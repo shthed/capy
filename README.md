@@ -1,15 +1,15 @@
 # Capy: Color-by-Number Suite
 
-[![Web App](https://img.shields.io/badge/Web_App-Play_Online-blue?style=for-the-badge&logo=googlechrome&logoColor=white)](https://shthed.github.io/capy/)
-[![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://shthed.github.io/capy/capy.apk)
+[![Web App](https://img.shields.io/badge/Web_App-Play_Online-blue?style=for-the-badge&logo=googlechrome&logoColor=white)](https://capypaint.com/)
+[![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://capypaint.com/capy.apk)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange?style=for-the-badge)](./LICENSE.md)
 
 **Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages.
 
-- **[Play Capy in Your Browser (Stable)](https://shthed.github.io/capy/)**
-- **[Download the Android APK (Stable)](https://shthed.github.io/capy/capy.apk)**
+- **[Play Capy in Your Browser (`capypaint.com`)](https://capypaint.com/)**
+- **[Download the Android APK (Stable)](https://capypaint.com/capy.apk)**
 - **[Try Upcoming Features on the Beta Channel](https://shthed.github.io/capy/beta/)** ([Beta Android APK](https://shthed.github.io/capy/beta/capy.apk) | [Official GitHub Releases](https://github.com/shthed/capy/releases))
-- **[Read the Privacy Policy](https://shthed.github.io/capy/privacy-policy.html)**
+- **[Read the Privacy Policy](https://capypaint.com/privacy-policy.html)**
 
 ---
 

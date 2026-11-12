@@ -57,7 +57,7 @@ flowchart TB
 1. **Zero Forced Server Dependency**: Image quantization, vector segmentation, and save storage run 100% locally in the browser or WebView. Puzzles generate and play offline without mandatory accounts.
 2. **60--120 FPS Canvas Rendering**: Instead of mutating thousands of DOM or SVG nodes, Capy uses a **3-tier offscreen-cached HTML5 2D Canvas pipeline** with dirty-rect updates and zero React state churn during pan/zoom/scrubbing.
 3. **Responsive Non-Blocking UI**: CPU-heavy computer vision runs inside a dedicated **Web Worker** (`puzzle.worker.ts`) using transferable `ArrayBuffer` buffers.
-4. **Single Source of Truth**: `web/` powers both the web PWA (`https://shthed.github.io/capy/`) and the native Android app ([`app/`](./app/)) via [`NativeBridge.ts`](./web/src/services/NativeBridge.ts).
+4. **Single Source of Truth**: `web/` powers the production Cloudflare Workers PWA (`https://capypaint.com/`), GitHub Pages previews (`https://shthed.github.io/capy/`), and the native Android app ([`app/`](./app/)) via [`NativeBridge.ts`](./web/src/services/NativeBridge.ts).
 5. **Edge-to-Edge Safe-Area Layout**: Hardware inset custom properties (`--sat`, `--sab`, `--sal`, `--sar`) keep controls clear of notches, cutouts, and gesture bars across phones, tablets, and desktops.
 
 ---
@@ -65,13 +65,15 @@ flowchart TB
 ## 2. Directory & Module Structure
 
 ### Entry, Build & Public Assets
-- **[`web/index.html`](./web/index.html)**: Host HTML document with mobile viewport and safe-area metadata.
-- **[`web/package.json`](./web/package.json)**: Single source of truth for `"version"`, dependencies (React 19, Vite 6, Tailwind CSS 4, Lucide, `canvas-confetti`), and CLI scripts.
+- **[`web/index.html`](./web/index.html)**: Host HTML document with canonical `https://capypaint.com/` metadata, mobile viewport, and safe-area tags.
+- **[`web/package.json`](./web/package.json)**: Single source of truth for `"version"`, dependencies (React 19, Vite 6, Tailwind CSS 4, Lucide, `canvas-confetti`), and CLI scripts (`lint`, `build`, `test`, `persona:capyboop`).
 - **[`web/tsconfig.json`](./web/tsconfig.json)**: Strict TypeScript compiler configuration.
 - **[`web/vite.config.ts`](./web/vite.config.ts)**: Vite bundler configuration enforcing relative asset base (`base: './'`) and lazy modal chunk splitting.
 - **[`web/public/sw.js`](./web/public/sw.js)**: Same-origin offline Service Worker (`capy-cache-v2`).
 - **[`web/public/manifest.webmanifest`](./web/public/manifest.webmanifest)**: Standalone PWA manifest with relative `./` scope.
-- **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)**: Published Privacy Policy and Google Play / Google Auth Data Safety summary.
+- **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Workers Static Assets security/cache headers and SPA fallback rules.
+- **[`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json)**: Root-domain Android Digital Asset Links manifest served at `https://capypaint.com/.well-known/assetlinks.json` for `com.capypaint.capy`.
+- **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)**: Published Privacy Policy and Google Play / Google Auth Data Safety summary (`https://capypaint.com/privacy-policy.html`).
 - **[`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy)**: Pre-baked 4-artwork `.capy` v2 Gzip archive for instant zero-worker first boot.
 
 ### Core Shell, Types & Styling (`web/src/`)

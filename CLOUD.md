@@ -1,6 +1,6 @@
 # Modular Cloud Sync, Google Account / Play Games v2 & Multiplayer Sharing (`CLOUD.md`)
 
-This document explains how modular multi-platform cloud login (`Google`, `Google Play Games v2`, `Steam`, `Microsoft`, `Apple`), conflict-free cross-device Save Library sync, shareable progress links, and simultaneous Co-op multiplayer rooms work across the **Capy** monorepo (`web/` and `app/`).
+This document explains how modular multi-platform cloud login (`Google`, `Google Play Games v2`, `Steam`, `Microsoft`, `Apple`), conflict-free cross-device Save Library sync, shareable progress links, simultaneous Co-op multiplayer rooms, and Cloudflare Workers edge hosting (`capypaint.com`) work across the **Capy** monorepo (`web/`, `app/`, and `worker/`).
 
 **Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
@@ -8,6 +8,7 @@ This document explains how modular multi-platform cloud login (`Google`, `Google
 1. [Plain-English Overview: How Everything Works](#1-plain-english-overview-how-everything-works)
 2. [End-to-End Architecture Diagrams](#2-end-to-end-architecture-diagrams)
 3. [Step-by-Step Developer Guide: Provisioning Google Cloud OAuth 2.0 & Play Games v2](#3-step-by-step-developer-guide-provisioning-google-cloud-oauth-20--play-games-v2)
+4. [Step-by-Step Developer Guide: Deploying capypaint.com on Cloudflare Workers & Syncing capyboop/capy](#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers--syncing-capyboopcapy)
 
 ---
 
@@ -44,12 +45,12 @@ Capy separates **CRDT save merging** (`CrdtCloudSaveAdapter` in [`ProviderRegist
 ### C. Four Complementary Ways Data Is Shared Between Players
 
 1. **Shareable Progress Link (`#s=<token>`)**:
-   - *Transport*: Compresses painted region IDs, Free Colour overrides, `isFreeColor`, `updatedAt`, and `sourceRef` directly into the URL fragment (`https://shthed.github.io/capy/#s=...`) via `ShareLinkService.ts`.
+   - *Transport*: Compresses painted region IDs, Free Colour overrides, `isFreeColor`, `updatedAt`, and `sourceRef` directly into the URL fragment (`https://capypaint.com/#s=...` via `CANONICAL_PRODUCTION_URL` in [`ShareLinkService.ts`](./web/src/services/ShareLinkService.ts)).
    - *Size & Infrastructure*: `~100--400 bytes` (`< 2 KB` budget); **zero server required**; works across separate devices immediately for built-in Gallery artworks.
 2. **Local / Same-Browser Co-op Room (`?room=<ROOM6>`)**:
    - *Transport*: Uses native `BroadcastChannel` (`capy_coop_room_<ROOM6>`) to stream real-time `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `UNFILL_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap/undo) between tabs/windows on the same device with **zero server required**.
 3. **Internet Cross-Device Co-op Room (`?room=<ROOM6>`)**:
-   - *Transport*: Uses `HybridCoopRoomAdapter` over WebSocket (`VITE_CAPY_ROOM_WS_URL`) to relay `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `UNFILL_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap/undo) across phones, tablets, and PCs when `VITE_CAPY_ROOM_WS_URL` is configured.
+   - *Transport*: Uses `HybridCoopRoomAdapter` over WebSocket (`resolveCoopRoomWsUrl` in [`ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts)) to relay `HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `UNFILL_EVENT`, `HEARTBEAT`, and `LEAVE` frames (`~120 bytes` per tap/undo, `<= 4 KB` enforced by [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts)) through [`CoopRoomDurableObject`](./worker/index.ts). Automatically connects to same-origin `wss://capypaint.com/api/room` on `capypaint.com`, `*.workers.dev`, and Android `appassets.androidplatform.net` (or any custom `VITE_CAPY_ROOM_WS_URL`), hibernating with `0` idle CPU ms between strokes and falling back cleanly to `BroadcastChannel` on `localhost` or `github.io`.
 4. **Portable `.capy` v2 Binary File Export**:
    - *Transport*: Exports a self-contained `CAPY\x02<flags>` binary archive (`flags`: `0x01` `FLAG_GZIP` single save, `0x03` `FLAG_GZIP | FLAG_ARCHIVE` multi-save library bundle, `0x00` uncompressed) containing the source image, quantized RLE segmentation map, custom palette, and undo/replay chronology via OS Share Sheet or file download.
    - *Size & Infrastructure*: `~15--45 KB` for built-in/line-art saves and `~45--95 KB` for custom photographic saves; **zero server required**; works offline across all devices.
@@ -114,7 +115,7 @@ flowchart TD
     subgraph Transport["Data Sharing Channels"]
         T_URL["URL Hash Link (#s=<token>)\nCopied or shared via SMS / Chat / App Link"]
         T_BC["BroadcastChannel\n(Same-Browser Multi-Tab Co-op)"]
-        T_WS["WebSocket Relay (VITE_CAPY_ROOM_WS_URL)\n(Cross-Device Internet Co-op)"]
+        T_WS["WebSocket Relay (wss://capypaint.com/api/room)\n(Hibernating CoopRoomDurableObject)"]
     end
 
     subgraph PlayerB["Player B (Recipient / Collaborator)"]
@@ -152,7 +153,7 @@ flowchart TD
    - Navigate to **APIs & Services -> Library**, search for **Google Drive API**, and click **Enable**.
 3. **Configure the Google Auth Platform / OAuth Consent Screen**:
    - Navigate to **APIs & Services -> OAuth consent screen** (or **Google Auth Platform -> Branding / Audience / Data Access**).
-   - Set **User Type** to **External** and set the Privacy Policy URL to `https://shthed.github.io/capy/privacy-policy.html`.
+   - Set **User Type** to **External** and set the Privacy Policy URL to `https://capypaint.com/privacy-policy.html`.
    - Under **Data Access / Scopes**, add:
      - `openid`
      - `.../auth/userinfo.profile`
@@ -161,10 +162,10 @@ flowchart TD
    - Add test accounts under **Audience -> Test users** while in Testing mode, or click **Publish App** for public Google sign-in.
 4. **Create the Web OAuth 2.0 Client ID**:
    - Navigate to **APIs & Services -> Credentials -> + Create Credentials -> OAuth client ID** (`Web application`).
-   - Add **Authorized JavaScript origins**: `https://shthed.github.io`, `http://localhost:3000`, and `http://localhost:4173`.
+   - Add **Authorized JavaScript origins**: `https://capypaint.com`, `https://www.capypaint.com`, `https://capyboop.github.io`, `https://shthed.github.io`, `http://localhost:3000`, and `http://localhost:4173`.
    - Copy the generated Client ID (`1234567890-xxxxxxxx.apps.googleusercontent.com`).
 5. **Save `VITE_GOOGLE_CLIENT_ID` in GitHub Repository Variables**:
-   - Open `https://github.com/shthed/capy/settings/variables/actions` (**Settings -> Secrets and variables -> Actions -> Variables**) and create `VITE_GOOGLE_CLIENT_ID` (or set it in `web/.env.local` for local dev).
+   - Open **Settings -> Secrets and variables -> Actions -> Variables** in your GitHub repository and create `VITE_GOOGLE_CLIENT_ID` (or set it in `web/.env.local` for local dev).
 
 ### Part B: Android Google Play Games Services v2 (`CAPY_PLAY_GAMES_APP_ID`)
 1. **Enable Play Games Services & Saved Games in Google Play Console**:
@@ -173,6 +174,37 @@ flowchart TD
 2. **Register Android Signing Certificate SHA-1 Fingerprints**:
    - Under **Credentials -> Add credential** (`Android`, `com.capypaint.capy`), register the SHA-1 fingerprint for both your debug/upload keystore and your Play App Signing certificate.
 3. **Save `CAPY_PLAY_GAMES_APP_ID` in GitHub Repository Variables**:
-   - Add `CAPY_PLAY_GAMES_APP_ID` (`<your-12-digit-play-games-app-id>`) in `https://github.com/shthed/capy/settings/variables/actions` (wiring `${{ vars.VITE_GOOGLE_CLIENT_ID }}` and `${{ vars.CAPY_PLAY_GAMES_APP_ID }}` into [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) is queued as `BUG-2` in [`TODO.md`](./TODO.md)).
-4. **Android App Links (`autoVerify="true"`) Root-Domain Note**:
-   - Android Digital Asset Links verification for `https://shthed.github.io/capy/` queries `https://shthed.github.io/.well-known/assetlinks.json` at the GitHub Pages **domain root** (`shthed.github.io` repository), not `/capy/.well-known/assetlinks.json` (tracked under `EPIC-5` `US-5.1` in [`ROADMAP.md`](./ROADMAP.md)).
+   - Add `CAPY_PLAY_GAMES_APP_ID` (`<your-12-digit-play-games-app-id>`) in **Settings -> Secrets and variables -> Actions -> Variables** (wiring `${{ vars.VITE_GOOGLE_CLIENT_ID }}` and `${{ vars.CAPY_PLAY_GAMES_APP_ID }}` into [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) is queued as `BUG-2` in [`TODO.md`](./TODO.md)).
+4. **Android App Links (`autoVerify="true"`) on `capypaint.com`**:
+   - Cloudflare Workers Static Assets serves [`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json) directly at `https://capypaint.com/.well-known/assetlinks.json`. Replace the placeholder SHA-256 fingerprint in `assetlinks.json` with your Google Play App Signing certificate SHA-256 fingerprint so Android verifies `https://capypaint.com/#s=...` App Links automatically.
+
+---
+
+## 4. Step-by-Step Developer Guide: Deploying capypaint.com on Cloudflare Workers & Syncing capyboop/capy
+
+### Architecture Overview ([`wrangler.jsonc`](./wrangler.jsonc) & [`worker/index.ts`](./worker/index.ts))
+- **Edge Static Assets (`0` Worker Invocations for Static Files)**: `wrangler.jsonc` serves `./web/dist` (`not_found_handling: "single-page-application"`, `run_worker_first: ["/api/*"]`) with immutable hashed bundle caching and [`web/public/_headers`](./web/public/_headers) security policies.
+- **SQLite-Backed WebSocket Hibernation (`CoopRoomDurableObject`)**: `/api/room?room=<ROOM6>` upgrades to a per-room Durable Object using `new_sqlite_classes` (supported on both **Cloudflare Workers Free and Paid plans**). Sockets hibernate between strokes (`0` idle CPU ms), persist the latest `WELCOME_STATE` `seedToken` in SQLite `room_state`, broadcast `LEAVE` on disconnect, and prune idle rooms after 24 hours via `alarm()`.
+- **Canonical Domain Redirect & Health Check**: `https://www.capypaint.com/*` 301-redirects to `https://capypaint.com/*`, and `GET /api/health` returns JSON service status.
+
+### Part A: Syncing & Rebranding the Production Fork (`capyboop/capy`)
+`capyboop/capy` (`https://github.com/capyboop/capy`) is the public production fork of `shthed/capy`. Whenever `shthed/capy` `main` advances:
+1. Pull `shthed/capy` `main` into your `capyboop/capy` checkout and run the idempotent persona rebrand script ([`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs)):
+   ```bash
+   git pull https://github.com/shthed/capy.git main
+   npm --prefix web run persona:capyboop
+   ```
+2. Preview changes first if desired via `node web/scripts/rebrand-persona.mjs --dry-run`, verify with `npm --prefix web test`, commit, and push to `capyboop/capy`.
+
+### Part B: Connecting `capyboop/capy` to Cloudflare Workers (`capypaint.com`)
+Choose either native Cloudflare Git builds (zero GitHub secrets) or GitHub Actions deployment:
+
+- **Option 1 -- Cloudflare Workers Builds Git Integration (Recommended)**:
+  1. Add `capypaint.com` as a zone in Cloudflare Dashboard and point your registrar's nameservers to Cloudflare.
+  2. Open **Compute (Workers) -> Workers & Pages -> Create application -> Import a repository**, select `capyboop/capy`, and keep Project Name `capy-paint`.
+  3. Set **Build command** to `npm --prefix web ci && npm --prefix web run build` and **Deploy command** to `npx wrangler deploy` (Root directory `/`).
+  4. Click **Save and Deploy**. Cloudflare automatically provisions custom domains `capypaint.com` and `www.capypaint.com` (`custom_domain: true` in [`wrangler.jsonc`](./wrangler.jsonc)) with managed SSL certificates and runs the `v1` SQLite Durable Object migration.
+- **Option 2 -- GitHub Actions Workflow ([`.github/workflows/deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml))**:
+  1. In `capyboop/capy` **Settings -> Secrets and variables -> Actions -> Secrets**, add `CLOUDFLARE_API_TOKEN` (*Edit Cloudflare Workers* template) and `CLOUDFLARE_ACCOUNT_ID` (optionally add `VITE_GOOGLE_CLIENT_ID` under **Variables**).
+  2. Every push to `main` (or manual `workflow_dispatch`) compiles `web/dist`, runs `tsc --noEmit` across `web/` and `worker/`, and deploys via `cloudflare/wrangler-action@v3`. Forks without Cloudflare secrets skip cleanly in `< 2s`.
+
