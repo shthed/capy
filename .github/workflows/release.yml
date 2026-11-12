@@ -58,10 +58,13 @@ jobs:
       - name: Build & package Web production bundle (web/)
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
           set -euo pipefail
           cd web
           npm ci --prefer-offline --no-audit --no-fund
+          npm run test:sanity
           npm run lint
           npm run build
           cd ..
@@ -82,6 +85,10 @@ jobs:
       - name: Build Android APK & Play Store App Bundle (.aab)
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
           CAPY_KEYSTORE_BASE64: ${{ secrets.CAPY_KEYSTORE_BASE64 }}
           CAPY_KEYSTORE_PASSWORD: ${{ secrets.CAPY_KEYSTORE_PASSWORD }}
           CAPY_KEY_ALIAS: ${{ secrets.CAPY_KEY_ALIAS }}
@@ -105,6 +112,9 @@ jobs:
               ./gradlew app:bundleDebug --build-cache
               cp app/build/outputs/bundle/debug/app-debug.aab "release-assets/capy-${TAG_NAME}.aab"
             fi
+          fi
+          if [ "${IS_PRERELEASE}" = "false" ]; then
+            cp "release-assets/capy-${TAG_NAME}.apk" "release-assets/capy.apk"
           fi
           ls -lh release-assets/
 
@@ -145,6 +155,9 @@ jobs:
             "release-assets/capy-${TAG_NAME}.aab"
             "release-assets/capy-web-${TAG_NAME}.tgz"
           )
+          if [ "${IS_PRERELEASE}" = "false" ]; then
+            ASSETS+=("release-assets/capy.apk")
+          fi
           if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
             gh release edit "${TAG_NAME}" \
               --notes-file release-notes.md \

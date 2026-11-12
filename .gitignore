@@ -33,3 +33,6 @@ Thumbs.db
 .dev.vars*
 .env*
 !.env.example
+
+# AI Agent Coordination & Scratch Directories
+.agents/

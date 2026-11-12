@@ -3,12 +3,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import { chromium } from 'playwright';
 import { createServer, preview } from 'vite';
+import { runSanityChecks } from './sanity.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
-const BASE_URL = process.env.CAPY_TEST_URL || 'http://localhost:3000';
+const EXPLICIT_TEST_URL = (process.env.CAPY_TEST_URL || '').trim().replace(/\/+$/, '');
+const webPkgJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
 
 async function isServerListening(url) {
   try {
@@ -208,7 +211,92 @@ async function runCodecAndEngineTests() {
     assert.deepEqual(merged.filledRegionIds, [1, 4, 9, 2, 8]);
     assert.equal(merged.paintedRegionColors?.[4], 0xff3b82f6, 'Newer timestamp wins Free Colour conflict');
 
-    // 5. Semantic Versioning & CHANGELOG.md Synchronization
+    // 4b. M-01 CapyCodec malformed varint, gzip-bomb, and allocation-ceiling rejection
+    const nineByteDosToken = Buffer.from([
+      0x00, 0x02, 0x00, 0x01, 0xff, 0xff, 0xff, 0xff, 0x0f,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(nineByteDosToken),
+      /filledLen|bounds/,
+      '9-byte filledLen=0xffffffff token must be rejected before allocation'
+    );
+    const truncatedPayloadToken = Buffer.from([0x00, 0x02, 0x00, 0x80]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(truncatedPayloadToken),
+      /Truncated progress delta payload/
+    );
+    const eofVarintToken = Buffer.from([0x00, 0x02, 0x00, 0x01, 0x80]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(eofVarintToken),
+      /Malformed varint: unexpected EOF/
+    );
+    const overlongVarintToken = Buffer.from([
+      0x00, 0x02, 0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(overlongVarintToken),
+      /Malformed varint/
+    );
+    const overflowVarintToken = Buffer.from([
+      0x00, 0x02, 0x00, 0x80, 0x80, 0x80, 0x80, 0x10,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(overflowVarintToken),
+      /uint32 overflow/
+    );
+    const oversizedColorsToken = Buffer.from([
+      0x00, 0x02, 0x02, 0x01, 0x00, 0xff, 0xff, 0x0f,
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(oversizedColorsToken),
+      /colorEntries|bounds/
+    );
+    const oversizedRefToken = Buffer.from([0x00, 0x02, 0x04, 0x01, 0x81, 0x20]).toString(
+      'base64url'
+    );
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(oversizedRefToken),
+      /sourceRef length/
+    );
+    const deltaGzipBombToken = Buffer.concat([
+      Buffer.from([0x01]),
+      zlib.gzipSync(Buffer.alloc(300 * 1024, 0)),
+    ]).toString('base64url');
+    await assert.rejects(
+      () => codec.decodeProgressDeltaToken(deltaGzipBombToken),
+      /exceeds limit/,
+      'Progress delta gzip stream > 256 KB must abort immediately'
+    );
+    const saveGzipBomb = new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x43, 0x41, 0x50, 0x59, 0x02, 0x01]),
+        zlib.gzipSync(Buffer.alloc(17 * 1024 * 1024, 0)),
+      ])
+    );
+    await assert.rejects(
+      () => codec.decodeBinarySaveV2(saveGzipBomb),
+      /exceeds limit/,
+      '.capy v2 gzip stream > 16 MB must abort immediately'
+    );
+    const badFramedSave = new Uint8Array([
+      0x43, 0x41, 0x50, 0x59, 0x02, 0x00, 0xff, 0xff, 0xff, 0x7f,
+    ]);
+    await assert.rejects(
+      () => codec.decodeBinarySaveV2(badFramedSave),
+      /JSON header exceeds payload/
+    );
+    assert.throws(
+      () =>
+        codec.decompressPuzzleRecord({
+          ...compact,
+          regionMeta: new Float32Array([1e9, 1, 0, 0, 1]),
+        }),
+      /exceeds limit/
+    );
+
+    // 5. Semantic Versioning, Fast <2s Sanity Gate & CHANGELOG.md Synchronization
+    const sanityRes = runSanityChecks({ repoRoot: path.resolve(projectRoot, '..') });
+    assert.equal(sanityRes.elapsedMs < 2000, true, `sanity.mjs must run in < 2s (${sanityRes.elapsedMs}ms)`);
     const versionMod = await vite.ssrLoadModule('/src/version.ts');
     const semverParts = versionMod.parseSemVer(versionMod.APP_VERSION);
     assert.equal(
@@ -284,11 +372,13 @@ async function runCodecAndEngineTests() {
     assert.equal(stableCh.stableWebUrl, 'https://shthed.github.io/capy/');
     assert.equal(stableCh.betaWebUrl, 'https://shthed.github.io/capy/beta/');
     assert.equal(stableCh.betaApkUrl, 'https://shthed.github.io/capy/beta/capy.apk');
+    assert.equal(stableCh.showChannelSwitcher, true);
 
     const betaCh = versionMod.resolveReleaseChannel('/capy/beta/', 'https://shthed.github.io', '');
     assert.equal(betaCh.channel, 'beta');
     assert.equal(betaCh.badgeLabel, 'BETA');
     assert.equal(betaCh.prNumber, null);
+    assert.equal(betaCh.showChannelSwitcher, true);
 
     const alphaCh = versionMod.resolveReleaseChannel(
       '/capy/pull/481/',
@@ -298,10 +388,38 @@ async function runCodecAndEngineTests() {
     assert.equal(alphaCh.channel, 'alpha');
     assert.equal(alphaCh.badgeLabel, 'ALPHA #481');
     assert.equal(alphaCh.prNumber, 481);
+    assert.equal(alphaCh.showChannelSwitcher, true);
 
     const devCh = versionMod.resolveReleaseChannel('/', 'http://localhost:3000', '');
     assert.equal(devCh.channel, 'dev');
     assert.equal(devCh.badgeLabel, null);
+    assert.equal(devCh.showChannelSwitcher, true);
+
+    const customDomCh = versionMod.resolveReleaseChannel('/', 'https://capypaint.com', '');
+    assert.equal(customDomCh.channel, 'stable');
+    assert.equal(customDomCh.badgeLabel, null);
+    assert.equal(customDomCh.stableWebUrl, 'https://capypaint.com/');
+    assert.equal(customDomCh.showChannelSwitcher, false);
+
+    const wwwDomCh = versionMod.resolveReleaseChannel('/', 'https://www.capypaint.com', '');
+    assert.equal(wwwDomCh.channel, 'stable');
+    assert.equal(wwwDomCh.showChannelSwitcher, false);
+
+    const androidDomCh = versionMod.resolveReleaseChannel(
+      '/assets/www/index.html',
+      'https://appassets.androidplatform.net',
+      ''
+    );
+    assert.equal(androidDomCh.channel, 'stable');
+    assert.equal(androidDomCh.showChannelSwitcher, false);
+
+    const customDomForcedBeta = versionMod.resolveReleaseChannel(
+      '/',
+      'https://capypaint.com',
+      '?capy_channel=beta'
+    );
+    assert.equal(customDomForcedBeta.channel, 'beta');
+    assert.equal(customDomForcedBeta.showChannelSwitcher, true);
 
     const queryBetaCh = versionMod.resolveReleaseChannel(
       '/',
@@ -332,9 +450,9 @@ async function runCodecAndEngineTests() {
     );
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/.test(bullet),
+        /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/.test(bullet),
         true,
-        `Each CHANGELOG.md bullet must end with a bare [#000] PR link: ${bullet}`
+        `Each CHANGELOG.md bullet must end with a bare [#000] or #000 PR reference: ${bullet}`
       );
     }
 
@@ -655,7 +773,16 @@ async function runCodecAndEngineTests() {
         host: 'capy-paint.example.workers.dev',
         hostname: 'capy-paint.example.workers.dev',
       }),
-      'wss://capy-paint.example.workers.dev/api/room'
+      null,
+      'Third-party .workers.dev origins must NOT auto-connect without explicit VITE_CAPY_ROOM_WS_URL'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'preview.capypaint.com',
+        hostname: 'preview.capypaint.com',
+      }),
+      'wss://preview.capypaint.com/api/room'
     );
     assert.equal(
       providerMod.resolveCoopRoomWsUrl(undefined, {
@@ -683,13 +810,174 @@ async function runCodecAndEngineTests() {
       'wss://custom-relay.example/ws'
     );
 
+    for (let attempt = 0; attempt <= 10; attempt++) {
+      const minBackoff = providerMod.computeCoopReconnectDelayMs(attempt, 0);
+      const maxBackoff = providerMod.computeCoopReconnectDelayMs(attempt, 1);
+      assert.equal(minBackoff >= 1000 && minBackoff <= 15_000, true);
+      assert.equal(maxBackoff >= 1000 && maxBackoff <= 15_000, true);
+      assert.equal(maxBackoff >= minBackoff, true);
+    }
+
+    // Transport-aware peer pruning & PONG handling on HybridCoopRoomAdapter
+    {
+      const prevWS = globalThis.WebSocket;
+      const prevWin = globalThis.window;
+      const sentWsFrames = [];
+      let latestMockSocket = null;
+      class MockRoomSocket {
+        static OPEN = 1;
+        static CLOSED = 3;
+        constructor(url) {
+          this.url = url;
+          this.readyState = 1;
+          latestMockSocket = this;
+        }
+        send(payload) {
+          sentWsFrames.push(payload);
+        }
+        close() {
+          this.readyState = 3;
+        }
+      }
+      globalThis.WebSocket = MockRoomSocket;
+      globalThis.window = {
+        location: { protocol: 'https:', host: 'capypaint.com', hostname: 'capypaint.com' },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      const adapter = new providerMod.HybridCoopRoomAdapter();
+      try {
+        await adapter.joinRoom(
+          'rmtest',
+          {
+            playerId: 'self-1',
+            displayName: 'Self Capy',
+            avatarColorHex: '#38bdf8',
+            lastActiveAt: Date.now(),
+          },
+          builtShare.token
+        );
+        assert.ok(latestMockSocket, 'HybridCoopRoomAdapter must open WebSocket on capypaint.com');
+        latestMockSocket.onopen?.();
+        assert.equal(sentWsFrames.length, 1, 'onopen must send initial HELLO over WebSocket');
+        assert.equal(JSON.parse(sentWsFrames[0]).type, 'HELLO');
+
+        // Raw PONG frame from C++ edge auto-response must be ignored cleanly without JSON parse error
+        latestMockSocket.onmessage?.({ data: 'PONG' });
+
+        // Remote WS peer joins and ages past 18s without 5s HEARTBEAT frames
+        latestMockSocket.onmessage?.({
+          data: JSON.stringify({
+            type: 'WELCOME_STATE',
+            roomCode: 'RMTEST',
+            sender: {
+              playerId: 'ws-peer-2',
+              displayName: 'Remote Peer',
+              avatarColorHex: '#f59e0b',
+              lastActiveAt: Date.now() - 25_000,
+            },
+            seedToken: builtShare.token,
+            sentAt: Date.now(),
+          }),
+        });
+        adapter.participants.get('ws-peer-2').lastActiveAt = Date.now() - 25_000;
+        adapter.pruneStaleParticipants();
+        assert.equal(
+          adapter.participants.has('ws-peer-2'),
+          true,
+          'Remote WebSocket peers must NOT be dropped at 18s when 5s HEARTBEAT is local-only'
+        );
+
+        // Local BroadcastChannel peer DOES prune after 18s inactivity
+        adapter.handleWireMessage(
+          {
+            type: 'HEARTBEAT',
+            roomCode: 'RMTEST',
+            sender: {
+              playerId: 'bc-peer-3',
+              displayName: 'Local Tab',
+              avatarColorHex: '#10b981',
+              lastActiveAt: Date.now(),
+            },
+            sentAt: Date.now(),
+          },
+          'channel'
+        );
+        adapter.participants.get('bc-peer-3').lastActiveAt = Date.now() - 25_000;
+        adapter.pruneStaleParticipants();
+        assert.equal(
+          adapter.participants.has('bc-peer-3'),
+          false,
+          'Stale BroadcastChannel peers must still prune cleanly past 18s'
+        );
+
+        // Socket close clears WS peers and schedules reconnect
+        latestMockSocket.onclose?.();
+        assert.equal(adapter.participants.has('ws-peer-2'), false);
+        assert.equal(Boolean(adapter.wsReconnectTimer), true);
+      } finally {
+        adapter.leaveRoom();
+        globalThis.WebSocket = prevWS;
+        globalThis.window = prevWin;
+      }
+    }
+
     assert.equal(relayProtoMod.normalizeRoomCode(' ab-c_123! '), 'ABC123');
     assert.equal(relayProtoMod.normalizeRoomCode('!!!'), null);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin(null), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin(''), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('   '), false);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capypaint.com'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://www.capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capyboop.github.io'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://appassets.androidplatform.net'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://localhost:5173'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.workers.dev'), false);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('http://capypaint.com'), false);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.example.com'), false);
+    assert.equal(
+      relayProtoMod.isAllowedRelayOrigin(
+        'https://preview.example.com',
+        'https://other.example.com, https://preview.example.com'
+      ),
+      true
+    );
+
+    assert.equal(relayProtoMod.MAX_COOP_FRAME_BYTES, 6144);
+    assert.equal(relayProtoMod.MAX_SEED_TOKEN_CHARS, 4096);
+    assert.equal(relayProtoMod.isValidSeedToken(builtShare.token), true);
+    assert.equal(relayProtoMod.isValidSeedToken('not!valid!base64'), false);
+    assert.equal(
+      relayProtoMod.isValidSeedToken(Buffer.from([0x99, 0x02, 0x00]).toString('base64url')),
+      false
+    );
+
+    const maxLenValidSeed = 'AAI' + 'A'.repeat(4093);
+    assert.equal(maxLenValidSeed.length, 4096);
+    const maxSeedHello = relayProtoMod.validateCoopFrame(
+      JSON.stringify({
+        type: 'HELLO',
+        roomCode: 'ABC123',
+        sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#38bdf8', lastActiveAt: 1 },
+        seedToken: maxLenValidSeed,
+        sentAt: 100,
+      }),
+      'ABC123'
+    );
+    assert.equal(maxSeedHello.ok, true, '4096-char valid seedToken frame must fit under 6144 bytes');
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'ABC123',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#38bdf8', lastActiveAt: 1 },
+          seedToken: maxLenValidSeed + 'A',
+          sentAt: 100,
+        }),
+        'ABC123'
+      ).reason,
+      'seed_token_too_large'
+    );
 
     const validRelayFrame = relayProtoMod.validateCoopFrame(
       JSON.stringify({
@@ -709,9 +997,43 @@ async function runCodecAndEngineTests() {
     assert.equal(validRelayFrame.ok, true);
     assert.equal(validRelayFrame.message?.roomCode, 'ABC123');
     assert.equal(
-      relayProtoMod.validateCoopFrame('x'.repeat(4097), 'ABC123').reason,
+      relayProtoMod.validateCoopFrame('x'.repeat(6145), 'ABC123').reason,
       'frame_size_exceeded',
-      'Worker Co-op relay must enforce <= 4096 byte frame cap'
+      'Worker Co-op relay must enforce <= 6144 byte frame cap'
+    );
+    for (const badPaintEvent of [
+      { eventId: '', regionIds: [1], action: 'FILL' },
+      { eventId: 'x'.repeat(97), regionIds: [1], action: 'FILL' },
+      { eventId: 'ev-empty', regionIds: [], action: 'FILL' },
+      { eventId: 'ev-neg', regionIds: [-1], action: 'FILL' },
+      { eventId: 'ev-many', regionIds: Array.from({ length: 513 }, (_, i) => i), action: 'FILL' },
+    ]) {
+      assert.equal(
+        relayProtoMod.validateCoopFrame(
+          JSON.stringify({
+            type: 'PAINT_EVENT',
+            roomCode: 'ABC123',
+            sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+            paintEvent: badPaintEvent,
+            sentAt: 1,
+          }),
+          'ABC123'
+        ).reason,
+        'invalid_event_payload'
+      );
+    }
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'UNFILL_EVENT',
+          roomCode: 'ABC123',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+          unfillEvent: { eventId: 'uf1', regionIds: [-2] },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'invalid_event_payload'
     );
     assert.equal(
       relayProtoMod.validateCoopFrame(
@@ -726,9 +1048,71 @@ async function runCodecAndEngineTests() {
       'room_mismatch'
     );
 
+    // Rate limiting (40 frames / 5000ms) & write-once initial HELLO seedToken policy
+    let rlTimestamps = [];
+    for (let i = 0; i < 40; i++) {
+      const rl = relayProtoMod.checkSocketRateLimit(rlTimestamps, 1000 + i * 10);
+      assert.equal(rl.allowed, true);
+      rlTimestamps = rl.timestamps;
+    }
+    assert.equal(relayProtoMod.checkSocketRateLimit(rlTimestamps, 1500).allowed, false);
+    assert.equal(relayProtoMod.checkSocketRateLimit(rlTimestamps, 6001).allowed, true);
+
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'HELLO',
+        incomingSeedToken: builtShare.token,
+        hasSocketJoined: true,
+        existingSeedToken: null,
+        lastSavedSeedToken: null,
+        lastWriteAtMs: 0,
+        nowMs: 1000,
+      }),
+      'write_now'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'HELLO',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 9000,
+      }),
+      'ignore',
+      'Late HELLO must never overwrite an existing room seed_token (F-03)'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'WELCOME_STATE',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 3000,
+      }),
+      'debounce'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'WELCOME_STATE',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 6500,
+      }),
+      'write_now'
+    );
+
     const wranglerRaw = fs.readFileSync(path.resolve(projectRoot, '../wrangler.jsonc'), 'utf8');
     const wranglerJson = JSON.parse(wranglerRaw.replace(/^\s*\/\/.*$/gm, ''));
     assert.equal(wranglerJson.name, 'capy-paint');
+    assert.equal(wranglerJson.workers_dev, false);
+    assert.equal(wranglerJson.preview_urls, false);
     assert.equal(wranglerJson.assets?.directory, './web/dist');
     assert.equal(wranglerJson.assets?.not_found_handling, 'single-page-application');
     assert.deepEqual(wranglerJson.assets?.run_worker_first, ['/api/*']);
@@ -738,58 +1122,122 @@ async function runCodecAndEngineTests() {
       true
     );
 
+    // PwaService scoped cache naming, vite.config fingerprint parser & stamped dist/sw.js check
+    const pwaMod = await vite.ssrLoadModule('/src/services/PwaService.ts');
+    const viteConfigMod = await vite.ssrLoadModule('/vite.config.ts');
+    assert.equal(
+      pwaMod.resolvePwaCacheName('https://shthed.github.io/capy/beta/', '2.6.0'),
+      'capy-cache-v2.6.0:/capy/beta/'
+    );
+    assert.equal(
+      pwaMod.resolvePwaCacheName('https://capypaint.com/', '2.6.0'),
+      'capy-cache-v2.6.0:/'
+    );
+    assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints(''), []);
+    assert.deepEqual(
+      viteConfigMod.parseAndroidSha256Fingerprints('00:'.repeat(31) + '00'),
+      []
+    );
+    assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints('ab'.repeat(32)), [
+      Array(32).fill('AB').join(':'),
+    ]);
+    const distSwPath = path.join(projectRoot, 'dist/sw.js');
+    if (fs.existsSync(distSwPath)) {
+      const distSwText = fs.readFileSync(distSwPath, 'utf8');
+      assert.equal(
+        distSwText.includes(`const SW_BUILD_VERSION = '${versionMod.APP_VERSION}';`),
+        true,
+        'Built dist/sw.js must stamp SW_BUILD_VERSION with package.json version'
+      );
+      assert.equal(
+        distSwText.includes('__CAPY_SW_VERSION__'),
+        false,
+        'Built dist/sw.js must not retain unstamped __CAPY_SW_VERSION__ placeholder'
+      );
+      assert.equal(
+        distSwText.includes(".endsWith('.apk')"),
+        true,
+        'Service Worker must bypass .apk binary downloads'
+      );
+    }
+
     /* capy-dev-only:start */
-    const osMod = await import('node:os');
     const {
       transformPersonaContent,
       sanitizeCommitMessage,
       exportCleanPersonaStage,
     } = await import('./rebrand-persona.mjs');
     const sampleDoc =
-      'Repo https://github.com/shthed/capy (`shthed`) preview https://shthed.github.io/capy/pull/1/';
+      'Repo https://github.com/shthed/capy (`shthed`) [#482](https://github.com/shthed/capy/pull/482) [#477](https://github.com/shthed/capy/issues/477) [Sprint 1](https://github.com/shthed/capy/milestone/2) preview https://shthed.github.io/capy/pull/1/';
     const transformedOnce = transformPersonaContent(sampleDoc);
     assert.equal(
       transformedOnce,
-      'Repo https://github.com/capyboop/capy (`capyboop`) preview https://capyboop.github.io/capy/pull/1/'
+      'Repo https://github.com/capyboop/capy (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
     assert.equal(
       sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
       'Add Cloudflare Worker for capyboop/capy'
     );
-    const tmpCleanStage = fs.mkdtempSync(path.join(osMod.tmpdir(), 'capy-clean-stage-'));
+    const tmpCleanStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-clean-stage-'));
     try {
       const stageStats = exportCleanPersonaStage({ stageDir: tmpCleanStage });
       assert.equal(stageStats.verifiedFiles > 50, true);
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, '.agents')), false);
       assert.equal(
         fs.existsSync(path.join(tmpCleanStage, '.github/workflows/publish-capyboop.yml')),
+        false
+      );
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/pr-review-gate.yml')),
         false
       );
       assert.equal(
         fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
         false
       );
+      const stagedRedirects = fs.readFileSync(
+        path.join(tmpCleanStage, 'web/public/_redirects'),
+        'utf8'
+      );
+      assert.equal(
+        stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
+        true
+      );
     } finally {
       fs.rmSync(tmpCleanStage, { recursive: true, force: true });
     }
     /* capy-dev-only:end */
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
 }
 
 async function runBrowserBasicsSuite() {
-  console.log(`\n=== PART 2: Unified Browser E2E Suite (${BASE_URL}) ===`);
   let previewServer = null;
-  if (!(await isServerListening(BASE_URL))) {
+  let BASE_URL = EXPLICIT_TEST_URL;
+  if (BASE_URL) {
+    if (!(await isServerListening(BASE_URL))) {
+      const explicitPort = Number(new URL(BASE_URL).port || 3000);
+      previewServer = await preview({
+        root: projectRoot,
+        preview: { host: '0.0.0.0', port: explicitPort, strictPort: true },
+        logLevel: 'error',
+      });
+    }
+  } else {
     previewServer = await preview({
       root: projectRoot,
-      preview: { host: '0.0.0.0', port: 3000, strictPort: true },
+      preview: { host: '0.0.0.0', port: Number(process.env.CAPY_TEST_PORT || 0), strictPort: false },
       logLevel: 'error',
     });
+    const addr = previewServer.httpServer.address();
+    const boundPort = typeof addr === 'object' && addr ? addr.port : 3000;
+    BASE_URL = `http://localhost:${boundPort}`;
   }
+  console.log(`\n=== PART 2: Unified Browser E2E Suite (${BASE_URL}) ===`);
 
   const chromiumPath =
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
@@ -829,6 +1277,14 @@ async function runBrowserBasicsSuite() {
     assert.equal(assetLinksRes?.status(), 200);
     const assetLinksJson = JSON.parse(await assetLinksRes.text());
     assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capypaint.capy');
+    assert.equal(Array.isArray(assetLinksJson[0]?.target?.sha256_cert_fingerprints), true);
+    assert.equal(
+      assetLinksJson[0].target.sha256_cert_fingerprints.includes(
+        '00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00'
+      ),
+      false,
+      'assetlinks.json must never ship all-zero placeholder SHA-256 fingerprints'
+    );
 
     const privacyRes = await page.goto(`${BASE_URL}/privacy-policy.html`);
     assert.equal(privacyRes?.status(), 200);
@@ -844,19 +1300,50 @@ async function runBrowserBasicsSuite() {
     page.off('request', onReq);
 
     assert.equal(workerRequestedOnBoot, false, 'Pre-baked sample_saves.capy must boot with zero worker wait');
-    const bootMeta = await page.evaluate(async () => {
+    const expectedSwCacheKey = `capy-cache-v${webPkgJson.version}:/`;
+    const bootMeta = await page.evaluate(async (expectedKey) => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
       const swReady = 'serviceWorker' in navigator ? Boolean((await navigator.serviceWorker.ready)?.active) : false;
       const cacheNames = await caches.keys();
-      return { count: snaps.length, firstId: snaps[0]?.id, swReady, hasCache: cacheNames.includes('capy-cache-v2') };
-    });
+      return {
+        count: snaps.length,
+        firstId: snaps[0]?.id,
+        swReady,
+        hasScopedCache: cacheNames.includes(expectedKey),
+        hasLegacyCache: cacheNames.includes('capy-cache-v2'),
+      };
+    }, expectedSwCacheKey);
     assert.equal(bootMeta.count, 4);
     assert.equal(bootMeta.firstId, 'sample-capybara');
     assert.equal(bootMeta.swReady, true);
-    assert.equal(bootMeta.hasCache, true);
+    assert.equal(bootMeta.hasScopedCache, true, `Expected Service Worker cache ${expectedSwCacheKey}`);
+    assert.equal(bootMeta.hasLegacyCache, false, 'Legacy unscoped capy-cache-v2 must not exist');
+
+    // Verify malformed #s= DoS token degrades cleanly without crashing the app
+    const dosSharePage = await context.newPage();
+    attachErrorListeners(dosSharePage, 'dosSharePage');
+    await dosSharePage.goto(`${BASE_URL}/#s=AAIAAf____8P`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(dosSharePage);
+    await dosSharePage.close();
+
+    // Verify Google Login button auto-hides on Web when VITE_GOOGLE_CLIENT_ID is unconfigured
+    const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(150);
+    await page.getByRole('button', { name: 'Saves', exact: true }).click();
+    await page.waitForTimeout(120);
+    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible' });
+    assert.equal(
+      await page.getByTestId('play-games-signin-btn').count(),
+      hasBakedClientId ? 1 : 0,
+      'Web Google Login button must auto-hide when VITE_GOOGLE_CLIENT_ID is empty'
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
 
     // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
     await page.evaluate(() => {
+      localStorage.removeItem('capy_last_settings_tab');
       const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
       s.autoReplayOnLoad = false;
       s.difficulty = 'EASY';

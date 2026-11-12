@@ -43,13 +43,13 @@ jobs:
 
       - name: Checkout source repository
         if: steps.check_secret.outputs.enabled == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Setup Node.js
         if: steps.check_secret.outputs.enabled == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -59,13 +59,18 @@ jobs:
           set -euo pipefail
           node web/scripts/rebrand-persona.mjs --stage-dir /tmp/capyboop-stage
           COMMIT_MSG="$(git log -1 --format=%s | node web/scripts/rebrand-persona.mjs --sanitize-message)"
-          VERSION="$(node -p "require('/tmp/capyboop-stage/web/package.json').version")"
+          VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('/tmp/capyboop-stage/web/package.json', 'utf8')).version")"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid SemVer in staged web/package.json: ${VERSION}" >&2
+            exit 1
+          fi
+          DELIM="EOF_COMMIT_MSG_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           {
-            echo "commit_msg=${COMMIT_MSG}"
-            echo "version=${VERSION}"
+            printf 'commit_msg<<%s\n%s\n%s\n' "${DELIM}" "${COMMIT_MSG}" "${DELIM}"
+            printf 'version=%s\n' "${VERSION}"
           } >> "$GITHUB_ENV"
 
-      - name: Commit as capyboop and push to capyboop/capy main
+      - name: Commit as capyboop, push main, and sync release tag on capyboop/capy
         if: steps.check_secret.outputs.enabled == 'true'
         env:
           CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
@@ -83,25 +88,42 @@ jobs:
           git remote add target "https://x-access-token:${CAPYBOOP_SYNC_TOKEN}@github.com/capyboop/capy.git"
           git add -A
 
+          PUSHED_COMMIT_SHA=""
           if git ls-remote --exit-code --heads target main >/dev/null 2>&1; then
             git fetch target main
             if [ "${RESET_CLEAN_ROOT}" = "true" ] || git log FETCH_HEAD --format="%an %ae %cn %ce %B" | grep -iqE "shthed|hairy dog trumpet"; then
               echo "Initializing fresh clean-room root history authored solely by capyboop..."
               git commit -m "Release Capy Paint v${version}"
-              git push --force target HEAD:refs/heads/main
+              PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
+              git push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
             else
               TREE_SHA="$(git write-tree)"
               REMOTE_TREE_SHA="$(git rev-parse FETCH_HEAD^{tree})"
               if [ "${TREE_SHA}" = "${REMOTE_TREE_SHA}" ]; then
-                echo "capyboop/capy main already matches clean tree (${TREE_SHA}); nothing to push."
-                exit 0
+                echo "capyboop/capy main already matches clean tree (${TREE_SHA})."
+                PUSHED_COMMIT_SHA="$(git rev-parse FETCH_HEAD)"
+              else
+                PARENT_SHA="$(git rev-parse FETCH_HEAD)"
+                NEW_COMMIT="$(git commit-tree "${TREE_SHA}" -p "${PARENT_SHA}" -m "${commit_msg}")"
+                PUSHED_COMMIT_SHA="${NEW_COMMIT}"
+                git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
               fi
-              PARENT_SHA="$(git rev-parse FETCH_HEAD)"
-              NEW_COMMIT="$(git commit-tree "${TREE_SHA}" -p "${PARENT_SHA}" -m "${commit_msg}")"
-              git push target "${NEW_COMMIT}:refs/heads/main"
             fi
           else
             echo "Target repository has no main branch yet; pushing initial clean root commit..."
             git commit -m "Release Capy Paint v${version}"
-            git push target HEAD:refs/heads/main
+            PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
+            git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+          fi
+
+          TAG_NAME="v${version}"
+          if [ "${RESET_CLEAN_ROOT}" = "true" ]; then
+            git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+            git push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          elif ! git ls-remote --exit-code --tags target "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/capy..."
+            git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+            git push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          else
+            echo "Tag ${TAG_NAME} already exists on capyboop/capy; skipping tag push."
           fi
