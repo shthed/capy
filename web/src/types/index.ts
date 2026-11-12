@@ -98,6 +98,7 @@ export interface UserSettings {
   reverseDoubleTapZoom: boolean;
   zoomSensitivity: number;
   snapZoomLevels: boolean;
+  showMagnifierLoupe: boolean;
   soundEnabled: boolean;
   soundVolume: number;
   reducedMotion: boolean;
@@ -204,6 +205,8 @@ export interface SavedSnapshot {
   paintedRegionColors?: Record<number, number>;
   customPalette?: PaletteColor[];
   isFreeColor?: boolean;
+  /** Monotonic epoch incremented on Reset Progress so stale cloud/Co-op merges never resurrect cleared regions */
+  resetEpoch?: number;
   isAutoSample?: boolean;
   sampleAssetPath?: string | null;
   sourceRef?: PuzzleSourceRef;
