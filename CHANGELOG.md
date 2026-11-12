@@ -1,5 +1,6 @@
 ### 3.0 - 2026-11-12 (Beta)
 
+- Fix mobile topbar badge overlap, cap incomplete puzzle progress at 99%, and log capypaint.com DNS cutover [#486](https://github.com/shthed/capy/pull/486)
 - Prepare v3.0.0 beta release with Cloudflare Worker, Co-op relay hardening, mobile replay controls, and CI sanity gate [#485](https://github.com/shthed/capy/pull/485)
 
 ### 2.7 - 2026-11-12 (Alpha)
