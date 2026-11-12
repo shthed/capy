@@ -5,9 +5,9 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 **Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
-1. [`EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Active in Sprint 2`)](#1-epic-3-fat-finger-touch-assist-daily-retention-accessibility--replays-active-in-sprint-2)
-2. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready for Sprint 3`)](#2-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish-ready-for-sprint-3)
-3. [`EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish (`Scheduled for v3.1 -- Awaiting Owner Design Approval`)](#3-epic-2-mobile-touch-precision--tactile-sensory-polish-scheduled-for-v31----awaiting-owner-design-approval)
+1. [`EPIC-2`: `v3.0.1` Critical Bugfixes (`Active in Sprint 1`)](#1-epic-2-v301-critical-bugfixes-active-in-sprint-1)
+2. [`EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Owner Review & Approval`)](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval)
+3. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready After EPIC-3`)](#3-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish-ready-after-epic-3)
 4. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)](#4-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation-blocked-on-external-infra)
 5. [Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)](#5-unscheduled-platform-icebox-ice-1--ice-3)
 6. [Shipped Epics & Stories (`EPIC-1` & Completed Stories)](#6-shipped-epics--stories-epic-1--completed-stories)
@@ -20,44 +20,58 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
   - **GitHub Parent Epic Tracking Issues (`1 Issue = 1 Epic`, `#476`--`#480`) & Sprint Milestones (`#1`--`#4`)**:
     - Every chartered Epic has **one** Parent GitHub Tracking Issue carrying `epic` + `epic:<N>` + platform labels (`web`, `android`) and a `- [x]` / `- [ ]` Story & Task checklist that renders live GitHub progress bars and `Tracked in #<issue>` badges on linked PRs:
       - `EPIC-1`: [#476](https://github.com/shthed/capy/issues/476) (`CLOSED` | [Sprint 0 (`#1`)](https://github.com/shthed/capy/milestone/1) -- Unified Monorepo & Foundation)
-      - `EPIC-2`: [#477](https://github.com/shthed/capy/issues/477) (`OPEN` | `US-2.1` & `US-2.3` Scheduled for `v3.1` -- Awaiting Owner Design Approval; `US-2.2` shipped in [#472](https://github.com/shthed/capy/pull/472))
-      - `EPIC-3`: [#478](https://github.com/shthed/capy/issues/478) (`OPEN` | [Sprint 2 (`#3`)](https://github.com/shthed/capy/milestone/3) -- Fat-Finger Assist, Daily Streaks, A11y & Video Replays)
+      - `EPIC-2`: [#477](https://github.com/shthed/capy/issues/477) (`OPEN` | [Sprint 1 (`#2`)](https://github.com/shthed/capy/milestone/2) -- `v3.0.1` Critical Bugfixes Only)
+      - `EPIC-3`: [#478](https://github.com/shthed/capy/issues/478) (`OPEN` | [Sprint 2 (`#3`)](https://github.com/shthed/capy/milestone/3) -- Touch Assist, Sensory Polish, Daily Streaks, A11y & Video Replays -- *Awaiting Owner Review & Approval*)
       - `EPIC-4`: [#479](https://github.com/shthed/capy/issues/479) (`OPEN` | [Sprint 3 (`#4`)](https://github.com/shthed/capy/milestone/4) -- Focal Sub-Tiles, Print Framing & Co-op Ping)
       - `EPIC-5`: [#480](https://github.com/shthed/capy/issues/480) (`OPEN` | *No Milestone -- Blocked on External Credentials / Infra*)
     - **Strict Anti-Sprawl Rule**: Individual `TASK-*` slices, Sprint Priority 0 `BUG-*` items (tracked in [`TODO.md`](./TODO.md) + the active GitHub Sprint Milestone), and unscheduled `ICE-1`--`ICE-3` wrappers do **not** open separate GitHub Issues. Charter a new `EPIC-N` issue **only** when promoting an `ICE-*` item or new product theme into active roadmap scheduling.
-  - **`TODO.md` (*Focused 1-Sprint Execution Queue*)**: Holds **only** the current sprint's unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices (`~8--10` tasks at a time). Future stories stay in `ROADMAP.md` until promoted at sprint replenishment.
+  - **`TODO.md` (*Focused 1-Sprint Execution Queue*)**: Holds **only** the current sprint's approved, unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices. Unapproved feature stories stay in `ROADMAP.md` (`Awaiting Owner Review & Approval`) until explicitly approved.
 - **Story Readiness States**:
-  - **`Active in Sprint N` ([`TODO.md`](./TODO.md))**: Pulled into `TODO.md` under the active GitHub Sprint Milestone with verified symbol targets and deterministic test gates.
-  - **`Ready for Next Sprint`**: Zero external backend/credential blockers; eligible for immediate promotion into `TODO.md` once the current sprint drains.
-  - **`Scheduled for vX.Y -- Awaiting Owner Design Approval`**: Scoped for a future release after Project Owner visual/audio UX review; never pull into `TODO.md` before design sign-off.
+  - **`Active in Sprint N` ([`TODO.md`](./TODO.md))**: Approved and pulled into `TODO.md` under the active GitHub Sprint Milestone with verified symbol targets and deterministic test gates.
+  - **`Awaiting Owner Review & Approval`**: Unblocked client-side stories queued for Project Owner feature/design sign-off before entering `TODO.md` or implementation.
+  - **`Ready After EPIC-3`**: Zero external backend/credential blockers; queued behind `EPIC-3` approval and execution.
   - **`Blocked -- External Credentials / Infra`**: Client hexagonal interfaces exist, but live execution awaits external OAuth client IDs, Play Console setup, serverless relays, or paid AI API keys. Never pull blocked stories into `TODO.md` or assign them to an active Sprint Milestone until their **Unblock Prerequisite** is satisfied.
 - **5-Stage Automated Sprint & Epic Lifecycle (`Alpha -> Beta -> Production`)**:
-  1. **Sprint Pull / Replenishment**: When [`TODO.md`](./TODO.md) drains (`<= 2` tasks left), open a lightweight `docs/*` sprint-planning PR promoting the next ready Epic/Stories from `ROADMAP.md` into `TODO.md` and ensuring the target GitHub Sprint Milestone is open.
+  1. **Sprint Pull / Replenishment**: When [`TODO.md`](./TODO.md) drains (`<= 2` tasks left), open a lightweight `docs/*` sprint-planning PR promoting approved Stories from `ROADMAP.md` into `TODO.md` and ensuring the target GitHub Sprint Milestone is open.
   2. **Daily Sprint PRs (`feature/* -> beta`)**: Branch off `origin/beta` (`#NNN` single-task chats or `/goal` / `/teamwork` multi-task Story runs), open PRs with `--base beta`, attach `epic:<N>` + work/platform labels + the active Sprint Milestone, and put `**Agile Scope**: Tracked in #<epic-issue> (...)` at the top (**never** write `Closes #<epic-issue>` or `Fixes #<epic-issue>` on partial Epic PRs).
   3. **Task Merge & Epic Checklist Sync**: Delete finished `BUG-*` / `TASK-*` items from [`TODO.md`](./TODO.md) in the shipping PR, and check off `- [x] ... — #<pr>` on the Parent Epic Tracking Issue (`gh issue edit <epic-issue>`) as slices land on `beta`.
   4. **Beta Play-Testing & Production Promotion (`beta -> main`)**: Soak merged Sprint slices on `https://shthed.github.io/capy/beta/`, then open a human-approved `beta -> main` Release Promotion PR (gated by CI `Playwright E2E Release Gate`), tag `vX.Y.Z` to trigger [`release.yml`](./.github/workflows/release.yml) (`.apk` + Play Store `.aab`), and sync `origin/beta` to `origin/main`.
   5. **Story/Epic Archive & Closure**: Move completed Stories/Epics into the collapsed **Shipped Epics & Stories** `<details>` archive in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) with `#<PR>` links, close the Parent Epic Tracking Issue (`gh issue close <epic-issue>`) once `100%` of its Stories reach Production, and close the completed Sprint Milestone.
-- **Remaining Roadmap Rollup (`15` Active/Queued Stories across `4` Epics)**:
-  - `EPIC-3` ([#478](https://github.com/shthed/capy/issues/478), *5 Stories -- Active in Sprint 2*): `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
-  - `EPIC-4` ([#479](https://github.com/shthed/capy/issues/479), *3 Stories -- Ready for Sprint 3*): `~68k tokens` | `~32--46 min agent` (`~9--13.5 hrs human`).
-  - `EPIC-2` ([#477](https://github.com/shthed/capy/issues/477), *2 Stories -- Scheduled for `v3.1` Awaiting Owner Design Approval*): `~66k tokens` | `~30--44 min agent` (`~8--11.5 hrs human`).
+- **Remaining Roadmap Rollup (`16` User Stories & `3` Staged P0 Bugfixes across `4` Epics)**:
+  - `EPIC-2` ([#477](https://github.com/shthed/capy/issues/477), *`v3.0.1` Critical Bugfixes Only -- Active in Sprint 1*): `~42k tokens` | `~21--31 min agent` (`~5--8 hrs human` -- `BUG-1`..`BUG-3` staged on `beta` in `#484` / `#485`).
+  - `EPIC-3` ([#478](https://github.com/shthed/capy/issues/478), *8 Stories -- Awaiting Owner Review & Approval*): `~256k tokens` | `~119--171 min agent` (`~32--46 hrs human`).
+  - `EPIC-4` ([#479](https://github.com/shthed/capy/issues/479), *3 Stories -- Ready After `EPIC-3`*): `~68k tokens` | `~32--46 min agent` (`~9--13.5 hrs human`).
   - `EPIC-5` ([#480](https://github.com/shthed/capy/issues/480), *5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
-  - **Total Strategic Horizon**: `~531k tokens` | `~4.1--6.0 hrs agent` (`~70.5--103.5 hrs human`).
+  - **Total Strategic Horizon**: `~611k tokens` | `~4.8--6.9 hrs agent` (`~80--117.5 hrs human`).
 
 </details>
 
 ---
 
-## 1. `EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Active in Sprint 2`)
+## 1. `EPIC-2`: `v3.0.1` Critical Bugfixes (`Active in Sprint 1`)
 
-**Epic Goal**: Forgive near-miss mobile taps on tiny micro-regions without requiring pixel-perfect precision, give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend. *(GitHub Tracking Issue: [#478](https://github.com/shthed/capy/issues/478) | Milestone: [Sprint 2](https://github.com/shthed/capy/milestone/3) | Active Sprint 2 task specs live in [`TODO.md`](./TODO.md)).*
+**Epic Goal**: Stabilize `v3.0.0` / `v3.0.1` strictly with critical reliability, lifecycle, and CI bugfixes—zero unapproved new features. *(GitHub Tracking Issue: [#477](https://github.com/shthed/capy/issues/477) | Milestone: [Sprint 1](https://github.com/shthed/capy/milestone/2) | Active queue in [`TODO.md`](./TODO.md)).*
+
+- **Current `v3.0.1` Critical Bugfix Scope**:
+  - **`BUG-1` (Co-op `WELCOME_STATE` Persistence & Replay Rewind `UNFILL` Sync)**: Fix staged on `beta` (`#484` / `#485`), pending human QA and Production merge.
+  - **`BUG-2` (CI Cloud Variable Injection & `< 2s` `npm run test:sanity` Gate)**: Fix staged on `beta` (`#485`), pending Production merge.
+  - **`BUG-3` (Android WebView `onPause()` / `onResume()` Lifecycle Guard)**: Fix staged on `beta` (`#484` / `#485`), pending human QA and Production merge.
+- **Previously Shipped / Deferred Scope**:
+  - `US-2.2` zoom controls & `TASK-2.3a` woodblock tap synth shipped in [#472](https://github.com/shthed/capy/pull/472) (archived in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories)).
+  - All remaining sensory and touch-precision feature stories (`US-2.1`, `US-2.3b`, `US-2.4`) have been moved to [`EPIC-3`](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval) for Owner review and approval.
+
+---
+
+## 2. `EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Owner Review & Approval`)
+
+**Epic Goal**: Forgive near-miss mobile taps, deliver owner-approved tactile/audio/loupe polish, build daily return habits, ensure colorblind accessibility, and enable shareable video replays—`100%` client-side with zero backend. *(GitHub Tracking Issue: [#478](https://github.com/shthed/capy/issues/478) | Milestone: [Sprint 2](https://github.com/shthed/capy/milestone/3) | All unshipped feature stories below await explicit Owner review and approval before entering [`TODO.md`](./TODO.md)).*
 
 ### US-3.1: Daily Featured Puzzle Streak & Completion Medals
 
-- **Readiness**: `Active in Sprint 2` ([`TODO.md`](./TODO.md)) -- `TASK-3.1b` *(base UTC `DailyPuzzleService.ts` & **Create** hero card `TASK-3.1a` shipped in [#474](https://github.com/shthed/capy/pull/474))*
+- **Readiness**: `Awaiting Owner Review & Approval` *(base UTC `DailyPuzzleService.ts` & **Create** hero card `TASK-3.1a` shipped in [#474](https://github.com/shthed/capy/pull/474))*
 - **Description**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint completion medals on top of `DailyPuzzleService.ts`.
 - **Value**: Turns one-off daily puzzle launches into a rewarding consecutive-day coloring habit completely offline.
-- **Why Now**: `DailyPuzzleService.ts` (`#474`) already rotates featured artworks deterministically by UTC date; adding streak persistence completes the retention loop.
+- **Why Now**: `DailyPuzzleService.ts` (`#474`) already rotates featured artworks deterministically by UTC date; adding streak persistence completes the retention loop once approved.
 - **Planned Sprint Slices**:
   - **TASK-3.1b**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges.
 
@@ -75,10 +89,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-3.2: Inclusive Accessibility -- Colorblind Geometric Region Patterns
 
-- **Readiness**: `Active in Sprint 2` ([`TODO.md`](./TODO.md)) -- `TASK-3.2c` *(base `reducedMotion` `TASK-3.2a` & desktop keyboard shortcuts `TASK-3.2b` shipped in [#474](https://github.com/shthed/capy/pull/474))*
+- **Readiness**: `Awaiting Owner Review & Approval` *(base `reducedMotion` `TASK-3.2a` & desktop keyboard shortcuts `TASK-3.2b` shipped in [#474](https://github.com/shthed/capy/pull/474))*
 - **Description**: Add geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active and hinted regions alongside existing `reducedMotion` and desktop keyboard gameplay shortcuts.
 - **Value**: Ensures players with deuteranopia, protanopia, or tritanopia can distinguish similar palette shades comfortably without relying solely on hue contrast.
-- **Why Now**: `reducedMotion` and desktop keyboard shortcuts (`1`--`9`, `+`/`-`, `0`, Arrow/WASD) are live (`#474`); adding cached `CanvasPattern` textures finishes full visual accessibility.
+- **Why Now**: `reducedMotion` and desktop keyboard shortcuts (`1`--`9`, `+`/`-`, `0`, Arrow/WASD) are live (`#474`); adding cached `CanvasPattern` textures finishes full visual accessibility once approved.
 - **Planned Sprint Slices**:
   - **TASK-3.2c**: Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures (dots, stripes, crosshatch, checkerboard) over active and hinted regions.
 
@@ -96,10 +110,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-3.3: Shareable Timelapse Replay Video (`.mp4` / `.webm`) Export
 
-- **Readiness**: `Active in Sprint 2` ([`TODO.md`](./TODO.md)) -- `TASK-3.3a`, `TASK-3.3b`
+- **Readiness**: `Awaiting Owner Review & Approval`
 - **Description**: Add an "Export Timelapse Video" button in `ReplayControls.tsx` recording the puzzle's chronological fill animation via `HTMLCanvasElement.captureStream(60)` + `MediaRecorder` and sharing via `NativeBridge.exportOrShareFile`.
 - **Value**: Turns Capy's YouTube-style replay scrubber into a one-tap shareable timelapse video for friends and social feeds, driving organic word-of-mouth discovery.
-- **Why Now**: Chronological `replaySequence` playback and `NativeBridge.exportOrShareFile` binary sharing already exist; adding `MediaRecorder` export unlocks sharing with zero server encoding cost.
+- **Why Now**: Chronological `replaySequence` playback and `NativeBridge.exportOrShareFile` binary sharing already exist; adding `MediaRecorder` export unlocks sharing with zero server encoding cost once approved.
 - **Planned Sprint Slices**:
   - **TASK-3.3a**: Build `web/src/services/ReplayVideoExporter.ts` (`MediaRecorder` `video/mp4` / `video/webm` fallback + progress bar + clean cancellation) rendering locked-frame timelapse playback.
   - **TASK-3.3b**: Wire an Export Video button in `ReplayControls.tsx` and completion banner to `NativeBridge.exportOrShareFile` with feature-detection fallback.
@@ -118,10 +132,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-3.4: Milestone Achievement Toasts & CRDT Lifetime Stats Sync
 
-- **Readiness**: `Active in Sprint 2` ([`TODO.md`](./TODO.md)) -- `TASK-3.4b` *(local `PlayerStatsService.ts` & Settings **Lifetime Stats** card `TASK-3.4a` shipped in [#474](https://github.com/shthed/capy/pull/474))*
+- **Readiness**: `Awaiting Owner Review & Approval` *(local `PlayerStatsService.ts` & Settings **Lifetime Stats** card `TASK-3.4a` shipped in [#474](https://github.com/shthed/capy/pull/474))*
 - **Description**: Layer non-blocking milestone achievement unlock toasts, monotonic CRDT cloud stat sync, and optional Play Games hooks onto `PlayerStatsService.ts` (`capy_player_stats_v1`).
 - **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes and keeps lifetime totals synced monotonically across devices.
-- **Why Now**: Local `PlayerStatsService.ts` (`mergeLifetimeStats`) and the Settings **Lifetime Stats** card are live (`#474`); wiring milestone unlock toasts and cloud/Play Games bridges completes cross-device progression.
+- **Why Now**: Local `PlayerStatsService.ts` (`mergeLifetimeStats`) and the Settings **Lifetime Stats** card are live (`#474`); wiring milestone unlock toasts and cloud/Play Games bridges completes cross-device progression once approved.
 - **Planned Sprint Slices**:
   - **TASK-3.4b**: Add milestone achievement unlock toasts, monotonic CRDT stat merging in `ProviderRegistry.ts` / `CloudProviderDrivers.ts`, and defensive no-op `NativeBridge.unlockAchievement` hooks.
 
@@ -139,10 +153,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-3.5: Fat-Finger Mode (Near-Miss Tap Assist) & Finger Reach Radius
 
-- **Readiness**: `Active in Sprint 2` ([`TODO.md`](./TODO.md)) -- `TASK-3.5a`, `TASK-3.5b`
+- **Readiness**: `Awaiting Owner Review & Approval`
 - **Description**: Add an independent **Fat-Finger Tap Assist** toggle (`fatFingerAssist`, enabled by default in `EASY` difficulty and optional in `NORMAL` / Precise difficulty) paired with a configurable **Finger Size / Touch Reach Radius** setting (`touchReachRadiusPx`, `8px`--`40px` screen CSS pixels with `Compact 12px` / `Standard 22px` / `Large 34px` presets) that snaps near-miss mobile taps onto intended tiny micro-regions without requiring pixel-perfect landing.
-- **Value**: Eliminates frustrating dead taps when a fingertip lands `2`--`8px` off a `< 50px` micro-region onto a `borderMap` pixel (`rId <= 0`), an already-filled neighbor, or an adjacent wrong-color region—complementing the planned Magnified Cutout + Crosshair Lens (`US-2.1`, `v3.1`) for quick one-handed single-tap play.
-- **Why Now**: Currently `PuzzleCanvas.tsx` (`puzzle.regionMap[ly * puzzle.width + lx]` single-tap hit-test) checks only the exact `1x1` pixel under the pointer; adding screen-space radial tolerance makes Easy and mobile play dramatically more forgiving with zero backend or asset cost.
+- **Value**: Eliminates frustrating dead taps when a fingertip lands `2`--`8px` off a `< 50px` micro-region onto a `borderMap` pixel (`rId <= 0`), an already-filled neighbor, or an adjacent wrong-color region—complementing the planned Precision Loupe (`US-2.1`) for quick one-handed single-tap play.
+- **Why Now**: Currently `PuzzleCanvas.tsx` (`puzzle.regionMap[ly * puzzle.width + lx]` single-tap hit-test) checks only the exact `1x1` pixel under the pointer; adding screen-space radial tolerance makes Easy and mobile play dramatically more forgiving once approved.
 - **Planned Sprint Slices**:
   - **TASK-3.5a**: Implement zero-allocation radial near-tap hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`) scaling `touchReachRadiusPx / totalScreenScale` dynamically across zoom levels, prioritizing the nearest unfilled `activeColorId` region first and falling back in `EASY` mode to the nearest unfilled region of any color when exact `(lx, ly)` hits a filled neighbor or border.
   - **TASK-3.5b** `[quick-win]`: Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` (`Compact 12px` / `Standard 22px` / `Large 34px` presets + `8px`--`40px` slider) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` with Playwright E2E near-miss micro-region tap tests.
@@ -160,9 +174,75 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 </details>
 
+### US-2.1: Floating Precision Loupe Magnifier for Micro-Regions *(Moved from `EPIC-2`)*
+
+- **Readiness**: `Awaiting Owner Review & Approval`
+- **Description**: Render an optional floating circular `2.5x` magnifier cutout with center crosshair (`showMagnifierLoupe`) offset `72px` above the active finger during press-and-hold or Paint Mode drags on [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), flipping cleanly below near top HUD edges.
+- **Value**: Eliminates mobile thumb occlusion on tiny `< 50px` micro-regions without forcing repeated manual zooming to `12x` and back out.
+- **Why Pushed to `EPIC-3`**: Held out of `v3.0.1` (bugfixes only) so the Project Owner can review visual cutout styling, crosshair ergonomics, horizontal edge clamping, and hold-vs-pan gesture thresholds prior to implementation.
+- **Planned Sprint Slices**:
+  - **TASK-2.1a**: Render a zero-allocation `2.5x` magnified `compositeCanvasRef` cutout + crosshair lens in `PuzzleCanvas.tsx`.
+  - **TASK-2.1b** `[quick-win]`: Add `showMagnifierLoupe: boolean` setting toggle in `SettingsModal.tsx` Controls and Playwright E2E touch-hold verification.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: medium` | `domain: canvas, gestures, ui`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon` (`2.1b`)
+- **Effort Estimate**: `~40,000 tokens` | `~18--26 min agent` (`~5--7 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Reuses existing offscreen `compositeCanvasRef` via `ctx.drawImage` circular clip with zero per-frame `OffscreenCanvas` or heap allocations inside `requestAnimationFrame`, scaling cleanly for `devicePixelRatio`.
+  - Repositions below the finger within `96px` of the top viewport edge, clamps horizontally (`>= loupeRadius + 12px` from left/right edges), and activates via hold threshold or Paint Mode drag without conflicting with pan or double-tap-drag zoom.
+
+</details>
+
+### US-2.3: Zero-Asset Procedural ASMR Web Audio Engine -- Melodic Layer *(Moved from `EPIC-2`)*
+
+- **Readiness**: `Awaiting Owner Review & Approval` *(base woodblock tap synth `TASK-2.3a` shipped in [#472](https://github.com/shthed/capy/pull/472))*
+- **Description**: Extend [`SoundService.ts`](./web/src/services/SoundService.ts) with rising pentatonic Paint Mode streak notes, warm swatch-completion chord arpeggios, and `100%` puzzle-completion chimes.
+- **Value**: Adds zero-KB offline harmonic reward to continuous painting and color completions while pairing cleanly with LRA haptics.
+- **Why Pushed to `EPIC-3`**: Held out of `v3.0.1` (bugfixes only) for Project Owner review of musical scale, instrument tone, voice-polyphony limits, and completion chime pacing.
+- **Planned Sprint Slices**:
+  - **TASK-2.3b** `[quick-win]`: Layer harmonic pentatonic streak progression during Paint Mode drags, warm swatch-clear arpeggios, and `100%` puzzle completion chimes into `SoundService.ts` and `App.tsx`.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: medium` | `domain: audio, ui`
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~22,000 tokens` | `~10--15 min agent` (`~2.5--3.5 hrs human`)
+- **Target Files**: [`web/src/services/SoundService.ts`](./web/src/services/SoundService.ts), [`web/src/App.tsx`](./web/src/App.tsx), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Zero bundled audio assets (`0 KB`), streak resets cleanly after gesture idle (`> 450ms`), does not advance on `UNFILL` / Undo, caps simultaneous oscillators (max 3--4 voices) during fast drags, and respects `soundEnabled`, `soundVolume`, and `document.hidden` auto-suspend.
+
+</details>
+
+### US-2.4: Zero-Allocation Region Fill Bloom & Swatch Shimmer *(Moved from `EPIC-2`)*
+
+- **Readiness**: `Awaiting Owner Review & Approval`
+- **Description**: Animate region fills with a `180ms` radial ink-bloom and highlight newly completed palette swatches with a `400ms` shimmer wave across matching regions in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
+- **Value**: Gives clear, tactile visual feedback on fills and color completions using a zero-allocation typed-array ring buffer.
+- **Why Pushed to `EPIC-3`**: Held out of `v3.0.1` (bugfixes only) so the Project Owner can review visual subtlety, `reducedMotion` behavior, and battery impact before implementation.
+- **Planned Sprint Slices**:
+  - **TASK-2.4a**: Create a pre-allocated typed-array fill-animation ring buffer (mirroring `CoopRippleBuffer.ts`) driving a `180ms` radial clip bloom in `PuzzleCanvas.tsx`.
+  - **TASK-2.4b**: Trigger a `400ms` celebratory highlight pulse across completed-swatch centroids when a palette color reaches `0` remaining regions.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: medium` | `domain: canvas`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`2.4a`), `Gemini 4 Argon` (`2.4b`)
+- **Effort Estimate**: `~42,000 tokens` | `~20--28 min agent` (`~5--7 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/engine/CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Zero heap allocations (`Float32Array` / `Int32Array` fixed ring buffer) during `requestAnimationFrame`, overwriting the oldest slot cleanly on overflow, bypassing bloom/shimmer when `reducedMotion` is enabled, and returning to `0%` CPU idle once the `180ms` / `400ms` window expires.
+
+</details>
+
 ---
 
-## 2. `EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready for Sprint 3`)
+## 3. `EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready After EPIC-3`)
 
 **Epic Goal**: Complete Capy's signature offline creative workflows—focal-point sub-tile exploration, physical paper coloring sheets, and expressive local Co-op—before introducing external backend infrastructure. *(GitHub Tracking Issue: [#479](https://github.com/shthed/capy/issues/479) | Milestone: [Sprint 3](https://github.com/shthed/capy/milestone/4)).*
 
@@ -210,7 +290,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-4.3: Co-op Collaborator Region Ping Beacon
 
-- **Readiness**: `Ready for Sprint 3` *(Single-step Co-op `UNFILL_EVENT` / `UNFILL` sync shipped in [#475](https://github.com/shthed/capy/pull/475); `WELCOME_STATE` session persistence, Replay Scrubber `Resume Here` `UNFILL`, and `Reset Progress` `UNFILL` + `resetEpoch` shipped in [#484](https://github.com/shthed/capy/pull/484)).*
+- **Readiness**: `Ready for Sprint 3` *(Single-step Co-op `UNFILL_EVENT` / `UNFILL` sync & 2-peer `BroadcastChannel` E2E shipped in [#475](https://github.com/shthed/capy/pull/475); replay-rewind `UNFILL` + `WELCOME_STATE` session persistence is promoted to Sprint 1 `BUG-1` in [`TODO.md`](./TODO.md)).*
 - **Description**: Add a tap-and-hold or toolbar `'PING'` beacon message over `CoopRoomWireMessage` (`HybridCoopRoomAdapter`) rendered as an expanding dual-ring beacon via `CoopRippleBuffer.ts` on `PuzzleCanvas.tsx`.
 - **Value**: Lets Co-op partners point out tiny hard-to-find micro-regions visually on shared puzzles without verbal coordinates.
 - **Why Now**: Works immediately over same-device `BroadcastChannel` Co-op today with zero server changes and carries forward automatically when the WebSocket relay (`US-5.2`) goes live.
@@ -231,61 +311,17 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ---
 
-## 3. `EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish (`Scheduled for v3.1 -- Awaiting Owner Design Approval`)
-
-**Epic Goal**: Make tiny micro-region targeting and continuous painting feel effortless and rewarding on phones and tablets after Project Owner design review. *(GitHub Tracking Issue: [#477](https://github.com/shthed/capy/issues/477) | `US-2.2` zoom controls and `TASK-2.3a` base woodblock tap audio shipped in [#472](https://github.com/shthed/capy/pull/472); `US-2.1` and `US-2.3` are deferred to `v3.1` pending Owner design review).*
-
-### US-2.1: Magnified Cutout + Crosshair Lens for Micro-Regions
-
-- **Readiness**: `Scheduled for v3.1 -- Awaiting Owner Design Approval`
-- **Description**: Show an optional floating magnified cutout with a center crosshair above your finger while pressing and holding or dragging in Paint Mode, flipping cleanly below your finger near the top bar so it never gets cut off.
-- **Value**: Lets you see and aim at tiny puzzle shapes clearly on a phone screen without your thumb covering the number or forcing constant zooming in and out.
-- **Why Deferred to `v3.1`**: Held for `v3.1` so the Project Owner can review the visual cutout styling, crosshair presentation, and hold-to-aim feel before shipping, while Sprint 2 (`v3.0`) delivers Forgiving Tap Assist (`US-3.5`).
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Story` | `EPIC-2` | `priority: medium` | `domain: canvas, gestures, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/grill-me` design review + `/plan`)
-- **Effort Estimate**: `~44,000 tokens` | `~20--30 min agent` (`~5.5--8 hrs human`)
-- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
-- **Acceptance Criteria**:
-  - Zero per-frame heap or canvas allocations during active drag/aiming, with approved visual lens framing and Settings toggle coverage.
-
-</details>
-
-### US-2.3: Musical Paint Sounds (Melodic Brush Streaks & Completion Chimes)
-
-- **Readiness**: `Scheduled for v3.1 -- Awaiting Owner Design Approval` *(base woodblock tap audio `TASK-2.3a` shipped in [#472](https://github.com/shthed/capy/pull/472))*
-- **Description**: Add optional gentle musical note progressions while dragging across shapes in Paint Mode, along with soft celebratory chimes when finishing all shapes of a color or completing an entire puzzle—synthesized live with zero audio file downloads.
-- **Value**: Gives continuous painting and color completion a relaxing, musical sense of reward while keeping the app tiny and 100% offline.
-- **Why Deferred to `v3.1`**: Held for `v3.1` so the Project Owner can review the musical scale, instrument tone, and celebration chime design before enabling melodic audio in gameplay.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Story` | `EPIC-2` | `priority: medium` | `domain: audio, ui`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~22,000 tokens` | `~10--14 min agent` (`~2.5--3.5 hrs human`)
-- **Target Files**: [`web/src/services/SoundService.ts`](./web/src/services/SoundService.ts), [`web/src/App.tsx`](./web/src/App.tsx), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
-- **Acceptance Criteria**:
-  - Zero bundled audio assets (`0 KB`), capped gentle pitch progression without harsh high frequencies, and instant mute/suspend compliance.
-
-</details>
-
----
-
 ## 4. `EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)
 
 **Epic Goal**: Connect Capy's hexagonal cloud, room-sync, and AI provider interfaces (`ProviderRegistry.ts`) to live production credentials and lightweight serverless endpoints when ready for public store and cross-network scale. *(GitHub Tracking Issue: [#480](https://github.com/shthed/capy/issues/480) | Do not pull `EPIC-5` stories into `TODO.md` until their stated **Unblock Prerequisite** is satisfied).*
 
 ### US-5.1: Production Google OAuth, Play Games IDs & Verified App Links
 
-- **Readiness**: `Partially Shipped (#482) -- Awaiting External Console Credentials & Play Signing SHA-256`
-- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), and Google Play App Signing SHA-256 fingerprint (`CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`) in GitHub Repository Variables (root `https://capypaint.com/.well-known/assetlinks.json`, dynamic `appLinksAutoVerify`, and CI variable wiring shipped in [#482](https://github.com/shthed/capy/pull/482)).
-- **Description**: Configure live Google Cloud OAuth, Play Games, and SHA-256 certificate fingerprint repository variables for `com.capypaint.capy`.
-- **Value**: Unlocks live one-tap Google Drive cross-device save sync on web, native Play Games `SnapshotsClient` sync on Android, and seamless Android App Link opening for `https://capypaint.com/#s=<token>` links.
-- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`), dynamic `assetlinks.json` / `appLinksAutoVerify` stamping, and CI workflow variable bindings (`VITE_GOOGLE_CLIENT_ID`, `CAPY_PLAY_GAMES_APP_ID`, `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`) are already complete in [#482](https://github.com/shthed/capy/pull/482).
+- **Readiness**: `Blocked -- External Console Credentials & Root Domain Hosting`
+- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), release keystore SHA-256 fingerprint, and write access to root `https://shthed.github.io/.well-known/assetlinks.json` (Android `autoVerify="true"` queries domain root rather than `/capy/.well-known/`).
+- **Description**: Configure live Google Cloud OAuth and Play Games repository variables and publish verified Digital Asset Links for `com.capypaint.capy`.
+- **Value**: Unlocks live one-tap Google Drive cross-device save sync on web, native Play Games `SnapshotsClient` sync on Android, and seamless Android App Link opening for `#s=<token>` links.
+- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`) are already complete; CI variable wiring is queued in `EPIC-2` (`BUG-2`, staged on `beta` in PR `#485`).
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
@@ -293,27 +329,27 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: android, cloud`
 - **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Gemini 3.8 Flash` + Human Console Setup
 - **Effort Estimate**: `~20,000 tokens` | `~10--15 min agent` (`~2--4 hrs human`)
-- **Target Files**: [`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json), [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), [`CLOUD.md`](./CLOUD.md)
+- **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
-  - `https://capypaint.com/.well-known/assetlinks.json` validates against `pm get-app-links com.capypaint.capy` and Google OAuth sign-in succeeds without sandbox overrides.
+  - `https://shthed.github.io/.well-known/assetlinks.json` (or custom domain) validates against `pm get-app-links com.capypaint.capy` and Google OAuth sign-in succeeds without sandbox overrides.
 
 </details>
 
-### US-5.2: Hosted Hibernating WebSocket Co-op Room Relay (`CoopRoomDurableObject`)
+### US-5.2: Hosted Hibernating WebSocket Co-op Room Relay (`VITE_CAPY_ROOM_WS_URL`)
 
-- **Readiness**: `Code Complete (#482) -- Awaiting Cloudflare capypaint.com Zone Connection`
-- **Unblock Prerequisite**: Connect repository to Cloudflare Workers Builds (or set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in GitHub Secrets) for custom domain `capypaint.com` (see [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers)).
-- **Description**: Activate the shipped Cloudflare Workers Static Assets + SQLite WebSocket Hibernation room relay ([`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts)) backing `HybridCoopRoomAdapter` (`wss://capypaint.com/api/room`) for 6-character `?room=ABC123` codes.
+- **Readiness**: `Blocked -- External Cloudflare Workers / Durable Objects Account`
+- **Unblock Prerequisite**: Cloudflare Workers + Durable Objects deployment target and live `VITE_CAPY_ROOM_WS_URL` domain.
+- **Description**: Deploy a lightweight stateless/hibernating WebSocket room relay (`relay/` Cloudflare Worker + Durable Objects) backing `HybridCoopRoomAdapter` for 6-character `?room=ABC123` codes.
 - **Value**: Lets friends and family color the same puzzle together in real time across separate phones, tablets, and laptops over the internet—not just tabs on the same browser.
-- **Why Now**: Both `HybridCoopRoomAdapter` same-origin auto-discovery (`resolveCoopRoomWsUrl`) and `CoopRoomDurableObject` shipped in [#482](https://github.com/shthed/capy/pull/482).
+- **Why Now**: `HybridCoopRoomAdapter` already implements the full WebSocket room protocol (`HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, `LEAVE`).
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: multiplayer, cloud`
-- **Complexity & Model**: `low` / `easy` (Human Cloudflare Dashboard Connect) | **Recommended Model**: `Gemini 3.8 Flash`
-- **Effort Estimate**: `~10,000 tokens` | `~5--10 min human`
-- **Target Files**: [`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
+- **Effort Estimate**: `~50,000 tokens` | `~25--35 min agent` (`~8--12 hrs human`)
+- **Target Files**: `relay/`, [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Hibernates between strokes (`0` billable CPU ms while idle via C++ `PING`/`PONG`), enforces `<= 6 KB` frame caps, strict `Origin` validation, `40 frames / 5s` rate limiting, and write-once initial `seed_token` persistence, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
 
@@ -383,14 +419,14 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ## 5. Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)
 
-Parked native desktop/mobile store wrappers awaiting completion of `EPIC-3`--`EPIC-4` Web/Android stabilization before active chartering *(intentionally excluded from open GitHub Issues until promoted to `EPIC-6+` so the Issue tracker stays strictly scoped to chartered Epics)*:
+Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EPIC-4` Web/Android stabilization before active chartering *(intentionally excluded from open GitHub Issues until promoted to `EPIC-6+` so the Issue tracker stays strictly scoped to chartered Epics)*:
 
 <details>
 <summary>Expand Unscheduled Multi-Platform Shell Epics (Steam, iOS/iPadOS, Microsoft/Xbox)</summary>
 
 - **`ICE-1`: Steam Desktop Wrapper (`desktop/` Tauri v2) & `SteamCloudDriver` Bindings**:
   - *Value*: Packages `web/dist/` for Windows/macOS/Linux Steam Deck & desktop players with `ISteamRemoteStorage` Cloud Saves, Steam Achievements, and Steam Overlay (`SteamCloudDriver` in [`CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts) is already modularly stubbed).
-  - *Activation Trigger*: Promote to an active Epic after `EPIC-3`--`EPIC-4` desktop keyboard, audio, and achievement contracts stabilize (`~60k tokens`, `Gemini 4 Argon`).
+  - *Activation Trigger*: Promote to an active Epic after `EPIC-2`--`EPIC-4` desktop keyboard, audio, and achievement contracts stabilize (`~60k tokens`, `Gemini 4 Argon`).
 - **`ICE-2`: iOS & iPadOS Native Wrapper (`ios/` Swift `WKWebView`) & `AppleCloudDriver` Bindings**:
   - *Value*: Delivers App Store distribution with Apple Pencil hover/tilt ergonomics, CoreHaptics, GameKit (`GKLocalPlayer`), and CloudKit save sync (`window.webkit.messageHandlers.CapyIOS` + `AppleCloudDriver`).
   - *Activation Trigger*: Promote when Apple Developer Storefront distribution and macOS Xcode signing are scheduled (`~65k tokens`, `Gemini 4 Argon`).
@@ -404,7 +440,7 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-3`--`EP
 
 ## 6. Shipped Epics & Stories (`EPIC-1` & Completed Stories)
 
-Completed Epics and User Stories archived upon merge (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
+Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
 <summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#484)</summary>
@@ -415,10 +451,10 @@ Completed Epics and User Stories archived upon merge (full granular PR history l
   - **`capypaint.com` Cloudflare Workers Static Assets, Hibernating `CoopRoomDurableObject` Relay (`US-5.2`) & Root `assetlinks.json` App Links (`US-5.1`)** -- [#482](https://github.com/shthed/capy/pull/482)
 - **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish* -- [#479](https://github.com/shthed/capy/issues/479))**:
   - **Infinite Zoom Parent Breadcrumbs (`TASK-4.1a`), Printable Vector `.svg` Coloring Sheets (`TASK-4.2a`) & Co-op `UNFILL_EVENT` Undo Sync (`TASK-4.3a`)** -- [#475](https://github.com/shthed/capy/pull/475)
-- **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays* -- [#478](https://github.com/shthed/capy/issues/478))**:
+- **Shipped Slices from `EPIC-3` (*Touch Assist, Sensory Polish, Retention, Accessibility & Replays* -- [#478](https://github.com/shthed/capy/issues/478))**:
   - **Daily Featured Puzzle (`TASK-3.1a`), Reduced Motion (`TASK-3.2a`), Desktop Keyboard Shortcuts (`TASK-3.2b`) & Lifetime Player Stats (`TASK-3.4a`)** -- [#474](https://github.com/shthed/capy/pull/474)
-- **Shipped Slices from `EPIC-2` (*Mobile Touch Precision & Tactile Sensory Polish* -- [#477](https://github.com/shthed/capy/issues/477))**:
-  - **`US-2.2`: Custom Zoom Sensitivity, Top-Bar Scale Pill & Magnetic Scale Detents, plus Base Woodblock Tap Synth (`TASK-2.3a`)** -- [#472](https://github.com/shthed/capy/pull/472)
+- **Shipped Stories from `EPIC-2` (*`v3.0.1` Critical Bugfixes -- Pre-Re-Scope Touch & Audio Base* -- [#477](https://github.com/shthed/capy/issues/477))**:
+  - **`US-2.2`: Custom Zoom Sensitivity, Top-Bar Scale Pill & Magnetic Scale Detents** (plus `TASK-2.3a` Web Audio woodblock tap synth) -- [#472](https://github.com/shthed/capy/pull/472)
 - **`EPIC-1`: Unified Web + Android Monorepo, Gesture Engine, `.capy` v2 Codec, Replay Scrubber & Cloud/Co-op Foundation (`Shipped v1.0--v2.5` | Tracking Issue [#476](https://github.com/shthed/capy/issues/476) | [Sprint 0](https://github.com/shthed/capy/milestone/1))**:
   - **`US-1.1`: Unified Single-Codebase Monorepo (`web/`, `app/`) & Automated Pages Preview CI** -- [#431](https://github.com/shthed/capy/pull/431), [#432](https://github.com/shthed/capy/pull/432), [#434](https://github.com/shthed/capy/pull/434), [#436](https://github.com/shthed/capy/pull/436), [#438](https://github.com/shthed/capy/pull/438), [#440](https://github.com/shthed/capy/pull/440), [#452](https://github.com/shthed/capy/pull/452)
   - **`US-1.2`: 6-Mode Touch Gesture Engine, Free Colour Mode & Live Segmentation Telemetry** -- [#433](https://github.com/shthed/capy/pull/433), [#439](https://github.com/shthed/capy/pull/439), [#442](https://github.com/shthed/capy/pull/442), [#444](https://github.com/shthed/capy/pull/444), [#454](https://github.com/shthed/capy/pull/454), [#455](https://github.com/shthed/capy/pull/455), [#456](https://github.com/shthed/capy/pull/456), [#457](https://github.com/shthed/capy/pull/457)
