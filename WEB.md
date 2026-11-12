@@ -66,7 +66,7 @@ flowchart TB
 
 ### Entry, Build & Public Assets
 - **[`web/index.html`](./web/index.html)**: Host HTML document with canonical `https://capypaint.com/` metadata, mobile viewport, and safe-area tags.
-- **[`web/package.json`](./web/package.json)**: Single source of truth for `"version"`, dependencies (React 19, Vite 6, Tailwind CSS 4, Lucide, `canvas-confetti`), and CLI scripts (`lint`, `build`, `test`, `persona:capyboop`).
+- **[`web/package.json`](./web/package.json)**: Single source of truth for `"version"`, dependencies (React 19, Vite 6, Tailwind CSS 4, Lucide, `canvas-confetti`), and CLI scripts (`lint`, `build`, `test`, `preview`).
 - **[`web/tsconfig.json`](./web/tsconfig.json)**: Strict TypeScript compiler configuration.
 - **[`web/vite.config.ts`](./web/vite.config.ts)**: Vite bundler configuration enforcing relative asset base (`base: './'`) and lazy modal chunk splitting.
 - **[`web/public/sw.js`](./web/public/sw.js)**: Same-origin offline Service Worker (`capy-cache-v2`).

@@ -121,7 +121,6 @@ class CapyAndroidBridgeTest {
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/?room=ABC123#s=abc123"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://www.capypaint.com/#s=token"))
-        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capyboop.github.io/capy/#s=abc123_XYZ-9"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/#s=abc123_XYZ-9"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/?room=ABC123#s=abc123"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy"))
@@ -134,7 +133,6 @@ class CapyAndroidBridgeTest {
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://shthed.github.io/capy/#s=insecure"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://evil.example.com/capy/#s=abc"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com.evil.example/#s=abc"))
-        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capyboop.github.io/other-repo/#s=abc"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/other-repo/#s=abc"))
     }
 
