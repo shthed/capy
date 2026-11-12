@@ -1,0 +1,71 @@
+name: Deploy Cloudflare Worker (capypaint.com)
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'notes/**'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-worker:
+    name: Deploy to capypaint.com
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Cloudflare credentials
+        id: creds
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "${CF_TOKEN}" ] && [ -n "${CF_ACCOUNT}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Cloudflare GitHub Actions Deploy Skipped"
+              echo "No \`CLOUDFLARE_API_TOKEN\` / \`CLOUDFLARE_ACCOUNT_ID\` repository secrets configured."
+              echo "If \`capyboop/capy\` is connected via **Cloudflare Workers Builds** (Git integration), Cloudflare deploys \`capypaint.com\` automatically on push without GitHub secrets."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Check out source
+        if: steps.creds.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        if: steps.creds.outputs.enabled == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web static assets (web/dist)
+        if: steps.creds.outputs.enabled == 'true'
+        working-directory: web
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run build
+
+      - name: Deploy Worker & Static Assets to Cloudflare
+        if: steps.creds.outputs.enabled == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

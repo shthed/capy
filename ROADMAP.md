@@ -263,11 +263,11 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ### US-5.1: Production Google OAuth, Play Games IDs & Verified App Links
 
-- **Readiness**: `Blocked -- External Console Credentials & Root Domain Hosting`
-- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), release keystore SHA-256 fingerprint, and write access to root `https://shthed.github.io/.well-known/assetlinks.json` (Android `autoVerify="true"` queries domain root rather than `/capy/.well-known/`).
-- **Description**: Configure live Google Cloud OAuth and Play Games repository variables and publish verified Digital Asset Links for `com.capypaint.capy`.
-- **Value**: Unlocks live one-tap Google Drive cross-device save sync on web, native Play Games `SnapshotsClient` sync on Android, and seamless Android App Link opening for `#s=<token>` links.
-- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`) are already complete; CI variable wiring is queued in Sprint 1 (`BUG-2`).
+- **Readiness**: `Partially Shipped (#482) -- Awaiting External Console Credentials & Play Signing SHA-256`
+- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), and Google Play App Signing SHA-256 fingerprint in [`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json) (root `https://capypaint.com/.well-known/assetlinks.json` and `AndroidManifest.xml` App Links shipped in [#482](https://github.com/shthed/capy/pull/482)).
+- **Description**: Configure live Google Cloud OAuth and Play Games repository variables and replace the placeholder SHA-256 fingerprint in `assetlinks.json` for `com.capypaint.capy`.
+- **Value**: Unlocks live one-tap Google Drive cross-device save sync on web, native Play Games `SnapshotsClient` sync on Android, and seamless Android App Link opening for `https://capypaint.com/#s=<token>` links.
+- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`) and `capypaint.com` App Link manifests are already complete; CI variable wiring is queued in Sprint 1 (`BUG-2`).
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
@@ -275,29 +275,29 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: android, cloud`
 - **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Gemini 3.8 Flash` + Human Console Setup
 - **Effort Estimate**: `~20,000 tokens` | `~10--15 min agent` (`~2--4 hrs human`)
-- **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), [`CLOUD.md`](./CLOUD.md)
+- **Target Files**: [`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json), [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
-  - `https://shthed.github.io/.well-known/assetlinks.json` (or custom domain) validates against `pm get-app-links com.capypaint.capy` and Google OAuth sign-in succeeds without sandbox overrides.
+  - `https://capypaint.com/.well-known/assetlinks.json` validates against `pm get-app-links com.capypaint.capy` and Google OAuth sign-in succeeds without sandbox overrides.
 
 </details>
 
-### US-5.2: Hosted Hibernating WebSocket Co-op Room Relay (`VITE_CAPY_ROOM_WS_URL`)
+### US-5.2: Hosted Hibernating WebSocket Co-op Room Relay (`CoopRoomDurableObject`)
 
-- **Readiness**: `Blocked -- External Cloudflare Workers / Durable Objects Account`
-- **Unblock Prerequisite**: Cloudflare Workers + Durable Objects deployment target and live `VITE_CAPY_ROOM_WS_URL` domain.
-- **Description**: Deploy a lightweight stateless/hibernating WebSocket room relay (`relay/` Cloudflare Worker + Durable Objects) backing `HybridCoopRoomAdapter` for 6-character `?room=ABC123` codes.
+- **Readiness**: `Code Complete (#482) -- Awaiting Cloudflare capypaint.com Zone Connection`
+- **Unblock Prerequisite**: Connect `capyboop/capy` to Cloudflare Workers Builds (or set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in GitHub Secrets) for custom domain `capypaint.com` (see [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers--syncing-capyboopcapy)).
+- **Description**: Activate the shipped Cloudflare Workers Static Assets + SQLite WebSocket Hibernation room relay ([`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts)) backing `HybridCoopRoomAdapter` (`wss://capypaint.com/api/room`) for 6-character `?room=ABC123` codes.
 - **Value**: Lets friends and family color the same puzzle together in real time across separate phones, tablets, and laptops over the internet—not just tabs on the same browser.
-- **Why Now**: `HybridCoopRoomAdapter` already implements the full WebSocket room protocol (`HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, `LEAVE`).
+- **Why Now**: Both `HybridCoopRoomAdapter` same-origin auto-discovery (`resolveCoopRoomWsUrl`) and `CoopRoomDurableObject` shipped in [#482](https://github.com/shthed/capy/pull/482).
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | `EPIC-5` | `priority: medium` | `domain: multiplayer, cloud`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
-- **Effort Estimate**: `~50,000 tokens` | `~25--35 min agent` (`~8--12 hrs human`)
-- **Target Files**: `relay/`, [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
+- **Complexity & Model**: `low` / `easy` (Human Cloudflare Dashboard Connect) | **Recommended Model**: `Gemini 3.8 Flash`
+- **Effort Estimate**: `~10,000 tokens` | `~5--10 min human`
+- **Target Files**: [`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
-  - Hibernates between strokes (`0` billable CPU ms while idle), enforces `<= 4 KB` frame caps, and automatically falls back to `BroadcastChannel` when offline or unconfigured.
+  - Hibernates between strokes (`0` billable CPU ms while idle), enforces `<= 4 KB` frame caps, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
 
 </details>
 
@@ -391,6 +391,8 @@ Completed Epics and User Stories archived upon merge to `main` (full granular PR
 <details>
 <summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#483)</summary>
 
+- **Shipped Slices from `EPIC-5` (*Production Cloud Auth, Cross-Network Co-op & Optional AI Creation* -- [#480](https://github.com/shthed/capy/issues/480))**:
+  - **`capypaint.com` Cloudflare Workers Static Assets, Hibernating `CoopRoomDurableObject` Relay (`US-5.2`) & Root `assetlinks.json` App Links (`US-5.1`)** -- [#482](https://github.com/shthed/capy/pull/482)
 - **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish* -- [#479](https://github.com/shthed/capy/issues/479))**:
   - **Infinite Zoom Parent Breadcrumbs (`TASK-4.1a`), Printable Vector `.svg` Coloring Sheets (`TASK-4.2a`) & Co-op `UNFILL_EVENT` Undo Sync (`TASK-4.3a`)** -- [#475](https://github.com/shthed/capy/pull/475)
 - **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays* -- [#478](https://github.com/shthed/capy/issues/478))**:

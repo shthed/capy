@@ -332,7 +332,7 @@ async function runCodecAndEngineTests() {
     );
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/.test(bullet),
+        /\s\[#\d+\]\(https:\/\/github\.com\/(?:capyboop|shthed)\/capy\/pull\/\d+\)$/.test(bullet),
         true,
         `Each CHANGELOG.md bullet must end with a bare [#000] PR link: ${bullet}`
       );
@@ -603,7 +603,153 @@ async function runCodecAndEngineTests() {
       'capy-friends-zen-sheet-coloring-sheet.svg'
     );
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, and Version/Changelog sync verified.');
+    // 11. capypaint.com canonical ShareLinkService, Co-op WS auto-discovery, Cloudflare Worker protocol & persona rebrand
+    const shareLinkMod = await vite.ssrLoadModule('/src/services/ShareLinkService.ts');
+    const providerMod = await vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts');
+    const relayProtoMod = await vite.ssrLoadModule(
+      path.resolve(projectRoot, '../worker/coopRoomProtocol.ts')
+    );
+    const { transformPersonaContent } = await import('./rebrand-persona.mjs');
+
+    assert.equal(shareLinkMod.CANONICAL_PRODUCTION_URL, 'https://capypaint.com/');
+    const builtShare = await shareLinkMod.buildShareProgressUrl({
+      sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
+      filledRegionIds: [1, 2, 3],
+      roomCode: 'abc123',
+    });
+    assert.equal(
+      builtShare.url.startsWith('https://capypaint.com/?room=ABC123#s='),
+      true,
+      `SSR canonical share URL must target https://capypaint.com/, got ${builtShare.url}`
+    );
+    for (const hostBase of [
+      'https://capypaint.com/',
+      'https://capyboop.github.io/capy/',
+      'https://shthed.github.io/capy/',
+    ]) {
+      const parsedLink = await shareLinkMod.parseShareLinkFromUrl(
+        `${hostBase}?room=abc123#s=${builtShare.token}`
+      );
+      assert.equal(parsedLink.roomCode, 'ABC123');
+      assert.deepEqual(parsedLink.delta?.filledRegionIds, [1, 2, 3]);
+      assert.equal(parsedLink.matchedSample?.id, 'capybara_sample');
+    }
+
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'capypaint.com',
+        hostname: 'capypaint.com',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'www.capypaint.com',
+        hostname: 'www.capypaint.com',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'capy-paint.example.workers.dev',
+        hostname: 'capy-paint.example.workers.dev',
+      }),
+      'wss://capy-paint.example.workers.dev/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'appassets.androidplatform.net',
+        hostname: 'appassets.androidplatform.net',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'http:',
+        host: 'localhost:3000',
+        hostname: 'localhost',
+      }),
+      null,
+      'Localhost without VITE_CAPY_ROOM_WS_URL must stay null so BroadcastChannel runs without spurious WS errors'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl('wss://custom-relay.example/ws', {
+        protocol: 'https:',
+        host: 'capypaint.com',
+        hostname: 'capypaint.com',
+      }),
+      'wss://custom-relay.example/ws'
+    );
+
+    assert.equal(relayProtoMod.normalizeRoomCode(' ab-c_123! '), 'ABC123');
+    assert.equal(relayProtoMod.normalizeRoomCode('!!!'), null);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://www.capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://appassets.androidplatform.net'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://capypaint.com'), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.example.com'), false);
+
+    const validRelayFrame = relayProtoMod.validateCoopFrame(
+      JSON.stringify({
+        type: 'PAINT_EVENT',
+        roomCode: 'abc123',
+        sender: {
+          playerId: 'p1',
+          displayName: 'Sunny Capy',
+          avatarColorHex: '#38bdf8',
+          lastActiveAt: 1000,
+        },
+        paintEvent: { eventId: 'ev1', regionIds: [4, 5], action: 'FILL' },
+        sentAt: 1234,
+      }),
+      'ABC123'
+    );
+    assert.equal(validRelayFrame.ok, true);
+    assert.equal(validRelayFrame.message?.roomCode, 'ABC123');
+    assert.equal(
+      relayProtoMod.validateCoopFrame('x'.repeat(4097), 'ABC123').reason,
+      'frame_size_exceeded',
+      'Worker Co-op relay must enforce <= 4096 byte frame cap'
+    );
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'OTHER1',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'room_mismatch'
+    );
+
+    const wranglerRaw = fs.readFileSync(path.resolve(projectRoot, '../wrangler.jsonc'), 'utf8');
+    const wranglerJson = JSON.parse(wranglerRaw.replace(/^\s*\/\/.*$/gm, ''));
+    assert.equal(wranglerJson.name, 'capy-paint');
+    assert.equal(wranglerJson.assets?.directory, './web/dist');
+    assert.equal(wranglerJson.assets?.not_found_handling, 'single-page-application');
+    assert.deepEqual(wranglerJson.assets?.run_worker_first, ['/api/*']);
+    assert.deepEqual(wranglerJson.migrations?.[0]?.new_sqlite_classes, ['CoopRoomDurableObject']);
+    assert.equal(
+      wranglerJson.routes?.some((r) => r.pattern === 'capypaint.com' && r.custom_domain === true),
+      true
+    );
+
+    const sampleDoc =
+      'Repo https://github.com/shthed/capy (`shthed`) preview https://shthed.github.io/capy/pull/1/';
+    const transformedOnce = transformPersonaContent(sampleDoc);
+    assert.equal(
+      transformedOnce,
+      'Repo https://github.com/capyboop/capy (`capyboop`) preview https://capyboop.github.io/capy/pull/1/'
+    );
+    assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -645,14 +791,19 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(page, 'main');
 
     // -------------------------------------------------------------------------
-    // 1. PWA Manifest, Privacy Policy & Instant Pre-Baked First Launch
+    // 1. PWA Manifest, Digital Asset Links, Privacy Policy & Instant Pre-Baked First Launch
     // -------------------------------------------------------------------------
-    console.log('1. Verifying PWA manifest, privacy policy, Service Worker & instant pre-baked boot...');
+    console.log('1. Verifying PWA manifest, Digital Asset Links, privacy policy, Service Worker & instant pre-baked boot...');
     const manifestRes = await page.goto(`${BASE_URL}/manifest.webmanifest`);
     assert.equal(manifestRes?.status(), 200);
     const manifestJson = JSON.parse(await manifestRes.text());
     assert.equal(manifestJson.name, 'Capy Paint');
     assert.equal(manifestJson.display, 'standalone');
+
+    const assetLinksRes = await page.goto(`${BASE_URL}/.well-known/assetlinks.json`);
+    assert.equal(assetLinksRes?.status(), 200);
+    const assetLinksJson = JSON.parse(await assetLinksRes.text());
+    assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capypaint.capy');
 
     const privacyRes = await page.goto(`${BASE_URL}/privacy-policy.html`);
     assert.equal(privacyRes?.status(), 200);

@@ -241,7 +241,9 @@ class CapyAndroidBridge(
         const val PLAY_GAMES_PREFS_NAME = "capy_play_games_prefs"
         const val KEY_PLAY_GAMES_PLAYER_ID = "player_id"
         const val KEY_PLAY_GAMES_DISPLAY_NAME = "display_name"
-        const val ALLOWED_DEEP_LINK_HOST = "shthed.github.io"
+        const val ALLOWED_DEEP_LINK_HOST = "capypaint.com"
+        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
+        val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("capyboop.github.io", "shthed.github.io")
 
         /**
          * Returns true when the Google Play Console Game Services Project ID is configured
@@ -372,8 +374,8 @@ class CapyAndroidBridge(
         }
 
         /**
-         * Validates incoming Android App Link URIs so only HTTPS URLs under shthed.github.io/capy
-         * are forwarded into the WebView deep-link handler.
+         * Validates incoming Android App Link URIs so only HTTPS URLs under capypaint.com
+         * (or verified GitHub Pages /capy paths) are forwarded into the WebView deep-link handler.
          */
         fun isAllowedCapyDeepLink(rawUrl: String?): Boolean {
             if (rawUrl.isNullOrBlank()) return false
@@ -382,11 +384,16 @@ class CapyAndroidBridge(
             return try {
                 val uri = URI(trimmed)
                 val scheme = uri.scheme?.lowercase()
-                val host = uri.host?.lowercase()
+                val host = uri.host?.lowercase() ?: return false
                 val path = uri.path ?: ""
-                (scheme == "https") &&
-                    (host == ALLOWED_DEEP_LINK_HOST) &&
-                    ((path == "/capy") || path.startsWith("/capy/"))
+                if (scheme != "https") return false
+                if (host in ROOT_DEEP_LINK_HOSTS) {
+                    path.isEmpty() || path.startsWith("/")
+                } else if (host in GITHUB_PAGES_DEEP_LINK_HOSTS) {
+                    (path == "/capy") || path.startsWith("/capy/")
+                } else {
+                    false
+                }
             } catch (_: Exception) {
                 false
             }

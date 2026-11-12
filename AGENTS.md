@@ -1,6 +1,6 @@
-# AI Agent Operational Playbook — Capy Monorepo (`web/`, `app/`)
+# AI Agent Operational Playbook — Capy Monorepo (`web/`, `app/`, `worker/`)
 
-Capy is a multi-platform color-by-number suite (`https://github.com/shthed/capy`, live at `https://shthed.github.io/capy/`). This file is auto-loaded every AI turn—keep it strictly AI-specific and let it grow as needed to maximize agent execution quality and accuracy over raw token savings. Shared guardrails (`web/` & `app/`), Human + AI workflows, model selection, CI, and maintenance live in [`DEV.md`](./DEV.md)—read [`DEV.md` Section 5](./DEV.md#5-core-technical-guardrails-web--app) before editing code.
+Capy is a multi-platform color-by-number suite (`https://github.com/shthed/capy`, production at `https://capypaint.com/`, PR previews at `https://shthed.github.io/capy/`). This file is auto-loaded every AI turn—keep it strictly AI-specific and let it grow as needed to maximize agent execution quality and accuracy over raw token savings. Shared guardrails (`web/`, `app/`, `worker/`), Human + AI workflows, model selection, CI, and maintenance live in [`DEV.md`](./DEV.md)—read [`DEV.md` Section 5](./DEV.md#5-core-technical-guardrails-web--app) before editing code.
 
 ---
 
@@ -31,7 +31,7 @@ Capy is a multi-platform color-by-number suite (`https://github.com/shthed/capy`
 
 - **UI & Controls** (`web/src/components/*`, `index.css`): `npm run lint && npm run build && npm test` (+ `gallery:capture` if visual). Sync [`DEV.md`](./DEV.md), [`WEB.md`](./WEB.md), [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), [`ROADMAP.md`](./ROADMAP.md).
 - **Puzzle Worker** (`web/src/engine/*`, `puzzle.worker.ts`): `npm run lint && npm run build && npm test`. Sync [`DEV.md`](./DEV.md), [`PUZZLE.md`](./PUZZLE.md), [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), [`ROADMAP.md`](./ROADMAP.md).
-- **Cloud & Codec** (`web/src/services/*Cloud*`, `CapyCodec.ts`): `npm run lint && npm run build && npm test`. Sync [`DEV.md`](./DEV.md), [`CLOUD.md`](./CLOUD.md), [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), [`ROADMAP.md`](./ROADMAP.md).
+- **Cloud, Cloudflare Worker & Codec** (`web/src/services/*Cloud*`, `CapyCodec.ts`, `worker/*`, `wrangler.jsonc`): `npm run lint && npm run build && npm test`. Sync [`DEV.md`](./DEV.md), [`CLOUD.md`](./CLOUD.md), [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), [`ROADMAP.md`](./ROADMAP.md).
 - **Android (`:app`)** (`app/src/main/*`, `NativeBridge.ts`): `npm run lint && npm run build && npm test` + `./gradlew app:testDebugUnitTest app:assembleDebug`. Sync [`DEV.md`](./DEV.md), [`APP.md`](./APP.md), [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), [`ROADMAP.md`](./ROADMAP.md).
 - **Tests & CI/CD** (`web/scripts/*`, `.github/workflows/*`): `npm run lint && npm run build && npm test`; keep daily CI fast/minimal and verify workflow permissions. Sync [`TESTING.md`](./TESTING.md), [`DEV.md`](./DEV.md), [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md).
 - **Docs & Roadmap** (`*.md`, `docs/*`): Verify relative links, zero emojis, zero ASCII art, mobile-safe lists, and Epic Issue (`#476`--`#480`) alignment. Sync [`DEV.md`](./DEV.md), [`ROADMAP.md`](./ROADMAP.md), [`TODO.md`](./TODO.md), [`README.md`](./README.md), [`CHANGELOG.md`](./CHANGELOG.md).

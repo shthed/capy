@@ -1,3 +1,7 @@
+### 2.6 - 2026-11-12 (Alpha)
+
+- Add capypaint.com Cloudflare Worker, Co-op relay security hardening, clean-room export, and dual-approval CI gate [#482](https://github.com/shthed/capy/pull/482)
+
 ### 2.5 - 2026-11-11 (Production, Beta)
 
 - Document 3-artefact roadmap triad, GitHub Epic Issue CLI playbooks, and sprint lifecycle [#483](https://github.com/shthed/capy/pull/483)

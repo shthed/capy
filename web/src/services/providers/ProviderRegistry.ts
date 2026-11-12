@@ -994,6 +994,41 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 // 3. RealtimeRoomProvider: Simultaneous Co-op via BroadcastChannel + Optional WS
 // ---------------------------------------------------------------------------
 
+export interface LocationLike {
+  protocol?: string;
+  host?: string;
+  hostname?: string;
+}
+
+export function resolveCoopRoomWsUrl(
+  explicitEnvUrl?: string,
+  locationLike?: LocationLike | null
+): string | null {
+  if (explicitEnvUrl && explicitEnvUrl.trim().length > 0) {
+    return explicitEnvUrl.trim();
+  }
+  if (!locationLike?.hostname) return null;
+
+  const hostname = locationLike.hostname.toLowerCase();
+  if (hostname === 'appassets.androidplatform.net') {
+    return 'wss://capypaint.com/api/room';
+  }
+
+  if (
+    hostname === 'capypaint.com' ||
+    hostname === 'www.capypaint.com' ||
+    hostname.endsWith('.capypaint.com') ||
+    hostname.endsWith('.workers.dev')
+  ) {
+    const wsProto = locationLike.protocol === 'http:' ? 'ws:' : 'wss:';
+    const targetHost =
+      hostname === 'www.capypaint.com' ? 'capypaint.com' : locationLike.host || hostname;
+    return `${wsProto}//${targetHost}/api/room`;
+  }
+
+  return null;
+}
+
 class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   private roomCode: string | null = null;
   private selfParticipant: CoopParticipant | null = null;
@@ -1041,8 +1076,12 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       };
     }
 
-    const wsEndpoint = (import.meta as unknown as { env?: Record<string, string> }).env
+    const explicitWsEndpoint = (import.meta as unknown as { env?: Record<string, string> }).env
       ?.VITE_CAPY_ROOM_WS_URL;
+    const wsEndpoint = resolveCoopRoomWsUrl(
+      explicitWsEndpoint,
+      typeof window !== 'undefined' ? window.location : null
+    );
     if (wsEndpoint && typeof WebSocket !== 'undefined') {
       try {
         const sep = wsEndpoint.includes('?') ? '&' : '?';
