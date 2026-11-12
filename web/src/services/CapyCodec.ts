@@ -26,6 +26,7 @@ export const MAX_BINARY_SAVE_DECOMPRESSED_BYTES = 16 * 1024 * 1024; // 16 MB
 export const MAX_DELTA_DECOMPRESSED_BYTES = 256 * 1024; // 256 KB
 export const MAX_DELTA_SOURCE_REF_BYTES = 4096;
 export const MAX_DELTA_REGION_ENTRIES = 65_536;
+export const MAX_DELTA_RESET_EPOCH = 1_000_000;
 const MAX_FRAMED_BINARY_CHUNKS = 4096;
 
 export interface CompactPuzzleRecordV2 {
@@ -74,6 +75,7 @@ export interface ProgressDeltaV2 {
   filledRegionIds: number[];
   paintedRegionColors?: Record<number, number>;
   isFreeColor?: boolean;
+  resetEpoch?: number;
   updatedAt: number;
 }
 
@@ -725,10 +727,17 @@ function base64UrlToBytes(token: string): Uint8Array {
  */
 export async function encodeProgressDeltaToken(delta: ProgressDeltaV2): Promise<string> {
   const out: number[] = [2]; // version 2
+  const normalizedResetEpoch =
+    typeof delta.resetEpoch === 'number' &&
+    Number.isFinite(delta.resetEpoch) &&
+    delta.resetEpoch > 0
+      ? Math.min(MAX_DELTA_RESET_EPOCH, Math.floor(delta.resetEpoch))
+      : 0;
   const flags =
     (delta.isFreeColor ? 1 : 0) |
     (delta.paintedRegionColors && Object.keys(delta.paintedRegionColors).length > 0 ? 2 : 0) |
-    (delta.sourceRef ? 4 : 0);
+    (delta.sourceRef ? 4 : 0) |
+    (normalizedResetEpoch > 0 ? 8 : 0);
   out.push(flags);
 
   writeVarint(out, Math.floor(delta.updatedAt / 1000));
@@ -752,6 +761,10 @@ export async function encodeProgressDeltaToken(delta: ProgressDeltaV2): Promise<
       const u32 = argb >>> 0;
       out.push(u32 & 0xff, (u32 >>> 8) & 0xff, (u32 >>> 16) & 0xff, (u32 >>> 24) & 0xff);
     }
+  }
+
+  if (flags & 8) {
+    writeVarint(out, normalizedResetEpoch);
   }
 
   const raw = new Uint8Array(out);
@@ -786,7 +799,7 @@ export async function decodeProgressDeltaToken(token: string): Promise<ProgressD
   if (version !== 2) {
     throw new Error(`Unsupported progress delta version: ${version}`);
   }
-  // Bits 0..2 used in v2.6; bits 3..7 reserved cleanly for Stage 2 F-01 (resetEpoch on flags & 8)
+  // Bits 0..2: freeColor, paintedColors, sourceRef; bit 3 (8): monotonic CRDT resetEpoch
   const flags = raw[cursor.pos++];
   const updatedAt = readVarint(raw, cursor) * 1000;
 
@@ -834,23 +847,78 @@ export async function decodeProgressDeltaToken(token: string): Promise<ProgressD
     }
   }
 
+  let resetEpoch: number | undefined;
+  if (flags & 8) {
+    const decodedEpoch = readVarint(raw, cursor);
+    if (decodedEpoch > MAX_DELTA_RESET_EPOCH) {
+      throw new Error(`Progress delta resetEpoch (${decodedEpoch}) exceeds bounds`);
+    }
+    if (decodedEpoch > 0) {
+      resetEpoch = decodedEpoch;
+    }
+  }
+
   return {
     version: 2,
     ...(sourceRef ? { sourceRef } : {}),
     filledRegionIds,
     ...(paintedRegionColors ? { paintedRegionColors } : {}),
     ...(flags & 1 ? { isFreeColor: true } : {}),
+    ...(resetEpoch !== undefined ? { resetEpoch } : {}),
     updatedAt,
   };
 }
 
+function normalizeResetEpoch(rawEpoch?: number): number {
+  if (typeof rawEpoch !== 'number' || !Number.isFinite(rawEpoch) || rawEpoch <= 0) {
+    return 0;
+  }
+  return Math.min(MAX_DELTA_RESET_EPOCH, Math.floor(rawEpoch));
+}
+
 /**
- * Conflict-free Set-Union + LWW merge for cloud save sync and simultaneous multiplayer recovery.
+ * Conflict-free epoch-scoped Set-Union + LWW merge for cloud save sync and simultaneous Co-op recovery.
+ * When `resetEpoch` differs, the higher monotonic epoch wins cleanly without resurrecting cleared regions.
  */
 export function mergeProgressDeltas(
   local: ProgressDeltaV2,
   remote: ProgressDeltaV2
 ): ProgressDeltaV2 {
+  const localEpoch = normalizeResetEpoch(local.resetEpoch);
+  const remoteEpoch = normalizeResetEpoch(remote.resetEpoch);
+
+  if (localEpoch > remoteEpoch) {
+    const localColors =
+      local.paintedRegionColors && Object.keys(local.paintedRegionColors).length > 0
+        ? { ...local.paintedRegionColors }
+        : undefined;
+    return {
+      version: 2,
+      sourceRef: local.sourceRef || remote.sourceRef,
+      filledRegionIds: [...local.filledRegionIds],
+      ...(localColors ? { paintedRegionColors: localColors } : {}),
+      isFreeColor: Boolean(local.isFreeColor ?? remote.isFreeColor),
+      resetEpoch: localEpoch,
+      updatedAt: Math.max(local.updatedAt, remote.updatedAt),
+    };
+  }
+
+  if (remoteEpoch > localEpoch) {
+    const remoteColors =
+      remote.paintedRegionColors && Object.keys(remote.paintedRegionColors).length > 0
+        ? { ...remote.paintedRegionColors }
+        : undefined;
+    return {
+      version: 2,
+      sourceRef: remote.sourceRef || local.sourceRef,
+      filledRegionIds: [...remote.filledRegionIds],
+      ...(remoteColors ? { paintedRegionColors: remoteColors } : {}),
+      isFreeColor: Boolean(remote.isFreeColor ?? local.isFreeColor),
+      resetEpoch: remoteEpoch,
+      updatedAt: Math.max(local.updatedAt, remote.updatedAt),
+    };
+  }
+
   const seen = new Set<number>(local.filledRegionIds);
   const mergedFilled = [...local.filledRegionIds];
   for (const rid of remote.filledRegionIds) {
@@ -874,6 +942,7 @@ export function mergeProgressDeltas(
     filledRegionIds: mergedFilled,
     ...(mergedColors ? { paintedRegionColors: mergedColors } : {}),
     isFreeColor: Boolean(local.isFreeColor || remote.isFreeColor),
+    ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
 }
