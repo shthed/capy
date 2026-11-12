@@ -1,6 +1,6 @@
 # Capy Product Roadmap -- Strategic Epics, Stories & Milestones (`ROADMAP.md`)
 
-Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./web/) and [`app/`](./app/)). High-level Epics (`EPIC-*`), User Stories (`US-*`), external dependency gates, unscheduled platform shells (`ICE-*`), and shipped milestones live here; only unblocked, codebase-verified tasks pulled into the **current sprint** enter [`TODO.md`](./TODO.md) (full governance in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
+Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./web/) and [`app/`](./app/)). Capy coordinates planning and execution across a **3-Artefact Agile Triad**: (1) **`ROADMAP.md`** owns Epics (`EPIC-*`), User Stories (`US-*`), external dependency gates, Platform Icebox (`ICE-*`), and shipped archives; (2) **GitHub Parent Epic Tracking Issues (`#476`--`#480`) & Sprint Milestones (`#1`--`#4`)** surface live progress bars and PR cross-links (`1 Issue = 1 Epic`); and (3) [`TODO.md`](./TODO.md) holds **only** unblocked, codebase-verified `BUG-*` and `TASK-*` slices pulled into the **active sprint** (full governance and CLI playbooks in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
 
 **Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
@@ -13,23 +13,34 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 6. [Shipped Epics & Stories (`EPIC-1` & Completed Stories)](#6-shipped-epics--stories-epic-1--completed-stories)
 
 <details>
-<summary>Roadmap Governance, Readiness States & Sprint Promotion Rules</summary>
+<summary>Roadmap Governance, GitHub Epic Tracking, Readiness States & Sprint Lifecycle</summary>
 
-- **Two-Stage Pull Architecture (`ROADMAP.md` -> `TODO.md`)**:
-  - **`ROADMAP.md` (Strategic Horizon)**: Owns all product Epics, User Stories, readiness gates, external dependency prerequisites, Platform Icebox (`ICE-*`), and collapsed shipped milestones.
-  - **`TODO.md` (Active Sprint Execution Queue)**: Holds **only** the current sprint's unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices (`~8--10` tasks at a time). Future stories stay in `ROADMAP.md` until promoted at sprint replenishment.
+- **3-Artefact Agile Triad (`ROADMAP.md` <-> GitHub Epic Issues & Milestones <-> `TODO.md`)**:
+  - **`ROADMAP.md` (*Strategic Horizon & Archive*)**: Single source of truth for outcome-driven Epics, User Stories, engineering estimates, external **Unblock Prerequisites**, Platform Icebox (`ICE-*`), and collapsed shipped milestones.
+  - **GitHub Parent Epic Tracking Issues (`1 Issue = 1 Epic`, `#476`--`#480`) & Sprint Milestones (`#1`--`#4`)**:
+    - Every chartered Epic has **one** Parent GitHub Tracking Issue carrying `epic` + `epic:<N>` + platform labels (`web`, `android`) and a `- [x]` / `- [ ]` Story & Task checklist that renders live GitHub progress bars and `Tracked in #<issue>` badges on linked PRs:
+      - `EPIC-1`: [#476](https://github.com/shthed/capy/issues/476) (`CLOSED` | [Sprint 0 (`#1`)](https://github.com/shthed/capy/milestone/1) -- Unified Monorepo & Foundation)
+      - `EPIC-2`: [#477](https://github.com/shthed/capy/issues/477) (`OPEN` | [Sprint 1 (`#2`)](https://github.com/shthed/capy/milestone/2) -- Mobile Touch Precision & Sensory Polish)
+      - `EPIC-3`: [#478](https://github.com/shthed/capy/issues/478) (`OPEN` | [Sprint 2 (`#3`)](https://github.com/shthed/capy/milestone/3) -- Fat-Finger Assist, Daily Streaks, A11y & Video Replays)
+      - `EPIC-4`: [#479](https://github.com/shthed/capy/issues/479) (`OPEN` | [Sprint 3 (`#4`)](https://github.com/shthed/capy/milestone/4) -- Focal Sub-Tiles, Print Framing & Co-op Ping)
+      - `EPIC-5`: [#480](https://github.com/shthed/capy/issues/480) (`OPEN` | *No Milestone -- Blocked on External Credentials / Infra*)
+    - **Strict Anti-Sprawl Rule**: Individual `TASK-*` slices, Sprint Priority 0 `BUG-*` items (tracked in [`TODO.md`](./TODO.md) + the active GitHub Sprint Milestone), and unscheduled `ICE-1`--`ICE-3` wrappers do **not** open separate GitHub Issues. Charter a new `EPIC-N` issue **only** when promoting an `ICE-*` item or new product theme into active roadmap scheduling.
+  - **`TODO.md` (*Focused 1-Sprint Execution Queue*)**: Holds **only** the current sprint's unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices (`~8--10` tasks at a time). Future stories stay in `ROADMAP.md` until promoted at sprint replenishment.
 - **Story Readiness States**:
-  - **`Active in Sprint N` ([`TODO.md`](./TODO.md))**: Currently pulled into `TODO.md` with exact file/line targets and deterministic test gates.
+  - **`Active in Sprint N` ([`TODO.md`](./TODO.md))**: Pulled into `TODO.md` under the active GitHub Sprint Milestone with verified symbol targets and deterministic test gates.
   - **`Ready for Next Sprint`**: Zero external backend/credential blockers; eligible for immediate promotion into `TODO.md` once the current sprint drains.
-  - **`Blocked -- External Credentials / Infra`**: Client hexagonal interfaces are ready, but live execution awaits external OAuth client IDs, Play Console setup, serverless relays, or paid AI API keys. Never pull blocked stories into `TODO.md` until their **Unblock Prerequisite** is satisfied.
-- **Completion Lifecycle**:
-  - When an individual `TASK-*` ships, delete it immediately from [`TODO.md`](./TODO.md).
-  - When a Story or Epic's final task merges to `main`, move that Story or Epic into the single collapsed **Shipped Epics & Stories** `<details>` summary in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) with clickable `#<PR>` links.
+  - **`Blocked -- External Credentials / Infra`**: Client hexagonal interfaces exist, but live execution awaits external OAuth client IDs, Play Console setup, serverless relays, or paid AI API keys. Never pull blocked stories into `TODO.md` or assign them to an active Sprint Milestone until their **Unblock Prerequisite** is satisfied.
+- **5-Stage Automated Sprint & Epic Lifecycle (`Alpha -> Beta -> Production`)**:
+  1. **Sprint Pull / Replenishment**: When [`TODO.md`](./TODO.md) drains (`<= 2` tasks left), open a lightweight `docs/*` sprint-planning PR promoting the next ready Epic/Stories from `ROADMAP.md` into `TODO.md` and ensuring the target GitHub Sprint Milestone is open.
+  2. **Daily Sprint PRs (`feature/* -> beta`)**: Branch off `origin/beta` (`#NNN` single-task chats or `/goal` / `/teamwork` multi-task Story runs), open PRs with `--base beta`, attach `epic:<N>` + work/platform labels + the active Sprint Milestone, and put `**Agile Scope**: Tracked in #<epic-issue> (...)` at the top (**never** write `Closes #<epic-issue>` or `Fixes #<epic-issue>` on partial Epic PRs).
+  3. **Task Merge & Epic Checklist Sync**: Delete finished `BUG-*` / `TASK-*` items from [`TODO.md`](./TODO.md) in the shipping PR, and check off `- [x] ... — #<pr>` on the Parent Epic Tracking Issue (`gh issue edit <epic-issue>`) as slices land on `beta`.
+  4. **Beta Play-Testing & Production Promotion (`beta -> main`)**: Soak merged Sprint slices on `https://shthed.github.io/capy/beta/`, then open a human-approved `beta -> main` Release Promotion PR (gated by CI `Playwright E2E Release Gate`), tag `vX.Y.Z` to trigger [`release.yml`](./.github/workflows/release.yml) (`.apk` + Play Store `.aab`), and sync `origin/beta` to `origin/main`.
+  5. **Story/Epic Archive & Closure**: Move completed Stories/Epics into the collapsed **Shipped Epics & Stories** `<details>` archive in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) with `#<PR>` links, close the Parent Epic Tracking Issue (`gh issue close <epic-issue>`) once `100%` of its Stories reach Production, and close the completed Sprint Milestone.
 - **Remaining Roadmap Rollup (`15` Active/Queued Stories across `4` Epics)**:
-  - `EPIC-2` (*3 Remaining Stories -- Active in Sprint 1*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
-  - `EPIC-3` (*5 Stories -- Ready for Sprint 2*): `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
-  - `EPIC-4` (*3 Stories -- Ready for Sprint 3*): `~68k tokens` | `~32--46 min agent` (`~9--13.5 hrs human`).
-  - `EPIC-5` (*5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
+  - `EPIC-2` ([#477](https://github.com/shthed/capy/issues/477), *3 Remaining Stories -- Active in Sprint 1*): `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
+  - `EPIC-3` ([#478](https://github.com/shthed/capy/issues/478), *5 Stories -- Ready for Sprint 2*): `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
+  - `EPIC-4` ([#479](https://github.com/shthed/capy/issues/479), *3 Stories -- Ready for Sprint 3*): `~68k tokens` | `~32--46 min agent` (`~9--13.5 hrs human`).
+  - `EPIC-5` ([#480](https://github.com/shthed/capy/issues/480), *5 Stories -- Blocked on External Infra*): `~245k tokens` | `~113--165 min agent` (`~34--50 hrs human`).
   - **Total Strategic Horizon**: `~569k tokens` | `~4.4--6.4 hrs agent` (`~75--109.5 hrs human`).
 
 </details>
@@ -157,10 +168,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Readiness**: `Ready for Sprint 2` (Zero external blockers)
 - **Description**: Add an independent **Fat-Finger Tap Assist** toggle (`fatFingerAssist`, enabled by default in `EASY` difficulty and optional in `NORMAL` / Precise difficulty) paired with a configurable **Finger Size / Touch Reach Radius** setting (`touchReachRadiusPx`, `8px`--`40px` screen CSS pixels with `Compact 12px` / `Standard 22px` / `Large 34px` presets) that snaps near-miss mobile taps onto intended tiny micro-regions without requiring pixel-perfect landing.
 - **Value**: Eliminates frustrating dead taps when a fingertip lands `2`--`8px` off a `< 50px` micro-region onto a `borderMap` pixel (`rId <= 0`), an already-filled neighbor, or an adjacent wrong-color region—complementing Sprint 1's press-and-hold Loupe (`US-2.1`) for quick one-handed single-tap play.
-- **Why Now**: Currently `PuzzleCanvas.tsx` (`#L2013`--`#L2024`) checks only the exact `1x1` pixel `regionMap[ly * width + lx]`; adding screen-space radial tolerance makes Easy and mobile play dramatically more forgiving with zero backend or asset cost.
+- **Why Now**: Currently `PuzzleCanvas.tsx` (`puzzle.regionMap[ly * puzzle.width + lx]` single-tap hit-test) checks only the exact `1x1` pixel under the pointer; adding screen-space radial tolerance makes Easy and mobile play dramatically more forgiving with zero backend or asset cost.
 - **Planned Sprint Slices**:
   - **TASK-3.5a**: Implement zero-allocation radial near-tap hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`) scaling `touchReachRadiusPx / totalScreenScale` dynamically across zoom levels, prioritizing the nearest unfilled `activeColorId` region first and falling back in `EASY` mode to the nearest unfilled region of any color when exact `(lx, ly)` hits a filled neighbor or border.
-  - **TASK-3.5b** `[quick-win]`: Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` (`Compact 12px` / `Standard 22px` / `Large 34px` presets + `8px`--`40px` slider) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` (`#L565`--`#L589`) with Playwright E2E near-miss micro-region tap tests.
+  - **TASK-3.5b** `[quick-win]`: Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` (`Compact 12px` / `Standard 22px` / `Large 34px` presets + `8px`--`40px` slider) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` with Playwright E2E near-miss micro-region tap tests.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
@@ -354,7 +365,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ## 5. Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)
 
-Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EPIC-4` Web/Android stabilization before active chartering:
+Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EPIC-4` Web/Android stabilization before active chartering *(intentionally excluded from open GitHub Issues until promoted to `EPIC-6+` so the Issue tracker stays strictly scoped to chartered Epics)*:
 
 <details>
 <summary>Expand Unscheduled Multi-Platform Shell Epics (Steam, iOS/iPadOS, Microsoft/Xbox)</summary>
@@ -378,7 +389,7 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EP
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#481)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#483)</summary>
 
 - **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish* -- [#479](https://github.com/shthed/capy/issues/479))**:
   - **Infinite Zoom Parent Breadcrumbs (`TASK-4.1a`), Printable Vector `.svg` Coloring Sheets (`TASK-4.2a`) & Co-op `UNFILL_EVENT` Undo Sync (`TASK-4.3a`)** -- [#475](https://github.com/shthed/capy/pull/475)
@@ -392,6 +403,6 @@ Completed Epics and User Stories archived upon merge to `main` (full granular PR
   - **`US-1.3`: Chronological Undo/Redo & YouTube-Style Interactive Replay Scrubber** -- [#446](https://github.com/shthed/capy/pull/446), [#447](https://github.com/shthed/capy/pull/447), [#448](https://github.com/shthed/capy/pull/448), [#463](https://github.com/shthed/capy/pull/463), [#464](https://github.com/shthed/capy/pull/464)
   - **`US-1.4`: Saves Gallery Modernization, `.capy` v2 Binary Archive & Instant Pre-Baked Startup** -- [#449](https://github.com/shthed/capy/pull/449), [#458](https://github.com/shthed/capy/pull/458), [#459](https://github.com/shthed/capy/pull/459), [#462](https://github.com/shthed/capy/pull/462)
   - **`US-1.5`: Modular `CloudProviderDriver` Sync (`GoogleCloudDriver`, `PlayGamesAndroidDriver`), `#s=<token>` Links & Simultaneous Co-op** -- [#460](https://github.com/shthed/capy/pull/460), [#461](https://github.com/shthed/capy/pull/461)
-  - **`US-1.6`: Core Reliability Audit Fixes, Pixel API 33+ Haptics, 3-Tier `Alpha -> Beta -> Production` Pipeline & Lean Agile Foundation** -- [#465](https://github.com/shthed/capy/pull/465), [#466](https://github.com/shthed/capy/pull/466), [#467](https://github.com/shthed/capy/pull/467), [#468](https://github.com/shthed/capy/pull/468), [#469](https://github.com/shthed/capy/pull/469), [#470](https://github.com/shthed/capy/pull/470), [#471](https://github.com/shthed/capy/pull/471), [#473](https://github.com/shthed/capy/pull/473), [#481](https://github.com/shthed/capy/pull/481)
+  - **`US-1.6`: Core Reliability Audit Fixes, Pixel API 33+ Haptics, 3-Tier `Alpha -> Beta -> Production` Pipeline & Lean Agile Foundation** -- [#465](https://github.com/shthed/capy/pull/465), [#466](https://github.com/shthed/capy/pull/466), [#467](https://github.com/shthed/capy/pull/467), [#468](https://github.com/shthed/capy/pull/468), [#469](https://github.com/shthed/capy/pull/469), [#470](https://github.com/shthed/capy/pull/470), [#471](https://github.com/shthed/capy/pull/471), [#473](https://github.com/shthed/capy/pull/473), [#481](https://github.com/shthed/capy/pull/481), [#483](https://github.com/shthed/capy/pull/483)
 
 </details>
