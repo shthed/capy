@@ -46,6 +46,7 @@ export interface ReleaseChannelInfo {
   stableWebUrl: string;
   betaWebUrl: string;
   betaApkUrl: string;
+  showChannelSwitcher: boolean;
 }
 
 const CANONICAL_PAGES_BASE = 'https://shthed.github.io/capy';
@@ -55,6 +56,7 @@ const CANONICAL_PAGES_BASE = 'https://shthed.github.io/capy';
  * - '/capy/pull/<num>/' -> channel: 'alpha', badgeLabel: 'ALPHA #<num>'
  * - '/capy/beta/'       -> channel: 'beta',  badgeLabel: 'BETA'
  * - '/capy/'            -> channel: 'stable', badgeLabel: null
+ * - 'capypaint.com'     -> channel: 'stable', badgeLabel: null, showChannelSwitcher: false
  * - 'localhost' / '127.0.0.1' -> channel: 'dev', badgeLabel: null (unless overridden via ?capy_channel=)
  */
 export function resolveReleaseChannel(
@@ -63,10 +65,23 @@ export function resolveReleaseChannel(
   search: string = typeof window !== 'undefined' ? window.location.search : ''
 ): ReleaseChannelInfo {
   const cleanOrigin = origin.replace(/\/+$/, '');
+  let originHostname = '';
+  try {
+    originHostname = new URL(cleanOrigin).hostname.toLowerCase();
+  } catch {
+    originHostname = '';
+  }
+
+  const isCustomDomain =
+    originHostname === 'capypaint.com' ||
+    originHostname === 'www.capypaint.com' ||
+    originHostname.endsWith('.capypaint.com') ||
+    originHostname === 'appassets.androidplatform.net';
+
   const pagesBase = cleanOrigin.endsWith('.github.io')
     ? `${cleanOrigin}/capy`
     : CANONICAL_PAGES_BASE;
-  const stableWebUrl = `${pagesBase}/`;
+  const stableWebUrl = isCustomDomain ? 'https://capypaint.com/' : `${pagesBase}/`;
   const betaWebUrl = `${pagesBase}/beta/`;
   const betaApkUrl = `${pagesBase}/beta/capy.apk`;
 
@@ -84,6 +99,7 @@ export function resolveReleaseChannel(
         stableWebUrl,
         betaWebUrl,
         betaApkUrl,
+        showChannelSwitcher: true,
       };
     }
     if (forced === 'alpha') {
@@ -94,6 +110,7 @@ export function resolveReleaseChannel(
         stableWebUrl,
         betaWebUrl,
         betaApkUrl,
+        showChannelSwitcher: true,
       };
     }
     if (forced === 'stable') {
@@ -104,6 +121,7 @@ export function resolveReleaseChannel(
         stableWebUrl,
         betaWebUrl,
         betaApkUrl,
+        showChannelSwitcher: true,
       };
     }
     if (forced === 'dev') {
@@ -114,8 +132,21 @@ export function resolveReleaseChannel(
         stableWebUrl,
         betaWebUrl,
         betaApkUrl,
+        showChannelSwitcher: true,
       };
     }
+  }
+
+  if (isCustomDomain) {
+    return {
+      channel: 'stable',
+      badgeLabel: null,
+      prNumber: null,
+      stableWebUrl: 'https://capypaint.com/',
+      betaWebUrl,
+      betaApkUrl,
+      showChannelSwitcher: false,
+    };
   }
 
   const pullNumMatch = /\/pull\/(\d+)(?:\/|$)/.exec(pathname);
@@ -128,6 +159,7 @@ export function resolveReleaseChannel(
       stableWebUrl,
       betaWebUrl,
       betaApkUrl,
+      showChannelSwitcher: true,
     };
   }
 
@@ -139,6 +171,7 @@ export function resolveReleaseChannel(
       stableWebUrl,
       betaWebUrl,
       betaApkUrl,
+      showChannelSwitcher: true,
     };
   }
 
@@ -150,6 +183,7 @@ export function resolveReleaseChannel(
       stableWebUrl,
       betaWebUrl,
       betaApkUrl,
+      showChannelSwitcher: true,
     };
   }
 
@@ -161,6 +195,6 @@ export function resolveReleaseChannel(
     stableWebUrl,
     betaWebUrl,
     betaApkUrl,
+    showChannelSwitcher: true,
   };
 }
-

@@ -257,6 +257,30 @@ class CapyAndroidBridge(
                 trimmed.any { it != '0' }
         }
 
+        /**
+         * Returns true when CAPY_ANDROID_SHA256_CERT_FINGERPRINTS contains at least one
+         * valid non-zero SHA-256 certificate fingerprint (colon-separated or 64-char hex).
+         */
+        fun isAppLinksCertConfigured(fingerprintsEnv: String?): Boolean {
+            if (fingerprintsEnv.isNullOrBlank()) return false
+            val hex64Regex = Regex("^[0-9A-F]{64}$")
+            val colonSha256Regex = Regex("^([0-9A-F]{2}:){31}[0-9A-F]{2}$")
+            val allZeroRegex = Regex("^(00:){31}00$")
+            return fingerprintsEnv
+                .split(Regex("[,;\\s]+"))
+                .map { token ->
+                    val upper = token.trim().uppercase()
+                    if (hex64Regex.matches(upper)) {
+                        upper.chunked(2).joinToString(":")
+                    } else {
+                        upper
+                    }
+                }
+                .any { candidate ->
+                    colonSha256Regex.matches(candidate) && !allZeroRegex.matches(candidate)
+                }
+        }
+
         fun sanitizeKey(key: String): String {
             val cleaned = key.replace(Regex("[^a-zA-Z0-9._-]"), "_")
             return cleaned.ifEmpty { "default_key" }

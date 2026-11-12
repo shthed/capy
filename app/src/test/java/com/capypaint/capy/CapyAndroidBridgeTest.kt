@@ -161,6 +161,26 @@ class CapyAndroidBridgeTest {
     }
 
     @Test
+    fun `isAppLinksCertConfigured validates real SHA-256 certificate fingerprints and rejects zero placeholders`() {
+        val validColon =
+            "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"
+        val validHex64 = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+        val zeroColon =
+            "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+
+        assertTrue(CapyAndroidBridge.isAppLinksCertConfigured(validColon))
+        assertTrue(CapyAndroidBridge.isAppLinksCertConfigured(validHex64))
+        assertTrue(CapyAndroidBridge.isAppLinksCertConfigured("$zeroColon, $validColon"))
+
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured(null))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured(""))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured("   "))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured(zeroColon))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured("0".repeat(64)))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured("not-a-sha256-fingerprint"))
+    }
+
+    @Test
     fun `cloud snapshot directory round-trips CRDT progress envelopes independently from local saves`() {
         val cloudDir = tempFolder.newFolder(CapyAndroidBridge.CLOUD_FOLDER_NAME)
         val payload = """{"version":1,"slotKey":"sample_capybara","updatedAt":1700000000000,"token":"abc"}"""
