@@ -52,6 +52,7 @@ export async function buildShareProgressUrl(options: {
   filledRegionIds: number[];
   paintedRegionColors?: Record<number, number>;
   isFreeColor?: boolean;
+  resetEpoch?: number;
   roomCode?: string | null;
 }): Promise<{ url: string; token: string }> {
   const delta: ProgressDeltaV2 = {
@@ -62,6 +63,7 @@ export async function buildShareProgressUrl(options: {
       ? { paintedRegionColors: options.paintedRegionColors }
       : {}),
     ...(options.isFreeColor ? { isFreeColor: true } : {}),
+    ...(options.resetEpoch && options.resetEpoch > 0 ? { resetEpoch: options.resetEpoch } : {}),
     updatedAt: Date.now(),
   };
 

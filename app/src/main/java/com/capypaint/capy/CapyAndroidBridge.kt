@@ -28,6 +28,7 @@ class CapyAndroidBridge(
     private val onModalStateChanged: (Boolean) -> Unit,
     private val onRequestPlayGamesSignIn: (() -> Unit)? = null,
     private val onSaveCloudSnapshot: ((String, String) -> Unit)? = null,
+    private val onRequestCloudSnapshotPull: ((String) -> Unit)? = null,
 ) {
     @Volatile
     var isModalOpen: Boolean = false
@@ -108,6 +109,39 @@ class CapyAndroidBridge(
     @JavascriptInterface
     fun loadCloudSnapshot(slotKey: String): String? {
         return loadBackupFromDir(cloudDir, slotKey)
+    }
+
+    @JavascriptInterface
+    fun saveCloudBinaryChunk(
+        blobKey: String,
+        chunkIndex: Int,
+        totalChunks: Int,
+        base64Chunk: String,
+    ): Boolean {
+        val savedLocal = saveCloudBinaryChunkToDir(
+            dir = cloudDir,
+            blobKey = blobKey,
+            chunkIndex = chunkIndex,
+            totalChunks = totalChunks,
+            base64Chunk = base64Chunk,
+        )
+        if (savedLocal) {
+            onSaveCloudSnapshot?.invoke(formatCloudBinaryChunkSlotKey(blobKey, chunkIndex), base64Chunk)
+        }
+        return savedLocal
+    }
+
+    @JavascriptInterface
+    fun loadCloudBinaryChunk(blobKey: String, chunkIndex: Int): String? {
+        return loadCloudBinaryChunkFromDir(cloudDir, blobKey, chunkIndex)
+    }
+
+    @JavascriptInterface
+    fun requestCloudSnapshotPull(slotKey: String): Boolean {
+        val safeKey = sanitizeKey(slotKey)
+        val callback = onRequestCloudSnapshotPull ?: return false
+        callback.invoke(safeKey)
+        return true
     }
 
     fun cachePlayGamesProfile(playerId: String, displayName: String) {
@@ -370,6 +404,166 @@ class CapyAndroidBridge(
                 content
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load backup: $key", e)
+                null
+            }
+        }
+
+        const val DEFAULT_CLOUD_BINARY_CHUNK_BYTES = 180_000
+        const val MAX_CLOUD_BINARY_CHUNKS = 32
+        const val MAX_CLOUD_BINARY_TOTAL_BYTES = 3 * 1024 * 1024
+        const val MAX_CLOUD_BINARY_CHUNK_CHARS = 300_000
+
+        fun formatCloudBinaryChunkSlotKey(blobKey: String, chunkIndex: Int): String {
+            return "${sanitizeKey(blobKey)}_part_$chunkIndex"
+        }
+
+        fun saveCloudBinaryChunkToDir(
+            dir: File,
+            blobKey: String,
+            chunkIndex: Int,
+            totalChunks: Int,
+            base64Chunk: String,
+        ): Boolean {
+            if (
+                (blobKey.isBlank()) ||
+                (totalChunks < 1) ||
+                (totalChunks > MAX_CLOUD_BINARY_CHUNKS) ||
+                (chunkIndex < 0) ||
+                (chunkIndex >= totalChunks) ||
+                (base64Chunk.isEmpty()) ||
+                (base64Chunk.length > MAX_CLOUD_BINARY_CHUNK_CHARS)
+            ) {
+                return false
+            }
+            val slotKey = formatCloudBinaryChunkSlotKey(blobKey, chunkIndex)
+            val saved = saveBackupToDir(dir, slotKey, base64Chunk)
+            if (!saved) return false
+
+            if (chunkIndex == totalChunks - 1) {
+                val safePrefix = sanitizeKey(blobKey)
+                for (staleIdx in totalChunks until MAX_CLOUD_BINARY_CHUNKS) {
+                    val staleFile = File(dir, "${safePrefix}_part_$staleIdx.json")
+                    if (staleFile.exists()) {
+                        staleFile.delete()
+                    }
+                }
+            }
+            return true
+        }
+
+        fun loadCloudBinaryChunkFromDir(dir: File, blobKey: String, chunkIndex: Int): String? {
+            if ((blobKey.isBlank()) || (chunkIndex < 0) || (chunkIndex >= MAX_CLOUD_BINARY_CHUNKS)) {
+                return null
+            }
+            return loadBackupFromDir(dir, formatCloudBinaryChunkSlotKey(blobKey, chunkIndex))
+        }
+
+        private fun writeAtomicBytesFile(dir: File, fileName: String, bytes: ByteArray): Boolean {
+            val tmpFile = File(dir, "$fileName.tmp")
+            return try {
+                if ((!dir.exists()) && (!dir.mkdirs())) return false
+                val targetFile = File(dir, fileName)
+                FileOutputStream(tmpFile).use { fos ->
+                    fos.write(bytes)
+                    fos.flush()
+                    fos.fd.sync()
+                }
+                try {
+                    Files.move(
+                        tmpFile.toPath(),
+                        targetFile.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE,
+                    )
+                } catch (_: AtomicMoveNotSupportedException) {
+                    try {
+                        Files.move(
+                            tmpFile.toPath(),
+                            targetFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                        )
+                    } catch (_: Exception) {
+                        if (!tmpFile.renameTo(targetFile)) {
+                            throw IllegalStateException("Failed to rename ${tmpFile.name}")
+                        }
+                    }
+                }
+                true
+            } catch (e: Exception) {
+                if (tmpFile.exists()) tmpFile.delete()
+                Log.e(TAG, "Failed writing atomic binary chunk: $fileName", e)
+                false
+            }
+        }
+
+        fun saveCloudBinaryBytesToDir(
+            dir: File,
+            blobKey: String,
+            bytes: ByteArray,
+            chunkSizeBytes: Int = DEFAULT_CLOUD_BINARY_CHUNK_BYTES,
+        ): Int {
+            if (
+                (blobKey.isBlank()) ||
+                (bytes.isEmpty()) ||
+                (bytes.size > MAX_CLOUD_BINARY_TOTAL_BYTES) ||
+                (chunkSizeBytes <= 0)
+            ) {
+                return 0
+            }
+            val totalChunks = (bytes.size + chunkSizeBytes - 1) / chunkSizeBytes
+            if ((totalChunks < 1) || (totalChunks > MAX_CLOUD_BINARY_CHUNKS)) return 0
+
+            val safeKey = sanitizeKey(blobKey)
+            for (i in 0 until totalChunks) {
+                val start = i * chunkSizeBytes
+                val end = minOf(bytes.size, start + chunkSizeBytes)
+                val slice = bytes.copyOfRange(start, end)
+                if (!writeAtomicBytesFile(dir, "${safeKey}_bin_$i.bin", slice)) {
+                    return 0
+                }
+            }
+            val metaText = "$totalChunks:${bytes.size}"
+            if (!saveBackupToDir(dir, "${safeKey}_bin_meta", metaText)) {
+                return 0
+            }
+            for (staleIdx in totalChunks until MAX_CLOUD_BINARY_CHUNKS) {
+                val staleFile = File(dir, "${safeKey}_bin_$staleIdx.bin")
+                if (staleFile.exists()) staleFile.delete()
+            }
+            return totalChunks
+        }
+
+        fun loadCloudBinaryBytesFromDir(dir: File, blobKey: String): ByteArray? {
+            if (blobKey.isBlank()) return null
+            val safeKey = sanitizeKey(blobKey)
+            val metaText = loadBackupFromDir(dir, "${safeKey}_bin_meta") ?: return null
+            val parts = metaText.split(':')
+            if (parts.size != 2) return null
+            val totalChunks = parts[0].toIntOrNull() ?: return null
+            val expectedBytes = parts[1].toIntOrNull() ?: return null
+            if (
+                (totalChunks !in 1..MAX_CLOUD_BINARY_CHUNKS) ||
+                (expectedBytes !in 1..MAX_CLOUD_BINARY_TOTAL_BYTES)
+            ) {
+                return null
+            }
+
+            return try {
+                val out = ByteArray(expectedBytes)
+                var writeOffset = 0
+                for (i in 0 until totalChunks) {
+                    val chunkFile = File(dir, "${safeKey}_bin_$i.bin")
+                    if (!chunkFile.exists()) return null
+                    val chunkBytes = chunkFile.readBytes()
+                    if ((chunkBytes.isEmpty()) || ((writeOffset + chunkBytes.size) > expectedBytes)) {
+                        return null
+                    }
+                    System.arraycopy(chunkBytes, 0, out, writeOffset, chunkBytes.size)
+                    writeOffset += chunkBytes.size
+                }
+                if (writeOffset == expectedBytes) out else null
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed loading chunked cloud binary: $blobKey", e)
                 null
             }
         }

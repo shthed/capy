@@ -1161,6 +1161,184 @@ async function runCodecAndEngineTests() {
       );
     }
 
+    // --- Sprint 2: F8 CRDT resetEpoch & F9 >180KB Play Games Chunks ---
+    {
+      const driversMod = await vite.ssrLoadModule('/src/services/providers/CloudProviderDrivers.ts');
+      const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
+
+      // 1. F8 (F-01): ProgressDeltaV2 resetEpoch token round-trip & monotonic CRDT epoch dominance
+      const resetToken = await codec.encodeProgressDeltaToken({
+        version: 2,
+        sourceRef: { kind: 'sample', uri: './assets/capybara.webp' },
+        filledRegionIds: [4, 9],
+        resetEpoch: 3,
+        updatedAt: 1_750_000_000_000,
+      });
+      const decodedReset = await codec.decodeProgressDeltaToken(resetToken);
+      assert.equal(decodedReset.resetEpoch, 3, 'ProgressDeltaV2 codec must round-trip resetEpoch');
+      assert.deepEqual(decodedReset.filledRegionIds, [4, 9]);
+
+      // Higher remote resetEpoch dominates stale pre-reset local regions (0 resurrection)
+      const mergedRemoteReset = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [1, 2, 3, 4, 5], resetEpoch: 0, updatedAt: 1000 },
+        { version: 2, filledRegionIds: [], resetEpoch: 1, updatedAt: 2000 }
+      );
+      assert.equal(mergedRemoteReset.resetEpoch, 1);
+      assert.deepEqual(
+        mergedRemoteReset.filledRegionIds,
+        [],
+        'Higher remote resetEpoch must clear stale pre-reset regions with zero resurrection'
+      );
+
+      // Higher local resetEpoch dominates stale pre-reset cloud regions (0 resurrection)
+      const mergedLocalReset = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [11], resetEpoch: 2, updatedAt: 3000 },
+        { version: 2, filledRegionIds: [1, 2, 3, 4, 5, 6], resetEpoch: 1, updatedAt: 2500 }
+      );
+      assert.equal(mergedLocalReset.resetEpoch, 2);
+      assert.deepEqual(
+        mergedLocalReset.filledRegionIds,
+        [11],
+        'Higher local resetEpoch must reject stale lower-epoch cloud regions'
+      );
+
+      // Equal resetEpoch preserves lossless set-union CRDT behavior
+      const mergedSameEpoch = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [2, 5], resetEpoch: 2, updatedAt: 3000 },
+        { version: 2, filledRegionIds: [5, 8], resetEpoch: 2, updatedAt: 3100 }
+      );
+      assert.equal(mergedSameEpoch.resetEpoch, 2);
+      assert.deepEqual(mergedSameEpoch.filledRegionIds, [2, 5, 8]);
+
+      // ShareLinkService URL round-trips resetEpoch cleanly
+      const builtResetShare = await shareLinkMod.buildShareProgressUrl({
+        sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
+        filledRegionIds: [7],
+        resetEpoch: 4,
+      });
+      const parsedResetShare = await shareLinkMod.parseShareLinkFromUrl(builtResetShare.url);
+      assert.equal(parsedResetShare.delta?.resetEpoch, 4, 'ShareLinkService must preserve resetEpoch in #s= URLs');
+
+      // CrdtCloudSaveAdapter.syncProgress dominates stale pre-reset slot envelopes
+      const prevLsF8 = globalThis.localStorage;
+      const lsMapF8 = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (lsMapF8.has(k) ? lsMapF8.get(k) : null),
+        setItem: (k, v) => lsMapF8.set(k, String(v)),
+        removeItem: (k) => lsMapF8.delete(k),
+      };
+      try {
+        await providerMod.ProviderRegistry.cloudSave.syncProgress(
+          'slot_reset_epoch_test',
+          'Capybara',
+          { version: 2, filledRegionIds: [1, 2, 3, 4], updatedAt: 1000 },
+          20
+        );
+        const syncedAfterReset = await providerMod.ProviderRegistry.cloudSave.syncProgress(
+          'slot_reset_epoch_test',
+          'Capybara',
+          { version: 2, filledRegionIds: [], resetEpoch: 1, updatedAt: 2000 },
+          20
+        );
+        assert.equal(syncedAfterReset.mergedDelta.resetEpoch, 1);
+        assert.deepEqual(
+          syncedAfterReset.mergedDelta.filledRegionIds,
+          [],
+          'CrdtCloudSaveAdapter.syncProgress must honor higher resetEpoch without resurrecting old fills'
+        );
+      } finally {
+        if (prevLsF8 === undefined) {
+          delete globalThis.localStorage;
+        } else {
+          globalThis.localStorage = prevLsF8;
+        }
+      }
+
+      // 2. F9 (F-02): PlayGamesAndroidDriver > 180 KB multi-chunk binary writeBinaryBlob & readBinaryBlob
+      const prevWindow = globalThis.window;
+      const chunkStore = new Map();
+      globalThis.window = {
+        CapyAndroid: {
+          saveCloudBinaryChunk(blobKey, chunkIndex, totalChunks, base64Chunk) {
+            if (chunkIndex < 0 || chunkIndex >= totalChunks) return false;
+            chunkStore.set(`${blobKey}_part_${chunkIndex}`, base64Chunk);
+            if (chunkIndex === totalChunks - 1) {
+              for (let k = totalChunks; k < 32; k++) {
+                chunkStore.delete(`${blobKey}_part_${k}`);
+              }
+            }
+            return true;
+          },
+          loadCloudBinaryChunk(blobKey, chunkIndex) {
+            return chunkStore.get(`${blobKey}_part_${chunkIndex}`) ?? null;
+          },
+          saveCloudSnapshot(slotKey, payloadJson) {
+            chunkStore.set(slotKey, payloadJson);
+            return true;
+          },
+          loadCloudSnapshot(slotKey) {
+            return chunkStore.get(slotKey) ?? null;
+          },
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      try {
+        const pgDriver = new driversMod.PlayGamesAndroidDriver();
+        const largeBinary = new Uint8Array(420_000);
+        for (let i = 0; i < largeBinary.length; i++) {
+          largeBinary[i] = (i * 29 + 13) & 0xff;
+        }
+        const blobRef = await pgDriver.writeBinaryBlob('save_hd_custom', 'save.capy', largeBinary);
+        assert.equal(
+          blobRef,
+          'pgblob:pgblob_save_hd_custom:3:420000',
+          '420 KB custom photo save must split across 3 x 180 KB Play Games chunks'
+        );
+        assert.equal(nativeBridgeMod.NativeBridge.loadCloudBinaryChunk('pgblob_save_hd_custom', 2) !== null, true);
+
+        const restoredBinary = await pgDriver.readBinaryBlob(blobRef);
+        assert.ok(restoredBinary, 'PlayGamesAndroidDriver.readBinaryBlob must reassemble 420 KB binary');
+        assert.equal(restoredBinary.byteLength, 420_000);
+        let diffBytes = 0;
+        for (let i = 0; i < largeBinary.length; i++) {
+          if (restoredBinary[i] !== largeBinary[i]) diffBytes++;
+        }
+        assert.equal(diffBytes, 0, 'Reassembled 420 KB Play Games binary must be bit-exact');
+
+        // Overwrite with smaller 2-chunk (200 KB) payload and verify stale part_2 is pruned
+        const smallerBinary = largeBinary.subarray(0, 200_000);
+        const smallerRef = await pgDriver.writeBinaryBlob('save_hd_custom', 'save.capy', smallerBinary);
+        assert.equal(smallerRef, 'pgblob:pgblob_save_hd_custom:2:200000');
+        assert.equal(
+          nativeBridgeMod.NativeBridge.loadCloudBinaryChunk('pgblob_save_hd_custom', 2),
+          null,
+          'Overwriting with fewer chunks must prune stale trailing chunk slots'
+        );
+
+        // Corrupt/mismatched/missing chunk resilience must return null cleanly without throwing
+        assert.equal(
+          await pgDriver.readBinaryBlob('pgblob:pgblob_save_hd_custom:2:999999'),
+          null,
+          'Mismatched expectedBytes in pgblob ref must return null cleanly'
+        );
+        chunkStore.set('pgblob_save_hd_custom_part_1', '%%%not_valid_base64%%%');
+        assert.equal(
+          await pgDriver.readBinaryBlob(smallerRef),
+          null,
+          'Corrupted Base64 chunk in PlayGamesAndroidDriver must return null cleanly'
+        );
+        chunkStore.delete('pgblob_save_hd_custom_part_1');
+        assert.equal(
+          await pgDriver.readBinaryBlob(smallerRef),
+          null,
+          'Missing chunk in PlayGamesAndroidDriver must return null cleanly'
+        );
+      } finally {
+        globalThis.window = prevWindow;
+      }
+    }
+
     /* capy-dev-only:start */
     const {
       transformPersonaContent,
@@ -2592,6 +2770,310 @@ async function runBrowserBasicsSuite() {
     );
     await betaPage.close();
     console.log('   PASS: Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
+
+    // -------------------------------------------------------------------------
+    // 12. Stage 2 (v2.7): Co-op Welcome Persistence, Replay Rewind UNFILL, Reset Epoch & Mobile Replay Controls
+    // -------------------------------------------------------------------------
+    console.log('-> [2.7] Verifying Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, Reset Epoch & Mobile Replay Controls...');
+
+    // 12a. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
+    // Reset active puzzle cleanly first so both Peer A and localStorage start at 0 filled regions
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('reset-progress-btn').click();
+    await page.waitForTimeout(450);
+
+    const totalPuzzleRegions27 = await readTotalRemainingRegions(page);
+    assert.ok(totalPuzzleRegions27 > 10, `Expected > 10 total puzzle regions after reset, got ${totalPuzzleRegions27}`);
+
+    // Boot Peer B while localStorage has 0 filled regions (100% deterministic, zero debounce race)
+    const peerS2 = await context.newPage();
+    attachErrorListeners(peerS2, 'peerS2-stage2');
+    await peerS2.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerS2);
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      totalPuzzleRegions27,
+      'Peer B must boot with 0 filled regions before joining Co-op room'
+    );
+
+    // Paint >= 3 regions on Peer A
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const curFilledLen = await page.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+      });
+      if (curFilledLen >= 3) break;
+      await tapCanvasGrid(page, 0.42 + attempt * 0.04, 14, 30);
+      await page.waitForTimeout(150);
+    }
+
+    const peerAStateBeforeRoom = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        activeSnapshotId: active.activeSnapshotId,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.ok(
+      peerAStateBeforeRoom.activeSnapshotId && peerAStateBeforeRoom.filledCount >= 3,
+      `Expected >= 3 filled regions on Peer A before Co-op welcome/rewind test, got ${peerAStateBeforeRoom.filledCount}`
+    );
+    const remainingPeerABeforeJoin = await readTotalRemainingRegions(page);
+
+    // Host Co-op room on Peer A (live React state + room seedToken carry the >= 3 filled regions)
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('host-coop-room-btn').click();
+    await page.waitForTimeout(200);
+    const s2RoomText = await page.getByTestId('active-coop-room-code').innerText();
+    const s2RoomCode = s2RoomText.match(/Room\s+([A-Z0-9]{6})/)[1];
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(450);
+
+    // Clear persisted localStorage fills after Peer A settles so only Peer B's WELCOME_STATE can repopulate capy_active_session_v8
+    await page.evaluate((snapId) => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      active.filledRegionIds = [];
+      active.paintedRegionColors = {};
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').map((s) =>
+        s.id === snapId ? { ...s, filledCount: 0, filledRegionIds: [], paintedRegionColors: {} } : s
+      );
+      localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+    }, peerAStateBeforeRoom.activeSnapshotId);
+
+    await peerS2.getByTestId('topbar-coop-btn').click();
+    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
+    await peerS2.getByTestId('join-coop-room-btn').click();
+    await peerS2.waitForTimeout(450);
+    await peerS2.keyboard.press('Escape');
+    await peerS2.waitForTimeout(150);
+
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'Peer B must immediately merge Peer A filled regions upon WELCOME_STATE'
+    );
+    const savedActiveAfterWelcome = await peerS2.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+    });
+    assert.equal(
+      savedActiveAfterWelcome,
+      peerAStateBeforeRoom.filledCount,
+      'BUG-1: onWelcomeState must immediately persist welcomed filledRegionIds into capy_active_session_v8'
+    );
+
+    // Reload Peer B before painting any region and verify welcomed regions survive reload
+    await peerS2.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerS2);
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'BUG-1: Reloading joining peer immediately after WELCOME_STATE must retain all welcomed regions'
+    );
+
+    // Rejoin s2RoomCode on Peer B so both peers are live for Replay Rewind & Reset Progress sync
+    await peerS2.getByTestId('topbar-coop-btn').click();
+    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
+    await peerS2.getByTestId('join-coop-room-btn').click();
+    await peerS2.waitForTimeout(350);
+    await peerS2.keyboard.press('Escape');
+    await peerS2.waitForTimeout(150);
+
+    // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and click Resume Here
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${peerAStateBeforeRoom.activeSnapshotId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-replay').click();
+
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByTestId('replay-toggle-minimize-btn').click();
+    await page.waitForTimeout(120);
+    await page.getByTestId('replay-scrubber').fill('1');
+    await page.waitForTimeout(120);
+    await page.getByTestId('replay-resume-btn').click();
+    await page.waitForTimeout(200);
+    await peerS2.waitForTimeout(400);
+
+    const remainingAfterRewindA = await readTotalRemainingRegions(page);
+    const remainingAfterRewindB = await readTotalRemainingRegions(peerS2);
+    assert.equal(
+      remainingAfterRewindA,
+      totalPuzzleRegions27 - 1,
+      `Expected Replay Resume Here at step 1 to leave exactly 1 filled region on Peer A (${totalPuzzleRegions27 - 1} remaining), got ${remainingAfterRewindA}`
+    );
+    assert.equal(
+      remainingAfterRewindB,
+      remainingAfterRewindA,
+      'BUG-1: Replay Scrubber Resume Here must broadcast UNFILL_EVENT so Peer B rewinds in lockstep'
+    );
+
+    // Trigger Reset Progress on Peer A and verify Peer B clears to 0 filled regions + resetEpoch increments
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('reset-progress-btn').click();
+    await page.waitForTimeout(200);
+    await peerS2.waitForTimeout(400);
+
+    assert.equal(
+      await readTotalRemainingRegions(page),
+      totalPuzzleRegions27,
+      'Reset Progress must clear Peer A back to 0 filled regions'
+    );
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      totalPuzzleRegions27,
+      'M-08: Reset Progress must broadcast UNFILL_EVENT so Peer B clears to 0 filled regions'
+    );
+    const postResetEpochs = await page.evaluate((snapId) => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snap = (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]') || []).find(
+        (s) => s.id === snapId
+      );
+      return {
+        activeEpoch: active.resetEpoch ?? 0,
+        snapEpoch: snap?.resetEpoch ?? 0,
+      };
+    }, peerAStateBeforeRoom.activeSnapshotId);
+    assert.ok(
+      postResetEpochs.activeEpoch >= 1 && postResetEpochs.snapEpoch >= 1,
+      `F-01: Expected monotonic resetEpoch >= 1 in both active session (${postResetEpochs.activeEpoch}) and snapshot (${postResetEpochs.snapEpoch})`
+    );
+
+    await peerS2.close();
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('leave-coop-room-btn').click();
+    await page.waitForTimeout(120);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+
+    // 12c. Mobile 360x800 minimized ReplayControls pill fit & save-load replayLoop auto-disable + gameplay auto-resume
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const curFilledLen = await page.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+      });
+      if (curFilledLen >= 4) break;
+      await tapCanvasGrid(page, 0.44 + attempt * 0.04, 14, 30);
+      await page.waitForTimeout(140);
+    }
+    const mobileReplaySetup = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const otherSnap = snaps.find(
+        (s) => s.id !== active.activeSnapshotId && String(s.id).startsWith('sample-')
+      );
+      return {
+        targetSnapId: active.activeSnapshotId,
+        otherSnapId: otherSnap ? otherSnap.id : null,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.ok(
+      mobileReplaySetup.targetSnapId && mobileReplaySetup.otherSnapId && mobileReplaySetup.filledCount >= 3,
+      `Expected >= 3 filled regions and a secondary sample save for mobile replay test, got ${JSON.stringify(mobileReplaySetup)}`
+    );
+
+    // Switch to narrow 360x800 mobile viewport and load secondary sample first
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.waitForTimeout(150);
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${mobileReplaySetup.otherSnapId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+    await page.waitForFunction(
+      (expectedId) =>
+        JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId ===
+        expectedId,
+      mobileReplaySetup.otherSnapId,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
+
+    // Enable Auto-Loop Replay (true) + 0.5x speed in Settings Tab 0, and ensure Replay on Load is ON in Saves
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(150);
+    await page.locator('button', { hasText: /^Settings$/ }).first().click();
+    await page.waitForTimeout(120);
+    const settingsLoopToggle = page.getByTestId('toggle-replay-loop-btn');
+    await settingsLoopToggle.scrollIntoViewIfNeeded();
+    if ((await settingsLoopToggle.getAttribute('aria-checked')) !== 'true') {
+      await settingsLoopToggle.click();
+      await page.waitForTimeout(80);
+    }
+    assert.equal(
+      await settingsLoopToggle.getAttribute('aria-checked'),
+      'true',
+      'Precondition: Auto-Loop Replay must be enabled before loading saved puzzle'
+    );
+    const speedHalfBtn = page.locator('button', { hasText: /^0\.5x$/ }).first();
+    await speedHalfBtn.scrollIntoViewIfNeeded();
+    await speedHalfBtn.click();
+    await page.waitForTimeout(80);
+
+    // Switch to Saves tab, ensure Replay on Load is enabled, and load targetSnapId
+    await page.locator('button', { hasText: /^Saves$/ }).first().click();
+    await page.waitForTimeout(120);
+    const autoReplaySavesSwitch = page.getByTestId('toggle-auto-replay-saves-btn');
+    if ((await autoReplaySavesSwitch.getAttribute('aria-checked')) !== 'true') {
+      await autoReplaySavesSwitch.click();
+      await page.waitForTimeout(80);
+    }
+    await page.getByTestId(`save-card-${mobileReplaySetup.targetSnapId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+
+    const mobileReplayWin = page.getByTestId('replay-controls-window');
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(
+      await mobileReplayWin.getAttribute('data-minimized'),
+      'true',
+      'Loaded save replay HUD must open minimized on mobile'
+    );
+    assert.equal(
+      await page.getByTestId('replay-loop-btn').getAttribute('aria-pressed'),
+      'false',
+      'Loading a puzzle save must immediately force replayLoop OFF (aria-pressed="false")'
+    );
+
+    const windowBox360 = await mobileReplayWin.boundingBox();
+    const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
+    assert.ok(windowBox360 && exitBox360, 'Expected visible bounding boxes for replay-controls-window and replay-exit-btn at 360x800');
+    assert.ok(
+      exitBox360.x >= windowBox360.x + 4 &&
+        exitBox360.x + exitBox360.width <= windowBox360.x + windowBox360.width - 4,
+      `Minimized ReplayControls X button (${exitBox360.x}..${exitBox360.x + exitBox360.width}) must fit strictly inside 360px mobile pill border (${windowBox360.x}..${windowBox360.x + windowBox360.width})`
+    );
+
+    // Wait for loaded save replay to finish and verify it automatically closes ReplayControls and resumes gameplay
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 10000 });
+    await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await page.evaluate(
+        () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').replayLoop)
+      ),
+      false,
+      'Persisted capy_user_settings_v8.replayLoop must remain false after save-load replay auto-resumes gameplay'
+    );
+
+    // Restore desktop viewport and default test settings cleanly
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.autoReplayOnLoad = false;
+      s.replaySpeed = 1;
+      s.replayLoop = false;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+    });
+    await page.waitForTimeout(120);
+    console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

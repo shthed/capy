@@ -699,85 +699,97 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
         const remoteBlobRef = remoteEntry.cloudBinaryRef || remoteEntry.driveBinaryFileId;
 
-        if (!localSnap) {
-          if (remoteBlobRef && activeDriver) {
-            try {
-              const bin = await activeDriver.readBinaryBlob(remoteBlobRef);
-              if (bin && bin.byteLength > 0) {
-                const imported = await StorageService.importSnapshotData(bin);
-                if (imported.importedCount > 0) {
-                  importedSavesFromCloud += imported.importedCount;
-                  currentSnapshots = StorageService.loadSnapshots();
-                  localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
-                }
-              }
-            } catch (err) {
-              console.warn(`Failed to download binary save from ${activeDriver.id}:`, err);
-            }
-          } else if (remoteEntry.inlineBinaryB64) {
-            try {
-              const bin = base64ToUint8(remoteEntry.inlineBinaryB64);
+        if (!localSnap && remoteBlobRef && activeDriver) {
+          try {
+            const bin = await activeDriver.readBinaryBlob(remoteBlobRef);
+            if (bin && bin.byteLength > 0) {
               const imported = await StorageService.importSnapshotData(bin);
               if (imported.importedCount > 0) {
                 importedSavesFromCloud += imported.importedCount;
                 currentSnapshots = StorageService.loadSnapshots();
                 localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
               }
-            } catch (err) {
-              console.warn('Failed to import inline binary puzzle from cloud manifest:', err);
             }
-          } else if (
+          } catch (err) {
+            console.warn(`Failed to download binary save from ${activeDriver.id}:`, err);
+          }
+        }
+
+        if (!localSnap && remoteEntry.inlineBinaryB64) {
+          try {
+            const bin = base64ToUint8(remoteEntry.inlineBinaryB64);
+            const imported = await StorageService.importSnapshotData(bin);
+            if (imported.importedCount > 0) {
+              importedSavesFromCloud += imported.importedCount;
+              currentSnapshots = StorageService.loadSnapshots();
+              localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
+            }
+          } catch (err) {
+            console.warn('Failed to import inline binary puzzle from cloud manifest:', err);
+          }
+        } else if (
+          !localSnap &&
+          (remoteEntry.sampleAssetPath || remoteEntry.sourceRef?.kind === 'sample')
+        ) {
+          const targetUri = (
             remoteEntry.sampleAssetPath ||
-            remoteEntry.sourceRef?.kind === 'sample'
-          ) {
-            const targetUri = (
-              remoteEntry.sampleAssetPath ||
-              remoteEntry.sourceRef?.uri ||
-              ''
-            ).replace(/^\.\//, '');
-            const matchedSample = SAMPLE_GALLERY.find(
-              (s) => s.assetPath.replace(/^\.\//, '') === targetUri
-            );
-            if (matchedSample && typeof fetch !== 'undefined') {
-              try {
-                const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
-                if (bundleResp && bundleResp.ok) {
-                  await StorageService.importSnapshotData(await bundleResp.arrayBuffer());
-                  currentSnapshots = StorageService.loadSnapshots();
-                  localSnap = currentSnapshots.find(
-                    (s) =>
-                      (s.sampleAssetPath || s.sourceRef?.uri || '').replace(/^\.\//, '') ===
-                      targetUri
-                  );
-                  if (localSnap) {
-                    importedSavesFromCloud += 1;
-                  }
+            remoteEntry.sourceRef?.uri ||
+            ''
+          ).replace(/^\.\//, '');
+          const matchedSample = SAMPLE_GALLERY.find(
+            (s) => s.assetPath.replace(/^\.\//, '') === targetUri
+          );
+          if (matchedSample && typeof fetch !== 'undefined') {
+            try {
+              const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
+              if (bundleResp && bundleResp.ok) {
+                await StorageService.importSnapshotData(await bundleResp.arrayBuffer());
+                currentSnapshots = StorageService.loadSnapshots();
+                localSnap = currentSnapshots.find(
+                  (s) =>
+                    (s.sampleAssetPath || s.sourceRef?.uri || '').replace(/^\.\//, '') ===
+                    targetUri
+                );
+                if (localSnap) {
+                  importedSavesFromCloud += 1;
                 }
-              } catch {
-                // Ignore sample bundle bootstrap error
               }
+            } catch {
+              // Ignore sample bundle bootstrap error
             }
           }
         }
 
         if (localSnap) {
+          const effectiveRemoteDelta: ProgressDeltaV2 =
+            remoteDelta.resetEpoch !== undefined || remoteEntry.resetEpoch === undefined
+              ? remoteDelta
+              : { ...remoteDelta, resetEpoch: remoteEntry.resetEpoch };
+          const localEpoch = localSnap.resetEpoch ?? 0;
           const localDelta: ProgressDeltaV2 = {
             version: 2,
             sourceRef: localSnap.sourceRef,
             filledRegionIds: localSnap.filledRegionIds || [],
             paintedRegionColors: localSnap.paintedRegionColors,
             isFreeColor: localSnap.isFreeColor,
+            ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
             updatedAt: localSnap.lastOpened || localSnap.timestamp || 0,
           };
           const beforeCount = localDelta.filledRegionIds.length;
-          const mergedDelta = mergeProgressDeltas(localDelta, remoteDelta);
-          const added = Math.max(0, mergedDelta.filledRegionIds.length - beforeCount);
+          const mergedDelta = mergeProgressDeltas(localDelta, effectiveRemoteDelta);
+          const mergedEpoch = mergedDelta.resetEpoch ?? 0;
+          const epochAdvanced = mergedEpoch > localEpoch;
+          const added = epochAdvanced
+            ? mergedDelta.filledRegionIds.length
+            : Math.max(0, mergedDelta.filledRegionIds.length - beforeCount);
           mergedRegionsFromCloud += added;
 
           if (
+            epochAdvanced ||
             added > 0 ||
-            (remoteDelta.paintedRegionColors &&
-              Object.keys(remoteDelta.paintedRegionColors).length > 0)
+            (effectiveRemoteDelta.paintedRegionColors &&
+              Object.keys(effectiveRemoteDelta.paintedRegionColors).length > 0 &&
+              (effectiveRemoteDelta.resetEpoch ?? 0) === mergedEpoch)
           ) {
             currentSnapshots = StorageService.updateSnapshotProgress(
               localSnap.id,
@@ -788,9 +800,11 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
               localSnap.panOffsetX,
               localSnap.panOffsetY,
               undefined,
-              mergedDelta.paintedRegionColors,
+              mergedDelta.paintedRegionColors ?? (epochAdvanced ? {} : undefined),
               localSnap.customPalette,
-              mergedDelta.isFreeColor ?? localSnap.isFreeColor
+              mergedDelta.isFreeColor ?? localSnap.isFreeColor,
+              undefined,
+              mergedEpoch > 0 ? mergedEpoch : undefined
             );
             localBySlot.set(slotKey, currentSnapshots.find((s) => s.id === localSnap!.id)!);
           }
@@ -804,19 +818,29 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       const localSnap = localBySlot.get(slotKey);
       if (!localSnap || !env.deltaToken) continue;
       try {
-        const remoteDelta = await decodeProgressDeltaToken(env.deltaToken);
+        const rawRemoteDelta = await decodeProgressDeltaToken(env.deltaToken);
+        const remoteDelta: ProgressDeltaV2 =
+          rawRemoteDelta.resetEpoch !== undefined || env.resetEpoch === undefined
+            ? rawRemoteDelta
+            : { ...rawRemoteDelta, resetEpoch: env.resetEpoch };
+        const localEpoch = localSnap.resetEpoch ?? 0;
         const localDelta: ProgressDeltaV2 = {
           version: 2,
           sourceRef: localSnap.sourceRef,
           filledRegionIds: localSnap.filledRegionIds || [],
           paintedRegionColors: localSnap.paintedRegionColors,
           isFreeColor: localSnap.isFreeColor,
+          ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
           updatedAt: localSnap.lastOpened || localSnap.timestamp || 0,
         };
         const beforeCount = localDelta.filledRegionIds.length;
         const mergedDelta = mergeProgressDeltas(localDelta, remoteDelta);
-        const added = Math.max(0, mergedDelta.filledRegionIds.length - beforeCount);
-        if (added > 0) {
+        const mergedEpoch = mergedDelta.resetEpoch ?? 0;
+        const epochAdvanced = mergedEpoch > localEpoch;
+        const added = epochAdvanced
+          ? mergedDelta.filledRegionIds.length
+          : Math.max(0, mergedDelta.filledRegionIds.length - beforeCount);
+        if (epochAdvanced || added > 0) {
           mergedRegionsFromCloud += added;
           currentSnapshots = StorageService.updateSnapshotProgress(
             localSnap.id,
@@ -827,9 +851,11 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
             localSnap.panOffsetX,
             localSnap.panOffsetY,
             undefined,
-            mergedDelta.paintedRegionColors,
+            mergedDelta.paintedRegionColors ?? (epochAdvanced ? {} : undefined),
             localSnap.customPalette,
-            mergedDelta.isFreeColor ?? localSnap.isFreeColor
+            mergedDelta.isFreeColor ?? localSnap.isFreeColor,
+            undefined,
+            mergedEpoch > 0 ? mergedEpoch : undefined
           );
           localBySlot.set(slotKey, currentSnapshots.find((s) => s.id === localSnap.id)!);
         }
@@ -847,6 +873,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     for (const snap of currentSnapshots) {
       const slotKey = computeSlotKeyForSnapshot(snap);
       const existingRemote = nextEntries[slotKey];
+      const snapEpoch = Math.max(snap.resetEpoch ?? 0, existingRemote?.resetEpoch ?? 0);
       const deltaToken = await encodeProgressDeltaToken({
         version: 2,
         sourceRef:
@@ -857,6 +884,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
           ? { paintedRegionColors: snap.paintedRegionColors }
           : {}),
         ...(snap.isFreeColor ? { isFreeColor: true } : {}),
+        ...(snapEpoch > 0 ? { resetEpoch: snapEpoch } : {}),
         updatedAt: snap.lastOpened || snap.timestamp || Date.now(),
       });
 
@@ -899,6 +927,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
         isPinned: snap.isPinned,
         filledCount: (snap.filledRegionIds || []).length,
         totalCount: snap.totalCount || 0,
+        ...(snapEpoch > 0 ? { resetEpoch: snapEpoch } : {}),
         deltaToken,
         sourceRef: snap.sourceRef,
         sampleAssetPath: snap.sampleAssetPath,
@@ -943,10 +972,18 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
     if (existing?.deltaToken) {
       try {
-        const remoteDelta = await decodeProgressDeltaToken(existing.deltaToken);
-        const beforeCount = localDelta.filledRegionIds.length;
-        merged = mergeProgressDeltas(localDelta, remoteDelta);
-        addedFromCloud = Math.max(0, merged.filledRegionIds.length - beforeCount);
+        const rawRemoteDelta = await decodeProgressDeltaToken(existing.deltaToken);
+        const remoteDelta: ProgressDeltaV2 =
+          rawRemoteDelta.resetEpoch !== undefined || existing.resetEpoch === undefined
+            ? rawRemoteDelta
+            : { ...rawRemoteDelta, resetEpoch: existing.resetEpoch };
+        const beforeEpoch = merged.resetEpoch ?? 0;
+        const beforeCount = merged.filledRegionIds.length;
+        merged = mergeProgressDeltas(merged, remoteDelta);
+        addedFromCloud =
+          (merged.resetEpoch ?? 0) > beforeEpoch
+            ? merged.filledRegionIds.length
+            : Math.max(0, merged.filledRegionIds.length - beforeCount);
       } catch {
         merged = localDelta;
       }
@@ -956,10 +993,18 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     const manifestEntry = remoteManifest?.entries?.[slotKey];
     if (manifestEntry?.deltaToken) {
       try {
-        const manifestDelta = await decodeProgressDeltaToken(manifestEntry.deltaToken);
+        const rawManifestDelta = await decodeProgressDeltaToken(manifestEntry.deltaToken);
+        const manifestDelta: ProgressDeltaV2 =
+          rawManifestDelta.resetEpoch !== undefined || manifestEntry.resetEpoch === undefined
+            ? rawManifestDelta
+            : { ...rawManifestDelta, resetEpoch: manifestEntry.resetEpoch };
+        const beforeEpoch = merged.resetEpoch ?? 0;
         const beforeCount = merged.filledRegionIds.length;
         merged = mergeProgressDeltas(merged, manifestDelta);
-        addedFromCloud += Math.max(0, merged.filledRegionIds.length - beforeCount);
+        addedFromCloud +=
+          (merged.resetEpoch ?? 0) > beforeEpoch
+            ? merged.filledRegionIds.length
+            : Math.max(0, merged.filledRegionIds.length - beforeCount);
       } catch {
         // Ignore
       }
@@ -973,6 +1018,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       deltaToken: mergedToken,
       filledCount: merged.filledRegionIds.length,
       totalCount,
+      ...(merged.resetEpoch && merged.resetEpoch > 0 ? { resetEpoch: merged.resetEpoch } : {}),
       updatedAt: syncedAt,
       devicePlayerId: this.auth.getCurrentIdentity().playerId,
     };
