@@ -13,6 +13,12 @@ declare class WebSocketPair {
   1: WebSocket;
 }
 
+declare class WebSocketRequestResponsePair {
+  readonly request: string;
+  readonly response: string;
+  constructor(request: string, response: string);
+}
+
 interface SqlStorageCursor<T = Record<string, unknown>> {
   toArray(): T[];
 }
@@ -33,6 +39,8 @@ interface DurableObjectState {
   blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T>;
   acceptWebSocket(ws: WebSocket, tags?: string[]): void;
   getWebSockets(tag?: string): WebSocket[];
+  setWebSocketAutoResponse(maybeReqResp?: WebSocketRequestResponsePair): void;
+  getWebSocketAutoResponse(): WebSocketRequestResponsePair | null;
 }
 
 interface DurableObjectId {
@@ -103,9 +111,11 @@ declare class URLSearchParams {
 
 declare class URL {
   href: string;
+  readonly origin: string;
   protocol: string;
   host: string;
   hostname: string;
+  port: string;
   pathname: string;
   search: string;
   hash: string;
@@ -149,4 +159,5 @@ declare module 'cloudflare:workers' {
 interface Env {
   ASSETS: Fetcher;
   COOP_ROOMS: DurableObjectNamespace<import('./index').CoopRoomDurableObject>;
+  ALLOWED_EXTRA_ORIGINS?: string;
 }
