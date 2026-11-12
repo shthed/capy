@@ -65,20 +65,20 @@ flowchart TB
 ## 2. Directory & Module Structure
 
 ### Entry, Build & Public Assets
-- **[`web/index.html`](./web/index.html)**: Host HTML document with canonical `https://capypaint.com/` metadata, mobile viewport, and safe-area tags.
-- **[`web/package.json`](./web/package.json)**: Single source of truth for `"version"`, dependencies (React 19, Vite 6, Tailwind CSS 4, Lucide, `canvas-confetti`), and CLI scripts (`lint`, `build`, `test`, `preview`).
+- **[`web/index.html`](./web/index.html)**: Host HTML document with synchronous pre-React `www.capypaint.com -> https://capypaint.com` canonical redirect, `https://capypaint.com/` metadata, mobile viewport, and safe-area tags.
+- **[`web/package.json`](./web/package.json)**: Single source of truth for `"version"`, dependencies (React 19, Vite 6, Tailwind CSS 4, Lucide, `canvas-confetti`), and CLI scripts (`test:sanity`, `lint`, `build`, `test`, `preview`).
 - **[`web/tsconfig.json`](./web/tsconfig.json)**: Strict TypeScript compiler configuration.
-- **[`web/vite.config.ts`](./web/vite.config.ts)**: Vite bundler configuration enforcing relative asset base (`base: './'`) and lazy modal chunk splitting.
-- **[`web/public/sw.js`](./web/public/sw.js)**: Same-origin offline Service Worker (`capy-cache-v2`).
+- **[`web/vite.config.ts`](./web/vite.config.ts)**: Vite bundler configuration enforcing relative asset base (`base: './'`), lazy modal chunk splitting, post-build `dist/sw.js` version/asset stamping, and `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` injection into `dist/.well-known/assetlinks.json`.
+- **[`web/public/sw.js`](./web/public/sw.js)**: Same-origin offline Service Worker isolating caches by version and deployment scope (`capy-cache-v<version>:<scopePath>`) with `.apk` download bypass.
 - **[`web/public/manifest.webmanifest`](./web/public/manifest.webmanifest)**: Standalone PWA manifest with relative `./` scope.
-- **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Workers Static Assets security/cache headers and SPA fallback rules.
-- **[`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json)**: Root-domain Android Digital Asset Links manifest served at `https://capypaint.com/.well-known/assetlinks.json` for `com.capypaint.capy`.
+- **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Workers Static Assets security headers, immutable `/assets/*` caching with `! Cache-Control` overrides for unhashed sample/icon assets, `/capy.apk` `302` release redirect, and SPA fallback rules.
+- **[`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json)**: Root-domain Android Digital Asset Links manifest served at `https://capypaint.com/.well-known/assetlinks.json` for `com.capypaint.capy` (populated at build time from `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`).
 - **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)**: Published Privacy Policy and Google Play / Google Auth Data Safety summary (`https://capypaint.com/privacy-policy.html`).
 - **[`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy)**: Pre-baked 4-artwork `.capy` v2 Gzip archive for instant zero-worker first boot.
 
 ### Core Shell, Types & Styling (`web/src/`)
-- **[`web/src/main.tsx`](./web/src/main.tsx)**: React 19 root mount and Service Worker bootstrap.
-- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `/capy/`, `/capy/beta/`, `/capy/pull/<num>/`, and `?capy_channel=` overrides).
+- **[`web/src/main.tsx`](./web/src/main.tsx)**: React 19 root mount, one-shot `sessionStorage`-guarded `vite:preloadError` reload recovery, and Service Worker bootstrap.
+- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `capypaint.com` with `showChannelSwitcher: false`, `/capy/`, `/capy/beta/`, `/capy/pull/<num>/`, and `?capy_channel=` overrides).
 - **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, lifetime stats tracking, release channel wiring, and desktop keyboard gameplay shortcuts.
 - **[`web/src/index.css`](./web/src/index.css)**: Tailwind CSS 4 imports, safe-area utility classes, and `touch-action: none` resets.
 - **[`web/src/types/index.ts`](./web/src/types/index.ts)**: Central TypeScript types (`PuzzleData`, `PaletteColor`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `GENERATION_PIPELINE_STEPS`, `SAMPLE_GALLERY`).

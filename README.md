@@ -85,9 +85,9 @@ npm run dev
 ```
 Open `http://localhost:3000` in your browser.
 
-Verify strict TypeScript types, production bundling, and the unified automated test suite (binary codec, engine, gestures, settings, and Playwright E2E gameplay):
+Verify repository hygiene, strict TypeScript types, production bundling, and the unified automated test suite (binary codec, engine, gestures, settings, and Playwright E2E gameplay):
 ```bash
-npm run lint && npm run build && npm test
+npm run test:sanity && npm run lint && npm run build && npm test
 ```
 
 ---
@@ -98,7 +98,7 @@ All detailed architectural guides, computer vision algorithms, and native bridge
 
 - **Web Architecture and UI Reference**: [`WEB.md`](./WEB.md) -- React 19, Vite 6, 3-tier offscreen canvas rendering, 6-mode gesture engine, Worker IPC, storage keys, and `UserSettings` dictionary.
 - **Android Native Launcher**: [`APP.md`](./APP.md) -- Kotlin launcher, AndroidX `WebViewAssetLoader`, Google Play Games Services v2 `SnapshotsClient` sync, Pixel API 33+ haptics, and disk backups.
-- **Cloud Sync, Google Account / Play Games and Multiplayer Sharing**: [`CLOUD.md`](./CLOUD.md) -- Google Identity Services OAuth 2.0 (`drive.appdata`), Play Games v2 login, CRDT Cloud Sync, `< 2 KB` shareable URL links, and simultaneous Co-op rooms.
+- **Cloud Sync, Google Account / Play Games and Multiplayer Sharing**: [`CLOUD.md`](./CLOUD.md) -- Google Identity Services OAuth 2.0 (`drive.appdata`), Play Games v2 login, CRDT Cloud Sync, `< 2 KB` shareable URL links, simultaneous Co-op rooms, and Cloudflare Workers edge hosting (`capypaint.com`).
 - **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker 5-strategy segmentation, adaptive Otsu/Sobel line extraction, Red-Mean K-Means++ clustering, and watershed border alignment.
 - **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Unified Vite SSR + Playwright E2E verification suite, multi-touch gesture patterns, and CI pipelines.
 - **Versioning Scheme and Changelog**: [`CHANGELOG.md`](./CHANGELOG.md) -- Semantic Versioning (`MAJOR.MINOR.PATCH`), Android `versionCode` mapping, and chronological release history.

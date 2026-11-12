@@ -264,10 +264,10 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 ### US-5.1: Production Google OAuth, Play Games IDs & Verified App Links
 
 - **Readiness**: `Partially Shipped (#482) -- Awaiting External Console Credentials & Play Signing SHA-256`
-- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), and Google Play App Signing SHA-256 fingerprint in [`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json) (root `https://capypaint.com/.well-known/assetlinks.json` and `AndroidManifest.xml` App Links shipped in [#482](https://github.com/shthed/capy/pull/482)).
-- **Description**: Configure live Google Cloud OAuth and Play Games repository variables and replace the placeholder SHA-256 fingerprint in `assetlinks.json` for `com.capypaint.capy`.
+- **Unblock Prerequisite**: Human provisioning of Google Cloud Web OAuth Client ID (`VITE_GOOGLE_CLIENT_ID`), 12-digit Play Games Project ID (`CAPY_PLAY_GAMES_APP_ID`), and Google Play App Signing SHA-256 fingerprint (`CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`) in GitHub Repository Variables (root `https://capypaint.com/.well-known/assetlinks.json`, dynamic `appLinksAutoVerify`, and CI variable wiring shipped in [#482](https://github.com/shthed/capy/pull/482)).
+- **Description**: Configure live Google Cloud OAuth, Play Games, and SHA-256 certificate fingerprint repository variables for `com.capypaint.capy`.
 - **Value**: Unlocks live one-tap Google Drive cross-device save sync on web, native Play Games `SnapshotsClient` sync on Android, and seamless Android App Link opening for `https://capypaint.com/#s=<token>` links.
-- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`) and `capypaint.com` App Link manifests are already complete; CI variable wiring is queued in Sprint 1 (`BUG-2`).
+- **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`), dynamic `assetlinks.json` / `appLinksAutoVerify` stamping, and CI workflow variable bindings (`VITE_GOOGLE_CLIENT_ID`, `CAPY_PLAY_GAMES_APP_ID`, `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`) are already complete in [#482](https://github.com/shthed/capy/pull/482).
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
@@ -297,7 +297,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 - **Effort Estimate**: `~10,000 tokens` | `~5--10 min human`
 - **Target Files**: [`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
-  - Hibernates between strokes (`0` billable CPU ms while idle), enforces `<= 4 KB` frame caps, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
+  - Hibernates between strokes (`0` billable CPU ms while idle via C++ `PING`/`PONG`), enforces `<= 6 KB` frame caps, strict `Origin` validation, `40 frames / 5s` rate limiting, and write-once initial `seed_token` persistence, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
 
 </details>
 
