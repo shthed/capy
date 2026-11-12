@@ -1267,8 +1267,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
                 {(() => {
                   const channelInfo = resolveReleaseChannel();
+                  if (!channelInfo.showChannelSwitcher) return null;
                   const isBeta = channelInfo.channel === 'beta';
                   const isAlpha = channelInfo.channel === 'alpha';
+                  const sharesOriginWithBeta =
+                    typeof window !== 'undefined' &&
+                    channelInfo.betaWebUrl.startsWith(window.location.origin);
                   const statusLabel = isBeta
                     ? `Beta Channel • v${APP_VERSION}`
                     : isAlpha
@@ -1303,7 +1307,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] leading-relaxed text-slate-400">
-                        Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.
+                        {sharesOriginWithBeta
+                          ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.'
+                          : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                         <a
@@ -2354,7 +2360,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   ? 'Google Play Games'
                                   : 'Google Account'
                               } • ${playerIdentity.email || playerIdentity.displayName}`
-                            : 'Local Profile • Sign in to sync saves across devices'}
+                            : NativeBridge.isAndroid ||
+                                Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
+                                (typeof window !== 'undefined' &&
+                                  Boolean(
+                                    (window as unknown as { __capyMockGoogleOAuthToken?: string })
+                                      .__capyMockGoogleOAuthToken
+                                  ))
+                              ? 'Local Profile • Sign in to sync saves across devices'
+                              : 'Local Profile • Saves stored locally on this device'}
                         </div>
                       </div>
                     )}
@@ -2373,7 +2387,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         Sign Out
                       </button>
-                    ) : (
+                    ) : NativeBridge.isAndroid ||
+                      Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
+                      (typeof window !== 'undefined' &&
+                        Boolean(
+                          (window as unknown as { __capyMockGoogleOAuthToken?: string })
+                            .__capyMockGoogleOAuthToken
+                        )) ? (
                       <button
                         type="button"
                         data-testid="play-games-signin-btn"
@@ -2419,7 +2439,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         {NativeBridge.isAndroid ? 'Play Games Login' : 'Google Login'}
                       </button>
-                    )}
+                    ) : null}
 
                     {onSyncCloudProgress && (
                       <button

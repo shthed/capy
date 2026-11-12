@@ -2,6 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      if (window.location.hostname.toLowerCase() === 'www.capypaint.com') {
+        window.location.replace(
+          'https://capypaint.com' +
+            window.location.pathname +
+            window.location.search +
+            window.location.hash
+        );
+      }
+    </script>
     <link rel="icon" type="image/webp" href="assets/capybara.webp" />
     <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png" />
