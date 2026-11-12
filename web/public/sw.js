@@ -1,7 +1,29 @@
 // Capy Service Worker - Offline PWA Caching Engine
-// Respects relative subpath hosting across GitHub Pages root, PR previews, and local dev.
+// Isolates caches by both semantic version and normalized deployment scope path.
 
-const CACHE_NAME = 'capy-cache-v2';
+const SW_BUILD_VERSION = '__CAPY_SW_VERSION__';
+const EFFECTIVE_VERSION = SW_BUILD_VERSION.startsWith('__CAPY_') ? 'dev' : SW_BUILD_VERSION;
+const BUILD_ASSET_RELATIVE_URLS = /* __CAPY_SW_BUILD_ASSETS__ */ [];
+
+function normalizeScopePath(rawPathname) {
+  if (!rawPathname) return '/';
+  const withLeading = rawPathname.startsWith('/') ? rawPathname : `/${rawPathname}`;
+  return withLeading.endsWith('/') ? withLeading : `${withLeading}/`;
+}
+
+const SCOPE_URL =
+  (self.registration && self.registration.scope) || new URL('./', self.location.href).href;
+const SCOPE_PATH = normalizeScopePath(new URL(SCOPE_URL).pathname);
+const CACHE_NAME = `capy-cache-v${EFFECTIVE_VERSION}:${SCOPE_PATH}`;
+
+function shouldEvictCacheKey(key) {
+  if (key === CACHE_NAME) return false;
+  if (key === 'capy-cache-v2') return true;
+  if (!key.startsWith('capy-cache-v')) return false;
+  const colonIdx = key.indexOf(':');
+  if (colonIdx === -1) return false;
+  return key.slice(colonIdx + 1) === SCOPE_PATH;
+}
 
 const PRECACHE_RELATIVE_URLS = [
   './',
@@ -18,17 +40,19 @@ const PRECACHE_RELATIVE_URLS = [
   './assets/apple-touch-icon.png',
 ];
 
-// Helper to resolve URLs relative to the service worker script location
+// Helper to resolve URLs relative to the service worker registration scope
 function getAbsolutePrecacheUrls() {
-  return PRECACHE_RELATIVE_URLS.map((rel) => new URL(rel, self.location).href);
+  const combined = Array.from(new Set([...PRECACHE_RELATIVE_URLS, ...BUILD_ASSET_RELATIVE_URLS]));
+  return combined.map((rel) => new URL(rel, SCOPE_URL).href);
 }
 
-// Installation: pre-cache application shell, sample assets, and discovered production bundles
+// Installation: pre-cache application shell, sample assets, and build-stamped chunks
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
       const urlsToCache = getAbsolutePrecacheUrls();
+      const indexUrlHref = new URL('./index.html', SCOPE_URL).href;
 
       await Promise.allSettled(
         urlsToCache.map(async (url) => {
@@ -37,25 +61,31 @@ self.addEventListener('install', (event) => {
             if (response.ok) {
               await cache.put(url, response.clone());
 
-              // If this is index.html, discover and precache hashed Vite script & style bundles
-              if (url.endsWith('/index.html') || url === new URL('./index.html', self.location).href) {
+              // Unstamped dev fallback: discover script & style bundles from index.html
+              if (
+                BUILD_ASSET_RELATIVE_URLS.length === 0 &&
+                (url.endsWith('/index.html') || url === indexUrlHref)
+              ) {
                 const htmlText = await response.text();
-                const bundleMatches = [...htmlText.matchAll(/(?:src|href)=["']?((?:\.\/)?assets\/[^"'\s>]+)["']?/g)];
+                const bundleMatches = [
+                  ...htmlText.matchAll(/(?:src|href)=["']?((?:\.\/)?assets\/[^"'\s>]+)["']?/g),
+                ];
 
                 for (const match of bundleMatches) {
                   const relPath = match[1].startsWith('./') ? match[1] : './' + match[1];
-                  const bundleUrl = new URL(relPath, self.location).href;
+                  const bundleUrl = new URL(relPath, SCOPE_URL).href;
                   try {
                     const bundleResp = await fetch(bundleUrl, { cache: 'no-cache' });
                     if (bundleResp.ok) {
                       await cache.put(bundleUrl, bundleResp.clone());
 
-                      // If this is the main JS bundle, discover and precache Web Worker script
                       if (bundleUrl.endsWith('.js')) {
                         const jsText = await bundleResp.text();
-                        const workerMatches = [...jsText.matchAll(/assets\/(puzzle\.worker-[^"'\s)]+\.js)/g)];
+                        const workerMatches = [
+                          ...jsText.matchAll(/assets\/(puzzle\.worker-[^"'\s)]+\.js)/g),
+                        ];
                         for (const wm of workerMatches) {
-                          const workerUrl = new URL('./assets/' + wm[1], self.location).href;
+                          const workerUrl = new URL('./assets/' + wm[1], SCOPE_URL).href;
                           const workerResp = await fetch(workerUrl, { cache: 'no-cache' });
                           if (workerResp.ok) {
                             await cache.put(workerUrl, workerResp);
@@ -64,7 +94,11 @@ self.addEventListener('install', (event) => {
                       }
                     }
                   } catch (bundleErr) {
-                    console.warn('[ServiceWorker] Failed to cache discovered bundle:', bundleUrl, bundleErr);
+                    console.warn(
+                      '[ServiceWorker] Failed to cache discovered bundle:',
+                      bundleUrl,
+                      bundleErr
+                    );
                   }
                 }
               }
@@ -80,16 +114,17 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activation: purge older cache generations and claim clients immediately
+// Activation: purge older cache generations for this scope only (preserving sibling channels)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const cacheKeys = await caches.keys();
       await Promise.all(
         cacheKeys.map((key) => {
-          if (key !== CACHE_NAME) {
+          if (shouldEvictCacheKey(key)) {
             return caches.delete(key);
           }
+          return undefined;
         })
       );
       await self.clients.claim();
@@ -97,18 +132,18 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Strategy depending on request type (strictly same-origin non-API assets)
+// Fetch: Strategy depending on request type (strictly same-origin non-API, non-APK assets)
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
-  // Only handle same-origin GET requests with http/https schemes and non-API paths
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (!url.protocol.startsWith('http')) return;
   if (url.origin !== self.location.origin) return;
   if (url.pathname.includes('/api/')) return;
+  if (url.pathname.toLowerCase().endsWith('.apk')) return;
 
-  // 1. Navigation requests (HTML document): Network-first with cache fallback
+  // 1. Navigation requests (HTML document): Network-first with scoped cache fallback
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
@@ -124,11 +159,11 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         } catch (networkError) {
-          // Offline navigation fallback: try matching the requested URL, or fallback to index.html
+          const cache = await caches.open(CACHE_NAME);
           const cachedResponse =
-            (await caches.match(request, { ignoreSearch: true })) ||
-            (await caches.match(new URL('./index.html', self.location).href, { ignoreSearch: true })) ||
-            (await caches.match(new URL('./', self.location).href, { ignoreSearch: true }));
+            (await cache.match(request, { ignoreSearch: true })) ||
+            (await cache.match(new URL('./index.html', SCOPE_URL).href, { ignoreSearch: true })) ||
+            (await cache.match(new URL('./', SCOPE_URL).href, { ignoreSearch: true }));
           if (cachedResponse) {
             return cachedResponse;
           }

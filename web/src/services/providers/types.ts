@@ -78,6 +78,7 @@ export interface CloudSaveEnvelope {
   deltaToken: string;
   filledCount: number;
   totalCount: number;
+  resetEpoch?: number;
   updatedAt: number;
   devicePlayerId: string;
 }
@@ -91,6 +92,7 @@ export interface CloudSaveEntryV2 {
   isPinned?: boolean;
   filledCount: number;
   totalCount: number;
+  resetEpoch?: number;
   deltaToken: string;
   sourceRef?: PuzzleSourceRef;
   sampleAssetPath?: string | null;

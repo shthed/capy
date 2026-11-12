@@ -1,0 +1,33 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+  Permissions-Policy: geolocation=(), microphone=(), payment=()
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.webmanifest
+  Cache-Control: no-cache
+
+/.well-known/assetlinks.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=3600
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/sample_saves.capy
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+/assets/*.webp
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+/assets/*.png
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate

@@ -21,6 +21,8 @@ import { GenerationCancelledError, PuzzleWorkerService } from './services/Puzzle
 import {
   decodeProgressDeltaToken,
   encodeProgressDeltaToken,
+  mergeProgressDeltas,
+  ProgressDeltaV2,
 } from './services/CapyCodec';
 import {
   buildShareProgressUrl,
@@ -569,6 +571,11 @@ export const App: React.FC = () => {
         autoResumeTimerRef.current = null;
       }
       autoResumeReplayRef.current = autoResumeOnFinish;
+      if (autoResumeOnFinish) {
+        handleUpdateSettings((prev) =>
+          prev.replayLoop ? { ...prev, replayLoop: false } : prev
+        );
+      }
       setHintRegionId(null);
       setReplaySequence(sequence);
       replayStepRef.current = 0;
@@ -576,7 +583,7 @@ export const App: React.FC = () => {
       setIsReplaying(true);
       setIsReplayPlaying(true);
     },
-    []
+    [handleUpdateSettings]
   );
 
   // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed with offscreen fast-forward, camera follow, and auto-loop)
@@ -617,7 +624,7 @@ export const App: React.FC = () => {
 
       const prev = replayStepRef.current;
       if (prev >= replaySequence.length) {
-        if (settings.replayLoop) {
+        if (settings.replayLoop && !autoResumeReplayRef.current) {
           if (loopPauseUntil === 0) {
             loopPauseUntil = now + 350;
           }
@@ -688,7 +695,7 @@ export const App: React.FC = () => {
       }
 
       if (next >= replaySequence.length) {
-        if (settings.replayLoop) {
+        if (settings.replayLoop && !autoResumeReplayRef.current) {
           loopPauseUntil = now + 350;
           animId = requestAnimationFrame(tick);
           return;
@@ -862,7 +869,13 @@ export const App: React.FC = () => {
               puzzleData.isFreeColor ||
               (initialPaintedColors && Object.keys(initialPaintedColors).length > 0)
           );
-          handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+          handleUpdateSettings((prev) => ({
+            ...prev,
+            isFreeColorMode: isFree,
+            ...((existingSnapshotId || shouldAutoReplay) && prev.replayLoop
+              ? { replayLoop: false }
+              : {}),
+          }));
           resetActivePuzzleSessionStats(
             snapId,
             initialFilledRegionIds.size >= puzzleData.regions.length
@@ -1142,8 +1155,10 @@ export const App: React.FC = () => {
         }
 
         const isMatchingActive = activeState?.activeSnapshotId === candidateSnap.id;
+        const snapEpochNewer =
+          (candidateSnap.resetEpoch ?? 0) > (activeState?.resetEpoch ?? 0);
         const orderedIds =
-          (isMatchingActive ? activeState?.filledRegionIds : undefined) ??
+          (isMatchingActive && !snapEpochNewer ? activeState?.filledRegionIds : undefined) ??
           candidateSnap.filledRegionIds ??
           [];
         const filledSet = new Set(orderedIds);
@@ -1204,7 +1219,11 @@ export const App: React.FC = () => {
           setRestoreViewTrigger((prev) => prev + 1);
 
           setPaintedRegionColors(restoredPaintedMap);
-          setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+          handleUpdateSettings((prev) => ({
+            ...prev,
+            isFreeColorMode: isFree,
+            ...(prev.replayLoop ? { replayLoop: false } : {}),
+          }));
           setSourceImage(img);
           setPuzzle(cachedPuzzle);
           setActiveSnapshotId(candidateSnap.id);
@@ -1439,18 +1458,22 @@ export const App: React.FC = () => {
     const room = ProviderRegistry.realtimeRoom.activeRoomCode;
     if (!room || regionIds.length === 0) return;
     const identity = ProviderRegistry.auth.getCurrentIdentity();
-    const now = Date.now();
-    ProviderRegistry.realtimeRoom.broadcastUnfillEvent({
-      eventId: `${identity.playerId}_unfill_${now}_${Math.random().toString(36).slice(2, 6)}`,
-      roomCode: room,
-      senderId: identity.playerId,
-      playerId: identity.playerId,
-      displayName: identity.displayName,
-      avatarColorHex: identity.avatarColorHex,
-      regionId: regionIds[0],
-      regionIds,
-      timestamp: now,
-    });
+    const maxBatch = 512;
+    for (let offsetIdx = 0; offsetIdx < regionIds.length; offsetIdx += maxBatch) {
+      const slice = regionIds.slice(offsetIdx, offsetIdx + maxBatch);
+      const now = Date.now();
+      ProviderRegistry.realtimeRoom.broadcastUnfillEvent({
+        eventId: `${identity.playerId}_unfill_${now}_${Math.random().toString(36).slice(2, 6)}`,
+        roomCode: room,
+        senderId: identity.playerId,
+        playerId: identity.playerId,
+        displayName: identity.displayName,
+        avatarColorHex: identity.avatarColorHex,
+        regionId: slice[0],
+        regionIds: slice,
+        timestamp: now,
+      });
+    }
   }, []);
 
   // Undo last region completion
@@ -1655,6 +1678,10 @@ export const App: React.FC = () => {
         nextPainted.delete(rId);
       }
 
+      if (undoneRegionIds.length > 0) {
+        emitCoopUnfill(undoneRegionIds);
+      }
+
       const newUndoStack: UndoHistoryEntry[] = keptRegionIds.map((rId) => {
         const existing = undoStack.find((u) => u.regionId === rId);
         return existing || { regionId: rId, wasPreviouslyFilled: false };
@@ -1723,6 +1750,7 @@ export const App: React.FC = () => {
       isFreeColorMode,
       activeSnapshotId,
       activeColorId,
+      emitCoopUnfill,
     ]
   );
 
@@ -2524,13 +2552,14 @@ export const App: React.FC = () => {
 
   // Load a saved snapshot (and optionally auto-replay its region completion sequence)
   const handleLoadSnapshot = async (snapshot: SavedSnapshot, forceReplay: boolean = false) => {
+    handleUpdateSettings((prev) => (prev.replayLoop ? { ...prev, replayLoop: false } : prev));
     if (snapshot.id === activeSnapshotId && puzzle) {
       const currentOrdered =
         filledRegionIds.size > 0
           ? Array.from(filledRegionIds)
           : snapshot.filledRegionIds || [];
       if ((forceReplay || settings.autoReplayOnLoad !== false) && currentOrdered.length > 0) {
-        startReplay(currentOrdered, !forceReplay);
+        startReplay(currentOrdered, true);
       }
       return;
     }
@@ -2581,7 +2610,11 @@ export const App: React.FC = () => {
           setPaintedRegionColors(new Map());
         }
         const isFree = Boolean(snapshot.isFreeColor || cachedPuzzle.isFreeColor);
-        handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+        handleUpdateSettings((prev) => ({
+          ...prev,
+          isFreeColorMode: isFree,
+          ...(prev.replayLoop ? { replayLoop: false } : {}),
+        }));
         const availableColors = getVisiblePalette(
           cachedPuzzle.palette,
           cachedPuzzle.regions,
@@ -2625,7 +2658,7 @@ export const App: React.FC = () => {
         setIsLoading(false);
 
         if ((forceReplay || settings.autoReplayOnLoad !== false) && orderedIds.length > 0) {
-          startReplay(orderedIds, !forceReplay);
+          startReplay(orderedIds, true);
         }
       };
       img.onerror = () => {
@@ -2958,7 +2991,8 @@ export const App: React.FC = () => {
       deltaFilledIds?: number[],
       deltaPaintedColors?: Record<number, number>,
       deltaIsFreeColor?: boolean,
-      forceGeneratorConfig?: GeneratorConfig
+      forceGeneratorConfig?: GeneratorConfig,
+      deltaResetEpoch?: number
     ) => {
       const skipBootstrap =
         typeof window !== 'undefined' &&
@@ -3001,14 +3035,42 @@ export const App: React.FC = () => {
             });
             if (img) {
               const validIds = new Set(cachedPuzzle.regions.map((r) => r.id));
-              const rawOrdered =
-                deltaFilledIds !== undefined ? deltaFilledIds : prebakedSnap.filledRegionIds || [];
+              const mergedSampleDelta =
+                deltaFilledIds !== undefined
+                  ? mergeProgressDeltas(
+                      {
+                        version: 2,
+                        filledRegionIds: prebakedSnap.filledRegionIds || [],
+                        paintedRegionColors: prebakedSnap.paintedRegionColors,
+                        isFreeColor: prebakedSnap.isFreeColor,
+                        ...(prebakedSnap.resetEpoch && prebakedSnap.resetEpoch > 0
+                          ? { resetEpoch: prebakedSnap.resetEpoch }
+                          : {}),
+                        updatedAt: prebakedSnap.lastOpened || prebakedSnap.timestamp || 0,
+                      },
+                      {
+                        version: 2,
+                        filledRegionIds: deltaFilledIds,
+                        paintedRegionColors: deltaPaintedColors,
+                        isFreeColor: deltaIsFreeColor,
+                        ...(deltaResetEpoch && deltaResetEpoch > 0
+                          ? { resetEpoch: deltaResetEpoch }
+                          : {}),
+                        updatedAt: Date.now(),
+                      }
+                    )
+                  : null;
+              const rawOrdered = mergedSampleDelta
+                ? mergedSampleDelta.filledRegionIds
+                : prebakedSnap.filledRegionIds || [];
               const orderedIds = rawOrdered.filter((id) => validIds.has(id));
               const filledSet = new Set(orderedIds);
-              const rawPainted =
-                deltaPaintedColors !== undefined
-                  ? deltaPaintedColors
-                  : prebakedSnap.paintedRegionColors || {};
+              const rawPainted = mergedSampleDelta
+                ? mergedSampleDelta.paintedRegionColors || {}
+                : prebakedSnap.paintedRegionColors || {};
+              const mergedEpoch = mergedSampleDelta
+                ? mergedSampleDelta.resetEpoch ?? 0
+                : prebakedSnap.resetEpoch ?? 0;
               const restoredPaintedMap = new Map(
                 Object.entries(rawPainted)
                   .map(([k, v]) => [Number(k), v] as [number, number])
@@ -3046,7 +3108,9 @@ export const App: React.FC = () => {
                 previewUrl,
                 Object.fromEntries(restoredPaintedMap),
                 cachedPuzzle.palette,
-                isFree
+                isFree,
+                undefined,
+                mergedEpoch > 0 ? mergedEpoch : undefined
               );
               setIsReplaying(false);
               setIsReplayPlaying(false);
@@ -3080,6 +3144,7 @@ export const App: React.FC = () => {
                 filledRegionIds: orderedIds,
                 paintedRegionColors: Object.fromEntries(restoredPaintedMap),
                 isFreeColorMode: isFree,
+                ...(mergedEpoch > 0 ? { resetEpoch: mergedEpoch } : {}),
                 zoomScale: 1.0,
                 panOffsetX: 0,
                 panOffsetY: 0,
@@ -3296,34 +3361,86 @@ export const App: React.FC = () => {
             targetSample,
             delta.filledRegionIds,
             delta.paintedRegionColors,
-            delta.isFreeColor
+            delta.isFreeColor,
+            undefined,
+            delta.resetEpoch
           );
           return;
         }
 
         if (!cur.puzzle) return;
         const validIds = new Set(cur.puzzle.regions.map((r) => r.id));
-        const nextFilled = new Set(cur.filledRegionIds);
-        const nextPainted = new Map(cur.paintedRegionColors);
-        let added = false;
-        for (const rId of delta.filledRegionIds) {
-          if (validIds.has(rId) && !nextFilled.has(rId)) {
-            nextFilled.add(rId);
-            added = true;
+        const localEpoch = cur.activeSave?.resetEpoch ?? 0;
+        const localPaintedObj =
+          cur.paintedRegionColors.size > 0
+            ? Object.fromEntries(cur.paintedRegionColors)
+            : undefined;
+        const localDelta: ProgressDeltaV2 = {
+          version: 2,
+          filledRegionIds: Array.from(cur.filledRegionIds),
+          ...(localPaintedObj ? { paintedRegionColors: localPaintedObj } : {}),
+          ...(cur.isFreeColorMode ? { isFreeColor: true } : {}),
+          ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
+          updatedAt: Date.now(),
+        };
+        const mergedWelcome = mergeProgressDeltas(localDelta, delta);
+        const mergedEpoch = mergedWelcome.resetEpoch ?? 0;
+        const epochAdvanced = mergedEpoch > localEpoch;
+
+        const nextFilled = new Set<number>();
+        for (const rId of mergedWelcome.filledRegionIds) {
+          if (validIds.has(rId)) nextFilled.add(rId);
+        }
+        const nextPainted = new Map<number, number>();
+        if (mergedWelcome.paintedRegionColors) {
+          for (const [k, v] of Object.entries(mergedWelcome.paintedRegionColors)) {
+            const numK = Number(k);
+            if (validIds.has(numK)) nextPainted.set(numK, v);
           }
         }
-        if (delta.paintedRegionColors) {
-          for (const [k, v] of Object.entries(delta.paintedRegionColors)) {
-            const numK = Number(k);
-            if (validIds.has(numK) && nextPainted.get(numK) !== v) {
-              nextPainted.set(numK, v);
-              added = true;
+
+        let stateChanged = epochAdvanced || nextFilled.size !== cur.filledRegionIds.size;
+        if (!stateChanged) {
+          for (const rId of nextFilled) {
+            if (!cur.filledRegionIds.has(rId)) {
+              stateChanged = true;
+              break;
             }
           }
         }
-        if (added) {
+        if (!stateChanged && nextPainted.size !== cur.paintedRegionColors.size) {
+          stateChanged = true;
+        }
+        if (!stateChanged) {
+          for (const [rId, col] of nextPainted) {
+            if (cur.paintedRegionColors.get(rId) !== col) {
+              stateChanged = true;
+              break;
+            }
+          }
+        }
+
+        if (stateChanged) {
           const orderedList = Array.from(nextFilled);
           const paintedObj = Object.fromEntries(nextPainted);
+          let nextActiveColorId = cur.activeColorId;
+          if (!cur.isFreeColorMode && nextFilled.size < cur.puzzle.regions.length) {
+            const curStillAvailable = cur.puzzle.regions.some(
+              (r) => r.colorId === cur.activeColorId && !nextFilled.has(r.id)
+            );
+            if (!curStillAvailable) {
+              const fallback = getVisiblePalette(
+                cur.puzzle.palette,
+                cur.puzzle.regions,
+                nextFilled,
+                cur.settings.paletteSort
+              )[0];
+              if (fallback) {
+                nextActiveColorId = fallback.id;
+                setActiveColorId(fallback.id);
+              }
+            }
+          }
           setFilledRegionIds(nextFilled);
           setPaintedRegionColors(nextPainted);
           if (cur.activeSnapshotId) {
@@ -3339,9 +3456,22 @@ export const App: React.FC = () => {
               undefined,
               paintedObj,
               cur.puzzle.palette,
-              cur.puzzle.isFreeColor
+              cur.puzzle.isFreeColor,
+              undefined,
+              mergedEpoch > 0 ? mergedEpoch : undefined
             );
             setSnapshots(updated);
+            StorageService.saveActiveState({
+              activeSnapshotId: cur.activeSnapshotId,
+              activeColorId: nextActiveColorId,
+              filledRegionIds: orderedList,
+              paintedRegionColors: paintedObj,
+              isFreeColorMode: cur.isFreeColorMode,
+              ...(mergedEpoch > 0 ? { resetEpoch: mergedEpoch } : {}),
+              zoomScale,
+              panOffsetX,
+              panOffsetY,
+            });
           }
         }
       } catch {
@@ -3358,16 +3488,21 @@ export const App: React.FC = () => {
   }, [loadSampleFromPrebakedOrGenerate]);
 
   const prevCoopSnapRef = useRef<string | null>(null);
+  const prevCoopResetEpochRef = useRef<number>(0);
 
   // Keep active Co-op room welcome seed token fresh whenever local progress or active puzzle updates
   useEffect(() => {
     if (!coopRoomCode || !puzzle) {
       prevCoopSnapRef.current = null;
+      prevCoopResetEpochRef.current = 0;
       return;
     }
+    const currentEpoch = activeSave?.resetEpoch ?? 0;
     const switchedPuzzle =
-      prevCoopSnapRef.current !== null && prevCoopSnapRef.current !== activeSnapshotId;
+      (prevCoopSnapRef.current !== null && prevCoopSnapRef.current !== activeSnapshotId) ||
+      currentEpoch > prevCoopResetEpochRef.current;
     prevCoopSnapRef.current = activeSnapshotId;
+    prevCoopResetEpochRef.current = currentEpoch;
 
     const sampleUri =
       activeSave?.sampleAssetPath ||
@@ -3380,6 +3515,7 @@ export const App: React.FC = () => {
       filledRegionIds: Array.from(filledRegionIds),
       ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
       ...(isFreeColorMode ? { isFreeColor: true } : {}),
+      ...(currentEpoch > 0 ? { resetEpoch: currentEpoch } : {}),
       updatedAt: Date.now(),
     }).then((token) => {
       if (switchedPuzzle) {
@@ -3419,7 +3555,9 @@ export const App: React.FC = () => {
           parsed.matchedSample,
           parsed.delta.filledRegionIds,
           parsed.delta.paintedRegionColors,
-          parsed.delta.isFreeColor
+          parsed.delta.isFreeColor,
+          undefined,
+          parsed.delta.resetEpoch
         );
       }
     };
@@ -3457,11 +3595,19 @@ export const App: React.FC = () => {
         filledRegionIds: Array.from(filledRegionIds),
         paintedRegionColors: paintedObj,
         isFreeColor: isFreeColorMode,
+        resetEpoch: activeSave?.resetEpoch,
         roomCode: roomOverride,
       });
       return url;
     },
-    [puzzle, activeSampleUri, filledRegionIds, paintedRegionColors, isFreeColorMode]
+    [
+      puzzle,
+      activeSampleUri,
+      activeSave?.resetEpoch,
+      filledRegionIds,
+      paintedRegionColors,
+      isFreeColorMode,
+    ]
   );
 
   const handleShareProgressLink = useCallback(async (): Promise<string | null> => {
@@ -3478,12 +3624,14 @@ export const App: React.FC = () => {
     const id = ProviderRegistry.auth.getCurrentIdentity();
     const paintedObj =
       paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
+    const currentEpoch = activeSave?.resetEpoch ?? 0;
     const seedToken = await encodeProgressDeltaToken({
       version: 2,
       ...(activeSampleUri ? { sourceRef: { kind: 'sample', uri: activeSampleUri } } : {}),
       filledRegionIds: Array.from(filledRegionIds),
       ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
       ...(isFreeColorMode ? { isFreeColor: true } : {}),
+      ...(currentEpoch > 0 ? { resetEpoch: currentEpoch } : {}),
       updatedAt: Date.now(),
     });
     await ProviderRegistry.realtimeRoom.joinRoom(
@@ -3503,6 +3651,7 @@ export const App: React.FC = () => {
     return activeCode;
   }, [
     activeSampleUri,
+    activeSave?.resetEpoch,
     filledRegionIds,
     paintedRegionColors,
     isFreeColorMode,
@@ -3552,6 +3701,7 @@ export const App: React.FC = () => {
   } | null> => {
     const paintedObj =
       paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
+    const localResetEpoch = activeSave?.resetEpoch ?? 0;
 
     // 1. Flush active canvas state into local StorageService before full-library cloud sync
     if (puzzle && activeSnapshotId) {
@@ -3567,7 +3717,9 @@ export const App: React.FC = () => {
         undefined,
         paintedObj,
         puzzle.palette,
-        puzzle.isFreeColor
+        puzzle.isFreeColor,
+        undefined,
+        localResetEpoch > 0 ? localResetEpoch : undefined
       );
     }
 
@@ -3577,10 +3729,7 @@ export const App: React.FC = () => {
 
     // 3. Also sync the active slot envelope and merge any newly added regions into the live canvas
     let slotAdded = 0;
-    let slotMergedDelta: {
-      filledRegionIds: number[];
-      paintedRegionColors?: Record<number, number>;
-    } | null = null;
+    let slotMergedDelta: ProgressDeltaV2 | null = null;
 
     if (puzzle && activeSnapshotId) {
       const slotKey = activeSampleUri
@@ -3595,6 +3744,7 @@ export const App: React.FC = () => {
           filledRegionIds: Array.from(filledRegionIds),
           ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
           ...(isFreeColorMode ? { isFreeColor: true } : {}),
+          ...(localResetEpoch > 0 ? { resetEpoch: localResetEpoch } : {}),
           updatedAt: Date.now(),
         },
         puzzle.regions.length
@@ -3606,7 +3756,7 @@ export const App: React.FC = () => {
     const refreshedSnapshots = StorageService.loadSnapshots();
     setSnapshots(refreshedSnapshots);
 
-    // Check if the active puzzle gained regions from either full-library sync or slot sync
+    // Check if the active puzzle gained regions or advanced resetEpoch from full-library sync or slot sync
     if (puzzle && activeSnapshotId) {
       const normalizedActiveSample = activeSampleUri ? activeSampleUri.replace(/^\.\//, '') : null;
       const matchingSave = refreshedSnapshots.find(
@@ -3617,35 +3767,53 @@ export const App: React.FC = () => {
               s.sampleAssetPath?.replace(/^\.\//, '') === normalizedActiveSample))
       );
 
-      const validIds = new Set(puzzle.regions.map((r) => r.id));
-      const combinedFilled = new Set<number>(filledRegionIds);
+      let reconciledDelta: ProgressDeltaV2 = {
+        version: 2,
+        filledRegionIds: Array.from(filledRegionIds),
+        ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
+        ...(isFreeColorMode ? { isFreeColor: true } : {}),
+        ...(localResetEpoch > 0 ? { resetEpoch: localResetEpoch } : {}),
+        updatedAt: Date.now(),
+      };
+
+      if (matchingSave) {
+        reconciledDelta = mergeProgressDeltas(reconciledDelta, {
+          version: 2,
+          filledRegionIds: matchingSave.filledRegionIds || [],
+          paintedRegionColors: matchingSave.paintedRegionColors,
+          isFreeColor: matchingSave.isFreeColor,
+          ...(matchingSave.resetEpoch && matchingSave.resetEpoch > 0
+            ? { resetEpoch: matchingSave.resetEpoch }
+            : {}),
+          updatedAt: matchingSave.lastOpened || matchingSave.timestamp || 0,
+        });
+      }
       if (slotMergedDelta) {
-        for (const rId of slotMergedDelta.filledRegionIds) {
-          if (validIds.has(rId)) combinedFilled.add(rId);
-        }
-      }
-      if (matchingSave?.filledRegionIds) {
-        for (const rId of matchingSave.filledRegionIds) {
-          if (validIds.has(rId)) combinedFilled.add(rId);
-        }
+        reconciledDelta = mergeProgressDeltas(reconciledDelta, slotMergedDelta);
       }
 
-      const nextPainted = new Map(paintedRegionColors);
-      if (matchingSave?.paintedRegionColors) {
-        for (const [k, v] of Object.entries(matchingSave.paintedRegionColors)) {
-          const rId = Number(k);
-          if (validIds.has(rId)) nextPainted.set(rId, v);
-        }
+      const validIds = new Set(puzzle.regions.map((r) => r.id));
+      const combinedFilled = new Set<number>();
+      for (const rId of reconciledDelta.filledRegionIds) {
+        if (validIds.has(rId)) combinedFilled.add(rId);
       }
-      if (slotMergedDelta?.paintedRegionColors) {
-        for (const [k, v] of Object.entries(slotMergedDelta.paintedRegionColors)) {
+      const nextPainted = new Map<number, number>();
+      if (reconciledDelta.paintedRegionColors) {
+        for (const [k, v] of Object.entries(reconciledDelta.paintedRegionColors)) {
           const rId = Number(k);
           if (validIds.has(rId)) nextPainted.set(rId, v);
         }
       }
 
+      const reconciledEpoch = reconciledDelta.resetEpoch ?? 0;
+      const epochAdvanced = reconciledEpoch > localResetEpoch;
       const gainedOnActive = Math.max(0, combinedFilled.size - filledRegionIds.size);
-      if (gainedOnActive > 0 || nextPainted.size !== paintedRegionColors.size) {
+      if (
+        epochAdvanced ||
+        gainedOnActive > 0 ||
+        combinedFilled.size !== filledRegionIds.size ||
+        nextPainted.size !== paintedRegionColors.size
+      ) {
         const orderedList = Array.from(combinedFilled);
         const mergedPaintedObj = Object.fromEntries(nextPainted);
         setFilledRegionIds(combinedFilled);
@@ -3663,7 +3831,9 @@ export const App: React.FC = () => {
           undefined,
           mergedPaintedObj,
           puzzle.palette,
-          puzzle.isFreeColor
+          puzzle.isFreeColor,
+          undefined,
+          reconciledEpoch > 0 ? reconciledEpoch : undefined
         );
         setSnapshots(updated);
         StorageService.saveActiveState({
@@ -3672,6 +3842,7 @@ export const App: React.FC = () => {
           filledRegionIds: orderedList,
           paintedRegionColors: mergedPaintedObj,
           isFreeColorMode,
+          ...(reconciledEpoch > 0 ? { resetEpoch: reconciledEpoch } : {}),
           zoomScale,
           panOffsetX,
           panOffsetY,
@@ -3692,6 +3863,7 @@ export const App: React.FC = () => {
     puzzle,
     activeSnapshotId,
     activeSampleUri,
+    activeSave?.resetEpoch,
     activeTitle,
     filledRegionIds,
     paintedRegionColors,
@@ -4278,6 +4450,11 @@ export const App: React.FC = () => {
             img.src = defaultSample.assetPath;
           }}
           onResetProgress={() => {
+            const previouslyFilled = Array.from(filledRegionIds);
+            if (previouslyFilled.length > 0) {
+              emitCoopUnfill(previouslyFilled);
+            }
+            const nextResetEpoch = (activeSave?.resetEpoch ?? 0) + 1;
             setIsReplaying(false);
             setIsReplayPlaying(false);
             setFilledRegionIds(new Set());
@@ -4297,7 +4474,11 @@ export const App: React.FC = () => {
                 panOffsetX,
                 panOffsetY,
                 undefined,
-                {}
+                {},
+                puzzle.palette,
+                puzzle.isFreeColor,
+                undefined,
+                nextResetEpoch
               );
               setSnapshots(updated);
               StorageService.saveActiveState({
@@ -4306,6 +4487,7 @@ export const App: React.FC = () => {
                 filledRegionIds: [],
                 paintedRegionColors: {},
                 isFreeColorMode,
+                resetEpoch: nextResetEpoch,
                 zoomScale,
                 panOffsetX,
                 panOffsetY,

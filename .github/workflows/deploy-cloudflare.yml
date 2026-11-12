@@ -1,0 +1,91 @@
+name: Deploy Cloudflare Worker (capypaint.com)
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'notes/**'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-worker:
+    name: Deploy to capypaint.com
+    if: github.repository == 'capyboop/capy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Cloudflare credentials
+        id: creds
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "${CF_TOKEN}" ] && [ -n "${CF_ACCOUNT}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Cloudflare GitHub Actions Deploy Skipped"
+              echo "No \`CLOUDFLARE_API_TOKEN\` / \`CLOUDFLARE_ACCOUNT_ID\` repository secrets configured."
+              echo "If \`capyboop/capy\` is connected via **Cloudflare Workers Builds** (Git integration), Cloudflare deploys \`capypaint.com\` automatically on push without GitHub secrets."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Check out source
+        if: steps.creds.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        if: steps.creds.outputs.enabled == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web static assets (web/dist)
+        if: steps.creds.outputs.enabled == 'true'
+        working-directory: web
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run test:sanity
+          npm run lint
+          npm run build
+
+      - name: Deploy Worker & Static Assets to Cloudflare
+        if: steps.creds.outputs.enabled == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.160.1'
+          command: deploy
+
+      - name: Verify capypaint.com /api/health
+        if: steps.creds.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if BODY="$(curl -fsSL --max-time 10 https://capypaint.com/api/health)" && node -e 'const j = JSON.parse(process.argv[1]); if (j.ok !== true) process.exit(1);' "${BODY}"; then
+              echo "Verified https://capypaint.com/api/health: ${BODY}"
+              exit 0
+            fi
+            echo "Waiting for Cloudflare edge propagation (attempt ${attempt}/5)..."
+            sleep 3
+          done
+          echo "ERROR: https://capypaint.com/api/health check failed after 5 attempts." >&2
+          exit 1

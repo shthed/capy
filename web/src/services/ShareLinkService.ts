@@ -33,11 +33,13 @@ export function resolveSampleFromSourceRef(sourceRef?: PuzzleSourceRef): SampleA
   return null;
 }
 
+export const CANONICAL_PRODUCTION_URL = 'https://capypaint.com/';
+
 function getCanonicalBaseUrl(): string {
-  if (typeof window === 'undefined') return 'https://shthed.github.io/capy/';
+  if (typeof window === 'undefined') return CANONICAL_PRODUCTION_URL;
   // On Android WebView asset loader host, generate public HTTPS App Link URL so friends can open it anywhere
   if (window.location.hostname === 'appassets.androidplatform.net') {
-    return 'https://shthed.github.io/capy/';
+    return CANONICAL_PRODUCTION_URL;
   }
   const url = new URL(window.location.href);
   url.search = '';
@@ -50,6 +52,7 @@ export async function buildShareProgressUrl(options: {
   filledRegionIds: number[];
   paintedRegionColors?: Record<number, number>;
   isFreeColor?: boolean;
+  resetEpoch?: number;
   roomCode?: string | null;
 }): Promise<{ url: string; token: string }> {
   const delta: ProgressDeltaV2 = {
@@ -60,6 +63,7 @@ export async function buildShareProgressUrl(options: {
       ? { paintedRegionColors: options.paintedRegionColors }
       : {}),
     ...(options.isFreeColor ? { isFreeColor: true } : {}),
+    ...(options.resetEpoch && options.resetEpoch > 0 ? { resetEpoch: options.resetEpoch } : {}),
     updatedAt: Date.now(),
   };
 
@@ -74,7 +78,7 @@ export async function buildShareProgressUrl(options: {
 
 export async function parseShareLinkFromUrl(rawUrl: string): Promise<ParsedShareLink> {
   try {
-    const parsed = new URL(rawUrl, 'https://shthed.github.io/capy/');
+    const parsed = new URL(rawUrl, CANONICAL_PRODUCTION_URL);
     const roomParam = parsed.searchParams.get('room');
     const roomCode = roomParam
       ? roomParam.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || null

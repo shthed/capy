@@ -241,7 +241,8 @@ export class StorageService {
     paintedRegionColors?: Record<number, number>,
     customPalette?: PaletteColor[],
     isFreeColor?: boolean,
-    fileSizeBytes?: number
+    fileSizeBytes?: number,
+    resetEpoch?: number
   ): SavedSnapshot[] {
     const list = this.loadSnapshots();
     const updated = list.map((item) => {
@@ -260,6 +261,7 @@ export class StorageService {
           ...(panOffsetY !== undefined ? { panOffsetY } : {}),
           ...(previewDataUrl ? { previewDataUrl } : {}),
           ...(fileSizeBytes !== undefined ? { fileSizeBytes } : {}),
+          ...(resetEpoch !== undefined ? { resetEpoch } : {}),
         };
       }
       return item;
@@ -425,12 +427,24 @@ export class StorageService {
     filledRegionIds: number[];
     paintedRegionColors?: Record<number, number>;
     isFreeColorMode?: boolean;
+    resetEpoch?: number;
     zoomScale: number;
     panOffsetX: number;
     panOffsetY: number;
   }): void {
     try {
-      const serialized = JSON.stringify(state);
+      const existing = state.resetEpoch === undefined && state.activeSnapshotId ? this.loadActiveState() : null;
+      const effectiveEpoch =
+        state.resetEpoch !== undefined
+          ? state.resetEpoch
+          : existing?.activeSnapshotId === state.activeSnapshotId
+            ? existing.resetEpoch
+            : undefined;
+      const payload =
+        effectiveEpoch !== undefined && effectiveEpoch > 0
+          ? { ...state, resetEpoch: effectiveEpoch }
+          : state;
+      const serialized = JSON.stringify(payload);
       localStorage.setItem(ACTIVE_STATE_KEY, serialized);
       NativeBridge.saveBackup(ACTIVE_STATE_KEY, serialized);
     } catch {
@@ -444,6 +458,7 @@ export class StorageService {
     filledRegionIds: number[];
     paintedRegionColors?: Record<number, number>;
     isFreeColorMode?: boolean;
+    resetEpoch?: number;
     zoomScale: number;
     panOffsetX: number;
     panOffsetY: number;
