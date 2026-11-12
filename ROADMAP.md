@@ -284,7 +284,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 ### US-5.2: Hosted Hibernating WebSocket Co-op Room Relay (`CoopRoomDurableObject`)
 
 - **Readiness**: `Code Complete (#482) -- Awaiting Cloudflare capypaint.com Zone Connection`
-- **Unblock Prerequisite**: Connect `capyboop/capy` to Cloudflare Workers Builds (or set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in GitHub Secrets) for custom domain `capypaint.com` (see [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers--syncing-capyboopcapy)).
+- **Unblock Prerequisite**: Connect repository to Cloudflare Workers Builds (or set `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` in GitHub Secrets) for custom domain `capypaint.com` (see [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers)).
 - **Description**: Activate the shipped Cloudflare Workers Static Assets + SQLite WebSocket Hibernation room relay ([`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts)) backing `HybridCoopRoomAdapter` (`wss://capypaint.com/api/room`) for 6-character `?room=ABC123` codes.
 - **Value**: Lets friends and family color the same puzzle together in real time across separate phones, tablets, and laptops over the internet—not just tabs on the same browser.
 - **Why Now**: Both `HybridCoopRoomAdapter` same-origin auto-discovery (`resolveCoopRoomWsUrl`) and `CoopRoomDurableObject` shipped in [#482](https://github.com/shthed/capy/pull/482).

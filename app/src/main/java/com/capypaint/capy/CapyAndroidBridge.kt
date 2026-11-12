@@ -243,7 +243,7 @@ class CapyAndroidBridge(
         const val KEY_PLAY_GAMES_DISPLAY_NAME = "display_name"
         const val ALLOWED_DEEP_LINK_HOST = "capypaint.com"
         val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
-        val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("capyboop.github.io", "shthed.github.io")
+        val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io")
 
         /**
          * Returns true when the Google Play Console Game Services Project ID is configured

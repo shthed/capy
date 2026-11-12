@@ -60,10 +60,6 @@
                     android:host="www.capypaint.com" />
                 <data
                     android:scheme="https"
-                    android:host="capyboop.github.io"
-                    android:pathPrefix="/capy" />
-                <data
-                    android:scheme="https"
                     android:host="shthed.github.io"
                     android:pathPrefix="/capy" />
             </intent-filter>

@@ -332,7 +332,7 @@ async function runCodecAndEngineTests() {
     );
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\s\[#\d+\]\(https:\/\/github\.com\/(?:capyboop|shthed)\/capy\/pull\/\d+\)$/.test(bullet),
+        /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/.test(bullet),
         true,
         `Each CHANGELOG.md bullet must end with a bare [#000] PR link: ${bullet}`
       );
@@ -603,13 +603,12 @@ async function runCodecAndEngineTests() {
       'capy-friends-zen-sheet-coloring-sheet.svg'
     );
 
-    // 11. capypaint.com canonical ShareLinkService, Co-op WS auto-discovery, Cloudflare Worker protocol & persona rebrand
+    // 11. capypaint.com canonical ShareLinkService, Co-op WS auto-discovery & Cloudflare Worker protocol
     const shareLinkMod = await vite.ssrLoadModule('/src/services/ShareLinkService.ts');
     const providerMod = await vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts');
     const relayProtoMod = await vite.ssrLoadModule(
       path.resolve(projectRoot, '../worker/coopRoomProtocol.ts')
     );
-    const { transformPersonaContent } = await import('./rebrand-persona.mjs');
 
     assert.equal(shareLinkMod.CANONICAL_PRODUCTION_URL, 'https://capypaint.com/');
     const builtShare = await shareLinkMod.buildShareProgressUrl({
@@ -624,7 +623,6 @@ async function runCodecAndEngineTests() {
     );
     for (const hostBase of [
       'https://capypaint.com/',
-      'https://capyboop.github.io/capy/',
       'https://shthed.github.io/capy/',
     ]) {
       const parsedLink = await shareLinkMod.parseShareLinkFromUrl(
@@ -740,6 +738,13 @@ async function runCodecAndEngineTests() {
       true
     );
 
+    /* capy-dev-only:start */
+    const osMod = await import('node:os');
+    const {
+      transformPersonaContent,
+      sanitizeCommitMessage,
+      exportCleanPersonaStage,
+    } = await import('./rebrand-persona.mjs');
     const sampleDoc =
       'Repo https://github.com/shthed/capy (`shthed`) preview https://shthed.github.io/capy/pull/1/';
     const transformedOnce = transformPersonaContent(sampleDoc);
@@ -748,6 +753,26 @@ async function runCodecAndEngineTests() {
       'Repo https://github.com/capyboop/capy (`capyboop`) preview https://capyboop.github.io/capy/pull/1/'
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
+    assert.equal(
+      sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
+      'Add Cloudflare Worker for capyboop/capy'
+    );
+    const tmpCleanStage = fs.mkdtempSync(path.join(osMod.tmpdir(), 'capy-clean-stage-'));
+    try {
+      const stageStats = exportCleanPersonaStage({ stageDir: tmpCleanStage });
+      assert.equal(stageStats.verifiedFiles > 50, true);
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/publish-capyboop.yml')),
+        false
+      );
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
+        false
+      );
+    } finally {
+      fs.rmSync(tmpCleanStage, { recursive: true, force: true });
+    }
+    /* capy-dev-only:end */
 
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {

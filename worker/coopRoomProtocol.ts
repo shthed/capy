@@ -76,7 +76,6 @@ export function isAllowedRelayOrigin(originHeader: string | null | undefined): b
       hostname.endsWith('.capypaint.com') ||
       hostname.endsWith('.workers.dev') ||
       hostname === 'appassets.androidplatform.net' ||
-      hostname === 'capyboop.github.io' ||
       hostname === 'shthed.github.io'
     );
   } catch {
