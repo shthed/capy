@@ -98,7 +98,6 @@ export interface UserSettings {
   reverseDoubleTapZoom: boolean;
   zoomSensitivity: number;
   snapZoomLevels: boolean;
-  showMagnifierLoupe: boolean;
   soundEnabled: boolean;
   soundVolume: number;
   reducedMotion: boolean;

@@ -1,6 +1,6 @@
 ### 2.7 - 2026-11-12 (Alpha)
 
-- Add precision loupe, melodic Web Audio, fill blooms, CRDT reset epochs, Co-op rewind sync, and chunked Android cloud saves [#484](https://github.com/shthed/capy/pull/484)
+- Fix Co-op save and rewind sync, Android large cloud saves, CRDT reset epochs, and mobile replay controls [#484](https://github.com/shthed/capy/pull/484)
 
 ### 2.6 - 2026-11-12
 

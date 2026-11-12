@@ -40,8 +40,8 @@
 - **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples and real-time undo sync.
 - **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync across Google Account (Google Drive `appDataFolder`) and Android Google Play Games Services v2 ensure zero progress is ever lost across devices.
 - **Daily Featured Puzzle, Searchable Gallery and Community Ideas**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), track your **Lifetime Stats**, and vote on upcoming community gallery packs.
-- **Smooth Navigation, Precision Loupe and Inclusive Accessibility**: Floating `2.5x` **Precision Magnifier Loupe** on press-and-hold and Paint Mode drags, one-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
-- **Continuous Paint Mode and Tactile Sensory Feedback**: Drag your finger across the screen to fill connected matching regions with `180ms` radial ink blooms, `400ms` swatch-clear shimmers, rising pentatonic Web Audio harmonies, and crisp Android haptics.
+- **Smooth Navigation and Inclusive Accessibility**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
+- **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
 - **100% Offline-First and Private**: All image processing and coloring run locally inside a sandboxed Web Worker. Play completely offline with zero forced accounts or ads.
 
 ---
@@ -50,16 +50,15 @@
 
 1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, launch the **Puzzle of the Day** in the **Create** tab, or import your own photo.
 2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any region directly in default **Easy Mode** to auto-select its color). Matching puzzle shapes highlight instantly.
-3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, hold a finger (`> 220ms`) to aim with the `2.5x` **Precision Loupe**, or turn on the **Paint Brush** tool to color continuously by dragging.
+3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on the **Paint Brush** tool to color continuously by dragging.
 4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
-5. **Celebrate**: Complete all colors to trigger the victory chime and confetti burst, watch your chronological replay, and download your finished masterpiece.
+5. **Celebrate**: Complete all colors to trigger the victory confetti burst, watch your chronological replay, and download your finished masterpiece.
 
 ---
 
 ## Controls and Gestures Cheat Sheet
 
 - **Tap Region**: In **Easy Mode** (default), auto-selects the tapped region's color and fills it immediately; in **Normal Mode**, fills the region when it matches the active swatch; in **Free Colour Mode**, paints with any selected color.
-- **Press-and-Hold (`> 220ms`) / Paint Drag**: Activates the floating `2.5x` circular **Precision Magnifier Loupe** `72px` above your finger (automatically flipping below near the top bar; toggleable in Settings).
 - **Drag Canvas**: Pans the artwork smoothly across the screen with inertial gliding momentum.
 - **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible and sensitivity-scalable via Settings).
 - **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`, with optional magnetic zoom detents (`1x`, `2x`, `4x`, `8x`, `12x`) in Settings.

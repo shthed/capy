@@ -835,36 +835,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                 </div>
 
-                {/* Precision Magnifier Loupe */}
-                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                  <div className="pr-3 min-w-0">
-                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Precision Magnifier Loupe
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-tight">
-                      Floating 2.5x circular lens above press-and-hold and Paint Mode drags
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="setting-magnifier-loupe"
-                    aria-checked={settings.showMagnifierLoupe !== false}
-                    onClick={() =>
-                      updateSetting('showMagnifierLoupe', !(settings.showMagnifierLoupe !== false))
-                    }
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
-                      settings.showMagnifierLoupe !== false ? 'bg-amber-500' : 'bg-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                        settings.showMagnifierLoupe !== false ? 'translate-x-4.5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
                 {/* Sound Effects */}
                 <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
                   <div className="pr-3 min-w-0">

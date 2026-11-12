@@ -1161,13 +1161,10 @@ async function runCodecAndEngineTests() {
       );
     }
 
-    // --- Sprint 2: F8 CRDT resetEpoch, F9 >180KB Play Games Chunks, F10 Loupe Geometry, F11 SoundService, F12 FillBloomBuffer ---
+    // --- Sprint 2: F8 CRDT resetEpoch & F9 >180KB Play Games Chunks ---
     {
       const driversMod = await vite.ssrLoadModule('/src/services/providers/CloudProviderDrivers.ts');
       const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
-      const canvasMod = await vite.ssrLoadModule('/src/components/PuzzleCanvas.tsx');
-      const soundMod = await vite.ssrLoadModule('/src/services/SoundService.ts');
-      const bloomMod = await vite.ssrLoadModule('/src/engine/CoopRippleBuffer.ts');
 
       // 1. F8 (F-01): ProgressDeltaV2 resetEpoch token round-trip & monotonic CRDT epoch dominance
       const resetToken = await codec.encodeProgressDeltaToken({
@@ -1340,175 +1337,6 @@ async function runCodecAndEngineTests() {
       } finally {
         globalThis.window = prevWindow;
       }
-
-      // 3. F10 (TASK-2.1a/b): computeLoupePosition 72px offset, < 96px top-edge flip, & zero-alloc clamping
-      const scratchLoupe = { x: 0, y: 0, flippedBelow: false };
-      const midPos = canvasMod.computeLoupePosition(200, 250, 400, 700, 44, scratchLoupe);
-      assert.equal(midPos, scratchLoupe, 'computeLoupePosition must reuse optional out struct in-place');
-      assert.equal(midPos.x, 200);
-      assert.equal(midPos.y, 178);
-      assert.equal(midPos.flippedBelow, false);
-
-      const topFlipPos = canvasMod.computeLoupePosition(200, 64, 400, 700, 44, scratchLoupe);
-      assert.equal(topFlipPos.flippedBelow, true, 'Pointer near top HUD (< 96px) must flip loupe below finger');
-      assert.equal(topFlipPos.y, 136);
-
-      const edgeClampPos = canvasMod.computeLoupePosition(4, 695, 400, 700, 44, scratchLoupe);
-      assert.equal(edgeClampPos.x, 52, 'Loupe X must clamp inside [radius + 8 .. width - radius - 8]');
-      assert.equal(edgeClampPos.y <= 700 - 52, true);
-
-      // 4. F11 (TASK-2.3a/b): SoundService rising pentatonic streaks (> 450ms reset), swatch arpeggio, & puzzle chime
-      let prevFreq = 0;
-      for (let step = 0; step <= soundMod.MAX_STREAK_STEP; step++) {
-        const freq = soundMod.computeStreakNoteFrequency(step, 1);
-        assert.equal(
-          freq > prevFreq,
-          true,
-          `Pentatonic streak frequency must strictly ascend at step ${step} (${prevFreq} -> ${freq})`
-        );
-        prevFreq = freq;
-      }
-      assert.equal(
-        soundMod.computeStreakNoteFrequency(99, 1),
-        soundMod.computeStreakNoteFrequency(soundMod.MAX_STREAK_STEP, 1),
-        'Streak pitch progression must cap cleanly at MAX_STREAK_STEP without runaway shriek'
-      );
-
-      let createdOscCount = 0;
-      class MockGainNode {
-        constructor() {
-          this.gain = {
-            setValueAtTime() {},
-            linearRampToValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-          };
-        }
-        connect() {}
-        disconnect() {}
-      }
-      class MockBiquadFilterNode {
-        constructor() {
-          this.type = 'lowpass';
-          this.frequency = {
-            setValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-          };
-          this.Q = {
-            setValueAtTime() {},
-          };
-        }
-        connect() {}
-        disconnect() {}
-      }
-      class MockOscillatorNode {
-        constructor() {
-          createdOscCount++;
-          this.type = 'triangle';
-          this.onended = null;
-          this.frequency = {
-            setValueAtTime() {},
-            exponentialRampToValueAtTime() {},
-          };
-        }
-        connect() {}
-        disconnect() {}
-        start() {}
-        stop() {}
-      }
-      class MockAudioContext {
-        constructor() {
-          this.state = 'running';
-          this.currentTime = 1.0;
-          this.destination = {};
-        }
-        resume() {
-          this.state = 'running';
-          return Promise.resolve();
-        }
-        suspend() {
-          this.state = 'suspended';
-          return Promise.resolve();
-        }
-        close() {
-          this.state = 'closed';
-          return Promise.resolve();
-        }
-        createOscillator() {
-          return new MockOscillatorNode();
-        }
-        createBiquadFilter() {
-          return new MockBiquadFilterNode();
-        }
-        createGain() {
-          return new MockGainNode();
-        }
-      }
-      const prevAudioCtx = globalThis.AudioContext;
-      globalThis.AudioContext = MockAudioContext;
-      try {
-        soundMod.SoundService.disposeForTesting();
-        soundMod.SoundService.configure({ enabled: false, volume: 0.7 });
-        assert.equal(soundMod.SoundService.playPaintStreak(1, 1000), false);
-        assert.equal(soundMod.SoundService.playSwatchComplete(1), false);
-        assert.equal(soundMod.SoundService.playPuzzleComplete(), false);
-        assert.equal(createdOscCount, 0, 'Disabled SoundService must allocate zero oscillators');
-
-        soundMod.SoundService.configure({ enabled: true, volume: 0.7 });
-        soundMod.SoundService.resetThrottleForTesting();
-        assert.equal(soundMod.SoundService.getStreakIndex(1000), 0);
-        assert.equal(soundMod.SoundService.playPaintStreak(1, 1000), true);
-        assert.equal(soundMod.SoundService.getStreakIndex(1000), 1);
-        assert.equal(soundMod.SoundService.playPaintStreak(1, 1150), true);
-        assert.equal(soundMod.SoundService.getStreakIndex(1150), 2);
-        assert.equal(soundMod.SoundService.playPaintStreak(1, 1300), true);
-        assert.equal(soundMod.SoundService.getStreakIndex(1300), 3);
-
-        // Idle gap > STREAK_RESET_IDLE_MS (450ms) resets streak ladder cleanly
-        assert.equal(
-          soundMod.SoundService.getStreakIndex(1300 + soundMod.STREAK_RESET_IDLE_MS + 20),
-          0,
-          'Streak index must reset to 0 after > 450ms gesture idle'
-        );
-        assert.equal(soundMod.SoundService.playPaintStreak(1, 1800), true);
-        assert.equal(soundMod.SoundService.getStreakIndex(1800), 1);
-
-        const beforeArp = createdOscCount;
-        assert.equal(soundMod.SoundService.playSwatchComplete(2), true);
-        assert.equal(createdOscCount - beforeArp, 3, 'Swatch complete must synthesize 3-note ascending arpeggio');
-
-        const beforeChime = createdOscCount;
-        assert.equal(soundMod.SoundService.playPuzzleComplete(), true);
-        assert.equal(createdOscCount - beforeChime, 5, 'Puzzle complete must synthesize 5-note celebratory chime');
-        soundMod.SoundService.disposeForTesting();
-      } finally {
-        if (prevAudioCtx === undefined) {
-          delete globalThis.AudioContext;
-        } else {
-          globalThis.AudioContext = prevAudioCtx;
-        }
-      }
-
-      // 5. F12 (TASK-2.2a/b): FillBloomBuffer zero-allocation circular ring & 180ms/400ms auto-sleep
-      const bloomBuf = new bloomMod.FillBloomBuffer();
-      assert.equal(bloomBuf.hasActiveAnimations(1000), false);
-      for (let i = 0; i < 80; i++) {
-        bloomBuf.spawnFillBloom(10 + i, 20 + i, 18, '#38bdf8', 1000);
-      }
-      assert.equal(bloomBuf.x.length, bloomMod.MAX_FILL_BLOOMS, 'Typed array capacity must never reallocate');
-      assert.equal(bloomBuf.hasActiveAnimations(1100), true);
-      assert.equal(
-        bloomBuf.hasActiveAnimations(1185),
-        false,
-        '180ms region fill blooms must expire cleanly to 0% idle rAF'
-      );
-
-      bloomBuf.spawnSwatchShimmer(50, 60, 24, '#fbbf24', 2000);
-      assert.equal(bloomBuf.hasActiveAnimations(2300), true);
-      assert.equal(
-        bloomBuf.hasActiveAnimations(2405),
-        false,
-        '400ms swatch completion shimmers must expire cleanly to 0% idle rAF'
-      );
     }
 
     /* capy-dev-only:start */
@@ -2944,92 +2772,11 @@ async function runBrowserBasicsSuite() {
     console.log('   PASS: Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
 
     // -------------------------------------------------------------------------
-    // 12. Stage 2 (v2.7): Precision Magnifier Loupe, Co-op Welcome Persistence, Replay Rewind UNFILL & Reset Epoch
+    // 12. Stage 2 (v2.7): Co-op Welcome Persistence, Replay Rewind UNFILL, Reset Epoch & Mobile Replay Controls
     // -------------------------------------------------------------------------
-    console.log('-> [2.7] Verifying Precision Magnifier Loupe, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL & Reset Epoch...');
+    console.log('-> [2.7] Verifying Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, Reset Epoch & Mobile Replay Controls...');
 
-    // 12a. F10 (US-2.1): setting-magnifier-loupe persistence & 2.5x Precision Loupe press-and-hold + < 96px top-edge flip
-    await page.locator('button[title="Settings and Menu"]').click();
-    await page.waitForTimeout(120);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.waitForTimeout(100);
-
-    const loupeToggle = page.getByTestId('setting-magnifier-loupe');
-    await loupeToggle.scrollIntoViewIfNeeded();
-    assert.equal(
-      await loupeToggle.getAttribute('aria-checked'),
-      'true',
-      'Precision Magnifier Loupe must default to enabled (aria-checked="true")'
-    );
-    await loupeToggle.click();
-    await page.waitForTimeout(60);
-    assert.equal(await loupeToggle.getAttribute('aria-checked'), 'false');
-    assert.equal(
-      await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').showMagnifierLoupe),
-      false,
-      'Toggling setting-magnifier-loupe off must persist showMagnifierLoupe=false in capy_user_settings_v8'
-    );
-    await loupeToggle.click();
-    await page.waitForTimeout(60);
-    assert.equal(await loupeToggle.getAttribute('aria-checked'), 'true');
-    assert.equal(
-      await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').showMagnifierLoupe),
-      true,
-      'Toggling setting-magnifier-loupe back on must persist showMagnifierLoupe=true'
-    );
-
-    // Ensure reducedMotion is off so FillBloomBuffer & Loupe render cleanly during live interaction
-    const rmToggle27 = page.getByTestId('setting-reduced-motion');
-    await rmToggle27.scrollIntoViewIfNeeded();
-    if ((await rmToggle27.getAttribute('aria-checked')) === 'true') {
-      await rmToggle27.click();
-      await page.waitForTimeout(60);
-    }
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(150);
-
-    const canvas27 = page.locator('canvas').first();
-    const cBox27 = await canvas27.boundingBox();
-    assert.ok(cBox27 && cBox27.width > 120 && cBox27.height > 200, 'Expected interactive PuzzleCanvas bounding box');
-
-    const holdClientX = cBox27.x + cBox27.width * 0.5;
-    const holdClientY = cBox27.y + cBox27.height * 0.52;
-    await page.mouse.move(holdClientX, holdClientY);
-    await page.mouse.down();
-    await page.waitForTimeout(290);
-    assert.equal(
-      await canvas27.getAttribute('data-loupe-active'),
-      'true',
-      'Press-and-hold (> 220ms) inside artwork must activate Precision Magnifier Loupe'
-    );
-    assert.equal(
-      await canvas27.getAttribute('data-loupe-flipped'),
-      'false',
-      'Mid-screen press-and-hold must position Precision Loupe above finger (data-loupe-flipped="false")'
-    );
-
-    // Drag crosshair into top 96px zone so lens flips cleanly below finger
-    await page.mouse.move(holdClientX, cBox27.y + 42, { steps: 4 });
-    await page.waitForTimeout(80);
-    assert.equal(
-      await canvas27.getAttribute('data-loupe-active'),
-      'true',
-      'Precision Loupe must remain active while aiming toward top HUD edge'
-    );
-    assert.equal(
-      await canvas27.getAttribute('data-loupe-flipped'),
-      'true',
-      'Aiming within < 96px of top container edge must flip Precision Loupe below finger (data-loupe-flipped="true")'
-    );
-    await page.mouse.up();
-    await page.waitForTimeout(80);
-    assert.equal(
-      await canvas27.getAttribute('data-loupe-active'),
-      'false',
-      'Releasing pointer must immediately dismiss Precision Magnifier Loupe'
-    );
-
-    // 12b. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
+    // 12a. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
     // Reset active puzzle cleanly first so both Peer A and localStorage start at 0 filled regions
     await page.getByTestId('topbar-coop-btn').click();
     await page.waitForTimeout(150);
@@ -3143,7 +2890,6 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId(`save-card-${peerAStateBeforeRoom.activeSnapshotId}`).click();
     await page.waitForTimeout(100);
     await page.getByTestId('save-action-replay').click();
-    await page.waitForTimeout(200);
 
     await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 5000 });
     await page.getByTestId('replay-toggle-minimize-btn').click();
@@ -3205,8 +2951,129 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('leave-coop-room-btn').click();
     await page.waitForTimeout(120);
     await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+
+    // 12c. Mobile 360x800 minimized ReplayControls pill fit & save-load replayLoop auto-disable + gameplay auto-resume
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const curFilledLen = await page.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+      });
+      if (curFilledLen >= 4) break;
+      await tapCanvasGrid(page, 0.44 + attempt * 0.04, 14, 30);
+      await page.waitForTimeout(140);
+    }
+    const mobileReplaySetup = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const otherSnap = snaps.find(
+        (s) => s.id !== active.activeSnapshotId && String(s.id).startsWith('sample-')
+      );
+      return {
+        targetSnapId: active.activeSnapshotId,
+        otherSnapId: otherSnap ? otherSnap.id : null,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.ok(
+      mobileReplaySetup.targetSnapId && mobileReplaySetup.otherSnapId && mobileReplaySetup.filledCount >= 3,
+      `Expected >= 3 filled regions and a secondary sample save for mobile replay test, got ${JSON.stringify(mobileReplaySetup)}`
+    );
+
+    // Switch to narrow 360x800 mobile viewport and load secondary sample first
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.waitForTimeout(150);
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${mobileReplaySetup.otherSnapId}`).click();
     await page.waitForTimeout(100);
-    console.log('   PASS: Precision Magnifier Loupe, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
+    await page.getByTestId('save-action-load').click();
+    await page.waitForFunction(
+      (expectedId) =>
+        JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId ===
+        expectedId,
+      mobileReplaySetup.otherSnapId,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
+
+    // Enable Auto-Loop Replay (true) + 0.5x speed in Settings Tab 0, and ensure Replay on Load is ON in Saves
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(150);
+    await page.locator('button', { hasText: /^Settings$/ }).first().click();
+    await page.waitForTimeout(120);
+    const settingsLoopToggle = page.getByTestId('toggle-replay-loop-btn');
+    await settingsLoopToggle.scrollIntoViewIfNeeded();
+    if ((await settingsLoopToggle.getAttribute('aria-checked')) !== 'true') {
+      await settingsLoopToggle.click();
+      await page.waitForTimeout(80);
+    }
+    assert.equal(
+      await settingsLoopToggle.getAttribute('aria-checked'),
+      'true',
+      'Precondition: Auto-Loop Replay must be enabled before loading saved puzzle'
+    );
+    const speedHalfBtn = page.locator('button', { hasText: /^0\.5x$/ }).first();
+    await speedHalfBtn.scrollIntoViewIfNeeded();
+    await speedHalfBtn.click();
+    await page.waitForTimeout(80);
+
+    // Switch to Saves tab, ensure Replay on Load is enabled, and load targetSnapId
+    await page.locator('button', { hasText: /^Saves$/ }).first().click();
+    await page.waitForTimeout(120);
+    const autoReplaySavesSwitch = page.getByTestId('toggle-auto-replay-saves-btn');
+    if ((await autoReplaySavesSwitch.getAttribute('aria-checked')) !== 'true') {
+      await autoReplaySavesSwitch.click();
+      await page.waitForTimeout(80);
+    }
+    await page.getByTestId(`save-card-${mobileReplaySetup.targetSnapId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-load').click();
+
+    const mobileReplayWin = page.getByTestId('replay-controls-window');
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 8000 });
+    assert.equal(
+      await mobileReplayWin.getAttribute('data-minimized'),
+      'true',
+      'Loaded save replay HUD must open minimized on mobile'
+    );
+    assert.equal(
+      await page.getByTestId('replay-loop-btn').getAttribute('aria-pressed'),
+      'false',
+      'Loading a puzzle save must immediately force replayLoop OFF (aria-pressed="false")'
+    );
+
+    const windowBox360 = await mobileReplayWin.boundingBox();
+    const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
+    assert.ok(windowBox360 && exitBox360, 'Expected visible bounding boxes for replay-controls-window and replay-exit-btn at 360x800');
+    assert.ok(
+      exitBox360.x >= windowBox360.x + 4 &&
+        exitBox360.x + exitBox360.width <= windowBox360.x + windowBox360.width - 4,
+      `Minimized ReplayControls X button (${exitBox360.x}..${exitBox360.x + exitBox360.width}) must fit strictly inside 360px mobile pill border (${windowBox360.x}..${windowBox360.x + windowBox360.width})`
+    );
+
+    // Wait for loaded save replay to finish and verify it automatically closes ReplayControls and resumes gameplay
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 10000 });
+    await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await page.evaluate(
+        () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').replayLoop)
+      ),
+      false,
+      'Persisted capy_user_settings_v8.replayLoop must remain false after save-load replay auto-resumes gameplay'
+    );
+
+    // Restore desktop viewport and default test settings cleanly
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.autoReplayOnLoad = false;
+      s.replaySpeed = 1;
+      s.replayLoop = false;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+    });
+    await page.waitForTimeout(120);
+    console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');
