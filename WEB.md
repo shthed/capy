@@ -76,17 +76,17 @@ flowchart TB
 
 ### Core Shell, Types & Styling (`web/src/`)
 - **[`web/src/main.tsx`](./web/src/main.tsx)**: React 19 root mount and Service Worker bootstrap.
-- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, and `parseSemVer`.
-- **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, lifetime stats tracking, and desktop keyboard gameplay shortcuts.
+- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `/capy/`, `/capy/beta/`, `/capy/pull/<num>/`, and `?capy_channel=` overrides).
+- **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, lifetime stats tracking, release channel wiring, and desktop keyboard gameplay shortcuts.
 - **[`web/src/index.css`](./web/src/index.css)**: Tailwind CSS 4 imports, safe-area utility classes, and `touch-action: none` resets.
 - **[`web/src/types/index.ts`](./web/src/types/index.ts)**: Central TypeScript types (`PuzzleData`, `PaletteColor`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `GENERATION_PIPELINE_STEPS`, `SAMPLE_GALLERY`).
 
 ### UI Components (`web/src/components/`)
 - **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: 3-tier offscreen 2D canvas renderer, 6-mode touch/pointer gesture engine with custom zoom sensitivity, magnetic zoom detents, `reducedMotion` instant camera/highlight overrides, keyboard `panStepRequest` clamping, Pole-of-Inaccessibility label layout, Follow Painting camera controller, and Co-op ripples.
-- **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**: Puzzle title, completion badge, sub-tile parent breadcrumb pill (`topbar-parent-puzzle-btn`), active Co-op presence pill (`topbar-active-coop-pill`), interactive relative zoom badge (`topbar-zoom-badge`, cycling `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), preview toggle, fullscreen, image upload, and settings button.
+- **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**: Puzzle title, completion badge, non-production `BETA` / `ALPHA #<num>` channel pill (`topbar-channel-badge`), sub-tile parent breadcrumb pill (`topbar-parent-puzzle-btn`), active Co-op presence pill (`topbar-active-coop-pill`), interactive relative zoom badge (`topbar-zoom-badge`, cycling `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), preview toggle, fullscreen, image upload, and settings button.
 - **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**: Horizontal swatch dock (`palette-swatch-<n>`) with completion badges, viewport spatial priority (`prioritizeOnScreen`), `reducedMotion` scroll overrides, and dynamic sort modes.
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)**: Undo (`Ctrl+Z`, long-press `>= 450ms` for timeline scrubber), conditional Redo (`Ctrl+Y`), Watch Puzzle Replay (`replay-btn`), continuous Paint Mode, zoom `+/-`, and fit-to-screen reset.
-- **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 4-tab configuration sheet (`Settings` + `Lifetime Stats`, `Hints`, `Create` + `Puzzle of the Day`, `Saves` & Cloud/Co-op Hub + Printable `.svg` export).
+- **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 4-tab configuration sheet (`Settings` + `Lifetime Stats` + `Release Channel` Stable/Beta switcher card `release-channel-card`, `Hints`, `Create` + `Puzzle of the Day`, `Saves` & Cloud/Co-op Hub + Printable `.svg` export).
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)**: Default-minimised YouTube-style playback scrubber HUD (`0.5x`--`20x`, Follow Painting, Auto-Loop, `Resume Here`, `Save PNG`, `Next`).
 - **[`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)**: Lazy-loaded custom HSL/Hex swatch editor and 5 theme presets for Free Colour mode.
 - **[`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx)**: Non-blocking bottom progress HUD supporting Simple (Fast Mode) and Detailed 6-stage pipeline inspection.

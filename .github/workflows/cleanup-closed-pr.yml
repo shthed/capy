@@ -53,8 +53,8 @@ jobs:
             exit 0
           fi
 
-          if [ "${BRANCH_NAME}" = "${DEFAULT_BRANCH}" ]; then
-            echo "Skipping deletion of default branch ${DEFAULT_BRANCH}."
+          if [ "${BRANCH_NAME}" = "${DEFAULT_BRANCH}" ] || [ "${BRANCH_NAME}" = "beta" ]; then
+            echo "Skipping deletion of protected branch ${BRANCH_NAME}."
             exit 0
           fi
 
