@@ -1161,6 +1161,356 @@ async function runCodecAndEngineTests() {
       );
     }
 
+    // --- Sprint 2: F8 CRDT resetEpoch, F9 >180KB Play Games Chunks, F10 Loupe Geometry, F11 SoundService, F12 FillBloomBuffer ---
+    {
+      const driversMod = await vite.ssrLoadModule('/src/services/providers/CloudProviderDrivers.ts');
+      const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
+      const canvasMod = await vite.ssrLoadModule('/src/components/PuzzleCanvas.tsx');
+      const soundMod = await vite.ssrLoadModule('/src/services/SoundService.ts');
+      const bloomMod = await vite.ssrLoadModule('/src/engine/CoopRippleBuffer.ts');
+
+      // 1. F8 (F-01): ProgressDeltaV2 resetEpoch token round-trip & monotonic CRDT epoch dominance
+      const resetToken = await codec.encodeProgressDeltaToken({
+        version: 2,
+        sourceRef: { kind: 'sample', uri: './assets/capybara.webp' },
+        filledRegionIds: [4, 9],
+        resetEpoch: 3,
+        updatedAt: 1_750_000_000_000,
+      });
+      const decodedReset = await codec.decodeProgressDeltaToken(resetToken);
+      assert.equal(decodedReset.resetEpoch, 3, 'ProgressDeltaV2 codec must round-trip resetEpoch');
+      assert.deepEqual(decodedReset.filledRegionIds, [4, 9]);
+
+      // Higher remote resetEpoch dominates stale pre-reset local regions (0 resurrection)
+      const mergedRemoteReset = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [1, 2, 3, 4, 5], resetEpoch: 0, updatedAt: 1000 },
+        { version: 2, filledRegionIds: [], resetEpoch: 1, updatedAt: 2000 }
+      );
+      assert.equal(mergedRemoteReset.resetEpoch, 1);
+      assert.deepEqual(
+        mergedRemoteReset.filledRegionIds,
+        [],
+        'Higher remote resetEpoch must clear stale pre-reset regions with zero resurrection'
+      );
+
+      // Higher local resetEpoch dominates stale pre-reset cloud regions (0 resurrection)
+      const mergedLocalReset = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [11], resetEpoch: 2, updatedAt: 3000 },
+        { version: 2, filledRegionIds: [1, 2, 3, 4, 5, 6], resetEpoch: 1, updatedAt: 2500 }
+      );
+      assert.equal(mergedLocalReset.resetEpoch, 2);
+      assert.deepEqual(
+        mergedLocalReset.filledRegionIds,
+        [11],
+        'Higher local resetEpoch must reject stale lower-epoch cloud regions'
+      );
+
+      // Equal resetEpoch preserves lossless set-union CRDT behavior
+      const mergedSameEpoch = codec.mergeProgressDeltas(
+        { version: 2, filledRegionIds: [2, 5], resetEpoch: 2, updatedAt: 3000 },
+        { version: 2, filledRegionIds: [5, 8], resetEpoch: 2, updatedAt: 3100 }
+      );
+      assert.equal(mergedSameEpoch.resetEpoch, 2);
+      assert.deepEqual(mergedSameEpoch.filledRegionIds, [2, 5, 8]);
+
+      // ShareLinkService URL round-trips resetEpoch cleanly
+      const builtResetShare = await shareLinkMod.buildShareProgressUrl({
+        sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
+        filledRegionIds: [7],
+        resetEpoch: 4,
+      });
+      const parsedResetShare = await shareLinkMod.parseShareLinkFromUrl(builtResetShare.url);
+      assert.equal(parsedResetShare.delta?.resetEpoch, 4, 'ShareLinkService must preserve resetEpoch in #s= URLs');
+
+      // CrdtCloudSaveAdapter.syncProgress dominates stale pre-reset slot envelopes
+      const prevLsF8 = globalThis.localStorage;
+      const lsMapF8 = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (lsMapF8.has(k) ? lsMapF8.get(k) : null),
+        setItem: (k, v) => lsMapF8.set(k, String(v)),
+        removeItem: (k) => lsMapF8.delete(k),
+      };
+      try {
+        await providerMod.ProviderRegistry.cloudSave.syncProgress(
+          'slot_reset_epoch_test',
+          'Capybara',
+          { version: 2, filledRegionIds: [1, 2, 3, 4], updatedAt: 1000 },
+          20
+        );
+        const syncedAfterReset = await providerMod.ProviderRegistry.cloudSave.syncProgress(
+          'slot_reset_epoch_test',
+          'Capybara',
+          { version: 2, filledRegionIds: [], resetEpoch: 1, updatedAt: 2000 },
+          20
+        );
+        assert.equal(syncedAfterReset.mergedDelta.resetEpoch, 1);
+        assert.deepEqual(
+          syncedAfterReset.mergedDelta.filledRegionIds,
+          [],
+          'CrdtCloudSaveAdapter.syncProgress must honor higher resetEpoch without resurrecting old fills'
+        );
+      } finally {
+        if (prevLsF8 === undefined) {
+          delete globalThis.localStorage;
+        } else {
+          globalThis.localStorage = prevLsF8;
+        }
+      }
+
+      // 2. F9 (F-02): PlayGamesAndroidDriver > 180 KB multi-chunk binary writeBinaryBlob & readBinaryBlob
+      const prevWindow = globalThis.window;
+      const chunkStore = new Map();
+      globalThis.window = {
+        CapyAndroid: {
+          saveCloudBinaryChunk(blobKey, chunkIndex, totalChunks, base64Chunk) {
+            if (chunkIndex < 0 || chunkIndex >= totalChunks) return false;
+            chunkStore.set(`${blobKey}_part_${chunkIndex}`, base64Chunk);
+            if (chunkIndex === totalChunks - 1) {
+              for (let k = totalChunks; k < 32; k++) {
+                chunkStore.delete(`${blobKey}_part_${k}`);
+              }
+            }
+            return true;
+          },
+          loadCloudBinaryChunk(blobKey, chunkIndex) {
+            return chunkStore.get(`${blobKey}_part_${chunkIndex}`) ?? null;
+          },
+          saveCloudSnapshot(slotKey, payloadJson) {
+            chunkStore.set(slotKey, payloadJson);
+            return true;
+          },
+          loadCloudSnapshot(slotKey) {
+            return chunkStore.get(slotKey) ?? null;
+          },
+        },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      try {
+        const pgDriver = new driversMod.PlayGamesAndroidDriver();
+        const largeBinary = new Uint8Array(420_000);
+        for (let i = 0; i < largeBinary.length; i++) {
+          largeBinary[i] = (i * 29 + 13) & 0xff;
+        }
+        const blobRef = await pgDriver.writeBinaryBlob('save_hd_custom', 'save.capy', largeBinary);
+        assert.equal(
+          blobRef,
+          'pgblob:pgblob_save_hd_custom:3:420000',
+          '420 KB custom photo save must split across 3 x 180 KB Play Games chunks'
+        );
+        assert.equal(nativeBridgeMod.NativeBridge.loadCloudBinaryChunk('pgblob_save_hd_custom', 2) !== null, true);
+
+        const restoredBinary = await pgDriver.readBinaryBlob(blobRef);
+        assert.ok(restoredBinary, 'PlayGamesAndroidDriver.readBinaryBlob must reassemble 420 KB binary');
+        assert.equal(restoredBinary.byteLength, 420_000);
+        let diffBytes = 0;
+        for (let i = 0; i < largeBinary.length; i++) {
+          if (restoredBinary[i] !== largeBinary[i]) diffBytes++;
+        }
+        assert.equal(diffBytes, 0, 'Reassembled 420 KB Play Games binary must be bit-exact');
+
+        // Overwrite with smaller 2-chunk (200 KB) payload and verify stale part_2 is pruned
+        const smallerBinary = largeBinary.subarray(0, 200_000);
+        const smallerRef = await pgDriver.writeBinaryBlob('save_hd_custom', 'save.capy', smallerBinary);
+        assert.equal(smallerRef, 'pgblob:pgblob_save_hd_custom:2:200000');
+        assert.equal(
+          nativeBridgeMod.NativeBridge.loadCloudBinaryChunk('pgblob_save_hd_custom', 2),
+          null,
+          'Overwriting with fewer chunks must prune stale trailing chunk slots'
+        );
+
+        // Corrupt/mismatched/missing chunk resilience must return null cleanly without throwing
+        assert.equal(
+          await pgDriver.readBinaryBlob('pgblob:pgblob_save_hd_custom:2:999999'),
+          null,
+          'Mismatched expectedBytes in pgblob ref must return null cleanly'
+        );
+        chunkStore.set('pgblob_save_hd_custom_part_1', '%%%not_valid_base64%%%');
+        assert.equal(
+          await pgDriver.readBinaryBlob(smallerRef),
+          null,
+          'Corrupted Base64 chunk in PlayGamesAndroidDriver must return null cleanly'
+        );
+        chunkStore.delete('pgblob_save_hd_custom_part_1');
+        assert.equal(
+          await pgDriver.readBinaryBlob(smallerRef),
+          null,
+          'Missing chunk in PlayGamesAndroidDriver must return null cleanly'
+        );
+      } finally {
+        globalThis.window = prevWindow;
+      }
+
+      // 3. F10 (TASK-2.1a/b): computeLoupePosition 72px offset, < 96px top-edge flip, & zero-alloc clamping
+      const scratchLoupe = { x: 0, y: 0, flippedBelow: false };
+      const midPos = canvasMod.computeLoupePosition(200, 250, 400, 700, 44, scratchLoupe);
+      assert.equal(midPos, scratchLoupe, 'computeLoupePosition must reuse optional out struct in-place');
+      assert.equal(midPos.x, 200);
+      assert.equal(midPos.y, 178);
+      assert.equal(midPos.flippedBelow, false);
+
+      const topFlipPos = canvasMod.computeLoupePosition(200, 64, 400, 700, 44, scratchLoupe);
+      assert.equal(topFlipPos.flippedBelow, true, 'Pointer near top HUD (< 96px) must flip loupe below finger');
+      assert.equal(topFlipPos.y, 136);
+
+      const edgeClampPos = canvasMod.computeLoupePosition(4, 695, 400, 700, 44, scratchLoupe);
+      assert.equal(edgeClampPos.x, 52, 'Loupe X must clamp inside [radius + 8 .. width - radius - 8]');
+      assert.equal(edgeClampPos.y <= 700 - 52, true);
+
+      // 4. F11 (TASK-2.3a/b): SoundService rising pentatonic streaks (> 450ms reset), swatch arpeggio, & puzzle chime
+      let prevFreq = 0;
+      for (let step = 0; step <= soundMod.MAX_STREAK_STEP; step++) {
+        const freq = soundMod.computeStreakNoteFrequency(step, 1);
+        assert.equal(
+          freq > prevFreq,
+          true,
+          `Pentatonic streak frequency must strictly ascend at step ${step} (${prevFreq} -> ${freq})`
+        );
+        prevFreq = freq;
+      }
+      assert.equal(
+        soundMod.computeStreakNoteFrequency(99, 1),
+        soundMod.computeStreakNoteFrequency(soundMod.MAX_STREAK_STEP, 1),
+        'Streak pitch progression must cap cleanly at MAX_STREAK_STEP without runaway shriek'
+      );
+
+      let createdOscCount = 0;
+      class MockGainNode {
+        constructor() {
+          this.gain = {
+            setValueAtTime() {},
+            linearRampToValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          };
+        }
+        connect() {}
+        disconnect() {}
+      }
+      class MockBiquadFilterNode {
+        constructor() {
+          this.type = 'lowpass';
+          this.frequency = {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          };
+          this.Q = {
+            setValueAtTime() {},
+          };
+        }
+        connect() {}
+        disconnect() {}
+      }
+      class MockOscillatorNode {
+        constructor() {
+          createdOscCount++;
+          this.type = 'triangle';
+          this.onended = null;
+          this.frequency = {
+            setValueAtTime() {},
+            exponentialRampToValueAtTime() {},
+          };
+        }
+        connect() {}
+        disconnect() {}
+        start() {}
+        stop() {}
+      }
+      class MockAudioContext {
+        constructor() {
+          this.state = 'running';
+          this.currentTime = 1.0;
+          this.destination = {};
+        }
+        resume() {
+          this.state = 'running';
+          return Promise.resolve();
+        }
+        suspend() {
+          this.state = 'suspended';
+          return Promise.resolve();
+        }
+        close() {
+          this.state = 'closed';
+          return Promise.resolve();
+        }
+        createOscillator() {
+          return new MockOscillatorNode();
+        }
+        createBiquadFilter() {
+          return new MockBiquadFilterNode();
+        }
+        createGain() {
+          return new MockGainNode();
+        }
+      }
+      const prevAudioCtx = globalThis.AudioContext;
+      globalThis.AudioContext = MockAudioContext;
+      try {
+        soundMod.SoundService.disposeForTesting();
+        soundMod.SoundService.configure({ enabled: false, volume: 0.7 });
+        assert.equal(soundMod.SoundService.playPaintStreak(1, 1000), false);
+        assert.equal(soundMod.SoundService.playSwatchComplete(1), false);
+        assert.equal(soundMod.SoundService.playPuzzleComplete(), false);
+        assert.equal(createdOscCount, 0, 'Disabled SoundService must allocate zero oscillators');
+
+        soundMod.SoundService.configure({ enabled: true, volume: 0.7 });
+        soundMod.SoundService.resetThrottleForTesting();
+        assert.equal(soundMod.SoundService.getStreakIndex(1000), 0);
+        assert.equal(soundMod.SoundService.playPaintStreak(1, 1000), true);
+        assert.equal(soundMod.SoundService.getStreakIndex(1000), 1);
+        assert.equal(soundMod.SoundService.playPaintStreak(1, 1150), true);
+        assert.equal(soundMod.SoundService.getStreakIndex(1150), 2);
+        assert.equal(soundMod.SoundService.playPaintStreak(1, 1300), true);
+        assert.equal(soundMod.SoundService.getStreakIndex(1300), 3);
+
+        // Idle gap > STREAK_RESET_IDLE_MS (450ms) resets streak ladder cleanly
+        assert.equal(
+          soundMod.SoundService.getStreakIndex(1300 + soundMod.STREAK_RESET_IDLE_MS + 20),
+          0,
+          'Streak index must reset to 0 after > 450ms gesture idle'
+        );
+        assert.equal(soundMod.SoundService.playPaintStreak(1, 1800), true);
+        assert.equal(soundMod.SoundService.getStreakIndex(1800), 1);
+
+        const beforeArp = createdOscCount;
+        assert.equal(soundMod.SoundService.playSwatchComplete(2), true);
+        assert.equal(createdOscCount - beforeArp, 3, 'Swatch complete must synthesize 3-note ascending arpeggio');
+
+        const beforeChime = createdOscCount;
+        assert.equal(soundMod.SoundService.playPuzzleComplete(), true);
+        assert.equal(createdOscCount - beforeChime, 5, 'Puzzle complete must synthesize 5-note celebratory chime');
+        soundMod.SoundService.disposeForTesting();
+      } finally {
+        if (prevAudioCtx === undefined) {
+          delete globalThis.AudioContext;
+        } else {
+          globalThis.AudioContext = prevAudioCtx;
+        }
+      }
+
+      // 5. F12 (TASK-2.2a/b): FillBloomBuffer zero-allocation circular ring & 180ms/400ms auto-sleep
+      const bloomBuf = new bloomMod.FillBloomBuffer();
+      assert.equal(bloomBuf.hasActiveAnimations(1000), false);
+      for (let i = 0; i < 80; i++) {
+        bloomBuf.spawnFillBloom(10 + i, 20 + i, 18, '#38bdf8', 1000);
+      }
+      assert.equal(bloomBuf.x.length, bloomMod.MAX_FILL_BLOOMS, 'Typed array capacity must never reallocate');
+      assert.equal(bloomBuf.hasActiveAnimations(1100), true);
+      assert.equal(
+        bloomBuf.hasActiveAnimations(1185),
+        false,
+        '180ms region fill blooms must expire cleanly to 0% idle rAF'
+      );
+
+      bloomBuf.spawnSwatchShimmer(50, 60, 24, '#fbbf24', 2000);
+      assert.equal(bloomBuf.hasActiveAnimations(2300), true);
+      assert.equal(
+        bloomBuf.hasActiveAnimations(2405),
+        false,
+        '400ms swatch completion shimmers must expire cleanly to 0% idle rAF'
+      );
+    }
+
     /* capy-dev-only:start */
     const {
       transformPersonaContent,
@@ -2592,6 +2942,271 @@ async function runBrowserBasicsSuite() {
     );
     await betaPage.close();
     console.log('   PASS: Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
+
+    // -------------------------------------------------------------------------
+    // 12. Stage 2 (v2.7): Precision Magnifier Loupe, Co-op Welcome Persistence, Replay Rewind UNFILL & Reset Epoch
+    // -------------------------------------------------------------------------
+    console.log('-> [2.7] Verifying Precision Magnifier Loupe, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL & Reset Epoch...');
+
+    // 12a. F10 (US-2.1): setting-magnifier-loupe persistence & 2.5x Precision Loupe press-and-hold + < 96px top-edge flip
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.waitForTimeout(120);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForTimeout(100);
+
+    const loupeToggle = page.getByTestId('setting-magnifier-loupe');
+    await loupeToggle.scrollIntoViewIfNeeded();
+    assert.equal(
+      await loupeToggle.getAttribute('aria-checked'),
+      'true',
+      'Precision Magnifier Loupe must default to enabled (aria-checked="true")'
+    );
+    await loupeToggle.click();
+    await page.waitForTimeout(60);
+    assert.equal(await loupeToggle.getAttribute('aria-checked'), 'false');
+    assert.equal(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').showMagnifierLoupe),
+      false,
+      'Toggling setting-magnifier-loupe off must persist showMagnifierLoupe=false in capy_user_settings_v8'
+    );
+    await loupeToggle.click();
+    await page.waitForTimeout(60);
+    assert.equal(await loupeToggle.getAttribute('aria-checked'), 'true');
+    assert.equal(
+      await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').showMagnifierLoupe),
+      true,
+      'Toggling setting-magnifier-loupe back on must persist showMagnifierLoupe=true'
+    );
+
+    // Ensure reducedMotion is off so FillBloomBuffer & Loupe render cleanly during live interaction
+    const rmToggle27 = page.getByTestId('setting-reduced-motion');
+    await rmToggle27.scrollIntoViewIfNeeded();
+    if ((await rmToggle27.getAttribute('aria-checked')) === 'true') {
+      await rmToggle27.click();
+      await page.waitForTimeout(60);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+
+    const canvas27 = page.locator('canvas').first();
+    const cBox27 = await canvas27.boundingBox();
+    assert.ok(cBox27 && cBox27.width > 120 && cBox27.height > 200, 'Expected interactive PuzzleCanvas bounding box');
+
+    const holdClientX = cBox27.x + cBox27.width * 0.5;
+    const holdClientY = cBox27.y + cBox27.height * 0.52;
+    await page.mouse.move(holdClientX, holdClientY);
+    await page.mouse.down();
+    await page.waitForTimeout(290);
+    assert.equal(
+      await canvas27.getAttribute('data-loupe-active'),
+      'true',
+      'Press-and-hold (> 220ms) inside artwork must activate Precision Magnifier Loupe'
+    );
+    assert.equal(
+      await canvas27.getAttribute('data-loupe-flipped'),
+      'false',
+      'Mid-screen press-and-hold must position Precision Loupe above finger (data-loupe-flipped="false")'
+    );
+
+    // Drag crosshair into top 96px zone so lens flips cleanly below finger
+    await page.mouse.move(holdClientX, cBox27.y + 42, { steps: 4 });
+    await page.waitForTimeout(80);
+    assert.equal(
+      await canvas27.getAttribute('data-loupe-active'),
+      'true',
+      'Precision Loupe must remain active while aiming toward top HUD edge'
+    );
+    assert.equal(
+      await canvas27.getAttribute('data-loupe-flipped'),
+      'true',
+      'Aiming within < 96px of top container edge must flip Precision Loupe below finger (data-loupe-flipped="true")'
+    );
+    await page.mouse.up();
+    await page.waitForTimeout(80);
+    assert.equal(
+      await canvas27.getAttribute('data-loupe-active'),
+      'false',
+      'Releasing pointer must immediately dismiss Precision Magnifier Loupe'
+    );
+
+    // 12b. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
+    // Reset active puzzle cleanly first so both Peer A and localStorage start at 0 filled regions
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('reset-progress-btn').click();
+    await page.waitForTimeout(450);
+
+    const totalPuzzleRegions27 = await readTotalRemainingRegions(page);
+    assert.ok(totalPuzzleRegions27 > 10, `Expected > 10 total puzzle regions after reset, got ${totalPuzzleRegions27}`);
+
+    // Boot Peer B while localStorage has 0 filled regions (100% deterministic, zero debounce race)
+    const peerS2 = await context.newPage();
+    attachErrorListeners(peerS2, 'peerS2-stage2');
+    await peerS2.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerS2);
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      totalPuzzleRegions27,
+      'Peer B must boot with 0 filled regions before joining Co-op room'
+    );
+
+    // Paint >= 3 regions on Peer A
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const curFilledLen = await page.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+      });
+      if (curFilledLen >= 3) break;
+      await tapCanvasGrid(page, 0.42 + attempt * 0.04, 14, 30);
+      await page.waitForTimeout(150);
+    }
+
+    const peerAStateBeforeRoom = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        activeSnapshotId: active.activeSnapshotId,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.ok(
+      peerAStateBeforeRoom.activeSnapshotId && peerAStateBeforeRoom.filledCount >= 3,
+      `Expected >= 3 filled regions on Peer A before Co-op welcome/rewind test, got ${peerAStateBeforeRoom.filledCount}`
+    );
+    const remainingPeerABeforeJoin = await readTotalRemainingRegions(page);
+
+    // Host Co-op room on Peer A (live React state + room seedToken carry the >= 3 filled regions)
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('host-coop-room-btn').click();
+    await page.waitForTimeout(200);
+    const s2RoomText = await page.getByTestId('active-coop-room-code').innerText();
+    const s2RoomCode = s2RoomText.match(/Room\s+([A-Z0-9]{6})/)[1];
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(450);
+
+    // Clear persisted localStorage fills after Peer A settles so only Peer B's WELCOME_STATE can repopulate capy_active_session_v8
+    await page.evaluate((snapId) => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      active.filledRegionIds = [];
+      active.paintedRegionColors = {};
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').map((s) =>
+        s.id === snapId ? { ...s, filledCount: 0, filledRegionIds: [], paintedRegionColors: {} } : s
+      );
+      localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+    }, peerAStateBeforeRoom.activeSnapshotId);
+
+    await peerS2.getByTestId('topbar-coop-btn').click();
+    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
+    await peerS2.getByTestId('join-coop-room-btn').click();
+    await peerS2.waitForTimeout(450);
+    await peerS2.keyboard.press('Escape');
+    await peerS2.waitForTimeout(150);
+
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'Peer B must immediately merge Peer A filled regions upon WELCOME_STATE'
+    );
+    const savedActiveAfterWelcome = await peerS2.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+    });
+    assert.equal(
+      savedActiveAfterWelcome,
+      peerAStateBeforeRoom.filledCount,
+      'BUG-1: onWelcomeState must immediately persist welcomed filledRegionIds into capy_active_session_v8'
+    );
+
+    // Reload Peer B before painting any region and verify welcomed regions survive reload
+    await peerS2.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(peerS2);
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'BUG-1: Reloading joining peer immediately after WELCOME_STATE must retain all welcomed regions'
+    );
+
+    // Rejoin s2RoomCode on Peer B so both peers are live for Replay Rewind & Reset Progress sync
+    await peerS2.getByTestId('topbar-coop-btn').click();
+    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
+    await peerS2.getByTestId('join-coop-room-btn').click();
+    await peerS2.waitForTimeout(350);
+    await peerS2.keyboard.press('Escape');
+    await peerS2.waitForTimeout(150);
+
+    // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and click Resume Here
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId(`save-card-${peerAStateBeforeRoom.activeSnapshotId}`).click();
+    await page.waitForTimeout(100);
+    await page.getByTestId('save-action-replay').click();
+    await page.waitForTimeout(200);
+
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByTestId('replay-toggle-minimize-btn').click();
+    await page.waitForTimeout(120);
+    await page.getByTestId('replay-scrubber').fill('1');
+    await page.waitForTimeout(120);
+    await page.getByTestId('replay-resume-btn').click();
+    await page.waitForTimeout(200);
+    await peerS2.waitForTimeout(400);
+
+    const remainingAfterRewindA = await readTotalRemainingRegions(page);
+    const remainingAfterRewindB = await readTotalRemainingRegions(peerS2);
+    assert.equal(
+      remainingAfterRewindA,
+      totalPuzzleRegions27 - 1,
+      `Expected Replay Resume Here at step 1 to leave exactly 1 filled region on Peer A (${totalPuzzleRegions27 - 1} remaining), got ${remainingAfterRewindA}`
+    );
+    assert.equal(
+      remainingAfterRewindB,
+      remainingAfterRewindA,
+      'BUG-1: Replay Scrubber Resume Here must broadcast UNFILL_EVENT so Peer B rewinds in lockstep'
+    );
+
+    // Trigger Reset Progress on Peer A and verify Peer B clears to 0 filled regions + resetEpoch increments
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('reset-progress-btn').click();
+    await page.waitForTimeout(200);
+    await peerS2.waitForTimeout(400);
+
+    assert.equal(
+      await readTotalRemainingRegions(page),
+      totalPuzzleRegions27,
+      'Reset Progress must clear Peer A back to 0 filled regions'
+    );
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      totalPuzzleRegions27,
+      'M-08: Reset Progress must broadcast UNFILL_EVENT so Peer B clears to 0 filled regions'
+    );
+    const postResetEpochs = await page.evaluate((snapId) => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snap = (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]') || []).find(
+        (s) => s.id === snapId
+      );
+      return {
+        activeEpoch: active.resetEpoch ?? 0,
+        snapEpoch: snap?.resetEpoch ?? 0,
+      };
+    }, peerAStateBeforeRoom.activeSnapshotId);
+    assert.ok(
+      postResetEpochs.activeEpoch >= 1 && postResetEpochs.snapEpoch >= 1,
+      `F-01: Expected monotonic resetEpoch >= 1 in both active session (${postResetEpochs.activeEpoch}) and snapshot (${postResetEpochs.snapEpoch})`
+    );
+
+    await peerS2.close();
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.waitForTimeout(150);
+    await page.getByTestId('leave-coop-room-btn').click();
+    await page.waitForTimeout(120);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    console.log('   PASS: Precision Magnifier Loupe, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');
