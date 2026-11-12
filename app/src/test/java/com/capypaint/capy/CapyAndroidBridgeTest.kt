@@ -1,5 +1,6 @@
 package com.capypaint.capy
 
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -117,6 +118,10 @@ class CapyAndroidBridgeTest {
 
     @Test
     fun `isAllowedCapyDeepLink accepts verified capy HTTPS app links and rejects untrusted URIs`() {
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/#s=abc123_XYZ-9"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/?room=ABC123#s=abc123"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://www.capypaint.com/#s=token"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/#s=abc123_XYZ-9"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/?room=ABC123#s=abc123"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy"))
@@ -125,8 +130,10 @@ class CapyAndroidBridgeTest {
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink(null))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink(""))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("javascript:alert(1)"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://capypaint.com/#s=insecure"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://shthed.github.io/capy/#s=insecure"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://evil.example.com/capy/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com.evil.example/#s=abc"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/other-repo/#s=abc"))
     }
 
@@ -152,6 +159,26 @@ class CapyAndroidBridgeTest {
         assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("000000000000"))
         assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("000000"))
         assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("abc123456789"))
+    }
+
+    @Test
+    fun `isAppLinksCertConfigured validates real SHA-256 certificate fingerprints and rejects zero placeholders`() {
+        val validColon =
+            "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99"
+        val validHex64 = "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899"
+        val zeroColon =
+            "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+
+        assertTrue(CapyAndroidBridge.isAppLinksCertConfigured(validColon))
+        assertTrue(CapyAndroidBridge.isAppLinksCertConfigured(validHex64))
+        assertTrue(CapyAndroidBridge.isAppLinksCertConfigured("$zeroColon, $validColon"))
+
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured(null))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured(""))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured("   "))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured(zeroColon))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured("0".repeat(64)))
+        assertFalse(CapyAndroidBridge.isAppLinksCertConfigured("not-a-sha256-fingerprint"))
     }
 
     @Test
@@ -213,5 +240,85 @@ class CapyAndroidBridgeTest {
         assertEquals(Pair(2048, 1536), CapyAndroidBridge.calculateTargetDimensions(4032, 3024, 2048))
         assertEquals(Pair(1536, 2048), CapyAndroidBridge.calculateTargetDimensions(3000, 4000, 2048))
         assertEquals(Pair(1, 1), CapyAndroidBridge.calculateTargetDimensions(0, 0, 2048))
+    }
+
+    @Test
+    fun `saveCloudBinaryChunkToDir and loadCloudBinaryChunkFromDir persist large multi-chunk saves above 180 KB and prune stale chunks`() {
+        val cloudDir = tempFolder.newFolder("capy_cloud_chunks")
+        val blobKey = "pgblob_save_large_photo"
+        val chunk0 = "A".repeat(240_000) // ~180 KB raw binary encoded as Base64
+        val chunk1 = "B".repeat(240_000) // ~360 KB cumulative
+        val chunk2 = "C".repeat(64_000) // ~408 KB cumulative across 3 chunks
+
+        assertTrue(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 0, 3, chunk0))
+        assertTrue(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 1, 3, chunk1))
+        assertTrue(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 2, 3, chunk2))
+
+        assertEquals(chunk0, CapyAndroidBridge.loadCloudBinaryChunkFromDir(cloudDir, blobKey, 0))
+        assertEquals(chunk1, CapyAndroidBridge.loadCloudBinaryChunkFromDir(cloudDir, blobKey, 1))
+        assertEquals(chunk2, CapyAndroidBridge.loadCloudBinaryChunkFromDir(cloudDir, blobKey, 2))
+
+        // Overwrite with a 2-chunk save and verify stale part_2 is pruned atomically
+        val updatedChunk1 = "D".repeat(80_000)
+        assertTrue(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 0, 2, chunk0))
+        assertTrue(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 1, 2, updatedChunk1))
+
+        assertEquals(chunk0, CapyAndroidBridge.loadCloudBinaryChunkFromDir(cloudDir, blobKey, 0))
+        assertEquals(updatedChunk1, CapyAndroidBridge.loadCloudBinaryChunkFromDir(cloudDir, blobKey, 1))
+        assertNull(CapyAndroidBridge.loadCloudBinaryChunkFromDir(cloudDir, blobKey, 2))
+
+        // Reject out-of-range indices, excessive chunk counts, or empty payloads
+        assertFalse(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, -1, 2, "abc"))
+        assertFalse(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 2, 2, "abc"))
+        assertFalse(
+            CapyAndroidBridge.saveCloudBinaryChunkToDir(
+                cloudDir,
+                blobKey,
+                0,
+                CapyAndroidBridge.MAX_CLOUD_BINARY_CHUNKS + 1,
+                "abc",
+            ),
+        )
+        assertFalse(CapyAndroidBridge.saveCloudBinaryChunkToDir(cloudDir, blobKey, 0, 1, ""))
+    }
+
+    @Test
+    fun `saveCloudBinaryBytesToDir and loadCloudBinaryBytesFromDir round-trip 420 KB raw binary save without corruption`() {
+        val cloudDir = tempFolder.newFolder("capy_cloud_raw_bytes")
+        val largePayload = ByteArray(420_000) { idx -> ((idx * 31 + 17) and 0xFF).toByte() }
+
+        val chunkCount = CapyAndroidBridge.saveCloudBinaryBytesToDir(cloudDir, "custom_hd_artwork", largePayload)
+        assertEquals(3, chunkCount)
+
+        val restored = CapyAndroidBridge.loadCloudBinaryBytesFromDir(cloudDir, "custom_hd_artwork")
+        assertNotNull(restored)
+        assertEquals(largePayload.size, restored?.size)
+        assertTrue(largePayload.contentEquals(restored))
+    }
+
+    @Test
+    fun `loadCloudBinaryBytesFromDir rejects missing, truncated, oversized, or malformed metadata chunks cleanly`() {
+        val cloudDir = tempFolder.newFolder("capy_cloud_corrupt_chunks")
+        val payload = ByteArray(400_000) { idx -> ((idx * 19 + 7) and 0xFF).toByte() }
+        assertEquals(3, CapyAndroidBridge.saveCloudBinaryBytesToDir(cloudDir, "corrupt_target", payload))
+
+        // 1. Truncating middle chunk below expectedBytes must return null cleanly without throwing
+        val chunk1File = File(cloudDir, "corrupt_target_bin_1.bin")
+        chunk1File.writeBytes(ByteArray(12_000) { 0x42 })
+        assertNull(CapyAndroidBridge.loadCloudBinaryBytesFromDir(cloudDir, "corrupt_target"))
+
+        // 2. Oversized chunk exceeding expectedBytes must return null cleanly without ArrayIndexOutOfBoundsException
+        assertEquals(3, CapyAndroidBridge.saveCloudBinaryBytesToDir(cloudDir, "corrupt_target", payload))
+        chunk1File.writeBytes(ByteArray(300_000) { 0x7F })
+        assertNull(CapyAndroidBridge.loadCloudBinaryBytesFromDir(cloudDir, "corrupt_target"))
+
+        // 3. Missing chunk file must return null cleanly
+        assertEquals(3, CapyAndroidBridge.saveCloudBinaryBytesToDir(cloudDir, "corrupt_target", payload))
+        assertTrue(chunk1File.delete())
+        assertNull(CapyAndroidBridge.loadCloudBinaryBytesFromDir(cloudDir, "corrupt_target"))
+
+        // 4. Malformed metadata header must return null cleanly
+        assertTrue(CapyAndroidBridge.saveBackupToDir(cloudDir, "corrupt_target_bin_meta", "not_valid_meta"))
+        assertNull(CapyAndroidBridge.loadCloudBinaryBytesFromDir(cloudDir, "corrupt_target"))
     }
 }

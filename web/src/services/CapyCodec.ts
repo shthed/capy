@@ -21,6 +21,14 @@ const FLAG_ARCHIVE = 1 << 1;
 
 const REGION_META_STRIDE = 5; // [id, colorId, centroidX, centroidY, maxRadius]
 
+export const MAX_PUZZLE_PIXELS = 16_777_216; // 4096 x 4096 ceiling
+export const MAX_BINARY_SAVE_DECOMPRESSED_BYTES = 16 * 1024 * 1024; // 16 MB
+export const MAX_DELTA_DECOMPRESSED_BYTES = 256 * 1024; // 256 KB
+export const MAX_DELTA_SOURCE_REF_BYTES = 4096;
+export const MAX_DELTA_REGION_ENTRIES = 65_536;
+export const MAX_DELTA_RESET_EPOCH = 1_000_000;
+const MAX_FRAMED_BINARY_CHUNKS = 4096;
+
 export interface CompactPuzzleRecordV2 {
   __capyCompactV2: 2;
   width: number;
@@ -67,6 +75,7 @@ export interface ProgressDeltaV2 {
   filledRegionIds: number[];
   paintedRegionColors?: Record<number, number>;
   isFreeColor?: boolean;
+  resetEpoch?: number;
   updatedAt: number;
 }
 
@@ -83,14 +92,20 @@ function readVarint(buf: Uint8Array, offsetObj: { pos: number }): number {
   let result = 0;
   let shift = 0;
   while (offsetObj.pos < buf.length) {
+    if (shift > 28) {
+      throw new Error('Malformed varint: exceeds uint32 length');
+    }
     const byte = buf[offsetObj.pos++];
+    if (shift === 28 && (byte & 0xf0) !== 0) {
+      throw new Error('Malformed varint: uint32 overflow');
+    }
     result |= (byte & 0x7f) << shift;
     if ((byte & 0x80) === 0) {
       return result >>> 0;
     }
     shift += 7;
   }
-  return result >>> 0;
+  throw new Error('Malformed varint: unexpected EOF');
 }
 
 /**
@@ -126,6 +141,9 @@ export function encodeRegionMapRle(regionMap: Int32Array): Uint8Array {
  * Decodes a scanline RLE + Varint byte stream back into an Int32Array `regionMap` of length `totalPixels`.
  */
 export function decodeRegionMapRle(rle: Uint8Array, totalPixels: number): Int32Array {
+  if (!Number.isInteger(totalPixels) || totalPixels < 0 || totalPixels > MAX_PUZZLE_PIXELS) {
+    throw new Error('Invalid regionMap pixel count');
+  }
   const regionMap = new Int32Array(totalPixels);
   const cursor = { pos: 0 };
   let writeIdx = 0;
@@ -197,13 +215,33 @@ export function isCompactPuzzleRecordV2(val: unknown): val is CompactPuzzleRecor
  */
 export function decompressPuzzleRecord(record: CompactPuzzleRecordV2): PuzzleData {
   const { width, height, palette, regionMeta, rleRegionMap, isFreeColor } = record;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error('Invalid puzzle dimensions');
+  }
   const total = width * height;
+  if (!Number.isSafeInteger(total) || total <= 0 || total > MAX_PUZZLE_PIXELS) {
+    throw new Error(`Puzzle pixel count (${total}) exceeds limit (${MAX_PUZZLE_PIXELS})`);
+  }
   const regionMap = decodeRegionMapRle(rleRegionMap, total);
+  if (regionMap.length !== total) {
+    throw new Error('Decoded regionMap length mismatch');
+  }
 
+  const maxAllowedRegionId = Math.max(total, MAX_DELTA_REGION_ENTRIES);
   const regionCount = Math.floor(regionMeta.length / REGION_META_STRIDE);
+  if (regionCount > maxAllowedRegionId) {
+    throw new Error(`Puzzle region count (${regionCount}) exceeds limit`);
+  }
   let maxRegionId = 0;
   for (let i = 0; i < regionCount; i++) {
-    const rid = Math.round(regionMeta[i * REGION_META_STRIDE]);
+    const rawRid = regionMeta[i * REGION_META_STRIDE];
+    if (!Number.isFinite(rawRid) || rawRid < 0) {
+      throw new Error('Invalid region ID in compact puzzle metadata');
+    }
+    const rid = Math.round(rawRid);
+    if (rid > maxAllowedRegionId) {
+      throw new Error(`Region ID (${rid}) exceeds limit (${maxAllowedRegionId})`);
+    }
     if (rid > maxRegionId) maxRegionId = rid;
   }
 
@@ -317,15 +355,47 @@ async function gzipCompress(data: Uint8Array): Promise<{ bytes: Uint8Array; comp
   }
 }
 
-async function gzipDecompress(data: Uint8Array): Promise<Uint8Array> {
+async function gzipDecompress(
+  data: Uint8Array,
+  maxOutputBytes: number = MAX_BINARY_SAVE_DECOMPRESSED_BYTES
+): Promise<Uint8Array> {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('DecompressionStream is not supported in this environment');
   }
   const stream = new Blob([new Uint8Array(data)])
     .stream()
     .pipeThrough(new DecompressionStream('gzip'));
-  const buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.byteLength > 0) {
+        totalBytes += value.byteLength;
+        if (totalBytes > maxOutputBytes) {
+          await reader.cancel('Decompressed payload exceeds byte limit').catch(() => {});
+          throw new Error(`Decompressed gzip payload exceeds limit of ${maxOutputBytes} bytes`);
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (chunks.length === 1) {
+    return chunks[0];
+  }
+  const out = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
 }
 
 /**
@@ -369,21 +439,40 @@ function packFramedPayload(root: unknown): Uint8Array {
 }
 
 function unpackFramedPayload<T>(packed: Uint8Array): T {
+  if (packed.byteLength < 4) {
+    throw new Error('Malformed framed payload: truncated header');
+  }
   const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
   const jsonByteLen = view.getUint32(0, true);
+  if (jsonByteLen > packed.byteLength - 4) {
+    throw new Error('Malformed framed payload: JSON header exceeds payload');
+  }
   const jsonBytes = packed.subarray(4, 4 + jsonByteLen);
   const jsonText = new TextDecoder().decode(jsonBytes);
 
   const chunkSliceStart = 4 + jsonByteLen;
+  const maxChunkBytes = packed.byteLength - chunkSliceStart;
   const parsed = JSON.parse(jsonText);
 
   // Collect chunks in index order by walking the parsed tree once to compute offsets
   const chunkLengths: number[] = [];
   const collect = (node: any) => {
     if (!node || typeof node !== 'object') return;
-    if (typeof node.__chunkIdx === 'number' && typeof node.byteLength === 'number') {
-      chunkLengths[node.__chunkIdx] = node.byteLength;
-      return;
+    if (node.__chunkIdx !== undefined || node.byteLength !== undefined) {
+      if (typeof node.__chunkIdx === 'number' && typeof node.byteLength === 'number') {
+        if (
+          !Number.isInteger(node.__chunkIdx) ||
+          node.__chunkIdx < 0 ||
+          node.__chunkIdx >= MAX_FRAMED_BINARY_CHUNKS ||
+          !Number.isInteger(node.byteLength) ||
+          node.byteLength < 0 ||
+          node.byteLength > maxChunkBytes
+        ) {
+          throw new Error('Malformed framed payload: invalid binary chunk descriptor');
+        }
+        chunkLengths[node.__chunkIdx] = node.byteLength;
+        return;
+      }
     }
     if (Array.isArray(node)) {
       for (const item of node) collect(item);
@@ -396,7 +485,10 @@ function unpackFramedPayload<T>(packed: Uint8Array): T {
   const chunkSlices: Uint8Array[] = [];
   let cursor = chunkSliceStart;
   for (let i = 0; i < chunkLengths.length; i++) {
-    const len = chunkLengths[i] || 0;
+    const len = chunkLengths[i] ?? 0;
+    if (len < 0 || cursor + len > packed.byteLength) {
+      throw new Error('Malformed framed payload: binary chunk exceeds bounds');
+    }
     chunkSlices[i] = packed.slice(cursor, cursor + len);
     cursor += len;
   }
@@ -436,6 +528,12 @@ function recordToSerializable(rec: CompactPuzzleRecordV2): SerializedCompactPuzz
 }
 
 export function serializableToRecord(ser: SerializedCompactPuzzleV2): CompactPuzzleRecordV2 {
+  if (
+    !(ser.regionMetaBytes instanceof Uint8Array) ||
+    ser.regionMetaBytes.byteLength % (REGION_META_STRIDE * 4) !== 0
+  ) {
+    throw new Error('Malformed compact puzzle regionMetaBytes');
+  }
   const alignedBuf = ser.regionMetaBytes.slice().buffer;
   return {
     __capyCompactV2: 2,
@@ -553,7 +651,13 @@ export async function decodeBinarySaveV2(
   }
   const flags = bytes[5];
   const rawBody = bytes.subarray(6);
-  const framed = (flags & FLAG_GZIP) !== 0 ? await gzipDecompress(rawBody) : rawBody;
+  if ((flags & FLAG_GZIP) === 0 && rawBody.byteLength > MAX_BINARY_SAVE_DECOMPRESSED_BYTES) {
+    throw new Error('Uncompressed Capy binary payload exceeds size limit');
+  }
+  const framed =
+    (flags & FLAG_GZIP) !== 0
+      ? await gzipDecompress(rawBody, MAX_BINARY_SAVE_DECOMPRESSED_BYTES)
+      : rawBody;
   return unpackFramedPayload<SingleSavePayloadV2 | ArchiveSavePayloadV2>(framed);
 }
 
@@ -623,10 +727,17 @@ function base64UrlToBytes(token: string): Uint8Array {
  */
 export async function encodeProgressDeltaToken(delta: ProgressDeltaV2): Promise<string> {
   const out: number[] = [2]; // version 2
+  const normalizedResetEpoch =
+    typeof delta.resetEpoch === 'number' &&
+    Number.isFinite(delta.resetEpoch) &&
+    delta.resetEpoch > 0
+      ? Math.min(MAX_DELTA_RESET_EPOCH, Math.floor(delta.resetEpoch))
+      : 0;
   const flags =
     (delta.isFreeColor ? 1 : 0) |
     (delta.paintedRegionColors && Object.keys(delta.paintedRegionColors).length > 0 ? 2 : 0) |
-    (delta.sourceRef ? 4 : 0);
+    (delta.sourceRef ? 4 : 0) |
+    (normalizedResetEpoch > 0 ? 8 : 0);
   out.push(flags);
 
   writeVarint(out, Math.floor(delta.updatedAt / 1000));
@@ -652,6 +763,10 @@ export async function encodeProgressDeltaToken(delta: ProgressDeltaV2): Promise<
     }
   }
 
+  if (flags & 8) {
+    writeVarint(out, normalizedResetEpoch);
+  }
+
   const raw = new Uint8Array(out);
   const { bytes: gz, compressed } = await gzipCompress(raw);
   const useGzip = compressed && gz.byteLength + 1 < raw.byteLength;
@@ -662,27 +777,51 @@ export async function encodeProgressDeltaToken(delta: ProgressDeltaV2): Promise<
 }
 
 export async function decodeProgressDeltaToken(token: string): Promise<ProgressDeltaV2> {
+  if (!token || typeof token !== 'string' || token.length > MAX_DELTA_DECOMPRESSED_BYTES * 2) {
+    throw new Error('Invalid progress delta token');
+  }
   const envelope = base64UrlToBytes(token);
+  if (envelope.byteLength < 2 || (envelope[0] !== 0 && envelope[0] !== 1)) {
+    throw new Error('Malformed progress delta envelope');
+  }
   const isGz = envelope[0] === 1;
-  const raw = isGz ? await gzipDecompress(envelope.subarray(1)) : envelope.subarray(1);
+  const body = envelope.subarray(1);
+  if (!isGz && body.byteLength > MAX_DELTA_DECOMPRESSED_BYTES) {
+    throw new Error('Uncompressed progress delta exceeds size limit');
+  }
+  const raw = isGz ? await gzipDecompress(body, MAX_DELTA_DECOMPRESSED_BYTES) : body;
+  if (raw.byteLength < 4) {
+    throw new Error('Truncated progress delta payload');
+  }
 
   const cursor = { pos: 0 };
   const version = raw[cursor.pos++];
   if (version !== 2) {
     throw new Error(`Unsupported progress delta version: ${version}`);
   }
+  // Bits 0..2: freeColor, paintedColors, sourceRef; bit 3 (8): monotonic CRDT resetEpoch
   const flags = raw[cursor.pos++];
   const updatedAt = readVarint(raw, cursor) * 1000;
 
   let sourceRef: PuzzleSourceRef | undefined;
   if (flags & 4) {
     const refLen = readVarint(raw, cursor);
+    if (refLen > MAX_DELTA_SOURCE_REF_BYTES || cursor.pos + refLen > raw.byteLength) {
+      throw new Error('Invalid progress delta sourceRef length');
+    }
     const refText = new TextDecoder().decode(raw.subarray(cursor.pos, cursor.pos + refLen));
     cursor.pos += refLen;
-    sourceRef = JSON.parse(refText) as PuzzleSourceRef;
+    const parsedRef = JSON.parse(refText) as unknown;
+    if (!parsedRef || typeof parsedRef !== 'object' || Array.isArray(parsedRef)) {
+      throw new Error('Malformed progress delta sourceRef');
+    }
+    sourceRef = parsedRef as PuzzleSourceRef;
   }
 
   const filledLen = readVarint(raw, cursor);
+  if (filledLen > MAX_DELTA_REGION_ENTRIES || cursor.pos + filledLen > raw.byteLength) {
+    throw new Error(`Progress delta filledLen (${filledLen}) exceeds bounds`);
+  }
   const filledRegionIds: number[] = new Array(filledLen);
   for (let i = 0; i < filledLen; i++) {
     filledRegionIds[i] = readVarint(raw, cursor);
@@ -691,14 +830,31 @@ export async function decodeProgressDeltaToken(token: string): Promise<ProgressD
   let paintedRegionColors: Record<number, number> | undefined;
   if (flags & 2) {
     const colorEntries = readVarint(raw, cursor);
+    if (colorEntries > MAX_DELTA_REGION_ENTRIES || cursor.pos + colorEntries * 5 > raw.byteLength) {
+      throw new Error(`Progress delta colorEntries (${colorEntries}) exceeds bounds`);
+    }
     paintedRegionColors = {};
     for (let i = 0; i < colorEntries; i++) {
       const rid = readVarint(raw, cursor);
+      if (cursor.pos + 4 > raw.byteLength) {
+        throw new Error('Truncated progress delta paintedRegionColors entry');
+      }
       const b0 = raw[cursor.pos++];
       const b1 = raw[cursor.pos++];
       const b2 = raw[cursor.pos++];
       const b3 = raw[cursor.pos++];
       paintedRegionColors[rid] = ((b3 << 24) | (b2 << 16) | (b1 << 8) | b0) >>> 0;
+    }
+  }
+
+  let resetEpoch: number | undefined;
+  if (flags & 8) {
+    const decodedEpoch = readVarint(raw, cursor);
+    if (decodedEpoch > MAX_DELTA_RESET_EPOCH) {
+      throw new Error(`Progress delta resetEpoch (${decodedEpoch}) exceeds bounds`);
+    }
+    if (decodedEpoch > 0) {
+      resetEpoch = decodedEpoch;
     }
   }
 
@@ -708,17 +864,61 @@ export async function decodeProgressDeltaToken(token: string): Promise<ProgressD
     filledRegionIds,
     ...(paintedRegionColors ? { paintedRegionColors } : {}),
     ...(flags & 1 ? { isFreeColor: true } : {}),
+    ...(resetEpoch !== undefined ? { resetEpoch } : {}),
     updatedAt,
   };
 }
 
+function normalizeResetEpoch(rawEpoch?: number): number {
+  if (typeof rawEpoch !== 'number' || !Number.isFinite(rawEpoch) || rawEpoch <= 0) {
+    return 0;
+  }
+  return Math.min(MAX_DELTA_RESET_EPOCH, Math.floor(rawEpoch));
+}
+
 /**
- * Conflict-free Set-Union + LWW merge for cloud save sync and simultaneous multiplayer recovery.
+ * Conflict-free epoch-scoped Set-Union + LWW merge for cloud save sync and simultaneous Co-op recovery.
+ * When `resetEpoch` differs, the higher monotonic epoch wins cleanly without resurrecting cleared regions.
  */
 export function mergeProgressDeltas(
   local: ProgressDeltaV2,
   remote: ProgressDeltaV2
 ): ProgressDeltaV2 {
+  const localEpoch = normalizeResetEpoch(local.resetEpoch);
+  const remoteEpoch = normalizeResetEpoch(remote.resetEpoch);
+
+  if (localEpoch > remoteEpoch) {
+    const localColors =
+      local.paintedRegionColors && Object.keys(local.paintedRegionColors).length > 0
+        ? { ...local.paintedRegionColors }
+        : undefined;
+    return {
+      version: 2,
+      sourceRef: local.sourceRef || remote.sourceRef,
+      filledRegionIds: [...local.filledRegionIds],
+      ...(localColors ? { paintedRegionColors: localColors } : {}),
+      isFreeColor: Boolean(local.isFreeColor ?? remote.isFreeColor),
+      resetEpoch: localEpoch,
+      updatedAt: Math.max(local.updatedAt, remote.updatedAt),
+    };
+  }
+
+  if (remoteEpoch > localEpoch) {
+    const remoteColors =
+      remote.paintedRegionColors && Object.keys(remote.paintedRegionColors).length > 0
+        ? { ...remote.paintedRegionColors }
+        : undefined;
+    return {
+      version: 2,
+      sourceRef: remote.sourceRef || local.sourceRef,
+      filledRegionIds: [...remote.filledRegionIds],
+      ...(remoteColors ? { paintedRegionColors: remoteColors } : {}),
+      isFreeColor: Boolean(remote.isFreeColor ?? local.isFreeColor),
+      resetEpoch: remoteEpoch,
+      updatedAt: Math.max(local.updatedAt, remote.updatedAt),
+    };
+  }
+
   const seen = new Set<number>(local.filledRegionIds);
   const mergedFilled = [...local.filledRegionIds];
   for (const rid of remote.filledRegionIds) {
@@ -742,6 +942,7 @@ export function mergeProgressDeltas(
     filledRegionIds: mergedFilled,
     ...(mergedColors ? { paintedRegionColors: mergedColors } : {}),
     isFreeColor: Boolean(local.isFreeColor || remote.isFreeColor),
+    ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
     updatedAt: Math.max(local.updatedAt, remote.updatedAt),
   };
 }

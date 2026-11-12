@@ -1,0 +1,13 @@
+{
+  "name": "capy-paint-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix web ci && npm --prefix web run build",
+    "deploy": "wrangler deploy",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "test:sanity": "npm --prefix web run test:sanity"
+  },
+  "devDependencies": {
+    "wrangler": "^4.160.1"
+  }
+}

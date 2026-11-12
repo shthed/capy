@@ -115,6 +115,11 @@ class MainActivity : ComponentActivity() {
                     pushSnapshotToPlayGames(slotKey, payloadJson)
                 }
             },
+            onRequestCloudSnapshotPull = { slotKey ->
+                runOnUiThread {
+                    pullSnapshotFromPlayGames(slotKey)
+                }
+            },
         )
 
         initializePlayGamesIfConfigured()
@@ -627,6 +632,16 @@ class MainActivity : ComponentActivity() {
                 null,
             )
         }
+    }
+
+    override fun onPause() {
+        webView?.onPause()
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView?.onResume()
     }
 
     override fun onDestroy() {

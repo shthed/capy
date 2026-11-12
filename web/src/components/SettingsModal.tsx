@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
-import { APP_VERSION } from '../version';
+import { APP_VERSION, resolveReleaseChannel } from '../version';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
@@ -1263,6 +1263,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </a>
                 </div>
+
+                {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
+                {(() => {
+                  const channelInfo = resolveReleaseChannel();
+                  if (!channelInfo.showChannelSwitcher) return null;
+                  const isBeta = channelInfo.channel === 'beta';
+                  const isAlpha = channelInfo.channel === 'alpha';
+                  const sharesOriginWithBeta =
+                    typeof window !== 'undefined' &&
+                    channelInfo.betaWebUrl.startsWith(window.location.origin);
+                  const statusLabel = isBeta
+                    ? `Beta Channel • v${APP_VERSION}`
+                    : isAlpha
+                      ? `Alpha Preview${channelInfo.prNumber ? ` #${channelInfo.prNumber}` : ''} • v${APP_VERSION}`
+                      : channelInfo.channel === 'dev'
+                        ? `Local Dev • v${APP_VERSION}`
+                        : `Stable Release • v${APP_VERSION}`;
+                  const primaryTargetUrl = isBeta ? channelInfo.stableWebUrl : channelInfo.betaWebUrl;
+                  const primaryActionLabel = isBeta
+                    ? 'Return to Stable Release'
+                    : 'Switch to Beta Channel';
+                  return (
+                    <div
+                      data-testid="release-channel-card"
+                      data-channel={channelInfo.channel}
+                      className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                          <Sparkles size={14} className="text-violet-400 flex-shrink-0" />
+                          <span>Release Channel</span>
+                        </div>
+                        <span
+                          data-testid="release-channel-status"
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            isBeta || isAlpha
+                              ? 'bg-violet-950/80 text-violet-200 border-violet-400/50'
+                              : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                          }`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        {sharesOriginWithBeta
+                          ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.'
+                          : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                        <a
+                          href={primaryTargetUrl}
+                          data-testid="toggle-beta-channel-btn"
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                            isBeta
+                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                              : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border-violet-400/50'
+                          }`}
+                        >
+                          <ExternalLink size={13} className="flex-shrink-0" />
+                          <span>{primaryActionLabel}</span>
+                        </a>
+                        <a
+                          href={channelInfo.betaApkUrl}
+                          download="capy-beta.apk"
+                          data-testid="beta-apk-download-link"
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
+                        >
+                          <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
+                          <span>Beta Android APK</span>
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -2286,7 +2360,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   ? 'Google Play Games'
                                   : 'Google Account'
                               } • ${playerIdentity.email || playerIdentity.displayName}`
-                            : 'Local Profile • Sign in to sync saves across devices'}
+                            : NativeBridge.isAndroid ||
+                                Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
+                                (typeof window !== 'undefined' &&
+                                  Boolean(
+                                    (window as unknown as { __capyMockGoogleOAuthToken?: string })
+                                      .__capyMockGoogleOAuthToken
+                                  ))
+                              ? 'Local Profile • Sign in to sync saves across devices'
+                              : 'Local Profile • Saves stored locally on this device'}
                         </div>
                       </div>
                     )}
@@ -2305,7 +2387,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         Sign Out
                       </button>
-                    ) : (
+                    ) : NativeBridge.isAndroid ||
+                      Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
+                      (typeof window !== 'undefined' &&
+                        Boolean(
+                          (window as unknown as { __capyMockGoogleOAuthToken?: string })
+                            .__capyMockGoogleOAuthToken
+                        )) ? (
                       <button
                         type="button"
                         data-testid="play-games-signin-btn"
@@ -2351,7 +2439,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         {NativeBridge.isAndroid ? 'Play Games Login' : 'Google Login'}
                       </button>
-                    )}
+                    ) : null}
 
                     {onSyncCloudProgress && (
                       <button
@@ -2902,6 +2990,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         >
                           <Download size={13} className="text-amber-400" />
                           <span>Export All</span>
+                        </button>
+                      )}
+
+                      {onResetProgress && (
+                        <button
+                          type="button"
+                          onClick={onResetProgress}
+                          title="Reset Current Puzzle Progress"
+                          data-testid="reset-progress-btn"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                        >
+                          <RotateCcw size={13} className="text-amber-400" />
+                          <span>Reset Progress</span>
                         </button>
                       )}
                     </div>
