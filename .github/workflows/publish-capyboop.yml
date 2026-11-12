@@ -1,0 +1,129 @@
+name: Publish Clean Mirror to capyboop/capy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      reset_clean_root:
+        description: 'Reset capyboop/capy main to a fresh single root commit authored by capyboop'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: publish-capyboop
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Export & Push Clean capyboop Release
+    if: github.repository == 'shthed/capy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check CAPYBOOP_SYNC_TOKEN configuration
+        id: check_secret
+        env:
+          HAS_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN != '' }}
+        run: |
+          if [ "${HAS_TOKEN}" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### capyboop/capy Auto-Publish Skipped (Token Not Configured)"
+              echo ""
+              echo "Add fine-grained Personal Access Token secret \`CAPYBOOP_SYNC_TOKEN\` (scoped to \`capyboop/capy\` with **Contents: Read & write** and **Workflows: Read & write**) under \`shthed/capy\` **Settings -> Secrets and variables -> Actions -> Secrets** to publish every \`main\` merge automatically."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Checkout source repository
+        if: steps.check_secret.outputs.enabled == 'true'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        if: steps.check_secret.outputs.enabled == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Export clean-room capyboop workspace and verify zero leaks
+        if: steps.check_secret.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          node web/scripts/rebrand-persona.mjs --stage-dir /tmp/capyboop-stage
+          COMMIT_MSG="$(git log -1 --format=%s | node web/scripts/rebrand-persona.mjs --sanitize-message)"
+          VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('/tmp/capyboop-stage/web/package.json', 'utf8')).version")"
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid SemVer in staged web/package.json: ${VERSION}" >&2
+            exit 1
+          fi
+          DELIM="EOF_COMMIT_MSG_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          {
+            printf 'commit_msg<<%s\n%s\n%s\n' "${DELIM}" "${COMMIT_MSG}" "${DELIM}"
+            printf 'version=%s\n' "${VERSION}"
+          } >> "$GITHUB_ENV"
+
+      - name: Commit as capyboop, push main, and sync release tag on capyboop/capy
+        if: steps.check_secret.outputs.enabled == 'true'
+        env:
+          CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
+          RESET_CLEAN_ROOT: ${{ inputs.reset_clean_root == true }}
+          GIT_AUTHOR_NAME: capyboop
+          GIT_AUTHOR_EMAIL: 354866242+capyboop@users.noreply.github.com
+          GIT_COMMITTER_NAME: capyboop
+          GIT_COMMITTER_EMAIL: 354866242+capyboop@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          cd /tmp/capyboop-stage
+          git init -b main
+          git config user.name "${GIT_AUTHOR_NAME}"
+          git config user.email "${GIT_AUTHOR_EMAIL}"
+          git remote add target "https://x-access-token:${CAPYBOOP_SYNC_TOKEN}@github.com/capyboop/capy.git"
+          git add -A
+
+          PUSHED_COMMIT_SHA=""
+          if git ls-remote --exit-code --heads target main >/dev/null 2>&1; then
+            git fetch target main
+            if [ "${RESET_CLEAN_ROOT}" = "true" ] || git log FETCH_HEAD --format="%an %ae %cn %ce %B" | grep -iqE "shthed|hairy dog trumpet"; then
+              echo "Initializing fresh clean-room root history authored solely by capyboop..."
+              git commit -m "Release Capy Paint v${version}"
+              PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
+              git push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+            else
+              TREE_SHA="$(git write-tree)"
+              REMOTE_TREE_SHA="$(git rev-parse FETCH_HEAD^{tree})"
+              if [ "${TREE_SHA}" = "${REMOTE_TREE_SHA}" ]; then
+                echo "capyboop/capy main already matches clean tree (${TREE_SHA})."
+                PUSHED_COMMIT_SHA="$(git rev-parse FETCH_HEAD)"
+              else
+                PARENT_SHA="$(git rev-parse FETCH_HEAD)"
+                NEW_COMMIT="$(git commit-tree "${TREE_SHA}" -p "${PARENT_SHA}" -m "${commit_msg}")"
+                PUSHED_COMMIT_SHA="${NEW_COMMIT}"
+                git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+              fi
+            fi
+          else
+            echo "Target repository has no main branch yet; pushing initial clean root commit..."
+            git commit -m "Release Capy Paint v${version}"
+            PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
+            git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+          fi
+
+          TAG_NAME="v${version}"
+          if [ "${RESET_CLEAN_ROOT}" = "true" ]; then
+            git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+            git push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          elif ! git ls-remote --exit-code --tags target "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/capy..."
+            git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+            git push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          else
+            echo "Tag ${TAG_NAME} already exists on capyboop/capy; skipping tag push."
+          fi

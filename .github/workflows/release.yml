@@ -1,0 +1,177 @@
+name: Publish GitHub Release & Play Store Bundle
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing Git tag to build and publish (e.g. v2.6.0 or v2.6.0-beta.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build APK, Play Store AAB & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag metadata
+        id: meta
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG_NAME="${INPUT_TAG:-${REF_NAME}}"
+          if [[ ! "${TAG_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "Invalid tag '${TAG_NAME}'. Expected vMAJOR.MINOR.PATCH[-prerelease]." >&2
+            exit 1
+          fi
+          IS_PRERELEASE="false"
+          if [[ "${TAG_NAME}" == *-* ]]; then
+            IS_PRERELEASE="true"
+          fi
+          echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.meta.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build & package Web production bundle (web/)
+        env:
+          TAG_NAME: ${{ steps.meta.outputs.tag }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
+        run: |
+          set -euo pipefail
+          cd web
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run test:sanity
+          npm run lint
+          npm run build
+          cd ..
+          mkdir -p release-assets
+          tar -czf "release-assets/capy-web-${TAG_NAME}.tgz" -C web/dist .
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: false
+
+      - name: Build Android APK & Play Store App Bundle (.aab)
+        env:
+          TAG_NAME: ${{ steps.meta.outputs.tag }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
+          CAPY_KEYSTORE_BASE64: ${{ secrets.CAPY_KEYSTORE_BASE64 }}
+          CAPY_KEYSTORE_PASSWORD: ${{ secrets.CAPY_KEYSTORE_PASSWORD }}
+          CAPY_KEY_ALIAS: ${{ secrets.CAPY_KEY_ALIAS }}
+          CAPY_KEY_PASSWORD: ${{ secrets.CAPY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CAPY_KEYSTORE_BASE64}" ]; then
+            KEYSTORE_FILE="${RUNNER_TEMP}/capy-release.keystore"
+            printf '%s' "${CAPY_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_FILE}"
+            export CAPY_KEYSTORE_PATH="${KEYSTORE_FILE}"
+            ./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease --build-cache
+            cp app/build/outputs/apk/release/app-release.apk "release-assets/capy-${TAG_NAME}.apk"
+            cp app/build/outputs/bundle/release/app-release.aab "release-assets/capy-${TAG_NAME}.aab"
+            rm -f "${KEYSTORE_FILE}"
+          else
+            ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
+            cp app/build/outputs/apk/debug/app-debug.apk "release-assets/capy-${TAG_NAME}.apk"
+            if ./gradlew app:bundleRelease --build-cache && [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+              cp app/build/outputs/bundle/release/app-release.aab "release-assets/capy-${TAG_NAME}.aab"
+            else
+              ./gradlew app:bundleDebug --build-cache
+              cp app/build/outputs/bundle/debug/app-debug.aab "release-assets/capy-${TAG_NAME}.aab"
+            fi
+          fi
+          if [ "${IS_PRERELEASE}" = "false" ]; then
+            cp "release-assets/capy-${TAG_NAME}.apk" "release-assets/capy.apk"
+          fi
+          ls -lh release-assets/
+
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          TAG_NAME: ${{ steps.meta.outputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          tag = os.environ["TAG_NAME"]
+          m = re.match(r"^v(\d+)\.(\d+)\.(\d+)", tag)
+          major, minor, patch = m.group(1), m.group(2), m.group(3)
+          full_ver = f"{major}.{minor}.{patch}"
+          short_ver = f"{major}.{minor}"
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          section = None
+          for candidate in (full_ver, short_ver):
+              pat = rf"^### {re.escape(candidate)} - [^\n]+\n+(.*?)(?=^### |\Z)"
+              found = re.search(pat, text, flags=re.M | re.S)
+              if found:
+                  section = found.group(1).strip()
+                  break
+          if not section:
+              section = f"- Release {tag}"
+          with open("release-notes.md", "w", encoding="utf-8") as f:
+              f.write(f"### What's New in `{tag}`\n\n{section}\n")
+          PY
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.meta.outputs.tag }}
+          IS_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          ASSETS=(
+            "release-assets/capy-${TAG_NAME}.apk"
+            "release-assets/capy-${TAG_NAME}.aab"
+            "release-assets/capy-web-${TAG_NAME}.tgz"
+          )
+          if [ "${IS_PRERELEASE}" = "false" ]; then
+            ASSETS+=("release-assets/capy.apk")
+          fi
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release edit "${TAG_NAME}" \
+              --notes-file release-notes.md \
+              --prerelease="${IS_PRERELEASE}"
+            gh release upload "${TAG_NAME}" "${ASSETS[@]}" --clobber
+          else
+            CREATE_FLAGS=(
+              --title "${TAG_NAME}"
+              --notes-file release-notes.md
+            )
+            if [ "${IS_PRERELEASE}" = "true" ]; then
+              CREATE_FLAGS+=(--prerelease)
+            else
+              CREATE_FLAGS+=(--latest)
+            fi
+            gh release create "${TAG_NAME}" "${ASSETS[@]}" "${CREATE_FLAGS[@]}"
+          fi

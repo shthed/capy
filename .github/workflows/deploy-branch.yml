@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - beta
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -13,12 +14,13 @@ on:
   pull_request:
     branches:
       - main
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'notes/**'
-      - '.gitignore'
-      - 'LICENSE'
+      - beta
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - converted_to_draft
   workflow_dispatch:
     inputs:
       target_branch:
@@ -64,6 +66,7 @@ jobs:
             const inputs = context.payload?.inputs || {};
             const branchInput = inputs.target_branch || '';
             const allowWithoutPrInput = inputs.allow_without_pr;
+            const isPullRequest = context.eventName === 'pull_request';
             const prFromPayload = context.payload?.pull_request?.number;
             const branchFromPayload = context.payload?.pull_request?.head?.ref;
             const branch = branchInput || branchFromPayload || context.ref.replace('refs/heads/', '');
@@ -78,7 +81,7 @@ jobs:
             const safeBranch = branch.replace(/[^a-zA-Z0-9._-]/g, '-');
 
             let prNumber = prFromPayload;
-            if (!prNumber && branch !== 'main') {
+            if (!prNumber && branch !== 'main' && branch !== 'beta') {
               try {
                 const { data: prs } = await github.rest.pulls.list({
                   owner: context.repo.owner,
@@ -94,17 +97,47 @@ jobs:
               }
             }
 
-            const targetDir = branch === 'main'
-              ? '.'
-              : prNumber
-                ? `pull/${prNumber}`
-                : `pull/${safeBranch}`;
+            let isDocsOnlyPr = false;
+            if (isPullRequest && prNumber) {
+              try {
+                const files = await github.paginate(github.rest.pulls.listFiles, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  per_page: 100,
+                });
+                isDocsOnlyPr =
+                  files.length > 0 &&
+                  files.every(
+                    (f) =>
+                      f.filename.endsWith('.md') ||
+                      f.filename.startsWith('docs/') ||
+                      f.filename.startsWith('notes/') ||
+                      f.filename === '.gitignore' ||
+                      f.filename === 'LICENSE'
+                  );
+              } catch (error) {
+                core.warning(`Failed to inspect PR changed files for #${prNumber}: ${error.message}`);
+              }
+            }
+
+            const targetDir = isPullRequest
+              ? (prNumber ? `pull/${prNumber}` : `pull/${safeBranch}`)
+              : branch === 'main'
+                ? '.'
+                : branch === 'beta'
+                  ? 'beta'
+                  : prNumber
+                    ? `pull/${prNumber}`
+                    : `pull/${safeBranch}`;
 
             const previewUrl = targetDir === '.'
               ? `${basePreview}/`
               : `${basePreview}/${targetDir}/`;
 
-            const shouldSkip = branch !== 'main' && !prNumber && !allowWithoutPr;
+            const shouldSkip =
+              isDocsOnlyPr ||
+              (!isPullRequest && branch !== 'main' && branch !== 'beta' && !prNumber && !allowWithoutPr);
 
             const checkoutRef = context.payload?.pull_request?.head?.sha || branchInput || context.sha;
 
@@ -117,7 +150,9 @@ jobs:
               `Android APK URL: ${previewUrl}capy.apk`,
             ];
 
-            if (shouldSkip) {
+            if (isDocsOnlyPr) {
+              summaryLines.push('Fast-path pass: PR modifies documentation/metadata files only (skipping Web/Android build and Pages deploy).');
+            } else if (shouldSkip) {
               summaryLines.push('Deployment skipped: branch has no open PR (override with allow_without_pr).');
             }
 
@@ -145,11 +180,16 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
-      - name: Build & typecheck web app (web/)
+      - name: Run sanity gate, typecheck, and build web app (web/)
         if: steps.target.outputs.skip != 'true'
         working-directory: web
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
           npm ci --prefer-offline --no-audit --no-fund
+          npm run test:sanity
+          npm run lint
           npm run build
 
       - name: Set up JDK 17
@@ -163,10 +203,14 @@ jobs:
         if: steps.target.outputs.skip != 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
 
       - name: Run unit tests and build Debug APK (app/)
         if: steps.target.outputs.skip != 'true'
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
 
       - name: Stage build artifacts
@@ -185,10 +229,46 @@ jobs:
           path: staging
           retention-days: 1
 
+  e2e_release_gate:
+    name: Playwright E2E Release Gate
+    needs: [build]
+    if: needs.build.outputs.skip != 'true' && github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build.outputs.checkout_ref }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies, build web bundle, and install Playwright Chromium
+        working-directory: web
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npm run test:sanity
+          npm run lint
+          npm run build
+          npx playwright install --with-deps chromium
+
+      - name: Run Unified Engine, Codec & Headless Chromium E2E Suite
+        working-directory: web
+        run: npm test
+
   deploy:
     name: Deploy to GitHub Pages
-    needs: [build]
-    if: needs.build.outputs.skip != 'true'
+    needs: [build, e2e_release_gate]
+    if: always() && github.event.repository.has_pages == true && needs.build.result == 'success' && needs.build.outputs.skip != 'true' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped')
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -239,6 +319,7 @@ jobs:
             rsync -avc --delete \
               --exclude '.git/' \
               --exclude 'pull/' \
+              --exclude 'beta/' \
               staging/web/ "${DEST_DIR}/"
           else
             rm -rf "${DEST_DIR}"
@@ -306,7 +387,7 @@ jobs:
             const marker = '<!-- capy-pages-preview -->';
             const body = [
               marker,
-              '### 🚀 Capy Preview & APK Deployed',
+              '### Capy Preview & APK Deployed',
               `- **Workflow Run**: [${context.runId}](${runUrl})`,
               `- **Web App (\`/\`)**: ${previewUrl}`,
               `- **Android Debug APK**: [${previewUrl}capy.apk](${previewUrl}capy.apk)`

@@ -1,29 +1,25 @@
 # Capy Active Sprint Backlog -- Ready-for-Dev Tasks (`TODO.md`)
 
-Focused **Sprint 1 Execution Queue** for the **Capy** monorepo ([`web/`](./web/) and [`app/`](./app/)). Only unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices approved for immediate development enter `TODO.md`. Strategic Epics (`EPIC-3`--`EPIC-5`), future User Stories, external dependency gates, Platform Icebox (`ICE-*`), and shipped milestones live in [`ROADMAP.md`](./ROADMAP.md) (full workflow in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
+Focused **Sprint 2 Execution Queue** ([Milestone #3](https://github.com/shthed/capy/milestone/3) | `EPIC-3` Tracking Issue [#478](https://github.com/shthed/capy/issues/478)) for the **Capy** monorepo ([`web/`](./web/), [`app/`](./app/), and [`worker/`](./worker/)). Only unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices approved for immediate development enter `TODO.md`, and all daily feature/bugfix PRs branch from and target **`beta`** (`--base beta`, deploying to `https://shthed.github.io/capy/beta/`) so live production players on `main` are never disrupted. Strategic and design-review Epics (`EPIC-2`, `EPIC-4`--`EPIC-5`), external dependency gates, Platform Icebox (`ICE-*`), and shipped milestones (`EPIC-1` & completed stories) live in [`ROADMAP.md`](./ROADMAP.md) (full workflow in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
 
 **Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
 1. [Quick-Win Ready Queue (`<= 15 min` Agent / `3.8 Flash` or `Argon`)](#1-quick-win-ready-queue--15-min-agent--38-flash-or-argon)
-2. [Sprint 1 Priority 0: Verified Codebase, Lifecycle & CI Hygiene Bugs (`BUG-1`--`BUG-3`)](#2-sprint-1-priority-0-verified-codebase-lifecycle--ci-hygiene-bugs-bug-1--bug-3)
-3. [Sprint 1 Feature Tasks: `EPIC-2` Mobile Touch Precision & Tactile Sensory Polish](#3-sprint-1-feature-tasks-epic-2-mobile-touch-precision--tactile-sensory-polish)
+2. [Sprint 2 Feature Tasks: `EPIC-3` Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays](#2-sprint-2-feature-tasks-epic-3-fat-finger-touch-assist-daily-retention-accessibility--replays)
 
 <details>
-<summary>Sprint 1 Entry Gate, Hybrid Execution Rules & Totals</summary>
+<summary>Sprint 2 Entry Gate, GitHub Agile Tracking, Hybrid Execution & Totals</summary>
 
 - **Strict Ready-for-Dev Gate**:
-  - A task enters `TODO.md` **only** when it has zero external backend/credential blockers, verified source file/symbol names against `main`, and deterministic acceptance criteria testable via `npm test` or `./gradlew app:testDebugUnitTest`.
-  - Future Epics (`EPIC-3`, `EPIC-4`), externally blocked cloud/AI stories (`EPIC-5`), and `ICE-*` remain in [`ROADMAP.md`](./ROADMAP.md) until promoted at sprint replenishment.
-- **Hybrid Automated Sprint Execution**:
-  - **Single-Task Chat (`1-Task = 1-PR`)**: Pick one `BUG-*` or `TASK-*` item in a fresh `#NNN` chat, run full local verification (`npm run lint && npm run build && npm test`), open the PR, and wait for human merge approval.
-  - **Automated Story / Sprint-Slice Run (`/goal` or `/swarm`)**: Execute a cohesive multi-task story (e.g., `BUG-1`--`BUG-3` or `US-2.1`) onto an `automation/sprint-*` or `feature/*` branch using atomic per-task commits, verify the full Playwright + JUnit4 suite locally in the Antigravity VM, and open one PR with one live preview for human merge approval.
-- **Definition of Done (Immediate Deletion)**:
-  - Never leave `[x]` checkboxes in `TODO.md`. Delete finished `BUG-*` / `TASK-*` items (and their Section 1 pointers) in the same PR that ships them; when a Story's final task ships, archive that Story into the collapsed **Shipped Epics & Stories** `<details>` section at the bottom of [`ROADMAP.md`](./ROADMAP.md).
-- **Sprint 1 Rollup (`8` Ready `1-PR` Slices: `3` `[quick-win]` Bugs + `5` `EPIC-2` Tasks)**:
-  - **Priority 0 Bugs (`BUG-1`--`BUG-3`)**: `~44k tokens` | `~22--32 min agent` (`~5--8 hrs human`).
-  - **`EPIC-2` Remaining Tasks (`US-2.1`, `US-2.3`, `US-2.4`)**: `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).
-  - **Sprint 1 Active Total**: `~148k tokens` | `~1.2--1.7 hrs agent` (`~17.5--25.5 hrs human`).
+  - A task enters `TODO.md` **only** when it has zero external backend/credential blockers, verified source file/symbol names against `beta`/`main`, and deterministic acceptance criteria testable via `npm test` or `./gradlew app:testDebugUnitTest`.
+  - Future Epics (`EPIC-4` [#479](https://github.com/shthed/capy/issues/479)), design-review Epics (`EPIC-2` [#477](https://github.com/shthed/capy/issues/477), `v3.1`), externally blocked cloud/AI stories (`EPIC-5` [#480](https://github.com/shthed/capy/issues/480)), and `ICE-*` (no GitHub Issues until chartered) remain in [`ROADMAP.md`](./ROADMAP.md) until promoted at sprint replenishment.
+- **GitHub Issue & Milestone Attribution (`1 Issue = 1 Epic`)**:
+  - **`EPIC-3` Feature Slices (`US-3.1`--`US-3.5`)**: Attach [Sprint 2 Milestone `#3`](https://github.com/shthed/capy/milestone/3) + `epic:3` + work/platform labels (`feature`, `ui`, `web`, `android`) and write `**Agile Scope**: Tracked in #478 (...)` at the top of the PR (**never** write `Closes #478` or `Fixes #478` on partial `EPIC-3` PRs).
+- **Definition of Done (Immediate Deletion & Epic Issue Sync)**:
+  - Never leave `[x]` checkboxes in `TODO.md`. Delete finished `BUG-*` / `TASK-*` items (and their Section 1 pointers) in the same PR that ships them, check off `- [x] ... — #<pr>` on Parent Epic Tracking Issue [#478](https://github.com/shthed/capy/issues/478) via `gh issue edit 478`, and when a Story's final task ships, archive that Story into the collapsed **Shipped Epics & Stories** `<details>` section at the bottom of [`ROADMAP.md`](./ROADMAP.md) (closing `#478` only once `100%` of `EPIC-3` reaches Production `main`).
+- **Sprint 2 Rollup (`7` Ready `1-PR` Slices across `5` `EPIC-3` Stories)**:
+  - **`EPIC-3` Active Tasks (`US-3.1`--`US-3.5`)**: `~152k tokens` | `~71--102 min agent` (`~19.5--28.5 hrs human`).
 
 </details>
 
@@ -31,147 +27,111 @@ Focused **Sprint 1 Execution Queue** for the **Capy** monorepo ([`web/`](./web/)
 
 ## 1. Quick-Win Ready Queue (`<= 15 min` Agent / `3.8 Flash` or `Argon`)
 
-Self-contained Sprint 1 `1-PR` slices (`1--3` files, zero external dependencies) ready for immediate single-pass execution:
+Self-contained Sprint 2 `1-PR` slices (`1--4` files, zero external dependencies) ready for immediate single-pass execution:
 
-1. **`BUG-1`** ([Section 2](#bug-1-co-op-welcome-session-persistence--replay-rewind-unfill-sync)): Persist `StorageService.saveActiveState` on Co-op `WELCOME_STATE`, emit `'UNFILL'` on Replay Scrubber rewind, and add 2-peer `UNFILL` E2E coverage.
-2. **`BUG-2`** ([Section 2](#bug-2-ci-cloud-variable-injection--fast--2s-sanity-gate)): Wire `vars.VITE_GOOGLE_CLIENT_ID` & `vars.CAPY_PLAY_GAMES_APP_ID` in `deploy-branch.yml` and add a `< 2s` `npm run test:sanity` check.
-3. **`BUG-3`** ([Section 2](#bug-3-android-webview-pause--resume-lifecycle-guard-in-mainactivitykt)): Override `onPause()` / `onResume()` in `MainActivity.kt` calling `webView?.onPause()` / `webView?.onResume()` to suspend background timers and audio cleanly.
-4. **`TASK-2.1b`** ([`US-2.1`](#us-21-floating-precision-loupe-magnifier-for-micro-regions)): Add `showMagnifierLoupe: boolean` setting toggle in `SettingsModal.tsx` Controls and Playwright E2E touch-hold verification *(after `TASK-2.1a`)*.
-5. **`TASK-2.3b`** ([`US-2.3`](#us-23-zero-asset-procedural-asmr-web-audio-engine-melodic-layer)): Layer rising pentatonic Paint Mode streak notes, swatch-clear arpeggios, and 100% puzzle completion chimes into `SoundService.ts`.
+1. **`TASK-3.1b`** ([`US-3.1`](#us-31-daily-featured-puzzle-streak--completion-medals)): Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges.
+2. **`TASK-3.2c`** ([`US-3.2`](#us-32-inclusive-accessibility----colorblind-geometric-region-patterns)): Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures over active and hinted regions.
+3. **`TASK-3.5b`** ([`US-3.5`](#us-35-fat-finger-mode-near-miss-tap-assist--finger-reach-radius)): Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` presets/slider in `SettingsModal.tsx` with Playwright E2E near-miss tap tests *(after `TASK-3.5a`)*.
 
 ---
 
-## 2. Sprint 1 Priority 0: Verified Codebase, Lifecycle & CI Hygiene Bugs (`BUG-1`--`BUG-3`)
+## 2. Sprint 2 Feature Tasks: `EPIC-3` Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays
 
-### BUG-1: Co-op Welcome Session Persistence & Replay Rewind `UNFILL` Sync
+**Sprint 2 Feature Goal**: Deliver `EPIC-3` ([`ROADMAP.md`](./ROADMAP.md#1-epic-3-fat-finger-touch-assist-daily-retention-accessibility--replays-active-in-sprint-2)) so near-miss mobile taps are forgiven automatically, daily play builds streaks, colorblind geometric patterns make every palette shade distinguishable, and replays export directly to shareable video—100% offline.
 
-- **Description**: Fix two Co-op state-synchronization gaps in [`App.tsx`](./web/src/App.tsx): (1) `onWelcomeState` (`#L2859`) updates snapshot progress on join but omits `StorageService.saveActiveState(...)`, and (2) `handleResumeFromReplayStep` (`#L1514`) rewinds `undoneRegionIds` locally when clicking **Resume Here** on the Replay Scrubber without calling `emitCoopPaint('UNFILL', undoneRegionIds)`.
-- **Value**: Prevents joining Co-op peers from losing synced progress if they reload before painting a region, and keeps collaborator canvases 100% consistent after a timeline rewind.
-- **Why Now**: Verified defects in existing Co-op code with zero external dependencies; fixing them also completes the missing 2-peer initial-fill `UNFILL` E2E test coverage in `web/scripts/test.mjs`.
+### US-3.1: Daily Featured Puzzle Streak & Completion Medals
+
+- **Description**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint completion medals on top of [`DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts).
+- **Value**: Turns one-off daily puzzle launches into a rewarding consecutive-day coloring habit completely offline.
 - **Tasks**:
-  - **BUG-1** `[quick-win]`: Persist `StorageService.saveActiveState` inside `onWelcomeState`, broadcast `emitCoopPaint('UNFILL', Array.from(undoneRegionIds))` inside `handleResumeFromReplayStep`, and add a 2-peer `BroadcastChannel` initial-fill `UNFILL` + replay-rewind assertion in `web/scripts/test.mjs`.
+  - **TASK-3.1b** `[quick-win]`: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges in `DailyPuzzleService.ts`, `SettingsModal.tsx`, and `App.tsx`.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
-- **Type & Priority**: `Bug` | `Sprint 1 P0` | `priority: critical` | `domain: multiplayer, storage, testing`
-- **Complexity & Model**: `low` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~18,000 tokens` | `~9--13 min agent` (`~2--3 hrs human`)
-- **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`TESTING.md`](./TESTING.md)
-- **Acceptance Criteria**:
-  - Reloading a peer tab immediately after receiving `WELCOME_STATE` retains all merged regions in `capy_active_session_v8`.
-  - 2-peer Playwright `BroadcastChannel` E2E test verifies both single-step initial-fill Undo (`UNFILL`) and Replay Scrubber `Resume Here` rewind across peers.
-
-</details>
-
-### BUG-2: CI Cloud Variable Injection & Fast `< 2s` Sanity Gate
-
-- **Description**: Wire `VITE_GOOGLE_CLIENT_ID` and `CAPY_PLAY_GAMES_APP_ID` from GitHub Repository Variables (`vars.*`) into [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml) (matching [`CLOUD.md`](./CLOUD.md) documentation), and add a sub-2-second `npm run test:sanity` Node check (`version.ts`, `CHANGELOG.md` contract, markdown relative links, and zero-emoji/box-drawing guard) to `deploy-branch.yml` without launching Playwright Chromium in CI.
-- **Value**: Ensures repository cloud variables actually reach Web and Android builds when configured, and gives GitHub Actions an instant `< 2s` hygiene/changelog sanity check on code PRs without slowing down preview deployments.
-- **Why Now**: Prepares CI for automated `/goal` and `/swarm` sprints while keeping full Playwright browser E2E inside the Antigravity VM so PR previews stay fast.
-- **Tasks**:
-  - **BUG-2** `[quick-win]`: Add `env:` bindings for `vars.VITE_GOOGLE_CLIENT_ID` and `vars.CAPY_PLAY_GAMES_APP_ID` in `deploy-branch.yml`, create `web/scripts/sanity.mjs` (`npm run test:sanity`), and invoke it during the `Build & typecheck web app` CI step.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Bug` | `Sprint 1 P0` | `priority: high` | `domain: ci, testing`
-- **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Gemini 3.8 Flash` or `Gemini 4 Argon`
-- **Effort Estimate**: `~14,000 tokens` | `~7--10 min agent` (`~1.5--2.5 hrs human`)
-- **Target Files**: [`.github/workflows/deploy-branch.yml`](./.github/workflows/deploy-branch.yml), `web/scripts/sanity.mjs`, [`web/package.json`](./web/package.json), [`TESTING.md`](./TESTING.md), [`CLOUD.md`](./CLOUD.md)
-- **Acceptance Criteria**:
-  - `npm run test:sanity` completes in `< 2s` with zero browser startup, verifying `APP_VERSION` / `APP_VERSION_CODE`, `CHANGELOG.md` formatting, relative `.md` links, and zero emojis/box-drawing characters.
-  - `deploy-branch.yml` builds cleanly when `vars.VITE_GOOGLE_CLIENT_ID` and `vars.CAPY_PLAY_GAMES_APP_ID` are unset (empty-string fallback) and injects them when set.
-
-</details>
-
-### BUG-3: Android WebView Pause / Resume Lifecycle Guard in `MainActivity.kt`
-
-- **Description**: Override `onPause()` and `onResume()` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) (`#L632`) to call `webView?.onPause()` and `webView?.onResume()` alongside unit verification in `CapyAndroidBridgeTest.kt`.
-- **Value**: Guarantees Android WebView rendering, `requestAnimationFrame` loops, and Web Audio (`SoundService.ts`, shipped in `#472`) suspend cleanly at the native OS layer whenever the app is backgrounded or the screen locks.
-- **Why Now**: `SoundService.ts` is now active in production (`v2.5.9`), and upcoming `EPIC-2` canvas animations (`US-2.1`, `US-2.4`) rely on strict zero-battery drain when backgrounded on Android.
-- **Tasks**:
-  - **BUG-3** `[quick-win]`: Add `onPause()` / `onResume()` WebView lifecycle forwarding in `MainActivity.kt` and update `APP.md` lifecycle documentation.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Bug` | `Sprint 1 P0` | `priority: high` | `domain: android`
-- **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Gemini 3.8 Flash` or `Gemini 4 Argon`
-- **Effort Estimate**: `~12,000 tokens` | `~6--9 min agent` (`~1.5--2.5 hrs human`)
-- **Target Files**: [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt`](./app/src/test/java/com/capypaint/capy/CapyAndroidBridgeTest.kt), [`APP.md`](./APP.md)
-- **Acceptance Criteria**:
-  - `./gradlew app:testDebugUnitTest` and `./gradlew app:assembleDebug` pass cleanly (locally or via GitHub Actions `Build & Test`), and foreground resume restores responsive canvas input and audio playback.
-
-</details>
-
----
-
-## 3. Sprint 1 Feature Tasks: `EPIC-2` Mobile Touch Precision & Tactile Sensory Polish
-
-**Sprint 1 Feature Goal**: Finish `EPIC-2` ([`ROADMAP.md`](./ROADMAP.md#1-epic-2-mobile-touch-precision--tactile-sensory-polish-active-in-sprint-1)) so mobile micro-region targeting, melodic ASMR audio, and region fill blooms feel effortless and tactile.
-
-### US-2.1: Floating Precision Loupe Magnifier for Micro-Regions
-
-- **Description**: Render an optional floating circular magnifier lens (`showMagnifierLoupe`) offset `72px` above the active finger during press-and-hold or Paint Mode drags on [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
-- **Value**: Eliminates mobile "fat-finger" occlusion so players can target tiny `< 50px` micro-regions accurately without constantly zooming to `12x` and back out.
-- **Why Now**: Highest-impact mobile touch usability upgrade remaining in `EPIC-2`.
-- **Tasks**:
-  - **TASK-2.1a**: Render a zero-allocation `2.5x` magnified `compositeCanvasRef` cutout + crosshair lens in `PuzzleCanvas.tsx` (flipping cleanly below/beside top HUD edges).
-  - **TASK-2.1b** `[quick-win]`: Add `showMagnifierLoupe: boolean` setting toggle in `SettingsModal.tsx` Controls and Playwright E2E touch-hold verification.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Story` | `EPIC-2` | `priority: critical` | `domain: canvas, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`2.1a` `/plan`), `Gemini 4 Argon` or `3.8 Flash` (`2.1b`)
-- **Effort Estimate**: `~40,000 tokens` | `~18--26 min agent` (`~5--7 hrs human`)
-- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
-- **Acceptance Criteria**:
-  - Reuses existing offscreen `compositeCanvasRef` via `ctx.drawImage` circular clip with zero per-frame `OffscreenCanvas` or heap object allocations inside `requestAnimationFrame`.
-  - Automatically repositions when within `96px` of the top viewport edge so the lens is never clipped offscreen.
-
-</details>
-
-### US-2.3: Zero-Asset Procedural ASMR Web Audio Engine (Melodic Layer)
-
-- **Description**: Extend [`SoundService.ts`](./web/src/services/SoundService.ts) (`#472`) with rising pentatonic Paint Mode streak notes, warm swatch-completion chord arpeggios, and 100% puzzle-completion chimes.
-- **Value**: Rewards continuous Paint Mode streaks and color completions with warm, zero-asset procedural harmony that pairs with LRA haptics.
-- **Why Now**: `SoundService.ts` woodblock taps and Settings volume controls are already live (`v2.5.9`); `TASK-2.3b` completes `US-2.3` in a single slice.
-- **Tasks**:
-  - **TASK-2.3b** `[quick-win]`: Layer harmonic pentatonic streak progression during Paint Mode drags, warm swatch-clear arpeggios, and 100% puzzle completion chimes into `SoundService.ts` and `App.tsx`.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Story` | `EPIC-2` | `priority: critical` | `domain: audio, ui`
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui`
 - **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~22,000 tokens` | `~10--15 min agent` (`~2.5--3.5 hrs human`)
-- **Target Files**: [`web/src/services/SoundService.ts`](./web/src/services/SoundService.ts), [`web/src/App.tsx`](./web/src/App.tsx), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Effort Estimate**: `~20,000 tokens` | `~9--13 min agent` (`~2.5--3.5 hrs human`)
+- **Target Files**: [`web/src/services/DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Rising pentatonic streak index resets cleanly after gesture idle (`> 450ms`), and swatch/puzzle completion arpeggios respect `soundEnabled`, `soundVolume`, and `document.hidden` auto-suspend.
-  - Archive `US-2.3` into the collapsed **Shipped Epics & Stories** section of [`ROADMAP.md`](./ROADMAP.md) when merged.
+  - Consecutive UTC-day completions increment streak accurately while preserving Relaxed vs. Zero-Hint medal badges offline, covered by unit and Playwright E2E assertions.
 
 </details>
 
-### US-2.4: Zero-Allocation Region Fill Bloom & Swatch Shimmer
+### US-3.2: Inclusive Accessibility -- Colorblind Geometric Region Patterns
 
-- **Description**: Animate region fills with a `180ms` radial ink-bloom and highlight newly completed palette swatches with a `400ms` shimmer wave across matching regions in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
-- **Value**: Makes every region tap feel alive and gives clear visual celebration when finishing all regions of a color number without interrupting flow.
-- **Why Now**: Completes `EPIC-2` and the core sensory triad (visual bloom + procedural sound + Android LRA haptics).
+- **Description**: Add geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active and hinted regions alongside existing `reducedMotion` and desktop keyboard gameplay shortcuts.
+- **Value**: Ensures players with deuteranopia, protanopia, or tritanopia can distinguish similar palette shades comfortably without relying solely on hue contrast.
 - **Tasks**:
-  - **TASK-2.4a**: Create a pre-allocated typed-array fill-animation ring buffer (mirroring `CoopRippleBuffer.ts`) driving a `180ms` radial clip bloom in `PuzzleCanvas.tsx`.
-  - **TASK-2.4b**: Trigger a `400ms` celebratory highlight pulse across completed-swatch centroids when a palette color reaches `0` remaining regions.
+  - **TASK-3.2c** `[quick-win]`: Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures (dots, stripes, crosshatch, checkerboard) over active and hinted regions.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
-- **Type & Priority**: `Story` | `EPIC-2` | `priority: critical` | `domain: canvas`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`2.4a`), `Gemini 4 Argon` (`2.4b`)
-- **Effort Estimate**: `~42,000 tokens` | `~20--28 min agent` (`~5--7 hrs human`)
-- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/engine/CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: a11y, canvas, ui`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~17,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Zero heap allocations (`Float32Array` / `Int32Array` fixed ring buffer) during `requestAnimationFrame`, returning to `0%` CPU idle once the `180ms` / `400ms` window expires.
-  - Archive `US-2.4` (and `EPIC-2` once `US-2.1` + `US-2.3` are also merged) into the collapsed **Shipped Epics & Stories** section of [`ROADMAP.md`](./ROADMAP.md).
+  - `CanvasPattern` tiles are generated once at setup/theme change—zero per-frame pattern creation inside `requestAnimationFrame`.
+
+</details>
+
+### US-3.3: Shareable Timelapse Replay Video (`.mp4` / `.webm`) Export
+
+- **Description**: Add an "Export Timelapse Video" button in [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx) recording the puzzle's chronological fill animation via `HTMLCanvasElement.captureStream(60)` + `MediaRecorder` and sharing via `NativeBridge.exportOrShareFile`.
+- **Value**: Turns Capy's YouTube-style replay scrubber into a one-tap shareable timelapse video with zero server encoding cost.
+- **Tasks**:
+  - **TASK-3.3a**: Build `web/src/services/ReplayVideoExporter.ts` (`MediaRecorder` `video/mp4` / `video/webm` fallback + progress bar + clean cancellation) rendering locked-frame timelapse playback.
+  - **TASK-3.3b**: Wire an Export Video button in `ReplayControls.tsx` to `NativeBridge.exportOrShareFile` with feature-detection fallback.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: export, canvas`
+- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~45,000 tokens` | `~22--30 min agent` (`~6--9 hrs human`)
+- **Target Files**: `web/src/services/ReplayVideoExporter.ts`, [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Prefers `video/mp4;codecs=avc1` where supported with automatic `video/webm;codecs=vp9` fallback, releasing all `MediaStreamTrack` handles on finish or cancel.
+
+</details>
+
+### US-3.4: Milestone Achievement Toasts & CRDT Lifetime Stats Sync
+
+- **Description**: Layer non-blocking milestone achievement unlock toasts, monotonic CRDT cloud stat sync, and optional Play Games hooks onto [`PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts) (`capy_player_stats_v1`).
+- **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes and keeps lifetime totals synced monotonically across devices.
+- **Tasks**:
+  - **TASK-3.4b**: Add milestone achievement unlock toasts, monotonic CRDT stat merging in `ProviderRegistry.ts` / `CloudProviderDrivers.ts`, and defensive no-op `NativeBridge.unlockAchievement` hooks.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: ui, cloud, android`
+- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
+- **Effort Estimate**: `~32,000 tokens` | `~14--20 min agent` (`~4--6 hrs human`)
+- **Target Files**: [`web/src/services/PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Stat counters merge monotonically (`Math.max` / set-count union) across devices so syncing an older offline tab never decrements lifetime totals.
+
+</details>
+
+### US-3.5: Fat-Finger Mode (Near-Miss Tap Assist) & Finger Reach Radius
+
+- **Description**: Add an independent **Fat-Finger Tap Assist** toggle (`fatFingerAssist`) paired with a configurable **Touch Reach Radius** setting (`touchReachRadiusPx`, `8px`--`40px` screen CSS pixels with `Compact 12px` / `Standard 22px` / `Large 34px` presets) that snaps near-miss mobile taps onto intended tiny micro-regions.
+- **Value**: Eliminates frustrating dead taps when a fingertip lands `2`--`8px` off a `< 50px` micro-region onto a border or filled neighbor.
+- **Tasks**:
+  - **TASK-3.5a**: Implement zero-allocation radial near-tap hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`) scaling `touchReachRadiusPx / totalScreenScale` dynamically across zoom levels.
+  - **TASK-3.5b** `[quick-win]`: Add `fatFingerAssist: boolean` and `touchReachRadiusPx: number` (`Compact 12px` / `Standard 22px` / `Large 34px` presets + `8px`--`40px` slider) in `SettingsModal.tsx` with Playwright E2E near-miss micro-region tap tests.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Story` | `EPIC-3` | `priority: high` | `domain: canvas, gestures, ui`
+- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon` (`3.5a`), `Gemini 3.8 Flash` (`3.5b`)
+- **Effort Estimate**: `~38,000 tokens` (`~22k` + `~16k`) | `~18--25 min agent` (`~5--7 hrs human`)
+- **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
+- **Acceptance Criteria**:
+  - Direct hits on playable unfilled regions remain `O(1)`; radial fallback scans integer offsets inside `Math.min(64, touchReachRadiusPx / totalScreenScale)` using scalar distance registers with zero heap allocations.
 
 </details>

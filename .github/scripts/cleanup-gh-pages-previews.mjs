@@ -153,7 +153,7 @@ const findLegacyPreviewDirectories = (rootDir) => {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isDirectory())
-    .filter((entry) => !['.git', 'pull', 'assets', 'web1'].includes(entry.name))
+    .filter((entry) => !['.git', 'pull', 'beta', 'assets', 'web1'].includes(entry.name))
     .filter((entry) => entry.name === sanitize(entry.name))
     .map((entry) => {
       const absolutePath = path.join(rootDir, entry.name);

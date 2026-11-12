@@ -1,5 +1,15 @@
-### 2.5 - 2026-11-11
+### 2.7 - 2026-11-12 (Alpha)
 
+- Fix Co-op save and rewind sync, Android large cloud saves, CRDT reset epochs, and mobile replay controls [#484](https://github.com/shthed/capy/pull/484)
+
+### 2.6 - 2026-11-12
+
+- Add capypaint.com Cloudflare Worker, Co-op relay security hardening, clean-room export, and dual-approval CI gate [#482](https://github.com/shthed/capy/pull/482)
+
+### 2.5 - 2026-11-11 (Production, Beta)
+
+- Document 3-artefact roadmap triad, GitHub Epic Issue CLI playbooks, and sprint lifecycle [#483](https://github.com/shthed/capy/pull/483)
+- Add 3-tier Alpha/Beta/Production release pipeline, channel switcher, and GitHub Agile tracking [#481](https://github.com/shthed/capy/pull/481)
 - Add sub-tile parent breadcrumbs, printable SVG sheets, and Co-op undo sync [#475](https://github.com/shthed/capy/pull/475)
 - Split strategic ROADMAP.md from Sprint 1 TODO.md and add Gemini 4 sprint playbooks [#473](https://github.com/shthed/capy/pull/473)
 - Add daily featured puzzle, reduced motion, keyboard shortcuts, and lifetime stats [#474](https://github.com/shthed/capy/pull/474)

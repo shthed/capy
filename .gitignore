@@ -27,3 +27,12 @@ Thumbs.db
 *.aab
 *.aar
 /inspect/
+
+# Cloudflare Workers Local State & Secrets
+.wrangler/
+.dev.vars*
+.env*
+!.env.example
+
+# AI Agent Coordination & Scratch Directories
+.agents/
