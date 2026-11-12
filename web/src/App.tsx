@@ -11,6 +11,7 @@ import {
   SampleArtwork,
   SavedSnapshot,
   UserSettings,
+  computeProgressPercentage,
 } from './types';
 import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
 import { NativeBridge } from './services/NativeBridge';
@@ -2720,7 +2721,7 @@ export const App: React.FC = () => {
   const activeTitle = activeSave?.title || 'Capy';
   const totalCount = puzzle?.regions.length || 0;
   const filledCount = filledRegionIds.size;
-  const progressPercentage = totalCount > 0 ? Math.round((filledCount * 100) / totalCount) : 0;
+  const progressPercentage = computeProgressPercentage(filledCount, totalCount);
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
 
   // Displayed regions on canvas (animated slice during Replay mode, or full filled set)
