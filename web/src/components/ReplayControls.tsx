@@ -149,7 +149,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
         onPointerLeave={() => {
           if (!isScrubbing) setHoverStep(null);
         }}
-        className="relative flex-1 min-w-[140px] h-7 flex items-center cursor-pointer select-none touch-none group"
+        className="relative flex-1 min-w-[44px] sm:min-w-[140px] h-7 flex items-center cursor-pointer select-none touch-none group"
       >
         {/* YouTube-style hover / scrub preview pill above thumb */}
         {previewStep !== null && (
@@ -224,7 +224,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
         <div
           data-testid="replay-controls-window"
           data-minimized="true"
-          className="pointer-events-auto w-full max-w-2xl flex items-center gap-2 sm:gap-2.5 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="pointer-events-auto w-full max-w-2xl flex items-center gap-1 sm:gap-2.5 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2 sm:px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
         >
           {/* Play / Pause / Replay */}
           <button
@@ -254,7 +254,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             aria-label="Change Replay Speed"
             title="Change Replay Speed"
             data-testid="replay-speed-btn"
-            className="inline-flex items-center gap-0.5 px-2 py-1 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
+            className="inline-flex items-center gap-0.5 px-1.5 sm:px-2 py-1 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
           >
             <FastForward size={11} />
             <span>{replaySpeed}x</span>
@@ -356,7 +356,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
             aria-label="Exit Replay"
             title="Exit Replay"
             data-testid="replay-exit-btn"
-            className="p-1 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
+            className="w-6 h-6 sm:w-7 sm:h-7 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
           >
             <X size={14} />
           </button>

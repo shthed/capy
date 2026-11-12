@@ -2992,6 +2992,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <span>Export All</span>
                         </button>
                       )}
+
+                      {onResetProgress && (
+                        <button
+                          type="button"
+                          onClick={onResetProgress}
+                          title="Reset Current Puzzle Progress"
+                          data-testid="reset-progress-btn"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                        >
+                          <RotateCcw size={13} className="text-amber-400" />
+                          <span>Reset Progress</span>
+                        </button>
+                      )}
                     </div>
 
                     {snapshots.length > 0 && (
