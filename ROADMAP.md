@@ -38,7 +38,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ## 1. `EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish (`Active in Sprint 1`)
 
-**Epic Goal**: Make core region tapping, micro-detail targeting, zooming, and stroke feedback feel effortless and deeply satisfying on phones and tablets. *(Active Sprint 1 task specs live in [`TODO.md`](./TODO.md); `US-2.2` shipped in [#472](https://github.com/shthed/capy/pull/472)).*
+**Epic Goal**: Make core region tapping, micro-detail targeting, zooming, and stroke feedback feel effortless and deeply satisfying on phones and tablets. *(GitHub Tracking Issue: [#477](https://github.com/shthed/capy/issues/477) | Milestone: [Sprint 1](https://github.com/shthed/capy/milestone/2) | Active Sprint 1 task specs live in [`TODO.md`](./TODO.md); `US-2.2` shipped in [#472](https://github.com/shthed/capy/pull/472)).*
 
 ### US-2.1: Floating Precision Loupe Magnifier for Micro-Regions
 
@@ -65,7 +65,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ## 2. `EPIC-3`: Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays (`Ready for Sprint 2`)
 
-**Epic Goal**: Forgive near-miss mobile taps on tiny micro-regions without requiring pixel-perfect precision, give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend.
+**Epic Goal**: Forgive near-miss mobile taps on tiny micro-regions without requiring pixel-perfect precision, give players a reason to return daily, make every puzzle accessible regardless of color vision or motor preference, and turn replays into shareable videos—100% client-side with zero backend. *(GitHub Tracking Issue: [#478](https://github.com/shthed/capy/issues/478) | Milestone: [Sprint 2](https://github.com/shthed/capy/milestone/3)).*
 
 ### US-3.1: Daily Featured Puzzle Streak & Completion Medals
 
@@ -179,7 +179,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ## 3. `EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready for Sprint 3`)
 
-**Epic Goal**: Complete Capy's signature offline creative workflows—focal-point sub-tile exploration, physical paper coloring sheets, and expressive local Co-op—before introducing external backend infrastructure.
+**Epic Goal**: Complete Capy's signature offline creative workflows—focal-point sub-tile exploration, physical paper coloring sheets, and expressive local Co-op—before introducing external backend infrastructure. *(GitHub Tracking Issue: [#479](https://github.com/shthed/capy/issues/479) | Milestone: [Sprint 3](https://github.com/shthed/capy/milestone/4)).*
 
 ### US-4.1: Focal-Point Quadtree Sub-Tiles & Parent Breadcrumbs
 
@@ -248,7 +248,7 @@ Strategic, outcome-driven product roadmap for the **Capy** monorepo ([`web/`](./
 
 ## 4. `EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)
 
-**Epic Goal**: Connect Capy's hexagonal cloud, room-sync, and AI provider interfaces (`ProviderRegistry.ts`) to live production credentials and lightweight serverless endpoints when ready for public store and cross-network scale. *(Do not pull `EPIC-5` stories into `TODO.md` until their stated **Unblock Prerequisite** is satisfied).*
+**Epic Goal**: Connect Capy's hexagonal cloud, room-sync, and AI provider interfaces (`ProviderRegistry.ts`) to live production credentials and lightweight serverless endpoints when ready for public store and cross-network scale. *(GitHub Tracking Issue: [#480](https://github.com/shthed/capy/issues/480) | Do not pull `EPIC-5` stories into `TODO.md` until their stated **Unblock Prerequisite** is satisfied).*
 
 ### US-5.1: Production Google OAuth, Play Games IDs & Verified App Links
 
@@ -378,20 +378,20 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EP
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#475)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#481)</summary>
 
-- **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish*)**:
+- **Shipped Slices from `EPIC-4` (*Serverless Infinite Zoom, Printable Art & Local Co-op Polish* -- [#479](https://github.com/shthed/capy/issues/479))**:
   - **Infinite Zoom Parent Breadcrumbs (`TASK-4.1a`), Printable Vector `.svg` Coloring Sheets (`TASK-4.2a`) & Co-op `UNFILL_EVENT` Undo Sync (`TASK-4.3a`)** -- [#475](https://github.com/shthed/capy/pull/475)
-- **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays*)**:
+- **Shipped Slices from `EPIC-3` (*Fat-Finger Touch Assist, Daily Retention, Accessibility & Replays* -- [#478](https://github.com/shthed/capy/issues/478))**:
   - **Daily Featured Puzzle (`TASK-3.1a`), Reduced Motion (`TASK-3.2a`), Desktop Keyboard Shortcuts (`TASK-3.2b`) & Lifetime Player Stats (`TASK-3.4a`)** -- [#474](https://github.com/shthed/capy/pull/474)
-- **Shipped Stories from `EPIC-2` (*Mobile Touch Precision & Tactile Sensory Polish*)**:
+- **Shipped Stories from `EPIC-2` (*Mobile Touch Precision & Tactile Sensory Polish* -- [#477](https://github.com/shthed/capy/issues/477))**:
   - **`US-2.2`: Custom Zoom Sensitivity, Top-Bar Scale Pill & Magnetic Scale Detents** (plus `TASK-2.3a` Web Audio woodblock tap synth) -- [#472](https://github.com/shthed/capy/pull/472)
-- **`EPIC-1`: Unified Web + Android Monorepo, Gesture Engine, `.capy` v2 Codec, Replay Scrubber & Cloud/Co-op Foundation (`Shipped v1.0--v2.5`)**:
+- **`EPIC-1`: Unified Web + Android Monorepo, Gesture Engine, `.capy` v2 Codec, Replay Scrubber & Cloud/Co-op Foundation (`Shipped v1.0--v2.5` | Tracking Issue [#476](https://github.com/shthed/capy/issues/476) | [Sprint 0](https://github.com/shthed/capy/milestone/1))**:
   - **`US-1.1`: Unified Single-Codebase Monorepo (`web/`, `app/`) & Automated Pages Preview CI** -- [#431](https://github.com/shthed/capy/pull/431), [#432](https://github.com/shthed/capy/pull/432), [#434](https://github.com/shthed/capy/pull/434), [#436](https://github.com/shthed/capy/pull/436), [#438](https://github.com/shthed/capy/pull/438), [#440](https://github.com/shthed/capy/pull/440), [#452](https://github.com/shthed/capy/pull/452)
   - **`US-1.2`: 6-Mode Touch Gesture Engine, Free Colour Mode & Live Segmentation Telemetry** -- [#433](https://github.com/shthed/capy/pull/433), [#439](https://github.com/shthed/capy/pull/439), [#442](https://github.com/shthed/capy/pull/442), [#444](https://github.com/shthed/capy/pull/444), [#454](https://github.com/shthed/capy/pull/454), [#455](https://github.com/shthed/capy/pull/455), [#456](https://github.com/shthed/capy/pull/456), [#457](https://github.com/shthed/capy/pull/457)
   - **`US-1.3`: Chronological Undo/Redo & YouTube-Style Interactive Replay Scrubber** -- [#446](https://github.com/shthed/capy/pull/446), [#447](https://github.com/shthed/capy/pull/447), [#448](https://github.com/shthed/capy/pull/448), [#463](https://github.com/shthed/capy/pull/463), [#464](https://github.com/shthed/capy/pull/464)
   - **`US-1.4`: Saves Gallery Modernization, `.capy` v2 Binary Archive & Instant Pre-Baked Startup** -- [#449](https://github.com/shthed/capy/pull/449), [#458](https://github.com/shthed/capy/pull/458), [#459](https://github.com/shthed/capy/pull/459), [#462](https://github.com/shthed/capy/pull/462)
   - **`US-1.5`: Modular `CloudProviderDriver` Sync (`GoogleCloudDriver`, `PlayGamesAndroidDriver`), `#s=<token>` Links & Simultaneous Co-op** -- [#460](https://github.com/shthed/capy/pull/460), [#461](https://github.com/shthed/capy/pull/461)
-  - **`US-1.6`: Core Reliability Audit Fixes, Pixel API 33+ Haptics & Lean Agile Documentation Foundation** -- [#465](https://github.com/shthed/capy/pull/465), [#466](https://github.com/shthed/capy/pull/466), [#467](https://github.com/shthed/capy/pull/467), [#468](https://github.com/shthed/capy/pull/468), [#469](https://github.com/shthed/capy/pull/469), [#470](https://github.com/shthed/capy/pull/470), [#471](https://github.com/shthed/capy/pull/471)
+  - **`US-1.6`: Core Reliability Audit Fixes, Pixel API 33+ Haptics, 3-Tier `Alpha -> Beta -> Production` Pipeline & Lean Agile Foundation** -- [#465](https://github.com/shthed/capy/pull/465), [#466](https://github.com/shthed/capy/pull/466), [#467](https://github.com/shthed/capy/pull/467), [#468](https://github.com/shthed/capy/pull/468), [#469](https://github.com/shthed/capy/pull/469), [#470](https://github.com/shthed/capy/pull/470), [#471](https://github.com/shthed/capy/pull/471), [#473](https://github.com/shthed/capy/pull/473), [#481](https://github.com/shthed/capy/pull/481)
 
 </details>

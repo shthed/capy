@@ -6,8 +6,9 @@
 
 **Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages.
 
-- **[Play Capy in Your Browser](https://shthed.github.io/capy/)**
-- **[Download the Android APK](https://shthed.github.io/capy/capy.apk)**
+- **[Play Capy in Your Browser (Stable)](https://shthed.github.io/capy/)**
+- **[Download the Android APK (Stable)](https://shthed.github.io/capy/capy.apk)**
+- **[Try Upcoming Features on the Beta Channel](https://shthed.github.io/capy/beta/)** ([Beta Android APK](https://shthed.github.io/capy/beta/capy.apk) | [Official GitHub Releases](https://github.com/shthed/capy/releases))
 - **[Read the Privacy Policy](https://shthed.github.io/capy/privacy-policy.html)**
 
 ---

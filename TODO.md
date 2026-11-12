@@ -1,6 +1,6 @@
 # Capy Active Sprint Backlog -- Ready-for-Dev Tasks (`TODO.md`)
 
-Focused **Sprint 1 Execution Queue** for the **Capy** monorepo ([`web/`](./web/) and [`app/`](./app/)). Only unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices approved for immediate development enter `TODO.md`. Strategic Epics (`EPIC-3`--`EPIC-5`), future User Stories, external dependency gates, Platform Icebox (`ICE-*`), and shipped milestones live in [`ROADMAP.md`](./ROADMAP.md) (full workflow in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
+Focused **Sprint 1 Execution Queue** ([Milestone #2](https://github.com/shthed/capy/milestone/2) | `EPIC-2` Tracking Issue [#477](https://github.com/shthed/capy/issues/477)) for the **Capy** monorepo ([`web/`](./web/) and [`app/`](./app/)). Only unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices approved for immediate development enter `TODO.md`, and all daily feature/bugfix PRs branch from and target **`beta`** (`--base beta`, deploying to `https://shthed.github.io/capy/beta/`) so live production players on `main` are never disrupted. Strategic Epics (`EPIC-3`--`EPIC-5`), future User Stories, external dependency gates, Platform Icebox (`ICE-*`), and shipped milestones live in [`ROADMAP.md`](./ROADMAP.md) (full workflow in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard)).
 
 **Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
@@ -13,13 +13,13 @@ Focused **Sprint 1 Execution Queue** for the **Capy** monorepo ([`web/`](./web/)
 <summary>Sprint 1 Entry Gate, Hybrid Execution Rules & Totals</summary>
 
 - **Strict Ready-for-Dev Gate**:
-  - A task enters `TODO.md` **only** when it has zero external backend/credential blockers, verified source file/symbol names against `main`, and deterministic acceptance criteria testable via `npm test` or `./gradlew app:testDebugUnitTest`.
-  - Future Epics (`EPIC-3`, `EPIC-4`), externally blocked cloud/AI stories (`EPIC-5`), and `ICE-*` remain in [`ROADMAP.md`](./ROADMAP.md) until promoted at sprint replenishment.
-- **Hybrid Automated Sprint Execution**:
-  - **Single-Task Chat (`1-Task = 1-PR`)**: Pick one `BUG-*` or `TASK-*` item in a fresh `#NNN` chat, run full local verification (`npm run lint && npm run build && npm test`), open the PR, and wait for human merge approval.
-  - **Automated Story / Sprint-Slice Run (`/goal` or `/swarm`)**: Execute a cohesive multi-task story (e.g., `BUG-1`--`BUG-3` or `US-2.1`) onto an `automation/sprint-*` or `feature/*` branch using atomic per-task commits, verify the full Playwright + JUnit4 suite locally in the Antigravity VM, and open one PR with one live preview for human merge approval.
-- **Definition of Done (Immediate Deletion)**:
-  - Never leave `[x]` checkboxes in `TODO.md`. Delete finished `BUG-*` / `TASK-*` items (and their Section 1 pointers) in the same PR that ships them; when a Story's final task ships, archive that Story into the collapsed **Shipped Epics & Stories** `<details>` section at the bottom of [`ROADMAP.md`](./ROADMAP.md).
+  - A task enters `TODO.md` **only** when it has zero external backend/credential blockers, verified source file/symbol names against `beta`/`main`, and deterministic acceptance criteria testable via `npm test` or `./gradlew app:testDebugUnitTest`.
+  - Future Epics (`EPIC-3` [#478](https://github.com/shthed/capy/issues/478), `EPIC-4` [#479](https://github.com/shthed/capy/issues/479)), externally blocked cloud/AI stories (`EPIC-5` [#480](https://github.com/shthed/capy/issues/480)), and `ICE-*` remain in [`ROADMAP.md`](./ROADMAP.md) until promoted at sprint replenishment.
+- **Hybrid Automated Sprint Execution (`feature/* -> beta -> main`)**:
+  - **Single-Task Chat (`1-Task = 1-PR` -> `beta`)**: Pick one `BUG-*` or `TASK-*` item in a fresh `#NNN` chat branched off `origin/beta`, run full local verification (`npm run lint && npm run build && npm test`), open the PR with `--base beta` + Sprint 1 Milestone + `epic:*` label, and wait for human merge approval.
+  - **Automated Story / Sprint-Slice Run (`/goal` or `/swarm` -> `beta`)**: Execute a cohesive multi-task story (e.g., `BUG-1`--`BUG-3` or `US-2.1`) onto an `automation/sprint-*` or `feature/*` branch off `origin/beta` using atomic per-task commits, verify the full Playwright + JUnit4 suite locally in the Antigravity VM, and open one PR targeting `beta` for human merge approval.
+- **Definition of Done (Immediate Deletion & Epic Issue Sync)**:
+  - Never leave `[x]` checkboxes in `TODO.md`. Delete finished `BUG-*` / `TASK-*` items (and their Section 1 pointers) in the same PR that ships them, check off the shipped item on its parent GitHub Epic Tracking Issue (`#477`), and when a Story's final task ships, archive that Story into the collapsed **Shipped Epics & Stories** `<details>` section at the bottom of [`ROADMAP.md`](./ROADMAP.md).
 - **Sprint 1 Rollup (`8` Ready `1-PR` Slices: `3` `[quick-win]` Bugs + `5` `EPIC-2` Tasks)**:
   - **Priority 0 Bugs (`BUG-1`--`BUG-3`)**: `~44k tokens` | `~22--32 min agent` (`~5--8 hrs human`).
   - **`EPIC-2` Remaining Tasks (`US-2.1`, `US-2.3`, `US-2.4`)**: `~104k tokens` | `~48--69 min agent` (`~12.5--17.5 hrs human`).

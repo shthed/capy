@@ -8,7 +8,7 @@ This document outlines the testing strategy, tooling rationale, unified end-to-e
 1. [Tooling Evaluation: Why Playwright + Vite SSR Is Optimal](#1-tooling-evaluation-why-playwright--vite-ssr-is-optimal)
 2. [Test Suites & Commands Across Targets](#2-test-suites--commands-across-targets)
 3. [Automated Gesture & Canvas Feature Testing Patterns](#3-automated-gesture--canvas-feature-testing-patterns)
-4. [Continuous Integration Pipeline (`deploy-branch.yml`)](#4-continuous-integration-pipeline-deploy-branchyml)
+4. [Continuous Integration Pipeline (`deploy-branch.yml` & `release.yml`)](#4-continuous-integration-pipeline-deploy-branchyml--releaseyml)
 
 ---
 
@@ -52,7 +52,7 @@ Run from `web/`:
      - Bit-exact `CapyCodec` scanline RLE + LEB128 varints, `.capy` v2 Gzip single/archive framing (including `SavedSnapshot.parentSnapshotId` preservation), and `< 2 KB` `ProgressDeltaV2` CRDT Set-Union + LWW merges.
      - `SoundService` SSR no-op safety, volume clamping, `25ms` drag rate-throttling, and `visibilitychange` / `blur` auto-suspend, alongside `PuzzleCanvas` magnetic zoom detent (`applyZoomSnapDetent`) and stop-stepping (`getNextZoomStop`) math.
      - `DailyPuzzleService` (`getDailyFeaturedPuzzle`) deterministic UTC date seeding across repeated calls and artwork/preset variation across consecutive dates, `PlayerStatsService` (`capy_player_stats_v1`) SSR load/increment/persistence, negative clamping, and monotonic `mergeLifetimeStats` merging, plus `SvgPrintExporter` (`buildPrintableColoringSvg`) vector `<path>` region boundary tracing, centroid `<text>` labels, swatch legend items, and XML special-character escaping (`&`, `<`, `>` , `"`).
-     - `version.ts` (`APP_VERSION`, `APP_VERSION_CODE`) synchronization with `web/package.json` and `CHANGELOG.md` (including zero preamble, compact `### X.Y[.Z] - YYYY-MM-DD` headings, single-bullet-per-PR format, zero category sub-headings or nested bullets, and full `0.1.0`+ PR history coverage).
+     - `version.ts` (`APP_VERSION`, `APP_VERSION_CODE`, `resolveReleaseChannel`) synchronization with `web/package.json` and `CHANGELOG.md` (including zero preamble, compact `### X.Y[.Z] - YYYY-MM-DD [(Alpha|Beta|Production|Production, Beta)]` headings, active channel-marker uniqueness invariants (`exactly 1` `Production`, `<= 1` `Beta`, `<= 1` `Alpha`), single-bullet-per-PR format, zero category sub-headings or nested bullets, and full `0.1.0`+ PR history coverage).
   2. **Part 2.1 -- Instant Boot & PWA Shell**:
      - Verifies `/manifest.webmanifest`, `/privacy-policy.html`, `capy-cache-v2` Service Worker registration, and instant 4-sample `sample_saves.capy` bootstrap with zero worker spawn.
   3. **Part 2.2 -- Canvas Gameplay & Gestures**:
@@ -63,6 +63,8 @@ Run from `web/`:
      - Verifies `app-version-badge`, preset background reset (`Charcoal`), Settings tab persistence (`capy_last_settings_tab`), Gallery search & category filtering, and moderated Community Puzzle Ideas.
   6. **Part 2.5 -- Share Links, Simultaneous Co-op, Saves, Resilience, Controls, Daily Puzzle, A11y, Stats & Printable SVG (`BF-1`, `BF-2`, `BF-6`)**:
      - Verifies `< 2 KB` `#s=<token>` share URL restoration in an isolated browser context, 2-peer `BroadcastChannel` Co-op stroke sync, Free Colour repaint first-fill chronology preservation and Co-op undo/redo repaint broadcast (`BF-1`), 2-peer `BroadcastChannel` Co-op first-time-fill Undo synchronization via `'UNFILL_EVENT'` (`undo-btn`), Saves Detail/Thumbnails view switching, custom photo upload into IndexedDB `capy_game_storage_v8` (`images` & `puzzles` stores), `.capy` v2 binary export, printable monochrome vector `.svg` coloring sheet download (`export-printable-svg-btn`), Infinite Zoom detail sub-tile `parentSnapshotId` persistence, one-tap `topbar-parent-puzzle-btn` parent navigation + saved viewport zoom restoration + parent-deletion breadcrumb cleanup, 100% offline PWA reload, `ResizeObserver` canvas resize clamping (`BF-2`), `customPalette` eviction recovery (`BF-6`, evicting `snapId` from the `'puzzles'` object store in `'capy_game_storage_v8'` and asserting `evicted === true` before cold-start reload), Controls settings persistence (`zoomSensitivity`, `snapZoomLevels`, `soundEnabled`, `soundVolume`, `reducedMotion` in `capy_user_settings_v8`), top HUD zoom-badge cycling (`topbar-zoom-badge`: `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), **Puzzle of the Day** Create-tab hero card (`daily-puzzle-card`) and one-tap launch (`daily-puzzle-play-btn`), desktop keyboard gameplay shortcuts (`1`--`9` swatch select, `+` zoom, `ArrowRight`/`ArrowLeft` pan, `0` reset, plus `<input>` focus guard on `gallery-search-input`), and **Lifetime Stats** (`capy_player_stats_v1` & `lifetime-stats-card`).
+  7. **Part 2.6 -- Release Channel Switcher & Non-Production HUD Pill**:
+     - Verifies zero `topbar-channel-badge` clutter on default `/` views, `release-channel-card` (`toggle-beta-channel-btn` -> `/capy/beta/`, `beta-apk-download-link` -> `/capy/beta/capy.apk`), and `BETA` pill click-to-open Settings on `?capy_channel=beta`.
 - **`npm run gallery:capture` (`node scripts/capture-gallery.mjs`)**: Captures deterministic high-DPI showcase screenshots into `docs/gallery/`.
 - **`npm run generate:samples` (`node scripts/generate-sample-saves.mjs`)**: Generates all 4 built-in `SAMPLE_GALLERY` puzzles via headless Chromium and writes `web/public/assets/sample_saves.capy`.
 
@@ -105,19 +107,23 @@ When extending [`web/scripts/test.mjs`](./web/scripts/test.mjs) for [`PuzzleCanv
 
 ---
 
-## 4. Continuous Integration Pipeline ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
+## 4. Continuous Integration Pipeline ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) & [`release.yml`](./.github/workflows/release.yml))
 
-Capy uses a two-stage GitHub Actions workflow balancing fast verification and minimal permissions:
+Capy uses a 3-tier `Alpha -> Beta -> Production` GitHub Actions architecture balancing fast daily previews with full E2E release protection:
 
 1. **Build & Test Job (`contents: read`)**:
-   - Compiles `web/` (`npm ci && npm run build`, including `tsc` type verification).
-   - Runs Android JUnit4 unit tests (`./gradlew app:testDebugUnitTest`).
-   - Assembles the Android debug APK (`./gradlew app:assembleDebug`).
-   - Runs in parallel across PR branches without global concurrency locks.
-2. **Deploy to GitHub Pages Job (`contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
+   - Compiles `web/` (`npm ci && npm run build`, including `tsc` type verification), runs Android JUnit4 unit tests (`./gradlew app:testDebugUnitTest`), and assembles the Android debug APK (`./gradlew app:assembleDebug`).
+   - Runs in parallel across PR branches (`feature/* -> beta` and `beta -> main`) without global concurrency locks.
+2. **Playwright E2E Release Gate Job (`contents: read`, conditional on `pull_request` targeting `main`)**:
+   - Triggered automatically whenever a **Release Promotion PR (`beta -> main`)** opens or updates.
+   - Installs Playwright Chromium (`npx playwright install --with-deps chromium`) and executes the complete `npm test` SSR + headless Chromium E2E suite before `deploy` can proceed.
+3. **Deploy to GitHub Pages Job (`contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
    - Acquires the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
-   - Publishes open PR previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
-   - Publishes `main` merges to the production root (`https://shthed.github.io/capy/`) as a single squashed orphan commit on `gh-pages`.
+   - Publishes open Alpha PR previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
+   - Publishes `beta` merges to `/beta/` (`https://shthed.github.io/capy/beta/`) and `/beta/capy.apk` without touching production `/`.
+   - Publishes `main` promotions to `/` (`https://shthed.github.io/capy/`, preserving `/pull/` and `/beta/`) as a single squashed orphan commit on `gh-pages`.
+4. **Release & Play Store Bundle Workflow ([`release.yml`](./.github/workflows/release.yml))**:
+   - Triggered on `v*.*.*` Git tags (or `workflow_dispatch`), compiling `capy-<tag>.apk`, Google Play Store `capy-<tag>.aab` (`bundleRelease`), and `capy-web-<tag>.tgz` with extracted `CHANGELOG.md` notes.
 
 > [!NOTE]
-> **Fast-CI / Thorough-Antigravity-VM Philosophy**: `npm test` (Vite SSR unit/codec checks + Playwright headless Chromium E2E suite) is a **mandatory pre-PR verification gate inside the Antigravity VM** before pushing Web/engine/codec changes. GitHub Actions (`deploy-branch.yml`) intentionally stays ultra-fast and minimal—running `npm ci && npm run build` and `./gradlew app:testDebugUnitTest app:assembleDebug` without multi-minute Playwright browser downloads—so PR preview deploys never bottleneck the dev/test/release loop (and skipping CI completely via `paths-ignore` when a PR modifies only `.md` or `docs/**` files).
+> **Fast Daily CI + Full E2E Production Gate**: `npm test` is always run locally inside the Antigravity VM before pushing any PR. Daily `feature/* -> beta` PRs skip heavy Playwright downloads in GitHub Actions so `/pull/<number>/` Alpha previews deploy in minimal time, while `beta -> main` Release Promotion PRs enforce the full Playwright Chromium E2E suite in GitHub Actions as a second safety net protecting live players on `https://shthed.github.io/capy/`.

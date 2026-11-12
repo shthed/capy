@@ -12,6 +12,7 @@ interface GameTopBarProps {
   coopRoomCode?: string | null;
   coopParticipants?: CoopParticipant[];
   parentPuzzleTitle?: string | null;
+  releaseChannelBadge?: string | null;
   onPickImage: () => void;
   onTogglePreview: () => void;
   onToggleFullscreen?: () => void;
@@ -20,6 +21,7 @@ interface GameTopBarProps {
   onOpenCoop?: () => void;
   onStepZoom?: () => void;
   onBackToParentPuzzle?: () => void;
+  onOpenReleaseChannel?: () => void;
 }
 
 function formatZoomBadge(zoomScale: number): string {
@@ -38,6 +40,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   coopRoomCode,
   coopParticipants = [],
   parentPuzzleTitle,
+  releaseChannelBadge,
   onPickImage,
   onTogglePreview,
   onToggleFullscreen,
@@ -46,6 +49,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   onOpenCoop,
   onStepZoom,
   onBackToParentPuzzle,
+  onOpenReleaseChannel,
 }) => {
   const formattedZoom = formatZoomBadge(zoomScale);
   const isZoomedAwayFromFit = Math.abs(zoomScale - 1) > 0.05;
@@ -58,7 +62,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
         paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
       }}
     >
-      {/* Top Left: Progress % / Title Pill, Parent Breadcrumb & Zoom Stepper */}
+      {/* Top Left: Progress % / Title Pill, Channel Badge, Parent Breadcrumb & Zoom Stepper */}
       <div className="pointer-events-auto flex items-center gap-1.5 min-w-0">
         {onBackToParentPuzzle && (
           <button
@@ -101,6 +105,19 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
           <span>•</span>
           <span>{progressPercentage}%</span>
         </button>
+
+        {releaseChannelBadge && onOpenReleaseChannel && (
+          <button
+            type="button"
+            data-testid="topbar-channel-badge"
+            onClick={onOpenReleaseChannel}
+            title={`Running on ${releaseChannelBadge} channel (tap to manage release channel)`}
+            aria-label={`Release channel ${releaseChannelBadge}. Activate to manage release channel`}
+            className="px-2.5 py-1.5 rounded-full text-[10px] tracking-wider uppercase font-extrabold bg-violet-950/90 text-violet-200 border border-violet-400/60 shadow-lg backdrop-blur-md hover:bg-violet-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0"
+          >
+            {releaseChannelBadge}
+          </button>
+        )}
 
         {onStepZoom && (
           <button
