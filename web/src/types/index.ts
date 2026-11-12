@@ -283,3 +283,11 @@ export function hexToArgb(hex: string): number {
   const clean = hex.replace('#', '');
   return (0xff000000 | parseInt(clean, 16)) >>> 0;
 }
+
+export function computeProgressPercentage(filledCount: number, totalCount: number): number {
+  if (!Number.isFinite(totalCount) || totalCount <= 0) return 0;
+  if (!Number.isFinite(filledCount) || filledCount <= 0) return 0;
+  if (filledCount >= totalCount) return 100;
+  return Math.min(99, Math.round((filledCount * 100) / totalCount));
+}
+
