@@ -3,7 +3,7 @@
  * Clean-room public persona exporter for `capyboop/capy`.
  *
  * Exports a clean, standalone copy of the repository where `capyboop` is the sole
- * author and owner with zero trace of `shthed`, dev-only mirror workflows, or
+ * author and owner with zero trace of `shthed`, dev-only mirror/review workflows, or
  * rebrand scripts anywhere in the exported tree.
  *
  * Usage:
@@ -23,10 +23,18 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 export const DEV_ONLY_RELATIVE_PATHS = new Set([
   'web/scripts/rebrand-persona.mjs',
   '.github/workflows/publish-capyboop.yml',
+  '.github/workflows/pr-review-gate.yml',
 ]);
 
-const SKIP_COPY_DIR_NAMES = new Set([
+export const SKIP_COPY_DIR_NAMES = new Set([
   '.git',
+  '.agents',
+  '.kotlin',
+  '.artifacts',
+  '.idea',
+  '.vscode',
+  'inspect',
+  'project',
   'node_modules',
   'dist',
   '.wrangler',
@@ -57,10 +65,17 @@ const TEXT_EXTENSIONS = new Set([
   '.webmanifest',
 ]);
 
-const TEXT_FILENAMES = new Set(['.gitignore', 'gradlew', 'gradlew.bat', 'LICENSE']);
+const TEXT_FILENAMES = new Set([
+  '.gitignore',
+  'gradlew',
+  'gradlew.bat',
+  'LICENSE',
+  '_redirects',
+  '_headers',
+]);
 
 const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|persona:capyboop|capy-dev-only/i;
+  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|persona:capyboop|capy-dev-only/i;
 
 export function stripDevOnlyBlocks(content) {
   return content
@@ -70,6 +85,14 @@ export function stripDevOnlyBlocks(content) {
 
 export function transformPersonaContent(content) {
   return stripDevOnlyBlocks(content)
+    .replace(
+      /\[([^\]]+)\]\(https:\/\/github\.com\/(?:shthed|capyboop)\/capy\/(?:pull|issues|milestone)\/\d+(?:[/?#][^\s)]*)?\)/g,
+      '$1'
+    )
+    .replace(
+      /https:\/\/(?:shthed|capyboop)\.github\.io\/capy\/pull\/\d+\/?/g,
+      'https://capypaint.com/'
+    )
     .replaceAll('https://github.com/shthed/capy', 'https://github.com/capyboop/capy')
     .replaceAll('github.com/shthed/capy', 'github.com/capyboop/capy')
     .replaceAll('github.com/shthed', 'github.com/capyboop')
@@ -80,10 +103,11 @@ export function transformPersonaContent(content) {
 }
 
 export function sanitizeCommitMessage(rawMessage) {
-  const firstLine = String(rawMessage || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0) || 'Update Capy Paint';
+  const firstLine =
+    String(rawMessage || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) || 'Update Capy Paint';
 
   const withoutPrSuffix = firstLine.replace(/\s*\(#\d+\)\s*$/, '').trim();
   const sanitized = transformPersonaContent(withoutPrSuffix).replace(/\s+/g, ' ').trim();
