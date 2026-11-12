@@ -2,14 +2,9 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import {
-  BLOOM_KIND_SWATCH_SHIMMER,
   COOP_RIPPLE_DURATION_MS,
   CoopRippleBuffer,
-  FILL_BLOOM_DURATION_MS,
-  FillBloomBuffer,
   MAX_COOP_RIPPLES,
-  MAX_FILL_BLOOMS,
-  SWATCH_SHIMMER_DURATION_MS,
 } from '../engine/CoopRippleBuffer';
 import {
   CANVAS_BG_MAP,
@@ -54,7 +49,6 @@ interface PuzzleCanvasProps {
   reverseDoubleTapZoom?: boolean;
   zoomSensitivity?: number;
   snapZoomLevels?: boolean;
-  showMagnifierLoupe?: boolean;
   reducedMotion?: boolean;
   displayNumberMap: Map<number, string>;
   zoomInTrigger?: number;
@@ -75,7 +69,6 @@ interface PuzzleCanvasProps {
   replayFollowStep?: number;
   replaySpeed?: number;
   coopRippleBuffer?: CoopRippleBuffer;
-  fillBloomBuffer?: FillBloomBuffer;
   onViewExtentChanged?: (
     zoom: number,
     panX: number,
@@ -93,53 +86,6 @@ interface PuzzleCanvasProps {
 
 export const ZOOM_DETENT_STOPS = [1, 2, 4, 8, 12] as const;
 const ZOOM_SNAP_TOLERANCE = 0.04;
-
-export const LOUPE_MAGNIFICATION = 2.5;
-export const LOUPE_OFFSET_Y_PX = 72;
-export const LOUPE_TOP_FLIP_THRESHOLD_PX = 96;
-export const LOUPE_RADIUS_PX = 44;
-export const LOUPE_HOLD_DELAY_MS = 220;
-
-export interface LoupePosition {
-  x: number;
-  y: number;
-  flippedBelow: boolean;
-}
-
-/**
- * Computes floating circular Precision Loupe center in container CSS pixels:
- * - Defaults `72px` above the active finger (`pointerY - 72`).
- * - Flips cleanly below (`pointerY + 72`) whenever `pointerY < 96` so top HUD bars and the
- *   viewport edge never clip the lens offscreen.
- * - Clamps inside `[radius + 8 .. containerDim - radius - 8]` with optional `out` struct for zero allocations.
- */
-export function computeLoupePosition(
-  pointerX: number,
-  pointerY: number,
-  containerWidth: number,
-  containerHeight: number,
-  radius: number = LOUPE_RADIUS_PX,
-  out?: LoupePosition
-): LoupePosition {
-  const margin = 8;
-  const minX = Math.min(containerWidth / 2, radius + margin);
-  const maxX = Math.max(minX, containerWidth - radius - margin);
-  const minY = Math.min(containerHeight / 2, radius + margin);
-  const maxY = Math.max(minY, containerHeight - radius - margin);
-
-  const flippedBelow = pointerY < LOUPE_TOP_FLIP_THRESHOLD_PX;
-  const rawY = flippedBelow ? pointerY + LOUPE_OFFSET_Y_PX : pointerY - LOUPE_OFFSET_Y_PX;
-  const cx = Math.max(minX, Math.min(maxX, pointerX));
-  const cy = Math.max(minY, Math.min(maxY, rawY));
-
-  if (out) {
-    out.x = cx;
-    out.y = cy;
-    out.flippedBelow = flippedBelow;
-    return out;
-  }
-  return { x: cx, y: cy, flippedBelow };
-}
 
 /**
  * Snaps relative zoom scale to the nearest magnetic stop (1x, 2x, 4x, 8x, 12x)
@@ -269,7 +215,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   reverseDoubleTapZoom = false,
   zoomSensitivity = 1.0,
   snapZoomLevels = false,
-  showMagnifierLoupe = true,
   reducedMotion = false,
   displayNumberMap,
   zoomInTrigger = 0,
@@ -290,7 +235,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   replayFollowStep = 0,
   replaySpeed = 1,
   coopRippleBuffer,
-  fillBloomBuffer,
   onViewExtentChanged,
   onManualPanStart,
   onRegionClicked,
@@ -301,15 +245,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Offscreen cached layer canvases (prevents 60 FPS full-pixel iteration)
   const baseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const baseImageDataRef = useRef<ImageData | null>(null);
   const paintedCacheRef = useRef<Set<number>>(new Set());
-  const completedSwatchesCacheRef = useRef<Set<number>>(new Set());
-  const internalFillBloomBufferRef = useRef<FillBloomBuffer>(new FillBloomBuffer());
-  const activeFillBloomBuffer = fillBloomBuffer ?? internalFillBloomBufferRef.current;
   const sourcePixelsRef = useRef<Uint8ClampedArray | null>(null);
   const regionByIdRef = useRef<Map<number, Region>>(new Map());
   const paletteByIdRef = useRef<Map<number, PaletteColor>>(new Map());
@@ -338,23 +278,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   );
   const effectiveZoomSensitivityRef = useRef(effectiveZoomSensitivity);
   const snapZoomLevelsRef = useRef(snapZoomLevels);
-  const showMagnifierLoupeRef = useRef(showMagnifierLoupe);
   const reducedMotionRef = useRef(reducedMotion);
   effectiveZoomSensitivityRef.current = effectiveZoomSensitivity;
   snapZoomLevelsRef.current = snapZoomLevels;
-  showMagnifierLoupeRef.current = showMagnifierLoupe;
   reducedMotionRef.current = reducedMotion;
-
-  // Pre-allocated scratch structs for zero-allocation Precision Loupe & gesture math
-  const loupeStateRef = useRef<{ active: boolean; screenX: number; screenY: number }>({
-    active: false,
-    screenX: 0,
-    screenY: 0,
-  });
-  const loupePosScratchRef = useRef<LoupePosition>({ x: 0, y: 0, flippedBelow: false });
-  const loupeHoldTimerRef = useRef<number | null>(null);
-  const isLoupeHoldTargetingRef = useRef<boolean>(false);
-  const loupeDrawRafRef = useRef<number>(0);
 
   // Pre-allocated scratch vectors for zero-allocation hot zoom/pan gesture math
   const gestureRawOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -404,23 +331,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
   }, []);
 
-  const cancelLoupeHoldTimer = useCallback(() => {
-    if (loupeHoldTimerRef.current !== null) {
-      window.clearTimeout(loupeHoldTimerRef.current);
-      loupeHoldTimerRef.current = null;
-    }
-  }, []);
-
   useEffect(() => {
     return () => {
       stopMomentum();
-      cancelLoupeHoldTimer();
-      if (loupeDrawRafRef.current !== 0) {
-        cancelAnimationFrame(loupeDrawRafRef.current);
-        loupeDrawRafRef.current = 0;
-      }
     };
-  }, [stopMomentum, cancelLoupeHoldTimer]);
+  }, [stopMomentum]);
 
   // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or viewport restoration triggers
   useEffect(() => {
@@ -1054,29 +969,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       baseImageDataRef.current = imgData;
       paintedCacheRef.current = new Set(filledRegionIds);
       prevColorsRef.current = new Map(paintedRegionColors || []);
-      const initCompletedSwatches = new Set<number>();
-      if (!isColoring) {
-        for (let pIdx = 0; pIdx < palette.length; pIdx++) {
-          const cid = palette[pIdx].id;
-          let hasAny = false;
-          let hasUnfilled = false;
-          for (let rIdx = 0; rIdx < regions.length; rIdx++) {
-            const r = regions[rIdx];
-            if (r.colorId === cid) {
-              hasAny = true;
-              if (!filledRegionIds.has(r.id)) {
-                hasUnfilled = true;
-                break;
-              }
-            }
-          }
-          if (hasAny && !hasUnfilled) {
-            initCompletedSwatches.add(cid);
-          }
-        }
-      }
-      completedSwatchesCacheRef.current = initCompletedSwatches;
-      activeFillBloomBuffer.clear();
       lastBasePuzzleRef.current = puzzle;
       lastBaseModeRef.current = regionColorMode;
       lastBaseImageRef.current = sourceImage;
@@ -1087,7 +979,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     // Incremental update: repaint regions whose filled status or painted color changed!
     const prevPainted = paintedCacheRef.current;
     const prevColors = prevColorsRef.current;
-    const completedSwatches = completedSwatchesCacheRef.current;
     const baseCtx = baseCanvasRef.current!.getContext('2d')!;
     const imgData = baseImageDataRef.current!;
     const data = imgData.data;
@@ -1099,17 +990,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     let minDirtyY = height;
     let maxDirtyX = -1;
     let maxDirtyY = -1;
-    let newlyFilledCount = 0;
-    const touchedSwatchIds = new Set<number>();
 
     // Check newly filled or repainted regions (in-place cache mutation, zero Set/Map cloning)
     for (const rId of filledRegionIds) {
       const curCol = paintedRegionColors?.get(rId);
       const prevCol = prevColors.get(rId);
-      const wasAlreadyFilled = prevPainted.has(rId);
       const colorChanged = curCol !== prevCol;
 
-      if (!wasAlreadyFilled || colorChanged) {
+      if (!prevPainted.has(rId) || colorChanged) {
         const reg = regMap.get(rId);
         if (reg) {
           writeRegionToImageData(
@@ -1127,69 +1015,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (reg.minY < minDirtyY) minDirtyY = reg.minY;
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
           if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
-
-          if (!reducedMotionRef.current && !isPreviewMode && newlyFilledCount < 32) {
-            const resolvedColId = curCol ?? reg.colorId;
-            const colObj = palMap.get(resolvedColId);
-            const bloomRadius = Math.max(
-              6,
-              Math.hypot(reg.maxX - reg.minX, reg.maxY - reg.minY) * 0.55
-            );
-            activeFillBloomBuffer.spawnFillBloom(
-              reg.centroidX,
-              reg.centroidY,
-              bloomRadius,
-              colObj?.hex || '#38bdf8'
-            );
-          }
-          if (!wasAlreadyFilled) {
-            newlyFilledCount++;
-            touchedSwatchIds.add(reg.colorId);
-          }
         }
         prevPainted.add(rId);
         if (curCol !== undefined) {
           prevColors.set(rId, curCol);
         } else {
           prevColors.delete(rId);
-        }
-      }
-    }
-
-    // Trigger 400ms celebratory centroid shimmer wave when any palette swatch reaches 0 remaining regions
-    if (
-      touchedSwatchIds.size > 0 &&
-      !isFreeColorMode &&
-      !puzzle.isFreeColor &&
-      !reducedMotionRef.current &&
-      !isPreviewMode
-    ) {
-      for (const swatchId of touchedSwatchIds) {
-        if (completedSwatches.has(swatchId)) continue;
-        let hasUnfilled = false;
-        for (let i = 0; i < regions.length; i++) {
-          const r = regions[i];
-          if (r.colorId === swatchId && !filledRegionIds.has(r.id)) {
-            hasUnfilled = true;
-            break;
-          }
-        }
-        if (!hasUnfilled) {
-          completedSwatches.add(swatchId);
-          const swatchHex = palMap.get(swatchId)?.hex || '#fbbf24';
-          let spawned = 0;
-          for (let i = 0; i < regions.length && spawned < MAX_FILL_BLOOMS; i++) {
-            const r = regions[i];
-            if (r.colorId === swatchId) {
-              activeFillBloomBuffer.spawnSwatchShimmer(
-                r.centroidX,
-                r.centroidY,
-                Math.max(10, r.maxRadius * 1.4),
-                swatchHex
-              );
-              spawned++;
-            }
-          }
         }
       }
     }
@@ -1214,7 +1045,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (reg.minY < minDirtyY) minDirtyY = reg.minY;
           if (reg.maxX > maxDirtyX) maxDirtyX = reg.maxX;
           if (reg.maxY > maxDirtyY) maxDirtyY = reg.maxY;
-          completedSwatches.delete(reg.colorId);
         }
         prevPainted.delete(rId);
         prevColors.delete(rId);
@@ -1699,64 +1529,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         ctx.fill();
       }
 
-      // 5a. Zero-allocation Region Fill Blooms (180ms) & Completed-Swatch Shimmers (400ms)
-      if (!reducedMotion) {
-        const bloomNowMs = performance.now();
-        ctx.save();
-        for (let i = 0; i < MAX_FILL_BLOOMS; i++) {
-          const started = activeFillBloomBuffer.startTimeMs[i];
-          if (started <= 0) continue;
-          const kind = activeFillBloomBuffer.kind[i];
-          const duration =
-            kind === BLOOM_KIND_SWATCH_SHIMMER
-              ? SWATCH_SHIMMER_DURATION_MS
-              : FILL_BLOOM_DURATION_MS;
-          const age = bloomNowMs - started;
-          if (age < 0 || age >= duration) {
-            activeFillBloomBuffer.startTimeMs[i] = 0;
-            continue;
-          }
-          const progress = age / duration;
-          const bx = activeFillBloomBuffer.x[i];
-          const by = activeFillBloomBuffer.y[i];
-          const baseRad = activeFillBloomBuffer.maxRadius[i];
-
-          if (kind === BLOOM_KIND_SWATCH_SHIMMER) {
-            const bell = Math.sin(progress * Math.PI);
-            const shimmerRadius = baseRad * (0.45 + 0.85 * progress) + 4 / effScale;
-            ctx.globalAlpha = bell * 0.42;
-            ctx.fillStyle = activeFillBloomBuffer.colorHex[i];
-            ctx.beginPath();
-            ctx.arc(bx, by, shimmerRadius * 0.72, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.globalAlpha = bell * 0.88;
-            ctx.lineWidth = 2.2 / effScale;
-            ctx.strokeStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(bx, by, shimmerRadius, 0, Math.PI * 2);
-            ctx.stroke();
-          } else {
-            const ease = 1 - (1 - progress) * (1 - progress) * (1 - progress);
-            const bloomRadius = Math.max(3 / effScale, baseRad * (0.22 + 0.88 * ease));
-            ctx.globalAlpha = (1 - progress) * 0.45;
-            ctx.fillStyle = activeFillBloomBuffer.colorHex[i];
-            ctx.beginPath();
-            ctx.arc(bx, by, bloomRadius, 0, Math.PI * 2);
-            ctx.fill();
-
-            ctx.globalAlpha = (1 - progress) * 0.85;
-            ctx.lineWidth = 1.8 / effScale;
-            ctx.strokeStyle = '#ffffff';
-            ctx.beginPath();
-            ctx.arc(bx, by, bloomRadius, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        }
-        ctx.restore();
-      }
-
-      // 5b. Zero-allocation Co-op Collaborator Paint Ripples (typed ring buffer, zero heap allocs)
+      // 5. Zero-allocation Co-op Collaborator Paint Ripples (typed ring buffer, zero heap allocs)
       if (coopRippleBuffer) {
         const nowMs = performance.now();
         ctx.save();
@@ -1782,125 +1555,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
 
       ctx.restore(); // Transform restore
-
-      // 6. Zero-allocation 2.5x Floating Precision Loupe Magnifier (reuses lazy offscreen compositeCanvasRef via circular clip)
-      if (
-        showMagnifierLoupe &&
-        !isPreviewMode &&
-        !isGenerating &&
-        loupeStateRef.current.active
-      ) {
-        let compositeSource = compositeCanvasRef.current;
-        if (!compositeSource) {
-          compositeSource = document.createElement('canvas');
-          compositeCanvasRef.current = compositeSource;
-        }
-        if (compositeSource.width !== canvas.width || compositeSource.height !== canvas.height) {
-          compositeSource.width = canvas.width;
-          compositeSource.height = canvas.height;
-        }
-        const compCtx = compositeSource.getContext('2d');
-        if (compCtx) {
-          compCtx.setTransform(1, 0, 0, 1, 0, 0);
-          compCtx.clearRect(0, 0, compositeSource.width, compositeSource.height);
-          compCtx.drawImage(canvas, 0, 0);
-        }
-
-        const ptrX = loupeStateRef.current.screenX;
-        const ptrY = loupeStateRef.current.screenY;
-        const loupePos = computeLoupePosition(
-          ptrX,
-          ptrY,
-          w,
-          h,
-          LOUPE_RADIUS_PX,
-          loupePosScratchRef.current
-        );
-        const lx = loupePos.x;
-        const ly = loupePos.y;
-        const srcHalfCss = LOUPE_RADIUS_PX / LOUPE_MAGNIFICATION;
-        const srcLeftCss = Math.max(0, ptrX - srcHalfCss);
-        const srcTopCss = Math.max(0, ptrY - srcHalfCss);
-        const srcRightCss = Math.min(w, ptrX + srcHalfCss);
-        const srcBottomCss = Math.min(h, ptrY + srcHalfCss);
-        const srcWCss = srcRightCss - srcLeftCss;
-        const srcHCss = srcBottomCss - srcTopCss;
-
-        ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
-        ctx.shadowBlur = 14;
-        ctx.shadowOffsetY = 4;
-        ctx.beginPath();
-        ctx.arc(lx, ly, LOUPE_RADIUS_PX, 0, Math.PI * 2);
-        ctx.fillStyle = bgHex;
-        ctx.fill();
-        ctx.restore();
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(lx, ly, LOUPE_RADIUS_PX, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.fillStyle = bgHex;
-        ctx.fillRect(
-          lx - LOUPE_RADIUS_PX,
-          ly - LOUPE_RADIUS_PX,
-          LOUPE_RADIUS_PX * 2,
-          LOUPE_RADIUS_PX * 2
-        );
-        if (srcWCss > 0.5 && srcHCss > 0.5) {
-          const dstX = lx + (srcLeftCss - ptrX) * LOUPE_MAGNIFICATION;
-          const dstY = ly + (srcTopCss - ptrY) * LOUPE_MAGNIFICATION;
-          const dstW = srcWCss * LOUPE_MAGNIFICATION;
-          const dstH = srcHCss * LOUPE_MAGNIFICATION;
-          ctx.drawImage(
-            compositeSource,
-            srcLeftCss * dpr,
-            srcTopCss * dpr,
-            srcWCss * dpr,
-            srcHCss * dpr,
-            dstX,
-            dstY,
-            dstW,
-            dstH
-          );
-        }
-
-        // Precision center crosshair reticle inside the circular lens
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.85)';
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(lx - 11, ly);
-        ctx.lineTo(lx - 3, ly);
-        ctx.moveTo(lx + 3, ly);
-        ctx.lineTo(lx + 11, ly);
-        ctx.moveTo(lx, ly - 11);
-        ctx.lineTo(lx, ly - 3);
-        ctx.moveTo(lx, ly + 3);
-        ctx.lineTo(lx, ly + 11);
-        ctx.stroke();
-
-        ctx.strokeStyle = '#f8fafc';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(lx, ly, 3, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-
-        // Crisp high-contrast outer bezel
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(lx, ly, LOUPE_RADIUS_PX, 0, Math.PI * 2);
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = '#f8fafc';
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(lx, ly, LOUPE_RADIUS_PX - 1.5, 0, Math.PI * 2);
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(15, 23, 42, 0.7)';
-        ctx.stroke();
-        ctx.restore();
-      }
-
       ctx.restore(); // DPR scale restore
     },
     [
@@ -1928,7 +1582,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       hintColorArgb,
       hintFillStyle,
       animateHint,
-      showMagnifierLoupe,
       reducedMotion,
       hintIntensity,
       displayNumberMap,
@@ -1938,8 +1591,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       generationProgress,
       generationStepIndex,
       coopRippleBuffer,
-      activeFillBloomBuffer,
-      compositeCanvasRef,
     ]
   );
 
@@ -2016,35 +1667,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     };
   }, [coopRippleBuffer, drawCompositeFrame]);
 
-  // Demand-driven Fill Bloom & Swatch Shimmer rAF loop (0% idle CPU once 180ms/400ms expires; skips under reducedMotion)
-  useEffect(() => {
-    if (reducedMotion) {
-      activeFillBloomBuffer.clear();
-      drawCompositeFrame(pulseAlphaRef.current);
-      return;
-    }
-    let bloomRafId = 0;
-    const stepBlooms = (now: number) => {
-      bloomRafId = 0;
-      drawCompositeFrame(pulseAlphaRef.current);
-      if (activeFillBloomBuffer.hasActiveAnimations(now)) {
-        bloomRafId = requestAnimationFrame(stepBlooms);
-      }
-    };
-    activeFillBloomBuffer.setWakeCallback(() => {
-      if (bloomRafId === 0 && !reducedMotionRef.current) {
-        bloomRafId = requestAnimationFrame(stepBlooms);
-      }
-    });
-    if (activeFillBloomBuffer.hasActiveAnimations(performance.now())) {
-      bloomRafId = requestAnimationFrame(stepBlooms);
-    }
-    return () => {
-      activeFillBloomBuffer.setWakeCallback(null);
-      if (bloomRafId !== 0) cancelAnimationFrame(bloomRafId);
-    };
-  }, [activeFillBloomBuffer, reducedMotion, drawCompositeFrame]);
-
   // Direct-to-canvas hint pulse rAF loop (zero React state updates; pauses completely when idle/completed or under reducedMotion)
   useEffect(() => {
     const hasActivePulseTarget =
@@ -2094,74 +1716,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     drawCompositeFrame,
   ]);
 
-  const scheduleLoupeRedraw = useCallback(() => {
-    if (loupeDrawRafRef.current !== 0) return;
-    loupeDrawRafRef.current = requestAnimationFrame(() => {
-      loupeDrawRafRef.current = 0;
-      drawCompositeFrame(pulseAlphaRef.current);
-    });
-  }, [drawCompositeFrame]);
-
-  const setLoupeDataAttributes = useCallback((active: boolean, screenX: number, screenY: number) => {
-    const el = canvasRef.current;
-    if (!el) return;
-    if (active) {
-      el.setAttribute('data-loupe-active', 'true');
-      el.setAttribute(
-        'data-loupe-flipped',
-        screenY < LOUPE_TOP_FLIP_THRESHOLD_PX ? 'true' : 'false'
-      );
-      el.setAttribute('data-loupe-pointer-x', String(Math.round(screenX)));
-      el.setAttribute('data-loupe-pointer-y', String(Math.round(screenY)));
-    } else {
-      el.setAttribute('data-loupe-active', 'false');
-      el.removeAttribute('data-loupe-flipped');
-    }
-  }, []);
-
-  const activateLoupeAt = useCallback(
-    (screenX: number, screenY: number) => {
-      if (!showMagnifierLoupeRef.current) return;
-      const wasActive = loupeStateRef.current.active;
-      const prevFlipped = loupeStateRef.current.screenY < LOUPE_TOP_FLIP_THRESHOLD_PX;
-      const nextFlipped = screenY < LOUPE_TOP_FLIP_THRESHOLD_PX;
-      loupeStateRef.current.active = true;
-      loupeStateRef.current.screenX = screenX;
-      loupeStateRef.current.screenY = screenY;
-      if (!wasActive || prevFlipped !== nextFlipped) {
-        setLoupeDataAttributes(true, screenX, screenY);
-      }
-      scheduleLoupeRedraw();
-    },
-    [scheduleLoupeRedraw, setLoupeDataAttributes]
-  );
-
-  const deactivateLoupe = useCallback(
-    (redraw: boolean) => {
-      cancelLoupeHoldTimer();
-      isLoupeHoldTargetingRef.current = false;
-      if (loupeStateRef.current.active) {
-        loupeStateRef.current.active = false;
-        setLoupeDataAttributes(false, 0, 0);
-        if (redraw) {
-          scheduleLoupeRedraw();
-        }
-      }
-    },
-    [cancelLoupeHoldTimer, scheduleLoupeRedraw, setLoupeDataAttributes]
-  );
-
-  useEffect(() => {
-    if (!showMagnifierLoupe || isPreviewMode || isGenerating) {
-      deactivateLoupe(true);
-    }
-  }, [showMagnifierLoupe, isPreviewMode, isGenerating, deactivateLoupe]);
-
   // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
     stopMomentum();
-    cancelLoupeHoldTimer();
-    isLoupeHoldTargetingRef.current = false;
     pointerHistoryRef.current = [{ x: e.clientX, y: e.clientY, time: performance.now() }];
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -2177,8 +1734,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (e.pointerType === 'touch') {
       touchPointerCountRef.current = activePointersRef.current.size;
       if (touchPointerCountRef.current > 1) {
-        // Multi-touch: cancel single pointer drag, zoom, loupe, and do not paint
-        deactivateLoupe(true);
+        // Multi-touch: cancel single pointer drag, zoom, and do not paint
         isDraggingRef.current = false;
         isPinchPanningRef.current = false;
         isDoubleTapCandidateRef.current = false;
@@ -2215,7 +1771,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     );
 
     if (timeSinceTapUp < 350 && distFromLastTap < 40 && !isRightClick) {
-      deactivateLoupe(true);
       isDoubleTapCandidateRef.current = true;
       isOneFingerZoomingRef.current = false;
       isDoubleTapPanningRef.current = false;
@@ -2233,39 +1788,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     if (!coords || !puzzle) return;
 
-    // Start continuous paint + Precision Loupe in Paint Mode, or schedule press-and-hold Loupe in normal mode
-    if (!isRightClick && !isPreviewMode && isInsideImage) {
-      if (isPaintMode) {
-        if (showMagnifierLoupeRef.current) {
-          activateLoupeAt(coords.screenX, coords.screenY);
-        }
-        hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
-        setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
-      } else if (showMagnifierLoupeRef.current) {
-        const startClientX = e.clientX;
-        const startClientY = e.clientY;
-        loupeHoldTimerRef.current = window.setTimeout(() => {
-          loupeHoldTimerRef.current = null;
-          if (
-            !isDraggingRef.current ||
-            wasPinchingRef.current ||
-            touchPointerCountRef.current > 1 ||
-            isDoubleTapCandidateRef.current ||
-            totalDragDistanceRef.current >= 10 ||
-            !showMagnifierLoupeRef.current
-          ) {
-            return;
-          }
-          const latestPos = lastPointerPosRef.current;
-          const holdCoords = screenToCanvasCoords(
-            latestPos.x || startClientX,
-            latestPos.y || startClientY
-          );
-          if (!holdCoords) return;
-          isLoupeHoldTargetingRef.current = true;
-          activateLoupeAt(holdCoords.screenX, holdCoords.screenY);
-        }, LOUPE_HOLD_DELAY_MS);
-      }
+    // Only start continuous paint if touching inside the image region
+    if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
+      hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
+      setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
     }
   };
 
@@ -2404,30 +1930,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const dy = e.clientY - lastPointerPosRef.current.y;
     totalDragDistanceRef.current += Math.hypot(dx, dy);
 
-    if (!isLoupeHoldTargetingRef.current && loupeHoldTimerRef.current !== null && totalDragDistanceRef.current >= 10) {
-      cancelLoupeHoldTimer();
-    }
-
     const prevCoords = screenToCanvasCoords(lastPointerPosRef.current.x, lastPointerPosRef.current.y);
     const currCoords = screenToCanvasCoords(e.clientX, e.clientY);
 
     lastPointerPosRef.current.x = e.clientX;
     lastPointerPosRef.current.y = e.clientY;
 
-    // Press-and-hold Precision Loupe aiming tracks crosshair smoothly without panning the stage
-    if (isLoupeHoldTargetingRef.current && currCoords) {
-      activateLoupeAt(currCoords.screenX, currCoords.screenY);
-      return;
-    }
-
     const isRightClick = isRightClickRef.current || (e.buttons & 2) !== 0;
     const isTouchingOutsideImage = isTouchingOutsideImageRef.current;
 
     // If touching outside the image region on the background canvas, drag always pans!
     if (!isPinchPanningRef.current && !isRightClick && !isTouchingOutsideImage && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
-      if (showMagnifierLoupeRef.current) {
-        activateLoupeAt(currCoords.screenX, currCoords.screenY);
-      }
       hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
@@ -2485,9 +1998,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
     }
 
-    const wasLoupeHoldTargeting = isLoupeHoldTargetingRef.current;
-    deactivateLoupe(true);
-
     // If one-finger double-tap zoom or pan was active, finish cleanly without clicks
     if (isOneFingerZoomingRef.current || isDoubleTapPanningRef.current) {
       isOneFingerZoomingRef.current = false;
@@ -2511,6 +2021,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     const wasRightClick = isRightClickRef.current;
+    const wasPinch = wasPinchingRef.current;
     const wasPinchPan = isPinchPanningRef.current;
     isDraggingRef.current = false;
     isRightClickRef.current = false;
@@ -2521,23 +2032,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     if (wasRightClick || touchStartDistRef.current !== null) {
-      return;
-    }
-
-    // Precision Loupe hold-and-release fills the exact micro-region under the crosshair
-    if (wasLoupeHoldTargeting && !isPreviewMode) {
-      const coords = screenToCanvasCoords(e.clientX, e.clientY);
-      if (coords && puzzle) {
-        setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
-        const lx = Math.floor(coords.x);
-        const ly = Math.floor(coords.y);
-        if (lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height) {
-          const rId = puzzle.regionMap[ly * puzzle.width + lx];
-          if (rId > 0) {
-            onRegionClicked(rId);
-          }
-        }
-      }
       return;
     }
 
@@ -2642,7 +2136,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     activePointersRef.current.delete(e.pointerId);
-    deactivateLoupe(true);
 
     if (e.pointerType === 'touch') {
       touchPointerCountRef.current = activePointersRef.current.size;
@@ -2730,7 +2223,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length >= 2) {
       stopMomentum();
-      deactivateLoupe(true);
       isDraggingRef.current = false;
       wasPinchingRef.current = true;
       isPinchPanningRef.current = false;
@@ -2838,7 +2330,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         totalDragDistanceRef.current = 100;
       }
     } else if (e.touches.length === 0) {
-      deactivateLoupe(true);
       activePointersRef.current.clear();
       touchStartDistRef.current = null;
       initialTouchCenterRef.current = null;

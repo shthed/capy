@@ -63,7 +63,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   reverseDoubleTapZoom: false,
   zoomSensitivity: 1.0,
   snapZoomLevels: false,
-  showMagnifierLoupe: true,
   soundEnabled: true,
   soundVolume: 0.7,
   reducedMotion: false,
@@ -151,10 +150,6 @@ export class StorageService {
         typeof parsed.snapZoomLevels === 'boolean'
           ? parsed.snapZoomLevels
           : DEFAULT_SETTINGS.snapZoomLevels;
-      const showMagnifierLoupe =
-        typeof parsed.showMagnifierLoupe === 'boolean'
-          ? parsed.showMagnifierLoupe
-          : DEFAULT_SETTINGS.showMagnifierLoupe;
       const soundEnabled =
         typeof parsed.soundEnabled === 'boolean'
           ? parsed.soundEnabled
@@ -170,7 +165,6 @@ export class StorageService {
         ...parsed,
         zoomSensitivity,
         snapZoomLevels,
-        showMagnifierLoupe,
         soundEnabled,
         soundVolume,
         reducedMotion,

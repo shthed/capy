@@ -33,7 +33,7 @@ import {
 } from './services/ShareLinkService';
 import { ProviderRegistry } from './services/providers/ProviderRegistry';
 import { CoopParticipant } from './services/providers/types';
-import { CoopRippleBuffer, FillBloomBuffer } from './engine/CoopRippleBuffer';
+import { CoopRippleBuffer } from './engine/CoopRippleBuffer';
 import { getDisplayNumberMap, getDockPalette, getVisiblePalette } from './components/PaletteDock';
 import { clampCanvasOffset, PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
@@ -175,9 +175,8 @@ export const App: React.FC = () => {
   const viewportSaveTimerRef = useRef<number | null>(null);
   const activeBlobUrlRef = useRef<string | null>(null);
 
-  // Co-op Multiplayer & Zero-Allocation Canvas Ripple / Fill-Bloom Buffers
+  // Co-op Multiplayer & Zero-Allocation Canvas Ripple Buffer
   const coopRippleBufferRef = useRef<CoopRippleBuffer>(new CoopRippleBuffer());
-  const fillBloomBufferRef = useRef<FillBloomBuffer>(new FillBloomBuffer());
   const [coopRoomCode, setCoopRoomCode] = useState<string | null>(null);
   const [coopParticipants, setCoopParticipants] = useState<CoopParticipant[]>([]);
 
@@ -572,6 +571,11 @@ export const App: React.FC = () => {
         autoResumeTimerRef.current = null;
       }
       autoResumeReplayRef.current = autoResumeOnFinish;
+      if (autoResumeOnFinish) {
+        handleUpdateSettings((prev) =>
+          prev.replayLoop ? { ...prev, replayLoop: false } : prev
+        );
+      }
       setHintRegionId(null);
       setReplaySequence(sequence);
       replayStepRef.current = 0;
@@ -579,7 +583,7 @@ export const App: React.FC = () => {
       setIsReplaying(true);
       setIsReplayPlaying(true);
     },
-    []
+    [handleUpdateSettings]
   );
 
   // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed with offscreen fast-forward, camera follow, and auto-loop)
@@ -620,7 +624,7 @@ export const App: React.FC = () => {
 
       const prev = replayStepRef.current;
       if (prev >= replaySequence.length) {
-        if (settings.replayLoop) {
+        if (settings.replayLoop && !autoResumeReplayRef.current) {
           if (loopPauseUntil === 0) {
             loopPauseUntil = now + 350;
           }
@@ -691,7 +695,7 @@ export const App: React.FC = () => {
       }
 
       if (next >= replaySequence.length) {
-        if (settings.replayLoop) {
+        if (settings.replayLoop && !autoResumeReplayRef.current) {
           loopPauseUntil = now + 350;
           animId = requestAnimationFrame(tick);
           return;
@@ -865,7 +869,13 @@ export const App: React.FC = () => {
               puzzleData.isFreeColor ||
               (initialPaintedColors && Object.keys(initialPaintedColors).length > 0)
           );
-          handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+          handleUpdateSettings((prev) => ({
+            ...prev,
+            isFreeColorMode: isFree,
+            ...((existingSnapshotId || shouldAutoReplay) && prev.replayLoop
+              ? { replayLoop: false }
+              : {}),
+          }));
           resetActivePuzzleSessionStats(
             snapId,
             initialFilledRegionIds.size >= puzzleData.regions.length
@@ -1209,7 +1219,11 @@ export const App: React.FC = () => {
           setRestoreViewTrigger((prev) => prev + 1);
 
           setPaintedRegionColors(restoredPaintedMap);
-          setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+          handleUpdateSettings((prev) => ({
+            ...prev,
+            isFreeColorMode: isFree,
+            ...(prev.replayLoop ? { replayLoop: false } : {}),
+          }));
           setSourceImage(img);
           setPuzzle(cachedPuzzle);
           setActiveSnapshotId(candidateSnap.id);
@@ -1911,9 +1925,8 @@ export const App: React.FC = () => {
 
         const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
-        SoundService.playRegionTap(activeColorId, undefined, Boolean(settings.isPaintMode));
+        SoundService.playRegionTap(activeColorId);
         if (isComplete) {
-          SoundService.playPuzzleComplete();
           recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
           NativeBridge.haptic('success', settings.hapticsEnabled);
           if (!settings.reducedMotion) {
@@ -1986,7 +1999,7 @@ export const App: React.FC = () => {
       setHintRegionId(null);
       emitCoopPaint('FILL', [regionId]);
       setLifetimeStats(PlayerStatsService.recordRegionsColored(1, Boolean(coopRoomCode)));
-      SoundService.playRegionTap(region.colorId, undefined, Boolean(settings.isPaintMode));
+      SoundService.playRegionTap(region.colorId);
 
       const orderedList = Array.from(nextFilled);
 
@@ -1996,11 +2009,7 @@ export const App: React.FC = () => {
         (r) => r.colorId === region.colorId && !nextFilled.has(r.id)
       );
 
-      if (isComplete) {
-        SoundService.playPuzzleComplete();
-        NativeBridge.haptic('success', settings.hapticsEnabled);
-      } else if (remainingForColor.length === 0) {
-        SoundService.playSwatchComplete(region.colorId);
+      if (isComplete || remainingForColor.length === 0) {
         NativeBridge.haptic('success', settings.hapticsEnabled);
       } else {
         NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -2138,12 +2147,11 @@ export const App: React.FC = () => {
           setLifetimeStats(
             PlayerStatsService.recordRegionsColored(newUndoEntries.length, Boolean(coopRoomCode))
           );
-          SoundService.playPaintStreak(activeColorId);
+          SoundService.playRegionTap(activeColorId);
 
           const orderedList = Array.from(nextFilled);
           const isComplete = nextFilled.size >= puzzle.regions.length;
           if (isComplete) {
-            SoundService.playPuzzleComplete();
             recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
             NativeBridge.haptic('success', settings.hapticsEnabled);
             if (!settings.reducedMotion) {
@@ -2195,7 +2203,6 @@ export const App: React.FC = () => {
       let filledAny = false;
       const nextFilled = new Set(filledRegionIds);
       const newUndoEntries: UndoHistoryEntry[] = [];
-      const touchedSwatchIds = new Set<number>();
 
       for (const rId of regionIds) {
         if (nextFilled.has(rId)) continue;
@@ -2208,7 +2215,6 @@ export const App: React.FC = () => {
             setActiveColorId(region.colorId);
           }
           nextFilled.add(rId);
-          touchedSwatchIds.add(region.colorId);
           newUndoEntries.push({
             regionId: rId,
             wasPreviouslyFilled: false,
@@ -2230,27 +2236,13 @@ export const App: React.FC = () => {
         setLifetimeStats(
           PlayerStatsService.recordRegionsColored(newUndoEntries.length, Boolean(coopRoomCode))
         );
-        const lastColorId =
-          newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? activeColorId;
-        SoundService.playPaintStreak(lastColorId);
+        SoundService.playRegionTap(
+          newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? activeColorId
+        );
 
         const orderedList = Array.from(nextFilled);
         const isComplete = nextFilled.size >= puzzle.regions.length;
-        let completedSwatchId: number | null = null;
-        if (!isComplete) {
-          for (const cid of touchedSwatchIds) {
-            const hasRemaining = puzzle.regions.some(
-              (r) => r.colorId === cid && !nextFilled.has(r.id)
-            );
-            if (!hasRemaining) {
-              completedSwatchId = cid;
-              break;
-            }
-          }
-        }
-
         if (isComplete) {
-          SoundService.playPuzzleComplete();
           recordFirstTimePuzzleCompletionIfNeeded(wasPuzzleIncomplete, true);
           NativeBridge.haptic('success', settings.hapticsEnabled);
           if (!settings.reducedMotion) {
@@ -2261,9 +2253,6 @@ export const App: React.FC = () => {
             });
           }
           startReplay(orderedList);
-        } else if (completedSwatchId !== null) {
-          SoundService.playSwatchComplete(completedSwatchId);
-          NativeBridge.haptic('success', settings.hapticsEnabled);
         } else {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
@@ -2563,13 +2552,14 @@ export const App: React.FC = () => {
 
   // Load a saved snapshot (and optionally auto-replay its region completion sequence)
   const handleLoadSnapshot = async (snapshot: SavedSnapshot, forceReplay: boolean = false) => {
+    handleUpdateSettings((prev) => (prev.replayLoop ? { ...prev, replayLoop: false } : prev));
     if (snapshot.id === activeSnapshotId && puzzle) {
       const currentOrdered =
         filledRegionIds.size > 0
           ? Array.from(filledRegionIds)
           : snapshot.filledRegionIds || [];
       if ((forceReplay || settings.autoReplayOnLoad !== false) && currentOrdered.length > 0) {
-        startReplay(currentOrdered, !forceReplay);
+        startReplay(currentOrdered, true);
       }
       return;
     }
@@ -2620,7 +2610,11 @@ export const App: React.FC = () => {
           setPaintedRegionColors(new Map());
         }
         const isFree = Boolean(snapshot.isFreeColor || cachedPuzzle.isFreeColor);
-        handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
+        handleUpdateSettings((prev) => ({
+          ...prev,
+          isFreeColorMode: isFree,
+          ...(prev.replayLoop ? { replayLoop: false } : {}),
+        }));
         const availableColors = getVisiblePalette(
           cachedPuzzle.palette,
           cachedPuzzle.regions,
@@ -2664,7 +2658,7 @@ export const App: React.FC = () => {
         setIsLoading(false);
 
         if ((forceReplay || settings.autoReplayOnLoad !== false) && orderedIds.length > 0) {
-          startReplay(orderedIds, !forceReplay);
+          startReplay(orderedIds, true);
         }
       };
       img.onerror = () => {
@@ -4148,7 +4142,6 @@ export const App: React.FC = () => {
         reverseDoubleTapZoom={settings.reverseDoubleTapZoom}
         zoomSensitivity={settings.zoomSensitivity}
         snapZoomLevels={settings.snapZoomLevels}
-        showMagnifierLoupe={!isReplaying && settings.showMagnifierLoupe !== false}
         displayNumberMap={displayNumberMap}
         initialZoomScale={initialViewport.zoomScale}
         initialPanOffsetX={initialViewport.panOffsetX}
@@ -4177,7 +4170,6 @@ export const App: React.FC = () => {
         generationProgress={loadingProgress}
         generationStepIndex={loadingPayload?.stepIndex || 1}
         coopRippleBuffer={coopRippleBufferRef.current}
-        fillBloomBuffer={fillBloomBufferRef.current}
         onViewExtentChanged={(zoom, panX, panY, containerW, containerH) => {
           if (containerW && containerH && containerW > 0 && containerH > 0) {
             canvasContainerSizeRef.current = { width: containerW, height: containerH };
