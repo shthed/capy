@@ -5,7 +5,8 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-11-11",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true,
+  "workers_dev": false,
+  "preview_urls": false,
   "routes": [
     {
       "pattern": "capypaint.com",

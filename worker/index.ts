@@ -1,26 +1,42 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
+  checkSocketRateLimit,
+  evaluateRoomSeedAction,
   isAllowedRelayOrigin,
   MAX_COOP_FRAME_BYTES,
   MAX_ROOM_PARTICIPANTS,
   normalizeRoomCode,
   RelayParticipant,
   ROOM_STATE_TTL_MS,
+  SEED_CHECKPOINT_DEBOUNCE_MS,
   validateCoopFrame,
 } from './coopRoomProtocol';
 
 interface SocketAttachment {
   roomCode: string;
   participant: RelayParticipant | null;
+  joinedAt?: number;
+  frameTimestamps?: number[];
+}
+
+interface RoomSeedRecord {
+  seedToken: string;
+  updatedAt: number;
 }
 
 /**
  * Hibernating SQLite-backed Durable Object coordinating a single 6-character Co-op room.
- * Uses Cloudflare's WebSocket Hibernation API so idle sockets consume 0 CPU ms between strokes.
+ * Uses Cloudflare's WebSocket Hibernation API + C++ PING/PONG auto-response so idle sockets
+ * consume 0 CPU ms between strokes.
  */
 export class CoopRoomDurableObject extends DurableObject<Env> {
+  private lastSeedWriteAt = 0;
+  private lastSavedSeedToken: string | null = null;
+  private pendingCheckpoint: { roomCode: string; seedToken: string } | null = null;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('PING', 'PONG'));
     this.ctx.blockConcurrencyWhile(async () => {
       this.ctx.storage.sql.exec(`
         CREATE TABLE IF NOT EXISTS room_state (
@@ -56,11 +72,14 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     const initialAttachment: SocketAttachment = {
       roomCode,
       participant: null,
+      frameTimestamps: [],
     };
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment(initialAttachment);
 
-    await this.ctx.storage.setAlarm(Date.now() + ROOM_STATE_TTL_MS);
+    if (!this.pendingCheckpoint) {
+      await this.ctx.storage.setAlarm(Date.now() + ROOM_STATE_TTL_MS);
+    }
 
     return new Response(null, {
       status: 101,
@@ -69,14 +88,32 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    if (message === 'PING') {
+      try {
+        ws.send('PONG');
+      } catch {
+        // Ignore closed socket
+      }
+      return;
+    }
+
     const attachment = (ws.deserializeAttachment() as SocketAttachment | null) ?? null;
     if (!attachment?.roomCode) {
       ws.close(1008, 'Missing room attachment');
       return;
     }
 
+    const now = Date.now();
+    const rate = checkSocketRateLimit(attachment.frameTimestamps, now);
+    if (!rate.allowed) {
+      ws.close(1008, 'Rate limit exceeded');
+      return;
+    }
+    attachment.frameTimestamps = rate.timestamps;
+
     const validation = validateCoopFrame(message, attachment.roomCode);
     if (!validation.ok || !validation.message || !validation.serialized) {
+      ws.serializeAttachment(attachment);
       if (validation.reason === 'frame_size_exceeded') {
         ws.close(1009, `Frame exceeds ${MAX_COOP_FRAME_BYTES} byte limit`);
       }
@@ -85,10 +122,38 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
 
     const parsed = validation.message;
     attachment.participant = parsed.sender;
+    if (parsed.type === 'HELLO' && !attachment.joinedAt) {
+      attachment.joinedAt = now;
+    }
     ws.serializeAttachment(attachment);
 
     if (parsed.seedToken && (parsed.type === 'HELLO' || parsed.type === 'WELCOME_STATE')) {
-      this.saveRoomSeedToken(attachment.roomCode, parsed.seedToken);
+      const currentRecord = this.loadRoomSeedRecord(now);
+      if (this.lastSeedWriteAt === 0 && currentRecord) {
+        this.lastSeedWriteAt = currentRecord.updatedAt;
+        this.lastSavedSeedToken = currentRecord.seedToken;
+      }
+      const effectiveSeed =
+        this.pendingCheckpoint?.seedToken ?? currentRecord?.seedToken ?? this.lastSavedSeedToken;
+      const seedAction = evaluateRoomSeedAction({
+        messageType: parsed.type,
+        incomingSeedToken: parsed.seedToken,
+        hasSocketJoined: Boolean(attachment.joinedAt),
+        existingSeedToken: effectiveSeed,
+        lastSavedSeedToken: effectiveSeed,
+        lastWriteAtMs: this.lastSeedWriteAt,
+        nowMs: now,
+      });
+
+      if (seedAction === 'write_now') {
+        this.saveRoomSeedToken(attachment.roomCode, parsed.seedToken, now);
+      } else if (seedAction === 'debounce') {
+        this.pendingCheckpoint = {
+          roomCode: attachment.roomCode,
+          seedToken: parsed.seedToken,
+        };
+        await this.ctx.storage.setAlarm(this.lastSeedWriteAt + SEED_CHECKPOINT_DEBOUNCE_MS);
+      }
     }
 
     const sockets = this.ctx.getWebSockets();
@@ -105,7 +170,8 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
 
     // If a player joins or reconnects when no active peer replied yet, hydrate from SQLite seedToken
     if (parsed.type === 'HELLO' && deliveredCount === 0) {
-      const storedSeed = this.loadRoomSeedToken();
+      const storedSeed =
+        this.pendingCheckpoint?.seedToken ?? this.loadRoomSeedRecord(now)?.seedToken ?? null;
       if (storedSeed && storedSeed !== parsed.seedToken) {
         try {
           ws.send(
@@ -116,10 +182,10 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
                 playerId: '__capy_room_relay__',
                 displayName: 'Room Relay',
                 avatarColorHex: '#38bdf8',
-                lastActiveAt: Date.now(),
+                lastActiveAt: now,
               },
               seedToken: storedSeed,
-              sentAt: Date.now(),
+              sentAt: now,
             })
           );
         } catch {
@@ -135,6 +201,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     reason: string,
     _wasClean: boolean
   ): Promise<void> {
+    this.flushPendingCheckpoint(Date.now());
     this.broadcastDeparture(ws);
     try {
       ws.close(code, reason.slice(0, 100));
@@ -144,6 +211,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
   }
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    this.flushPendingCheckpoint(Date.now());
     this.broadcastDeparture(ws);
     try {
       ws.close(1011, 'WebSocket error');
@@ -153,11 +221,29 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
+    const now = Date.now();
+    this.flushPendingCheckpoint(now);
+    const record = this.loadRoomSeedRecord(now);
     if (this.ctx.getWebSockets().length === 0) {
-      this.ctx.storage.sql.exec('DELETE FROM room_state');
+      if (record) {
+        const expiresAt = record.updatedAt + ROOM_STATE_TTL_MS;
+        if (now >= expiresAt) {
+          this.ctx.storage.sql.exec('DELETE FROM room_state');
+        } else {
+          await this.ctx.storage.setAlarm(expiresAt);
+        }
+      } else {
+        this.ctx.storage.sql.exec('DELETE FROM room_state');
+      }
     } else {
-      await this.ctx.storage.setAlarm(Date.now() + ROOM_STATE_TTL_MS);
+      await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
     }
+  }
+
+  private flushPendingCheckpoint(now: number): void {
+    if (!this.pendingCheckpoint) return;
+    const { roomCode, seedToken } = this.pendingCheckpoint;
+    this.saveRoomSeedToken(roomCode, seedToken, now);
   }
 
   private broadcastDeparture(closedWs: WebSocket): void {
@@ -181,8 +267,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     }
   }
 
-  private saveRoomSeedToken(roomCode: string, seedToken: string): void {
-    const now = Date.now();
+  private saveRoomSeedToken(roomCode: string, seedToken: string, now: number = Date.now()): void {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_state (key, value, updated_at)
        VALUES ('seed_token', ?, ?), ('room_code', ?, ?)
@@ -192,13 +277,29 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       roomCode,
       now
     );
+    this.lastSeedWriteAt = now;
+    this.lastSavedSeedToken = seedToken;
+    this.pendingCheckpoint = null;
   }
 
-  private loadRoomSeedToken(): string | null {
+  private loadRoomSeedRecord(now: number = Date.now()): RoomSeedRecord | null {
     const rows = this.ctx.storage.sql
-      .exec<{ value: string }>(`SELECT value FROM room_state WHERE key = 'seed_token' LIMIT 1`)
+      .exec<{ value: string; updated_at: number }>(
+        `SELECT value, updated_at FROM room_state WHERE key = 'seed_token' LIMIT 1`
+      )
       .toArray();
-    return rows.length > 0 ? rows[0].value : null;
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    if (now - row.updated_at > ROOM_STATE_TTL_MS) {
+      this.ctx.storage.sql.exec('DELETE FROM room_state');
+      this.lastSavedSeedToken = null;
+      this.lastSeedWriteAt = 0;
+      return null;
+    }
+    return {
+      seedToken: row.value,
+      updatedAt: row.updated_at,
+    };
   }
 }
 
@@ -230,7 +331,7 @@ export default {
 
     if (url.pathname === '/api/room') {
       const origin = request.headers.get('Origin');
-      if (!isAllowedRelayOrigin(origin)) {
+      if (!isAllowedRelayOrigin(origin, env.ALLOWED_EXTRA_ORIGINS)) {
         console.error(
           JSON.stringify({
             event: 'coop_origin_rejected',

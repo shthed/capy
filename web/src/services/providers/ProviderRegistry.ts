@@ -1017,8 +1017,7 @@ export function resolveCoopRoomWsUrl(
   if (
     hostname === 'capypaint.com' ||
     hostname === 'www.capypaint.com' ||
-    hostname.endsWith('.capypaint.com') ||
-    hostname.endsWith('.workers.dev')
+    hostname.endsWith('.capypaint.com')
   ) {
     const wsProto = locationLike.protocol === 'http:' ? 'ws:' : 'wss:';
     const targetHost =
@@ -1029,14 +1028,31 @@ export function resolveCoopRoomWsUrl(
   return null;
 }
 
-class HybridCoopRoomAdapter implements RealtimeRoomProvider {
+export function computeCoopReconnectDelayMs(
+  attempt: number,
+  randomVal: number = Math.random()
+): number {
+  const expMs = Math.min(15_000, 1000 * Math.pow(2, Math.max(0, attempt)));
+  const clampedRandom = Math.min(1, Math.max(0, randomVal));
+  const jittered = Math.round(expMs * (0.8 + clampedRandom * 0.4));
+  return Math.max(1000, Math.min(15_000, jittered));
+}
+
+export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   private roomCode: string | null = null;
   private selfParticipant: CoopParticipant | null = null;
   private seedToken: string | undefined;
   private channel: BroadcastChannel | null = null;
   private ws: WebSocket | null = null;
+  private wsEndpoint: string | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private wsPingTimer: ReturnType<typeof setInterval> | null = null;
+  private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private wsReconnectAttempt = 0;
+  private isLeavingRoom = false;
+  private detachLifecycleListeners: (() => void) | null = null;
   private participants = new Map<string, CoopParticipant>();
+  private participantTransports = new Map<string, 'channel' | 'ws'>();
   private seenEventIds = new Set<string>();
 
   private paintHandlers = new Set<(event: CoopPaintEvent) => void>();
@@ -1062,54 +1078,24 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       .slice(0, 8);
     if (!normalized) throw new Error('Invalid room code');
 
+    this.isLeavingRoom = false;
     this.roomCode = normalized;
     this.selfParticipant = { ...participant, lastActiveAt: Date.now() };
     this.seedToken = initialSeedToken;
     this.participants.clear();
+    this.participantTransports.clear();
     this.participants.set(this.selfParticipant.playerId, this.selfParticipant);
     this.emitParticipants();
 
     if (typeof BroadcastChannel !== 'undefined') {
       this.channel = new BroadcastChannel(`capy_coop_room_${normalized}`);
       this.channel.onmessage = (ev: MessageEvent<CoopRoomWireMessage>) => {
-        if (ev.data) this.handleWireMessage(ev.data);
+        if (ev.data) this.handleWireMessage(ev.data, 'channel');
       };
     }
 
-    const explicitWsEndpoint = (import.meta as unknown as { env?: Record<string, string> }).env
-      ?.VITE_CAPY_ROOM_WS_URL;
-    const wsEndpoint = resolveCoopRoomWsUrl(
-      explicitWsEndpoint,
-      typeof window !== 'undefined' ? window.location : null
-    );
-    if (wsEndpoint && typeof WebSocket !== 'undefined') {
-      try {
-        const sep = wsEndpoint.includes('?') ? '&' : '?';
-        this.ws = new WebSocket(`${wsEndpoint}${sep}room=${encodeURIComponent(normalized)}`);
-        this.ws.onmessage = (ev) => {
-          try {
-            const parsed = JSON.parse(String(ev.data)) as CoopRoomWireMessage;
-            this.handleWireMessage(parsed);
-          } catch {
-            // Ignore malformed frame
-          }
-        };
-        this.ws.onopen = () => {
-          this.sendWireMessage({
-            type: 'HELLO',
-            roomCode: normalized,
-            sender: this.selfParticipant!,
-            seedToken: this.seedToken,
-            sentAt: Date.now(),
-          });
-        };
-      } catch {
-        this.ws = null;
-      }
-    }
-
-    // Announce presence immediately
-    this.sendWireMessage({
+    // Announce immediate presence on local BroadcastChannel
+    this.sendLocalChannelMessage({
       type: 'HELLO',
       roomCode: normalized,
       sender: this.selfParticipant,
@@ -1117,12 +1103,34 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       sentAt: Date.now(),
     });
 
+    const explicitWsEndpoint = (import.meta as unknown as { env?: Record<string, string> }).env
+      ?.VITE_CAPY_ROOM_WS_URL;
+    this.wsEndpoint = resolveCoopRoomWsUrl(
+      explicitWsEndpoint,
+      typeof window !== 'undefined' ? window.location : null
+    );
+    if (this.wsEndpoint && typeof WebSocket !== 'undefined') {
+      this.wsReconnectAttempt = 0;
+      this.attachLifecycleListeners();
+      this.wsPingTimer = setInterval(() => {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          try {
+            this.ws.send('PING');
+          } catch {
+            // Ignore send failure; onclose drives reconnect
+          }
+        }
+      }, 30_000);
+      this.openWebSocket();
+    }
+
     this.heartbeatTimer = setInterval(() => {
       if (!this.roomCode || !this.selfParticipant) return;
       this.selfParticipant.lastActiveAt = Date.now();
       this.participants.set(this.selfParticipant.playerId, this.selfParticipant);
       this.pruneStaleParticipants();
-      this.sendWireMessage({
+      // Keep 5s HEARTBEAT strictly on local BroadcastChannel so Cloudflare DO can hibernate
+      this.sendLocalChannelMessage({
         type: 'HEARTBEAT',
         roomCode: this.roomCode,
         sender: this.selfParticipant,
@@ -1131,7 +1139,133 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     }, 5000);
   }
 
+  private attachLifecycleListeners(): void {
+    this.detachLifecycleListeners?.();
+    const cleanups: Array<() => void> = [];
+    const recoverIfDisconnected = () => {
+      if (this.isLeavingRoom || !this.roomCode || !this.wsEndpoint) return;
+      if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
+        if (this.wsReconnectTimer) {
+          clearTimeout(this.wsReconnectTimer);
+          this.wsReconnectTimer = null;
+        }
+        this.wsReconnectAttempt = 0;
+        this.openWebSocket();
+      }
+    };
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('online', recoverIfDisconnected);
+      cleanups.push(() => window.removeEventListener('online', recoverIfDisconnected));
+    }
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      const onVisibility = () => {
+        if (document.visibilityState === 'visible') {
+          recoverIfDisconnected();
+        }
+      };
+      document.addEventListener('visibilitychange', onVisibility);
+      cleanups.push(() => document.removeEventListener('visibilitychange', onVisibility));
+    }
+    this.detachLifecycleListeners = () => {
+      for (const fn of cleanups) fn();
+    };
+  }
+
+  private openWebSocket(): void {
+    if (this.isLeavingRoom || !this.roomCode || !this.wsEndpoint || typeof WebSocket === 'undefined') {
+      return;
+    }
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+
+    try {
+      const sep = this.wsEndpoint.includes('?') ? '&' : '?';
+      const socket = new WebSocket(
+        `${this.wsEndpoint}${sep}room=${encodeURIComponent(this.roomCode)}`
+      );
+      this.ws = socket;
+
+      socket.onopen = () => {
+        if (this.ws !== socket || this.isLeavingRoom || !this.roomCode || !this.selfParticipant) {
+          try {
+            socket.close();
+          } catch {
+            // Ignore
+          }
+          return;
+        }
+        this.wsReconnectAttempt = 0;
+        this.sendWebSocketMessage({
+          type: 'HELLO',
+          roomCode: this.roomCode,
+          sender: this.selfParticipant,
+          seedToken: this.seedToken,
+          sentAt: Date.now(),
+        });
+      };
+
+      socket.onmessage = (ev) => {
+        const raw = typeof ev.data === 'string' ? ev.data : String(ev.data ?? '');
+        if (raw === 'PONG' || raw === 'PING') return;
+        try {
+          const parsed = JSON.parse(raw) as CoopRoomWireMessage;
+          this.handleWireMessage(parsed, 'ws');
+        } catch {
+          // Ignore malformed frame
+        }
+      };
+
+      socket.onclose = () => {
+        if (this.ws === socket) {
+          this.ws = null;
+        }
+        this.clearWsParticipants();
+        if (!this.isLeavingRoom && this.roomCode && this.wsEndpoint) {
+          this.scheduleWsReconnect();
+        }
+      };
+
+      socket.onerror = () => {
+        // Allow onclose to drive cleanup and backoff
+      };
+    } catch {
+      this.ws = null;
+      this.scheduleWsReconnect();
+    }
+  }
+
+  private scheduleWsReconnect(): void {
+    if (this.wsReconnectTimer || this.isLeavingRoom || !this.roomCode || !this.wsEndpoint) {
+      return;
+    }
+    const delayMs = computeCoopReconnectDelayMs(this.wsReconnectAttempt++);
+    this.wsReconnectTimer = setTimeout(() => {
+      this.wsReconnectTimer = null;
+      if (!this.isLeavingRoom && this.roomCode && this.wsEndpoint) {
+        this.openWebSocket();
+      }
+    }, delayMs);
+  }
+
+  private clearWsParticipants(): void {
+    let changed = false;
+    for (const [pid, transport] of this.participantTransports.entries()) {
+      if (this.selfParticipant && pid === this.selfParticipant.playerId) continue;
+      if (transport === 'ws') {
+        this.participantTransports.delete(pid);
+        if (this.participants.delete(pid)) {
+          changed = true;
+        }
+      }
+    }
+    if (changed) this.emitParticipants();
+  }
+
   leaveRoom(): void {
+    this.isLeavingRoom = true;
     if (this.roomCode && this.selfParticipant) {
       this.sendWireMessage({
         type: 'LEAVE',
@@ -1144,32 +1278,55 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.wsPingTimer) {
+      clearInterval(this.wsPingTimer);
+      this.wsPingTimer = null;
+    }
+    if (this.wsReconnectTimer) {
+      clearTimeout(this.wsReconnectTimer);
+      this.wsReconnectTimer = null;
+    }
+    this.detachLifecycleListeners?.();
+    this.detachLifecycleListeners = null;
+
     if (this.channel) {
       this.channel.close();
       this.channel = null;
     }
     if (this.ws) {
+      const activeWs = this.ws;
+      this.ws = null;
+      activeWs.onopen = null;
+      activeWs.onmessage = null;
+      activeWs.onclose = null;
+      activeWs.onerror = null;
       try {
-        this.ws.close();
+        activeWs.close();
       } catch {
         // Ignore
       }
-      this.ws = null;
     }
+    this.wsEndpoint = null;
+    this.wsReconnectAttempt = 0;
     this.roomCode = null;
     this.selfParticipant = null;
     this.seedToken = undefined;
     this.participants.clear();
+    this.participantTransports.clear();
     this.seenEventIds.clear();
+    this.isLeavingRoom = false;
     this.emitParticipants();
   }
 
-  private sendWireMessage(msg: CoopRoomWireMessage): void {
+  private sendLocalChannelMessage(msg: CoopRoomWireMessage): void {
     try {
       this.channel?.postMessage(msg);
     } catch {
       // Ignore closed channel
     }
+  }
+
+  private sendWebSocketMessage(msg: CoopRoomWireMessage): void {
     try {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify(msg));
@@ -1179,12 +1336,26 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     }
   }
 
-  private handleWireMessage(msg: CoopRoomWireMessage): void {
+  private sendWireMessage(msg: CoopRoomWireMessage): void {
+    this.sendLocalChannelMessage(msg);
+    this.sendWebSocketMessage(msg);
+  }
+
+  private handleWireMessage(msg: CoopRoomWireMessage, source: 'channel' | 'ws' = 'channel'): void {
     if (!this.roomCode || msg.roomCode !== this.roomCode || !msg.sender) return;
     if (this.selfParticipant && msg.sender.playerId === this.selfParticipant.playerId) return;
 
+    if (msg.type === 'WELCOME_STATE' && msg.sender.playerId === '__capy_room_relay__') {
+      if (msg.seedToken) {
+        const relaySender: CoopParticipant = { ...msg.sender, lastActiveAt: Date.now() };
+        for (const h of this.welcomeHandlers) h(msg.seedToken, relaySender);
+      }
+      return;
+    }
+
     if (msg.type === 'LEAVE') {
       this.participants.delete(msg.sender.playerId);
+      this.participantTransports.delete(msg.sender.playerId);
       this.emitParticipants();
       return;
     }
@@ -1193,8 +1364,15 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       ...msg.sender,
       lastActiveAt: Date.now(),
     };
-    const isNewPeer = !this.participants.has(updatedSender.playerId);
-    this.participants.set(updatedSender.playerId, updatedSender);
+    const pid = updatedSender.playerId;
+    if (source === 'channel') {
+      this.participantTransports.set(pid, 'channel');
+    } else if (this.participantTransports.get(pid) !== 'channel') {
+      this.participantTransports.set(pid, 'ws');
+    }
+
+    const isNewPeer = !this.participants.has(pid);
+    this.participants.set(pid, updatedSender);
     if (isNewPeer) {
       this.emitParticipants();
     }
@@ -1203,15 +1381,20 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       if (msg.seedToken) {
         for (const h of this.welcomeHandlers) h(msg.seedToken, updatedSender);
       }
-      // Reply with our current welcome state so newly joined peers converge immediately!
+      // Reply with our current welcome state on the transport that delivered HELLO
       if (this.selfParticipant) {
-        this.sendWireMessage({
+        const welcomeMsg: CoopRoomWireMessage = {
           type: 'WELCOME_STATE',
           roomCode: this.roomCode,
           sender: this.selfParticipant,
           seedToken: this.seedToken,
           sentAt: Date.now(),
-        });
+        };
+        if (source === 'ws') {
+          this.sendWebSocketMessage(welcomeMsg);
+        } else {
+          this.sendLocalChannelMessage(welcomeMsg);
+        }
       }
       return;
     }
@@ -1271,8 +1454,10 @@ class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     let changed = false;
     for (const [pid, peer] of this.participants.entries()) {
       if (this.selfParticipant && pid === this.selfParticipant.playerId) continue;
+      if (this.participantTransports.get(pid) === 'ws') continue;
       if (peer.lastActiveAt < cutoff) {
         this.participants.delete(pid);
+        this.participantTransports.delete(pid);
         changed = true;
       }
     }
