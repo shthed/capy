@@ -93,7 +93,7 @@ export function transformPersonaContent(content) {
       '$1'
     )
     .replace(
-      /https:\/\/(?:shthed|capyboop)\.github\.io\/capy\/(?:PR|pull)\/\d+\/?/g,
+      /https:\/\/(?:shthed|capyboop)\.github\.io\/capy\/(?:alpha|PR|pull)\/\d+\/?/g,
       'https://capypaint.com/'
     )
     .replaceAll('https://github.com/shthed/capy', 'https://github.com/capyboop/capy')
