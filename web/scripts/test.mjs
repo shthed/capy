@@ -5246,9 +5246,9 @@ async function runBrowserBasicsSuite() {
 
     // Verify completed puzzle Replay button starts replay in place without zooming out or resetting viewport
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
-    if (await page.locator('[data-testid="replay-controls-window"]').isVisible()) {
-      const cb6 = await page.locator('canvas').first().boundingBox();
-      await page.mouse.click(cb6.x + cb6.width * 0.5, cb6.y + cb6.height * 0.5);
+    if (await page.locator('[data-testid="replay-exit-btn"]').isVisible()) {
+      await page.locator('[data-testid="replay-exit-btn"]').click();
+      await page.waitForTimeout(150);
     }
     const completedReplayBtn = await page.waitForSelector('[data-testid="replay-btn"]', { timeout: 5000 });
     await completedReplayBtn.click();
