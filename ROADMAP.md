@@ -5,7 +5,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 **Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
-1. [`EPIC-2`: `v3.0.1` Critical Bugfixes (`Active in Sprint 1`)](#1-epic-2-v301-critical-bugfixes-active-in-sprint-1)
+1. [`EPIC-2`: `v3.0.1` Critical Bugfixes & Android Play Release (`Active in Sprint 1`)](#1-epic-2-v301-critical-bugfixes--android-play-release-active-in-sprint-1)
 2. [`EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Owner Review & Approval`)](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval)
 3. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready After EPIC-3`)](#3-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish-ready-after-epic-3)
 4. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)](#4-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation-blocked-on-external-infra)
@@ -13,25 +13,25 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 6. [Shipped Epics & Stories (`EPIC-1` & Completed Stories)](#6-shipped-epics--stories-epic-1--completed-stories)
 
 <details>
-<summary>Roadmap Rollup (`16` Stories & `3` Staged Bugfixes across `4` Epics)</summary>
+<summary>Roadmap Rollup (`16` Stories & `2` Remaining `v3.0.1` Items across `4` Epics)</summary>
 
-- `EPIC-2` ([#477](https://github.com/shthed/capy/issues/477), *`v3.0.1` Critical Bugfixes -- [Sprint 1 (`#2`)](https://github.com/shthed/capy/milestone/2)*): `~42k tokens` (`BUG-1`..`BUG-3` in [`TODO.md`](./TODO.md))
+- `EPIC-2` ([#477](https://github.com/shthed/capy/issues/477), *`v3.0.1` Critical Bugfixes & Android/Play Release -- [Sprint 1 (`#2`)](https://github.com/shthed/capy/milestone/2)*): `~28k tokens` (`BUG-4` + `TASK-2.5` in [`TODO.md`](./TODO.md))
 - `EPIC-3` ([#478](https://github.com/shthed/capy/issues/478), *8 Stories -- [Sprint 2 (`#3`)](https://github.com/shthed/capy/milestone/3), Awaiting Owner Review*): `~256k tokens` (`~119--171 min agent`)
 - `EPIC-4` ([#479](https://github.com/shthed/capy/issues/479), *3 Stories -- [Sprint 3 (`#4`)](https://github.com/shthed/capy/milestone/4), Ready After `EPIC-3`*): `~68k tokens` (`~32--46 min agent`)
 - `EPIC-5` ([#480](https://github.com/shthed/capy/issues/480), *5 Stories -- Blocked on External Infra*): `~245k tokens` (`~113--165 min agent`)
-- **Total Strategic Horizon**: `~611k tokens` (`~4.8--6.9 hrs agent` | `~80--117.5 hrs human`)
+- **Total Strategic Horizon**: `~597k tokens` (`~4.6--6.7 hrs agent` | `~77--112 hrs human`)
 
 </details>
 
 ---
 
-## 1. `EPIC-2`: `v3.0.1` Critical Bugfixes (`Active in Sprint 1`)
+## 1. `EPIC-2`: `v3.0.1` Critical Bugfixes & Android Play Release (`Active in Sprint 1`)
 
-**Epic Goal**: Stabilize `v3.0.0` / `v3.0.1` strictly with critical reliability, lifecycle, and CI bugfixes—zero unapproved new features. *(Tracking: [#477](https://github.com/shthed/capy/issues/477) | [Sprint 1 (`#2`)](https://github.com/shthed/capy/milestone/2)).*
+**Epic Goal**: Stabilize `v3.0.0` / `v3.0.1` with critical reliability fixes, go live at `https://capypaint.com/`, and ship the Android app to Google Play Store—zero unapproved new features. *(Tracking: [#477](https://github.com/shthed/capy/issues/477) | [Sprint 1 (`#2`)](https://github.com/shthed/capy/milestone/2)).*
 
-- **Active Execution Queue**: See [`TODO.md`](./TODO.md) for the `BUG-1`--`BUG-3` specs (all three fixes are staged on `beta` in `#484` / `#485` awaiting human QA and Production merge).
+- **Active Execution Queue**: See [`TODO.md`](./TODO.md) for `BUG-4` (`capypaint.com` live DNS & Cloudflare Worker cutover) and `TASK-2.5` (Android `.aab` & Google Play Store release for `v3.0.1`).
 - **Previously Shipped / Moved Scope**:
-  - `US-2.2` zoom controls & `TASK-2.3a` woodblock tap synth shipped in [#472](https://github.com/shthed/capy/pull/472) (archived in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories)).
+  - `BUG-1`--`BUG-3` shipped to `main` in [#485](https://github.com/shthed/capy/pull/485); mobile `GameTopBar` overlap & `99%` incomplete progress cap merged to `beta` in [#486](https://github.com/shthed/capy/pull/486); `US-2.2` & `TASK-2.3a` shipped in [#472](https://github.com/shthed/capy/pull/472) (archived in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories)).
   - Feature stories `US-2.1`, `US-2.3b`, and `US-2.4` moved to [`EPIC-3`](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval) for Owner review and approval.
 
 ---
@@ -417,9 +417,11 @@ Parked native desktop/mobile store wrappers awaiting completion of `EPIC-2`--`EP
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#484)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 #476 & Shipped Slices -- PRs #431--#486)</summary>
 
-- **Sprint 1 Reliability, Replay Polish & Cloud Hardening (`BUG-1`, `BUG-3`, `F-01`, `F-02`)**:
+- **Sprint 1 `v3.0.0` / `v3.0.1` Bugfix Slices (`BUG-1`--`BUG-3`, Mobile TopBar & `99%` Progress Cap)**:
+  - **Mobile `GameTopBar` Two-Lane Non-Overlap Layout & `computeProgressPercentage` `99%` Incomplete Cap (`v3.0.1`)** -- [#486](https://github.com/shthed/capy/pull/486)
+  - **`v3.0.0` Production Promotion (`BUG-2` CI Cloud Variable Injection & `< 2s` `sanity.mjs` Gate + Sprint 1 Bundle)** -- [#485](https://github.com/shthed/capy/pull/485)
   - **Co-op `WELCOME_STATE` Reload Persistence, Replay Scrubber `Resume Here` & `Reset Progress` `'UNFILL_EVENT'` Sync, Compact Mobile `ReplayControls` Pill Fit & Save-Load `replayLoop` Auto-Disable/Auto-Resume, Monotonic CRDT `resetEpoch`, `> 180 KB` Chunked Play Games Binary Sync, and Android `MainActivity` `onPause` / `onResume` WebView Lifecycle Guard** -- [#484](https://github.com/shthed/capy/pull/484)
 - **Shipped Slices from `EPIC-5` (*Production Cloud Auth, Cross-Network Co-op & Optional AI Creation* -- [#480](https://github.com/shthed/capy/issues/480))**:
   - **`capypaint.com` Cloudflare Workers Static Assets, Hibernating `CoopRoomDurableObject` Relay (`US-5.2`) & Root `assetlinks.json` App Links (`US-5.1`)** -- [#482](https://github.com/shthed/capy/pull/482)
