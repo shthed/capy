@@ -65,9 +65,7 @@ jobs:
             const isBetaTarget = baseRef === 'beta';
             const ownerLogin = owner.toLowerCase();
             const prAuthorLogin = (pr.user?.login || '').toLowerCase();
-            const isBotAuthoredPr = prAuthorLogin === 'github-actions[bot]';
             const isDependabotPr = prAuthorLogin === 'dependabot[bot]';
-            const requiresNativeApproveOnMain = isBotAuthoredPr || isDependabotPr;
             const isReadOnlyDependabotEvent =
               isDependabotPr && context.eventName === 'pull_request';
 
@@ -124,23 +122,6 @@ jobs:
               await safeRemoveLabel('review:ai-approved');
               await safeRemoveLabel('review:owner-approved');
               await safeRemoveLabel('review:changes-requested');
-            }
-
-            // Determine latest labeled timestamps for review:owner-approved
-            let latestOwnerLabelMs = 0;
-            for (const ev of issueEvents) {
-              if (
-                ev.event === 'labeled' &&
-                ev.label?.name === 'review:owner-approved' &&
-                ev.actor?.login?.toLowerCase() === ownerLogin &&
-                ev.created_at
-              ) {
-                const ts = Date.parse(ev.created_at) || 0;
-                if (ts > latestOwnerLabelMs) latestOwnerLabelMs = ts;
-              }
-            }
-            if (activeLabels.has('review:owner-approved') && latestOwnerLabelMs < latestPushMs) {
-              await safeRemoveLabel('review:owner-approved');
             }
 
             const reviews = await github.paginate(github.rest.pulls.listReviews, {
@@ -209,23 +190,9 @@ jobs:
 
             // 2. Evaluate Separate Post-Push Human Project Owner Gate
             const nativeHeadApprovals = [];
-            const legacyApprovals = [];
             const rejectionCandidates = [];
-            let hasLegacyOwnerSignal = false;
             let earliestExactHeadReviewMs = 0;
 
-            if (
-              activeLabels.has('review:owner-approved') &&
-              latestOwnerLabelMs > 0 &&
-              latestOwnerLabelMs >= latestPushMs
-            ) {
-              hasLegacyOwnerSignal = true;
-              legacyApprovals.push({
-                ts: latestOwnerLabelMs,
-                id: 0,
-                source: 'label',
-              });
-            }
             if (activeLabels.has('review:changes-requested')) {
               rejectionCandidates.push({
                 ts: Number.MAX_SAFE_INTEGER,
@@ -255,7 +222,6 @@ jobs:
               if (r.state === 'DISMISSED') continue;
 
               const isRejectionBody = /^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body);
-              const isApprovalBody = /^(?:APPROVED|LGTM)\b/i.test(body);
               const isExactHeadNativeApproval =
                 r.state === 'APPROVED' && isExactHead && !isRejectionBody;
               const isRejection = r.state === 'CHANGES_REQUESTED' || isRejectionBody;
@@ -267,11 +233,6 @@ jobs:
               } else if (isRejection) {
                 if (ts >= latestForcePushMs) {
                   rejectionCandidates.push({ ts, id, source: 'review', exactHead: isExactHead });
-                }
-              } else if (isApprovalBody) {
-                if (ts >= latestPushMs) {
-                  hasLegacyOwnerSignal = true;
-                  legacyApprovals.push({ ts, id, source: 'review' });
                 }
               }
             }
@@ -287,21 +248,13 @@ jobs:
                 if (ts >= latestForcePushMs) {
                   rejectionCandidates.push({ ts, id, source: 'comment', exactHead: false });
                 }
-              } else if (/^(?:APPROVED|LGTM)\b/i.test(body)) {
-                if (ts >= latestPushMs) {
-                  hasLegacyOwnerSignal = true;
-                  legacyApprovals.push({ ts, id, source: 'comment' });
-                }
               }
             }
 
             const maxSignalTs = (signals) =>
               signals.reduce((maxTs, s) => (s.ts > maxTs ? s.ts : maxTs), 0);
 
-            const latestLegacyApprovalMs = maxSignalTs(legacyApprovals);
-            const effectiveOwnerApprovals = requiresNativeApproveOnMain
-              ? nativeHeadApprovals
-              : [...nativeHeadApprovals, ...legacyApprovals];
+            const effectiveOwnerApprovals = nativeHeadApprovals;
             const effectiveOwnerApprovalMs = maxSignalTs(effectiveOwnerApprovals);
 
             const skewAnchorMs =
@@ -345,78 +298,29 @@ jobs:
                 isApprovalStrictlyNewerThanRejection(natApp, rej)
               )
             );
-            const hasValidLegacyOwnerSignal =
-              hasLegacyOwnerSignal && latestLegacyApprovalMs >= latestPushMs;
-            const ownerApproved =
-              !isDraft &&
-              !changesRequested &&
-              (requiresNativeApproveOnMain
-                ? hasFreshNativeHeadApproval
-                : hasFreshNativeHeadApproval || hasValidLegacyOwnerSignal);
-            const ownerLegacyOnlyOnBotPr =
-              requiresNativeApproveOnMain &&
-              !isDraft &&
-              !changesRequested &&
-              !hasFreshNativeHeadApproval &&
-              hasValidLegacyOwnerSignal;
+            const ownerApproved = !isDraft && !changesRequested && hasFreshNativeHeadApproval;
             const dualApproved = !isDraft && aiApproved && ownerApproved && !changesRequested;
             const betaApproved = isBetaTarget && !isDraft && aiApproved && !changesRequested;
 
-            // 3. Reconcile github-actions[bot] formal PR review
-            // On bot/dependabot-opened PRs, GitHub rejects bot self-approval with HTTP 422, and the
-            // Project Owner's native APPROVED review directly satisfies main branch rulesets.
-            // On --base beta PRs, never post a formal bot APPROVE review without Owner approval.
-            if (requiresNativeApproveOnMain) {
-              core.info(
-                `PR #${prNumber} is authored by ${prAuthorLogin}; skipping bot self-approval review.`
-              );
-            } else {
-              const botReviews = reviews.filter(
-                (r) => r.user?.login === 'github-actions[bot]' && r.state === 'APPROVED'
-              );
-
-              if (dualApproved) {
-                let hasBotApprovalForHead = false;
-                for (const br of botReviews) {
-                  if (br.commit_id === headSha) {
-                    hasBotApprovalForHead = true;
-                  } else {
-                    try {
-                      await github.rest.pulls.dismissReview({
-                        owner,
-                        repo,
-                        pull_number: prNumber,
-                        review_id: br.id,
-                        message: `Superseded by newer commit ${headSha.slice(0, 7)}.`,
-                      });
-                    } catch (err) {
-                      core.warning(`Failed to dismiss stale bot review ${br.id}: ${err.message}`);
-                    }
-                  }
-                }
-                if (!hasBotApprovalForHead) {
-                  await github.rest.pulls.createReview({
+            // 3. Dismiss any legacy github-actions[bot] formal PR approvals
+            // Bot review rubber-stamping is removed; --base beta passes on AI review (>=95%)
+            // without Owner approval, and --base main requires native GitHub APPROVED on HEAD.
+            const botReviews = reviews.filter(
+              (r) => r.user?.login === 'github-actions[bot]' && r.state === 'APPROVED'
+            );
+            if (!isReadOnlyDependabotEvent) {
+              for (const br of botReviews) {
+                try {
+                  await github.rest.pulls.dismissReview({
                     owner,
                     repo,
                     pull_number: prNumber,
-                    commit_id: headSha,
-                    event: 'APPROVE',
-                    body: `Dual review gate satisfied for \`${headSha}\` (AI Reviewer score \`${latestAiSignal.score}%\` + Project Owner post-push sign-off).`,
+                    review_id: br.id,
+                    message:
+                      'Bot review rubber-stamping is disabled; native GitHub approval on HEAD is required for main.',
                   });
-                }
-              } else {
-                for (const br of botReviews) {
-                  try {
-                    await github.rest.pulls.dismissReview({
-                      owner,
-                      repo,
-                      pull_number: prNumber,
-                      review_id: br.id,
-                      message: 'Dual AI + Project Owner approval is no longer active for current HEAD.',
-                    });
-                  } catch (err) {
-                    core.warning(`Failed to dismiss bot review ${br.id}: ${err.message}`);
-                  }
+                } catch (err) {
+                  core.warning(`Failed to dismiss bot review ${br.id}: ${err.message}`);
                 }
               }
             }
@@ -441,9 +345,6 @@ jobs:
             } else if (dualApproved) {
               state = 'success';
               description = 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
-            } else if (ownerLegacyOnlyOnBotPr) {
-              state = 'pending';
-              description = 'Awaiting Owner native Approve click (required on bot-opened PR)';
             } else if (aiApproved && !ownerApproved) {
               state = 'pending';
               description = 'AI review passed; awaiting Project Owner sign-off';

@@ -33,10 +33,10 @@ const SKIP_DIRS = new Set([
   'build',
 ]);
 
-// M3A defaults (set all three to true in M3B once PM PR 1 merges onto beta):
-const DEFAULT_REQUIRE_PROJECT_MD = false;
-const DEFAULT_ENFORCE_CHANNEL_ORDER = false;
-const DEFAULT_ENFORCE_EPIC_NAMING = false;
+// M3B strict defaults:
+const DEFAULT_REQUIRE_PROJECT_MD = true;
+const DEFAULT_ENFORCE_CHANNEL_ORDER = true;
+const DEFAULT_ENFORCE_EPIC_NAMING = true;
 
 function collectMarkdownFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -226,7 +226,7 @@ export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
   assert.equal(/\[EPIC-\d+\s*\(#\d+\)\]/i.test(markdownText), false, hint);
 }
 
-export function validateRootGuideIndex(root, { requireProjectMd = false } = {}) {
+export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD } = {}) {
   const resolvedRoot = path.resolve(root);
   const rootMdFiles = fs
     .readdirSync(resolvedRoot, { withFileTypes: true })

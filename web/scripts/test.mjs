@@ -2480,7 +2480,7 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(gateBotNativeRes.calls.createReview.length, 0);
 
-    // (b) Bot PR + review:owner-approved label only -> pending awaiting native Approve click
+    // (b) Bot PR + review:owner-approved label only -> pending awaiting Project Owner sign-off
     const gateBotLabelOnlyRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
@@ -2500,11 +2500,11 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotLabelOnlyRes.status.state, 'pending');
     assert.equal(
       gateBotLabelOnlyRes.status.description,
-      'Awaiting Owner native Approve click (required on bot-opened PR)'
+      'AI review passed; awaiting Project Owner sign-off'
     );
     assert.equal(gateBotLabelOnlyRes.calls.createReview.length, 0);
 
-    // (c) Bot PR + APPROVED/LGTM comment only -> pending awaiting native Approve click
+    // (c) Bot PR + APPROVED/LGTM comment only -> pending awaiting Project Owner sign-off
     const gateBotCommentOnlyRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
@@ -2523,7 +2523,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotCommentOnlyRes.status.state, 'pending');
     assert.equal(
       gateBotCommentOnlyRes.status.description,
-      'Awaiting Owner native Approve click (required on bot-opened PR)'
+      'AI review passed; awaiting Project Owner sign-off'
     );
     assert.equal(gateBotCommentOnlyRes.calls.createReview.length, 0);
 
@@ -2545,7 +2545,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotLgtmReviewOnlyRes.status.state, 'pending');
     assert.equal(
       gateBotLgtmReviewOnlyRes.status.description,
-      'Awaiting Owner native Approve click (required on bot-opened PR)'
+      'AI review passed; awaiting Project Owner sign-off'
     );
     assert.equal(gateBotLgtmReviewOnlyRes.calls.createReview.length, 0);
 
@@ -2622,9 +2622,10 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(gateBotChangesReqRes.calls.createReview.length, 0);
 
-    // (f) Manual shthed-authored PR + label/comment -> success and pulls.createReview({ event: 'APPROVE' }) called once
+    // (f) Manual shthed-authored PR + label/comment -> pending (no bot APPROVE rubber-stamping); native APPROVED -> success with stale bot review dismissed
     const gateManualLabelRes = await runReviewGateCase({
       prAuthor: 'shthed',
+      baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
       labels: ['review:ai-approved', 'review:owner-approved'],
@@ -2637,13 +2638,16 @@ async function runCodecAndEngineTests() {
         },
       ],
     });
-    assert.equal(gateManualLabelRes.status.state, 'success');
-    assert.equal(gateManualLabelRes.calls.createReview.length, 1);
-    assert.equal(gateManualLabelRes.calls.createReview[0].event, 'APPROVE');
-    assert.equal(gateManualLabelRes.calls.createReview[0].commit_id, gateHeadSha);
+    assert.equal(gateManualLabelRes.status.state, 'pending');
+    assert.equal(
+      gateManualLabelRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateManualLabelRes.calls.createReview.length, 0);
 
     const gateManualCommentRes = await runReviewGateCase({
       prAuthor: 'shthed',
+      baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
       comments: [
@@ -2655,9 +2659,61 @@ async function runCodecAndEngineTests() {
         },
       ],
     });
-    assert.equal(gateManualCommentRes.status.state, 'success');
-    assert.equal(gateManualCommentRes.calls.createReview.length, 1);
-    assert.equal(gateManualCommentRes.calls.createReview[0].event, 'APPROVE');
+    assert.equal(gateManualCommentRes.status.state, 'pending');
+    assert.equal(
+      gateManualCommentRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateManualCommentRes.calls.createReview.length, 0);
+
+    const gateManualLgtmCommentRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          user: { login: 'shthed' },
+          body: 'LGTM',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualLgtmCommentRes.status.state, 'pending');
+    assert.equal(
+      gateManualLgtmCommentRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateManualLgtmCommentRes.calls.createReview.length, 0);
+
+    const gateManualMainNativeNoBotReviewRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 111,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 112,
+          user: { login: 'github-actions[bot]' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: 'legacy bot approval',
+          submitted_at: '2026-11-13T01:04:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualMainNativeNoBotReviewRes.status.state, 'success');
+    assert.equal(gateManualMainNativeNoBotReviewRes.calls.createReview.length, 0);
+    assert.equal(gateManualMainNativeNoBotReviewRes.calls.dismissReview.length, 1);
 
     // (g) Draft bot PR -> pending even with native APPROVED
     const gateBotDraftRes = await runReviewGateCase({
@@ -3230,6 +3286,31 @@ async function runCodecAndEngineTests() {
     });
     assert.equal(gateBetaHoldFailRes.status.state, 'failure');
 
+    const gateBetaHoldWithLgtmCommentStillFailsRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 30201,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait for fix',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 30202,
+          user: { login: 'shthed' },
+          body: 'LGTM',
+          created_at: '2026-11-13T01:06:00Z',
+          updated_at: '2026-11-13T01:06:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaHoldWithLgtmCommentStillFailsRes.status.state, 'failure');
+    assert.equal(gateBetaHoldWithLgtmCommentStillFailsRes.calls.createReview.length, 0);
+
     const gateBetaDraftRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       baseRef: 'beta',
@@ -3343,7 +3424,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateDependabotMainCommentOnlyRes.status.state, 'pending');
     assert.equal(
       gateDependabotMainCommentOnlyRes.status.description,
-      'Awaiting Owner native Approve click (required on bot-opened PR)'
+      'AI review passed; awaiting Project Owner sign-off'
     );
 
     const gateDependabotMainNativeRes = await runReviewGateCase({

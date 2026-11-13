@@ -72,7 +72,7 @@ All `@JavascriptInterface` methods exposed on `window.CapyAndroid`:
 - **`shareTextLink(title: String, url: String)`**: Launches Android's `Intent.ACTION_SEND` (`text/plain`) chooser for `< 2 KB` progress links and Co-op room invites.
 - **`shareImage(title: String, dataUrl: String)`**: Decodes Base64 PNG data, writes `cacheDir/capy_shared_artwork.png`, and opens Android's Share chooser via AndroidX `FileProvider`.
 - **`shareFile(title: String, fileName: String, mimeType: String, base64Data: String)`**: Writes arbitrary binary or text exports (such as `.capy` v2 archives and PNGs) to `cacheDir/<sanitized_fileName>` and opens Android's Share / Save chooser via `FileProvider`.
-- **`getAppVersion(): String`**: Returns `BuildConfig.VERSION_NAME` (`"3.0.4"` or latest `web/package.json` `"version"`, synchronized automatically at Gradle configure time).
+- **`getAppVersion(): String`**: Returns `BuildConfig.VERSION_NAME` (`"3.0.3"` or latest `web/package.json` `"version"`, synchronized automatically at Gradle configure time).
 
 ---
 
