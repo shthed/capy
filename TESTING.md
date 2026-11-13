@@ -28,7 +28,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers, bi
 
 ### Key Architectural Advantages
 1. **Single Unified Runner ([`web/scripts/test.mjs`](./web/scripts/test.mjs)) + Sub-2s Sanity Gate ([`web/scripts/sanity.mjs`](./web/scripts/sanity.mjs))**:
-   - `npm run test:sanity` verifies SemVer/`versionCode` parity, `CHANGELOG.md` channel-marker invariants, and `.md` formatting/links across the entire repo in `< 2s` with zero browser startup.
+   - `npm run test:sanity` verifies SemVer/`versionCode` parity, `CHANGELOG.md` SemVer/date ordering, clickable PR links, channel-marker invariants, root `.md` guide indexing, and `.md` formatting/links across the entire repo in `< 2s` with zero browser startup.
    - `npm test` consolidates all Vite SSR engine/codec/worker unit checks and headless Chromium E2E stages into one deterministic script, binding an ephemeral preview port automatically when `CAPY_TEST_URL` is unset so concurrent runs never collide on `:3000`.
 2. **Deterministic Pre-Baked + Live Worker Coverage**:
    - Verifies both instant zero-worker startup via `./assets/sample_saves.capy` and live `puzzle.worker.ts` custom photo segmentation, IndexedDB (`capy_game_storage_v8`) persistence, and 100% offline PWA reload.
@@ -41,7 +41,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers, bi
 
 Run from `web/`:
 
-- **`npm run test:sanity` (`node scripts/sanity.mjs`)**: Sub-2-second pure-Node repository gate checking `web/package.json` / `version.ts` / `app/build.gradle.kts` version formula parity, `CHANGELOG.md` channel markers and PR bullets, and `.md` hygiene (zero emojis, zero box-drawing art, zero `>= 3`-column tables, and valid relative links).
+- **`npm run test:sanity` (`node scripts/sanity.mjs`)**: Sub-2-second pure-Node repository gate checking `web/package.json` / `version.ts` / `app/build.gradle.kts` version formula parity, `CHANGELOG.md` SemVer/date descending order, channel markers, and PR bullet links (clean-room compatible), `README.md` / `DEV.md` / `PROJECT.md` root guide indexing, and `.md` hygiene (zero emojis, zero box-drawing art, zero `>= 3`-column tables, and valid relative links).
 - **`npm run lint` (`tsc --noEmit && tsc --noEmit -p ../worker/tsconfig.json`)**: Strict TypeScript type-checking across all React 19 components, services, providers, Web Worker modules, and Cloudflare Worker / Durable Object modules.
 - **`npm run build` (`tsc && vite build`)**: Compiles TypeScript, produces code-split production bundles in `web/dist/`, stamps `dist/sw.js` with `APP_VERSION` and emitted asset chunks, and injects `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` into `dist/.well-known/assetlinks.json`.
 - **`npm test` (`node scripts/test.mjs`)**: Runs the **Unified Engine, Codec & Browser E2E Suite**:
@@ -115,25 +115,27 @@ When extending [`web/scripts/test.mjs`](./web/scripts/test.mjs) for [`PuzzleCanv
 Capy uses a 3-tier `Alpha -> Beta -> Production` GitHub Actions architecture paired with Cloudflare Workers edge deployment:
 
 1. **Build & Test Job (`deploy-branch.yml`, `contents: read`)**:
-   - Runs a `< 2s` docs-only fast-path check on pure `.md`/metadata PRs so required branch ruleset checks pass immediately without consuming build runner minutes.
+   - Runs a `< 2s` pure-Node `npm run test:sanity` check on pure `.md`/metadata PRs (`is_docs_only`, zero `npm ci`) against the resolved PR merge ref (`checkout_ref`) before skipping Web/Android compilation and Pages deploy.
    - Executes `npm ci`, `npm run test:sanity` (`< 2s`), `npm run lint`, and `npm run build` in `web/`, runs Android JUnit4 unit tests (`./gradlew app:testDebugUnitTest`), and assembles the Android debug APK (`./gradlew app:assembleDebug`).
-   - Runs in parallel across PR branches (`feature/* -> beta` and `beta -> main`) without global concurrency locks.
-2. **Playwright E2E Release Gate Job (`deploy-branch.yml`, `contents: read`, conditional on non-draft `pull_request` targeting `main`)**:
-   - Triggered automatically whenever a ready-for-review **Release Promotion PR (`beta -> main`)** opens or updates (`draft == false`).
-   - Installs Playwright Chromium (`npx playwright install --with-deps chromium`) and executes the complete `npm test` SSR + headless Chromium E2E suite before `deploy` can proceed.
+   - Runs in parallel across PR branches (`feature/* -> beta`, `dependabot/* -> beta`, and `beta -> main`) with `inputs.target_branch` concurrency isolation; `dependabot/* -> beta` PRs run `Build & Test` + `Playwright E2E Release Gate` while skipping Pages `deploy`.
+2. **Playwright E2E Release Gate Job (`deploy-branch.yml`, `contents: read`, conditional on non-draft, non-docs `pull_request` targeting `beta` or `main`)**:
+   - Triggered automatically when any ready-for-review (`draft == false`) non-docs PR targeting `beta` (`feature/* -> beta`, `dependabot/* -> beta`) or `main` (`beta -> main`) opens or updates (using the resolved PR merge ref when mergeable).
+   - Caches Playwright Chromium (`~/.cache/ms-playwright` via `actions/cache` keyed on `web/package-lock.json`), installs OS shared libraries or Chromium (`npx playwright install --with-deps chromium` on miss / `install-deps chromium` on hit), and executes the complete `npm test` SSR + headless Chromium E2E suite before `deploy` can proceed.
 3. **Deploy to GitHub Pages Job (`deploy-branch.yml`, `contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
-   - Guarded by `github.event.repository.has_pages == true` and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
-   - Publishes open Alpha PR previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
+   - Guarded by `github.event.repository.has_pages == true` (excluding `dependabot[bot]` PRs and external forks) and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
+   - Publishes open Alpha PR previews to `/PR/<number>/` and `/PR/<number>/capy.apk`.
    - Publishes `beta` merges to `/beta/` (`https://shthed.github.io/capy/beta/`) and `/beta/capy.apk` without touching production `/`.
-   - Publishes `main` promotions to `/` (`https://shthed.github.io/capy/`, preserving `/pull/` and `/beta/`) as a single squashed orphan commit on `gh-pages`.
+   - Publishes `main` promotions to `/` (`https://shthed.github.io/capy/`, preserving `/PR/` and `/beta/`) as a single squashed orphan commit on `gh-pages`.
 4. **Release & Play Store Bundle Workflow ([`release.yml`](./.github/workflows/release.yml))**:
    - Triggered on `v*.*.*` Git tags (or `workflow_dispatch`), compiling `capy-<tag>.apk` (plus unversioned `capy.apk` on stable releases), Google Play Store `capy-<tag>.aab` (`bundleRelease`), and `capy-web-<tag>.tgz` with extracted `CHANGELOG.md` notes.
 5. **Deploy Cloudflare Worker Job ([`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml), `contents: read`)**:
    - Runs `npm run test:sanity`, `npm run lint`, and `npm run build`, deploys `web/dist` Static Assets and `worker/index.ts` (`CoopRoomDurableObject`) to `https://capypaint.com/` via `cloudflare/wrangler-action@v4` when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set (skipping cleanly in `< 2s` when unconfigured), and verifies `https://capypaint.com/api/health`.
 <!-- capy-dev-only:start -->
-6. **Bot-Authored PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)) & Dual AI + Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**:
-   - Enforces Draft-first development (`draft=true` + `gh pr ready` / `synchronize` / `deploy-branch.yml` triggers on bot-opened PRs), machine-verified `review:ai-approved` (`>= 95%` 5-Pillar score for exact `HEAD` SHA), and separate Human Project Owner sign-off via `capy/review-gate` (requiring native 1-click GitHub **Approve** on `HEAD` for `github-actions[bot]`-opened PRs while avoiding HTTP 422 bot self-approval, and preserving legacy fallback on owner-authored PRs), unit-tested against the extracted workflow scripts in [`web/scripts/test.mjs`](./web/scripts/test.mjs).
+6. **Bot-Authored PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)) & Base-Split PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**:
+   - Enforces Draft-first creation (`draft: true` unconditionally in `open-pr.yml` so `gh pr ready <num>` and `synchronize` emit `pull_request` triggers), filters `capy-review` markers to trusted actors/associations (`OWNER`, `MEMBER`, `COLLABORATOR`), and splits `capy/review-gate` by target branch: `--base beta` passes on `!isDraft && aiApproved && !changesRequested` (failing closed on Owner `HOLD`/`CHANGES_REQUESTED`/`review:changes-requested` and holding `dependabot[bot]` / `sync/beta-from-main` pending until AI-reviewed), while `--base main` requires both AI (`>= 95%`) and Project Owner sign-off (native 1-click GitHub **Approve** on `HEAD` for bot and Dependabot PRs), unit-tested against the extracted workflow scripts in [`web/scripts/test.mjs`](./web/scripts/test.mjs).
+7. **Automated `main -> beta` Ancestry Sync ([`sync-beta-from-main.yml`](./.github/workflows/sync-beta-from-main.yml)) & Dependabot ([`dependabot.yml`](./.github/dependabot.yml))**:
+   - Triggered on `push` to `main` (or `workflow_dispatch`); exits cleanly when `origin/main` is already an ancestor of `origin/beta`, otherwise opens/updates a `sync/beta-from-main -> beta` PR merged with `--merge` to preserve ancestry without force-pushing protected `beta`; Dependabot groups weekly `npm`/`gradle`/`github-actions` updates into `--base beta` PRs while scheduled branch cleanup prunes stale `dependabot/` and `sync/` branches safely.
 <!-- capy-dev-only:end -->
 
 > [!NOTE]
-> **Fast Daily CI + Full E2E Production Gate**: `npm run test:sanity && npm run lint && npm run build && npm test` is always run locally inside the Antigravity VM before pushing any PR. Draft and daily `feature/* -> beta` PRs skip heavy Playwright browser downloads in GitHub Actions so `/pull/<number>/` Alpha previews deploy rapidly, while ready-for-review `main` PRs enforce the full Playwright Chromium E2E suite in GitHub Actions as a second safety net.
+> **Fast Daily CI + Full E2E Gate**: `npm run test:sanity && npm run lint && npm run build && npm test` is always run locally inside the Antigravity VM before pushing any PR. Draft PRs (`draft == true`) skip Playwright E2E so WIP `/PR/<number>/` Alpha previews deploy rapidly, pure docs-only PRs run `sanity.mjs` (`< 2s`), and all ready-for-review non-docs PRs (`draft == false`) targeting `beta` or `main` enforce `Playwright E2E Release Gate` (with cached Chromium) in GitHub Actions as a second safety net.

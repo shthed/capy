@@ -25,6 +25,8 @@ export const DEV_ONLY_RELATIVE_PATHS = new Set([
   '.github/workflows/publish-capyboop.yml',
   '.github/workflows/pr-review-gate.yml',
   '.github/workflows/open-pr.yml',
+  '.github/workflows/sync-beta-from-main.yml',
+  '.github/dependabot.yml',
 ]);
 
 export const SKIP_COPY_DIR_NAMES = new Set([
@@ -75,8 +77,8 @@ const TEXT_FILENAMES = new Set([
   '_headers',
 ]);
 
-const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only/i;
+export const FORBIDDEN_PERSONA_REGEX =
+  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|dependabot\.ya?ml/i;
 
 export function stripDevOnlyBlocks(content) {
   return content
@@ -91,7 +93,7 @@ export function transformPersonaContent(content) {
       '$1'
     )
     .replace(
-      /https:\/\/(?:shthed|capyboop)\.github\.io\/capy\/pull\/\d+\/?/g,
+      /https:\/\/(?:shthed|capyboop)\.github\.io\/capy\/(?:PR|pull)\/\d+\/?/g,
       'https://capypaint.com/'
     )
     .replaceAll('https://github.com/shthed/capy', 'https://github.com/capyboop/capy')

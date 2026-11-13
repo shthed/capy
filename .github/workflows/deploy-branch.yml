@@ -37,7 +37,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.target_branch || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -54,6 +54,7 @@ jobs:
       target_dir: ${{ steps.target.outputs.target_dir }}
       preview_url: ${{ steps.target.outputs.preview_url }}
       skip: ${{ steps.target.outputs.skip }}
+      is_docs_only: ${{ steps.target.outputs.is_docs_only }}
       checkout_ref: ${{ steps.target.outputs.checkout_ref }}
     steps:
       - name: Determine deployment target
@@ -139,7 +140,23 @@ jobs:
               isDocsOnlyPr ||
               (!isPullRequest && branch !== 'main' && branch !== 'beta' && !prNumber && !allowWithoutPr);
 
-            const checkoutRef = context.payload?.pull_request?.head?.sha || branchInput || context.sha;
+            let prMergeable = context.payload?.pull_request?.mergeable;
+            if (isPullRequest && prNumber && prMergeable == null) {
+              try {
+                const { data: prDetails } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                });
+                prMergeable = prDetails.mergeable;
+              } catch (error) {
+                core.warning(`Failed to inspect mergeable state for PR #${prNumber}: ${error.message}`);
+              }
+            }
+            const prHeadSha = context.payload?.pull_request?.head?.sha;
+            const checkoutRef = isPullRequest
+              ? (prMergeable === false ? (prHeadSha || context.sha) : (context.sha || prHeadSha))
+              : (branchInput || context.sha);
 
             const summaryLines = [
               `Branch: ${branch}`,
@@ -151,7 +168,7 @@ jobs:
             ];
 
             if (isDocsOnlyPr) {
-              summaryLines.push('Fast-path pass: PR modifies documentation/metadata files only (skipping Web/Android build and Pages deploy).');
+              summaryLines.push('Fast-path pass: PR modifies documentation/metadata files only (running sanity gate; skipping Web/Android build and Pages deploy).');
             } else if (shouldSkip) {
               summaryLines.push('Deployment skipped: branch has no open PR (override with allow_without_pr).');
             }
@@ -162,12 +179,13 @@ jobs:
             core.setOutput('target_dir', targetDir);
             core.setOutput('preview_url', previewUrl);
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
+            core.setOutput('is_docs_only', isDocsOnlyPr ? 'true' : 'false');
             core.setOutput('checkout_ref', checkoutRef);
 
             core.summary.addRaw(summaryLines.join('\n')).write();
 
       - name: Check out source
-        if: steps.target.outputs.skip != 'true'
+        if: steps.target.outputs.skip != 'true' || steps.target.outputs.is_docs_only == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.target.outputs.checkout_ref }}
@@ -179,6 +197,17 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
+
+      - name: Use Node.js 22 (docs-only sanity)
+        if: steps.target.outputs.skip == 'true' && steps.target.outputs.is_docs_only == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Run repository sanity gate (docs-only)
+        if: steps.target.outputs.skip == 'true' && steps.target.outputs.is_docs_only == 'true'
+        working-directory: web
+        run: npm run test:sanity
 
       - name: Run sanity gate, typecheck, and build web app (web/)
         if: steps.target.outputs.skip != 'true'
@@ -232,7 +261,7 @@ jobs:
   e2e_release_gate:
     name: Playwright E2E Release Gate
     needs: [build]
-    if: needs.build.outputs.skip != 'true' && github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.draft == false
+    if: needs.build.outputs.skip != 'true' && github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -249,7 +278,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
-      - name: Install dependencies, build web bundle, and install Playwright Chromium
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Install dependencies, build web bundle, and prepare Playwright Chromium
         working-directory: web
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
@@ -259,7 +295,11 @@ jobs:
           npm run test:sanity
           npm run lint
           npm run build
-          npx playwright install --with-deps chromium
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            npx playwright install --with-deps chromium
+          else
+            npx playwright install-deps chromium
+          fi
 
       - name: Run Unified Engine, Codec & Headless Chromium E2E Suite
         working-directory: web
@@ -268,7 +308,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: [build, e2e_release_gate]
-    if: always() && github.event.repository.has_pages == true && needs.build.result == 'success' && needs.build.outputs.skip != 'true' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped')
+    if: always() && github.event.repository.has_pages == true && needs.build.result == 'success' && needs.build.outputs.skip != 'true' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped') && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     environment:
       name: github-pages

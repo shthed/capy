@@ -10,6 +10,7 @@ on:
       - converted_to_draft
       - labeled
       - unlabeled
+      - edited
   pull_request_review:
     types:
       - submitted
@@ -33,7 +34,7 @@ concurrency:
 jobs:
   review-gate:
     name: Dual AI & Owner Review Gate
-    if: github.repository == 'shthed/capy' && github.actor != 'github-actions[bot]' && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+    if: github.repository == 'shthed/capy' && github.actor != 'github-actions[bot]' && github.actor != 'dependabot[bot]' && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate Dual AI + Project Owner Approval State
@@ -60,9 +61,15 @@ jobs:
 
             const headSha = pr.head.sha;
             const isDraft = Boolean(pr.draft);
+            const baseRef = (pr.base?.ref || 'main').trim();
+            const isBetaTarget = baseRef === 'beta';
             const ownerLogin = owner.toLowerCase();
             const prAuthorLogin = (pr.user?.login || '').toLowerCase();
             const isBotAuthoredPr = prAuthorLogin === 'github-actions[bot]';
+            const isDependabotPr = prAuthorLogin === 'dependabot[bot]';
+            const requiresNativeApproveOnMain = isBotAuthoredPr || isDependabotPr;
+            const isReadOnlyDependabotEvent =
+              isDependabotPr && context.eventName === 'pull_request';
 
             const { data: headCommit } = await github.rest.repos.getCommit({
               owner,
@@ -154,13 +161,23 @@ jobs:
               `<!--\\s*capy-review:\\s*actor=ai-agent\\s+verdict=(APPROVED|CHANGES_REQUESTED)\\s+sha=${headSha}\\s+score=([0-9]+(?:\\.[0-9]+)?)%?[^>]*-->`,
               'i'
             );
+            const ALLOWED_AI_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            const isTrustedAiReviewer = (item) => {
+              const login = (item?.user?.login || '').toLowerCase();
+              const assoc = String(item?.author_association || '').toUpperCase();
+              return (
+                login === ownerLogin ||
+                login === 'github-actions[bot]' ||
+                ALLOWED_AI_ASSOCIATIONS.has(assoc)
+              );
+            };
             let latestAiSignal = null;
             const allBodies = [
-              ...reviews.map((r) => ({
+              ...reviews.filter(isTrustedAiReviewer).map((r) => ({
                 body: r.body || '',
                 ts: Date.parse(r.submitted_at || '') || 0,
               })),
-              ...comments.map((c) => ({
+              ...comments.filter(isTrustedAiReviewer).map((c) => ({
                 body: c.body || '',
                 ts: Date.parse(c.updated_at || c.created_at || '') || 0,
               })),
@@ -282,7 +299,7 @@ jobs:
               signals.reduce((maxTs, s) => (s.ts > maxTs ? s.ts : maxTs), 0);
 
             const latestLegacyApprovalMs = maxSignalTs(legacyApprovals);
-            const effectiveOwnerApprovals = isBotAuthoredPr
+            const effectiveOwnerApprovals = requiresNativeApproveOnMain
               ? nativeHeadApprovals
               : [...nativeHeadApprovals, ...legacyApprovals];
             const effectiveOwnerApprovalMs = maxSignalTs(effectiveOwnerApprovals);
@@ -333,23 +350,25 @@ jobs:
             const ownerApproved =
               !isDraft &&
               !changesRequested &&
-              (isBotAuthoredPr
+              (requiresNativeApproveOnMain
                 ? hasFreshNativeHeadApproval
                 : hasFreshNativeHeadApproval || hasValidLegacyOwnerSignal);
             const ownerLegacyOnlyOnBotPr =
-              isBotAuthoredPr &&
+              requiresNativeApproveOnMain &&
               !isDraft &&
               !changesRequested &&
               !hasFreshNativeHeadApproval &&
               hasValidLegacyOwnerSignal;
             const dualApproved = !isDraft && aiApproved && ownerApproved && !changesRequested;
+            const betaApproved = isBetaTarget && !isDraft && aiApproved && !changesRequested;
 
             // 3. Reconcile github-actions[bot] formal PR review
-            // On bot-opened PRs, GitHub rejects bot self-approval with HTTP 422, and the
-            // Project Owner's native APPROVED review directly satisfies branch rulesets.
-            if (isBotAuthoredPr) {
+            // On bot/dependabot-opened PRs, GitHub rejects bot self-approval with HTTP 422, and the
+            // Project Owner's native APPROVED review directly satisfies main branch rulesets.
+            // On --base beta PRs, never post a formal bot APPROVE review without Owner approval.
+            if (requiresNativeApproveOnMain) {
               core.info(
-                `PR #${prNumber} is authored by github-actions[bot]; skipping bot self-approval review.`
+                `PR #${prNumber} is authored by ${prAuthorLogin}; skipping bot self-approval review.`
               );
             } else {
               const botReviews = reviews.filter(
@@ -411,6 +430,14 @@ jobs:
             } else if (isDraft) {
               state = 'pending';
               description = 'Draft PR: complete work, pass AI review, and mark ready';
+            } else if (isBetaTarget) {
+              if (betaApproved) {
+                state = 'success';
+                description = 'Beta gate passed: AI review (>=95%) verified; no holds';
+              } else {
+                state = 'pending';
+                description = 'Beta gate: awaiting AI review (review:ai-approved) on HEAD';
+              }
             } else if (dualApproved) {
               state = 'success';
               description = 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
@@ -440,12 +467,22 @@ jobs:
               latestGateStatus.state !== state ||
               latestGateStatus.description !== clippedDesc
             ) {
-              await github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: headSha,
-                context: 'capy/review-gate',
-                state,
-                description: clippedDesc,
-              });
+              try {
+                await github.rest.repos.createCommitStatus({
+                  owner,
+                  repo,
+                  sha: headSha,
+                  context: 'capy/review-gate',
+                  state,
+                  description: clippedDesc,
+                });
+              } catch (err) {
+                if (isReadOnlyDependabotEvent && err.status === 403) {
+                  core.warning(
+                    `Read-only GITHUB_TOKEN on Dependabot ${context.eventName} event prevented updating capy/review-gate status: ${err.message}`
+                  );
+                } else {
+                  throw err;
+                }
+              }
             }

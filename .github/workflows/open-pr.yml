@@ -25,7 +25,7 @@ on:
         type: string
         default: ''
       draft:
-        description: 'Create new PR as draft (ignored on existing PR updates; use gh pr ready)'
+        description: 'Create new PR as draft (always enforced on creation so gh pr ready triggers CI checks)'
         required: false
         type: boolean
         default: true
@@ -219,6 +219,11 @@ jobs:
               pr = updated;
               action = 'updated';
             } else {
+              if (!draft) {
+                core.warning(
+                  `Enforcing draft=true when creating PR for "${headBranch}" -> "${base}" because GITHUB_TOKEN PR creation does not trigger CI checks; run "gh pr ready" after creation.`
+                );
+              }
               const { data: created } = await github.rest.pulls.create({
                 owner,
                 repo,
@@ -226,7 +231,7 @@ jobs:
                 base,
                 title,
                 body: bodyInput,
-                draft,
+                draft: true,
               });
               pr = created;
               action = 'created';

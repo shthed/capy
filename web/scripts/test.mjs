@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 import { chromium } from 'playwright';
 import { createServer, preview } from 'vite';
-import { runSanityChecks } from './sanity.mjs';
+import {
+  runSanityChecks,
+  validateChangelogChannelOrder,
+  validateEpicNaming,
+  validateRootGuideIndex,
+} from './sanity.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -462,12 +468,863 @@ async function runCodecAndEngineTests() {
       true,
       `Expected >= 398 single-line PR bullets in CHANGELOG.md, got ${changelogBullets.length}`
     );
+    let changelogBulletRe = /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/;
+    /* capy-dev-only:start */
+    changelogBulletRe = /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/;
+    /* capy-dev-only:end */
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/.test(bullet),
+        changelogBulletRe.test(bullet),
         true,
-        `Each CHANGELOG.md bullet must end with a bare [#000] or #000 PR reference: ${bullet}`
+        `Each CHANGELOG.md bullet must end with a valid PR reference: ${bullet}`
       );
+    }
+
+    // 5b. Chronological changelog, Epic naming, dynamic guide indexing, and CI cleanup script unit checks
+    const validBetaChangelog = [
+      '### 3.0.3 - 2026-11-13 (Beta)',
+      '',
+      '- Beta item #493',
+      '',
+      '### 3.0.2 - 2026-11-13',
+      '',
+      '- Prior beta item #490',
+      '',
+      '### 3.0.1 - 2026-11-12 (Production)',
+      '',
+      '- Prod item #488',
+      '',
+      '### 2.7 - 2026-11-12',
+      '',
+      '- Older item #484',
+      '',
+      '### 0.1.0 - 2026-10-01',
+      '',
+      '- Initial #1',
+    ].join('\n');
+    const betaOrderRes = validateChangelogChannelOrder(validBetaChangelog, '3.0.3', {
+      enforceChannelOrder: true,
+    });
+    assert.equal(betaOrderRes.alphaIdx, -1);
+    assert.equal(betaOrderRes.betaIdx, 0);
+    assert.equal(betaOrderRes.prodIdx, 2);
+
+    const validAlphaBetaProd = [
+      '### 3.1.0 - 2026-11-14 (Alpha)',
+      '- Alpha #500',
+      '### 3.0.3 - 2026-11-13 (Beta)',
+      '- Beta #493',
+      '### 3.0.1 - 2026-11-12 (Production)',
+      '- Prod #488',
+      '### 0.1.0 - 2026-10-01',
+      '- Init #1',
+    ].join('\n');
+    const abpRes = validateChangelogChannelOrder(validAlphaBetaProd, '3.1.0', {
+      enforceChannelOrder: true,
+    });
+    assert.equal(abpRes.alphaIdx, 0);
+    assert.equal(abpRes.betaIdx, 1);
+    assert.equal(abpRes.prodIdx, 2);
+
+    const validCombinedProdBeta = [
+      '### 3.0.1 - 2026-11-12 (Production, Beta)',
+      '- Combined #488',
+      '### 2.7 - 2026-11-11',
+      '- Old #484',
+    ].join('\n');
+    const combinedRes = validateChangelogChannelOrder(validCombinedProdBeta, '3.0.1', {
+      enforceChannelOrder: true,
+    });
+    assert.equal(combinedRes.betaIdx, 0);
+    assert.equal(combinedRes.prodIdx, 0);
+
+    const validProdOnly = [
+      '### 3.0.1 - 2026-11-12 (Production)',
+      '- Prod #488',
+      '### 2.7 - 2026-11-11',
+      '- Old #484',
+    ].join('\n');
+    assert.equal(
+      validateChangelogChannelOrder(validProdOnly, '3.0.1', { enforceChannelOrder: true }).prodIdx,
+      0
+    );
+
+    // Minor rollup heading (3.0) matches patch version 3.0.4
+    const validMinorRollup = [
+      '### 3.0 - 2026-11-13 (Beta)',
+      '- Rollup #493',
+      '### 2.5 - 2026-11-11 (Production)',
+      '- Prod #483',
+    ].join('\n');
+    assert.equal(
+      validateChangelogChannelOrder(validMinorRollup, '3.0.4', { enforceChannelOrder: true }).betaIdx,
+      0
+    );
+
+    const crlfChangelogRes = validateChangelogChannelOrder(
+      validBetaChangelog.replace(/\n/g, '\r\n'),
+      '3.0.3',
+      { enforceChannelOrder: true }
+    );
+    assert.equal(crlfChangelogRes.betaIdx, 0);
+    assert.equal(crlfChangelogRes.prodIdx, 2);
+
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          [
+            '### 3.0 - 2026-11-13 (Beta)',
+            '### 2.7 - 2026-11-12 (Alpha)',
+            '### 2.5 - 2026-11-11 (Production)',
+          ].join('\n'),
+          '3.0.4',
+          { enforceChannelOrder: true }
+        ),
+      /Alpha heading must appear first/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0 - 2026-11-13 (Production)', '### 2.7 - 2026-11-12 (Beta)'].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /Beta heading must appear at or before Production/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          [
+            '### 3.0 - 2026-11-13 (Beta)',
+            '### 2.8 - 2026-11-12 (Production)',
+            '### 2.5 - 2026-11-11 (Beta)',
+          ].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /Expected <= 1 Beta heading|after Production/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          [
+            '### 3.0 - 2026-11-13 (Beta)',
+            '### 2.8 - 2026-11-12 (Production)',
+            '### 2.5 - 2026-11-11 (Alpha)',
+          ].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /Alpha heading must appear first|after Production/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0.1 - 2026-11-13 (Beta)', '### 3.0.2 - 2026-11-12 (Production)'].join('\n'),
+          '3.0.1',
+          { enforceChannelOrder: true }
+        ),
+      /strictly descending by version/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0 - 2026-11-13 (Beta)', '### 3.0.0 - 2026-11-12 (Production)'].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /strictly descending by version/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0.2 - 2026-11-12 (Beta)', '### 3.0.1 - 2026-11-13 (Production)'].join('\n'),
+          '3.0.2',
+          { enforceChannelOrder: true }
+        ),
+      /non-increasing by date/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0.2 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)'].join('\n'),
+          '3.0.4',
+          { enforceChannelOrder: true }
+        ),
+      /missing active channel heading for 3\.0\.4/
+    );
+
+    const validEpicUrl = 'https://github.com/' + 'capyboop/capy/issues/477';
+    const validPrRef = '[' + '#482](' + 'https://github.com/' + 'capyboop/capy/pull/482)';
+    validateEpicNaming(`See [EPIC-2](${validEpicUrl}), plain EPIC-2, and ${validPrRef}`, 'DEV.md');
+    for (const badNum of ['476', '477', '480']) {
+      assert.throws(
+        () => validateEpicNaming(`Legacy #'${badNum}`.replace("'", ''), 'TODO.md'),
+        /EPIC-N/
+      );
+    }
+    const badIssueLink = '[' + '#481](' + 'https://github.com/' + 'capyboop/capy/issues/481)';
+    assert.throws(() => validateEpicNaming(`Link ${badIssueLink}`, 'ROADMAP.md'), /EPIC-N/);
+    const badCombinedEpic = '[EPIC-2 (' + '#477)](' + validEpicUrl + ')';
+    assert.throws(() => validateEpicNaming(`Combined ${badCombinedEpic}`, 'AGENTS.md'), /EPIC-N/);
+    const badUnlinkedCombinedEpic = '[EPIC-6 (#' + '481)]';
+    assert.throws(() => validateEpicNaming(`Unlinked ${badUnlinkedCombinedEpic}`, 'ROADMAP.md'), /EPIC-N/);
+
+    const tmpGuideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-guide-index-'));
+    try {
+      const rootMdNames = [
+        'README.md',
+        'PROJECT.md',
+        'DEV.md',
+        'AGENTS.md',
+        'ROADMAP.md',
+        'TODO.md',
+        'WEB.md',
+        'PUZZLE.md',
+        'APP.md',
+        'CLOUD.md',
+        'TESTING.md',
+        'CHANGELOG.md',
+        'LICENSE.md',
+      ];
+      for (const name of rootMdNames) {
+        fs.writeFileSync(path.join(tmpGuideDir, name), `# ${name}\n`, 'utf8');
+      }
+      const allLinks = rootMdNames.map((n) => `[${n}](./${n})`).join(' ');
+      fs.writeFileSync(path.join(tmpGuideDir, 'README.md'), `# README\n${allLinks}\n`, 'utf8');
+      fs.writeFileSync(path.join(tmpGuideDir, 'DEV.md'), `# DEV\n${allLinks}\n`, 'utf8');
+      fs.writeFileSync(path.join(tmpGuideDir, 'PROJECT.md'), `# PROJECT\n${allLinks}\n`, 'utf8');
+      const guideRes = validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true });
+      assert.equal(guideRes.hasProjectMd, true);
+      assert.equal(guideRes.rootMdFiles.length, 13);
+
+      fs.writeFileSync(
+        path.join(tmpGuideDir, 'README.md'),
+        `# README\n${allLinks.replace('./PROJECT.md', './OTHER.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () => validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true }),
+        /README\.md must link \.\/PROJECT\.md/
+      );
+      fs.writeFileSync(path.join(tmpGuideDir, 'README.md'), `# README\n${allLinks}\n`, 'utf8');
+
+      fs.writeFileSync(
+        path.join(tmpGuideDir, 'PROJECT.md'),
+        `# PROJECT\n${allLinks.replace('./TESTING.md', './OTHER.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () => validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true }),
+        /PROJECT\.md must link \.\/TESTING\.md/
+      );
+      fs.writeFileSync(path.join(tmpGuideDir, 'PROJECT.md'), `# PROJECT\n${allLinks}\n`, 'utf8');
+
+      fs.unlinkSync(path.join(tmpGuideDir, 'PROJECT.md'));
+      assert.throws(
+        () => validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true }),
+        /PROJECT\.md must exist/
+      );
+    } finally {
+      fs.rmSync(tmpGuideDir, { recursive: true, force: true });
+    }
+
+    /* capy-dev-only:start */
+    const tmpStrictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-sanity-strict-'));
+    try {
+      fs.mkdirSync(path.join(tmpStrictRepo, 'web/src'), { recursive: true });
+      fs.mkdirSync(path.join(tmpStrictRepo, 'app'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'web/package.json'),
+        JSON.stringify({ name: 'capy-paint', version: '3.0.4' }, null, 2),
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'web/src/version.ts'),
+        'export const code = major * 10000 + minor * 100 + patch;\n',
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'app/build.gradle.kts'),
+        'val capyVersionCode = (verMajor * 10000) + (verMinor * 100) + verPatch\n',
+        'utf8'
+      );
+      const strictRootMds = [
+        'README.md',
+        'PROJECT.md',
+        'DEV.md',
+        'AGENTS.md',
+        'ROADMAP.md',
+        'TODO.md',
+        'WEB.md',
+        'PUZZLE.md',
+        'APP.md',
+        'CLOUD.md',
+        'TESTING.md',
+        'CHANGELOG.md',
+        'LICENSE.md',
+      ];
+      const strictAllLinks = strictRootMds.map((n) => `[${n}](./${n})`).join(' ');
+      for (const name of strictRootMds) {
+        if (name === 'CHANGELOG.md') continue;
+        fs.writeFileSync(path.join(tmpStrictRepo, name), `# ${name}\n${strictAllLinks}\n`, 'utf8');
+      }
+      const makeStrictChangelog = ({
+        headings = ['### 3.0.4 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)', '### 0.1.0 - 2026-10-01'],
+        bulletCount = 398,
+        firstBulletSuffix = '[#493](https://github.com/shthed/capy/pull/493)',
+      } = {}) => {
+        const lines = [headings[0], '', `- Top change ${firstBulletSuffix}`, ''];
+        for (let i = 1; i < headings.length; i++) {
+          lines.push(headings[i], '');
+          if (i === headings.length - 1) {
+            for (let b = 1; b < bulletCount; b++) {
+              lines.push(`- Historical change ${b} [#${b}](https://github.com/shthed/capy/pull/${b})`);
+            }
+          } else {
+            lines.push(`- Channel release [#${i}](https://github.com/shthed/capy/pull/${i})`, '');
+          }
+        }
+        return `${lines.join('\n')}\n`;
+      };
+      const strictChangelogPath = path.join(tmpStrictRepo, 'CHANGELOG.md');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      const strictRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+      });
+      assert.equal(strictRes.version, '3.0.4');
+      assert.equal(strictRes.markdownFilesChecked, 13);
+
+      // 1. Missing ./PROJECT.md from README.md
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'README.md'),
+        `# README\n${strictAllLinks.replace('./PROJECT.md', './DEV.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /README\.md must link \.\/PROJECT\.md/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'README.md'), `# README\n${strictAllLinks}\n`, 'utf8');
+
+      // 2. Missing ./TESTING.md from PROJECT.md
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT\n${strictAllLinks.replace('./TESTING.md', './DEV.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /PROJECT\.md must link \.\/TESTING\.md/
+      );
+
+      // 3. Guide link hidden inside HTML capy-dev-only block must fail public indexing check
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT\n${strictAllLinks.replace('[TESTING.md](./TESTING.md)', '')}\n<!-- capy-dev-only:start -->\n[TESTING.md](./TESTING.md)\n<!-- capy-dev-only:end -->\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /PROJECT\.md must link \.\/TESTING\.md/
+      );
+
+      // 4. Legacy Epic issue ref fails when enforceEpicNaming: true
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT\n${strictAllLinks}\nSee #` + '477\n',
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /EPIC-N/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), `# PROJECT\n${strictAllLinks}\n`, 'utf8');
+
+      // 5. Bare #490 bullet fails clickable PR link check
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({ firstBulletSuffix: '#490' }),
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /Invalid CHANGELOG bullet suffix/
+      );
+
+      // 6. Inverted Alpha after Beta fails enforceChannelOrder
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({
+          headings: [
+            '### 3.0.4 - 2026-11-13 (Beta)',
+            '### 2.7 - 2026-11-12 (Alpha)',
+            '### 2.5 - 2026-11-11 (Production)',
+            '### 0.1.0 - 2026-10-01',
+          ],
+        }),
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /Alpha heading must appear first/
+      );
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 6b. CRLF line endings in CHANGELOG.md normalize cleanly
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog().replace(/\n/g, '\r\n'), 'utf8');
+      const strictCrlfRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+      });
+      assert.equal(strictCrlfRes.version, '3.0.4');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 7. Missing PROJECT.md fails requireProjectMd: true
+      fs.unlinkSync(path.join(tmpStrictRepo, 'PROJECT.md'));
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+          }),
+        /PROJECT\.md must exist/
+      );
+    } finally {
+      fs.rmSync(tmpStrictRepo, { recursive: true, force: true });
+    }
+    /* capy-dev-only:end */
+
+    // Unit-test .github/scripts/cleanup-gh-pages-previews.mjs and .github/scripts/cleanup-branches.mjs
+    const previewCleanupMod = await import('../../.github/scripts/cleanup-gh-pages-previews.mjs');
+    const branchCleanupMod = await import('../../.github/scripts/cleanup-branches.mjs');
+
+    const makeMockResponse = ({ ok = true, status = 200, statusText = 'OK', headers = {}, jsonData = null, textData = '' } = {}) => ({
+      ok,
+      status,
+      statusText,
+      headers: {
+        get: (key) => {
+          const found = Object.entries(headers).find(([k]) => k.toLowerCase() === String(key).toLowerCase());
+          return found ? found[1] : null;
+        },
+      },
+      json: async () => jsonData,
+      text: async () => textData,
+    });
+
+    // cleanup-gh-pages-previews: 504 transient retry -> 200
+    {
+      let calls = 0;
+      const sleeps = [];
+      const res = await previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls', {
+        baseDelayMs: 1,
+        sleepImpl: async (ms) => sleeps.push(ms),
+        fetchImpl: async () => {
+          calls += 1;
+          if (calls === 1) {
+            return makeMockResponse({ ok: false, status: 504, statusText: 'Gateway Timeout', textData: 'timeout' });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [] });
+        },
+      });
+      assert.equal(calls, 2);
+      assert.equal(sleeps.length, 1);
+      assert.deepEqual(res.data, []);
+    }
+
+    // cleanup-gh-pages-previews: 429 Retry-After honored -> 200
+    {
+      let calls = 0;
+      const sleeps = [];
+      await previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls', {
+        baseDelayMs: 1,
+        sleepImpl: async (ms) => sleeps.push(ms),
+        fetchImpl: async () => {
+          calls += 1;
+          if (calls === 1) {
+            return makeMockResponse({
+              ok: false,
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'Retry-After': '0.005' },
+            });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [{ number: 1 }] });
+        },
+      });
+      assert.equal(calls, 2);
+      assert.equal(sleeps[0], 5);
+    }
+
+    // cleanup-gh-pages-previews: non-rate-limit 403 & 404 fail fast without retry
+    {
+      let calls404 = 0;
+      await assert.rejects(
+        () =>
+          previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls/999', {
+            baseDelayMs: 1,
+            sleepImpl: async () => {},
+            fetchImpl: async () => {
+              calls404 += 1;
+              return makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' });
+            },
+          }),
+        /404/
+      );
+      assert.equal(calls404, 1);
+
+      let calls403 = 0;
+      await assert.rejects(
+        () =>
+          previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls', {
+            baseDelayMs: 1,
+            sleepImpl: async () => {},
+            fetchImpl: async () => {
+              calls403 += 1;
+              return makeMockResponse({ ok: false, status: 403, statusText: 'Forbidden' });
+            },
+          }),
+        /403/
+      );
+      assert.equal(calls403, 1);
+    }
+
+    // cleanup-gh-pages-previews: fetchPullRequests uses state=open + targeted PR lookup, ignoring 404
+    {
+      const requestedUrls = [];
+      const pulls = await previewCleanupMod.fetchPullRequests({
+        baseUrl: 'https://api.github.com/repos/a/b',
+        headers: {},
+        targetPr: 484,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async (url) => {
+          const href = String(url);
+          requestedUrls.push(href);
+          if (href.includes('/pulls/484')) {
+            return makeMockResponse({ ok: true, status: 200, jsonData: { number: 484, state: 'closed', head: { ref: 'feature/x' } } });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [{ number: 492, state: 'open', head: { ref: 'fix/y' } }] });
+        },
+      });
+      assert.equal(requestedUrls.some((u) => u.includes('state=open')), true);
+      assert.equal(requestedUrls.some((u) => u.includes('state=all')), false);
+      assert.equal(requestedUrls.some((u) => u.endsWith('/pulls/484')), true);
+      assert.equal(pulls.length, 2);
+
+      const missingTargetPulls = await previewCleanupMod.fetchPullRequests({
+        baseUrl: 'https://api.github.com/repos/a/b',
+        headers: {},
+        targetPr: 999,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async (url) => {
+          if (String(url).includes('/pulls/999')) {
+            return makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [{ number: 492, state: 'open', head: { ref: 'fix/y' } }] });
+        },
+      });
+      assert.equal(missingTargetPulls.length, 1);
+    }
+
+    // cleanup-gh-pages-previews: selectPreviewDeletions & runCleanupGhPagesPreviews temp dir
+    {
+      const selected = previewCleanupMod.selectPreviewDeletions(
+        [
+          { name: '492', kind: 'pull', prNumber: 492, pull: { state: 'open' }, prs: [], hasLiveBranch: true, isRecent: false },
+          { name: '484', kind: 'pull', prNumber: 484, pull: { state: 'closed' }, prs: [], hasLiveBranch: false, isRecent: false },
+          { name: 'legacy-old', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: false },
+          { name: 'legacy-live', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: true, isRecent: false },
+        ],
+        { targetPr: null, ignoreRecency: false }
+      );
+      assert.deepEqual(
+        selected.map((s) => s.name),
+        ['484', 'legacy-old']
+      );
+
+      const tmpPages = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-gh-pages-cleanup-'));
+      try {
+        fs.mkdirSync(path.join(tmpPages, 'stale-legacy-dir'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'live-branch-dir'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'beta'), { recursive: true });
+        const runRes = await previewCleanupMod.runCleanupGhPagesPreviews({
+          pagesDir: tmpPages,
+          ignoreRecency: true,
+          repository: 'a/b',
+          token: 'tok',
+          defaultBranch: 'main',
+          remoteBranches: ['main', 'beta', 'live-branch-dir'],
+          baseDelayMs: 1,
+          sleepImpl: async () => {},
+          fetchImpl: async () => makeMockResponse({ ok: true, status: 200, jsonData: [] }),
+        });
+        assert.deepEqual(runRes.deleted, ['stale-legacy-dir']);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'stale-legacy-dir')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'live-branch-dir')), true);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'beta')), true);
+      } finally {
+        fs.rmSync(tmpPages, { recursive: true, force: true });
+      }
+    }
+
+    // cleanup-branches: 503 retry, DELETE 404 on retry attempt > 0 success vs attempt 0 fail
+    {
+      let delCalls = 0;
+      await branchCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/git/refs/heads/feature%2Fx', {
+        method: 'DELETE',
+        retries: 2,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async () => {
+          delCalls += 1;
+          if (delCalls === 1) {
+            return makeMockResponse({ ok: false, status: 502, statusText: 'Bad Gateway' });
+          }
+          return makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' });
+        },
+      });
+      assert.equal(delCalls, 2);
+
+      await assert.rejects(
+        () =>
+          branchCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/git/refs/heads/missing', {
+            method: 'DELETE',
+            retries: 2,
+            baseDelayMs: 1,
+            sleepImpl: async () => {},
+            fetchImpl: async () => makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
+          }),
+        /404/
+      );
+    }
+
+    // cleanup-branches: protected channels even with *, dependabot/ & sync/ prefixes, closed-unmerged, stale zero-PR vs recent WIP, missing timestamp fail-closed
+    {
+      const nowMs = Date.parse('2026-11-13T00:00:00Z');
+      const dayMs = 24 * 60 * 60 * 1000;
+      const commitDates = new Map([
+        ['sha-dep-closed-old', nowMs - 2 * dayMs],
+        ['sha-dep-closed-fresh', nowMs - 6 * 60 * 60 * 1000],
+        ['sha-sync-stale', nowMs - 8 * dayMs],
+        ['sha-wip-recent', nowMs - 3 * dayMs],
+      ]);
+      const evalRes = await branchCleanupMod.evaluateBranchesForCleanup({
+        branches: [
+          { name: 'main', protected: false, commit: { sha: 's1' } },
+          { name: 'beta', protected: false, commit: { sha: 's2' } },
+          { name: 'gh-pages', protected: false, commit: { sha: 's3' } },
+          { name: 'release-lock', protected: true, commit: { sha: 's4' } },
+          { name: 'feature/open-pr', protected: false, commit: { sha: 's5' } },
+          { name: 'dependabot/npm/old-closed', protected: false, commit: { sha: 'sha-dep-closed-old' } },
+          { name: 'dependabot/npm/fresh-closed', protected: false, commit: { sha: 'sha-dep-closed-fresh' } },
+          { name: 'sync/beta-from-main', protected: false, commit: { sha: 'sha-sync-stale' } },
+          { name: 'feature/wip-recent', protected: false, commit: { sha: 'sha-wip-recent' } },
+          { name: 'fix/no-commit-ts', protected: false, commit: { sha: 'sha-missing' } },
+        ],
+        defaultBranch: 'main',
+        includePrefixes: ['*'],
+        activeBranches: new Set(['feature/open-pr']),
+        mergedBranches: new Map(),
+        closedUnmergedBranches: new Map([
+          ['dependabot/npm/old-closed', nowMs - 2 * dayMs],
+          ['dependabot/npm/fresh-closed', nowMs - 6 * 60 * 60 * 1000],
+        ]),
+        getCommitTimestampMs: async (sha) => commitDates.get(sha) ?? 0,
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+      });
+      assert.deepEqual(
+        evalRes.deletions.map((d) => d.name),
+        ['dependabot/npm/old-closed', 'sync/beta-from-main']
+      );
+
+      // Verify explicit prefix list rejects unmatched prefix even when old
+      const prefixOnlyRes = await branchCleanupMod.evaluateBranchesForCleanup({
+        branches: [
+          { name: 'dependabot/npm/old', protected: false, commit: { sha: 'sha-sync-stale' } },
+          { name: 'other/old', protected: false, commit: { sha: 'sha-sync-stale' } },
+        ],
+        includePrefixes: ['dependabot/', 'sync/'],
+        getCommitTimestampMs: async () => nowMs - 10 * dayMs,
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+      });
+      assert.deepEqual(
+        prefixOnlyRes.deletions.map((d) => d.name),
+        ['dependabot/npm/old']
+      );
+
+      // Reused merged branch with fresh commit is NOT deleted; stale merged branch IS deleted; null/error commit timestamp fails closed
+      const reusedMergedRes = await branchCleanupMod.evaluateBranchesForCleanup({
+        branches: [
+          { name: 'sync/reused-fresh', protected: false, commit: { sha: 'sha-reused-fresh' } },
+          { name: 'feature/merged-stale', protected: false, commit: { sha: 'sha-merged-stale' } },
+          { name: 'fix/merged-null-ts', protected: false, commit: { sha: 'sha-null-ts' } },
+          { name: 'fix/merged-error-ts', protected: false, commit: { sha: 'sha-error-ts' } },
+        ],
+        includePrefixes: ['sync/', 'feature/', 'fix/'],
+        mergedBranches: new Map([
+          ['sync/reused-fresh', nowMs - 5 * dayMs],
+          ['feature/merged-stale', nowMs - 5 * dayMs],
+          ['fix/merged-null-ts', nowMs - 5 * dayMs],
+          ['fix/merged-error-ts', nowMs - 5 * dayMs],
+        ]),
+        getCommitTimestampMs: async (sha) => {
+          if (sha === 'sha-reused-fresh') return nowMs - 60 * 60 * 1000;
+          if (sha === 'sha-merged-stale') return nowMs - 5 * dayMs;
+          if (sha === 'sha-null-ts') return null;
+          throw new Error('simulated commit lookup failure');
+        },
+        minAgeDays: 1,
+        nowMs,
+      });
+      assert.deepEqual(reusedMergedRes.deletions, [{ name: 'feature/merged-stale', reason: 'merged' }]);
+      assert.equal(
+        reusedMergedRes.diagnostics.some(
+          (d) =>
+            d.name === 'sync/reused-fresh' &&
+            d.detail.includes('merged branch has newer commit within minAgeDays')
+        ),
+        true
+      );
+      assert.equal(
+        reusedMergedRes.diagnostics.some(
+          (d) =>
+            d.name === 'fix/merged-null-ts' &&
+            d.detail === 'skipped: unable to determine commit timestamp'
+        ),
+        true
+      );
+      assert.equal(
+        reusedMergedRes.diagnostics.some(
+          (d) =>
+            d.name === 'fix/merged-error-ts' &&
+            d.detail === 'skipped: unable to determine commit timestamp'
+        ),
+        true
+      );
+    }
+
+    // cleanup-branches: end-to-end runCleanupBranches with dryRun vs live DELETE
+    {
+      const nowMs = Date.parse('2026-11-13T00:00:00Z');
+      const oldIso = '2026-11-01T00:00:00Z';
+      const createMockFetch = (deleteCalls) => async (url, init = {}) => {
+        const href = String(url);
+        const method = init.method || 'GET';
+        if (method === 'DELETE') {
+          deleteCalls.push(href);
+          return makeMockResponse({ ok: true, status: 204 });
+        }
+        if (href.endsWith('/repos/a/b')) {
+          return makeMockResponse({ ok: true, status: 200, jsonData: { default_branch: 'main' } });
+        }
+        if (href.includes('/pulls') && href.includes('state=open')) {
+          return makeMockResponse({ ok: true, status: 200, jsonData: [] });
+        }
+        if (href.includes('/pulls') && href.includes('state=closed')) {
+          return makeMockResponse({ ok: true, status: 200, jsonData: [] });
+        }
+        if (href.includes('/branches')) {
+          return makeMockResponse({
+            ok: true,
+            status: 200,
+            jsonData: [
+              { name: 'beta', protected: false, commit: { sha: 'sha-beta' } },
+              { name: 'dependabot/npm/stale', protected: false, commit: { sha: 'sha-stale' } },
+            ],
+          });
+        }
+        if (href.includes('/commits/sha-stale')) {
+          return makeMockResponse({
+            ok: true,
+            status: 200,
+            jsonData: { commit: { committer: { date: oldIso } } },
+          });
+        }
+        return makeMockResponse({ ok: false, status: 404 });
+      };
+
+      const dryDeletes = [];
+      await branchCleanupMod.runCleanupBranches({
+        repository: 'a/b',
+        token: 'tok',
+        dryRun: true,
+        includePrefixes: ['dependabot/', 'sync/'],
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: createMockFetch(dryDeletes),
+      });
+      assert.equal(dryDeletes.length, 0);
+
+      const liveDeletes = [];
+      const liveRes = await branchCleanupMod.runCleanupBranches({
+        repository: 'a/b',
+        token: 'tok',
+        dryRun: false,
+        includePrefixes: ['dependabot/', 'sync/'],
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: createMockFetch(liveDeletes),
+      });
+      assert.equal(liveDeletes.length, 1);
+      assert.equal(liveDeletes[0].endsWith('/git/refs/heads/dependabot/npm/stale'), true);
+      assert.deepEqual(liveRes.deleted, ['dependabot/npm/stale']);
     }
 
     // 6. SoundService SSR safety, volume clamping, visibility/disable auto-suspend & rate-throttled woodblock tap
@@ -1355,9 +2212,11 @@ async function runCodecAndEngineTests() {
 
     /* capy-dev-only:start */
     const {
+      FORBIDDEN_PERSONA_REGEX,
       stripDevOnlyBlocks,
       transformPersonaContent,
       sanitizeCommitMessage,
+      assertZeroSourcePersonaLeak,
       exportCleanPersonaStage,
     } = await import('./rebrand-persona.mjs');
     const sampleDoc =
@@ -1368,6 +2227,14 @@ async function runCodecAndEngineTests() {
       'Repo https://github.com/capyboop/capy (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
+    const samplePrEpicDoc =
+      'Preview https://shthed.github.io/capy/PR/42/ [EPIC-2](https://github.com/shthed/capy/issues/477)';
+    const transformedPrEpic = transformPersonaContent(samplePrEpicDoc);
+    assert.equal(transformedPrEpic, 'Preview https://capypaint.com/ EPIC-2');
+    assert.equal(transformPersonaContent(transformedPrEpic), transformedPrEpic);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('sync-beta-from-main'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('.github/dependabot.yml'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('dependabot[bot]'), false);
     const devOnlyStartTag = '<!-- capy-dev-' + 'only:start -->';
     const devOnlyEndTag = '<!-- capy-dev-' + 'only:end -->';
     const docWithOpenPrBlock = [
@@ -1389,6 +2256,15 @@ async function runCodecAndEngineTests() {
       sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
       'Add Cloudflare Worker for capyboop/capy'
     );
+    const tmpLeakCheck = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-leak-check-'));
+    try {
+      fs.writeFileSync(path.join(tmpLeakCheck, 'ok.yml'), 'if: actor != "dependabot[bot]"\n', 'utf8');
+      assert.equal(assertZeroSourcePersonaLeak(tmpLeakCheck), 1);
+      fs.writeFileSync(path.join(tmpLeakCheck, 'leak.md'), 'See sync-beta-from-main workflow\n', 'utf8');
+      assert.throws(() => assertZeroSourcePersonaLeak(tmpLeakCheck), /Forbidden persona token/);
+    } finally {
+      fs.rmSync(tmpLeakCheck, { recursive: true, force: true });
+    }
     const tmpCleanStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-clean-stage-'));
     try {
       const stageStats = exportCleanPersonaStage({ stageDir: tmpCleanStage });
@@ -1407,6 +2283,11 @@ async function runCodecAndEngineTests() {
         false
       );
       assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/sync-beta-from-main.yml')),
+        false
+      );
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, '.github/dependabot.yml')), false);
+      assert.equal(
         fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
         false
       );
@@ -1418,6 +2299,17 @@ async function runCodecAndEngineTests() {
         stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
         true
       );
+      const stagedSanityMod = await import(
+        pathToFileURL(path.join(tmpCleanStage, 'web/scripts/sanity.mjs')).href
+      );
+      const stagedSanity = stagedSanityMod.runSanityChecks({ repoRoot: tmpCleanStage });
+      assert.equal(stagedSanity.elapsedMs < 2000, true);
+      execFileSync(process.execPath, [path.join(tmpCleanStage, 'web/scripts/sanity.mjs')], {
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['--check', path.join(tmpCleanStage, 'web/scripts/test.mjs')], {
+        stdio: 'pipe',
+      });
     } finally {
       fs.rmSync(tmpCleanStage, { recursive: true, force: true });
     }
@@ -1463,6 +2355,7 @@ async function runCodecAndEngineTests() {
 
     const runReviewGateCase = async ({
       prAuthor = 'github-actions[bot]',
+      baseRef = 'main',
       isDraft = false,
       headSha = 'abcdef1234567890abcdef1234567890abcdef12',
       commitDate = '2026-11-13T01:00:00Z',
@@ -1473,6 +2366,8 @@ async function runCodecAndEngineTests() {
       aiCommentScore = 98,
       eventName = 'pull_request_review',
       action = 'submitted',
+      createCommitStatusImpl = null,
+      expectCommitStatus = true,
     } = {}) => {
       const calls = {
         createReview: [],
@@ -1510,6 +2405,7 @@ async function runCodecAndEngineTests() {
                 state: 'open',
                 draft: isDraft,
                 user: { login: prAuthor },
+                base: { ref: baseRef },
                 head: { sha: headSha },
                 labels: labels.map((name) => ({ name })),
               },
@@ -1531,6 +2427,9 @@ async function runCodecAndEngineTests() {
             listCommitStatusesForRef: async () => ({ data: [] }),
             createCommitStatus: async (payload) => {
               calls.createCommitStatus.push(payload);
+              if (createCommitStatusImpl) {
+                return createCommitStatusImpl(payload);
+              }
               return { data: payload };
             },
           },
@@ -1551,7 +2450,9 @@ async function runCodecAndEngineTests() {
       };
       await runReviewGateScript(contextMock, githubMock, coreMock);
       assert.equal(coreMock.failed.length, 0);
-      assert.equal(calls.createCommitStatus.length, 1);
+      if (expectCommitStatus) {
+        assert.equal(calls.createCommitStatus.length, 1);
+      }
       return { status: calls.createCommitStatus[0], calls, core: coreMock };
     };
 
@@ -2287,6 +3188,208 @@ async function runCodecAndEngineTests() {
     assert.equal(gateSameSecCrossSourceFailClosedRes.status.state, 'failure');
     assert.equal(gateSameSecCrossSourceFailClosedRes.calls.createReview.length, 0);
 
+    // (n) --base beta split: AI>=95% passes without Owner sign-off and without creating bot APPROVE review, holds fail closed, spoofing blocked, Dependabot & sync/beta-from-main governed properly
+    const gateBetaAiOnlyPassRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 301,
+          user: { login: 'github-actions[bot]' },
+          state: 'APPROVED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: 'stale',
+          submitted_at: '2026-11-13T00:50:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaAiOnlyPassRes.status.state, 'success');
+    assert.equal(
+      gateBetaAiOnlyPassRes.status.description,
+      'Beta gate passed: AI review (>=95%) verified; no holds'
+    );
+    assert.equal(gateBetaAiOnlyPassRes.calls.createReview.length, 0);
+    assert.equal(gateBetaAiOnlyPassRes.calls.dismissReview.length, 1);
+
+    const gateBetaHoldFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 302,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait for fix',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaHoldFailRes.status.state, 'failure');
+
+    const gateBetaDraftRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateBetaDraftRes.status.state, 'pending');
+
+    const gateBetaMissingAiRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      labels: [],
+      aiCommentScore: null,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateBetaMissingAiRes.status.state, 'pending');
+    assert.equal(
+      gateBetaMissingAiRes.status.description,
+      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
+    );
+
+    // Untrusted external user cannot spoof AI CHANGES_REQUESTED DoS or forged APPROVED marker
+    const gateUntrustedDosIgnoredRes = await runReviewGateCase({
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 303,
+          user: { login: 'stranger' },
+          author_association: 'NONE',
+          body: `<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=${gateHeadSha} score=10% -->`,
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateUntrustedDosIgnoredRes.status.state, 'success');
+
+    const gateUntrustedApproveIgnoredRes = await runReviewGateCase({
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      aiCommentScore: null,
+      comments: [
+        {
+          id: 304,
+          user: { login: 'stranger' },
+          author_association: 'NONE',
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateUntrustedApproveIgnoredRes.status.state, 'pending');
+    assert.deepEqual(gateUntrustedApproveIgnoredRes.calls.removeLabel[0].name, 'review:ai-approved');
+
+    // Dependabot PRs: held pending on beta until AI-reviewed, 403 pull_request warning safety, native Approve required on main
+    const gateDependabotBetaPendingRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      labels: [],
+      aiCommentScore: null,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateDependabotBetaPendingRes.status.state, 'pending');
+
+    const gateDependabotBetaPassRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateDependabotBetaPassRes.status.state, 'success');
+    assert.equal(gateDependabotBetaPassRes.calls.createReview.length, 0);
+
+    const gateDependabotReadOnly403Res = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'pull_request',
+      action: 'opened',
+      expectCommitStatus: false,
+      createCommitStatusImpl: async () => {
+        const err = new Error('Resource not accessible by integration');
+        err.status = 403;
+        throw err;
+      },
+    });
+    assert.equal(
+      gateDependabotReadOnly403Res.core.warnings.some((w) => w.includes('Read-only GITHUB_TOKEN')),
+      true
+    );
+
+    const gateDependabotMainCommentOnlyRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 305,
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateDependabotMainCommentOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateDependabotMainCommentOnlyRes.status.description,
+      'Awaiting Owner native Approve click (required on bot-opened PR)'
+    );
+
+    const gateDependabotMainNativeRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 306,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateDependabotMainNativeRes.status.state, 'success');
+    assert.equal(gateDependabotMainNativeRes.calls.createReview.length, 0);
+
+    // sync/beta-from-main PRs follow --base beta rules uniformly (draft -> pending, ready without AI -> pending, ready with AI -> success)
+    const gateSyncBetaPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateSyncBetaPassRes.status.state, 'success');
+    assert.equal(gateSyncBetaPassRes.calls.createReview.length, 0);
+
+    // Retargeting an AI-approved PR from beta to main via pull_request edited immediately requires Owner sign-off
+    const gateRetargetBetaToMainRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      isDraft: false,
+      headSha: gateHeadSha,
+      eventName: 'pull_request',
+      action: 'edited',
+    });
+    assert.equal(gateRetargetBetaToMainRes.status.state, 'pending');
+    assert.equal(
+      gateRetargetBetaToMainRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+
     // Extract and unit-test real .github/workflows/open-pr.yml script
     const runOpenPrScript = new AsyncFunction(
       'context',
@@ -2474,6 +3577,21 @@ async function runCodecAndEngineTests() {
     assert.equal(openReversedPrefixRes.calls.createPr.length, 1);
     assert.equal(openReversedPrefixRes.calls.createPr[0].head, 'feature/x');
 
+    // Enforced draft=true on PR creation even when INPUT_DRAFT='false'
+    const openForcedDraftRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'feature/force-draft',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Forced draft PR',
+        INPUT_DRAFT: 'false',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(openForcedDraftRes.failed.length, 0);
+    assert.equal(openForcedDraftRes.calls.createPr.length, 1);
+    assert.equal(openForcedDraftRes.calls.createPr[0].draft, true);
+    assert.equal(openForcedDraftRes.warnings.length, 1);
+
     // Validation rejections: head === base, invalid draft, cross-owner head, extra colon, missing milestone before PR create
     const sameBranchFail = await runOpenPrCase({
       INPUT_HEAD: 'refs/heads/beta',
@@ -2524,6 +3642,172 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(missingMilestoneFail.failed.length, 1);
     assert.equal(missingMilestoneFail.calls.createPr.length, 0);
+
+    // Extract and unit-test .github/workflows/deploy-branch.yml target script & Phase 2 workflow invariants
+    const runDeployTargetScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/deploy-branch.yml')
+    );
+
+    const runDeployTargetCase = async ({
+      eventName = 'pull_request',
+      sha = 'mergesha11111111111111111111111111111111',
+      ref = 'refs/pull/499/merge',
+      payload = {},
+      changedFiles = [{ filename: 'web/src/App.tsx' }],
+      prDetails = { mergeable: true },
+      pullsList = [],
+    } = {}) => {
+      const prevBaseUrl = process.env.BASE_PREVIEW_URL;
+      process.env.BASE_PREVIEW_URL = 'https://shthed.github.io/capy';
+      const outputs = {};
+      const warnings = [];
+      const failed = [];
+      const coreMock = {
+        setOutput: (k, v) => {
+          outputs[k] = v;
+        },
+        warning: (m) => warnings.push(m),
+        setFailed: (m) => failed.push(m),
+        summary: {
+          addRaw: () => coreMock.summary,
+          write: async () => {},
+        },
+      };
+      const githubMock = {
+        paginate: async (fn, params) => (await fn(params)).data,
+        rest: {
+          pulls: {
+            list: async () => ({ data: pullsList }),
+            listFiles: async () => ({ data: changedFiles }),
+            get: async () => ({ data: prDetails }),
+          },
+        },
+      };
+      const contextMock = {
+        eventName,
+        sha,
+        ref,
+        repo: { owner: 'shthed', repo: 'capy' },
+        payload,
+      };
+      try {
+        await runDeployTargetScript(contextMock, githubMock, coreMock);
+        return { outputs, warnings, failed };
+      } finally {
+        if (prevBaseUrl === undefined) delete process.env.BASE_PREVIEW_URL;
+        else process.env.BASE_PREVIEW_URL = prevBaseUrl;
+      }
+    };
+
+    const deployDocsRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 499,
+          head: { ref: 'docs/update', sha: 'headsha22222222222222222222222222222222' },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'CHANGELOG.md' }, { filename: 'docs/guide.md' }],
+    });
+    assert.equal(deployDocsRes.failed.length, 0);
+    assert.equal(deployDocsRes.outputs.is_docs_only, 'true');
+    assert.equal(deployDocsRes.outputs.skip, 'true');
+    assert.equal(deployDocsRes.outputs.checkout_ref, 'mergesha11111111111111111111111111111111');
+
+    const deployMergeableRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 499,
+          head: { ref: 'feature/x', sha: 'headsha22222222222222222222222222222222' },
+          mergeable: true,
+        },
+      },
+    });
+    assert.equal(deployMergeableRes.outputs.is_docs_only, 'false');
+    assert.equal(deployMergeableRes.outputs.skip, 'false');
+    assert.equal(deployMergeableRes.outputs.checkout_ref, 'mergesha11111111111111111111111111111111');
+
+    const deployConflictingRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 499,
+          head: { ref: 'feature/x', sha: 'headsha22222222222222222222222222222222' },
+          mergeable: null,
+        },
+      },
+      prDetails: { mergeable: false },
+    });
+    assert.equal(deployConflictingRes.outputs.checkout_ref, 'headsha22222222222222222222222222222222');
+
+    const deployDispatchRes = await runDeployTargetCase({
+      eventName: 'workflow_dispatch',
+      ref: 'refs/heads/beta',
+      payload: {
+        inputs: { target_branch: 'feature/ci-dispatch', allow_without_pr: true },
+      },
+    });
+    assert.equal(deployDispatchRes.outputs.branch, 'feature/ci-dispatch');
+    assert.equal(deployDispatchRes.outputs.checkout_ref, 'feature/ci-dispatch');
+    assert.equal(deployDispatchRes.outputs.skip, 'false');
+
+    const deployYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/deploy-branch.yml'),
+      'utf8'
+    );
+    assert.equal(deployYaml.includes('github.event.inputs.target_branch'), true);
+    assert.equal(deployYaml.includes('actions/cache@v6'), true);
+    assert.equal(deployYaml.includes("github.base_ref == 'main' || github.base_ref == 'beta'"), true);
+    assert.equal(deployYaml.includes("github.event.pull_request.user.login != 'dependabot[bot]'"), true);
+    assert.equal(deployYaml.includes('steps.target.outputs.is_docs_only'), true);
+
+    const cleanupClosedPrYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
+      'utf8'
+    );
+    assert.equal(cleanupClosedPrYaml.includes("github.actor != 'dependabot[bot]'"), true);
+    assert.equal(cleanupClosedPrYaml.includes('timeout-minutes: 10'), true);
+
+    const cleanupBranchesYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/cleanup-branches.yml'),
+      'utf8'
+    );
+    assert.equal(cleanupBranchesYaml.includes('dependabot/,sync/'), true);
+    assert.equal(cleanupBranchesYaml.includes('BRANCH_CLEANUP_UNMERGED_MIN_AGE_DAYS'), true);
+    assert.equal(cleanupBranchesYaml.includes('timeout-minutes: 10'), true);
+
+    const syncBetaYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/sync-beta-from-main.yml'),
+      'utf8'
+    );
+    assert.equal(syncBetaYaml.includes('git merge-base --is-ancestor origin/main origin/beta'), true);
+    assert.equal(syncBetaYaml.includes('git merge --no-ff origin/main'), true);
+    assert.equal(syncBetaYaml.includes('github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}'), true);
+    assert.equal(syncBetaYaml.includes('pr-review-gate.yml'), true);
+    assert.equal(syncBetaYaml.includes('draft: !hasPatToken'), true);
+
+    const prReviewGateYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/pr-review-gate.yml'),
+      'utf8'
+    );
+    assert.equal(
+      /pull_request:\s*\r?\n\s*types:[\s\S]*?\n\s*-\s*edited\b[\s\S]*?pull_request_review:/.test(
+        prReviewGateYaml
+      ),
+      true
+    );
+    assert.equal(prReviewGateYaml.includes('github.event.changes.base != null'), true);
+
+    const dependabotYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/dependabot.yml'),
+      'utf8'
+    );
+    assert.equal(dependabotYaml.includes('package-ecosystem: "npm"'), true);
+    assert.equal(dependabotYaml.includes('package-ecosystem: "gradle"'), true);
+    assert.equal(dependabotYaml.includes('package-ecosystem: "github-actions"'), true);
+    assert.equal(dependabotYaml.includes('target-branch: "beta"'), true);
     /* capy-dev-only:end */
 
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
