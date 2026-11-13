@@ -1,5 +1,6 @@
 ### 3.0 - 2026-11-12 (Beta)
 
+- Add Android Play Store release to v3.0.1 scope and remove shipped Sprint 1 bugfixes from active queue [#487](https://github.com/shthed/capy/pull/487)
 - Fix mobile topbar badge overlap, cap incomplete puzzle progress at 99%, and log capypaint.com DNS cutover [#486](https://github.com/shthed/capy/pull/486)
 - Prepare v3.0.0 beta release with Cloudflare Worker, Co-op relay hardening, mobile replay controls, and CI sanity gate [#485](https://github.com/shthed/capy/pull/485)
 
