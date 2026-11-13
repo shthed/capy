@@ -6,6 +6,8 @@ import {
   ProgressDeltaV2,
 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
+import { resolveReleaseChannel } from '../../version';
+import { resolveScopedStorageKey, resolveStorageNamespace } from '../StorageNamespace';
 import { StorageService } from '../StorageService';
 import {
   AppleCloudDriver,
@@ -77,10 +79,11 @@ function randomHexId(len: number): string {
 function getTabPeerSuffix(): string {
   if (typeof sessionStorage === 'undefined') return 't0';
   try {
-    let suffix = sessionStorage.getItem(TAB_SESSION_SUFFIX_KEY);
+    const scopedKey = resolveScopedStorageKey(TAB_SESSION_SUFFIX_KEY);
+    let suffix = sessionStorage.getItem(scopedKey);
     if (!suffix) {
       suffix = randomHexId(4);
-      sessionStorage.setItem(TAB_SESSION_SUFFIX_KEY, suffix);
+      sessionStorage.setItem(scopedKey, suffix);
     }
     return suffix;
   } catch {
@@ -222,7 +225,7 @@ class MultiProviderAuthManager implements AuthProvider {
     }
 
     try {
-      const raw = localStorage.getItem(IDENTITY_STORAGE_KEY);
+      const raw = localStorage.getItem(resolveScopedStorageKey(IDENTITY_STORAGE_KEY));
       if (raw) {
         const parsed = JSON.parse(raw) as PlayerIdentity;
         if (parsed && parsed.playerId && parsed.displayName) {
@@ -302,7 +305,7 @@ class MultiProviderAuthManager implements AuthProvider {
         ...id,
         playerId: id.provider === 'guest' ? id.playerId.split(':')[0] : id.playerId,
       };
-      localStorage.setItem(IDENTITY_STORAGE_KEY, JSON.stringify(stored));
+      localStorage.setItem(resolveScopedStorageKey(IDENTITY_STORAGE_KEY), JSON.stringify(stored));
     } catch {
       // Ignore
     }
@@ -484,7 +487,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
   private readLocalVault(): Record<string, CloudSaveEnvelope> {
     try {
-      const raw = localStorage.getItem(CLOUD_VAULT_STORAGE_KEY);
+      const raw = localStorage.getItem(resolveScopedStorageKey(CLOUD_VAULT_STORAGE_KEY));
       if (raw) return JSON.parse(raw) as Record<string, CloudSaveEnvelope>;
     } catch {
       // Ignore
@@ -494,7 +497,10 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
   private writeLocalVault(vault: Record<string, CloudSaveEnvelope>): void {
     try {
-      localStorage.setItem(CLOUD_VAULT_STORAGE_KEY, JSON.stringify(vault));
+      localStorage.setItem(
+        resolveScopedStorageKey(CLOUD_VAULT_STORAGE_KEY),
+        JSON.stringify(vault)
+      );
     } catch {
       // Ignore
     }
@@ -502,7 +508,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
   private readLocalManifest(): CloudLibraryManifestV2 | null {
     try {
-      const raw = localStorage.getItem(CLOUD_MANIFEST_STORAGE_KEY);
+      const raw = localStorage.getItem(resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY));
       if (raw) {
         const parsed = JSON.parse(raw) as CloudLibraryManifestV2;
         if (parsed && parsed.version === 2 && parsed.entries) return parsed;
@@ -515,7 +521,10 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
   private writeLocalManifest(manifest: CloudLibraryManifestV2): void {
     try {
-      localStorage.setItem(CLOUD_MANIFEST_STORAGE_KEY, JSON.stringify(manifest));
+      localStorage.setItem(
+        resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY),
+        JSON.stringify(manifest)
+      );
     } catch {
       // Ignore
     }
@@ -1084,6 +1093,19 @@ export function computeCoopReconnectDelayMs(
   return Math.max(1000, Math.min(15_000, jittered));
 }
 
+export function resolveCoopBroadcastChannelName(roomCode: string): string {
+  const channelInfo = resolveReleaseChannel();
+  const ns = resolveStorageNamespace();
+  if (!ns.isSandboxed) {
+    return `capy_coop_room_stable_${roomCode}`;
+  }
+  const scope =
+    channelInfo.channel === 'alpha'
+      ? `alpha_${channelInfo.prNumber ?? 'preview'}`
+      : channelInfo.channel;
+  return `capy_coop_room_${scope}_${roomCode}`;
+}
+
 export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   private roomCode: string | null = null;
   private selfParticipant: CoopParticipant | null = null;
@@ -1134,7 +1156,7 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     this.emitParticipants();
 
     if (typeof BroadcastChannel !== 'undefined') {
-      this.channel = new BroadcastChannel(`capy_coop_room_${normalized}`);
+      this.channel = new BroadcastChannel(resolveCoopBroadcastChannelName(normalized));
       this.channel.onmessage = (ev: MessageEvent<CoopRoomWireMessage>) => {
         if (ev.data) this.handleWireMessage(ev.data, 'channel');
       };
@@ -1648,7 +1670,7 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
 
   getCommunityIdeas(): CommunityPuzzleIdea[] {
     try {
-      const raw = localStorage.getItem(COMMUNITY_IDEAS_STORAGE_KEY);
+      const raw = localStorage.getItem(resolveScopedStorageKey(COMMUNITY_IDEAS_STORAGE_KEY));
       if (raw) {
         const parsed = JSON.parse(raw) as CommunityPuzzleIdea[];
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1663,7 +1685,10 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
 
   private saveIdeas(ideas: CommunityPuzzleIdea[]): void {
     try {
-      localStorage.setItem(COMMUNITY_IDEAS_STORAGE_KEY, JSON.stringify(ideas));
+      localStorage.setItem(
+        resolveScopedStorageKey(COMMUNITY_IDEAS_STORAGE_KEY),
+        JSON.stringify(ideas)
+      );
     } catch {
       // Ignore
     }
@@ -1761,7 +1786,7 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
   getLedger(): AiCreditLedger {
     const isDesktopOrWebAdFree = !NativeBridge.isAndroid;
     try {
-      const raw = localStorage.getItem(AI_CREDITS_STORAGE_KEY);
+      const raw = localStorage.getItem(resolveScopedStorageKey(AI_CREDITS_STORAGE_KEY));
       if (raw) {
         const parsed = JSON.parse(raw) as AiCreditLedger;
         return {
@@ -1783,7 +1808,10 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
 
   private saveLedger(ledger: AiCreditLedger): void {
     try {
-      localStorage.setItem(AI_CREDITS_STORAGE_KEY, JSON.stringify(ledger));
+      localStorage.setItem(
+        resolveScopedStorageKey(AI_CREDITS_STORAGE_KEY),
+        JSON.stringify(ledger)
+      );
     } catch {
       // Ignore
     }

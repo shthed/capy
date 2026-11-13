@@ -902,11 +902,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         const tmpCanvas = document.createElement('canvas');
         tmpCanvas.width = width;
         tmpCanvas.height = height;
-        const tmpCtx = tmpCanvas.getContext('2d');
+        const tmpCtx = tmpCanvas.getContext('2d', { willReadFrequently: true }) || tmpCanvas.getContext('2d');
         if (tmpCtx) {
           tmpCtx.drawImage(sourceImage, 0, 0, width, height);
           sourcePixelsRef.current = tmpCtx.getImageData(0, 0, width, height).data;
         }
+        tmpCanvas.width = 0;
+        tmpCanvas.height = 0;
       } else {
         sourcePixelsRef.current = null;
       }
@@ -1361,10 +1363,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const h = container.clientHeight;
       if (w <= 0 || h <= 0) return;
 
-      const dpr = window.devicePixelRatio || 1;
-      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
+      const rawDpr = Math.max(1, window.devicePixelRatio || 1);
+      const MAX_BACKING_DIM = 4096;
+      const effDpr = Math.max(
+        1,
+        Math.min(rawDpr, MAX_BACKING_DIM / Math.max(1, w), MAX_BACKING_DIM / Math.max(1, h))
+      );
+      const targetWidth = Math.max(1, Math.round(w * effDpr));
+      const targetHeight = Math.max(1, Math.round(h * effDpr));
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
         canvas.style.width = `${w}px`;
         canvas.style.height = `${h}px`;
       }
@@ -1373,7 +1382,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!ctx) return;
 
       ctx.save();
-      ctx.scale(dpr, dpr);
+      ctx.scale(targetWidth / w, targetHeight / h);
 
       // Canvas stage background
       const bgHex =
@@ -1643,12 +1652,55 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         : null;
     observer?.observe(container);
     window.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+
+    let disposed = false;
+    let currentDprCleanup: (() => void) | null = null;
+    const attachDprListener = () => {
+      currentDprCleanup?.();
+      currentDprCleanup = null;
+      if (disposed || typeof window.matchMedia !== 'function') return;
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      if (!mq) return;
+      const onDprChange = () => {
+        if (disposed) return;
+        handleResize();
+        attachDprListener();
+      };
+      if (typeof mq.addEventListener === 'function') {
+        mq.addEventListener('change', onDprChange);
+        currentDprCleanup = () => mq.removeEventListener('change', onDprChange);
+      } else if (typeof mq.addListener === 'function') {
+        mq.addListener(onDprChange);
+        currentDprCleanup = () => mq.removeListener(onDprChange);
+      }
+    };
+    attachDprListener();
 
     return () => {
+      disposed = true;
       observer?.disconnect();
       window.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      currentDprCleanup?.();
+      currentDprCleanup = null;
     };
   }, [puzzle, drawCompositeFrame]);
+
+  // Release offscreen canvas backing buffers cleanly on unmount
+  useEffect(() => {
+    return () => {
+      for (const ref of [baseCanvasRef, highlightCanvasRef, borderCanvasRef]) {
+        if (ref.current) {
+          ref.current.width = 0;
+          ref.current.height = 0;
+          ref.current = null;
+        }
+      }
+      baseImageDataRef.current = null;
+      sourcePixelsRef.current = null;
+    };
+  }, []);
 
   // Redraw immediately whenever visual props or viewport state change
   useEffect(() => {

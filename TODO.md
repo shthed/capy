@@ -6,9 +6,9 @@ Focused **Sprint 1 Queue** ([EPIC-2](https://github.com/shthed/capy/issues/477) 
 
 ---
 
-## Sprint 1 Priority 0: `v3.0.1` Stabilization, Release Gates & Active PRs (`BUG-4`, `TASK-2.5`, [#489](https://github.com/shthed/capy/pull/489))
+## Sprint 1 Priority 0: `v3.0.1` Stabilization & Release Ops Gates (`BUG-4`, `TASK-2.5`)
 
-Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/shthed/capy/pull/484), [#485](https://github.com/shthed/capy/pull/485)), `BUG-2` ([#485](https://github.com/shthed/capy/pull/485)), and `BUG-5` mobile `GameTopBar` overlap & `99%` progress cap ([#486](https://github.com/shthed/capy/pull/486), promoted to `main` in [#488](https://github.com/shthed/capy/pull/488)). Shipped to `beta` (`v3.0.2`, awaiting `main` promotion): prebaked sample `1x` viewport reset & 1-click bot PR approval workflow ([#490](https://github.com/shthed/capy/pull/490)) plus `TASK-2.5` backlog sync ([#487](https://github.com/shthed/capy/pull/487)). Delete each remaining item below once shipped to Production / Play Store.
+Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/shthed/capy/pull/484), [#485](https://github.com/shthed/capy/pull/485)), `BUG-2` ([#485](https://github.com/shthed/capy/pull/485)), and `BUG-5` mobile `GameTopBar` overlap & `99%` progress cap ([#486](https://github.com/shthed/capy/pull/486), promoted to `main` in [#488](https://github.com/shthed/capy/pull/488)). Shipped to `beta` (`v3.0.2`--`v3.0.7`, awaiting `main` promotion): prebaked sample `1x` viewport reset & 1-click bot PR approval workflow ([#490](https://github.com/shthed/capy/pull/490)), `TASK-2.5` backlog sync ([#487](https://github.com/shthed/capy/pull/487)), CI/CD & governance hardening ([#491](https://github.com/shthed/capy/pull/491)--[#494](https://github.com/shthed/capy/pull/494)), and `TASK-2.6` post-load replay controls, `Capy Forest` default, onboarding tutorial & `About` tab ([#489](https://github.com/shthed/capy/pull/489)). Delete each remaining item below once shipped to Production / Play Store.
 
 ### BUG-4: `capypaint.com` Live DNS & Cloudflare Worker Cutover
 

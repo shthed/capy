@@ -11,6 +11,8 @@ export interface ParsedShareLink {
   roomCode: string | null;
   delta: ProgressDeltaV2 | null;
   matchedSample: SampleArtwork | null;
+  hasToken?: boolean;
+  tokenError?: string;
 }
 
 export function generateCoopRoomCode(length: number = 6): string {
@@ -77,14 +79,16 @@ export async function buildShareProgressUrl(options: {
 }
 
 export async function parseShareLinkFromUrl(rawUrl: string): Promise<ParsedShareLink> {
+  let roomCode: string | null = null;
+  let token: string | null = null;
   try {
     const parsed = new URL(rawUrl, CANONICAL_PRODUCTION_URL);
     const roomParam = parsed.searchParams.get('room');
-    const roomCode = roomParam
-      ? roomParam.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || null
-      : null;
+    const cleanRoom = roomParam
+      ? roomParam.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
+      : '';
+    roomCode = cleanRoom.length >= 4 ? cleanRoom : null;
 
-    let token: string | null = null;
     const rawHash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
     if (rawHash) {
       const hashParams = new URLSearchParams(rawHash);
@@ -93,22 +97,30 @@ export async function parseShareLinkFromUrl(rawUrl: string): Promise<ParsedShare
     if (!token) {
       token = parsed.searchParams.get('s');
     }
-
-    let delta: ProgressDeltaV2 | null = null;
-    let matchedSample: SampleArtwork | null = null;
-    if (token) {
-      delta = await decodeProgressDeltaToken(token);
-      matchedSample = resolveSampleFromSourceRef(delta.sourceRef);
-    }
-
-    return {
-      roomCode,
-      delta,
-      matchedSample,
-    };
   } catch {
     return { roomCode: null, delta: null, matchedSample: null };
   }
+
+  let delta: ProgressDeltaV2 | null = null;
+  let matchedSample: SampleArtwork | null = null;
+  let tokenError: string | undefined;
+  const hasToken = Boolean(token && token.trim().length > 0);
+  if (hasToken && token) {
+    try {
+      delta = await decodeProgressDeltaToken(token.trim());
+      matchedSample = resolveSampleFromSourceRef(delta.sourceRef);
+    } catch (err: unknown) {
+      tokenError = err instanceof Error ? err.message : 'Invalid share token';
+    }
+  }
+
+  return {
+    roomCode,
+    delta,
+    matchedSample,
+    ...(hasToken ? { hasToken: true } : {}),
+    ...(tokenError ? { tokenError } : {}),
+  };
 }
 
 export function clearShareHashFromWindowUrl(keepRoomCode?: string | null): void {

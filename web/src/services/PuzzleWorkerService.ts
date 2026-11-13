@@ -62,7 +62,9 @@ export class PuzzleWorkerService {
       try {
         const width = sourceCanvas.width;
         const height = sourceCanvas.height;
-        const ctx = sourceCanvas.getContext('2d')!;
+        const ctx =
+          sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
+          sourceCanvas.getContext('2d')!;
         const imgData = ctx.getImageData(0, 0, width, height);
         const rgbaBuffer = imgData.data.buffer;
 

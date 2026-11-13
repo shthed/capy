@@ -140,7 +140,9 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx = sourceCanvas.getContext('2d')!;
+    const ctx =
+      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
+      sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
     return this.generateFromRgba(imgData.data, sourceCanvas.width, sourceCanvas.height, config, onProgress);
   }
@@ -443,7 +445,9 @@ export class PainterlyPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx = sourceCanvas.getContext('2d')!;
+    const ctx =
+      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
+      sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
     return this.generateFromRgba(imgData.data, sourceCanvas.width, sourceCanvas.height, config, onProgress);
   }
@@ -518,7 +522,9 @@ export class PosterizedPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx = sourceCanvas.getContext('2d')!;
+    const ctx =
+      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
+      sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
     return this.generateFromRgba(imgData.data, sourceCanvas.width, sourceCanvas.height, config, onProgress);
   }
@@ -593,7 +599,9 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx = sourceCanvas.getContext('2d')!;
+    const ctx =
+      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
+      sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
     return this.generateFromRgba(imgData.data, sourceCanvas.width, sourceCanvas.height, config, onProgress);
   }
@@ -780,7 +788,9 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     onProgress?: ProgressCallback,
     detailedProgress: boolean = false
   ): PuzzleData {
-    const ctx = sourceCanvas.getContext('2d')!;
+    const ctx =
+      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
+      sourceCanvas.getContext('2d')!;
     const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
     return this.generateFromRgba(
       imgData.data,

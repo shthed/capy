@@ -323,4 +323,11 @@ class CapyAndroidBridgeTest {
         assertTrue(CapyAndroidBridge.saveBackupToDir(cloudDir, "corrupt_target_bin_meta", "not_valid_meta"))
         assertNull(CapyAndroidBridge.loadCloudBinaryBytesFromDir(cloudDir, "corrupt_target"))
     }
+
+    @Test
+    fun `isPlayGamesAppIdConfigured rejects whitespace and placeholder values`() {
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("   "))
+        assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("12345"))
+        assertTrue(CapyAndroidBridge.isPlayGamesAppIdConfigured("123456"))
+    }
 }
