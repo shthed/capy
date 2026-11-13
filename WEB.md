@@ -74,6 +74,7 @@ flowchart TB
 - **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Workers Static Assets security headers, immutable `/assets/*` caching with `! Cache-Control` overrides for unhashed sample/icon assets, `/capy.apk` `302` release redirect, and SPA fallback rules.
 - **[`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json)**: Root-domain Android Digital Asset Links manifest served at `https://capypaint.com/.well-known/assetlinks.json` for `com.capypaint.capy` (populated at build time from `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`).
 - **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)**: Published Privacy Policy and Google Play / Google Auth Data Safety summary (`https://capypaint.com/privacy-policy.html`).
+- **[`web/public/404.html`](./web/public/404.html)**: GitHub Pages fallback page redirecting expired `/capy/alpha/<id>`, `/capy/PR/<id>`, and `/capy/pull/<id>` preview URLs to `/capy/alpha/?missing=<id>` (with an infinite-redirect guard on `/capy/alpha/`).
 - **[`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy)**: Pre-baked 4-artwork `.capy` v2 Gzip archive for instant zero-worker first boot.
 
 ### Core Shell, Types & Styling (`web/src/`)

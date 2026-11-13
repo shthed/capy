@@ -322,6 +322,14 @@ jobs:
       id-token: write
       pull-requests: write
     steps:
+      - name: Checkout PR manifest scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build.outputs.checkout_ref }}
+          sparse-checkout: |
+            .github/scripts
+            web/public/404.html
+
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
@@ -370,6 +378,17 @@ jobs:
 
           cp -f staging/web/index.html "${DEST_DIR}/index.html"
           cp staging/apk/capy.apk "${DEST_DIR}/capy.apk"
+
+      - name: Generate PR preview manifest & 404 fallback
+        env:
+          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+          REFRESH_FLAG=""
+          if [ "${TARGET_DIR}" = "." ] || [ "${TARGET_DIR}" = "beta" ]; then
+            REFRESH_FLAG="--refresh-404"
+          fi
+          node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./pages ${REFRESH_FLAG}
 
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
         env:

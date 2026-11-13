@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import zlib from 'node:zlib';
 import { chromium } from 'playwright';
 import { createServer, preview } from 'vite';
@@ -4185,6 +4186,166 @@ async function runCodecAndEngineTests() {
     assert.equal(dependabotYaml.includes('package-ecosystem: "github-actions"'), true);
     assert.equal(dependabotYaml.includes('target-branch: "beta"'), true);
     /* capy-dev-only:end */
+
+    // Verify web/public/404.html redirect logic, .github/scripts/pr-index.html, & generate-pr-manifest.mjs
+    console.log('-> Testing 404.html redirect VM behavior, pr-index.html, generate-pr-manifest.mjs & workflow wiring...');
+    const notFoundHtmlPath = path.resolve(projectRoot, 'public/404.html');
+    const notFoundHtml = fs.readFileSync(notFoundHtmlPath, 'utf8');
+    assert.equal(notFoundHtml.includes('/capy/alpha/?missing='), true, '404.html must redirect to /capy/alpha/?missing=');
+    assert.equal(notFoundHtml.includes('(alpha|PR|pull)'), true, '404.html must match /capy/alpha/, /capy/PR/, and /capy/pull/');
+    assert.equal(notFoundHtml.includes('href="/capy/alpha/"'), true, '404.html must include fallback /capy/alpha/ link');
+
+    const scriptMatch = notFoundHtml.match(/<script>([\s\S]*?)<\/script>/);
+    assert.ok(scriptMatch, '404.html must contain an inline redirect script');
+    const run404Redirect = (pathname) => {
+      let replacedWith = null;
+      const msgEl = { textContent: '' };
+      const prLinkEl = {
+        attrs: {},
+        setAttribute(k, v) {
+          this.attrs[k] = v;
+        },
+      };
+      const sandbox = {
+        encodeURIComponent,
+        window: {
+          location: {
+            pathname,
+            replace(url) {
+              replacedWith = url;
+            },
+          },
+        },
+        document: {
+          getElementById(id) {
+            if (id === 'message') return msgEl;
+            if (id === 'pr-link') return prLinkEl;
+            return null;
+          },
+        },
+      };
+      vm.runInNewContext(scriptMatch[1], sandbox);
+      return { replacedWith, msg: msgEl.textContent, href: prLinkEl.attrs.href ?? null };
+    };
+
+    assert.equal(run404Redirect('/capy/alpha/491/').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/PR/491/').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/pull/489/').replacedWith, '/capy/alpha/?missing=489');
+    assert.equal(run404Redirect('/capy/PR/').replacedWith, '/capy/alpha/');
+    assert.equal(run404Redirect('/capy/pull/').replacedWith, '/capy/alpha/');
+    assert.equal(run404Redirect('/capy/alpha/').replacedWith, null, '404.html must not loop on /capy/alpha/');
+    assert.equal(run404Redirect('/capy/alpha').replacedWith, null, '404.html must not loop on /capy/alpha');
+    assert.equal(run404Redirect('/capy/beta/missing').replacedWith, null, '404.html must not redirect /capy/beta/*');
+    assert.equal(run404Redirect('/capy/unknown').replacedWith, null, '404.html must not redirect /capy/unknown');
+    assert.equal(run404Redirect('/capy/privacy-policy.html').replacedWith, null, '404.html must not redirect /capy/privacy-policy.html');
+    assert.equal(run404Redirect('/capy/preview').replacedWith, null, '404.html must not redirect /capy/preview');
+    assert.equal(run404Redirect('/capy/pull-request').replacedWith, null, '404.html must not redirect /capy/pull-request');
+    assert.equal(run404Redirect('/capy/alpha-test').replacedWith, null, '404.html must not redirect /capy/alpha-test');
+    assert.equal(run404Redirect('/capy/alpha/491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/alpha///491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/pull/491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/PR/491/sub?x=1#y').replacedWith, '/capy/alpha/?missing=491');
+
+    const prIndexHtmlPath = path.resolve(projectRoot, '../.github/scripts/pr-index.html');
+    const prIndexHtml = fs.readFileSync(prIndexHtmlPath, 'utf8');
+    assert.equal(prIndexHtml.includes('/capy/alpha/'), true, 'pr-index.html must target /capy/alpha/');
+    assert.equal(prIndexHtml.includes("fetch('manifest.json', { cache: 'no-store' })"), true, 'pr-index.html must fetch manifest.json with no-store');
+    assert.equal(prIndexHtml.includes("params.get('missing')"), true, 'pr-index.html must read ?missing= query parameter');
+    assert.equal(prIndexHtml.includes('/capy/PR/'), false, 'pr-index.html must not reference legacy /capy/PR/');
+    assert.equal(prIndexHtml.toLowerCase().includes('shthed'), false, 'pr-index.html must not hardcode owner slug');
+    assert.equal(prIndexHtml.includes('deriveRepoSlug'), true, 'pr-index.html must derive repo slug dynamically');
+
+    const { generatePrManifest } = await import('../../.github/scripts/generate-pr-manifest.mjs');
+    const tmpPagesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-pr-manifest-'));
+    try {
+      const alphaDir = path.join(tmpPagesDir, 'alpha');
+      fs.mkdirSync(path.join(alphaDir, '485'), { recursive: true });
+      fs.mkdirSync(path.join(alphaDir, '491'), { recursive: true });
+      fs.mkdirSync(path.join(alphaDir, 'feature-x'), { recursive: true });
+      fs.mkdirSync(path.join(alphaDir, 'not-a-pr'), { recursive: true });
+      fs.writeFileSync(path.join(alphaDir, '491', 'capy.apk'), 'apk');
+
+      const manifest = generatePrManifest({ pagesDir: tmpPagesDir });
+      assert.deepEqual(
+        manifest.prs.map((p) => ({ number: p.number, path: p.path, hasApk: p.hasApk })),
+        [
+          { number: 491, path: '/capy/alpha/491/', hasApk: true },
+          { number: 485, path: '/capy/alpha/485/', hasApk: false },
+        ],
+        'generatePrManifest must sort numeric PR directories descending, emit /capy/alpha/<id>/, and exclude non-numeric dirs'
+      );
+      const writtenManifest = JSON.parse(fs.readFileSync(path.join(alphaDir, 'manifest.json'), 'utf8'));
+      assert.deepEqual(
+        writtenManifest.prs.map((p) => p.path),
+        ['/capy/alpha/491/', '/capy/alpha/485/']
+      );
+      assert.equal(fs.existsSync(path.join(alphaDir, 'index.html')), true, 'alpha/index.html must be copied');
+      assert.equal(fs.existsSync(path.join(tmpPagesDir, '404.html')), true, 'root 404.html must be seeded when missing');
+
+      // Passing alpha/ subdirectory directly must resolve rootPagesDir cleanly
+      const subManifest = generatePrManifest({ pagesDir: alphaDir });
+      assert.equal(subManifest.prs.length, 2);
+
+      // Existing 404.html must be preserved when refreshNotFound is false, and overwritten when refreshNotFound is true
+      const dest404Path = path.join(tmpPagesDir, '404.html');
+      fs.writeFileSync(dest404Path, 'stale-404-sentinel', 'utf8');
+      generatePrManifest({ pagesDir: tmpPagesDir, refreshNotFound: false });
+      assert.equal(fs.readFileSync(dest404Path, 'utf8'), 'stale-404-sentinel');
+
+      generatePrManifest({ pagesDir: tmpPagesDir, refreshNotFound: true });
+      assert.equal(fs.readFileSync(dest404Path, 'utf8'), notFoundHtml);
+
+      // Verify CLI flags --pages-dir, --not-found-src, and --refresh-404
+      fs.writeFileSync(dest404Path, 'cli-stale-sentinel', 'utf8');
+      execFileSync(process.execPath, [
+        path.resolve(projectRoot, '../.github/scripts/generate-pr-manifest.mjs'),
+        '--pages-dir',
+        tmpPagesDir,
+        '--not-found-src',
+        notFoundHtmlPath,
+        '--refresh-404',
+      ]);
+      assert.equal(fs.readFileSync(dest404Path, 'utf8'), notFoundHtml);
+
+      // cleanup-gh-pages-previews must preserve alpha/index.html and alpha/manifest.json intact
+      const cleanupRes = await previewCleanupMod.runCleanupGhPagesPreviews({
+        pagesDir: tmpPagesDir,
+        ignoreRecency: true,
+        repository: 'a/b',
+        token: 'tok',
+        defaultBranch: 'main',
+        remoteBranches: ['main', 'beta'],
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async () =>
+          makeMockResponse({
+            ok: true,
+            status: 200,
+            jsonData: [{ number: 491, state: 'open', head: { ref: 'fix/pr-404-redirect' } }],
+          }),
+      });
+      assert.equal(cleanupRes.deleted.includes('alpha/485'), true);
+      assert.equal(fs.existsSync(path.join(alphaDir, '491')), true);
+      assert.equal(fs.existsSync(path.join(alphaDir, '485')), false);
+      assert.equal(fs.existsSync(path.join(alphaDir, 'index.html')), true, 'alpha/index.html must survive preview cleanup');
+      assert.equal(fs.existsSync(path.join(alphaDir, 'manifest.json')), true, 'alpha/manifest.json must survive preview cleanup');
+    } finally {
+      fs.rmSync(tmpPagesDir, { recursive: true, force: true });
+    }
+
+    const deployWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/deploy-branch.yml'),
+      'utf8'
+    );
+    assert.equal(deployWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
+    assert.equal(deployWorkflowYaml.includes('web/public/404.html'), true);
+    assert.equal(deployWorkflowYaml.includes('--refresh-404'), true);
+
+    const cleanupWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
+      'utf8'
+    );
+    assert.equal(cleanupWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
 
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {
