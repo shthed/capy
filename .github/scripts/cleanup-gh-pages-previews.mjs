@@ -3,31 +3,16 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const sanitize = (value) => (value || '').replace(/[^a-zA-Z0-9._-]/g, '-').trim();
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const repository = process.env.GITHUB_REPOSITORY ?? '';
-const [owner, repo] = repository.split('/');
-
-if (!owner || !repo) {
-  console.error('cleanup-gh-pages: GITHUB_REPOSITORY must be set to "owner/repo".');
-  process.exitCode = 1;
-  process.exit();
-}
-
-const token = process.env.GITHUB_TOKEN ?? '';
-if (!token) {
-  console.error('cleanup-gh-pages: GITHUB_TOKEN is required.');
-  process.exitCode = 1;
-  process.exit();
-}
-
-const baseUrl = `https://api.github.com/repos/${owner}/${repo}`;
-const fetchHeaders = {
+const createHeaders = (token) => ({
   Accept: 'application/vnd.github+json',
   'User-Agent': 'capy-gh-pages-cleanup-script',
   Authorization: `Bearer ${token}`
-};
+});
 
 const parseLinkHeader = (value) => {
   if (!value) {
@@ -45,8 +30,67 @@ const parseLinkHeader = (value) => {
   }, {});
 };
 
-const request = async (url, options = {}) => {
-  const { params, method = 'GET', body } = options;
+const parseRetryAfterMs = (headerValue, nowMs = Date.now()) => {
+  if (!headerValue) {
+    return null;
+  }
+  const trimmed = String(headerValue).trim();
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    return Math.max(0, Math.round(Number.parseFloat(trimmed) * 1000));
+  }
+  const parsedDate = Date.parse(trimmed);
+  if (Number.isFinite(parsedDate)) {
+    return Math.max(0, parsedDate - nowMs);
+  }
+  return null;
+};
+
+const computeRetryDelayMs = (response, attempt, baseDelayMs, nowMs = Date.now()) => {
+  const retryAfterMs = parseRetryAfterMs(response?.headers?.get?.('retry-after'), nowMs);
+  if (retryAfterMs !== null) {
+    return Math.min(60000, Math.max(0, retryAfterMs));
+  }
+  const status = response?.status;
+  if (status === 403 || status === 429) {
+    const resetHeader = response?.headers?.get?.('x-ratelimit-reset');
+    if (resetHeader && /^\d+$/.test(String(resetHeader).trim())) {
+      const resetMs = Number.parseInt(resetHeader, 10) * 1000;
+      return Math.min(60000, Math.max(1000, resetMs - nowMs));
+    }
+  }
+  const safeBase = Math.max(0, Number.isFinite(baseDelayMs) ? baseDelayMs : 1000);
+  const exp = Math.min(30000, safeBase * (2 ** attempt));
+  const jitterBound = Math.min(250, Math.max(1, Math.floor(safeBase)));
+  const jitter = safeBase > 0 ? Math.floor(Math.random() * jitterBound) : 0;
+  return Math.min(30000, exp + jitter);
+};
+
+const isRetryableResponse = (response) => {
+  const status = response?.status;
+  if (status === 429 || (status >= 500 && status <= 599)) {
+    return true;
+  }
+  if (status === 403) {
+    const remaining = response.headers?.get?.('x-ratelimit-remaining');
+    const retryAfter = response.headers?.get?.('retry-after');
+    return remaining === '0' || Boolean(retryAfter);
+  }
+  return false;
+};
+
+export const requestWithRetry = async (url, options = {}) => {
+  const {
+    params,
+    method = 'GET',
+    body,
+    headers = {},
+    retries = 4,
+    timeoutMs = 30000,
+    baseDelayMs = 1000,
+    fetchImpl = globalThis.fetch,
+    sleepImpl = defaultSleep,
+  } = options;
+
   const requestUrl = new URL(url);
 
   if (params && typeof params === 'object') {
@@ -58,35 +102,70 @@ const request = async (url, options = {}) => {
     }
   }
 
-  const response = await fetch(requestUrl, {
-    method,
-    headers: fetchHeaders,
-    body
-  });
-
-  if (response.ok) {
-    const linkHeader = response.headers.get('link');
-    const links = parseLinkHeader(linkHeader ?? '');
-    if (method === 'DELETE' || response.status === 204) {
-      return { data: null, response, links };
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    let response;
+    try {
+      const signal =
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(timeoutMs)
+          : undefined;
+      response = await fetchImpl(requestUrl, {
+        method,
+        headers,
+        body,
+        ...(signal ? { signal } : {})
+      });
+    } catch (error) {
+      if (attempt < retries) {
+        const safeBase = Math.max(0, Number.isFinite(baseDelayMs) ? baseDelayMs : 1000);
+        const exp = Math.min(30000, safeBase * (2 ** attempt));
+        const jitter = safeBase > 0 ? Math.floor(Math.random() * Math.min(250, Math.max(1, Math.floor(safeBase)))) : 0;
+        await sleepImpl(Math.min(30000, exp + jitter));
+        continue;
+      }
+      throw new Error(`GitHub request failed after ${attempt + 1} attempt(s): ${error?.message || error}`, {
+        cause: error
+      });
     }
-    return { data: await response.json(), response, links };
+
+    if (response.ok) {
+      const linkHeader = response.headers?.get?.('link');
+      const links = parseLinkHeader(linkHeader ?? '');
+      if (method === 'DELETE' || response.status === 204) {
+        return { data: null, response, links };
+      }
+      return { data: await response.json(), response, links };
+    }
+
+    if (attempt < retries && isRetryableResponse(response)) {
+      const delay = computeRetryDelayMs(response, attempt, baseDelayMs);
+      await response.text().catch(() => {});
+      await sleepImpl(delay);
+      continue;
+    }
+
+    const text = await response.text().catch(() => '');
+    const err = new Error(`GitHub request failed with ${response.status}: ${text || response.statusText}`);
+    err.status = response.status;
+    throw err;
   }
 
-  const text = await response.text();
-  throw new Error(`GitHub request failed with ${response.status}: ${text || response.statusText}`);
+  throw new Error('GitHub request failed after retries.');
 };
 
-const paginate = async (path, initialParams = {}) => {
+const paginate = async (baseUrl, reqPath, initialParams = {}, requestOptions = {}) => {
   const perPage = Math.min(Math.max(Number.parseInt(initialParams.per_page ?? '100', 10) || 100, 1), 100);
   const params = { ...initialParams, per_page: perPage };
   let page = Number.parseInt(params.page ?? '1', 10) || 1;
   const results = [];
 
   while (true) {
-    const { data, links } = await request(`${baseUrl}/${path}`, { params: { ...params, page } });
+    const { data, links } = await requestWithRetry(`${baseUrl}/${reqPath}`, {
+      ...requestOptions,
+      params: { ...params, page }
+    });
     if (!Array.isArray(data)) {
-      throw new Error(`Expected array response from ${path}, received ${typeof data}`);
+      throw new Error(`Expected array response from ${reqPath}, received ${typeof data}`);
     }
 
     results.push(...data);
@@ -101,7 +180,39 @@ const paginate = async (path, initialParams = {}) => {
   return results;
 };
 
-const fetchPullRequests = async () => paginate('pulls', { state: 'all', sort: 'updated', direction: 'desc' });
+export const fetchPullRequests = async ({
+  baseUrl,
+  headers,
+  targetPr = null,
+  fetchImpl = globalThis.fetch,
+  sleepImpl = defaultSleep,
+  baseDelayMs = 1000,
+  timeoutMs = 30000,
+  retries = 4,
+} = {}) => {
+  const reqOpts = { headers, fetchImpl, sleepImpl, baseDelayMs, timeoutMs, retries };
+  const pulls = await paginate(
+    baseUrl,
+    'pulls',
+    { state: 'open', sort: 'updated', direction: 'desc' },
+    reqOpts
+  );
+
+  if (targetPr !== null && targetPr !== undefined && !pulls.some((pr) => pr?.number === targetPr)) {
+    try {
+      const { data } = await requestWithRetry(`${baseUrl}/pulls/${targetPr}`, reqOpts);
+      if (data && typeof data === 'object' && data.number) {
+        pulls.push(data);
+      }
+    } catch (error) {
+      if (error?.status !== 404) {
+        throw error;
+      }
+    }
+  }
+
+  return pulls;
+};
 
 const runCommand = (command) => {
   const output = execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -185,7 +296,7 @@ const deleteDirectory = (targetPath) => {
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 
-const buildPullRequestIndex = (pulls) => {
+export const buildPullRequestIndex = (pulls) => {
   const index = new Map();
   for (const pull of pulls) {
     const branch = pull?.head?.ref;
@@ -211,7 +322,7 @@ const buildPullRequestIndex = (pulls) => {
   return index;
 };
 
-const buildPullRequestNumberIndex = (pulls) => {
+export const buildPullRequestNumberIndex = (pulls) => {
   const index = new Map();
   for (const pull of pulls) {
     if (!pull?.number) {
@@ -246,15 +357,31 @@ const formatPrSummary = (prs) => {
     .join(', ');
 };
 
-const main = async () => {
-  const options = parseArguments();
+export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
+  const repository = rawOptions.repository ?? process.env.GITHUB_REPOSITORY ?? '';
+  const [owner, repo] = repository.split('/');
+  if (!owner || !repo) {
+    throw new Error('cleanup-gh-pages: GITHUB_REPOSITORY must be set to "owner/repo".');
+  }
+
+  const token = rawOptions.token ?? process.env.GITHUB_TOKEN ?? '';
+  if (!token) {
+    throw new Error('cleanup-gh-pages: GITHUB_TOKEN is required.');
+  }
+
+  const cliOptions = rawOptions.pagesDir !== undefined ? {} : parseArguments();
+  const options = {
+    pagesDir: rawOptions.pagesDir ?? cliOptions.pagesDir ?? 'gh-pages',
+    targetPr: rawOptions.targetPr !== undefined ? rawOptions.targetPr : (cliOptions.targetPr ?? null),
+    ignoreRecency: rawOptions.ignoreRecency ?? cliOptions.ignoreRecency ?? false,
+  };
   const { pagesDir } = options;
-  const resolvedPagesDir = path.resolve(process.cwd(), pagesDir);
+  const resolvedPagesDir = path.resolve(rawOptions.cwd ?? process.cwd(), pagesDir);
 
   if (!fs.existsSync(resolvedPagesDir) || !fs.statSync(resolvedPagesDir).isDirectory()) {
     console.error(`cleanup-gh-pages: pages directory not found at ${resolvedPagesDir}`);
     process.exitCode = 1;
-    return;
+    return { deleted: [], evaluated: 0 };
   }
 
   const legacyReadme = path.join(resolvedPagesDir, 'README');
@@ -263,8 +390,8 @@ const main = async () => {
     deleteDirectory(legacyReadme);
   }
 
-  const defaultBranch = resolveDefaultBranch();
-  const remoteBranches = fetchRemoteBranches();
+  const defaultBranch = rawOptions.defaultBranch ?? resolveDefaultBranch();
+  const remoteBranches = rawOptions.remoteBranches ?? fetchRemoteBranches();
 
   const liveBranchSlugs = new Set();
 
@@ -282,7 +409,18 @@ const main = async () => {
     addBranchTargets(defaultBranch);
   }
 
-  const pulls = await fetchPullRequests();
+  const baseUrl = `https://api.github.com/repos/${owner}/${repo}`;
+  const headers = createHeaders(token);
+  const pulls = await fetchPullRequests({
+    baseUrl,
+    headers,
+    targetPr: options.targetPr,
+    fetchImpl: rawOptions.fetchImpl ?? globalThis.fetch,
+    sleepImpl: rawOptions.sleepImpl ?? defaultSleep,
+    baseDelayMs: rawOptions.baseDelayMs ?? 1000,
+    timeoutMs: rawOptions.timeoutMs ?? 30000,
+    retries: rawOptions.retries ?? 4,
+  });
   const pullIndex = buildPullRequestIndex(pulls);
   const pullNumberIndex = buildPullRequestNumberIndex(pulls);
 
@@ -299,10 +437,10 @@ const main = async () => {
 
   if (previewDirectories.length === 0) {
     console.log('cleanup-gh-pages: no preview directories detected.');
-    return;
+    return { deleted: [], evaluated: 0 };
   }
 
-  const now = Date.now();
+  const now = rawOptions.nowMs ?? Date.now();
   const inventory = previewDirectories.map((entry) => {
     const prs = entry.kind === 'pull' ? [] : pullIndex.get(entry.name) ?? [];
     const prNumber = entry.kind === 'pull' ? Number.parseInt(entry.name, 10) : null;
@@ -349,28 +487,7 @@ const main = async () => {
     console.log(`::debug::- ${label}: ${branchState}; last updated ${updatedLabel}; ${freshness}; PRs: ${prSummary}`);
   }
 
-  const deletions = inventory.filter((entry) => {
-    const hasOpenPr = entry.pull?.state === 'open' || entry.prs.some((pr) => pr.state === 'open');
-    const matchesTargetPr = options.targetPr !== null && entry.prNumber === options.targetPr;
-
-    if (hasOpenPr) {
-      return false;
-    }
-
-    if (options.targetPr !== null) {
-      return matchesTargetPr;
-    }
-
-    if (entry.kind === 'legacy') {
-      if (entry.hasLiveBranch) {
-        return false;
-      }
-      return options.ignoreRecency || !entry.isRecent;
-    }
-
-    // For pull/ directories: only deployments for open pull requests are kept.
-    return true;
-  });
+  const deletions = selectPreviewDeletions(inventory, options);
 
   if (deletions.length === 0) {
     if (options.targetPr !== null) {
@@ -378,7 +495,7 @@ const main = async () => {
     } else {
       console.log('cleanup-gh-pages: no preview directories met cleanup criteria.');
     }
-    return;
+    return { deleted: [], evaluated: inventory.length };
   }
 
   const removalReason = options.targetPr !== null
@@ -386,19 +503,54 @@ const main = async () => {
     : 'closed or non-open pull request preview directories';
 
   console.log(`cleanup-gh-pages: removing ${removalReason}:`);
+  const deleted = [];
   for (const entry of deletions) {
     const label = entry.kind === 'pull' ? `pull/${entry.name}` : entry.name;
     console.log(`- ${label}`);
     deleteDirectory(entry.absolutePath);
+    deleted.push(label);
   }
+  return { deleted, evaluated: inventory.length };
 };
 
-main().catch((error) => {
-  console.error('cleanup-gh-pages: failed to prune previews');
-  if (error && error.stack) {
-    console.error(error.stack);
-  } else {
-    console.error(error);
-  }
-  process.exitCode = 1;
-});
+export const selectPreviewDeletions = (inventory, options = {}) => {
+  const { targetPr = null, ignoreRecency = false } = options;
+  return inventory.filter((entry) => {
+    const hasOpenPr = entry.pull?.state === 'open' || entry.prs.some((pr) => pr.state === 'open');
+    const matchesTargetPr = targetPr !== null && entry.prNumber === targetPr;
+
+    if (hasOpenPr) {
+      return false;
+    }
+
+    if (targetPr !== null) {
+      return matchesTargetPr;
+    }
+
+    if (entry.kind === 'legacy') {
+      if (entry.hasLiveBranch) {
+        return false;
+      }
+      return ignoreRecency || !entry.isRecent;
+    }
+
+    // For pull/ directories: only deployments for open pull requests are kept.
+    return true;
+  });
+};
+
+const isCliEntry = Boolean(
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+);
+
+if (isCliEntry) {
+  runCleanupGhPagesPreviews().catch((error) => {
+    console.error('cleanup-gh-pages: failed to prune previews');
+    if (error && error.stack) {
+      console.error(error.stack);
+    } else {
+      console.error(error);
+    }
+    process.exitCode = 1;
+  });
+}
