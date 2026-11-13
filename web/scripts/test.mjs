@@ -6728,7 +6728,7 @@ async function runBrowserBasicsSuite() {
     const tabsBox = await tabsContainer.boundingBox();
     const closeBox = await closeBtn.boundingBox();
     assert.ok(tabsBox && closeBox);
-    for (const tabKey of ['settings', 'hints', 'create', 'saves']) {
+    for (const tabKey of ['about', 'settings', 'hints', 'create', 'saves']) {
       const tabBox = await mobileTopbarPage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
       assert.ok(tabBox, `Expected settings-tab-${tabKey} boundingBox to exist`);
       assert.equal(
