@@ -15,11 +15,15 @@ import {
   uint8ToBase64,
 } from './CapyCodec';
 import { NativeBridge } from './NativeBridge';
+import {
+  resolveScopedBackupKey,
+  resolveScopedDbName,
+  resolveScopedStorageKey,
+} from './StorageNamespace';
 
 const SETTINGS_KEY = 'capy_user_settings_v8';
 const SNAPSHOTS_KEY = 'capy_snapshots_v8';
 const ACTIVE_STATE_KEY = 'capy_active_session_v8';
-const DB_NAME = 'capy_game_storage_v8';
 const DB_VERSION = 1;
 const STORE_PUZZLES = 'puzzles';
 const STORE_IMAGES = 'images';
@@ -92,12 +96,14 @@ function detectSystemReducedMotion(): boolean {
 }
 
 export class StorageService {
-  private static dbPromise: Promise<IDBDatabase> | null = null;
+  private static dbPromises = new Map<string, Promise<IDBDatabase>>();
 
   private static getDB(): Promise<IDBDatabase> {
-    if (!this.dbPromise) {
-      this.dbPromise = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const dbName = resolveScopedDbName();
+    let existing = this.dbPromises.get(dbName);
+    if (!existing) {
+      existing = new Promise((resolve, reject) => {
+        const req = indexedDB.open(dbName, DB_VERSION);
         req.onupgradeneeded = () => {
           const db = req.result;
           if (!db.objectStoreNames.contains(STORE_PUZZLES)) {
@@ -109,12 +115,13 @@ export class StorageService {
         };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => {
-          this.dbPromise = null;
+          this.dbPromises.delete(dbName);
           reject(req.error);
         };
       });
+      this.dbPromises.set(dbName, existing);
     }
-    return this.dbPromise;
+    return existing;
   }
 
   private static async runTransaction(
@@ -134,7 +141,9 @@ export class StorageService {
   static loadSettings(): UserSettings {
     const systemReducedMotion = detectSystemReducedMotion();
     try {
-      const raw = localStorage.getItem(SETTINGS_KEY) || NativeBridge.loadBackup(SETTINGS_KEY);
+      const storageKey = resolveScopedStorageKey(SETTINGS_KEY);
+      const backupKey = resolveScopedBackupKey(SETTINGS_KEY);
+      const raw = localStorage.getItem(storageKey) || NativeBridge.loadBackup(backupKey);
       if (!raw) {
         return {
           ...DEFAULT_SETTINGS,
@@ -167,7 +176,7 @@ export class StorageService {
       const reducedMotion =
         typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : systemReducedMotion;
       const difficulty =
-        parsed.difficulty === 'EASY' || parsed.difficulty === 'HARD'
+        parsed.difficulty === 'EASY' || parsed.difficulty === 'NORMAL'
           ? parsed.difficulty
           : DEFAULT_SETTINGS.difficulty;
       const saveSortOrder =
@@ -179,13 +188,15 @@ export class StorageService {
       const paletteSort =
         parsed.paletteSort === 'NUMBER' ||
         parsed.paletteSort === 'REMAINING' ||
-        parsed.paletteSort === 'LUMINANCE'
+        parsed.paletteSort === 'HUE' ||
+        parsed.paletteSort === 'LIGHTNESS'
           ? parsed.paletteSort
           : DEFAULT_SETTINGS.paletteSort;
       const highlightStyle =
+        parsed.highlightStyle === 'CENTROID_GLOW' ||
+        parsed.highlightStyle === 'NUMBER_ONLY' ||
         parsed.highlightStyle === 'FULL_REGION' ||
-        parsed.highlightStyle === 'BOUNDARY_ONLY' ||
-        parsed.highlightStyle === 'NUMBER_ONLY'
+        parsed.highlightStyle === 'BOUNDARY_ONLY'
           ? parsed.highlightStyle
           : DEFAULT_SETTINGS.highlightStyle;
       const hintFillStyle =
@@ -238,8 +249,8 @@ export class StorageService {
   static saveSettings(settings: UserSettings): void {
     try {
       const serialized = JSON.stringify(settings);
-      localStorage.setItem(SETTINGS_KEY, serialized);
-      NativeBridge.saveBackup(SETTINGS_KEY, serialized);
+      localStorage.setItem(resolveScopedStorageKey(SETTINGS_KEY), serialized);
+      NativeBridge.saveBackup(resolveScopedBackupKey(SETTINGS_KEY), serialized);
     } catch {
       // ignore
     }
@@ -247,7 +258,9 @@ export class StorageService {
 
   static loadSnapshots(): SavedSnapshot[] {
     try {
-      const raw = localStorage.getItem(SNAPSHOTS_KEY) || NativeBridge.loadBackup(SNAPSHOTS_KEY);
+      const raw =
+        localStorage.getItem(resolveScopedStorageKey(SNAPSHOTS_KEY)) ||
+        NativeBridge.loadBackup(resolveScopedBackupKey(SNAPSHOTS_KEY));
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
@@ -272,8 +285,8 @@ export class StorageService {
   static saveSnapshots(snapshots: SavedSnapshot[]): void {
     try {
       const serialized = JSON.stringify(snapshots);
-      localStorage.setItem(SNAPSHOTS_KEY, serialized);
-      NativeBridge.saveBackup(SNAPSHOTS_KEY, serialized);
+      localStorage.setItem(resolveScopedStorageKey(SNAPSHOTS_KEY), serialized);
+      NativeBridge.saveBackup(resolveScopedBackupKey(SNAPSHOTS_KEY), serialized);
     } catch {
       // ignore
     }
@@ -518,8 +531,8 @@ export class StorageService {
           ? { ...state, resetEpoch: effectiveEpoch }
           : state;
       const serialized = JSON.stringify(payload);
-      localStorage.setItem(ACTIVE_STATE_KEY, serialized);
-      NativeBridge.saveBackup(ACTIVE_STATE_KEY, serialized);
+      localStorage.setItem(resolveScopedStorageKey(ACTIVE_STATE_KEY), serialized);
+      NativeBridge.saveBackup(resolveScopedBackupKey(ACTIVE_STATE_KEY), serialized);
     } catch {
       // ignore
     }
@@ -527,8 +540,8 @@ export class StorageService {
 
   static clearActiveState(): void {
     try {
-      localStorage.removeItem(ACTIVE_STATE_KEY);
-      NativeBridge.saveBackup(ACTIVE_STATE_KEY, '');
+      localStorage.removeItem(resolveScopedStorageKey(ACTIVE_STATE_KEY));
+      NativeBridge.saveBackup(resolveScopedBackupKey(ACTIVE_STATE_KEY), '');
     } catch {
       // ignore
     }
@@ -546,7 +559,9 @@ export class StorageService {
     panOffsetY: number;
   } | null {
     try {
-      const raw = localStorage.getItem(ACTIVE_STATE_KEY) || NativeBridge.loadBackup(ACTIVE_STATE_KEY);
+      const raw =
+        localStorage.getItem(resolveScopedStorageKey(ACTIVE_STATE_KEY)) ||
+        NativeBridge.loadBackup(resolveScopedBackupKey(ACTIVE_STATE_KEY));
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;

@@ -1,6 +1,6 @@
 ### 3.0.7 - 2026-11-13 (Beta)
 
-- Harden canvas DPR/offscreen memory, atomic `.capy` imports, sample-save ordering, `#s=`/`?room=` Co-op isolation, Android Play Games fallback, and standalone `compile-changelog.mjs` release extraction [#495](https://github.com/shthed/capy/pull/495)
+- Isolate alpha/beta preview browser storage (`StorageNamespace`), harden canvas DPR listeners and settings persistence, add `.changelog/` fragment compiler, fix `PaletteDock` accessibility labels, and sync Agile docs [#495](https://github.com/shthed/capy/pull/495)
 
 ### 3.0.6 - 2026-11-13
 

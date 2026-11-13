@@ -26,6 +26,7 @@ export const DEV_ONLY_RELATIVE_PATHS = new Set([
   '.github/workflows/pr-review-gate.yml',
   '.github/workflows/open-pr.yml',
   '.github/workflows/sync-beta-from-main.yml',
+  '.github/workflows/sync-agile-tracker.yml',
   '.github/dependabot.yml',
 ]);
 
@@ -78,7 +79,7 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 export const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|dependabot\.ya?ml/i;
+  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|dependabot\.ya?ml/i;
 
 export function stripDevOnlyBlocks(content) {
   return content

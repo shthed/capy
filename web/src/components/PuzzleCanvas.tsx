@@ -1654,22 +1654,31 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     window.addEventListener('resize', handleResize);
     window.visualViewport?.addEventListener('resize', handleResize);
 
+    let disposed = false;
     let currentDprCleanup: (() => void) | null = null;
     const attachDprListener = () => {
       currentDprCleanup?.();
       currentDprCleanup = null;
-      if (typeof window.matchMedia !== 'function') return;
+      if (disposed || typeof window.matchMedia !== 'function') return;
       const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      if (!mq) return;
       const onDprChange = () => {
+        if (disposed) return;
         handleResize();
         attachDprListener();
       };
-      mq.addEventListener('change', onDprChange);
-      currentDprCleanup = () => mq.removeEventListener('change', onDprChange);
+      if (typeof mq.addEventListener === 'function') {
+        mq.addEventListener('change', onDprChange);
+        currentDprCleanup = () => mq.removeEventListener('change', onDprChange);
+      } else if (typeof mq.addListener === 'function') {
+        mq.addListener(onDprChange);
+        currentDprCleanup = () => mq.removeListener(onDprChange);
+      }
     };
     attachDprListener();
 
     return () => {
+      disposed = true;
       observer?.disconnect();
       window.removeEventListener('resize', handleResize);
       window.visualViewport?.removeEventListener('resize', handleResize);

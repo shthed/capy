@@ -14,6 +14,7 @@ import {
   computeProgressPercentage,
 } from './types';
 import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
+import { resolveScopedBackupKey, resolveScopedStorageKey } from './services/StorageNamespace';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
 import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
@@ -521,11 +522,11 @@ export const App: React.FC = () => {
   const completeTutorial = useCallback(() => {
     setShowTutorial(false);
     try {
-      localStorage.setItem('capy_tutorial_completed_v1', '1');
+      localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
     } catch {
       // Ignored
     }
-    NativeBridge.saveBackup('capy_tutorial_completed_v1', '1');
+    NativeBridge.saveBackup(resolveScopedBackupKey('capy_tutorial_completed_v1'), '1');
   }, []);
 
   useEffect(() => {
@@ -1476,8 +1477,8 @@ export const App: React.FC = () => {
               let tutorialCompleted = false;
               try {
                 tutorialCompleted =
-                  localStorage.getItem('capy_tutorial_completed_v1') === '1' ||
-                  NativeBridge.loadBackup('capy_tutorial_completed_v1') === '1';
+                  localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
+                  NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
               } catch {
                 // Ignored
               }

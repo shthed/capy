@@ -1,0 +1,156 @@
+name: Sync Parent Epic Issue Checklists
+
+on:
+  pull_request_target:
+    types:
+      - closed
+    branches:
+      - beta
+      - main
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: sync-agile-tracker-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync Merged PR to Parent Epic Issue
+    if: github.repository == 'shthed/capy' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Epic issue checklist via GitHub REST API
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr || !pr.merged) {
+              core.info('PR is not merged; skipping Epic tracker sync.');
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = pr.number;
+            const prTitle = String(pr.title || `PR #${prNumber}`).trim();
+            const prUrl = pr.html_url || `https://github.com/${owner}/${repo}/pull/${prNumber}`;
+            const baseRef = pr.base?.ref || 'beta';
+
+            const EPIC_ISSUE_MAP = {
+              '1': 476,
+              '2': 477,
+              '3': 478,
+              '4': 479,
+              '5': 480,
+            };
+            const VALID_EPIC_NUMS = new Set([476, 477, 478, 479, 480]);
+
+            const targetIssues = new Set();
+            for (const label of pr.labels || []) {
+              const name = String(label?.name || '').trim().toLowerCase();
+              const m = /^epic:([1-5])$/.exec(name);
+              if (m && EPIC_ISSUE_MAP[m[1]]) {
+                targetIssues.add(EPIC_ISSUE_MAP[m[1]]);
+              }
+            }
+
+            const bodyText = String(pr.body || '');
+            for (const line of bodyText.split(/\r?\n/)) {
+              if (!/agile\s*scope/i.test(line)) continue;
+              for (const m of line.matchAll(/\bEPIC-([1-5])\b/gi)) {
+                const mapped = EPIC_ISSUE_MAP[m[1]];
+                if (mapped) targetIssues.add(mapped);
+              }
+              for (const m of line.matchAll(/(?:\/issues\/|#)(47[6-9]|480)\b/g)) {
+                const num = Number(m[1]);
+                if (VALID_EPIC_NUMS.has(num)) targetIssues.add(num);
+              }
+            }
+
+            if (targetIssues.size === 0) {
+              core.info(`PR #${prNumber} has no epic:1..5 label or Agile Scope reference; skipping.`);
+              return;
+            }
+
+            const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const prRefRe = new RegExp(`(?:#${prNumber}\\b|\\/pull\\/${prNumber}\\b)`);
+            const uncheckedLineRe = new RegExp(`^(\\s*- \\[) (\\]\\s+.*(?:#${prNumber}\\b|\\/pull\\/${prNumber}\\b).*)$`);
+            const newBullet = `- [x] [#${prNumber} — ${prTitle}](${prUrl})`;
+
+            for (const issueNumber of targetIssues) {
+              const { data: issue } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: issueNumber,
+              });
+
+              if (issue.state !== 'open') {
+                core.info(`Epic issue #${issueNumber} is ${issue.state}; skipping.`);
+                continue;
+              }
+
+              const existingBody = String(issue.body || '').replace(/\r\n/g, '\n');
+              const lines = existingBody.split('\n');
+              let changed = false;
+              let foundRef = false;
+
+              for (let i = 0; i < lines.length; i++) {
+                if (prRefRe.test(lines[i])) {
+                  foundRef = true;
+                  if (uncheckedLineRe.test(lines[i])) {
+                    lines[i] = lines[i].replace(uncheckedLineRe, '$1x$2');
+                    changed = true;
+                  }
+                }
+              }
+
+              if (!foundRef) {
+                const sectionHints =
+                  baseRef === 'main'
+                    ? [/^#{2,4}\s+Production Shipped/i, /^#{2,4}\s+Shipped/i]
+                    : [/^#{2,4}\s+Staged on `beta`/i, /^#{2,4}\s+Shipped/i];
+
+                let insertIdx = -1;
+                for (const hintRe of sectionHints) {
+                  const headerIdx = lines.findIndex((l) => hintRe.test(l));
+                  if (headerIdx !== -1) {
+                    let scan = headerIdx + 1;
+                    while (scan < lines.length && !/^#{1,4}\s+/.test(lines[scan])) {
+                      scan++;
+                    }
+                    while (scan > headerIdx + 1 && lines[scan - 1].trim() === '') {
+                      scan--;
+                    }
+                    insertIdx = scan;
+                    break;
+                  }
+                }
+
+                if (insertIdx !== -1) {
+                  lines.splice(insertIdx, 0, newBullet);
+                } else {
+                  if (lines.length > 0 && lines[lines.length - 1].trim() !== '') {
+                    lines.push('');
+                  }
+                  lines.push(newBullet);
+                }
+                changed = true;
+              }
+
+              const nextBody = lines.join('\n');
+              if (changed && nextBody !== existingBody) {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: nextBody,
+                });
+                core.info(`Updated Epic issue #${issueNumber} checklist for merged PR #${prNumber}.`);
+              } else {
+                core.info(`Epic issue #${issueNumber} already up to date for PR #${prNumber}.`);
+              }
+            }

@@ -35,6 +35,7 @@ import {
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
+import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
@@ -172,7 +173,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<number>(() => {
     if (initialTab !== undefined) return initialTab;
     try {
-      const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+      const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
       if (saved !== null) {
         const parsed = parseInt(saved, 10);
         if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) return parsed;
@@ -191,7 +192,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [savesViewMode, setSavesViewMode] = useState<'DETAIL' | 'THUMBNAILS'>(() => {
     try {
       return (
-        (localStorage.getItem('capy_saves_view_mode') as 'DETAIL' | 'THUMBNAILS') || 'DETAIL'
+        (localStorage.getItem(resolveScopedStorageKey('capy_saves_view_mode')) as
+          | 'DETAIL'
+          | 'THUMBNAILS') || 'DETAIL'
       );
     } catch {
       return 'DETAIL';
@@ -251,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSetViewMode = (mode: 'DETAIL' | 'THUMBNAILS') => {
     setSavesViewMode(mode);
     try {
-      localStorage.setItem('capy_saves_view_mode', mode);
+      localStorage.setItem(resolveScopedStorageKey('capy_saves_view_mode'), mode);
     } catch {
       // Ignored
     }
@@ -263,13 +266,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (initialTab !== undefined) {
         setActiveTab(initialTab);
         try {
-          localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(initialTab));
+          localStorage.setItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY), String(initialTab));
         } catch {
           // Ignored
         }
       } else {
         try {
-          const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+          const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
           if (saved !== null) {
             const parsed = parseInt(saved, 10);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
@@ -441,7 +444,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => {
                     setActiveTab(tab.id);
                     try {
-                      localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(tab.id));
+                      localStorage.setItem(
+                        resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY),
+                        String(tab.id)
+                      );
                     } catch {
                       // Ignored
                     }
@@ -723,6 +729,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {(() => {
                   const channelInfo = resolveReleaseChannel();
                   if (!channelInfo.showChannelSwitcher) return null;
+                  const ns = resolveStorageNamespace();
                   const isBeta = channelInfo.channel === 'beta';
                   const isAlpha = channelInfo.channel === 'alpha';
                   const sharesOriginWithBeta =
@@ -762,9 +769,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] leading-relaxed text-slate-400">
-                        {sharesOriginWithBeta
-                          ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.'
-                          : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
+                        {ns.isSandboxed
+                          ? 'Preview upcoming Sprint features early in an isolated channel sandbox so your Production saves and settings stay untouched.'
+                          : sharesOriginWithBeta
+                            ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Beta runs in an isolated browser sandbox so your Production saves and settings stay untouched.'
+                            : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                         <a

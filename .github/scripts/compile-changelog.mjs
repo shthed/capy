@@ -21,7 +21,7 @@ export function extractReleaseNotes(changelogText, tagName) {
 
   for (const candidate of [fullVer, shortVer]) {
     const pattern = new RegExp(
-      `^### ${escapeRegExp(candidate)} - [^\\n]+\\n+([\\s\\S]*?)(?=^### |(?![\\s\\S]))`,
+      `^### ${escapeRegExp(candidate)} - [^\\n]+\\n+([\\s\\S]*?)(?=^#{1,3}\\s|(?![\\s\\S]))`,
       'm'
     );
     const found = pattern.exec(normalizedText);
