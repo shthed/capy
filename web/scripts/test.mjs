@@ -4237,6 +4237,14 @@ async function runCodecAndEngineTests() {
     assert.equal(run404Redirect('/capy/alpha').replacedWith, null, '404.html must not loop on /capy/alpha');
     assert.equal(run404Redirect('/capy/beta/missing').replacedWith, null, '404.html must not redirect /capy/beta/*');
     assert.equal(run404Redirect('/capy/unknown').replacedWith, null, '404.html must not redirect /capy/unknown');
+    assert.equal(run404Redirect('/capy/privacy-policy.html').replacedWith, null, '404.html must not redirect /capy/privacy-policy.html');
+    assert.equal(run404Redirect('/capy/preview').replacedWith, null, '404.html must not redirect /capy/preview');
+    assert.equal(run404Redirect('/capy/pull-request').replacedWith, null, '404.html must not redirect /capy/pull-request');
+    assert.equal(run404Redirect('/capy/alpha-test').replacedWith, null, '404.html must not redirect /capy/alpha-test');
+    assert.equal(run404Redirect('/capy/alpha/491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/alpha///491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/pull/491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/PR/491/sub?x=1#y').replacedWith, '/capy/alpha/?missing=491');
 
     const prIndexHtmlPath = path.resolve(projectRoot, '../.github/scripts/pr-index.html');
     const prIndexHtml = fs.readFileSync(prIndexHtmlPath, 'utf8');

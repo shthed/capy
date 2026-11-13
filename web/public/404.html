@@ -98,7 +98,7 @@
   <script>
     (function () {
       var pathname = window.location.pathname || '';
-      var match = pathname.match(/^\/capy\/(alpha|PR|pull)(?:\/([^/]+))?\/?/i);
+      var match = pathname.match(/^\/capy\/(alpha|PR|pull)(?:\/+([^/]+)(?:\/.*)?|\/+)?$/i);
       var prefix = match ? match[1].toLowerCase() : '';
       var id = match && match[2] ? match[2].trim() : '';
       if (match && (id || prefix !== 'alpha')) {
