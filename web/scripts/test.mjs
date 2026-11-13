@@ -1670,6 +1670,40 @@ async function runCodecAndEngineTests() {
       assert.equal(parsedLink.matchedSample?.id, 'capybara_sample');
     }
 
+    // Corrupt/invalid #s= token must preserve ?room= code and surface tokenError without throwing
+    const corruptTokenLink = await shareLinkMod.parseShareLinkFromUrl(
+      'https://capypaint.com/?room=xy9876#s=not_a_valid_token_!!!'
+    );
+    assert.equal(corruptTokenLink.roomCode, 'XY9876');
+    assert.equal(corruptTokenLink.delta, null);
+    assert.equal(corruptTokenLink.matchedSample, null);
+    assert.equal(corruptTokenLink.hasToken, true);
+    assert.equal(typeof corruptTokenLink.tokenError, 'string');
+
+    // BroadcastChannel Co-op room namespacing across /capy/, /capy/beta/, and /capy/alpha/<num>/ on shared origin
+    const prevChanWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        location: { pathname: '/capy/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const stableChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const betaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/alpha/495/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const alphaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      assert.equal(stableChan, 'capy_coop_room_stable_ABC123');
+      assert.equal(betaChan, 'capy_coop_room_beta_ABC123');
+      assert.equal(alphaChan, 'capy_coop_room_alpha_495_ABC123');
+      assert.notEqual(stableChan, betaChan);
+      assert.notEqual(betaChan, alphaChan);
+    } finally {
+      globalThis.window = prevChanWindow;
+    }
+
     assert.equal(
       providerMod.resolveCoopRoomWsUrl(undefined, {
         protocol: 'https:',
@@ -2253,6 +2287,50 @@ async function runCodecAndEngineTests() {
           null,
           'Missing chunk in PlayGamesAndroidDriver must return null cleanly'
         );
+
+        // 3. Unconfigured / Unavailable Play Games fallback must fail fast (no 8s hang)
+        const prevCapyAndroid = globalThis.window.CapyAndroid;
+        try {
+          globalThis.window.CapyAndroid = {
+            isPlayGamesConfigured: () => false,
+            signInPlayGames: () => null,
+          };
+          assert.equal(pgDriver.getDescriptor().isConfigured, false);
+          const autoSignStart = Date.now();
+          assert.equal(await pgDriver.attemptAutoSignIn(), null);
+          assert.equal(Date.now() - autoSignStart < 500, true, 'Unconfigured Play Games auto-sign-in must return null immediately');
+          let unconfErr = null;
+          const signInStart = Date.now();
+          try {
+            await pgDriver.signIn();
+          } catch (err) {
+            unconfErr = err;
+          }
+          assert.equal(unconfErr?.message, 'PLAY_GAMES_UNCONFIGURED');
+          assert.equal(Date.now() - signInStart < 500, true, 'Unconfigured Play Games signIn must fail fast');
+
+          // Configured Play Games that fires native error callback must reject immediately
+          globalThis.window.CapyAndroid = {
+            isPlayGamesConfigured: () => true,
+            signInPlayGames: () => {
+              setTimeout(() => {
+                globalThis.window.__capyReceivePlayGamesError?.('PLAY_GAMES_UNAVAILABLE');
+              }, 10);
+              return null;
+            },
+          };
+          const failStart = Date.now();
+          let unavailErr = null;
+          try {
+            await pgDriver.signIn();
+          } catch (err) {
+            unavailErr = err;
+          }
+          assert.equal(unavailErr?.message, 'PLAY_GAMES_UNAVAILABLE');
+          assert.equal(Date.now() - failStart < 500, true, 'Play Games error callback must reject signIn immediately');
+        } finally {
+          globalThis.window.CapyAndroid = prevCapyAndroid;
+        }
       } finally {
         globalThis.window = prevWindow;
       }
@@ -4350,6 +4428,63 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(cleanupWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
 
+    // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
+    console.log('-> Testing compile-changelog.mjs release note extraction & release.yml wiring...');
+    const { extractReleaseNotes, formatReleaseNotesMarkdown } = await import(
+      '../../.github/scripts/compile-changelog.mjs'
+    );
+    const sampleChangelog = `### 3.0.7 - 2026-11-13 (Beta)
+
+- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)
+
+### 3.0.6 - 2026-11-13
+
+- Prior release note [#489](https://github.com/shthed/capy/pull/489)
+
+### 2.9 - 2026-11-10
+
+- Minor rollup note [#470](https://github.com/shthed/capy/pull/470)`;
+    assert.equal(
+      extractReleaseNotes(sampleChangelog, 'v3.0.7'),
+      '- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)'
+    );
+    assert.equal(
+      extractReleaseNotes(sampleChangelog.replace(/\n/g, '\r\n'), 'v3.0.7-beta.1'),
+      '- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)'
+    );
+    assert.equal(
+      extractReleaseNotes(sampleChangelog, 'v2.9.4'),
+      '- Minor rollup note [#470](https://github.com/shthed/capy/pull/470)'
+    );
+    assert.equal(extractReleaseNotes(sampleChangelog, 'v9.9.9'), '- Release v9.9.9');
+    assert.throws(() => extractReleaseNotes(sampleChangelog, 'invalid-tag'));
+    assert.equal(
+      formatReleaseNotesMarkdown(sampleChangelog, 'v3.0.6'),
+      '### What\'s New in `v3.0.6`\n\n- Prior release note [#489](https://github.com/shthed/capy/pull/489)\n'
+    );
+    const tmpReleaseNotesOut = path.join(os.tmpdir(), 'capy-release-notes-test.md');
+    try {
+      execFileSync(process.execPath, [
+        path.resolve(projectRoot, '../.github/scripts/compile-changelog.mjs'),
+        '--tag',
+        `v${webPkgJson.version}`,
+        '--changelog',
+        path.resolve(projectRoot, '../CHANGELOG.md'),
+        '--out',
+        tmpReleaseNotesOut,
+      ]);
+      const cliNotes = fs.readFileSync(tmpReleaseNotesOut, 'utf8');
+      assert.equal(cliNotes.startsWith(`### What's New in \`v${webPkgJson.version}\`\n\n`), true);
+    } finally {
+      fs.rmSync(tmpReleaseNotesOut, { force: true });
+    }
+    const releaseWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/release.yml'),
+      'utf8'
+    );
+    assert.equal(releaseWorkflowYaml.includes('compile-changelog.mjs'), true);
+    assert.equal(releaseWorkflowYaml.includes('python3'), false);
+
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
@@ -6329,6 +6464,140 @@ async function runBrowserBasicsSuite() {
     );
     await mobileTopbarPage.close();
     console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap with BETA and zoom badges verified.');
+
+    // -------------------------------------------------------------------------
+    // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
+    // -------------------------------------------------------------------------
+    console.log('-> [3.0] Verifying malformed import inline notice, sample_saves ordering, zero-snapshot recovery & fractional DPR...');
+    const m3Page = await context.newPage();
+    attachErrorListeners(m3Page, 'm3Page');
+    // Force a fractional devicePixelRatio (1.25) to verify PuzzleCanvas backing store rounds cleanly without drift
+    await m3Page.addInitScript(() => {
+      Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.25, configurable: true });
+      window.__capyAlertCalls = 0;
+      window.alert = () => {
+        window.__capyAlertCalls += 1;
+      };
+    });
+    await m3Page.setViewportSize({ width: 540, height: 420 });
+    await m3Page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(m3Page);
+
+    const fractionalDprCheck = await m3Page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      return {
+        clientWidth: c ? c.clientWidth : 0,
+        canvasWidth: c ? c.width : 0,
+        expectedWidth: c ? Math.round(c.clientWidth * 1.25) : 0,
+      };
+    });
+    assert.equal(
+      fractionalDprCheck.canvasWidth,
+      fractionalDprCheck.expectedWidth,
+      `Expected fractional 1.25x DPR canvas.width=${fractionalDprCheck.expectedWidth}, got ${fractionalDprCheck.canvasWidth}`
+    );
+
+    // Seed a custom user save, then trigger import of malformed .capy JSON -> must show inline notice without alert() or partial state
+    await m3Page.getByTestId('topbar-saves-btn').click();
+    await m3Page.getByTestId('import-save-btn').waitFor({ state: 'visible', timeout: 5000 });
+    const preBadImportSnapCount = await m3Page.evaluate(
+      () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length
+    );
+    const badJsonPath = path.join(os.tmpdir(), 'capy_malformed_test.json');
+    fs.writeFileSync(
+      badJsonPath,
+      JSON.stringify({
+        format: 'capy-single-save',
+        snapshot: { id: 'corrupt_snap_1', title: 'Corrupt Save' },
+        puzzle: { width: -5, height: 10, palette: [], regions: [] },
+      }),
+      'utf8'
+    );
+    await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
+    fs.rmSync(badJsonPath, { force: true });
+    await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await m3Page.getByTestId('saves-import-notice').getAttribute('role'),
+      'alert',
+      'Malformed save import must display inline role="alert" banner'
+    );
+    assert.equal(
+      await m3Page.evaluate(() => window.__capyAlertCalls),
+      0,
+      'Malformed save import must never call blocking window.alert()'
+    );
+    assert.equal(
+      await m3Page.evaluate(() => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length),
+      preBadImportSnapCount,
+      'Malformed save import must leave zero partial snapshots in localStorage'
+    );
+
+    // Delete all saves -> must clear active session cleanly and auto-regenerate Capy Forest with zero broken thumbnails
+    await m3Page.getByRole('button', { name: 'Delete All Saves' }).click();
+    await m3Page.getByRole('button', { name: 'Yes, Delete All' }).click();
+    await m3Page.waitForFunction(
+      () => {
+        const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+        return snaps.length === 1 && snaps[0].title === 'Capy Forest' && snaps[0].totalCount > 0;
+      },
+      null,
+      { timeout: 15000 }
+    );
+    await m3Page.waitForFunction(
+      () => {
+        const imgs = Array.from(document.querySelectorAll('img'));
+        return imgs.length > 0 && imgs.every((img) => img.complete && img.naturalWidth > 0);
+      },
+      null,
+      { timeout: 5000 }
+    );
+
+    // Verify sample_saves.capy bootstrap import does not shadow existing custom user saves
+    const sampleOrderCheck = await m3Page.evaluate(async () => {
+      const customTs = Date.now() - 60_000;
+      const customSave = {
+        id: 'custom_user_save_check',
+        title: 'Custom User Art',
+        timestamp: customTs,
+        lastOpened: customTs,
+        filledCount: 2,
+        totalCount: 10,
+        filledRegionIds: [1, 2],
+        isAutoSample: false,
+      };
+      window.capyStorage.saveSnapshots([customSave]);
+      const resp = await fetch('./assets/sample_saves.capy');
+      const buf = await resp.arrayBuffer();
+      await window.capyStorage.importSnapshotData(buf, { refreshTimestamps: true });
+      const after = window.capyStorage.loadSnapshots();
+      const samples = after.filter((s) => s.isAutoSample);
+      return {
+        firstId: after[0]?.id,
+        sampleCount: samples.length,
+        allSamplesOlder: samples.every((s) => s.lastOpened < customTs && s.timestamp < customTs),
+      };
+    });
+    assert.equal(sampleOrderCheck.firstId, 'custom_user_save_check', 'Custom user save must remain first');
+    assert.equal(sampleOrderCheck.sampleCount >= 4, true, 'All sample_saves.capy entries must import');
+    assert.equal(sampleOrderCheck.allSamplesOlder, true, 'Auto-sample timestamps must stay strictly older than custom saves');
+
+    // Corrupt #s= deep-link with valid ?room= must join room and strip invalid #s= hash without throwing
+    await m3Page.goto(`${BASE_URL}/?room=ABCD23#s=invalid_corrupt_token`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(m3Page);
+    await m3Page.waitForFunction(
+      () => !window.location.hash.includes('s='),
+      null,
+      { timeout: 5000 }
+    );
+    const m3RoomTitle = await m3Page.getByTestId('topbar-coop-btn').getAttribute('title');
+    assert.equal(
+      Boolean(m3RoomTitle && m3RoomTitle.includes('ABCD23')),
+      true,
+      `Expected ?room=ABCD23 to remain joined even when #s= token is invalid, got ${m3RoomTitle}`
+    );
+
+    await m3Page.close();
+    console.log('   PASS: Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, and fractional DPR verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

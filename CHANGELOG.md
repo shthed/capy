@@ -1,4 +1,8 @@
-### 3.0.6 - 2026-11-13 (Beta)
+### 3.0.7 - 2026-11-13 (Beta)
+
+- Harden canvas DPR/offscreen memory, atomic `.capy` imports, sample-save ordering, `#s=`/`?room=` Co-op isolation, Android Play Games fallback, and standalone `compile-changelog.mjs` release extraction [#000](https://github.com/shthed/capy/pull/000)
+
+### 3.0.6 - 2026-11-13
 
 - Persist post-load replay controls until puzzle interaction, set Capy Forest as default puzzle, add interactive first-run tutorial, and move About tab first [#489](https://github.com/shthed/capy/pull/489)
 

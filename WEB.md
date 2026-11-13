@@ -292,8 +292,9 @@ type WorkerResponse =
 2. **Binary `.capy` v2 Archives & CRDT Progress Deltas ([`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
    - `StorageService.exportSnapshotBinary(id)` / `exportAllSnapshotsBinary()` emit `CAPY\x02<flags>` Gzip archives embedding `SavedSnapshot` metadata (including `customPalette` and `parentSnapshotId`), `CompactPuzzleRecordV2` geometry, and custom image blobs.
    - `CapyCodec.encodeProgressDeltaToken` / `mergeProgressDeltas` encode `ProgressDeltaV2` (`sourceRef`, `filledRegionIds`, `paintedRegionColors`, `isFreeColor`, `updatedAt`) into `< 2 KB` `#s=<token>` URL fragments with CRDT Grow-Only Set-Union (`filledRegionIds`) + Last-Writer-Wins (`paintedRegionColors`) merging.
-3. **Instant First-Launch Sample Archive (`./assets/sample_saves.capy`)**:
-   - On cold start with zero existing snapshots, `restoreSession` fetches `./assets/sample_saves.capy` (`225 KB`) and imports all 4 `SAMPLE_GALLERY` puzzles (`Capy Forest` default index `0`, `Capybara`, `Mushroom Forest`, `Snail Guitar`) directly into `localStorage` and `IndexedDB` without spawning `puzzle.worker.ts`.
+3. **Instant First-Launch Sample Archive (`./assets/sample_saves.capy`) & Atomic `.capy` Imports**:
+   - On cold start with zero existing snapshots, `restoreSession` fetches `./assets/sample_saves.capy` (`225 KB`) and imports all 4 `SAMPLE_GALLERY` puzzles (`Capy Forest` default index `0`, `Capybara`, `Mushroom Forest`, `Snail Guitar`) directly into `localStorage` and `IndexedDB` without spawning `puzzle.worker.ts`. When `sample_saves.capy` is lazily imported alongside existing custom user saves, `StorageService.mergeImportedSnapshots` preserves custom saves first with strictly newer timestamps so `isAutoSample` entries never shadow user artwork.
+   - `StorageService.importSnapshotData` validates and decompresses all puzzle records and blobs in memory before mutating `IndexedDB` or `localStorage`, while `SettingsModal` surfaces inline accessible import notices (`saves-import-notice`, zero blocking `alert()` dialogs) and zero-snapshot starter recovery.
 
 ### Complete Browser Storage Key Inventory (`localStorage` & `sessionStorage`)
 - **`capy_snapshots_v8`** (`localStorage`): Array of `SavedSnapshot` metadata records (mirrored to Android `filesDir/capy_saves/`).
