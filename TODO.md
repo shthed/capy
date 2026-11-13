@@ -45,21 +45,3 @@ Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/s
   - `v3.0.1` Android build passes on-device smoke QA (launch, coloring, save/resume, back navigation) and is uploaded to Google Play Console.
 
 </details>
-
-### TASK-2.6: Post-Load Replay Controls, `Capy Forest` Default, Onboarding Tutorial & `About` Tab
-
-- **Status**: `In Progress` ([#489](https://github.com/shthed/capy/pull/489), awaiting rebase onto updated `origin/beta`, Section 11c test fix, & `WEB.md` / docs sync)
-- **Action**: Rebase `feature/epic2-replay-default-tutorial-about` onto updated `origin/beta` (bumping [`web/package.json`](./web/package.json) to the next patch atop `beta` and updating [`CHANGELOG.md`](./CHANGELOG.md)), include the Section 11c `replay-controls-window` dismiss fix in [`web/scripts/test.mjs`](./web/scripts/test.mjs), sync [`WEB.md`](./WEB.md), [`README.md`](./README.md), and [`TESTING.md`](./TESTING.md) for shifted `SettingsModal` tabs (`0`=`About`..`4`=`Saves`), `OnboardingTutorial`, and `Capy Forest` index `0`, and pass full Playwright E2E + independent AI review.
-- **Value**: Keeps replay controls reachable after saved-puzzle playback and on Undo/Redo, surfaces `PaletteDock` immediately on load, greets new players with `Capy Forest` and a non-blocking 5-step tutorial, and puts app info (`About`, channel switcher, APK download) at tab `0`.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Task` | [EPIC-2](https://github.com/shthed/capy/issues/477) ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: high` | `domain: ui, onboarding, testing`
-- **Model & Estimate**: `Gemini 4 Argon` (Dev Manager recovery PR [#489](https://github.com/shthed/capy/pull/489))
-- **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), `web/src/components/OnboardingTutorial.tsx`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`web/package.json`](./web/package.json), [`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy), [`web/scripts/generate-sample-saves.mjs`](./web/scripts/generate-sample-saves.mjs), [`web/scripts/capture-gallery.mjs`](./web/scripts/capture-gallery.mjs), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md), [`README.md`](./README.md), [`TESTING.md`](./TESTING.md), [`CHANGELOG.md`](./CHANGELOG.md)
-- **Acceptance Criteria**:
-  - `npm run test:sanity && npm run lint && npm run build && npm test` passes after rebasing onto updated `origin/beta` (with [`web/package.json`](./web/package.json) bumped to the next patch atop `beta`) with zero Section 11c or `E2E 10` (`snail_guitar` viewport reset) regressions.
-  - `SettingsModal` tabs (`About`=`0`, `Settings`=`1`, `Hints`=`2`, `Create`=`3`, `Saves`=`4`), `capy_tutorial_completed_v1` / `?skipTutorial`, and `Capy Forest` default sample are documented in [`WEB.md`](./WEB.md).
-
-</details>
