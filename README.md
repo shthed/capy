@@ -102,8 +102,10 @@ All detailed architectural guides, computer vision algorithms, and native bridge
 - **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker 5-strategy segmentation, adaptive Otsu/Sobel line extraction, Red-Mean K-Means++ clustering, and watershed border alignment.
 - **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Unified Vite SSR + Playwright E2E verification suite, multi-touch gesture patterns, and CI pipelines.
 - **Versioning Scheme and Changelog**: [`CHANGELOG.md`](./CHANGELOG.md) -- Semantic Versioning (`MAJOR.MINOR.PATCH`), Android `versionCode` mapping, and chronological release history.
-- **Product Roadmap and Epic Issues**: [`ROADMAP.md`](./ROADMAP.md) -- Strategic Epics (`#476`--`#480` GitHub Epic Tracking Issues), User Stories, external readiness gates, Platform Icebox, and collapsed shipped milestones.
+- **Product Roadmap and Epic Issues**: [`ROADMAP.md`](./ROADMAP.md) -- Strategic Epics ([EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480)), User Stories, external readiness gates, Platform Icebox, and collapsed shipped milestones.
 - **Active Sprint Backlog**: [`TODO.md`](./TODO.md) -- Ready-for-dev Sprint 1 bugfixes, `1-PR` engineering slices, `[quick-win]` queue, and GitHub Sprint Milestone links.
-- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Human + AI co-development workflows, Hybrid Agile sprints, GitHub Epic Issue CLI playbooks, `Alpha -> Beta -> Production` release promotion, Gemini 4 model routing, and technical guardrails.
+- **Project Management and Release Governance**: [`PROJECT.md`](./PROJECT.md) -- Lean Agile triad, sprint cadence, Epic triage, PR sync and readiness gates, release promotion, `CHANGELOG.md` governance, and continuous improvement retro log.
+- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Human + AI co-development workflow, Gemini 4 model routing, session hygiene, shared technical guardrails, 3-tier CI/CD architecture, SemVer versioning, and troubleshooting.
 - **AI Agent Operational Playbook**: [`AGENTS.md`](./AGENTS.md) -- Auto-loaded AI guardrails, mobile-first formatting rules, and PR readiness contract for AI coding agents.
 - **Privacy Policy and Data Safety**: [`web/public/privacy-policy.html`](./web/public/privacy-policy.html) -- Local-first photo processing and optional Google Drive `appDataFolder` / Play Games Cloud Sync disclosures.
+- **License**: [`LICENSE.md`](./LICENSE.md) -- Capybara Chill Preamble and CC BY-NC-SA 4.0 terms.

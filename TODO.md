@@ -1,25 +1,25 @@
 # Capy Active Sprint Execution Queue (`TODO.md`)
 
-Focused **Sprint 1 Queue** ([`EPIC-2: v3.0.1 Critical Bugfixes`](https://github.com/shthed/capy/issues/477) | [Milestone #2](https://github.com/shthed/capy/milestone/2)). Holds **only** approved, unblocked `1-PR` slices for the active sprint (`--base beta`). Strategic Epics, unapproved features (`EPIC-3`), and shipped archives live in [`ROADMAP.md`](./ROADMAP.md); workflow & GitHub CLI rules live in [`DEV.md`](./DEV.md#capy-lean-agile-backlog--todomd-entry-standard).
+Focused **Sprint 1 Queue** ([EPIC-2](https://github.com/shthed/capy/issues/477) | [Milestone #2](https://github.com/shthed/capy/milestone/2)). Holds **only** approved, unblocked `1-PR` slices for the active sprint (`--base beta`). Strategic Epics, unapproved features ([EPIC-3](https://github.com/shthed/capy/issues/478)), and shipped archives live in [`ROADMAP.md`](./ROADMAP.md); workflow & GitHub CLI rules live in [`PROJECT.md`](./PROJECT.md#2-lean-agile-lifecycle-and-backlog-governance).
 
-**Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+**Related Guides**: [`README.md`](./README.md) | [`PROJECT.md`](./PROJECT.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 ---
 
-## Sprint 1 Priority 0: `v3.0.1` Critical Bugfixes & Release (`BUG-4`, `TASK-2.5`)
+## Sprint 1 Priority 0: `v3.0.1` Stabilization, Release Gates & Active PRs (`BUG-4`, `TASK-2.5`, [#489](https://github.com/shthed/capy/pull/489))
 
-Remaining Sprint 1 items (`BUG-1`--`BUG-3` shipped to `main` in `#485`; `GameTopBar` overlap & `99%` progress cap shipped to `beta` in `#486`). Delete each item here once it reaches Production / Play Store.
+Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/shthed/capy/pull/484), [#485](https://github.com/shthed/capy/pull/485)), `BUG-2` ([#485](https://github.com/shthed/capy/pull/485)), and `BUG-5` mobile `GameTopBar` overlap & `99%` progress cap ([#486](https://github.com/shthed/capy/pull/486), promoted to `main` in [#488](https://github.com/shthed/capy/pull/488)). Shipped to `beta` (`v3.0.2`, awaiting `main` promotion): prebaked sample `1x` viewport reset & 1-click bot PR approval workflow ([#490](https://github.com/shthed/capy/pull/490)) plus `TASK-2.5` backlog sync ([#487](https://github.com/shthed/capy/pull/487)). Delete each remaining item below once shipped to Production / Play Store.
 
 ### BUG-4: `capypaint.com` Live DNS & Cloudflare Worker Cutover
 
-- **Status**: `Open -- Awaiting Human Cloudflare Zone & DNS Cutover`
-- **Action**: Point `capypaint.com` registrar nameservers to Cloudflare, connect `shthed/capy` (or `capyboop/capy`) to Cloudflare Workers Builds per [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers), and add the `www.capypaint.com -> https://capypaint.com` edge `301` Redirect Rule.
+- **Status**: `Open -- Human Ops Gate (Awaiting Cloudflare Zone & DNS Cutover)`
+- **Action**: Point `capypaint.com` registrar nameservers to Cloudflare, connect the repository to Cloudflare Workers Builds per [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers), and add the `www.capypaint.com -> https://capypaint.com` edge `301` Redirect Rule.
 - **Value**: Replaces the Squarespace "under construction" placeholder on `capypaint.com` with the live `v3.0.1` production SPA, `/api/health`, and `CoopRoomDurableObject` WebSocket relay.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
-- **Type & Priority**: `Bug` | `v3.0.1` ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: critical` | `domain: cloud, ci`
+- **Type & Priority**: `Bug` | [EPIC-2](https://github.com/shthed/capy/issues/477) ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: critical` | `domain: cloud, ci`
 - **Model & Estimate**: `ops` (Human Cloudflare & Registrar Cutover)
 - **Target Files**: [`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`.github/workflows/deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
@@ -30,18 +30,36 @@ Remaining Sprint 1 items (`BUG-1`--`BUG-3` shipped to `main` in `#485`; `GameTop
 
 ### TASK-2.5: Android App Verification & Google Play Store Deployment (`v3.0.1`)
 
-- **Status**: `Open -- Part of v3.0.1 Scope`
+- **Status**: `Open -- Release Ops Gate (Awaiting Keystore Secrets, v3.0.1 Tag & Play Console Upload)`
 - **Action**: Configure release signing secrets (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`), verify `./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease` (plus `MainActivity` `onPause`/`onResume` lifecycle & hardware back navigation), tag `v3.0.1` on `main` to trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml), and publish `capy-v3.0.1.aab` to Google Play Console.
 - **Value**: Ships the unified Android wrapper (`com.capypaint.capy`) to Google Play Store alongside the `v3.0.1` web release.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
 
-- **Type & Priority**: `Task` | `EPIC-2 (v3.0.1)` ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: critical` | `domain: android, ci`
+- **Type & Priority**: `Task` | [EPIC-2](https://github.com/shthed/capy/issues/477) ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: critical` | `domain: android, ci`
 - **Model & Estimate**: `Gemini 4 Argon` + Owner Play Console / Keystore Setup | `~18,000 tokens` (`~10--15 min agent`)
 - **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`.github/workflows/release.yml`](./.github/workflows/release.yml), [`APP.md`](./APP.md)
 - **Acceptance Criteria**:
   - `release.yml` builds a Play-signed `capy-v3.0.1.aab` (`versionName = "3.0.1"`, `versionCode = 30001`) and `capy-v3.0.1.apk` cleanly.
   - `v3.0.1` Android build passes on-device smoke QA (launch, coloring, save/resume, back navigation) and is uploaded to Google Play Console.
+
+</details>
+
+### TASK-2.6: Post-Load Replay Controls, `Capy Forest` Default, Onboarding Tutorial & `About` Tab
+
+- **Status**: `In Progress` ([#489](https://github.com/shthed/capy/pull/489), awaiting rebase onto updated `origin/beta`, Section 11c test fix, & `WEB.md` / docs sync)
+- **Action**: Rebase `feature/epic2-replay-default-tutorial-about` onto updated `origin/beta` (bumping [`web/package.json`](./web/package.json) to the next patch atop `beta` and updating [`CHANGELOG.md`](./CHANGELOG.md)), include the Section 11c `replay-controls-window` dismiss fix in [`web/scripts/test.mjs`](./web/scripts/test.mjs), sync [`WEB.md`](./WEB.md), [`README.md`](./README.md), and [`TESTING.md`](./TESTING.md) for shifted `SettingsModal` tabs (`0`=`About`..`4`=`Saves`), `OnboardingTutorial`, and `Capy Forest` index `0`, and pass full Playwright E2E + independent AI review.
+- **Value**: Keeps replay controls reachable after saved-puzzle playback and on Undo/Redo, surfaces `PaletteDock` immediately on load, greets new players with `Capy Forest` and a non-blocking 5-step tutorial, and puts app info (`About`, channel switcher, APK download) at tab `0`.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Task` | [EPIC-2](https://github.com/shthed/capy/issues/477) ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: high` | `domain: ui, onboarding, testing`
+- **Model & Estimate**: `Gemini 4 Argon` (Dev Manager recovery PR [#489](https://github.com/shthed/capy/pull/489))
+- **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), `web/src/components/OnboardingTutorial.tsx`, [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`web/package.json`](./web/package.json), [`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy), [`web/scripts/generate-sample-saves.mjs`](./web/scripts/generate-sample-saves.mjs), [`web/scripts/capture-gallery.mjs`](./web/scripts/capture-gallery.mjs), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md), [`README.md`](./README.md), [`TESTING.md`](./TESTING.md), [`CHANGELOG.md`](./CHANGELOG.md)
+- **Acceptance Criteria**:
+  - `npm run test:sanity && npm run lint && npm run build && npm test` passes after rebasing onto updated `origin/beta` (with [`web/package.json`](./web/package.json) bumped to the next patch atop `beta`) with zero Section 11c or `E2E 10` (`snail_guitar` viewport reset) regressions.
+  - `SettingsModal` tabs (`About`=`0`, `Settings`=`1`, `Hints`=`2`, `Create`=`3`, `Saves`=`4`), `capy_tutorial_completed_v1` / `?skipTutorial`, and `Capy Forest` default sample are documented in [`WEB.md`](./WEB.md).
 
 </details>
