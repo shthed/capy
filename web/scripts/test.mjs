@@ -1355,6 +1355,7 @@ async function runCodecAndEngineTests() {
 
     /* capy-dev-only:start */
     const {
+      stripDevOnlyBlocks,
       transformPersonaContent,
       sanitizeCommitMessage,
       exportCleanPersonaStage,
@@ -1367,6 +1368,23 @@ async function runCodecAndEngineTests() {
       'Repo https://github.com/capyboop/capy (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
+    const devOnlyStartTag = '<!-- capy-dev-' + 'only:start -->';
+    const devOnlyEndTag = '<!-- capy-dev-' + 'only:end -->';
+    const docWithOpenPrBlock = [
+      'Public workflow guide.',
+      devOnlyStartTag,
+      '- **Bot PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml))**: Uses `gh workflow run open-pr.yml`.',
+      devOnlyEndTag,
+      'Remaining public footer.',
+    ].join('\n');
+    const strippedOpenPrDoc = stripDevOnlyBlocks(docWithOpenPrBlock);
+    assert.equal(strippedOpenPrDoc.includes('open-pr.yml'), false);
+    assert.equal(strippedOpenPrDoc.includes('Public workflow guide.'), true);
+    assert.equal(strippedOpenPrDoc.includes('Remaining public footer.'), true);
+    assert.equal(
+      transformPersonaContent(docWithOpenPrBlock).includes('open-pr.yml'),
+      false
+    );
     assert.equal(
       sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
       'Add Cloudflare Worker for capyboop/capy'
@@ -1385,6 +1403,10 @@ async function runCodecAndEngineTests() {
         false
       );
       assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/open-pr.yml')),
+        false
+      );
+      assert.equal(
         fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
         false
       );
@@ -1399,6 +1421,1109 @@ async function runCodecAndEngineTests() {
     } finally {
       fs.rmSync(tmpCleanStage, { recursive: true, force: true });
     }
+
+    // Extract and unit-test real GitHub Actions script blocks from pr-review-gate.yml & open-pr.yml
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const extractWorkflowScript = (workflowRelPath) => {
+      const raw = fs.readFileSync(path.resolve(projectRoot, '..', workflowRelPath), 'utf8');
+      const lines = raw.split(/\r?\n/);
+      const scriptIdx = lines.findIndex((line) => /^\s*script:\s*\|\s*$/.test(line));
+      assert.notEqual(scriptIdx, -1, `Expected script: | block in ${workflowRelPath}`);
+      const headerIndent = lines[scriptIdx].match(/^(\s*)/)[1].length;
+      let bodyIndent = null;
+      const bodyLines = [];
+      for (let i = scriptIdx + 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.trim() === '') {
+          bodyLines.push('');
+          continue;
+        }
+        const indent = line.match(/^(\s*)/)[1].length;
+        if (bodyIndent === null) {
+          assert.equal(
+            indent > headerIndent,
+            true,
+            `Expected indented script body in ${workflowRelPath}`
+          );
+          bodyIndent = indent;
+        } else if (indent < bodyIndent) {
+          break;
+        }
+        bodyLines.push(line.slice(bodyIndent));
+      }
+      return bodyLines.join('\n');
+    };
+
+    const runReviewGateScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/pr-review-gate.yml')
+    );
+
+    const runReviewGateCase = async ({
+      prAuthor = 'github-actions[bot]',
+      isDraft = false,
+      headSha = 'abcdef1234567890abcdef1234567890abcdef12',
+      commitDate = '2026-11-13T01:00:00Z',
+      labels = ['review:ai-approved'],
+      events = [],
+      reviews = [],
+      comments = [],
+      aiCommentScore = 98,
+      eventName = 'pull_request_review',
+      action = 'submitted',
+    } = {}) => {
+      const calls = {
+        createReview: [],
+        dismissReview: [],
+        removeLabel: [],
+        createCommitStatus: [],
+      };
+      const allComments = [...comments];
+      if (aiCommentScore !== null) {
+        allComments.unshift({
+          user: { login: 'shthed' },
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${headSha} score=${aiCommentScore}% -->`,
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        });
+      }
+      const coreMock = {
+        infos: [],
+        warnings: [],
+        failed: [],
+        info: (msg) => coreMock.infos.push(msg),
+        warning: (msg) => coreMock.warnings.push(msg),
+        setFailed: (msg) => coreMock.failed.push(msg),
+      };
+      const githubMock = {
+        paginate: async (fn, params) => {
+          const res = await fn(params);
+          return res.data;
+        },
+        rest: {
+          pulls: {
+            get: async () => ({
+              data: {
+                number: 490,
+                state: 'open',
+                draft: isDraft,
+                user: { login: prAuthor },
+                head: { sha: headSha },
+                labels: labels.map((name) => ({ name })),
+              },
+            }),
+            listReviews: async () => ({ data: reviews }),
+            createReview: async (payload) => {
+              calls.createReview.push(payload);
+              return { data: { id: 9001 } };
+            },
+            dismissReview: async (payload) => {
+              calls.dismissReview.push(payload);
+              return { data: {} };
+            },
+          },
+          repos: {
+            getCommit: async () => ({
+              data: { commit: { committer: { date: commitDate }, author: { date: commitDate } } },
+            }),
+            listCommitStatusesForRef: async () => ({ data: [] }),
+            createCommitStatus: async (payload) => {
+              calls.createCommitStatus.push(payload);
+              return { data: payload };
+            },
+          },
+          issues: {
+            listEvents: async () => ({ data: events }),
+            listComments: async () => ({ data: allComments }),
+            removeLabel: async (payload) => {
+              calls.removeLabel.push(payload);
+              return { data: {} };
+            },
+          },
+        },
+      };
+      const contextMock = {
+        repo: { owner: 'shthed', repo: 'capy' },
+        eventName,
+        payload: { pull_request: { number: 490 }, action },
+      };
+      await runReviewGateScript(contextMock, githubMock, coreMock);
+      assert.equal(coreMock.failed.length, 0);
+      assert.equal(calls.createCommitStatus.length, 1);
+      return { status: calls.createCommitStatus[0], calls, core: coreMock };
+    };
+
+    const gateHeadSha = '1234567890abcdef1234567890abcdef12345678';
+    // (a) Bot PR + empty-body native APPROVED with commit_id === headSha and future commitMs clock skew
+    const gateBotNativeRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T02:00:00Z',
+      reviews: [
+        {
+          id: 101,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotNativeRes.status.state, 'success');
+    assert.equal(
+      gateBotNativeRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateBotNativeRes.calls.createReview.length, 0);
+
+    // (b) Bot PR + review:owner-approved label only -> pending awaiting native Approve click
+    const gateBotLabelOnlyRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      eventName: 'pull_request',
+      action: 'labeled',
+    });
+    assert.equal(gateBotLabelOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateBotLabelOnlyRes.status.description,
+      'Awaiting Owner native Approve click (required on bot-opened PR)'
+    );
+    assert.equal(gateBotLabelOnlyRes.calls.createReview.length, 0);
+
+    // (c) Bot PR + APPROVED/LGTM comment only -> pending awaiting native Approve click
+    const gateBotCommentOnlyRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBotCommentOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateBotCommentOnlyRes.status.description,
+      'Awaiting Owner native Approve click (required on bot-opened PR)'
+    );
+    assert.equal(gateBotCommentOnlyRes.calls.createReview.length, 0);
+
+    const gateBotLgtmReviewOnlyRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 102,
+          user: { login: 'shthed' },
+          state: 'COMMENTED',
+          commit_id: gateHeadSha,
+          body: 'LGTM',
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotLgtmReviewOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateBotLgtmReviewOnlyRes.status.description,
+      'Awaiting Owner native Approve click (required on bot-opened PR)'
+    );
+    assert.equal(gateBotLgtmReviewOnlyRes.calls.createReview.length, 0);
+
+    // (d) Bot PR + stale APPROVED (commit_id !== headSha) or pre-force-push -> pending
+    const gateBotStaleShaRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 103,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotStaleShaRes.status.state, 'pending');
+    assert.equal(
+      gateBotStaleShaRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotStaleShaRes.calls.createReview.length, 0);
+
+    const gateBotPreForcePushRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      events: [{ event: 'head_ref_force_pushed', created_at: '2026-11-13T01:10:00Z' }],
+      reviews: [
+        {
+          id: 104,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotPreForcePushRes.status.state, 'pending');
+    assert.equal(gateBotPreForcePushRes.calls.createReview.length, 0);
+
+    // (e) Bot PR + native APPROVED followed by CHANGES_REQUESTED on headSha (with commitMs skew) -> failure
+    const gateBotChangesReqRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T02:00:00Z',
+      reviews: [
+        {
+          id: 105,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+        {
+          id: 106,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix edge case first',
+          submitted_at: '2026-11-13T01:12:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotChangesReqRes.status.state, 'failure');
+    assert.equal(
+      gateBotChangesReqRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotChangesReqRes.calls.createReview.length, 0);
+
+    // (f) Manual shthed-authored PR + label/comment -> success and pulls.createReview({ event: 'APPROVE' }) called once
+    const gateManualLabelRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualLabelRes.status.state, 'success');
+    assert.equal(gateManualLabelRes.calls.createReview.length, 1);
+    assert.equal(gateManualLabelRes.calls.createReview[0].event, 'APPROVE');
+    assert.equal(gateManualLabelRes.calls.createReview[0].commit_id, gateHeadSha);
+
+    const gateManualCommentRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualCommentRes.status.state, 'success');
+    assert.equal(gateManualCommentRes.calls.createReview.length, 1);
+    assert.equal(gateManualCommentRes.calls.createReview[0].event, 'APPROVE');
+
+    // (g) Draft bot PR -> pending even with native APPROVED
+    const gateBotDraftRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      isDraft: true,
+      headSha: gateHeadSha,
+      reviews: [
+        {
+          id: 107,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotDraftRes.status.state, 'pending');
+    assert.equal(
+      gateBotDraftRes.status.description,
+      'Draft PR: complete work, pass AI review, and mark ready'
+    );
+    assert.equal(gateBotDraftRes.calls.createReview.length, 0);
+
+    // (h) Bot PR + CHANGES_REQUESTED whose body starts with "APPROVED..." -> failure (not legacy approval)
+    const gateBotChangesReqApprovedPrefixRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 108,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'APPROVED - needs one fix',
+          submitted_at: '2026-11-13T01:12:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotChangesReqApprovedPrefixRes.status.state, 'failure');
+    assert.equal(
+      gateBotChangesReqApprovedPrefixRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotChangesReqApprovedPrefixRes.calls.createReview.length, 0);
+
+    // (i) Bot PR + CHANGES_REQUESTED recovered by newer native APPROVED on headSha under commitMs skew -> success
+    const gateBotRecoverySkewRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T02:00:00Z',
+      reviews: [
+        {
+          id: 109,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix edge case first',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+        {
+          id: 110,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:15:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotRecoverySkewRes.status.state, 'success');
+    assert.equal(
+      gateBotRecoverySkewRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateBotRecoverySkewRes.calls.createReview.length, 0);
+
+    // (j) Bot PR + DISMISSED native APPROVED -> ignored (pending)
+    const gateBotDismissedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 111,
+          user: { login: 'shthed' },
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:15:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotDismissedRes.status.state, 'pending');
+    assert.equal(
+      gateBotDismissedRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotDismissedRes.calls.createReview.length, 0);
+
+    // (k) Bug 1 regression: bot PR CHANGES_REQUESTED + legacy APPROVED/LGTM comment + review:owner-approved label (with and without earlier native APPROVED) -> failure
+    const gateBotLegacyAfterRejectCommentRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 112,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix required',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 201,
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:10:00Z',
+          updated_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotLegacyAfterRejectCommentRes.status.state, 'failure');
+    assert.equal(
+      gateBotLegacyAfterRejectCommentRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotLegacyAfterRejectCommentRes.calls.createReview.length, 0);
+
+    const gateBotChangesReqLegacyLgtmAndLabelRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          id: 501,
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 113,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix Bug 1 first',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 202,
+          user: { login: 'shthed' },
+          body: 'LGTM',
+          created_at: '2026-11-13T01:11:00Z',
+          updated_at: '2026-11-13T01:11:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.state, 'failure');
+    assert.equal(
+      gateBotChangesReqLegacyLgtmAndLabelRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.calls.createReview.length, 0);
+
+    const gateBotLegacyAfterPriorNativeAndRejectRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          id: 502,
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 114,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:02:00Z',
+        },
+        {
+          id: 115,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Needs fix',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 203,
+          user: { login: 'shthed' },
+          body: 'LGTM on UI',
+          created_at: '2026-11-13T01:11:00Z',
+          updated_at: '2026-11-13T01:11:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.state, 'failure');
+    assert.equal(
+      gateBotLegacyAfterPriorNativeAndRejectRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.calls.createReview.length, 0);
+
+    // (l) Bug 2 regression: +120s commitMs skew catches post-approval HOLD comment, reverse-ordered COMMENTED DO NOT MERGE review (non-head & head), and DISMISSED+HOLD; stale pre-push HOLD stays ignored
+    const gateBotSkewHoldCommentRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 116,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+      comments: [
+        {
+          id: 204,
+          user: { login: 'shthed' },
+          body: 'HOLD - do not merge yet',
+          created_at: '2026-11-13T01:00:40Z',
+          updated_at: '2026-11-13T01:00:40Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBotSkewHoldCommentRes.status.state, 'failure');
+    assert.equal(
+      gateBotSkewHoldCommentRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotSkewHoldCommentRes.calls.createReview.length, 0);
+
+    const gateBotSkewNonHeadCommentedReviewRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 118,
+          user: { login: 'shthed' },
+          state: 'COMMENTED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: 'DO NOT MERGE - regression',
+          submitted_at: '2026-11-13T01:00:40Z',
+        },
+        {
+          id: 117,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.state, 'failure');
+    assert.equal(
+      gateBotSkewNonHeadCommentedReviewRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.calls.createReview.length, 0);
+
+    const gateBotSkewHeadCommentedReviewRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 120,
+          user: { login: 'shthed' },
+          state: 'COMMENTED',
+          commit_id: gateHeadSha,
+          body: 'DO NOT MERGE - head regression',
+          submitted_at: '2026-11-13T01:00:40Z',
+        },
+        {
+          id: 119,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewHeadCommentedReviewRes.status.state, 'failure');
+    assert.equal(
+      gateBotSkewHeadCommentedReviewRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotSkewHeadCommentedReviewRes.calls.createReview.length, 0);
+
+    const gateBotSkewDismissedHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 121,
+          user: { login: 'shthed' },
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+      comments: [
+        {
+          id: 205,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait after dismiss',
+          created_at: '2026-11-13T01:00:40Z',
+          updated_at: '2026-11-13T01:00:40Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewDismissedHoldRes.status.state, 'failure');
+    assert.equal(gateBotSkewDismissedHoldRes.calls.createReview.length, 0);
+
+    const gateBotStalePrePushHoldPendingRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 206,
+          user: { login: 'shthed' },
+          body: 'HOLD',
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotStalePrePushHoldPendingRes.status.state, 'pending');
+    assert.equal(gateBotStalePrePushHoldPendingRes.calls.createReview.length, 0);
+
+    const gateBotSkewStalePrePushHoldWithApprovalRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 122,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+      comments: [
+        {
+          id: 207,
+          user: { login: 'shthed' },
+          body: 'HOLD - fix old commit',
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.status.state, 'success');
+    assert.equal(
+      gateBotSkewStalePrePushHoldWithApprovalRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.calls.createReview.length, 0);
+
+    // (m) Finding 3 regression: same-second review ties use deterministic [ts, id], while omitted IDs & cross-source review/comment ties fail closed
+    const gateSameSecRejectWinsByIdRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 10,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 11,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Hold on',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecRejectWinsByIdRes.status.state, 'failure');
+    assert.equal(
+      gateSameSecRejectWinsByIdRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateSameSecRejectWinsByIdRes.calls.createReview.length, 0);
+
+    const gateSameSecApproveSupersedesByIdRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 10,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Hold on',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 11,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecApproveSupersedesByIdRes.status.state, 'success');
+    assert.equal(
+      gateSameSecApproveSupersedesByIdRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateSameSecApproveSupersedesByIdRes.calls.createReview.length, 0);
+
+    const gateSameSecOmittedIdsFailClosedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 12,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Hold on',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecOmittedIdsFailClosedRes.status.state, 'failure');
+    assert.equal(gateSameSecOmittedIdsFailClosedRes.calls.createReview.length, 0);
+
+    const gateSameSecOmittedRejectionIdFailClosedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 12,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Missing rejection id fails closed',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecOmittedRejectionIdFailClosedRes.status.state, 'failure');
+    assert.equal(gateSameSecOmittedRejectionIdFailClosedRes.calls.createReview.length, 0);
+
+    const gateSameSecCrossSourceFailClosedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 105,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 50,
+          user: { login: 'shthed' },
+          body: 'HOLD',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecCrossSourceFailClosedRes.status.state, 'failure');
+    assert.equal(gateSameSecCrossSourceFailClosedRes.calls.createReview.length, 0);
+
+    // Extract and unit-test real .github/workflows/open-pr.yml script
+    const runOpenPrScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/open-pr.yml')
+    );
+
+    const runOpenPrCase = async (envInputs, { openPrs = [], milestones = [] } = {}) => {
+      const prevEnv = {
+        INPUT_HEAD: process.env.INPUT_HEAD,
+        INPUT_BASE: process.env.INPUT_BASE,
+        INPUT_TITLE: process.env.INPUT_TITLE,
+        INPUT_BODY: process.env.INPUT_BODY,
+        INPUT_DRAFT: process.env.INPUT_DRAFT,
+        INPUT_LABELS: process.env.INPUT_LABELS,
+        INPUT_MILESTONE: process.env.INPUT_MILESTONE,
+      };
+      for (const [key, val] of Object.entries(prevEnv)) {
+        if (val === undefined) delete process.env[key];
+      }
+      Object.assign(process.env, envInputs);
+
+      const calls = {
+        listPrs: [],
+        createPr: [],
+        updatePr: [],
+        addLabels: [],
+        updateIssue: [],
+      };
+      const outputs = {};
+      const warnings = [];
+      const infos = [];
+      const failed = [];
+      const summaryBuffer = [];
+      const coreMock = {
+        setOutput: (k, v) => {
+          outputs[k] = v;
+        },
+        warning: (m) => warnings.push(m),
+        info: (m) => infos.push(m),
+        setFailed: (m) => failed.push(m),
+        summary: {
+          addRaw: (text) => {
+            summaryBuffer.push(text);
+            return coreMock.summary;
+          },
+          write: async () => {},
+        },
+      };
+      const githubMock = {
+        paginate: async (fn, params) => (await fn(params)).data,
+        rest: {
+          pulls: {
+            list: async (params) => {
+              calls.listPrs.push(params);
+              return { data: openPrs };
+            },
+            create: async (params) => {
+              calls.createPr.push(params);
+              return {
+                data: {
+                  number: 495,
+                  html_url: 'https://github.com/shthed/capy/pull/495',
+                  draft: params.draft,
+                  user: { login: 'github-actions[bot]' },
+                },
+              };
+            },
+            update: async (params) => {
+              calls.updatePr.push(params);
+              const existing = openPrs[0];
+              return {
+                data: {
+                  number: existing.number,
+                  html_url: existing.html_url,
+                  draft: existing.draft,
+                  user: existing.user,
+                },
+              };
+            },
+          },
+          issues: {
+            listMilestones: async () => ({ data: milestones }),
+            addLabels: async (params) => {
+              calls.addLabels.push(params);
+              return { data: [] };
+            },
+            update: async (params) => {
+              calls.updateIssue.push(params);
+              return { data: {} };
+            },
+          },
+        },
+      };
+      try {
+        await runOpenPrScript(
+          { repo: { owner: 'shthed', repo: 'capy' } },
+          githubMock,
+          coreMock
+        );
+        return { calls, outputs, warnings, infos, failed, summary: summaryBuffer.join('') };
+      } finally {
+        for (const [key, val] of Object.entries(prevEnv)) {
+          if (val === undefined) delete process.env[key];
+          else process.env[key] = val;
+        }
+      }
+    };
+
+    const milestonesFixture = [
+      { number: 2, title: 'Sprint 1: EPIC-2 v3.0.1 Critical Bugfixes' },
+      { number: 3, title: 'Sprint 2: EPIC-3 Features' },
+    ];
+
+    // Create new bot PR with refs/heads/ + shthed: normalization, deduped labels, case-insensitive milestone title
+    const openCreateRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: '  refs/heads/shthed:feature/one-click  ',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Add one-click PR approval',
+        INPUT_BODY: 'Overview text',
+        INPUT_DRAFT: 'true',
+        INPUT_LABELS: 'ci, docs, ci, , testing',
+        INPUT_MILESTONE: 'sprint 1: epic-2 v3.0.1 critical bugfixes',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(openCreateRes.failed.length, 0);
+    assert.equal(openCreateRes.calls.listPrs[0].head, 'shthed:feature/one-click');
+    assert.equal(openCreateRes.calls.createPr.length, 1);
+    assert.equal(openCreateRes.calls.createPr[0].head, 'feature/one-click');
+    assert.equal(openCreateRes.calls.createPr[0].draft, true);
+    assert.deepEqual(openCreateRes.calls.addLabels[0].labels, ['ci', 'docs', 'testing']);
+    assert.equal(openCreateRes.calls.updateIssue[0].milestone, 2);
+    assert.equal(openCreateRes.outputs.pr_number, '495');
+    assert.equal(openCreateRes.outputs.action, 'created');
+    assert.equal(openCreateRes.summary.includes('Bot PR #495 (created)'), true);
+
+    // Idempotent update: omits draft, preserves existing body when INPUT_BODY is empty, resolves numeric milestone, warns on draft mismatch
+    const openUpdateRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'feature/one-click',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Updated PR title',
+        INPUT_BODY: '',
+        INPUT_DRAFT: 'false',
+        INPUT_LABELS: '',
+        INPUT_MILESTONE: '2',
+      },
+      {
+        openPrs: [
+          {
+            number: 495,
+            html_url: 'https://github.com/shthed/capy/pull/495',
+            draft: true,
+            user: { login: 'github-actions[bot]' },
+          },
+        ],
+        milestones: milestonesFixture,
+      }
+    );
+    assert.equal(openUpdateRes.failed.length, 0);
+    assert.equal(openUpdateRes.calls.createPr.length, 0);
+    assert.equal(openUpdateRes.calls.updatePr.length, 1);
+    assert.equal('draft' in openUpdateRes.calls.updatePr[0], false);
+    assert.equal('body' in openUpdateRes.calls.updatePr[0], false);
+    assert.equal(openUpdateRes.calls.addLabels.length, 0);
+    assert.equal(openUpdateRes.calls.updateIssue[0].milestone, 2);
+    assert.equal(openUpdateRes.outputs.action, 'updated');
+    assert.equal(openUpdateRes.warnings.length, 1);
+
+    // Reversed prefix order (owner:refs/heads/) normalizes cleanly
+    const openReversedPrefixRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'shthed:refs/heads/feature/x',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Reversed prefix PR',
+        INPUT_DRAFT: 'true',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(openReversedPrefixRes.failed.length, 0);
+    assert.equal(openReversedPrefixRes.calls.listPrs[0].head, 'shthed:feature/x');
+    assert.equal(openReversedPrefixRes.calls.createPr.length, 1);
+    assert.equal(openReversedPrefixRes.calls.createPr[0].head, 'feature/x');
+
+    // Validation rejections: head === base, invalid draft, cross-owner head, extra colon, missing milestone before PR create
+    const sameBranchFail = await runOpenPrCase({
+      INPUT_HEAD: 'refs/heads/beta',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Bad same branch',
+      INPUT_DRAFT: 'true',
+    });
+    assert.equal(sameBranchFail.failed.length, 1);
+    assert.equal(sameBranchFail.calls.createPr.length, 0);
+
+    const badDraftFail = await runOpenPrCase({
+      INPUT_HEAD: 'feature/x',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Bad draft',
+      INPUT_DRAFT: 'maybe',
+    });
+    assert.equal(badDraftFail.failed.length, 1);
+    assert.equal(badDraftFail.calls.createPr.length, 0);
+
+    const crossOwnerFail = await runOpenPrCase({
+      INPUT_HEAD: 'otheruser:feature/x',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Cross-owner PR',
+      INPUT_DRAFT: 'true',
+    });
+    assert.equal(crossOwnerFail.failed.length, 1);
+    assert.equal(crossOwnerFail.failed[0].includes('cross-owner'), true);
+    assert.equal(crossOwnerFail.calls.createPr.length, 0);
+
+    const extraColonFail = await runOpenPrCase({
+      INPUT_HEAD: 'shthed:a:b',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Extra colon head',
+      INPUT_DRAFT: 'true',
+    });
+    assert.equal(extraColonFail.failed.length, 1);
+    assert.equal(extraColonFail.calls.createPr.length, 0);
+
+    const missingMilestoneFail = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'feature/x',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Unknown milestone',
+        INPUT_DRAFT: 'true',
+        INPUT_MILESTONE: 'Nonexistent Sprint 99',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(missingMilestoneFail.failed.length, 1);
+    assert.equal(missingMilestoneFail.calls.createPr.length, 0);
     /* capy-dev-only:end */
 
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
@@ -2309,6 +3434,61 @@ async function runBrowserBasicsSuite() {
     // 10. Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats
     // ------------------------------------------------------------------
     console.log('-> [E2E 10] Verifying Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats...');
+
+    // Prebaked sample viewport reset regression check (date-independent, reproduces zoomed reload -> 1x cycle -> prebaked load)
+    await zoomBadge.click();
+    assert.equal((await zoomBadge.innerText()).trim(), '2x', 'Expected zoomBadge to step to 2x before reload');
+    await page.waitForTimeout(420);
+    await page.reload({ waitUntil: 'load' });
+    await waitForPuzzleLoaded(page);
+
+    for (let guard = 0; guard < 6; guard++) {
+      const text = (await zoomBadge.innerText()).trim();
+      if (text === '1x') break;
+      await zoomBadge.click();
+    }
+    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected zoomBadge to cycle back to 1x after zoomed reload');
+
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    const snailCard = page.getByTestId('gallery-card-snail_guitar');
+    await snailCard.waitFor({ state: 'visible', timeout: 5000 });
+    await snailCard.getByRole('button', { name: 'Play', exact: true }).click();
+    await waitForPuzzleLoaded(page);
+    await page.waitForTimeout(200);
+
+    assert.equal(
+      (await zoomBadge.innerText()).trim(),
+      '1x',
+      'Expected prebaked sample load after zoomed reload to reset zoom badge to 1x'
+    );
+    assert.equal(
+      await page.getByTestId('reset-view-btn').count(),
+      0,
+      'Expected reset-view-btn to be unmounted after prebaked sample viewport reset'
+    );
+    const prebakedSession = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+    });
+    assert.equal(
+      prebakedSession.zoomScale,
+      1,
+      `Expected capy_active_session_v8 zoomScale === 1 after prebaked sample load, got ${prebakedSession.zoomScale}`
+    );
+    assert.equal(
+      prebakedSession.panOffsetX,
+      0,
+      `Expected capy_active_session_v8 panOffsetX === 0 after prebaked sample load, got ${prebakedSession.panOffsetX}`
+    );
+    assert.equal(
+      prebakedSession.panOffsetY,
+      0,
+      `Expected capy_active_session_v8 panOffsetY === 0 after prebaked sample load, got ${prebakedSession.panOffsetY}`
+    );
+
+    // Step to 2x before Play Daily so 10a also verifies daily puzzle launch resets non-1x zoom
+    await zoomBadge.click();
+    assert.equal((await zoomBadge.innerText()).trim(), '2x', 'Expected zoomBadge to step to 2x before Play Daily');
 
     // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
     await page.locator('button[title="Settings and Menu"]').click();

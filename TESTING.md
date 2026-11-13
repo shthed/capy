@@ -131,8 +131,8 @@ Capy uses a 3-tier `Alpha -> Beta -> Production` GitHub Actions architecture pai
 5. **Deploy Cloudflare Worker Job ([`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml), `contents: read`)**:
    - Runs `npm run test:sanity`, `npm run lint`, and `npm run build`, deploys `web/dist` Static Assets and `worker/index.ts` (`CoopRoomDurableObject`) to `https://capypaint.com/` via `cloudflare/wrangler-action@v4` when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set (skipping cleanly in `< 2s` when unconfigured), and verifies `https://capypaint.com/api/health`.
 <!-- capy-dev-only:start -->
-6. **Dual AI & Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**:
-   - Enforces Draft-first development, machine-verified `review:ai-approved` (`>= 95%` 5-Pillar score for exact `HEAD` SHA), and separate post-push Human Project Owner sign-off (`review:owner-approved` or `APPROVED`/`LGTM`) via the `capy/review-gate` commit status before `gh pr merge` can unlock.
+6. **Bot-Authored PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)) & Dual AI + Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**:
+   - Enforces Draft-first development (`draft=true` + `gh pr ready` / `synchronize` / `deploy-branch.yml` triggers on bot-opened PRs), machine-verified `review:ai-approved` (`>= 95%` 5-Pillar score for exact `HEAD` SHA), and separate Human Project Owner sign-off via `capy/review-gate` (requiring native 1-click GitHub **Approve** on `HEAD` for `github-actions[bot]`-opened PRs while avoiding HTTP 422 bot self-approval, and preserving legacy fallback on owner-authored PRs), unit-tested against the extracted workflow scripts in [`web/scripts/test.mjs`](./web/scripts/test.mjs).
 <!-- capy-dev-only:end -->
 
 > [!NOTE]
