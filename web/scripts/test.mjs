@@ -5836,47 +5836,21 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
 
-    const zoomBadge = page.getByTestId('topbar-zoom-badge');
-    await zoomBadge.waitFor({ state: 'visible', timeout: 5000 });
-
-    // Align to 1x stop if currently zoomed in from previous E2E steps
-    for (let guard = 0; guard < 6; guard++) {
-      const text = (await zoomBadge.innerText()).trim();
-      if (text === '1x') break;
-      await zoomBadge.click();
-    }
-    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected top HUD zoom badge to align to 1x');
-
-    const expectedZoomCycle = ['2x', '4x', '8x', '12x', '1x'];
-    for (const expectedLabel of expectedZoomCycle) {
-      await zoomBadge.click();
-      const actualLabel = (await zoomBadge.innerText()).trim();
-      assert.equal(
-        actualLabel,
-        expectedLabel,
-        `Expected topbar-zoom-badge to step to '${expectedLabel}', got '${actualLabel}'`
-      );
-    }
-    console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and HUD zoom-badge cycle (1x -> 2x -> 4x -> 8x -> 12x -> 1x) verified.');
+    assert.equal(
+      await page.getByTestId('topbar-zoom-badge').count(),
+      0,
+      'Expected topbar-zoom-badge to be removed from GameTopBar'
+    );
+    console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and topbar-zoom-badge removal verified.');
 
     // ------------------------------------------------------------------
     // 10. Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats
     // ------------------------------------------------------------------
     console.log('-> [E2E 10] Verifying Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats...');
 
-    // Prebaked sample viewport reset regression check (date-independent, reproduces zoomed reload -> 1x cycle -> prebaked load)
-    await zoomBadge.click();
-    assert.equal((await zoomBadge.innerText()).trim(), '2x', 'Expected zoomBadge to step to 2x before reload');
-    await page.waitForTimeout(420);
+    // Prebaked sample viewport reset regression check (date-independent)
     await page.reload({ waitUntil: 'load' });
     await waitForPuzzleLoaded(page);
-
-    for (let guard = 0; guard < 6; guard++) {
-      const text = (await zoomBadge.innerText()).trim();
-      if (text === '1x') break;
-      await zoomBadge.click();
-    }
-    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected zoomBadge to cycle back to 1x after zoomed reload');
 
     await page.locator('button[title="Settings and Menu"]').click();
     await page.getByRole('button', { name: 'Create', exact: true }).click();
@@ -5886,11 +5860,6 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(page);
     await page.waitForTimeout(200);
 
-    assert.equal(
-      (await zoomBadge.innerText()).trim(),
-      '1x',
-      'Expected prebaked sample load after zoomed reload to reset zoom badge to 1x'
-    );
     assert.equal(
       await page.getByTestId('reset-view-btn').count(),
       0,
@@ -5915,9 +5884,9 @@ async function runBrowserBasicsSuite() {
       `Expected capy_active_session_v8 panOffsetY === 0 after prebaked sample load, got ${prebakedSession.panOffsetY}`
     );
 
-    // Step to 2x before Play Daily so 10a also verifies daily puzzle launch resets non-1x zoom
-    await zoomBadge.click();
-    assert.equal((await zoomBadge.innerText()).trim(), '2x', 'Expected zoomBadge to step to 2x before Play Daily');
+    // Zoom in before Play Daily so 10a also verifies daily puzzle launch resets non-1x zoom
+    await page.keyboard.press('+');
+    await page.waitForTimeout(80);
 
     // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
     await page.locator('button[title="Settings and Menu"]').click();
@@ -6001,10 +5970,11 @@ async function runBrowserBasicsSuite() {
     );
 
     // '+' zooms in above 1.0x (press twice so there is ample horizontal pan headroom)
-    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected daily puzzle initial zoom at 1x');
     await page.keyboard.press('+');
-    await page.waitForTimeout(80);
-    const zoomAfterFirstPlus = parseFloat((await zoomBadge.innerText()).replace('x', '').trim());
+    await page.waitForTimeout(420);
+    const zoomAfterFirstPlus = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1;
+    });
     assert.ok(
       zoomAfterFirstPlus > 1.0,
       `Expected keyboard "+" to zoom above 1.0x, got '${zoomAfterFirstPlus}'`
@@ -6037,10 +6007,13 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.keyboard.press('0');
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(420);
+    const zoomAfterReset = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1;
+    });
     assert.equal(
-      (await zoomBadge.innerText()).trim(),
-      '1x',
+      zoomAfterReset,
+      1,
       'Expected keyboard "0" to reset zoom back to 1x'
     );
 
@@ -6105,13 +6078,6 @@ async function runBrowserBasicsSuite() {
 
     // 11b. TASK-4.1a: Infinite Zoom detail sub-tile sets parentSnapshotId, renders topbar-parent-puzzle-btn,
     // restores parent puzzle & viewport on tap, and hides breadcrumb pill when parent snapshot is deleted
-    await page.getByTestId('topbar-zoom-badge').click();
-    await page.waitForTimeout(120);
-    assert.equal(
-      (await page.getByTestId('topbar-zoom-badge').innerText()).trim(),
-      '2x',
-      'Parent puzzle should be zoomed to 2x before spawning detail sub-tile'
-    );
     const parentSnapId = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null;
     });
@@ -6163,11 +6129,6 @@ async function runBrowserBasicsSuite() {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null;
     });
     assert.equal(restoredActiveId, parentSnapId, 'Clicking topbar-parent-puzzle-btn must restore parent snapshot');
-    assert.equal(
-      (await page.getByTestId('topbar-zoom-badge').innerText()).trim(),
-      '2x',
-      'Returning to parent puzzle via breadcrumb must restore parent saved 2x viewport zoom'
-    );
     assert.equal(
       await parentBreadcrumbBtn.count(),
       0,
@@ -6715,24 +6676,26 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(120);
     console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
-    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap with BETA pill + zoomed badge
+    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + SettingsModal tab bar fit
     const mobileTopbarPage = await context.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
     await mobileTopbarPage.setViewportSize({ width: 360, height: 780 });
     await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
-    await mobileTopbarPage.getByTestId('topbar-zoom-badge').click();
-    await mobileTopbarPage.waitForTimeout(100);
+    assert.equal(
+      await mobileTopbarPage.getByTestId('topbar-zoom-badge').count(),
+      0,
+      'Expected topbar-zoom-badge to be absent on 360x780 mobile'
+    );
 
     const leftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
     const rightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
     const savesBox = await mobileTopbarPage.getByTestId('topbar-saves-btn').boundingBox();
     const channelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
-    const zoomBox = await mobileTopbarPage.getByTestId('topbar-zoom-badge').boundingBox();
     const settingsBox = await mobileTopbarPage.locator('button[title="Settings and Menu"]').boundingBox();
 
-    assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && zoomBox && settingsBox);
+    assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && settingsBox);
     assert.equal(
       leftLaneBox.x + leftLaneBox.width <= rightLaneBox.x,
       true,
@@ -6748,8 +6711,39 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+
+    // Open SettingsModal on 360x780 mobile and verify all header tabs fit without horizontal clipping
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    const tabsContainer = mobileTopbarPage.getByTestId('settings-modal-tabs');
+    const closeBtn = mobileTopbarPage.getByTestId('settings-modal-close');
+    await tabsContainer.waitFor({ state: 'visible', timeout: 5000 });
+    await closeBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+    const tabsOverflow = await tabsContainer.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.equal(
+      tabsOverflow.scrollWidth <= tabsOverflow.clientWidth,
+      true,
+      `SettingsModal tabs must not overflow horizontally at 360x780 (scrollWidth=${tabsOverflow.scrollWidth}, clientWidth=${tabsOverflow.clientWidth})`
+    );
+
+    const tabsBox = await tabsContainer.boundingBox();
+    const closeBox = await closeBtn.boundingBox();
+    assert.ok(tabsBox && closeBox);
+    for (const tabKey of ['settings', 'hints', 'create', 'saves']) {
+      const tabBox = await mobileTopbarPage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
+      assert.ok(tabBox, `Expected settings-tab-${tabKey} boundingBox to exist`);
+      assert.equal(
+        tabBox.x >= tabsBox.x && tabBox.x + tabBox.width <= closeBox.x,
+        true,
+        `settings-tab-${tabKey} (${tabBox.x}..${tabBox.x + tabBox.width}) must fit inside tabs container (${tabsBox.x}) and to the left of close button (${closeBox.x})`
+      );
+    }
+
     await mobileTopbarPage.close();
-    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap with BETA and zoom badges verified.');
+    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, and SettingsModal tab fit verified.');
 
     // -------------------------------------------------------------------------
     // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
