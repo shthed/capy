@@ -6,7 +6,7 @@ Focused **Sprint 1 Queue** ([`EPIC-2: v3.0.1 Critical Bugfixes`](https://github.
 
 ---
 
-## Sprint 1 Priority 0: `v3.0.1` Critical Bugfixes (`BUG-1`--`BUG-3`)
+## Sprint 1 Priority 0: `v3.0.1` Critical Bugfixes (`BUG-1`--`BUG-4`)
 
 Total Sprint 1 scope: `~42k tokens` (`~21--31 min agent`). Delete each item here once its fix is merged to Production `main`.
 
@@ -62,3 +62,22 @@ Total Sprint 1 scope: `~42k tokens` (`~21--31 min agent`). Delete each item here
   - `./gradlew app:testDebugUnitTest` and `./gradlew app:assembleDebug` pass cleanly (locally or via GitHub Actions `Build & Test`), and foreground resume restores responsive canvas input and audio playback.
 
 </details>
+
+### BUG-4: `capypaint.com` Live DNS & Cloudflare Worker Cutover
+
+- **Status**: `Open -- Awaiting Human Cloudflare Zone & DNS Cutover`
+- **Action**: Point `capypaint.com` registrar nameservers to Cloudflare, connect `shthed/capy` (or `capyboop/capy`) to Cloudflare Workers Builds per [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers), and add the `www.capypaint.com -> https://capypaint.com` edge `301` Redirect Rule.
+- **Value**: Replaces the Squarespace "under construction" placeholder on `capypaint.com` with the live `v3.0.1` production SPA, `/api/health`, and `CoopRoomDurableObject` WebSocket relay.
+
+<details>
+<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+
+- **Type & Priority**: `Bug` | `v3.0.1` ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: critical` | `domain: cloud, ci`
+- **Model & Estimate**: `ops` (Human Cloudflare & Registrar Cutover)
+- **Target Files**: [`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`.github/workflows/deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml), [`CLOUD.md`](./CLOUD.md)
+- **Acceptance Criteria**:
+  - `https://capypaint.com/` serves the live Capy Paint SPA and `https://www.capypaint.com/` `301`-redirects to `https://capypaint.com/`.
+  - `https://capypaint.com/api/health` returns `{"ok":true,"service":"capy-paint",...}` and `wss://capypaint.com/api/room?room=<ROOM6>` upgrades to `CoopRoomDurableObject`.
+
+</details>
+

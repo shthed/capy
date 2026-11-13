@@ -43,6 +43,7 @@ import {
   CanvasBgColor,
   PresetCanvasBgColor,
   argbToHex,
+  computeProgressPercentage,
   hexToArgb,
   Difficulty,
   GeneratorAlgorithm,
@@ -3054,10 +3055,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {sortedSnapshots.map((snap) => {
                     const isActive = snap.id === activeSnapshotId;
                     const isSelected = snap.id === currentSelectedId;
-                    const progressPct =
-                      snap.totalCount > 0
-                        ? Math.round((snap.filledCount * 100) / snap.totalCount)
-                        : 0;
+                    const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
                     const thumbSrc = snap.sampleAssetPath || snap.previewDataUrl;
 
                     return (
@@ -3134,10 +3132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {sortedSnapshots.map((snap) => {
                     const isActive = snap.id === activeSnapshotId;
                     const isSelected = snap.id === currentSelectedId;
-                    const progressPct =
-                      snap.totalCount > 0
-                        ? Math.round((snap.filledCount * 100) / snap.totalCount)
-                        : 0;
+                    const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
                     const thumbSrc = snap.sampleAssetPath || snap.previewDataUrl;
 
                     return (

@@ -437,6 +437,20 @@ async function runCodecAndEngineTests() {
     assert.equal(queryAlphaCh.channel, 'alpha');
     assert.equal(queryAlphaCh.badgeLabel, 'ALPHA #481');
     assert.equal(queryAlphaCh.prNumber, 481);
+
+    const typesMod = await vite.ssrLoadModule('/src/types/index.ts');
+    assert.equal(typesMod.computeProgressPercentage(0, 0), 0);
+    assert.equal(typesMod.computeProgressPercentage(0, 100), 0);
+    assert.equal(typesMod.computeProgressPercentage(50, 100), 50);
+    assert.equal(typesMod.computeProgressPercentage(996, 1000), 99);
+    assert.equal(typesMod.computeProgressPercentage(999, 1000), 99);
+    assert.equal(typesMod.computeProgressPercentage(1000, 1000), 100);
+    assert.equal(typesMod.computeProgressPercentage(-5, 100), 0);
+    assert.equal(typesMod.computeProgressPercentage(105, 100), 100);
+    assert.equal(typesMod.computeProgressPercentage(10, -5), 0);
+    assert.equal(typesMod.computeProgressPercentage(10, Number.NaN), 0);
+    assert.equal(typesMod.computeProgressPercentage(Number.NaN, 100), 0);
+
     assert.equal(
       /^[ \t]+-\s+/m.test(changelogText),
       false,
@@ -3074,6 +3088,42 @@ async function runBrowserBasicsSuite() {
     });
     await page.waitForTimeout(120);
     console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
+
+    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap with BETA pill + zoomed badge
+    const mobileTopbarPage = await context.newPage();
+    attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
+    await mobileTopbarPage.setViewportSize({ width: 360, height: 780 });
+    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
+    await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
+    await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+    await mobileTopbarPage.getByTestId('topbar-zoom-badge').click();
+    await mobileTopbarPage.waitForTimeout(100);
+
+    const leftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
+    const rightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
+    const savesBox = await mobileTopbarPage.getByTestId('topbar-saves-btn').boundingBox();
+    const channelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    const zoomBox = await mobileTopbarPage.getByTestId('topbar-zoom-badge').boundingBox();
+    const settingsBox = await mobileTopbarPage.locator('button[title="Settings and Menu"]').boundingBox();
+
+    assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && zoomBox && settingsBox);
+    assert.equal(
+      leftLaneBox.x + leftLaneBox.width <= rightLaneBox.x,
+      true,
+      `topbar-left-lane (${leftLaneBox.x + leftLaneBox.width}) must not overlap topbar-right-lane (${rightLaneBox.x}) at 360x780`
+    );
+    assert.equal(
+      rightLaneBox.x + rightLaneBox.width <= 360,
+      true,
+      `topbar-right-lane (${rightLaneBox.x + rightLaneBox.width}) must fit within 360px mobile viewport`
+    );
+    assert.equal(
+      settingsBox.x + settingsBox.width <= 360 && settingsBox.x >= rightLaneBox.x,
+      true,
+      'Settings button must fit inside right lane and 360px viewport'
+    );
+    await mobileTopbarPage.close();
+    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap with BETA and zoom badges verified.');
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');
