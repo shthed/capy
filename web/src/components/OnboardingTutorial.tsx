@@ -21,6 +21,7 @@ export interface TutorialTriedActions {
 
 interface OnboardingTutorialProps {
   isOpen: boolean;
+  isModalOpen?: boolean;
   stepIndex: number;
   triedActions: TutorialTriedActions;
   onStepChange: (nextStep: number) => void;
@@ -82,6 +83,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
 
 export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   isOpen,
+  isModalOpen = false,
   stepIndex,
   triedActions,
   onStepChange,
@@ -116,7 +118,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   }, [isOpen, isLastStep, isCurrentTried, clampedStep, onStepChange]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onSkip();
@@ -124,7 +126,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onSkip]);
+  }, [isOpen, isModalOpen, onSkip]);
 
   if (!isOpen) return null;
 

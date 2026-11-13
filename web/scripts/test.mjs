@@ -4460,34 +4460,98 @@ async function runBrowserBasicsSuite() {
     assert.equal(bootMeta.hasScopedCache, true, `Expected Service Worker cache ${expectedSwCacheKey}`);
     assert.equal(bootMeta.hasLegacyCache, false, 'Legacy unscoped capy-cache-v2 must not exist');
 
-    // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps, and persists completion
+    // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 5');
-    // Step 1: Pick Color (click a palette swatch)
-    await page.locator('[aria-label="Palette dock"] button').first().click();
-    await page.getByTestId('tutorial-next-btn').click();
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 2 OF 5');
-    // Step 2: Tap & Paint Shape (tap canvas)
+    // Step 1: Pick Color (click an unselected palette swatch -> shows Tried! badge and auto-advances to Step 2)
+    await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    // Step 2: Tap & Paint Shape (tap canvas below tutorial card -> shows Tried! badge and auto-advances to Step 3)
     const canvasBoxTut = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(canvasBoxTut.x + canvasBoxTut.width * 0.5, canvasBoxTut.y + canvasBoxTut.height * 0.5);
-    await page.getByTestId('tutorial-next-btn').click();
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 3 OF 5');
-    // Step 3: Zoom & Pan
-    await page.mouse.move(canvasBoxTut.x + canvasBoxTut.width * 0.5, canvasBoxTut.y + canvasBoxTut.height * 0.5);
-    await page.mouse.wheel(0, -120);
-    await page.getByTestId('tutorial-next-btn').click();
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 4 OF 5');
-    // Step 4: Smart Hints (use inline Try Hint button)
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const xFrac = 0.42 + (attempt % 3) * 0.08;
+      const yFrac = 0.60 + Math.floor(attempt / 3) * 0.08;
+      await page.mouse.click(canvasBoxTut.x + canvasBoxTut.width * xFrac, canvasBoxTut.y + canvasBoxTut.height * yFrac);
+      await page.waitForTimeout(80);
+      if ((await page.getByTestId('tutorial-step-tried-badge').count()) > 0) break;
+    }
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    // Step 3: Zoom & Pan (step zoom -> shows Tried! badge and auto-advances to Step 4, then restore 1x)
+    await page.getByTestId('topbar-zoom-badge').click();
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    for (let guard = 0; guard < 6; guard++) {
+      const zTxt = (await page.getByTestId('topbar-zoom-badge').innerText()).trim();
+      if (zTxt === '1x') break;
+      await page.getByTestId('topbar-zoom-badge').click();
+    }
+    // Step 4: Smart Hints (use inline Try Hint button -> marks tried and auto-advances to Step 5)
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByTestId('tutorial-next-btn').click();
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 5 OF 5');
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
     // Step 5: Finish Coloring
     await page.getByTestId('tutorial-finish-btn').click();
     await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
     const tutorialCompletedFlag = await page.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1'));
     assert.equal(tutorialCompletedFlag, '1');
+
+    // Verify ?skipTutorial=1 suppresses tutorial AND Escape with modal open closes only modal before tutorial
+    const skipTutContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const skipTutPage = await skipTutContext.newPage();
+    attachErrorListeners(skipTutPage, 'skipTutPage');
+    await skipTutPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(skipTutPage);
+    assert.equal(
+      await skipTutPage.getByTestId('onboarding-tutorial').count(),
+      0,
+      '?skipTutorial=1 must suppress OnboardingTutorial on cold start'
+    );
+    await skipTutPage.close();
+    await skipTutContext.close();
+
+    const escTutContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const escTutPage = await escTutContext.newPage();
+    attachErrorListeners(escTutPage, 'escTutPage');
+    await escTutPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(escTutPage);
+    await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
+    await escTutPage.locator('button[title="Settings and Menu"]').click();
+    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'visible', timeout: 3000 });
+    await escTutPage.keyboard.press('Escape');
+    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(
+      await escTutPage.getByTestId('onboarding-tutorial').isVisible(),
+      true,
+      'Pressing Escape while SettingsModal is open must NOT double-dismiss OnboardingTutorial'
+    );
+    await escTutPage.keyboard.press('Escape');
+    await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(
+      await escTutPage.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1')),
+      '1',
+      'Pressing Escape with no modal open must dismiss OnboardingTutorial and persist completion'
+    );
+    await escTutPage.close();
+    await escTutContext.close();
 
 
     // Verify malformed #s= DoS token degrades cleanly without crashing the app
@@ -4591,17 +4655,30 @@ async function runBrowserBasicsSuite() {
     console.log('3. Verifying Undo, Redo, long-press Replay scrubber, Resume Here & Free Colour auto-undo...');
     assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo hidden by default for standard puzzles');
 
-    // Open Settings -> verify version badge, enable Undo, test Charcoal background reset, and verify tab memory
+    // Open Settings -> verify all 5 distinct tabs (About=0, Settings=1, Hints=2, Create=3, Saves=4), zero duplicates, and tab 4 persistence across reload
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
     await settingsBtn.click();
     await page.waitForTimeout(200);
 
+    // Tab 0: About
     const pkgVersion = JSON.parse(fs.readFileSync(path.resolve(projectRoot, 'package.json'), 'utf8')).version;
     const versionBadgeText = await page.locator('[data-testid="app-version-badge"]').textContent();
     assert.equal(versionBadgeText?.trim(), `v${pkgVersion}`, `Expected app-version-badge to equal v${pkgVersion}`);
+    assert.equal(await page.getByTestId('app-version-badge').count(), 1, 'Expected single app-version-badge in About tab');
+    assert.equal(await page.getByTestId('about-screen-card').isVisible(), true, 'About tab must render about-screen-card');
+    assert.equal(await page.getByTestId('about-replay-tutorial-btn').isVisible(), true, 'About tab must render about-replay-tutorial-btn');
+    assert.equal(await page.getByTestId('lifetime-stats-card').isVisible(), true, 'About tab must render lifetime-stats-card');
+    assert.equal(await page.getByTestId('release-channel-card').isVisible(), true, 'About tab must render release-channel-card');
+    assert.equal(await page.getByText('Highlight Style').count(), 0, 'About tab must not render Hints content');
 
-    await page.locator('button:has(span:text-is("Settings"))').click();
+    // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.waitForTimeout(150);
+    assert.equal(await page.getByText('Canvas Background').isVisible(), true, 'Settings tab must render Canvas Background');
+    assert.equal(await page.getByTestId('app-version-badge').count(), 0, 'Settings tab must not duplicate app-version-badge');
+    assert.equal(await page.getByTestId('lifetime-stats-card').count(), 0, 'Settings tab must not duplicate lifetime-stats-card');
+    assert.equal(await page.getByTestId('release-channel-card').count(), 0, 'Settings tab must not duplicate release-channel-card');
+    assert.equal(await page.getByText('Highlight Style').count(), 0, 'Settings tab must not leak Hints content');
 
     await page.locator('button[title="Charcoal"]').first().click();
     for (const labelText of [
@@ -4613,7 +4690,39 @@ async function runBrowserBasicsSuite() {
       await labelEl.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     }
 
-    // Switch to Hints tab and close -> reopen to verify capy_last_settings_tab persistence
+    // Tab 2: Hints
+    await page.getByRole('button', { name: 'Hints', exact: true }).click();
+    await page.waitForTimeout(120);
+    assert.equal(await page.getByText('Highlight Style').isVisible(), true, 'Hints tab must render Highlight Style');
+    assert.equal(await page.getByText('Hint Fill Pattern').isVisible(), true, 'Hints tab must render Hint Fill Pattern');
+    assert.equal(await page.getByText('Canvas Background').count(), 0, 'Hints tab must not render Settings content');
+
+    // Tab 3: Create
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForTimeout(120);
+    assert.equal(await page.getByTestId('daily-puzzle-card').isVisible(), true, 'Create tab must render daily-puzzle-card');
+    assert.equal(await page.getByTestId('gallery-search-input').isVisible(), true, 'Create tab must render gallery-search-input');
+    assert.equal(await page.getByText('Highlight Style').count(), 0, 'Create tab must not render Hints content');
+
+    // Tab 4: Saves (persist tab 4 across full page reload)
+    await page.getByRole('button', { name: 'Saves', exact: true }).click();
+    await page.waitForTimeout(120);
+    assert.equal(await page.getByTestId('cloud-coop-hub').isVisible(), true, 'Saves tab must render cloud-coop-hub');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')), '4');
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    await settingsBtn.click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.getByTestId('cloud-coop-hub').isVisible(),
+      true,
+      'Saves tab (index 4) must restore after page reload via capy_last_settings_tab'
+    );
+
+    // Switch to Hints tab and close -> verify capy_last_settings_tab === '2'
     await page.getByRole('button', { name: 'Hints', exact: true }).click();
     await page.waitForTimeout(150);
     await page.keyboard.press('Escape');
@@ -4698,6 +4807,25 @@ async function runBrowserBasicsSuite() {
     });
     assert.equal(progressAfterCtrlY, 3, 'Expected Ctrl+Y to redo step 3');
 
+    // Verify ReplayControls "Next" button (onOpenCreate) opens Create tab (index 3)
+    const undoBoxForNext = await (await page.waitForSelector('[data-testid="undo-btn"]')).boundingBox();
+    await page.mouse.move(undoBoxForNext.x + undoBoxForNext.width / 2, undoBoxForNext.y + undoBoxForNext.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await page.waitForSelector('[data-testid="replay-controls-window"]', { timeout: 3000 });
+    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
+    await page.waitForTimeout(120);
+    await page.locator('button[title="Pick Next Artwork"]').click();
+    await page.getByTestId('daily-puzzle-card').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')),
+      '3',
+      'ReplayControls Next button must open SettingsModal Create tab (index 3)'
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+
     // Verify save-load zoom restoration before replay, offscreen step fast-forward, and pan/zoom during playback
     const zoomInBtn = await page.waitForSelector('[data-testid="zoom-in-btn"]');
     await zoomInBtn.click();
@@ -4733,10 +4861,26 @@ async function runBrowserBasicsSuite() {
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
     // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
     await page.waitForSelector('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]', { timeout: 5000 });
-    const canvasBoxReload = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(canvasBoxReload.x + canvasBoxReload.width * 0.5, canvasBoxReload.y + canvasBoxReload.height * 0.5);
+    // First Ctrl+Z while awaiting post-load replay dismisses ReplayControls AND immediately performs Undo on the same tick
+    await page.keyboard.press('Control+z');
+    await page.locator('[data-testid="replay-controls-window"]').waitFor({ state: 'hidden', timeout: 3000 });
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
-    await page.waitForTimeout(220);
+    const progressAfterFirstCtrlZ = await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return list[0]?.filledCount || 0;
+    });
+    assert.equal(
+      progressAfterFirstCtrlZ,
+      2,
+      'First Ctrl+Z while awaiting post-load ReplayControls must dismiss replay AND undo immediately (3 -> 2)'
+    );
+    await page.keyboard.press('Control+y');
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.evaluate(() => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0)),
+      3,
+      'Ctrl+Y after post-load replay dismiss must redo back to 3'
+    );
 
     // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
     const undoBtnAfterLoad = await page.waitForSelector('[data-testid="undo-btn"]');
@@ -5496,7 +5640,7 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'About', exact: true }).click();
     const statsCard = page.getByTestId('lifetime-stats-card');
     await statsCard.waitFor({ state: 'visible', timeout: 5000 });
     const renderedTotalText = (await page.getByTestId('stat-total-regions').innerText()).replace(/,/g, '').trim();
@@ -5792,11 +5936,11 @@ async function runBrowserBasicsSuite() {
     );
     await page.locator('button[title="Settings and Menu"]').click();
     await page.waitForTimeout(150);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'About', exact: true }).click();
     await page.waitForTimeout(100);
     const channelCard = page.getByTestId('release-channel-card');
     await channelCard.scrollIntoViewIfNeeded();
-    assert.equal(await channelCard.isVisible(), true, 'release-channel-card must be visible in Controls tab');
+    assert.equal(await channelCard.isVisible(), true, 'release-channel-card must be visible in About tab');
     assert.equal(
       await page.getByTestId('toggle-beta-channel-btn').getAttribute('href'),
       'https://shthed.github.io/capy/beta/',
@@ -5828,7 +5972,7 @@ async function runBrowserBasicsSuite() {
     assert.equal(
       await betaCard.getAttribute('data-channel'),
       'beta',
-      'Clicking topbar-channel-badge must open Settings Controls tab with data-channel="beta"'
+      'Clicking topbar-channel-badge must open About tab with data-channel="beta"'
     );
     assert.equal(
       await betaPage.getByTestId('toggle-beta-channel-btn').getAttribute('href'),

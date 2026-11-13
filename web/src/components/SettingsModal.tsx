@@ -171,7 +171,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
       if (saved !== null) {
         const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) return parsed;
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) return parsed;
       }
     } catch {
       // Ignored
@@ -266,7 +266,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
           if (saved !== null) {
             const parsed = parseInt(saved, 10);
-            if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) {
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
               setActiveTab(parsed);
             }
           }
@@ -554,6 +554,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="text-[11px] text-slate-400 mt-0.5">
                       Upload any photo in Create, export .capy backups or printable SVGs, and color
                       together in Co-op.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lifetime Player Statistics (compact 2-column mobile-first grid) */}
+              <div
+                data-testid="lifetime-stats-card"
+                className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-semibold text-slate-200">
+                    Lifetime Stats
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90">
+                    Local Progress
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Regions Colored
+                    </div>
+                    <div
+                      data-testid="stat-total-regions"
+                      className="text-sm sm:text-base font-extrabold font-mono text-amber-400 tabular-nums"
+                    >
+                      {effectiveStats.totalRegionsColored.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Puzzles Completed
+                    </div>
+                    <div
+                      data-testid="stat-puzzles-completed"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-100 tabular-nums"
+                    >
+                      {effectiveStats.puzzlesCompleted.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Zero-Hint Clears
+                    </div>
+                    <div
+                      data-testid="stat-zero-hint-puzzles"
+                      className="text-sm sm:text-base font-extrabold font-mono text-emerald-400 tabular-nums"
+                    >
+                      {effectiveStats.zeroHintPuzzles.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Fastest Clear
+                    </div>
+                    <div
+                      data-testid="stat-fastest-completion"
+                      className="text-sm sm:text-base font-extrabold font-mono text-sky-300 tabular-nums"
+                    >
+                      {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Free Colour Art
+                    </div>
+                    <div
+                      data-testid="stat-free-color-creations"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                    >
+                      {effectiveStats.freeColorCreations.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Co-op Regions
+                    </div>
+                    <div
+                      data-testid="stat-coop-regions"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                    >
+                      {effectiveStats.coopRegionsPainted.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -1353,236 +1436,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Lifetime Player Statistics (compact 2-column mobile-first grid) */}
-              <div
-                data-testid="lifetime-stats-card"
-                className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs sm:text-sm font-semibold text-slate-200">
-                    Lifetime Stats
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90">
-                    Local Progress
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Regions Colored
-                    </div>
-                    <div
-                      data-testid="stat-total-regions"
-                      className="text-sm sm:text-base font-extrabold font-mono text-amber-400 tabular-nums"
-                    >
-                      {effectiveStats.totalRegionsColored.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Puzzles Completed
-                    </div>
-                    <div
-                      data-testid="stat-puzzles-completed"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-100 tabular-nums"
-                    >
-                      {effectiveStats.puzzlesCompleted.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Zero-Hint Clears
-                    </div>
-                    <div
-                      data-testid="stat-zero-hint-puzzles"
-                      className="text-sm sm:text-base font-extrabold font-mono text-emerald-400 tabular-nums"
-                    >
-                      {effectiveStats.zeroHintPuzzles.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Fastest Clear
-                    </div>
-                    <div
-                      data-testid="stat-fastest-completion"
-                      className="text-sm sm:text-base font-extrabold font-mono text-sky-300 tabular-nums"
-                    >
-                      {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Free Colour Art
-                    </div>
-                    <div
-                      data-testid="stat-free-color-creations"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
-                    >
-                      {effectiveStats.freeColorCreations.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Co-op Regions
-                    </div>
-                    <div
-                      data-testid="stat-coop-regions"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
-                    >
-                      {effectiveStats.coopRegionsPainted.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Platform & External Application Links */}
-              <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Platforms & Applications
-                  </div>
-                  <span
-                    data-testid="app-version-badge"
-                    className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-400"
-                  >
-                    v{APP_VERSION}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {NativeBridge.isNative ? (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
-                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-emerald-400">Native Application</div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          Running as installed {NativeBridge.platform === 'android' ? 'Android' : 'iOS'} launcher
-                        </div>
-                      </div>
-                    </div>
-                  ) : isStandalone ? (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
-                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-emerald-400">Installed Web App</div>
-                        <div className="text-[10px] text-slate-400 truncate">Running offline as standalone PWA</div>
-                      </div>
-                    </div>
-                  ) : isInstallable ? (
-                    <button
-                      type="button"
-                      onClick={() => PwaService.promptInstall()}
-                      data-testid="pwa-install-btn"
-                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer text-left"
-                    >
-                      <AppWindow size={16} className="text-amber-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-amber-300">Install Web App</div>
-                        <div className="text-[10px] text-slate-400 truncate">Install on home screen or desktop</div>
-                      </div>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-200 text-xs font-semibold">
-                      <AppWindow size={16} className="text-slate-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-slate-200">Progressive Web App</div>
-                        <div className="text-[10px] text-slate-400 truncate">Install via browser menu for offline play</div>
-                      </div>
-                    </div>
-                  )}
-
-                  <a
-                    href="capy.apk"
-                    download="capy.apk"
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
-                  >
-                    <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="truncate font-bold text-slate-200">Android APK</div>
-                      <div className="text-[10px] text-slate-400 truncate">Download standalone Android application</div>
-                    </div>
-                  </a>
-                </div>
-
-                {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
-                {(() => {
-                  const channelInfo = resolveReleaseChannel();
-                  if (!channelInfo.showChannelSwitcher) return null;
-                  const isBeta = channelInfo.channel === 'beta';
-                  const isAlpha = channelInfo.channel === 'alpha';
-                  const sharesOriginWithBeta =
-                    typeof window !== 'undefined' &&
-                    channelInfo.betaWebUrl.startsWith(window.location.origin);
-                  const statusLabel = isBeta
-                    ? `Beta Channel • v${APP_VERSION}`
-                    : isAlpha
-                      ? `Alpha Preview${channelInfo.prNumber ? ` #${channelInfo.prNumber}` : ''} • v${APP_VERSION}`
-                      : channelInfo.channel === 'dev'
-                        ? `Local Dev • v${APP_VERSION}`
-                        : `Stable Release • v${APP_VERSION}`;
-                  const primaryTargetUrl = isBeta ? channelInfo.stableWebUrl : channelInfo.betaWebUrl;
-                  const primaryActionLabel = isBeta
-                    ? 'Return to Stable Release'
-                    : 'Switch to Beta Channel';
-                  return (
-                    <div
-                      data-testid="release-channel-card"
-                      data-channel={channelInfo.channel}
-                      className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2"
-                    >
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-                          <Sparkles size={14} className="text-violet-400 flex-shrink-0" />
-                          <span>Release Channel</span>
-                        </div>
-                        <span
-                          data-testid="release-channel-status"
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            isBeta || isAlpha
-                              ? 'bg-violet-950/80 text-violet-200 border-violet-400/50'
-                              : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                          }`}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-slate-400">
-                        {sharesOriginWithBeta
-                          ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.'
-                          : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
-                        <a
-                          href={primaryTargetUrl}
-                          data-testid="toggle-beta-channel-btn"
-                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                            isBeta
-                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
-                              : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border-violet-400/50'
-                          }`}
-                        >
-                          <ExternalLink size={13} className="flex-shrink-0" />
-                          <span>{primaryActionLabel}</span>
-                        </a>
-                        <a
-                          href={channelInfo.betaApkUrl}
-                          download="capy-beta.apk"
-                          data-testid="beta-apk-download-link"
-                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
-                        >
-                          <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
-                          <span>Beta Android APK</span>
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
             </div>
           )}
 
-          {/* TAB 1: HINTS */}
-          {activeTab === 1 && (
+          {/* TAB 2: HINTS */}
+          {activeTab === 2 && (
             <div className="space-y-4 sm:space-y-5">
               {/* Highlight Style */}
               <div className="space-y-1.5">
@@ -1786,7 +1644,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: CREATE / GENERATOR */}
+          {/* TAB 3: CREATE / GENERATOR */}
           {activeTab === 3 && (
             <div className="space-y-4 sm:space-y-5">
               {/* Deterministic Offline UTC Puzzle of the Day Hero Card */}

@@ -1963,6 +1963,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!hasNotifiedManualPanRef.current && totalDragDistanceRef.current >= 6) {
         hasNotifiedManualPanRef.current = true;
         onManualPanStartRef.current?.();
+        onViewportGestureRef.current?.();
+        onPuzzleInteractionRef.current?.();
       }
       const w = container.clientWidth;
       const h = container.clientHeight;

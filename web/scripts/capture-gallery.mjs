@@ -34,7 +34,7 @@ async function captureGallery() {
       deviceScaleFactor: 2,
     });
     const desktopPage = await desktopContext.newPage();
-    await desktopPage.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
+    await desktopPage.goto('http://localhost:3000/?skipTutorial=1', { waitUntil: 'networkidle' });
     await desktopPage.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
     await desktopPage.waitForTimeout(1000); // Allow render settle
 
@@ -109,7 +109,7 @@ async function captureGallery() {
       deviceScaleFactor: 2,
     });
     const coloringPage = await coloringContext.newPage();
-    await coloringPage.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
+    await coloringPage.goto('http://localhost:3000/?skipTutorial=1', { waitUntil: 'networkidle' });
     await coloringPage.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
 
     // Open Settings -> Create tab -> Pick Mushroom Forest sample
@@ -164,7 +164,7 @@ async function captureGallery() {
       isMobile: true,
     });
     const mobilePage = await mobileContext.newPage();
-    await mobilePage.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
+    await mobilePage.goto('http://localhost:3000/?skipTutorial=1', { waitUntil: 'networkidle' });
     await mobilePage.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
     await mobilePage.waitForTimeout(1000);
 

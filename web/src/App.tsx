@@ -477,6 +477,7 @@ export const App: React.FC = () => {
 
   const cancelAutoResume = useCallback(() => {
     autoResumeReplayRef.current = false;
+    awaitingReplayDismissRef.current = false;
     if (autoResumeTimerRef.current !== null) {
       window.clearTimeout(autoResumeTimerRef.current);
       autoResumeTimerRef.current = null;
@@ -505,6 +506,11 @@ export const App: React.FC = () => {
     }
     NativeBridge.saveBackup('capy_tutorial_completed_v1', '1');
   }, []);
+
+  useEffect(() => {
+    if (!showTutorial) return;
+    return NativeBridge.pushBackHandler(completeTutorial);
+  }, [showTutorial, completeTutorial]);
 
   const handleStartTutorial = useCallback(() => {
     setTutorialStep(0);
@@ -1563,8 +1569,8 @@ export const App: React.FC = () => {
   }, []);
 
   // Undo last region completion
-  const handleUndo = useCallback(() => {
-    if (!puzzle || isReplaying || undoStack.length === 0 || !isUndoEnabled) return;
+  const handleUndo = useCallback((bypassReplayCheck: boolean = false) => {
+    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || undoStack.length === 0 || !isUndoEnabled) return;
 
     const lastAction = undoStack[undoStack.length - 1];
     setUndoStack((prev) => prev.slice(0, -1));
@@ -1647,8 +1653,8 @@ export const App: React.FC = () => {
   ]);
 
   // Redo last undone region action
-  const handleRedo = useCallback(() => {
-    if (!puzzle || isReplaying || redoStack.length === 0 || !isUndoEnabled) return;
+  const handleRedo = useCallback((bypassReplayCheck: boolean = false) => {
+    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || redoStack.length === 0 || !isUndoEnabled) return;
 
     const lastRedo = redoStack[redoStack.length - 1];
     setRedoStack((prev) => prev.slice(0, -1));
@@ -1855,15 +1861,18 @@ export const App: React.FC = () => {
       }
 
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        const wasAwaiting = dismissPostLoadReplayIfAwaiting();
-        if ((isReplaying && !wasAwaiting) || !isUndoEnabled) return;
         const lowerKey = e.key.toLowerCase();
-        if (!e.shiftKey && lowerKey === 'z') {
+        const isUndoKey = !e.shiftKey && lowerKey === 'z';
+        const isRedoKey = lowerKey === 'y' || (e.shiftKey && lowerKey === 'z');
+        if ((isUndoKey || isRedoKey) && isUndoEnabled) {
+          const wasAwaiting = dismissPostLoadReplayIfAwaiting();
+          if (isReplaying && !wasAwaiting) return;
           e.preventDefault();
-          handleUndo();
-        } else if (lowerKey === 'y' || (e.shiftKey && lowerKey === 'z')) {
-          e.preventDefault();
-          handleRedo();
+          if (isUndoKey) {
+            handleUndo(wasAwaiting);
+          } else {
+            handleRedo(wasAwaiting);
+          }
         }
         return;
       }
@@ -1963,6 +1972,8 @@ export const App: React.FC = () => {
     handleUndo,
     handleRedo,
     isUndoEnabled,
+    dismissPostLoadReplayIfAwaiting,
+    markTutorialActionTried,
   ]);
 
   const recordFirstTimePuzzleCompletionIfNeeded = useCallback(
@@ -2024,6 +2035,7 @@ export const App: React.FC = () => {
         nextFilled.add(regionId);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
+        markTutorialActionTried('paint');
         emitCoopPaint('FILL', [regionId], { [regionId]: activeColorId });
         setLifetimeStats(PlayerStatsService.recordRegionsColored(1, Boolean(coopRoomCode)));
 
@@ -2244,6 +2256,7 @@ export const App: React.FC = () => {
           setPaintedRegionColors(nextPainted);
           setFilledRegionIds(nextFilled);
           setHintRegionId(null);
+          markTutorialActionTried('paint');
           emitCoopPaint(
             'FILL',
             newUndoEntries.map((u) => u.regionId),
@@ -2334,6 +2347,7 @@ export const App: React.FC = () => {
         setRedoStack([]);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
+        markTutorialActionTried('paint');
         emitCoopPaint(
           'FILL',
           newUndoEntries.map((u) => u.regionId)
@@ -2623,8 +2637,16 @@ export const App: React.FC = () => {
       const target = onScreen || unfilled[0];
       hintsUsedInSessionRef.current += 1;
       setHintRegionId(target.id);
+      markTutorialActionTried('hint');
     },
-    [puzzle, activeColorId, filledRegionIds, visibleRegionIds, settings.hapticsEnabled]
+    [
+      puzzle,
+      activeColorId,
+      filledRegionIds,
+      visibleRegionIds,
+      settings.hapticsEnabled,
+      markTutorialActionTried,
+    ]
   );
 
   // File Upload
@@ -4198,14 +4220,17 @@ export const App: React.FC = () => {
         }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
+          markTutorialActionTried('menu');
           setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
         onOpenSaves={() => {
+          markTutorialActionTried('menu');
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
         onOpenCoop={() => {
+          markTutorialActionTried('menu');
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
@@ -4356,17 +4381,30 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
+          onUndo={() => handleUndo()}
+          onRedo={() => handleRedo()}
           onLongPressUndo={handleOpenTimelineReplay}
           onStartReplay={() => startReplay(Array.from(filledRegionIds))}
           onTogglePaintMode={() => {
+            dismissPostLoadReplayIfAwaiting();
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings((prev) => ({ ...prev, isPaintMode: !prev.isPaintMode }));
           }}
-          onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
-          onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
-          onResetView={() => setResetViewTrigger((prev) => prev + 1)}
+          onZoomIn={() => {
+            dismissPostLoadReplayIfAwaiting();
+            markTutorialActionTried('zoom');
+            setZoomInTrigger((prev) => prev + 1);
+          }}
+          onZoomOut={() => {
+            dismissPostLoadReplayIfAwaiting();
+            markTutorialActionTried('zoom');
+            setZoomOutTrigger((prev) => prev + 1);
+          }}
+          onResetView={() => {
+            dismissPostLoadReplayIfAwaiting();
+            markTutorialActionTried('zoom');
+            setResetViewTrigger((prev) => prev + 1);
+          }}
         />
       )}
 
@@ -4441,7 +4479,7 @@ export const App: React.FC = () => {
             cancelAutoResume();
             setIsReplaying(false);
             setIsReplayPlaying(false);
-            setSettingsInitialTab(2);
+            setSettingsInitialTab(3);
             setShowSettings(true);
           }}
           onResumeFromStep={handleResumeFromReplayStep}
@@ -4450,7 +4488,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Palette Dock floating above canvas */}
-      {puzzle && !isCompleted && !isReplaying && (
+      {puzzle && !isLoading && !isCompleted && !isReplaying && (
         <PaletteDock
           palette={puzzle.palette}
           regions={puzzle.regions}
@@ -4470,6 +4508,7 @@ export const App: React.FC = () => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             setActiveColorId(colId);
             setHintRegionId(null);
+            markTutorialActionTried('palette');
           }}
           onColorHintRequested={(colId) => triggerHint(colId)}
           onOpenPaletteOptions={() => setShowPaletteOptions(true)}
@@ -4670,10 +4709,14 @@ export const App: React.FC = () => {
 
       <OnboardingTutorial
         isOpen={showTutorial}
+        isModalOpen={showSettings || showPaletteOptions}
         stepIndex={tutorialStep}
         triedActions={tutorialTried}
         onStepChange={setTutorialStep}
-        onTriggerHint={() => markTutorialActionTried('hint')}
+        onTriggerHint={() => {
+          triggerHint();
+          markTutorialActionTried('hint');
+        }}
         onComplete={completeTutorial}
         onSkip={completeTutorial}
       />
