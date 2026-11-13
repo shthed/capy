@@ -4188,7 +4188,7 @@ async function runCodecAndEngineTests() {
 
     // Verify web/public/404.html redirect logic & .github/scripts/generate-pr-manifest.mjs
     console.log('-> Testing 404.html redirect & generate-pr-manifest.mjs...');
-    const notFoundHtmlPath = path.resolve(ROOT_DIR, 'public/404.html');
+    const notFoundHtmlPath = path.resolve(process.cwd(), 'public/404.html');
     const notFoundHtml = fs.readFileSync(notFoundHtmlPath, 'utf8');
     assert.equal(notFoundHtml.includes('/capy/PR/?missing='), true, '404.html must redirect to /capy/PR/?missing=');
     assert.equal(notFoundHtml.includes('(?:PR|pull)'), true, '404.html must match both /capy/PR/ and legacy /capy/pull/');
