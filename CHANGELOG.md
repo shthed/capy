@@ -1,4 +1,8 @@
-### 3.0.7 - 2026-11-13 (Beta)
+### 3.0.8 - 2026-11-13 (Beta)
+
+- Remove topbar zoom pill badge, fix 360px mobile SettingsModal tab clipping, and add E2E overflow guard [#497](https://github.com/shthed/capy/pull/497)
+
+### 3.0.7 - 2026-11-13
 
 - Isolate alpha/beta preview browser storage (`StorageNamespace`), harden canvas DPR listeners and settings persistence, add `.changelog/` fragment compiler, fix `PaletteDock` accessibility labels, and sync Agile docs [#495](https://github.com/shthed/capy/pull/495)
 
