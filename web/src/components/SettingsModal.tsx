@@ -433,7 +433,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           }}
         >
           {/* Tab Navigation */}
-          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
+          <div data-testid="settings-modal-tabs" className="min-w-0 flex-1 flex items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -441,6 +441,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   key={tab.id}
                   type="button"
+                  data-testid={`settings-tab-${tab.label.toLowerCase()}`}
                   onClick={() => {
                     setActiveTab(tab.id);
                     try {
@@ -452,13 +453,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       // Ignored
                     }
                   }}
-                  className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                  className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 px-1 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-all ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  <Icon size={15} />
+                  <Icon className="w-3 h-3 sm:w-[15px] sm:h-[15px]" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -468,6 +469,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Close button */}
           <button
             type="button"
+            data-testid="settings-modal-close"
             onClick={onClose}
             className="p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
             title="Close"
