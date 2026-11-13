@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   cleanup:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -42,8 +43,9 @@ jobs:
       - name: Run branch cleanup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_CLEANUP_PREFIXES: 'automation/,feature/,fix/,chore/,ci/,deps/,docs/,codex/'
+          BRANCH_CLEANUP_PREFIXES: 'automation/,feature/,fix/,chore/,ci/,deps/,docs/,codex/,dependabot/,sync/'
           BRANCH_CLEANUP_MIN_AGE_DAYS: '1'
+          BRANCH_CLEANUP_UNMERGED_MIN_AGE_DAYS: '7'
         run: |
           set -euo pipefail
 
@@ -75,6 +77,10 @@ jobs:
           set -euo pipefail
 
           node ./.github/scripts/cleanup-gh-pages-previews.mjs --pages-dir ./gh-pages
+
+          if [ -f ./.github/scripts/generate-pr-manifest.mjs ]; then
+            node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./gh-pages
+          fi
 
       - name: Commit and push gh-pages updates (squashed history)
         id: sync_pages
