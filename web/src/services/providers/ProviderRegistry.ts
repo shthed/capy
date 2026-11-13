@@ -6,6 +6,7 @@ import {
   ProgressDeltaV2,
 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
+import { resolveReleaseChannel } from '../../version';
 import { StorageService } from '../StorageService';
 import {
   AppleCloudDriver,
@@ -1084,6 +1085,15 @@ export function computeCoopReconnectDelayMs(
   return Math.max(1000, Math.min(15_000, jittered));
 }
 
+export function resolveCoopBroadcastChannelName(roomCode: string): string {
+  const channelInfo = resolveReleaseChannel();
+  const scope =
+    channelInfo.channel === 'alpha'
+      ? `alpha_${channelInfo.prNumber ?? 'preview'}`
+      : channelInfo.channel;
+  return `capy_coop_room_${scope}_${roomCode}`;
+}
+
 export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   private roomCode: string | null = null;
   private selfParticipant: CoopParticipant | null = null;
@@ -1134,7 +1144,7 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     this.emitParticipants();
 
     if (typeof BroadcastChannel !== 'undefined') {
-      this.channel = new BroadcastChannel(`capy_coop_room_${normalized}`);
+      this.channel = new BroadcastChannel(resolveCoopBroadcastChannelName(normalized));
       this.channel.onmessage = (ev: MessageEvent<CoopRoomWireMessage>) => {
         if (ev.data) this.handleWireMessage(ev.data, 'channel');
       };

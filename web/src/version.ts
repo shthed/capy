@@ -60,11 +60,13 @@ const CANONICAL_PAGES_BASE = 'https://shthed.github.io/capy';
  * - 'localhost' / '127.0.0.1' -> channel: 'dev', badgeLabel: null (unless overridden via ?capy_channel=)
  */
 export function resolveReleaseChannel(
-  pathname: string = typeof window !== 'undefined' ? window.location.pathname : '/',
-  origin: string = typeof window !== 'undefined' ? window.location.origin : 'https://shthed.github.io',
-  search: string = typeof window !== 'undefined' ? window.location.search : ''
+  pathname: string = typeof window !== 'undefined' ? (window.location?.pathname ?? '/') : '/',
+  origin: string = typeof window !== 'undefined'
+    ? (window.location?.origin ?? 'https://shthed.github.io')
+    : 'https://shthed.github.io',
+  search: string = typeof window !== 'undefined' ? (window.location?.search ?? '') : ''
 ): ReleaseChannelInfo {
-  const cleanOrigin = origin.replace(/\/+$/, '');
+  const cleanOrigin = (origin || '').replace(/\/+$/, '');
   let originHostname = '';
   try {
     originHostname = new URL(cleanOrigin).hostname.toLowerCase();

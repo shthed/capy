@@ -94,6 +94,26 @@ export function mergeCustomPalette(
   return merged;
 }
 
+function loadHtmlImage(src: string, fallbackSrc?: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      if (fallbackSrc && fallbackSrc !== src) {
+        const fb = new Image();
+        fb.crossOrigin = 'anonymous';
+        fb.onload = () => resolve(fb);
+        fb.onerror = () => resolve(null);
+        fb.src = fallbackSrc;
+      } else {
+        resolve(null);
+      }
+    };
+    img.src = src;
+  });
+}
+
 interface UndoHistoryEntry {
   regionId: number;
   wasPreviouslyFilled: boolean;
@@ -179,6 +199,7 @@ export const App: React.FC = () => {
 
   // Co-op Multiplayer & Zero-Allocation Canvas Ripple Buffer
   const coopRippleBufferRef = useRef<CoopRippleBuffer>(new CoopRippleBuffer());
+  const coopJoinSeqRef = useRef<number>(0);
   const [coopRoomCode, setCoopRoomCode] = useState<string | null>(null);
   const [coopParticipants, setCoopParticipants] = useState<CoopParticipant[]>([]);
 
@@ -833,7 +854,8 @@ export const App: React.FC = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
-      const ctx = canvas.getContext('2d')!;
+      const ctx =
+        canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
 
       // Pre-register snapshot at 0ms so it appears in Saves instantly!
@@ -1034,25 +1056,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const loadHtmlImage = (src: string, fallbackSrc?: string): Promise<HTMLImageElement | null> =>
-      new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = () => {
-          if (fallbackSrc && fallbackSrc !== src) {
-            const fb = new Image();
-            fb.crossOrigin = 'anonymous';
-            fb.onload = () => resolve(fb);
-            fb.onerror = () => resolve(null);
-            fb.src = fallbackSrc;
-          } else {
-            resolve(null);
-          }
-        };
-        img.src = src;
-      });
-
     const restoreSession = async () => {
       const skipBootstrap =
         typeof window !== 'undefined' &&
@@ -1061,17 +1064,26 @@ export const App: React.FC = () => {
       if (typeof window !== 'undefined') {
         const parsedLink = await parseShareLinkFromUrl(window.location.href);
         if (parsedLink.roomCode) {
-          const id = ProviderRegistry.auth.getCurrentIdentity();
-          await ProviderRegistry.realtimeRoom.joinRoom(parsedLink.roomCode, {
-            playerId: id.playerId,
-            displayName: id.displayName,
-            avatarColorHex: id.avatarColorHex,
-            lastActiveAt: Date.now(),
-          });
-          if (isMounted) {
-            setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
-            setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+          const joinSeq = ++coopJoinSeqRef.current;
+          try {
+            const id = ProviderRegistry.auth.getCurrentIdentity();
+            await ProviderRegistry.realtimeRoom.joinRoom(parsedLink.roomCode, {
+              playerId: id.playerId,
+              displayName: id.displayName,
+              avatarColorHex: id.avatarColorHex,
+              lastActiveAt: Date.now(),
+            });
+            if (isMounted && joinSeq === coopJoinSeqRef.current) {
+              setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
+              setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+            }
+          } catch {
+            // Ignore malformed room code cleanly
           }
+        }
+
+        if (parsedLink.tokenError || (parsedLink.hasToken && !parsedLink.matchedSample)) {
+          clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsedLink.roomCode);
         }
 
         if (parsedLink.matchedSample && parsedLink.delta) {
@@ -1103,18 +1115,41 @@ export const App: React.FC = () => {
               loadHtmlImage(sharedSample.assetPath),
             ]);
             if (cachedPuzzle && sampleImg && isMounted) {
-              clearShareHashFromWindowUrl(parsedLink.roomCode);
+              clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsedLink.roomCode);
               const validIds = new Set(cachedPuzzle.regions.map((r) => r.id));
-              const orderedIds = parsedLink.delta.filledRegionIds.filter((id) => validIds.has(id));
+              const mergedDelta = mergeProgressDeltas(
+                {
+                  version: 2,
+                  filledRegionIds: prebakedSnap.filledRegionIds || [],
+                  paintedRegionColors: prebakedSnap.paintedRegionColors,
+                  isFreeColor: prebakedSnap.isFreeColor,
+                  ...(prebakedSnap.resetEpoch && prebakedSnap.resetEpoch > 0
+                    ? { resetEpoch: prebakedSnap.resetEpoch }
+                    : {}),
+                  updatedAt: prebakedSnap.lastOpened || prebakedSnap.timestamp || 0,
+                },
+                {
+                  version: 2,
+                  filledRegionIds: parsedLink.delta.filledRegionIds,
+                  paintedRegionColors: parsedLink.delta.paintedRegionColors,
+                  isFreeColor: parsedLink.delta.isFreeColor,
+                  ...(parsedLink.delta.resetEpoch && parsedLink.delta.resetEpoch > 0
+                    ? { resetEpoch: parsedLink.delta.resetEpoch }
+                    : {}),
+                  updatedAt: parsedLink.delta.updatedAt || Date.now(),
+                }
+              );
+              const orderedIds = mergedDelta.filledRegionIds.filter((id) => validIds.has(id));
               const filledSet = new Set(orderedIds);
-              const paintedObj = parsedLink.delta.paintedRegionColors || {};
+              const paintedObj = mergedDelta.paintedRegionColors || {};
+              const mergedEpoch = mergedDelta.resetEpoch ?? 0;
               const restoredPaintedMap = new Map(
                 Object.entries(paintedObj)
                   .map(([k, v]) => [Number(k), v] as [number, number])
                   .filter(([k]) => validIds.has(k))
               );
               const isFree = Boolean(
-                parsedLink.delta.isFreeColor ||
+                mergedDelta.isFreeColor ||
                   prebakedSnap.isFreeColor ||
                   cachedPuzzle.isFreeColor ||
                   restoredPaintedMap.size > 0
@@ -1137,7 +1172,9 @@ export const App: React.FC = () => {
                 undefined,
                 Object.fromEntries(restoredPaintedMap),
                 cachedPuzzle.palette,
-                isFree
+                isFree,
+                undefined,
+                mergedEpoch > 0 ? mergedEpoch : undefined
               );
               if (viewportSaveTimerRef.current !== null) {
                 window.clearTimeout(viewportSaveTimerRef.current);
@@ -1169,6 +1206,7 @@ export const App: React.FC = () => {
                 filledRegionIds: orderedIds,
                 paintedRegionColors: Object.fromEntries(restoredPaintedMap),
                 isFreeColorMode: isFree,
+                ...(mergedEpoch > 0 ? { resetEpoch: mergedEpoch } : {}),
                 zoomScale: 1.0,
                 panOffsetX: 0,
                 panOffsetY: 0,
@@ -1186,7 +1224,7 @@ export const App: React.FC = () => {
             setIsLoading(false);
             return;
           }
-          clearShareHashFromWindowUrl(parsedLink.roomCode);
+          clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsedLink.roomCode);
           loadArtworkFromImage(
             img,
             sharedSample.title,
@@ -3030,7 +3068,9 @@ export const App: React.FC = () => {
 
   // Import saves from .capy (v2 binary or v1 JSON) or .json file
   const handleImportSnapshots = useCallback(
-    async (file: File) => {
+    async (
+      file: File
+    ): Promise<{ ok: boolean; importedCount: number; message: string }> => {
       try {
         const buffer = await file.arrayBuffer();
         const result = await StorageService.importSnapshotData(buffer);
@@ -3038,11 +3078,23 @@ export const App: React.FC = () => {
           const refreshed = StorageService.loadSnapshots();
           setSnapshots(refreshed);
           NativeBridge.haptic('success', settings.hapticsEnabled);
-        } else if (result.error) {
-          alert(`Failed to import saves: ${result.error}`);
+          return {
+            ok: true,
+            importedCount: result.importedCount,
+            message: `Imported ${result.importedCount} ${result.importedCount === 1 ? 'save' : 'saves'} cleanly.`,
+          };
         }
+        const errorMsg = result.error || 'No valid saves found in file.';
+        NativeBridge.haptic('error', settings.hapticsEnabled);
+        return { ok: false, importedCount: 0, message: `Failed to import saves: ${errorMsg}` };
       } catch (e) {
         console.error('Failed to import file', e);
+        NativeBridge.haptic('error', settings.hapticsEnabled);
+        return {
+          ok: false,
+          importedCount: 0,
+          message: `Failed to import saves: ${e instanceof Error ? e.message : 'Invalid file'}`,
+        };
       }
     },
     [settings.hapticsEnabled]
@@ -3676,18 +3728,25 @@ export const App: React.FC = () => {
     const handleIncomingUrl = async (rawUrl: string) => {
       const parsed = await parseShareLinkFromUrl(rawUrl);
       if (parsed.roomCode) {
-        const id = ProviderRegistry.auth.getCurrentIdentity();
-        await ProviderRegistry.realtimeRoom.joinRoom(parsed.roomCode, {
-          playerId: id.playerId,
-          displayName: id.displayName,
-          avatarColorHex: id.avatarColorHex,
-          lastActiveAt: Date.now(),
-        });
-        setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
-        setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+        const joinSeq = ++coopJoinSeqRef.current;
+        try {
+          const id = ProviderRegistry.auth.getCurrentIdentity();
+          await ProviderRegistry.realtimeRoom.joinRoom(parsed.roomCode, {
+            playerId: id.playerId,
+            displayName: id.displayName,
+            avatarColorHex: id.avatarColorHex,
+            lastActiveAt: Date.now(),
+          });
+          if (joinSeq === coopJoinSeqRef.current) {
+            setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
+            setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+          }
+        } catch {
+          // Ignore malformed room codes cleanly
+        }
       }
       if (parsed.matchedSample && parsed.delta) {
-        clearShareHashFromWindowUrl(parsed.roomCode);
+        clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsed.roomCode);
         await loadSampleFromPrebakedOrGenerate(
           parsed.matchedSample,
           parsed.delta.filledRegionIds,
@@ -3696,6 +3755,8 @@ export const App: React.FC = () => {
           undefined,
           parsed.delta.resetEpoch
         );
+      } else if (parsed.hasToken || parsed.tokenError) {
+        clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsed.roomCode);
       }
     };
 
@@ -3797,23 +3858,36 @@ export const App: React.FC = () => {
 
   const handleJoinCoopRoom = useCallback(
     async (rawCode: string): Promise<boolean> => {
-      const id = ProviderRegistry.auth.getCurrentIdentity();
-      await ProviderRegistry.realtimeRoom.joinRoom(rawCode, {
-        playerId: id.playerId,
-        displayName: id.displayName,
-        avatarColorHex: id.avatarColorHex,
-        lastActiveAt: Date.now(),
-      });
-      const activeCode = ProviderRegistry.realtimeRoom.activeRoomCode;
-      setCoopRoomCode(activeCode);
-      setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
-      NativeBridge.haptic('success', settings.hapticsEnabled);
-      return Boolean(activeCode);
+      const normalized = rawCode
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 8);
+      if (normalized.length < 4) return false;
+      const joinSeq = ++coopJoinSeqRef.current;
+      try {
+        const id = ProviderRegistry.auth.getCurrentIdentity();
+        await ProviderRegistry.realtimeRoom.joinRoom(normalized, {
+          playerId: id.playerId,
+          displayName: id.displayName,
+          avatarColorHex: id.avatarColorHex,
+          lastActiveAt: Date.now(),
+        });
+        if (joinSeq !== coopJoinSeqRef.current) return false;
+        const activeCode = ProviderRegistry.realtimeRoom.activeRoomCode;
+        setCoopRoomCode(activeCode);
+        setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+        NativeBridge.haptic('success', settings.hapticsEnabled);
+        return Boolean(activeCode);
+      } catch {
+        return false;
+      }
     },
     [settings.hapticsEnabled]
   );
 
   const handleLeaveCoopRoom = useCallback(() => {
+    ++coopJoinSeqRef.current;
     ProviderRegistry.realtimeRoom.leaveRoom();
     setCoopRoomCode(null);
     setCoopParticipants([]);
@@ -4582,17 +4656,32 @@ export const App: React.FC = () => {
             }
             const updated = await StorageService.deleteSnapshot(id);
             setSnapshots(updated);
-            if (id === activeSnapshotId) {
+            if (id === activeSnapshotId || updated.length === 0) {
               if (updated.length > 0) {
                 handleLoadSnapshot(updated[0], false);
               } else {
+                setActiveSnapshotId(null);
+                setPuzzle(null);
+                setFilledRegionIds(new Set());
+                setPaintedRegionColors(new Map());
+                setUndoStack([]);
+                setRedoStack([]);
+                setHintRegionId(null);
                 const defaultSample = SAMPLE_GALLERY[0];
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                  loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
-                };
-                img.src = defaultSample.assetPath;
+                const img = await loadHtmlImage(defaultSample.assetPath);
+                if (img) {
+                  loadArtworkFromImage(
+                    img,
+                    defaultSample.title,
+                    settings.generatorConfig,
+                    new Set(),
+                    undefined,
+                    undefined,
+                    defaultSample.assetPath
+                  );
+                } else {
+                  setIsLoading(false);
+                }
               }
             }
           }}
@@ -4603,13 +4692,43 @@ export const App: React.FC = () => {
             }
             await StorageService.clearAllSnapshots();
             setSnapshots([]);
+            setActiveSnapshotId(null);
+            setPuzzle(null);
+            setFilledRegionIds(new Set());
+            setPaintedRegionColors(new Map());
+            setUndoStack([]);
+            setRedoStack([]);
+            setHintRegionId(null);
             const defaultSample = SAMPLE_GALLERY[0];
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-              loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
-            };
-            img.src = defaultSample.assetPath;
+            const img = await loadHtmlImage(defaultSample.assetPath);
+            if (img) {
+              loadArtworkFromImage(
+                img,
+                defaultSample.title,
+                settings.generatorConfig,
+                new Set(),
+                undefined,
+                undefined,
+                defaultSample.assetPath
+              );
+            } else {
+              setIsLoading(false);
+            }
+          }}
+          onRestoreStarterSample={async () => {
+            const defaultSample = SAMPLE_GALLERY[0];
+            const img = await loadHtmlImage(defaultSample.assetPath);
+            if (img) {
+              loadArtworkFromImage(
+                img,
+                defaultSample.title,
+                settings.generatorConfig,
+                new Set(),
+                undefined,
+                undefined,
+                defaultSample.assetPath
+              );
+            }
           }}
           onResetProgress={() => {
             const previouslyFilled = Array.from(filledRegionIds);

@@ -89,7 +89,7 @@ export function stripDevOnlyBlocks(content) {
 export function transformPersonaContent(content) {
   return stripDevOnlyBlocks(content)
     .replace(
-      /\[([^\]]+)\]\(https:\/\/github\.com\/(?:shthed|capyboop)\/capy\/(?:pull|issues|milestone)\/\d+(?:[/?#][^\s)]*)?\)/g,
+      /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed|capyboop)\/capy\/(?:pull|issues|milestone)\/\d+(?:[/?#][^\s)]*)?\)/g,
       '$1'
     )
     .replace(
