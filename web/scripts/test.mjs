@@ -5665,6 +5665,10 @@ async function runBrowserBasicsSuite() {
     );
     await waitForPuzzleLoaded(page);
     await page.waitForTimeout(200);
+    if (await page.$('[data-testid="replay-exit-btn"]')) {
+      await page.locator('[data-testid="replay-exit-btn"]').click();
+      await page.waitForTimeout(150);
+    }
 
     // Ensure Enable Undo Action is ON and Free Colour Mode is OFF on Peer A
     await page.locator('button[title="Settings and Menu"]').click();
@@ -5681,8 +5685,7 @@ async function runBrowserBasicsSuite() {
       await fcLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
       await page.waitForTimeout(80);
     }
-    const isUndoVisibleAlready = (await page.getByTestId('undo-btn').count()) > 0;
-    if (!isUndoVisibleAlready) {
+    if (!currentSettings11c.enableUndo) {
       const undoSettingLabel = await page.waitForSelector('text=Enable Undo Action');
       await undoSettingLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
       await page.waitForTimeout(80);
@@ -5705,6 +5708,10 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(peerB, 'peerB-unfill');
     await peerB.goto(BASE_URL, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerB);
+    if (await peerB.$('[data-testid="replay-exit-btn"]')) {
+      await peerB.locator('[data-testid="replay-exit-btn"]').click();
+      await peerB.waitForTimeout(150);
+    }
     await peerB.getByTestId('topbar-coop-btn').click();
     await peerB.waitForTimeout(150);
     await peerB.getByTestId('join-coop-room-input').fill(undoRoomCode);
@@ -5929,6 +5936,10 @@ async function runBrowserBasicsSuite() {
     // Reload Peer B before painting any region and verify welcomed regions survive reload
     await peerS2.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerS2);
+    if (await peerS2.$('[data-testid="replay-exit-btn"]')) {
+      await peerS2.locator('[data-testid="replay-exit-btn"]').click();
+      await peerS2.waitForTimeout(150);
+    }
     assert.equal(
       await readTotalRemainingRegions(peerS2),
       remainingPeerABeforeJoin,
