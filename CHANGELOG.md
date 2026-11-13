@@ -1,11 +1,16 @@
-### 3.0 - 2026-11-13 (Beta)
+### 3.0.2 - 2026-11-13 (Beta)
 
+- Establish PROJECT.md governance charter, split 3.0.1 vs 3.0.2 changelog channels, and reconcile Epics and backlog links [#493](https://github.com/shthed/capy/pull/493)
 - Add 1-click GitHub PR approval workflow via bot-opened PRs, native review gate tests, and prebaked sample viewport reset [#490](https://github.com/shthed/capy/pull/490)
 - Add Android Play Store release to v3.0.1 scope and remove shipped Sprint 1 bugfixes from active queue [#487](https://github.com/shthed/capy/pull/487)
+
+### 3.0.1 - 2026-11-12 (Production)
+
+- Promote v3.0.1 mobile topbar and progress cap fixes to Production [#488](https://github.com/shthed/capy/pull/488)
 - Fix mobile topbar badge overlap, cap incomplete puzzle progress at 99%, and log capypaint.com DNS cutover [#486](https://github.com/shthed/capy/pull/486)
 - Prepare v3.0.0 beta release with Cloudflare Worker, Co-op relay hardening, mobile replay controls, and CI sanity gate [#485](https://github.com/shthed/capy/pull/485)
 
-### 2.7 - 2026-11-12 (Alpha)
+### 2.7 - 2026-11-12
 
 - Fix Co-op save and rewind sync, Android large cloud saves, CRDT reset epochs, and mobile replay controls [#484](https://github.com/shthed/capy/pull/484)
 
@@ -13,7 +18,7 @@
 
 - Add capypaint.com Cloudflare Worker, Co-op relay security hardening, clean-room export, and dual-approval CI gate [#482](https://github.com/shthed/capy/pull/482)
 
-### 2.5 - 2026-11-11 (Production)
+### 2.5 - 2026-11-11
 
 - Document 3-artefact roadmap triad, GitHub Epic Issue CLI playbooks, and sprint lifecycle [#483](https://github.com/shthed/capy/pull/483)
 - Add 3-tier Alpha/Beta/Production release pipeline, channel switcher, and GitHub Agile tracking [#481](https://github.com/shthed/capy/pull/481)
