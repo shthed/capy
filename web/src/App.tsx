@@ -4449,7 +4449,7 @@ export const App: React.FC = () => {
       )}
 
       {/* Palette Dock floating above canvas */}
-      {puzzle && !isLoading && !isCompleted && !isReplaying && (
+      {puzzle && !isCompleted && !isReplaying && (
         <PaletteDock
           palette={puzzle.palette}
           regions={puzzle.regions}
