@@ -37,7 +37,10 @@ async function waitForPuzzleLoaded(page) {
       !document.body.innerText.includes('Generating puzzle'),
     { timeout: 25000 }
   );
-  await page.waitForSelector('[aria-label="Palette dock"], [data-testid="replay-btn"]', { timeout: 25000 });
+  await page.waitForSelector(
+    '[aria-label="Palette dock"], [data-testid="replay-btn"], [data-testid="replay-controls-window"]',
+    { timeout: 25000 }
+  );
   await page.waitForTimeout(250);
 }
 
@@ -4452,10 +4455,40 @@ async function runBrowserBasicsSuite() {
       };
     }, expectedSwCacheKey);
     assert.equal(bootMeta.count, 4);
-    assert.equal(bootMeta.firstId, 'sample-capybara');
+    assert.equal(bootMeta.firstId, 'sample-capy-forest');
     assert.equal(bootMeta.swReady, true);
     assert.equal(bootMeta.hasScopedCache, true, `Expected Service Worker cache ${expectedSwCacheKey}`);
     assert.equal(bootMeta.hasLegacyCache, false, 'Legacy unscoped capy-cache-v2 must not exist');
+
+    // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps, and persists completion
+    const tutorialCard = page.getByTestId('onboarding-tutorial');
+    await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 5');
+    // Step 1: Pick Color (click a palette swatch)
+    await page.locator('[aria-label="Palette dock"] button').first().click();
+    await page.getByTestId('tutorial-next-btn').click();
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 2 OF 5');
+    // Step 2: Tap & Paint Shape (tap canvas)
+    const canvasBoxTut = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(canvasBoxTut.x + canvasBoxTut.width * 0.5, canvasBoxTut.y + canvasBoxTut.height * 0.5);
+    await page.getByTestId('tutorial-next-btn').click();
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 3 OF 5');
+    // Step 3: Zoom & Pan
+    await page.mouse.move(canvasBoxTut.x + canvasBoxTut.width * 0.5, canvasBoxTut.y + canvasBoxTut.height * 0.5);
+    await page.mouse.wheel(0, -120);
+    await page.getByTestId('tutorial-next-btn').click();
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 4 OF 5');
+    // Step 4: Smart Hints (use inline Try Hint button)
+    await page.getByTestId('tutorial-try-hint-btn').click();
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('tutorial-next-btn').click();
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 5 OF 5');
+    // Step 5: Finish Coloring
+    await page.getByTestId('tutorial-finish-btn').click();
+    await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
+    const tutorialCompletedFlag = await page.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1'));
+    assert.equal(tutorialCompletedFlag, '1');
+
 
     // Verify malformed #s= DoS token degrades cleanly without crashing the app
     const dosSharePage = await context.newPage();
@@ -4567,6 +4600,9 @@ async function runBrowserBasicsSuite() {
     const versionBadgeText = await page.locator('[data-testid="app-version-badge"]').textContent();
     assert.equal(versionBadgeText?.trim(), `v${pkgVersion}`, `Expected app-version-badge to equal v${pkgVersion}`);
 
+    await page.locator('button:has(span:text-is("Settings"))').click();
+    await page.waitForTimeout(150);
+
     await page.locator('button[title="Charcoal"]').first().click();
     for (const labelText of [
       'Show Zoom (+ / -) Buttons',
@@ -4586,7 +4622,7 @@ async function runBrowserBasicsSuite() {
     const updatedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'));
     assert.equal(updatedSettings.canvasBgColor, 'CHARCOAL');
     assert.equal(updatedSettings.canvasBgArgb >>> 0, 0xff18181b);
-    assert.equal(localStorage_tab(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '1');
+    assert.equal(localStorage_tab(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '2');
 
     function localStorage_tab(v) {
       return String(v);
@@ -4696,6 +4732,9 @@ async function runBrowserBasicsSuite() {
     // Immediately check that Fit-to-Screen button is visible (meaning previous zoom extent was restored BEFORE replay)
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
     // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
+    await page.waitForSelector('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]', { timeout: 5000 });
+    const canvasBoxReload = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(canvasBoxReload.x + canvasBoxReload.width * 0.5, canvasBoxReload.y + canvasBoxReload.height * 0.5);
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
     await page.waitForTimeout(220);
 
@@ -5063,6 +5102,10 @@ async function runBrowserBasicsSuite() {
 
     // Verify completed puzzle Replay button starts replay in place without zooming out or resetting viewport
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
+    if (await page.locator('[data-testid="replay-controls-window"]').isVisible()) {
+      const cb6 = await page.locator('canvas').first().boundingBox();
+      await page.mouse.click(cb6.x + cb6.width * 0.5, cb6.y + cb6.height * 0.5);
+    }
     const completedReplayBtn = await page.waitForSelector('[data-testid="replay-btn"]', { timeout: 5000 });
     await completedReplayBtn.click();
     await page.waitForTimeout(380);
@@ -6067,8 +6110,12 @@ async function runBrowserBasicsSuite() {
       `Minimized ReplayControls X button (${exitBox360.x}..${exitBox360.x + exitBox360.width}) must fit strictly inside 360px mobile pill border (${windowBox360.x}..${windowBox360.x + windowBox360.width})`
     );
 
-    // Wait for loaded save replay to finish and verify it automatically closes ReplayControls and resumes gameplay
-    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 10000 });
+    // Wait for loaded save replay to finish and verify ReplayControls remains onscreen until user interacts with puzzle
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(await mobileReplayWin.isVisible(), true, 'ReplayControls must remain onscreen after save-load replay finishes');
+    const canvasBox360 = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(canvasBox360.x + canvasBox360.width * 0.5, canvasBox360.y + canvasBox360.height * 0.45);
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 5000 });
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
       await page.evaluate(

@@ -77,6 +77,8 @@ interface PuzzleCanvasProps {
     containerHeight?: number
   ) => void;
   onManualPanStart?: () => void;
+  onPuzzleInteraction?: () => void;
+  onViewportGesture?: () => void;
   onRegionClicked: (regionId: number) => void;
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
   onVisibleColorsChanged: (colorIds: Set<number>) => void;
@@ -237,6 +239,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   coopRippleBuffer,
   onViewExtentChanged,
   onManualPanStart,
+  onPuzzleInteraction,
+  onViewportGesture,
   onRegionClicked,
   onBatchRegionsClicked,
   onVisibleColorsChanged,
@@ -493,6 +497,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (!panStepRequest || panStepRequest.seq <= 0 || !containerRef.current || !puzzle) return;
     stopMomentum();
     onManualPanStartRef.current?.();
+    onViewportGestureRef.current?.();
+    onPuzzleInteractionRef.current?.();
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
     if (w <= 0 || h <= 0) return;
@@ -534,6 +540,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // - Critically-damped 2D spring-damper (SmoothDamp): C1-continuous velocity with smooth ease-in and ease-out (zero jerk)
   const onManualPanStartRef = useRef(onManualPanStart);
   onManualPanStartRef.current = onManualPanStart;
+  const onPuzzleInteractionRef = useRef(onPuzzleInteraction);
+  onPuzzleInteractionRef.current = onPuzzleInteraction;
+  const onViewportGestureRef = useRef(onViewportGesture);
+  onViewportGestureRef.current = onViewportGesture;
   const hasNotifiedManualPanRef = useRef(false);
   const replayFollowRegionIdRef = useRef<number | null>(replayFollowRegionId ?? null);
   replayFollowRegionIdRef.current = replayFollowRegionId ?? null;
@@ -1822,6 +1832,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           } else {
             // Predominantly vertical drag triggers zoom
             isOneFingerZoomingRef.current = true;
+            onViewportGestureRef.current?.();
+            onPuzzleInteractionRef.current?.();
           }
         }
       }
@@ -1830,6 +1842,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         if (!hasNotifiedManualPanRef.current) {
           hasNotifiedManualPanRef.current = true;
           onManualPanStartRef.current?.();
+          onViewportGestureRef.current?.();
+          onPuzzleInteractionRef.current?.();
         }
         const moveDx = e.clientX - lastPointerPosRef.current.x;
         const moveDy = e.clientY - lastPointerPosRef.current.y;
@@ -2113,6 +2127,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
           const lx = Math.floor(coords.x);
           const ly = Math.floor(coords.y);
+          onPuzzleInteractionRef.current?.();
           if (lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height) {
             const rId = puzzle.regionMap[ly * puzzle.width + lx];
             if (rId > 0) {
@@ -2216,6 +2231,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       offsetRef.current = nextOffset;
       setScale(newScale);
       setOffset(nextOffset);
+      onViewportGestureRef.current?.();
+      onPuzzleInteractionRef.current?.();
     }
   };
 
@@ -2223,6 +2240,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length >= 2) {
       stopMomentum();
+      onViewportGestureRef.current?.();
+      onPuzzleInteractionRef.current?.();
       isDraggingRef.current = false;
       wasPinchingRef.current = true;
       isPinchPanningRef.current = false;

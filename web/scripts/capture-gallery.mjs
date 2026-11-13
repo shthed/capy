@@ -80,7 +80,10 @@ async function captureGallery() {
     console.log('3️⃣ Capturing Settings Modal Customizer...');
     const settingsBtn = await desktopPage.waitForSelector('button[title="Settings and Menu"]');
     await settingsBtn.click();
-    await desktopPage.waitForTimeout(500);
+    await desktopPage.waitForTimeout(300);
+    const settingsTabBtn = await desktopPage.waitForSelector('button:has-text("Settings")');
+    await settingsTabBtn.click();
+    await desktopPage.waitForTimeout(400);
 
     await saveScreenshots(desktopPage, 'settings_customizer.png');
 
