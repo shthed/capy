@@ -53,8 +53,8 @@ const CANONICAL_PAGES_BASE = 'https://shthed.github.io/capy';
 
 /**
  * Resolves the active deployment channel from URL pathname, origin, and optional query override.
- * - '/capy/pull/<num>/' -> channel: 'alpha', badgeLabel: 'ALPHA #<num>'
- * - '/capy/beta/'       -> channel: 'beta',  badgeLabel: 'BETA'
+ * - '/capy/alpha/<num>/' (plus legacy '/PR/' and '/pull/') -> channel: 'alpha', badgeLabel: 'ALPHA #<num>'
+ * - '/capy/beta/'        -> channel: 'beta',  badgeLabel: 'BETA'
  * - '/capy/'            -> channel: 'stable', badgeLabel: null
  * - 'capypaint.com'     -> channel: 'stable', badgeLabel: null, showChannelSwitcher: false
  * - 'localhost' / '127.0.0.1' -> channel: 'dev', badgeLabel: null (unless overridden via ?capy_channel=)
@@ -149,7 +149,7 @@ export function resolveReleaseChannel(
     };
   }
 
-  const pullNumMatch = /\/pull\/(\d+)(?:\/|$)/.exec(pathname);
+  const pullNumMatch = /\/(?:alpha|PR|pull)\/(\d+)(?:\/|$)/.exec(pathname);
   if (pullNumMatch) {
     const prNumber = Number(pullNumMatch[1]);
     return {
@@ -163,7 +163,7 @@ export function resolveReleaseChannel(
     };
   }
 
-  if (/\/pull\/[A-Za-z0-9._-]+(?:\/|$)/.test(pathname)) {
+  if (/\/(?:alpha|PR|pull)\/[A-Za-z0-9._-]+(?:\/|$)/.test(pathname)) {
     return {
       channel: 'alpha',
       badgeLabel: 'ALPHA',

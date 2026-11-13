@@ -123,14 +123,14 @@ jobs:
             }
 
             const targetDir = isPullRequest
-              ? (prNumber ? `pull/${prNumber}` : `pull/${safeBranch}`)
+              ? (prNumber ? `alpha/${prNumber}` : `alpha/${safeBranch}`)
               : branch === 'main'
                 ? '.'
                 : branch === 'beta'
                   ? 'beta'
                   : prNumber
-                    ? `pull/${prNumber}`
-                    : `pull/${safeBranch}`;
+                    ? `alpha/${prNumber}`
+                    : `alpha/${safeBranch}`;
 
             const previewUrl = targetDir === '.'
               ? `${basePreview}/`
@@ -358,7 +358,7 @@ jobs:
             mkdir -p "${DEST_DIR}"
             rsync -avc --delete \
               --exclude '.git/' \
-              --exclude 'pull/' \
+              --exclude 'alpha/' \
               --exclude 'beta/' \
               staging/web/ "${DEST_DIR}/"
           else

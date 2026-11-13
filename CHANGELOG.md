@@ -1,4 +1,8 @@
-### 3.0.3 - 2026-11-13 (Beta)
+### 3.0.4 - 2026-11-13 (Beta)
+
+- Standardize GitHub Pages PR preview URLs to lowercase /capy/alpha/<num>/ with legacy /PR/ and /pull/ fallbacks and prune stale top-level pull/ and PR/ preview directories [#492](https://github.com/shthed/capy/pull/492)
+
+### 3.0.3 - 2026-11-13
 
 - Harden CI/CD workflow retries, Playwright E2E caching on beta PRs, main-to-beta sync workflow and dependency automation, and changelog/guide sanity checks [#494](https://github.com/shthed/capy/pull/494)
 

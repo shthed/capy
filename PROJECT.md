@@ -23,7 +23,7 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 
 ## 1. Roles, Ownership and Multi-Session Coordination
 
-- **Human Project Owner**: Sets product vision and Epic priority in [`ROADMAP.md`](./ROADMAP.md), approves unblocked work entering [`TODO.md`](./TODO.md), resolves architectural and UX trade-offs during `/grill-me` and `/plan`, validates subjective tactile/visual feel on Alpha `/PR/<number>/` and Beta `/beta/` previews, and holds sole final merge authority into `beta` and `main`.
+- **Human Project Owner**: Sets product vision and Epic priority in [`ROADMAP.md`](./ROADMAP.md), approves unblocked work entering [`TODO.md`](./TODO.md), resolves architectural and UX trade-offs during `/grill-me` and `/plan`, validates subjective tactile/visual feel on Alpha `/alpha/<number>/` and Beta `/beta/` previews, and holds sole final merge authority into `beta` and `main`.
 - **AI Contributors & Agents**: Execute approved `TODO.md` slices or documentation updates on clean linear branches off `origin/beta`, keep PR titles/bodies/backlog docs synchronized on every push, run full local verification before marking PRs ready, and pause for explicit Owner approval prior to any merge.
 - **Worktree & Diff Hygiene**: Never share one dirty working tree across concurrent sessions or tasks, never stage untracked local agent/scratch files via blind `git add -A`, and verify `git status` plus `git show --stat HEAD` before every push.
 
@@ -57,7 +57,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 - **Sprint (`Sprint 0`..`Sprint 3`)**: A focused batch of `~8--10` unblocked Tasks and Bugs pulled into [`TODO.md`](./TODO.md), integrated onto `beta`, play-tested on `/beta/`, and promoted to `main`.
 - **GitHub Milestone (`Sprint N: ...`)**: Native Sprint progress bar (`closed PRs / total PRs %`) assigned to every PR and Epic issue in that Sprint.
 - **GitHub Label (`epic:*`, `web`, `android`, `feature`, `fix`, `ui`, `testing`, `ci`, `docs`, `deps`)**: Taxonomy tags allowing PR titles to remain clean and prefix-free.
-- **Channels (`Alpha` / `Beta` / `Production`)**: Isolated PR previews at `/PR/<number>/` (`Alpha`, indexed under `/PR`), integration soak branch `beta` at `/beta/` (`Beta`), and live stable `main` at `/` (`Production`).
+- **Channels (`Alpha` / `Beta` / `Production`)**: Isolated PR previews at `/alpha/<number>/` (`Alpha`, indexed under `/alpha/`), integration soak branch `beta` at `/beta/` (`Beta`), and live stable `main` at `/` (`Production`).
 - **Git Tag (`vX.Y.Z`) & GitHub Release**: Immutable release tag triggering [`release.yml`](./.github/workflows/release.yml) for APK, Play Store `.aab`, `.tgz`, and release notes.
 
 ### Canonical Reference Formatting (Epics vs. PRs)
@@ -144,7 +144,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
   - Write clean, prefix-free action-oriented PR titles (e.g., `Add floating precision loupe magnifier for micro-regions`). Never put `feat():`, `EPIC-*`, `US-*`, version tags, or comma-separated laundry lists in titles.
 - **Labels, Milestones & Top-of-PR Header**:
   - Attach `epic:*` (only for scoped Epic slices; omit on standalone P0 `BUG-*`), subsystem labels (`web`, `android`), and work-type labels (`feature`, `fix`, `docs`, `ui`, `testing`, `ci`, `deps`), plus the active Sprint Milestone.
-  - Place the Alpha preview URL (`https://shthed.github.io/capy/PR/<number>/`, when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys; skipped cleanly on pure-docs `isDocsOnlyPr` PRs), preview APK URL when applicable, and `**Agile Scope**: Tracked in [EPIC-N](https://github.com/shthed/capy/issues/<num>) ... | **Sprint**: Sprint N` at the top of the PR body, followed by scannable plain-English overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`—never drifting `blob/main/...` or deleted branch links).
+  - Place the Alpha preview URL (`https://shthed.github.io/capy/alpha/<number>/`, when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys; skipped cleanly on pure-docs `isDocsOnlyPr` PRs), preview APK URL when applicable, and `**Agile Scope**: Tracked in [EPIC-N](https://github.com/shthed/capy/issues/<num>) ... | **Sprint**: Sprint N` at the top of the PR body, followed by scannable plain-English overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`—never drifting `blob/main/...` or deleted branch links).
 - **Mandatory PR Sync-on-Every-Push & Rebase Rule**:
   - Whenever follow-up commits are pushed, a PR is rebased, `origin/beta` advances, or scope/version changes, **immediately** synchronize:
     1. PR title, labels, and Sprint Milestone (`gh pr edit`).

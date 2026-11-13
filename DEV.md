@@ -94,7 +94,7 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 ### Optimal Goals for the Human Developer
 
 1. **Product Vision & Sprint Pull Governance**: Curate Epics and Stories in [`ROADMAP.md`](./ROADMAP.md) ([EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480); governance in [`PROJECT.md`](./PROJECT.md)) and promote only unblocked, high-impact tasks into [`TODO.md`](./TODO.md) for the active sprint.
-2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/capy/PR/<number>/` and `/capy/beta/`.
+2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/capy/alpha/<number>/` and `/capy/beta/`.
 3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve `implementation_plan.md` artifacts *before* code generation begins. Five minutes spent aligning on a plan saves tens of thousands of tokens of rework.
 4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/teamwork`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
 5. **Final Merge Gatekeeping**: Verify the live preview link and the **5-Pillar PR Readiness & Perfection Confidence Score (`>= 95%`)** before approving any merge to `main`.
@@ -181,7 +181,7 @@ When working inside Antigravity:
    - Bundling 3--4 unrelated sequential PRs into a single chat forces frontier models to re-attend over tens of thousands of historical tool outputs on every turn, multiplying thinking-token spend. Start a fresh `#NNN` chat for each new PR so rolling 5-hour/weekly Antigravity quotas stretch much further.
 4. **Canonical `.url.json` Bookmark Cards**:
    - When the agent opens a PR, it bookmarks the PR using `PR_<number>.url.json` (`UserFacing: true`) with `"title": "#<number> <Canonical GitHub PR Title>"`.
-   - Once a PR is merged and its `/PR/<number>/` preview is cleaned up, stale preview `.url.json` cards should not be left pointing to `404` URLs.
+   - Once a PR is merged and its `/alpha/<number>/` preview is cleaned up, stale preview `.url.json` cards should not be left pointing to `404` URLs.
 
 ---
 
@@ -204,7 +204,7 @@ All human and AI contributors modifying Web (`web/`) or Android (`app/`) code mu
    - Execute all CPU-heavy image processing (K-Means clustering, Otsu/Sobel contour extraction, watershed region segmentation) exclusively inside `puzzle.worker.ts` using transferable `ArrayBuffer` payloads.
    - Support clean cancellation/termination whenever a new puzzle generation begins.
 5. **Relative Asset Path Invariance**:
-   - Never use root-relative `/assets/...` URLs in code or CSS. Always use `./assets/...` and keep `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) so assets resolve identically across GitHub Pages (`/`), PR previews (`/PR/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
+   - Never use root-relative `/assets/...` URLs in code or CSS. Always use `./assets/...` and keep `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) so assets resolve identically across GitHub Pages (`/`), PR previews (`/alpha/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
 6. **Defensive `NativeBridge` Fallbacks ([`NativeBridge.ts`](./web/src/services/NativeBridge.ts))**:
    - Feature-detect host capabilities on every call (`haptic`, `saveBackup`, `loadBackup`, `saveCloudBinaryChunk`, `loadCloudBinaryChunk`, `setBackModalOpen`, `onSharedImage`, `shareImage`) and fall back safely to Web APIs (`navigator.vibrate`, IndexedDB, Web Share API) without uncaught exceptions.
 7. **Storage Durability, Epoch-Scoped CRDT & IndexedDB Quota Safety ([`StorageService.ts`](./web/src/services/StorageService.ts), [`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
@@ -274,7 +274,7 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 
 All PR title/label/Milestone rules, top-of-PR live preview templates, 5-Pillar Readiness Rubric (`>= 95%`), and closed-PR recovery commands live canonically in [`PROJECT.md` Section 4](./PROJECT.md#4-pull-request-lifecycle-and-readiness-gates). Preserve these engineering invariants on every PR:
 
-- **PR Preview Paths vs. GitHub PR URLs**: Alpha GitHub Pages previews deploy to `https://shthed.github.io/capy/PR/<number>/` (and `/PR/<number>/capy.apk`), whereas GitHub repository diff links (`https://github.com/shthed/capy/pull/<number>/files#diff-...`) and git recovery refs (`refs/pull/<number>/head`) keep GitHub's native `/pull/` path. Pin code links in PR bodies and comments to exact commit SHAs (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
+- **PR Preview Paths vs. GitHub PR URLs**: Alpha GitHub Pages previews deploy to `https://shthed.github.io/capy/alpha/<number>/` (and `/alpha/<number>/capy.apk`), whereas GitHub repository diff links (`https://github.com/shthed/capy/pull/<number>/files#diff-...`) and git recovery refs (`refs/pull/<number>/head`) keep GitHub's native `/pull/` path. Pin code links in PR bodies and comments to exact commit SHAs (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
 - **PR Description Sync-on-Push Rule**: Immediately update PR title, overview bullets, target version, SHA-pinned line links, labels, Milestone, and `gh pr view <num> --json mergeable,mergeStateStatus` (`MERGEABLE` / `CLEAN`) whenever follow-up commits or rebases alter scope or state.
 - **Clickable Link Standard**: Format PR references as clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` links and Epic references as `[EPIC-N](https://github.com/shthed/capy/issues/<num>)` (never bare/backticked `#<epic-issue>` or `[#<epic-issue>](.../issues/...)`).
 - **Wait for Explicit Approval**: Never merge a PR or push directly to `main` or `beta` without explicit Owner confirmation.
@@ -289,7 +289,7 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
 <!-- capy-dev-only:end -->
 
 ### 1. Unified 3-Tier Build, E2E Release Gate & Pages Deployment ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
-- **Fast Daily CI + Full E2E Production Gate**: Daily `feature/* -> beta` PRs run `< 2s` sanity checks, TypeScript lint, Web compilation, and Android JUnit4 checks without heavy Playwright Chromium downloads so Alpha `/PR/<number>/` previews deploy rapidly (while the AI agent runs `npm test` locally in the Antigravity VM). Marking a **Release Promotion PR (`beta -> main`)** ready for review (`draft == false`) automatically activates the **`Playwright E2E Release Gate`** job in GitHub Actions so live production `/` cannot be updated unless the full SSR + Chromium E2E suite passes in CI.
+- **Fast Daily CI + Full E2E Production Gate**: Daily `feature/* -> beta` PRs run `< 2s` sanity checks, TypeScript lint, Web compilation, and Android JUnit4 checks without heavy Playwright Chromium downloads so Alpha `/alpha/<number>/` previews deploy rapidly (while the AI agent runs `npm test` locally in the Antigravity VM). Marking a **Release Promotion PR (`beta -> main`)** ready for review (`draft == false`) automatically activates the **`Playwright E2E Release Gate`** job in GitHub Actions so live production `/` cannot be updated unless the full SSR + Chromium E2E suite passes in CI.
 - **Sub-2s Documentation Fast-Path (`isDocsOnlyPr`)**: Pull requests that exclusively touch `**.md`, `docs/**`, `notes/**`, `.gitignore`, or `LICENSE` pass the `Build & Test` check run in `< 2s` (satisfying required branch ruleset checks) while skipping Web/Android compilation and Pages deployment.
 - **Job 1 -- `build` (`Build & Test`, `contents: read`)**:
   - Runs concurrently across open PRs (`main` and `beta` bases) with `cancel-in-progress: true` per PR/ref.
@@ -298,9 +298,9 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
   - Runs automatically when `github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.draft == false`, executing `npx playwright install --with-deps chromium && npm test` and gating `deploy`.
 - **Job 3 -- `deploy` (`Deploy to GitHub Pages`, `contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
   - Guarded by `github.event.repository.has_pages == true` and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
-  - Publishes open Alpha PR builds to `/PR/<number>/` and `/PR/<number>/capy.apk`, then posts or updates the zero-emoji PR preview comment.
+  - Publishes open Alpha PR builds to `/alpha/<number>/` and `/alpha/<number>/capy.apk`, then posts or updates the zero-emoji PR preview comment.
   - Publishes `beta` branch pushes to `/beta/` (`https://shthed.github.io/capy/beta/`) and `/beta/capy.apk` without modifying production `/`.
-  - Publishes `main` branch pushes to `/` (`https://shthed.github.io/capy/`) and `/capy.apk` (excluding `/PR/` and `/beta/` during `rsync`).
+  - Publishes `main` branch pushes to `/` (`https://shthed.github.io/capy/`) and `/capy.apk` (excluding `/alpha/` and `/beta/` during `rsync`).
   - Squashes `gh-pages` into a single **orphan commit** on every push so binary `.apk` artifacts never bloat Git history.
 
 ### 2. Automated GitHub Release & Play Store Bundle Publisher ([`release.yml`](./.github/workflows/release.yml))
@@ -309,11 +309,11 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
 
 ### 3. Closed PR Preview & Branch Cleanup ([`cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))
 - Triggered automatically on `pull_request: types: [closed]` (both merged and closed-unmerged PRs).
-- Deletes ephemeral PR head branches from `origin` (explicitly protecting both `main` and `beta` so merging a `beta -> main` Release Promotion PR never deletes `origin/beta`) and invokes `.github/scripts/cleanup-gh-pages-previews.mjs --target-pr <number> --ignore-recency` (preserving `/beta/`, `/PR/` open PRs, `/assets/`, and `/web1/`).
+- Deletes ephemeral PR head branches from `origin` (explicitly protecting both `main` and `beta` so merging a `beta -> main` Release Promotion PR never deletes `origin/beta`) and invokes `.github/scripts/cleanup-gh-pages-previews.mjs --target-pr <number> --ignore-recency` (preserving `/beta/`, `/alpha/` open PRs, `/assets/`, and `/web1/`).
 
 ### 4. Scheduled Stale Branch & Orphan Sweep ([`cleanup-branches.yml`](./.github/workflows/cleanup-branches.yml))
 - Runs daily at `06:00 UTC` (`cron: '0 6 * * *'`) or manually via `workflow_dispatch`.
-- Invokes `.github/scripts/cleanup-branches.mjs` to prune merged/stale branches (`>= 1` day old) matching `automation/`, `feature/`, `fix/`, `chore/`, `ci/`, `deps/`, `docs/`, or `codex/` (never touching `main` or `beta`), followed by `cleanup-gh-pages-previews.mjs` to remove any orphaned `/PR/` directories while preserving `/beta/`.
+- Invokes `.github/scripts/cleanup-branches.mjs` to prune merged/stale branches (`>= 1` day old) matching `automation/`, `feature/`, `fix/`, `chore/`, `ci/`, `deps/`, `docs/`, or `codex/` (never touching `main` or `beta`), followed by `cleanup-gh-pages-previews.mjs` to remove any orphaned `/alpha/` directories while preserving `/beta/`.
 
 ### 5. Production Cloudflare Workers Deployment ([`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml))
 - Triggered on `push` to `main` (touching `web/**`, `worker/**`, `wrangler.jsonc`, or the workflow file) and `workflow_dispatch`.

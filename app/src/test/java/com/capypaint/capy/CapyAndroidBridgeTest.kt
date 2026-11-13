@@ -125,6 +125,8 @@ class CapyAndroidBridgeTest {
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/#s=abc123_XYZ-9"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/?room=ABC123#s=abc123"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/alpha/459/#s=token"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/PR/459/#s=token"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/pull/459/#s=token"))
 
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink(null))

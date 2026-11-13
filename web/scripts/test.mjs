@@ -387,7 +387,7 @@ async function runCodecAndEngineTests() {
     assert.equal(betaCh.showChannelSwitcher, true);
 
     const alphaCh = versionMod.resolveReleaseChannel(
-      '/capy/pull/481/',
+      '/capy/alpha/481/',
       'https://shthed.github.io',
       ''
     );
@@ -395,6 +395,34 @@ async function runCodecAndEngineTests() {
     assert.equal(alphaCh.badgeLabel, 'ALPHA #481');
     assert.equal(alphaCh.prNumber, 481);
     assert.equal(alphaCh.showChannelSwitcher, true);
+
+    const alphaBranchCh = versionMod.resolveReleaseChannel(
+      '/capy/alpha/feature-x/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(alphaBranchCh.channel, 'alpha');
+    assert.equal(alphaBranchCh.badgeLabel, 'ALPHA');
+    assert.equal(alphaBranchCh.prNumber, null);
+    assert.equal(alphaBranchCh.showChannelSwitcher, true);
+
+    const legacyPrCh = versionMod.resolveReleaseChannel(
+      '/capy/PR/481/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(legacyPrCh.channel, 'alpha');
+    assert.equal(legacyPrCh.badgeLabel, 'ALPHA #481');
+    assert.equal(legacyPrCh.prNumber, 481);
+
+    const legacyPullCh = versionMod.resolveReleaseChannel(
+      '/capy/pull/481/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(legacyPullCh.channel, 'alpha');
+    assert.equal(legacyPullCh.badgeLabel, 'ALPHA #481');
+    assert.equal(legacyPullCh.prNumber, 481);
 
     const devCh = versionMod.resolveReleaseChannel('/', 'http://localhost:3000', '');
     assert.equal(devCh.channel, 'dev');
@@ -1079,6 +1107,8 @@ async function runCodecAndEngineTests() {
         [
           { name: '492', kind: 'pull', prNumber: 492, pull: { state: 'open' }, prs: [], hasLiveBranch: true, isRecent: false },
           { name: '484', kind: 'pull', prNumber: 484, pull: { state: 'closed' }, prs: [], hasLiveBranch: false, isRecent: false },
+          { name: 'pull', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: true },
+          { name: 'PR', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: true },
           { name: 'legacy-old', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: false },
           { name: 'legacy-live', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: true, isRecent: false },
         ],
@@ -1086,26 +1116,40 @@ async function runCodecAndEngineTests() {
       );
       assert.deepEqual(
         selected.map((s) => s.name),
-        ['484', 'legacy-old']
+        ['484', 'pull', 'PR', 'legacy-old']
       );
 
       const tmpPages = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-gh-pages-cleanup-'));
       try {
+        fs.mkdirSync(path.join(tmpPages, 'alpha', '492'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'alpha', '484'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'pull', '123'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'PR', '456'), { recursive: true });
         fs.mkdirSync(path.join(tmpPages, 'stale-legacy-dir'), { recursive: true });
         fs.mkdirSync(path.join(tmpPages, 'live-branch-dir'), { recursive: true });
         fs.mkdirSync(path.join(tmpPages, 'beta'), { recursive: true });
         const runRes = await previewCleanupMod.runCleanupGhPagesPreviews({
           pagesDir: tmpPages,
-          ignoreRecency: true,
+          ignoreRecency: false,
+          nowMs: Date.now() + 2 * 24 * 60 * 60 * 1000,
           repository: 'a/b',
           token: 'tok',
           defaultBranch: 'main',
           remoteBranches: ['main', 'beta', 'live-branch-dir'],
           baseDelayMs: 1,
           sleepImpl: async () => {},
-          fetchImpl: async () => makeMockResponse({ ok: true, status: 200, jsonData: [] }),
+          fetchImpl: async () =>
+            makeMockResponse({
+              ok: true,
+              status: 200,
+              jsonData: [{ number: 492, state: 'open', head: { ref: 'fix/pr-url-rename' } }],
+            }),
         });
-        assert.deepEqual(runRes.deleted, ['stale-legacy-dir']);
+        assert.deepEqual(runRes.deleted.sort(), ['PR', 'alpha/484', 'pull', 'stale-legacy-dir']);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'alpha', '492')), true);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'alpha', '484')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'pull')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'PR')), false);
         assert.equal(fs.existsSync(path.join(tmpPages, 'stale-legacy-dir')), false);
         assert.equal(fs.existsSync(path.join(tmpPages, 'live-branch-dir')), true);
         assert.equal(fs.existsSync(path.join(tmpPages, 'beta')), true);
@@ -2228,9 +2272,12 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
     const samplePrEpicDoc =
-      'Preview https://shthed.github.io/capy/PR/42/ [EPIC-2](https://github.com/shthed/capy/issues/477)';
+      'Preview https://shthed.github.io/capy/alpha/492/ and https://shthed.github.io/capy/PR/42/ [EPIC-2](https://github.com/shthed/capy/issues/477)';
     const transformedPrEpic = transformPersonaContent(samplePrEpicDoc);
-    assert.equal(transformedPrEpic, 'Preview https://capypaint.com/ EPIC-2');
+    assert.equal(
+      transformedPrEpic,
+      'Preview https://capypaint.com/ and https://capypaint.com/ EPIC-2'
+    );
     assert.equal(transformPersonaContent(transformedPrEpic), transformedPrEpic);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('sync-beta-from-main'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('.github/dependabot.yml'), true);
@@ -4053,6 +4100,8 @@ async function runCodecAndEngineTests() {
     });
     assert.equal(deployMergeableRes.outputs.is_docs_only, 'false');
     assert.equal(deployMergeableRes.outputs.skip, 'false');
+    assert.equal(deployMergeableRes.outputs.target_dir, 'alpha/499');
+    assert.equal(deployMergeableRes.outputs.preview_url, 'https://shthed.github.io/capy/alpha/499/');
     assert.equal(deployMergeableRes.outputs.checkout_ref, 'mergesha11111111111111111111111111111111');
 
     const deployConflictingRes = await runDeployTargetCase({
@@ -4075,6 +4124,7 @@ async function runCodecAndEngineTests() {
       },
     });
     assert.equal(deployDispatchRes.outputs.branch, 'feature/ci-dispatch');
+    assert.equal(deployDispatchRes.outputs.target_dir, 'alpha/feature-ci-dispatch');
     assert.equal(deployDispatchRes.outputs.checkout_ref, 'feature/ci-dispatch');
     assert.equal(deployDispatchRes.outputs.skip, 'false');
 
@@ -4087,6 +4137,7 @@ async function runCodecAndEngineTests() {
     assert.equal(deployYaml.includes("github.base_ref == 'main' || github.base_ref == 'beta'"), true);
     assert.equal(deployYaml.includes("github.event.pull_request.user.login != 'dependabot[bot]'"), true);
     assert.equal(deployYaml.includes('steps.target.outputs.is_docs_only'), true);
+    assert.equal(deployYaml.includes("--exclude 'alpha/'"), true);
 
     const cleanupClosedPrYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
