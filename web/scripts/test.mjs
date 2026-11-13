@@ -5674,6 +5674,8 @@ async function runBrowserBasicsSuite() {
     const currentSettings11c = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
     });
+    await page.locator('button:has(span:text-is("Settings"))').click();
+    await page.waitForTimeout(120);
     if (currentSettings11c.isFreeColorMode) {
       const fcLabel = await page.waitForSelector('text=Free Colour Mode');
       await fcLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
