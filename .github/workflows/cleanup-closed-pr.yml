@@ -74,6 +74,8 @@ jobs:
             --target-pr "${TARGET_PR}" \
             --ignore-recency
 
+          node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./gh-pages
+
       - name: Commit and push gh-pages updates (squashed history)
         id: sync_pages
         env:

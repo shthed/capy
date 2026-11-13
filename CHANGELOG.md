@@ -1,4 +1,8 @@
-### 3.0.4 - 2026-11-13 (Beta)
+### 3.0.5 - 2026-11-13 (Beta)
+
+- Serve `/capy/alpha/` preview index manifest with `404.html` redirect from legacy `/capy/PR/NNN` and `/capy/pull/NNN` paths [#491](https://github.com/shthed/capy/pull/491)
+
+### 3.0.4 - 2026-11-13
 
 - Standardize GitHub Pages PR preview URLs to lowercase /capy/alpha/<num>/ with legacy /PR/ and /pull/ fallbacks and prune stale top-level pull/ and PR/ preview directories [#492](https://github.com/shthed/capy/pull/492)
 
