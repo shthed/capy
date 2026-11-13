@@ -1,4 +1,8 @@
-### 3.0.5 - 2026-11-13 (Beta)
+### 3.0.6 - 2026-11-13 (Beta)
+
+- Persist post-load replay controls until puzzle interaction, set Capy Forest as default puzzle, add interactive first-run tutorial, and move About tab first [#489](https://github.com/shthed/capy/pull/489)
+
+### 3.0.5 - 2026-11-13
 
 - Serve `/capy/alpha/` preview index manifest with `404.html` redirect from legacy `/capy/PR/NNN` and `/capy/pull/NNN` paths [#491](https://github.com/shthed/capy/pull/491)
 
@@ -12,7 +16,6 @@
 
 ### 3.0.2 - 2026-11-13
 
-- Persist post-load replay controls until puzzle interaction, set Capy Forest as default puzzle, add interactive first-run tutorial, and move About tab first [#489](https://github.com/shthed/capy/pull/489)
 - Establish PROJECT.md governance charter, split 3.0.1 vs 3.0.2 changelog channels, and reconcile Epics and backlog links [#493](https://github.com/shthed/capy/pull/493)
 - Add 1-click GitHub PR approval workflow via bot-opened PRs, native review gate tests, and prebaked sample viewport reset [#490](https://github.com/shthed/capy/pull/490)
 - Add Android Play Store release to v3.0.1 scope and remove shipped Sprint 1 bugfixes from active queue [#487](https://github.com/shthed/capy/pull/487)
