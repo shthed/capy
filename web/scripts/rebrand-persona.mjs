@@ -24,6 +24,7 @@ export const DEV_ONLY_RELATIVE_PATHS = new Set([
   'web/scripts/rebrand-persona.mjs',
   '.github/workflows/publish-capyboop.yml',
   '.github/workflows/pr-review-gate.yml',
+  '.github/workflows/open-pr.yml',
 ]);
 
 export const SKIP_COPY_DIR_NAMES = new Set([
@@ -75,7 +76,7 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|persona:capyboop|capy-dev-only/i;
+  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only/i;
 
 export function stripDevOnlyBlocks(content) {
   return content
