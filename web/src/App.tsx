@@ -4327,6 +4327,7 @@ export const App: React.FC = () => {
           }
         }}
         onPuzzleInteraction={dismissPostLoadReplayIfAwaiting}
+        onViewportGesture={() => markTutorialActionTried('zoom')}
         onManualPanStart={() => {
           if (isReplaying) {
             cancelAutoResume();
