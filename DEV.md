@@ -197,6 +197,9 @@ Capy separates strategic roadmap planning from sprint execution across [`ROADMAP
   gh label create "epic:6" -R shthed/capy --color "0052cc" --description "EPIC-6: <Title>"
   gh issue create -R shthed/capy --title "EPIC-6: <Title>" --label "epic,epic:6,web" --body-file /tmp/epic_6.md
   ```
+<!-- capy-dev-only:start -->
+- **Bot-Opened PRs on `shthed/capy` (`open-pr.yml`)**: Once [`open-pr.yml`](./.github/workflows/open-pr.yml) is live on `main`, agents open Draft PRs via `gh workflow run open-pr.yml -f head=feature/<short-topic> -f base=beta -f title="..." -f draft=true ...` (falling back to `gh pr create` only beforehand) and then run `gh pr ready <num>` (or push follow-up commits / run `deploy-branch.yml`) so CI triggers and the Project Owner can unlock merge with 1-click native **Approve**.
+<!-- capy-dev-only:end -->
 
 ---
 
@@ -341,6 +344,9 @@ git fetch origin main
 git tag -a v2.6.0 origin/main -m "v2.6.0 -- <Release Title>" && git push origin v2.6.0
 git push --force-with-lease origin origin/main:refs/heads/beta
 ```
+<!-- capy-dev-only:start -->
+- **Bot-Opened Release Promotion PRs (`open-pr.yml` -> `main`)**: Once [`open-pr.yml`](./.github/workflows/open-pr.yml) is on `main`, open Release Promotion PRs with `gh workflow run open-pr.yml -f head=beta -f base=main -f title="..." -f draft=true ...` and then run `gh pr ready <num>` so `pull_request: ready_for_review` (`draft == false`) activates the required **Playwright E2E Release Gate** in [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) and unlocks 1-click native **Approve**.
+<!-- capy-dev-only:end -->
 
 ### Step 2: Local Development & Verification
 
@@ -453,8 +459,9 @@ Capy runs five coordinated GitHub Actions workflows in [`.github/workflows/`](./
 - Triggered on `push` to `main` (touching `web/**`, `worker/**`, `wrangler.jsonc`, or the workflow file) and `workflow_dispatch`.
 - When `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets are configured (or via Cloudflare Workers Builds native Git integration), runs `npm run test:sanity && npm run lint && npm run build`, deploys [`wrangler.jsonc`](./wrangler.jsonc) + [`worker/index.ts`](./worker/index.ts) (`CoopRoomDurableObject`) to `https://capypaint.com/` via `cloudflare/wrangler-action@v4` (`wranglerVersion: '4.160.1'`), and verifies `https://capypaint.com/api/health`. Repositories without Cloudflare secrets skip cleanly in `< 2s`.
 <!-- capy-dev-only:start -->
-- **Dual AI & Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**: Enforces Draft-first PRs, independent AI Reviewer approval (`review:ai-approved` backed by `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<HEAD_SHA> score=<SCORE>% -->` with `score >= 95%`), and separate post-push Human Project Owner sign-off (`review:owner-approved` or `APPROVED`/`LGTM`) via the required `capy/review-gate` commit status on `HEAD` (paired with `github-actions[bot]` review dismissal on new pushes).
-- **Automated Clean-Room Public Mirror ([`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml))**: Every merge to `shthed/capy` `main` exports a clean-room copy via [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs) (`--stage-dir`), verifies zero `shthed` byte leaks across all files and commit messages, strips dev-only mirror/review workflows, pushes a linear commit authored solely by `capyboop` to `https://github.com/capyboop/capy`, and syncs the `v<version>` release tag when `CAPYBOOP_SYNC_TOKEN` is configured.
+- **Bot-Authored Draft PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)) & CI Triggers**: Opens idempotent `github-actions[bot]`-authored PRs targeting `beta` or `main` via `workflow_dispatch` (`gh workflow run open-pr.yml`, falling back to `gh pr create` only if `open-pr.yml` has not yet landed on `main`) so `shthed` can use GitHub's native 1-click **Approve** button. Opening with `draft=true` pairs with `gh pr ready <num>` (`pull_request: ready_for_review`), follow-up pushes (`synchronize`), or `gh workflow run deploy-branch.yml` to trigger `Build & Test`, Pages previews, and `Playwright E2E Release Gate` on `main`.
+- **Dual AI & Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**: Enforces Draft-first PRs, independent AI Reviewer approval (`review:ai-approved` backed by `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<HEAD_SHA> score=<SCORE>% -->` with `score >= 95%`), and separate post-push Human Project Owner sign-off via the required `capy/review-gate` commit status on `HEAD`. On `github-actions[bot]`-opened PRs, requires a native GitHub **Approve** review matching exact `HEAD` SHA (empty body allowed, tolerant of commit-clock skew relative to `latestForcePushMs`), leaves legacy labels/comments `pending` until native Approve, and skips `github-actions[bot]` self-approval to avoid HTTP 422; manual owner-authored PRs preserve legacy `review:owner-approved` / `APPROVED` / `LGTM` fallback.
+- **Automated Clean-Room Public Mirror ([`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml))**: Every merge to `shthed/capy` `main` exports a clean-room copy via [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs) (`--stage-dir`), verifies zero `shthed` byte leaks across all files and commit messages, strips dev-only mirror/review/bot-PR workflows, pushes a linear commit authored solely by `capyboop` to `https://github.com/capyboop/capy`, and syncs the `v<version>` release tag when `CAPYBOOP_SYNC_TOKEN` is configured.
 <!-- capy-dev-only:end -->
 
 ---

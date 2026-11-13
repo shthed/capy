@@ -746,6 +746,10 @@ export const App: React.FC = () => {
       parentSnapshotId?: string
     ) => {
       const currentSeq = ++generationSeqRef.current;
+      if (viewportSaveTimerRef.current !== null) {
+        window.clearTimeout(viewportSaveTimerRef.current);
+        viewportSaveTimerRef.current = null;
+      }
       setIsReplaying(false);
       setIsReplayPlaying(false);
       setIsLoading(true);
@@ -1078,6 +1082,14 @@ export const App: React.FC = () => {
                 cachedPuzzle.palette,
                 isFree
               );
+              if (viewportSaveTimerRef.current !== null) {
+                window.clearTimeout(viewportSaveTimerRef.current);
+                viewportSaveTimerRef.current = null;
+              }
+              const targetView = { zoomScale: 1.0, panOffsetX: 0, panOffsetY: 0 };
+              viewportRef.current = targetView;
+              setInitialViewport(targetView);
+              setRestoreViewTrigger((prev) => prev + 1);
               setSnapshots(updatedList);
               setPaintedRegionColors(restoredPaintedMap);
               setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -1327,6 +1339,14 @@ export const App: React.FC = () => {
               const initialColor = availableColors[0]?.id || firstPuzzle.palette[0]?.id || 1;
               const isFree = Boolean(firstSnap.isFreeColor || firstPuzzle.isFreeColor);
 
+              if (viewportSaveTimerRef.current !== null) {
+                window.clearTimeout(viewportSaveTimerRef.current);
+                viewportSaveTimerRef.current = null;
+              }
+              const targetView = { zoomScale: 1.0, panOffsetX: 0, panOffsetY: 0 };
+              viewportRef.current = targetView;
+              setInitialViewport(targetView);
+              setRestoreViewTrigger((prev) => prev + 1);
               setSnapshots(refreshedList);
               setPaintedRegionColors(new Map());
               setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -3113,6 +3133,15 @@ export const App: React.FC = () => {
                 undefined,
                 mergedEpoch > 0 ? mergedEpoch : undefined
               );
+              if (viewportSaveTimerRef.current !== null) {
+                window.clearTimeout(viewportSaveTimerRef.current);
+                viewportSaveTimerRef.current = null;
+              }
+              ++generationSeqRef.current;
+              const targetView = { zoomScale: 1.0, panOffsetX: 0, panOffsetY: 0 };
+              viewportRef.current = targetView;
+              setInitialViewport(targetView);
+              setRestoreViewTrigger((prev) => prev + 1);
               setIsReplaying(false);
               setIsReplayPlaying(false);
               setShowSettings(false);
