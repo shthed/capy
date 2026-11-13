@@ -92,18 +92,19 @@
     <div class="links">
       <a class="btn primary" href="/capy/">Go to Capy Paint (Production)</a>
       <a class="btn" href="/capy/beta/">Go to Beta Channel</a>
-      <a class="btn" id="pr-link" href="/capy/PR/">View Open PR Previews</a>
+      <a class="btn" id="pr-link" href="/capy/alpha/">View Open PR Previews</a>
     </div>
   </main>
   <script>
     (function () {
       var pathname = window.location.pathname || '';
-      var match = pathname.match(/^\/capy\/(?:PR|pull)(?:\/([^/]+))?\/?/i);
-      if (match) {
-        var id = match[1] ? match[1].trim() : '';
+      var match = pathname.match(/^\/capy\/(alpha|PR|pull)(?:\/([^/]+))?\/?/i);
+      var prefix = match ? match[1].toLowerCase() : '';
+      var id = match && match[2] ? match[2].trim() : '';
+      if (match && (id || prefix !== 'alpha')) {
         var target = id
-          ? '/capy/PR/?missing=' + encodeURIComponent(id)
-          : '/capy/PR/';
+          ? '/capy/alpha/?missing=' + encodeURIComponent(id)
+          : '/capy/alpha/';
         var msg = document.getElementById('message');
         var prLink = document.getElementById('pr-link');
         if (msg) {

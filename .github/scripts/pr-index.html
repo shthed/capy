@@ -201,14 +201,14 @@
 
           var webLink = document.createElement('a');
           webLink.className = 'btn primary';
-          webLink.href = pr.path || ('/capy/PR/' + pr.number + '/');
+          webLink.href = pr.path || ('/capy/alpha/' + pr.number + '/');
           webLink.textContent = 'Open Web Preview';
           actions.appendChild(webLink);
 
           if (pr.hasApk) {
             var apkLink = document.createElement('a');
             apkLink.className = 'btn';
-            apkLink.href = (pr.path || ('/capy/PR/' + pr.number + '/')) + 'capy.apk';
+            apkLink.href = (pr.path || ('/capy/alpha/' + pr.number + '/')) + 'capy.apk';
             apkLink.textContent = 'Download APK';
             actions.appendChild(apkLink);
           }
