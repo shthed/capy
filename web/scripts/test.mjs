@@ -4909,18 +4909,14 @@ async function runBrowserBasicsSuite() {
       { timeout: 3000 }
     );
     // Step 3: Zoom & Pan (step zoom -> shows Tried! badge and auto-advances to Step 4, then restore 1x)
-    await page.getByTestId('topbar-zoom-badge').click();
+    await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
       () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 5',
       undefined,
       { timeout: 3000 }
     );
-    for (let guard = 0; guard < 6; guard++) {
-      const zTxt = (await page.getByTestId('topbar-zoom-badge').innerText()).trim();
-      if (zTxt === '1x') break;
-      await page.getByTestId('topbar-zoom-badge').click();
-    }
+    await page.keyboard.press('0');
     // Step 4: Smart Hints (use inline Try Hint button -> marks tried and auto-advances to Step 5)
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
