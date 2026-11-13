@@ -4186,6 +4186,39 @@ async function runCodecAndEngineTests() {
     assert.equal(dependabotYaml.includes('target-branch: "beta"'), true);
     /* capy-dev-only:end */
 
+    // Verify web/public/404.html redirect logic & .github/scripts/generate-pr-manifest.mjs
+    console.log('-> Testing 404.html redirect & generate-pr-manifest.mjs...');
+    const notFoundHtmlPath = path.resolve(ROOT_DIR, 'public/404.html');
+    const notFoundHtml = fs.readFileSync(notFoundHtmlPath, 'utf8');
+    assert.equal(notFoundHtml.includes('/capy/PR/?missing='), true, '404.html must redirect to /capy/PR/?missing=');
+    assert.equal(notFoundHtml.includes('(?:PR|pull)'), true, '404.html must match both /capy/PR/ and legacy /capy/pull/');
+    assert.equal(notFoundHtml.includes('href="/capy/PR/"'), true, '404.html must include fallback /capy/PR/ link');
+
+    const { generatePrManifest } = await import('../../.github/scripts/generate-pr-manifest.mjs');
+    const tmpPagesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-pr-manifest-'));
+    try {
+      const prDir = path.join(tmpPagesDir, 'PR');
+      fs.mkdirSync(path.join(prDir, '485'), { recursive: true });
+      fs.mkdirSync(path.join(prDir, '491'), { recursive: true });
+      fs.mkdirSync(path.join(prDir, 'not-a-pr'), { recursive: true });
+      fs.writeFileSync(path.join(prDir, '491', 'capy.apk'), 'apk');
+
+      const manifest = generatePrManifest({ pagesDir: tmpPagesDir });
+      assert.deepEqual(
+        manifest.prs.map((p) => ({ number: p.number, path: p.path, hasApk: p.hasApk })),
+        [
+          { number: 491, path: '/capy/PR/491/', hasApk: true },
+          { number: 485, path: '/capy/PR/485/', hasApk: false },
+        ],
+        'generatePrManifest must sort numeric PR directories descending and detect capy.apk'
+      );
+      assert.equal(fs.existsSync(path.join(prDir, 'manifest.json')), true, 'manifest.json must be written');
+      assert.equal(fs.existsSync(path.join(prDir, 'index.html')), true, 'PR/index.html must be copied');
+      assert.equal(fs.existsSync(path.join(tmpPagesDir, '404.html')), true, 'root 404.html must be copied if missing');
+    } finally {
+      fs.rmSync(tmpPagesDir, { recursive: true, force: true });
+    }
+
     console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
   } finally {
     await vite.close();

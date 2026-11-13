@@ -371,6 +371,9 @@ jobs:
           cp -f staging/web/index.html "${DEST_DIR}/index.html"
           cp staging/apk/capy.apk "${DEST_DIR}/capy.apk"
 
+      - name: Generate PR preview manifest & 404 fallback
+        run: node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./pages
+
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
