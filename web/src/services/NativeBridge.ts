@@ -15,6 +15,7 @@ interface CapyAndroidInterface {
   ) => boolean;
   loadCloudBinaryChunk?: (blobKey: string, chunkIndex: number) => string | null;
   requestCloudSnapshotPull?: (slotKey: string) => boolean;
+  isPlayGamesConfigured?: () => boolean;
   signInPlayGames?: () => string | null;
   showRewardedAd?: () => boolean;
   shareImage?: (title: string, dataUrl: string) => void;
@@ -35,6 +36,7 @@ declare global {
     __capyReceivePlayGamesProfile?: (
       profile: { playerId?: string; displayName?: string } | string
     ) => void;
+    __capyReceivePlayGamesError?: (reason: string) => void;
     __capyReceiveCloudSnapshot?: (slotKey: string, payloadJson: string) => void;
     webkit?: {
       messageHandlers?: {
@@ -69,6 +71,7 @@ class NativeBridgeService {
   private playGamesProfileHandler:
     | ((profile: { playerId: string; displayName: string }) => void)
     | null = null;
+  private playGamesErrorHandler: ((reason: string) => void) | null = null;
   private cloudSnapshotHandler: ((slotKey: string, payloadJson: string) => void) | null = null;
 
   constructor() {
@@ -119,6 +122,12 @@ class NativeBridgeService {
           }
         } catch {
           // Ignore malformed payload
+        }
+      };
+
+      window.__capyReceivePlayGamesError = (reason: string) => {
+        if (this.playGamesErrorHandler) {
+          this.playGamesErrorHandler((reason || 'PLAY_GAMES_UNAVAILABLE').trim());
         }
       };
 
@@ -394,6 +403,34 @@ class NativeBridgeService {
         this.playGamesProfileHandler = null;
       }
     };
+  }
+
+  onPlayGamesError(handler: (reason: string) => void): () => void {
+    this.playGamesErrorHandler = handler;
+    if (typeof window !== 'undefined' && !window.__capyReceivePlayGamesError) {
+      window.__capyReceivePlayGamesError = (reason: string) => {
+        if (this.playGamesErrorHandler) {
+          this.playGamesErrorHandler((reason || 'PLAY_GAMES_UNAVAILABLE').trim());
+        }
+      };
+    }
+    return () => {
+      if (this.playGamesErrorHandler === handler) {
+        this.playGamesErrorHandler = null;
+      }
+    };
+  }
+
+  isPlayGamesConfigured(): boolean {
+    if (!this.isAndroid) return false;
+    try {
+      if (typeof window !== 'undefined' && typeof window.CapyAndroid?.isPlayGamesConfigured === 'function') {
+        return Boolean(window.CapyAndroid.isPlayGamesConfigured());
+      }
+    } catch {
+      return false;
+    }
+    return true;
   }
 
   onCloudSnapshot(handler: (slotKey: string, payloadJson: string) => void): () => void {

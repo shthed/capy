@@ -1670,6 +1670,40 @@ async function runCodecAndEngineTests() {
       assert.equal(parsedLink.matchedSample?.id, 'capybara_sample');
     }
 
+    // Corrupt/invalid #s= token must preserve ?room= code and surface tokenError without throwing
+    const corruptTokenLink = await shareLinkMod.parseShareLinkFromUrl(
+      'https://capypaint.com/?room=xy9876#s=not_a_valid_token_!!!'
+    );
+    assert.equal(corruptTokenLink.roomCode, 'XY9876');
+    assert.equal(corruptTokenLink.delta, null);
+    assert.equal(corruptTokenLink.matchedSample, null);
+    assert.equal(corruptTokenLink.hasToken, true);
+    assert.equal(typeof corruptTokenLink.tokenError, 'string');
+
+    // BroadcastChannel Co-op room namespacing across /capy/, /capy/beta/, and /capy/alpha/<num>/ on shared origin
+    const prevChanWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        location: { pathname: '/capy/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const stableChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const betaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/alpha/495/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const alphaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      assert.equal(stableChan, 'capy_coop_room_stable_ABC123');
+      assert.equal(betaChan, 'capy_coop_room_beta_ABC123');
+      assert.equal(alphaChan, 'capy_coop_room_alpha_495_ABC123');
+      assert.notEqual(stableChan, betaChan);
+      assert.notEqual(betaChan, alphaChan);
+    } finally {
+      globalThis.window = prevChanWindow;
+    }
+
     assert.equal(
       providerMod.resolveCoopRoomWsUrl(undefined, {
         protocol: 'https:',
@@ -2253,6 +2287,50 @@ async function runCodecAndEngineTests() {
           null,
           'Missing chunk in PlayGamesAndroidDriver must return null cleanly'
         );
+
+        // 3. Unconfigured / Unavailable Play Games fallback must fail fast (no 8s hang)
+        const prevCapyAndroid = globalThis.window.CapyAndroid;
+        try {
+          globalThis.window.CapyAndroid = {
+            isPlayGamesConfigured: () => false,
+            signInPlayGames: () => null,
+          };
+          assert.equal(pgDriver.getDescriptor().isConfigured, false);
+          const autoSignStart = Date.now();
+          assert.equal(await pgDriver.attemptAutoSignIn(), null);
+          assert.equal(Date.now() - autoSignStart < 500, true, 'Unconfigured Play Games auto-sign-in must return null immediately');
+          let unconfErr = null;
+          const signInStart = Date.now();
+          try {
+            await pgDriver.signIn();
+          } catch (err) {
+            unconfErr = err;
+          }
+          assert.equal(unconfErr?.message, 'PLAY_GAMES_UNCONFIGURED');
+          assert.equal(Date.now() - signInStart < 500, true, 'Unconfigured Play Games signIn must fail fast');
+
+          // Configured Play Games that fires native error callback must reject immediately
+          globalThis.window.CapyAndroid = {
+            isPlayGamesConfigured: () => true,
+            signInPlayGames: () => {
+              setTimeout(() => {
+                globalThis.window.__capyReceivePlayGamesError?.('PLAY_GAMES_UNAVAILABLE');
+              }, 10);
+              return null;
+            },
+          };
+          const failStart = Date.now();
+          let unavailErr = null;
+          try {
+            await pgDriver.signIn();
+          } catch (err) {
+            unavailErr = err;
+          }
+          assert.equal(unavailErr?.message, 'PLAY_GAMES_UNAVAILABLE');
+          assert.equal(Date.now() - failStart < 500, true, 'Play Games error callback must reject signIn immediately');
+        } finally {
+          globalThis.window.CapyAndroid = prevCapyAndroid;
+        }
       } finally {
         globalThis.window = prevWindow;
       }
@@ -4188,6 +4266,114 @@ async function runCodecAndEngineTests() {
     assert.equal(dependabotYaml.includes('package-ecosystem: "gradle"'), true);
     assert.equal(dependabotYaml.includes('package-ecosystem: "github-actions"'), true);
     assert.equal(dependabotYaml.includes('target-branch: "beta"'), true);
+
+    // Extract and unit-test sync-agile-tracker.yml pure github-script (zero PR checkout)
+    const syncAgileYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/sync-agile-tracker.yml'),
+      'utf8'
+    );
+    assert.equal(syncAgileYaml.includes('actions/checkout'), false);
+    assert.equal(syncAgileYaml.includes('pull_request_target:'), true);
+    const runSyncAgileScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/sync-agile-tracker.yml')
+    );
+
+    const runSyncAgileCase = async ({
+      merged = true,
+      baseRef = 'beta',
+      prNumber = 495,
+      prTitle = 'Harden storage sandbox and changelog compiler',
+      labels = [],
+      body = '',
+      issuesByNumber = {},
+    }) => {
+      const updatedIssues = [];
+      const coreMock = {
+        infos: [],
+        info: (msg) => coreMock.infos.push(msg),
+      };
+      const githubMock = {
+        rest: {
+          issues: {
+            get: async ({ issue_number }) => ({ data: issuesByNumber[issue_number] }),
+            update: async (payload) => {
+              updatedIssues.push(payload);
+              return { data: {} };
+            },
+          },
+        },
+      };
+      const contextMock = {
+        repo: { owner: 'shthed', repo: 'capy' },
+        payload: {
+          pull_request: {
+            number: prNumber,
+            title: prTitle,
+            html_url: `https://github.com/shthed/capy/pull/${prNumber}`,
+            merged,
+            base: { ref: baseRef },
+            labels: labels.map((name) => ({ name })),
+            body,
+          },
+        },
+      };
+      await runSyncAgileScript(contextMock, githubMock, coreMock);
+      return updatedIssues;
+    };
+
+    // Case 1: epic:2 label flips unchecked PR checklist line [ ] -> [x]
+    const syncRes1 = await runSyncAgileCase({
+      labels: ['epic:2'],
+      prNumber: 495,
+      issuesByNumber: {
+        477: {
+          number: 477,
+          state: 'open',
+          body: '#### Staged on `beta`\n- [ ] [#495 — Old PR Title](https://github.com/shthed/capy/pull/495)\n',
+        },
+      },
+    });
+    assert.equal(syncRes1.length, 1);
+    assert.equal(syncRes1[0].issue_number, 477);
+    assert.equal(
+      syncRes1[0].body.includes('- [x] [#495 — Old PR Title](https://github.com/shthed/capy/pull/495)'),
+      true
+    );
+
+    // Case 2: Agile Scope EPIC-3 inserts [x] bullet under Staged on beta when absent
+    const syncRes2 = await runSyncAgileCase({
+      prNumber: 499,
+      prTitle: 'Add loupe magnifier',
+      body: '**Agile Scope**: Tracked in [EPIC-3](https://github.com/shthed/capy/issues/478)',
+      issuesByNumber: {
+        478: {
+          number: 478,
+          state: 'open',
+          body: '#### Staged on `beta`\n- [x] [#472 — Zoom](https://github.com/shthed/capy/pull/472)\n\n#### Open\n- [ ] Future\n',
+        },
+      },
+    });
+    assert.equal(syncRes2.length, 1);
+    assert.equal(syncRes2[0].issue_number, 478);
+    assert.equal(
+      syncRes2[0].body.includes('- [x] [#499 — Add loupe magnifier](https://github.com/shthed/capy/pull/499)'),
+      true
+    );
+
+    // Case 3: closed issue or unmerged PR makes zero mutations
+    const syncRes3 = await runSyncAgileCase({
+      labels: ['epic:1'],
+      prNumber: 500,
+      issuesByNumber: {
+        476: { number: 476, state: 'closed', body: '- [ ] #500' },
+      },
+    });
+    assert.equal(syncRes3.length, 0);
+    const syncRes4 = await runSyncAgileCase({ merged: false, labels: ['epic:2'] });
+    assert.equal(syncRes4.length, 0);
     /* capy-dev-only:end */
 
     // Verify web/public/404.html redirect logic, .github/scripts/pr-index.html, & generate-pr-manifest.mjs
@@ -4350,7 +4536,242 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(cleanupWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
+    // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
+    console.log('-> Testing compile-changelog.mjs release note extraction & release.yml wiring...');
+    const { extractReleaseNotes, formatReleaseNotesMarkdown } = await import(
+      '../../.github/scripts/compile-changelog.mjs'
+    );
+    const sampleChangelog = `### 3.0.7 - 2026-11-13 (Beta)
+
+- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)
+
+### 3.0.6 - 2026-11-13
+
+- Prior release note [#489](https://github.com/shthed/capy/pull/489)
+
+### 2.9 - 2026-11-10
+
+- Minor rollup note [#470](https://github.com/shthed/capy/pull/470)`;
+    assert.equal(
+      extractReleaseNotes(sampleChangelog, 'v3.0.7'),
+      '- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)'
+    );
+    assert.equal(
+      extractReleaseNotes(sampleChangelog.replace(/\n/g, '\r\n'), 'v3.0.7-beta.1'),
+      '- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)'
+    );
+    assert.equal(
+      extractReleaseNotes(sampleChangelog, 'v2.9.4'),
+      '- Minor rollup note [#470](https://github.com/shthed/capy/pull/470)'
+    );
+    assert.equal(extractReleaseNotes(sampleChangelog, 'v9.9.9'), '- Release v9.9.9');
+    assert.throws(() => extractReleaseNotes(sampleChangelog, 'invalid-tag'));
+    assert.equal(
+      formatReleaseNotesMarkdown(sampleChangelog, 'v3.0.6'),
+      '### What\'s New in `v3.0.6`\n\n- Prior release note [#489](https://github.com/shthed/capy/pull/489)\n'
+    );
+    const tmpReleaseNotesOut = path.join(os.tmpdir(), 'capy-release-notes-test.md');
+    try {
+      execFileSync(process.execPath, [
+        path.resolve(projectRoot, '../.github/scripts/compile-changelog.mjs'),
+        '--tag',
+        `v${webPkgJson.version}`,
+        '--changelog',
+        path.resolve(projectRoot, '../CHANGELOG.md'),
+        '--out',
+        tmpReleaseNotesOut,
+      ]);
+      const cliNotes = fs.readFileSync(tmpReleaseNotesOut, 'utf8');
+      assert.equal(cliNotes.startsWith(`### What's New in \`v${webPkgJson.version}\`\n\n`), true);
+    } finally {
+      fs.rmSync(tmpReleaseNotesOut, { force: true });
+    }
+    const releaseWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/release.yml'),
+      'utf8'
+    );
+    assert.equal(releaseWorkflowYaml.includes('compile-changelog.mjs'), true);
+    assert.equal(releaseWorkflowYaml.includes('python3'), false);
+
+    // Verify .github/scripts/compile-changelog.mjs stops cleanly at ## headings
+    const changelogWithSubheading = `### 3.0.7 - 2026-11-13 (Beta)
+
+- Top bullet [#495](https://example.invalid/pull/495)
+
+## Archive Section
+
+- Should never bleed into v3.0.7 release notes`;
+    assert.equal(
+      extractReleaseNotes(changelogWithSubheading, 'v3.0.7'),
+      '- Top bullet [#495](https://example.invalid/pull/495)'
+    );
+
+    // Verify sanity.mjs .changelog fragment parser + web/scripts/compile-changelog.mjs
+    console.log('-> Testing .changelog fragment validation, compile-changelog.mjs, StorageNamespace & UserSettings enums...');
+    const sanityMod = await import('./sanity.mjs');
+    const compileMod = await import('./compile-changelog.mjs');
+
+    const validFrag = sanityMod.parseChangelogFragment(
+      '---\nbump: minor\nepic: EPIC-3\ntask: TASK-2.5\n---\nAdd crisp new brush stroke effect\n',
+      '.changelog/brush.md'
+    );
+    assert.equal(validFrag.bump, 'minor');
+    assert.equal(validFrag.task, 'TASK-2.5');
+    assert.throws(() => sanityMod.parseChangelogFragment('---\nbump: invalid\n---\nBad bump\n'));
+    assert.throws(() => sanityMod.parseChangelogFragment('---\nbump: patch\n---\nLine 1\nLine 2\n'));
+
+    assert.equal(compileMod.computeNextSemVer('3.0.7', 'patch').version, '3.0.8');
+    assert.equal(compileMod.computeNextSemVer('3.0.7', 'minor').version, '3.1.0');
+    assert.equal(compileMod.computeNextSemVer('3.0.7', 'major').version, '4.0.0');
+
+    const tmpCompileRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-changelog-compile-'));
+    try {
+      fs.mkdirSync(path.join(tmpCompileRepo, 'web/src'), { recursive: true });
+      fs.mkdirSync(path.join(tmpCompileRepo, 'app'), { recursive: true });
+      fs.mkdirSync(path.join(tmpCompileRepo, '.changelog'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'web/package.json'),
+        JSON.stringify({ name: 'capy-paint', version: '3.0.7' }, null, 2),
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'web/src/version.ts'),
+        `export const APP_VERSION = '3.0.7';\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'app/build.gradle.kts'),
+        `versionCode = 30007\nversionName = "3.0.7"\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'TODO.md'),
+        `# Queue\n\n### TASK-2.5: Finish release\n\nDetails here.\n\n### BUG-4: Keep me\n\nKeep details.\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'CHANGELOG.md'),
+        `### 3.0.7 - 2026-11-12 (Beta)\n\n- Beta item [#495](https://github.com/capyboop/capy/pull/495)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod item [#488](https://github.com/capyboop/capy/pull/488)\n`,
+        'utf8'
+      );
+      fs.writeFileSync(path.join(tmpCompileRepo, '.changelog/README.md'), '# Fragments\n', 'utf8');
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/01-fix.md'),
+        '---\nbump: patch\npr: 496\ntask: TASK-2.5\n---\nFix edge zoom jitter\n',
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/02-feat.md'),
+        '---\nbump: minor\nepic: EPIC-3\n---\nAdd loupe magnifier\n',
+        'utf8'
+      );
+
+      assert.equal(sanityMod.validateChangelogFragments(tmpCompileRepo), 2);
+      const betaCompileRes = compileMod.compileChangelog({
+        repoRoot: tmpCompileRepo,
+        dateStr: '2026-11-13',
+        prMap: { '02-feat': 497 },
+      });
+      assert.equal(betaCompileRes.version, '3.1.0');
+      assert.equal(betaCompileRes.compiledCount, 2);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(tmpCompileRepo, 'web/package.json'), 'utf8')).version, '3.1.0');
+      assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'web/src/version.ts'), 'utf8').includes("'3.1.0'"), true);
+      assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'app/build.gradle.kts'), 'utf8').includes('versionCode = 30100'), true);
+      assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'app/build.gradle.kts'), 'utf8').includes('versionName = "3.1.0"'), true);
+      const todoAfter = fs.readFileSync(path.join(tmpCompileRepo, 'TODO.md'), 'utf8');
+      assert.equal(todoAfter.includes('TASK-2.5'), false);
+      assert.equal(todoAfter.includes('BUG-4'), true);
+      assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/01-fix.md')), false);
+      assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/README.md')), true);
+      const compiledCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
+      assert.equal(compiledCl.startsWith('### 3.1.0 - 2026-11-13 (Beta)\n'), true);
+      assert.equal(compiledCl.includes('### 3.0.7 - 2026-11-12\n'), true);
+      assert.equal(compiledCl.includes('### 3.0.1 - 2026-11-10 (Production)\n'), true);
+
+      // Promote to Production, Beta
+      const promoRes = compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true });
+      assert.equal(promoRes.promoted, true);
+      const promotedCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
+      assert.equal(promotedCl.startsWith('### 3.1.0 - 2026-11-13 (Production, Beta)\n'), true);
+      assert.equal(promotedCl.includes('### 3.0.1 - 2026-11-10\n'), true);
+
+      // Refuse promoting an (Alpha) top heading
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'CHANGELOG.md'),
+        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- Alpha preview [#498](https://github.com/capyboop/capy/pull/498)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod [#488](https://github.com/capyboop/capy/pull/488)\n`,
+        'utf8'
+      );
+      assert.throws(() => compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true }));
+    } finally {
+      fs.rmSync(tmpCompileRepo, { recursive: true, force: true });
+    }
+
+    // Verify StorageNamespace isolation + StorageService UserSettings enum round-trips
+    const nsMod = await vite.ssrLoadModule('/src/services/StorageNamespace.ts');
+    const storageMod = await vite.ssrLoadModule('/src/services/StorageService.ts');
+    assert.deepEqual(nsMod.resolveStorageNamespace('/capy/', 'https://capypaint.com', ''), {
+      channel: 'stable',
+      isSandboxed: false,
+      sandboxSuffix: '',
+      dbName: 'capy_game_storage_v8',
+    });
+    assert.deepEqual(nsMod.resolveStorageNamespace('/capy/beta/', 'https://example.github.io', ''), {
+      channel: 'beta',
+      isSandboxed: true,
+      sandboxSuffix: '__sandbox_beta',
+      dbName: 'capy_game_storage_v8_beta',
+    });
+    assert.deepEqual(nsMod.resolveStorageNamespace('/capy/alpha/495/', 'https://example.github.io', ''), {
+      channel: 'alpha',
+      isSandboxed: true,
+      sandboxSuffix: '__sandbox_alpha',
+      dbName: 'capy_game_storage_v8_alpha',
+    });
+    assert.equal(
+      nsMod.resolveScopedStorageKey('capy_snapshots_v8', '/capy/beta/', 'https://example.github.io', '?capy_sandbox=0'),
+      'capy_snapshots_v8'
+    );
+    assert.equal(
+      nsMod.resolveScopedBackupKey('capy_user_settings_v8', '/capy/alpha/495/', 'https://example.github.io', ''),
+      'capy_user_settings_v8__sandbox_alpha'
+    );
+    assert.equal(
+      nsMod.resolveScopedDbName('/capy/', 'https://capypaint.com', '?capy_sandbox=1'),
+      'capy_game_storage_v8_stable'
+    );
+
+    const prevLs = globalThis.localStorage;
+    const prevSsrWin = globalThis.window;
+    const mockStorage = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (mockStorage.has(k) ? mockStorage.get(k) : null),
+      setItem: (k, v) => mockStorage.set(k, String(v)),
+      removeItem: (k) => mockStorage.delete(k),
+    };
+    globalThis.window = { location: { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' } };
+    try {
+      storageMod.StorageService.saveSettings({
+        ...storageMod.DEFAULT_SETTINGS,
+        difficulty: 'NORMAL',
+        paletteSort: 'HUE',
+        highlightStyle: 'CENTROID_GLOW',
+      });
+      const loadedNormalHue = storageMod.StorageService.loadSettings();
+      assert.equal(loadedNormalHue.difficulty, 'NORMAL');
+      assert.equal(loadedNormalHue.paletteSort, 'HUE');
+      assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
+
+      storageMod.StorageService.saveSettings({
+        ...storageMod.DEFAULT_SETTINGS,
+        paletteSort: 'LIGHTNESS',
+      });
+      assert.equal(storageMod.StorageService.loadSettings().paletteSort, 'LIGHTNESS');
+    } finally {
+      globalThis.localStorage = prevLs;
+      globalThis.window = prevSsrWin;
+    }
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -6329,6 +6750,214 @@ async function runBrowserBasicsSuite() {
     );
     await mobileTopbarPage.close();
     console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap with BETA and zoom badges verified.');
+
+    // -------------------------------------------------------------------------
+    // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
+    // -------------------------------------------------------------------------
+    console.log('-> [3.0] Verifying malformed import inline notice, sample_saves ordering, zero-snapshot recovery & fractional DPR...');
+    const m3Page = await context.newPage();
+    attachErrorListeners(m3Page, 'm3Page');
+    // Force a fractional devicePixelRatio (1.25) to verify PuzzleCanvas backing store rounds cleanly without drift
+    await m3Page.addInitScript(() => {
+      Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.25, configurable: true });
+      window.__capyAlertCalls = 0;
+      window.alert = () => {
+        window.__capyAlertCalls += 1;
+      };
+    });
+    await m3Page.setViewportSize({ width: 540, height: 420 });
+    await m3Page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(m3Page);
+
+    const fractionalDprCheck = await m3Page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      return {
+        clientWidth: c ? c.clientWidth : 0,
+        canvasWidth: c ? c.width : 0,
+        expectedWidth: c ? Math.round(c.clientWidth * 1.25) : 0,
+      };
+    });
+    assert.equal(
+      fractionalDprCheck.canvasWidth,
+      fractionalDprCheck.expectedWidth,
+      `Expected fractional 1.25x DPR canvas.width=${fractionalDprCheck.expectedWidth}, got ${fractionalDprCheck.canvasWidth}`
+    );
+
+    // Seed a custom user save, then trigger import of malformed .capy JSON -> must show inline notice without alert() or partial state
+    await m3Page.getByTestId('topbar-saves-btn').click();
+    await m3Page.getByTestId('import-save-btn').waitFor({ state: 'visible', timeout: 5000 });
+    const preBadImportSnapCount = await m3Page.evaluate(
+      () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length
+    );
+    const badJsonPath = path.join(os.tmpdir(), 'capy_malformed_test.json');
+    fs.writeFileSync(
+      badJsonPath,
+      JSON.stringify({
+        format: 'capy-single-save',
+        snapshot: { id: 'corrupt_snap_1', title: 'Corrupt Save' },
+        puzzle: { width: -5, height: 10, palette: [], regions: [] },
+      }),
+      'utf8'
+    );
+    await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
+    fs.rmSync(badJsonPath, { force: true });
+    await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await m3Page.getByTestId('saves-import-notice').getAttribute('role'),
+      'alert',
+      'Malformed save import must display inline role="alert" banner'
+    );
+    assert.equal(
+      await m3Page.evaluate(() => window.__capyAlertCalls),
+      0,
+      'Malformed save import must never call blocking window.alert()'
+    );
+    assert.equal(
+      await m3Page.evaluate(() => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length),
+      preBadImportSnapCount,
+      'Malformed save import must leave zero partial snapshots in localStorage'
+    );
+
+    // Delete all saves -> must clear active session cleanly and auto-regenerate Capy Forest with zero broken thumbnails
+    await m3Page.getByRole('button', { name: 'Delete All Saves' }).click();
+    await m3Page.getByRole('button', { name: 'Yes, Delete All' }).click();
+    await m3Page.waitForFunction(
+      () => {
+        const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+        return snaps.length === 1 && snaps[0].title === 'Capy Forest' && snaps[0].totalCount > 0;
+      },
+      null,
+      { timeout: 15000 }
+    );
+    await m3Page.waitForFunction(
+      () => {
+        const imgs = Array.from(document.querySelectorAll('img'));
+        return imgs.length > 0 && imgs.every((img) => img.complete && img.naturalWidth > 0);
+      },
+      null,
+      { timeout: 5000 }
+    );
+
+    // Verify sample_saves.capy bootstrap import does not shadow existing custom user saves
+    const sampleOrderCheck = await m3Page.evaluate(async () => {
+      const customTs = Date.now() - 60_000;
+      const customSave = {
+        id: 'custom_user_save_check',
+        title: 'Custom User Art',
+        timestamp: customTs,
+        lastOpened: customTs,
+        filledCount: 2,
+        totalCount: 10,
+        filledRegionIds: [1, 2],
+        isAutoSample: false,
+      };
+      window.capyStorage.saveSnapshots([customSave]);
+      const resp = await fetch('./assets/sample_saves.capy');
+      const buf = await resp.arrayBuffer();
+      await window.capyStorage.importSnapshotData(buf, { refreshTimestamps: true });
+      const after = window.capyStorage.loadSnapshots();
+      const samples = after.filter((s) => s.isAutoSample);
+      return {
+        firstId: after[0]?.id,
+        sampleCount: samples.length,
+        allSamplesOlder: samples.every((s) => s.lastOpened < customTs && s.timestamp < customTs),
+      };
+    });
+    assert.equal(sampleOrderCheck.firstId, 'custom_user_save_check', 'Custom user save must remain first');
+    assert.equal(sampleOrderCheck.sampleCount >= 4, true, 'All sample_saves.capy entries must import');
+    assert.equal(sampleOrderCheck.allSamplesOlder, true, 'Auto-sample timestamps must stay strictly older than custom saves');
+
+    // Corrupt #s= deep-link with valid ?room= must join room and strip invalid #s= hash without throwing
+    await m3Page.goto(`${BASE_URL}/?room=ABCD23#s=invalid_corrupt_token`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(m3Page);
+    await m3Page.waitForFunction(
+      () => !window.location.hash.includes('s='),
+      null,
+      { timeout: 5000 }
+    );
+    const m3RoomTitle = await m3Page.getByTestId('topbar-coop-btn').getAttribute('title');
+    assert.equal(
+      Boolean(m3RoomTitle && m3RoomTitle.includes('ABCD23')),
+      true,
+      `Expected ?room=ABCD23 to remain joined even when #s= token is invalid, got ${m3RoomTitle}`
+    );
+
+    await m3Page.close();
+    console.log('   PASS: Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, and fractional DPR verified.');
+
+    // -------------------------------------------------------------------------
+    // 14. Channel Storage Sandbox Isolation & UserSettings Enum Persistence E2E
+    // -------------------------------------------------------------------------
+    console.log('-> [3.0.7] Verifying Beta/Alpha StorageNamespace browser isolation & UserSettings enum persistence...');
+    await page.evaluate(() => {
+      const s = window.capyStorage.loadSettings();
+      s.difficulty = 'NORMAL';
+      s.paletteSort = 'HUE';
+      s.highlightStyle = 'CENTROID_GLOW';
+      window.capyStorage.saveSettings(s);
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    const persistedEnums = await page.evaluate(() => {
+      const s = window.capyStorage.loadSettings();
+      return {
+        difficulty: s.difficulty,
+        paletteSort: s.paletteSort,
+        highlightStyle: s.highlightStyle,
+      };
+    });
+    assert.deepEqual(persistedEnums, {
+      difficulty: 'NORMAL',
+      paletteSort: 'HUE',
+      highlightStyle: 'CENTROID_GLOW',
+    });
+
+    const sandboxBetaPage = await context.newPage();
+    attachErrorListeners(sandboxBetaPage, 'sandboxBetaPage');
+    await sandboxBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForPuzzleLoaded(sandboxBetaPage);
+    await sandboxBetaPage.evaluate(() => {
+      const s = window.capyStorage.loadSettings();
+      s.difficulty = 'EASY';
+      s.paletteSort = 'LIGHTNESS';
+      window.capyStorage.saveSettings(s);
+    });
+    const sandboxKeys = await sandboxBetaPage.evaluate(() => ({
+      betaSettingsRaw: localStorage.getItem('capy_user_settings_v8__sandbox_beta'),
+      betaSnapsRaw: localStorage.getItem('capy_snapshots_v8__sandbox_beta'),
+      betaActiveRaw: localStorage.getItem('capy_active_session_v8__sandbox_beta'),
+      betaIdentityRaw: localStorage.getItem('capy_player_identity_v1__sandbox_beta'),
+      betaTabSuffix: sessionStorage.getItem('capy_tab_peer_suffix_v1__sandbox_beta'),
+      prodSettings: JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'),
+    }));
+    assert.ok(sandboxKeys.betaSettingsRaw, 'Beta sandbox must persist capy_user_settings_v8__sandbox_beta');
+    assert.ok(sandboxKeys.betaSnapsRaw, 'Beta sandbox must persist capy_snapshots_v8__sandbox_beta');
+    assert.ok(sandboxKeys.betaActiveRaw, 'Beta sandbox must persist capy_active_session_v8__sandbox_beta');
+    assert.ok(sandboxKeys.betaIdentityRaw, 'Beta sandbox must persist capy_player_identity_v1__sandbox_beta');
+    assert.ok(sandboxKeys.betaTabSuffix, 'Beta sandbox must persist capy_tab_peer_suffix_v1__sandbox_beta');
+    assert.equal(
+      sandboxKeys.prodSettings.difficulty,
+      'NORMAL',
+      'Beta sandbox mutations must never overwrite Production capy_user_settings_v8.difficulty'
+    );
+    assert.equal(
+      sandboxKeys.prodSettings.paletteSort,
+      'HUE',
+      'Beta sandbox mutations must never overwrite Production capy_user_settings_v8.paletteSort'
+    );
+
+    // Check Release Channel card mentions isolated sandbox
+    await sandboxBetaPage.getByTestId('topbar-channel-badge').click();
+    await sandboxBetaPage.getByTestId('release-channel-card').waitFor({ state: 'visible', timeout: 5000 });
+    const betaChannelCopy = await sandboxBetaPage.getByTestId('release-channel-card').innerText();
+    assert.equal(
+      betaChannelCopy.toLowerCase().includes('isolated'),
+      true,
+      'Release Channel card must explain isolated channel sandbox'
+    );
+    await sandboxBetaPage.close();
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

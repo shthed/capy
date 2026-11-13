@@ -29,6 +29,9 @@ class CapyAndroidBridge(
     private val onRequestPlayGamesSignIn: (() -> Unit)? = null,
     private val onSaveCloudSnapshot: ((String, String) -> Unit)? = null,
     private val onRequestCloudSnapshotPull: ((String) -> Unit)? = null,
+    private val isPlayGamesConfiguredProvider: () -> Boolean = {
+        isPlayGamesAppIdConfigured(readPlayGamesAppId(context))
+    },
 ) {
     @Volatile
     var isModalOpen: Boolean = false
@@ -137,7 +140,19 @@ class CapyAndroidBridge(
     }
 
     @JavascriptInterface
+    fun isPlayGamesConfigured(): Boolean {
+        return try {
+            isPlayGamesConfiguredProvider()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @JavascriptInterface
     fun requestCloudSnapshotPull(slotKey: String): Boolean {
+        if (!isPlayGamesConfigured()) {
+            return false
+        }
         val safeKey = sanitizeKey(slotKey)
         val callback = onRequestCloudSnapshotPull ?: return false
         callback.invoke(safeKey)
@@ -289,6 +304,20 @@ class CapyAndroidBridge(
             return (trimmed.length >= 6) &&
                 trimmed.all { it.isDigit() } &&
                 trimmed.any { it != '0' }
+        }
+
+        fun readPlayGamesAppId(context: Context): String? {
+            return try {
+                val resId = context.resources.getIdentifier(
+                    "game_services_project_id",
+                    "string",
+                    context.packageName,
+                )
+                if (resId == 0) return null
+                context.getString(resId)
+            } catch (_: Exception) {
+                null
+            }
         }
 
         /**

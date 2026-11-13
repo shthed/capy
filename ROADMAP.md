@@ -156,7 +156,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Value**: Eliminates mobile thumb occlusion on tiny `< 50px` micro-regions without forcing repeated manual zooming to `12x` and back out.
 - **Why Pushed to [EPIC-3](https://github.com/shthed/capy/issues/478)**: Held out of `v3.0.1` (bugfixes only) so the Project Owner can review visual cutout styling, crosshair ergonomics, horizontal edge clamping, and hold-vs-pan gesture thresholds prior to implementation.
 - **Planned Sprint Slices**:
-  - **TASK-2.1a**: Render a zero-allocation `2.5x` magnified `compositeCanvasRef` cutout + crosshair lens in `PuzzleCanvas.tsx`.
+  - **TASK-2.1a**: Render a zero-allocation `2.5x` magnified `baseCanvasRef` cutout + crosshair lens in `PuzzleCanvas.tsx`.
   - **TASK-2.1b** `[quick-win]`: Add `showMagnifierLoupe: boolean` setting toggle in `SettingsModal.tsx` Controls and Playwright E2E touch-hold verification.
 
 <details>
@@ -167,7 +167,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Effort Estimate**: `~40,000 tokens` | `~18--26 min agent` (`~5--7 hrs human`)
 - **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
-  - Reuses existing offscreen `compositeCanvasRef` via `ctx.drawImage` circular clip with zero per-frame `OffscreenCanvas` or heap allocations inside `requestAnimationFrame`, scaling cleanly for `devicePixelRatio`.
+  - Reuses existing offscreen `baseCanvasRef` (plus `highlightCanvasRef` / `borderCanvasRef`) via `ctx.drawImage` circular clip with zero per-frame `OffscreenCanvas` or heap allocations inside `requestAnimationFrame`, scaling cleanly for `devicePixelRatio`.
   - Repositions below the finger within `96px` of the top viewport edge, clamps horizontally (`>= loupeRadius + 12px` from left/right edges), and activates via hold threshold or Paint Mode drag without conflicting with pan or double-tap-drag zoom.
 
 </details>
@@ -314,7 +314,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 - **Readiness**: `Blocked -- External Cloudflare Workers / Durable Objects Account`
 - **Unblock Prerequisite**: Cloudflare Workers + Durable Objects deployment target and live `VITE_CAPY_ROOM_WS_URL` domain.
-- **Description**: Deploy a lightweight stateless/hibernating WebSocket room relay (`relay/` Cloudflare Worker + Durable Objects) backing `HybridCoopRoomAdapter` for 6-character `?room=ABC123` codes.
+- **Description**: Deploy a lightweight stateless/hibernating WebSocket room relay ([`worker/`](./worker/) Cloudflare Worker + Durable Objects) backing `HybridCoopRoomAdapter` for 6-character `?room=ABC123` codes.
 - **Value**: Lets friends and family color the same puzzle together in real time across separate phones, tablets, and laptops over the internet—not just tabs on the same browser.
 - **Why Now**: `HybridCoopRoomAdapter` already implements the full WebSocket room protocol (`HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, `LEAVE`).
 
@@ -324,7 +324,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Type & Priority**: `Story` | [EPIC-5](https://github.com/shthed/capy/issues/480) | `priority: medium` | `domain: multiplayer, cloud`
 - **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
 - **Effort Estimate**: `~50,000 tokens` | `~25--35 min agent` (`~8--12 hrs human`)
-- **Target Files**: `relay/`, [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
+- **Target Files**: [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts), [`wrangler.jsonc`](./wrangler.jsonc), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Hibernates between strokes (`0` billable CPU ms while idle via C++ `PING`/`PONG`), enforces `<= 6 KB` frame caps, strict `Origin` validation, `40 frames / 5s` rate limiting, and write-once initial `seed_token` persistence, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
 

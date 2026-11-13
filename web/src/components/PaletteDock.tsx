@@ -336,6 +336,11 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
               ref={isActive ? activeSwatchRef : undefined}
               type="button"
               data-testid={`palette-swatch-${dispNum}`}
+              aria-label={`Color #${dispNum}${
+                isFreeColorMode
+                  ? ` (${badgeVal} painted)`
+                  : ` (${badgeVal} remaining)`
+              }`}
               aria-pressed={isActive}
               onClick={() => handleSwatchClick(color)}
               title={`Color #${dispNum}${

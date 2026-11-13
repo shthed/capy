@@ -257,7 +257,7 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
       displayName: 'Google Play Games',
       storageName: 'Google Play Games Saved Games (SnapshotsClient)',
       isSupported: NativeBridge.isAndroid,
-      isConfigured: NativeBridge.isAndroid,
+      isConfigured: NativeBridge.isAndroid && NativeBridge.isPlayGamesConfigured(),
     };
   }
 
@@ -290,6 +290,9 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
         lastSyncedAt: Date.now(),
       };
     }
+    if (!NativeBridge.isPlayGamesConfigured()) {
+      return null;
+    }
     const immediate = NativeBridge.signInPlayGames();
     if (immediate) {
       this.activeProfile = immediate;
@@ -303,17 +306,23 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     }
     return new Promise<Partial<PlayerIdentity> | null>((resolve) => {
       let settled = false;
+      let unsubProfile: () => void = () => {};
+      let unsubError: () => void = () => {};
+      const cleanup = () => {
+        clearTimeout(timer);
+        unsubProfile();
+        unsubError();
+      };
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
-        unsub();
+        cleanup();
         resolve(null);
       }, 4500);
-      const unsub = NativeBridge.onPlayGamesProfile((profile) => {
+      unsubProfile = NativeBridge.onPlayGamesProfile((profile) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
-        unsub();
+        cleanup();
         this.activeProfile = profile;
         resolve({
           playerId: profile.playerId,
@@ -323,11 +332,20 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
           lastSyncedAt: Date.now(),
         });
       });
+      unsubError = NativeBridge.onPlayGamesError(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(null);
+      });
     });
   }
 
   async signIn(): Promise<Partial<PlayerIdentity>> {
     setExplicitlySignedOut(false);
+    if (!NativeBridge.isAndroid) {
+      throw new Error('PLAY_GAMES_UNCONFIGURED');
+    }
     const immediate = NativeBridge.signInPlayGames();
     if (immediate) {
       this.activeProfile = immediate;
@@ -339,32 +357,48 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
         lastSyncedAt: Date.now(),
       };
     }
-    // Wait up to 8 seconds for the native Play Games interactive signIn() callback
-    const asyncProfile = await new Promise<{ playerId: string; displayName: string } | null>(
-      (resolve) => {
-        let settled = false;
-        const timer = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          unsub();
-          resolve(null);
-        }, 8000);
-        const unsub = NativeBridge.onPlayGamesProfile((profile) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          unsub();
-          resolve(profile);
-        });
-      }
-    );
-    if (!asyncProfile) {
+    if (!NativeBridge.isPlayGamesConfigured()) {
       throw new Error('PLAY_GAMES_UNCONFIGURED');
     }
-    this.activeProfile = asyncProfile;
+    // Wait up to 8 seconds for the native Play Games interactive signIn() callback or immediate error
+    const outcome = await new Promise<
+      | { ok: true; profile: { playerId: string; displayName: string } }
+      | { ok: false; error: string }
+    >((resolve) => {
+      let settled = false;
+      let unsubProfile: () => void = () => {};
+      let unsubError: () => void = () => {};
+      const cleanup = () => {
+        clearTimeout(timer);
+        unsubProfile();
+        unsubError();
+      };
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ ok: false, error: 'PLAY_GAMES_UNCONFIGURED' });
+      }, 8000);
+      unsubProfile = NativeBridge.onPlayGamesProfile((profile) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ ok: true, profile });
+      });
+      unsubError = NativeBridge.onPlayGamesError((reason) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ ok: false, error: reason || 'PLAY_GAMES_UNAVAILABLE' });
+      });
+    });
+    if (!outcome.ok) {
+      throw new Error(outcome.error);
+    }
+    this.activeProfile = outcome.profile;
     return {
-      playerId: asyncProfile.playerId,
-      displayName: asyncProfile.displayName,
+      playerId: outcome.profile.playerId,
+      displayName: outcome.profile.displayName,
       provider: 'play_games_v2',
       isAuthenticated: true,
       lastSyncedAt: Date.now(),

@@ -1,4 +1,8 @@
-### 3.0.6 - 2026-11-13 (Beta)
+### 3.0.7 - 2026-11-13 (Beta)
+
+- Isolate alpha/beta preview browser storage (`StorageNamespace`), harden canvas DPR listeners and settings persistence, add `.changelog/` fragment compiler, fix `PaletteDock` accessibility labels, and sync Agile docs [#495](https://github.com/shthed/capy/pull/495)
+
+### 3.0.6 - 2026-11-13
 
 - Persist post-load replay controls until puzzle interaction, set Capy Forest as default puzzle, add interactive first-run tutorial, and move About tab first [#489](https://github.com/shthed/capy/pull/489)
 

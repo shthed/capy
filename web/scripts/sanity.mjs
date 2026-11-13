@@ -281,6 +281,84 @@ export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIR
   return { rootMdFiles, hasProjectMd };
 }
 
+export function parseChangelogFragment(rawContent, relFile = '.changelog/fragment.md') {
+  const normalized = String(rawContent || '').replace(/\r\n/g, '\n');
+  const fmMatch = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(normalized);
+  assert.ok(fmMatch, `Invalid changelog fragment frontmatter in ${relFile}: expected --- YAML --- block`);
+
+  const metaLines = fmMatch[1].split('\n');
+  const meta = {};
+  for (const line of metaLines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const kv = /^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$/.exec(trimmed);
+    assert.ok(kv, `Invalid frontmatter line in ${relFile}: "${line}"`);
+    const key = kv[1].toLowerCase();
+    const val = kv[2].trim().replace(/^["']|["']$/g, '');
+    meta[key] = val;
+  }
+
+  const bump = (meta.bump || '').toLowerCase();
+  assert.equal(
+    bump === 'patch' || bump === 'minor' || bump === 'major',
+    true,
+    `Invalid or missing "bump" in ${relFile}: expected patch|minor|major`
+  );
+
+  let pr = null;
+  if (meta.pr !== undefined && meta.pr !== '') {
+    assert.match(meta.pr, /^[1-9]\d*$/, `Invalid "pr" number in ${relFile}: ${meta.pr}`);
+    pr = Number(meta.pr);
+  }
+
+  if (meta.epic !== undefined && meta.epic !== '') {
+    assert.match(
+      meta.epic,
+      /^(?:EPIC-[1-9]\d*|[1-9]\d*)$/i,
+      `Invalid "epic" value in ${relFile}: ${meta.epic}`
+    );
+  }
+
+  const body = fmMatch[2].trim();
+  assert.equal(body.length > 0, true, `Changelog fragment ${relFile} must have a non-empty summary`);
+  assert.equal(body.includes('\n'), false, `Changelog fragment ${relFile} summary must be a single line`);
+  assert.equal(
+    /^#{1,6}\s|^-\s/.test(body),
+    false,
+    `Changelog fragment ${relFile} summary must be plain text without headings or list prefixes`
+  );
+
+  return {
+    bump,
+    pr,
+    epic: meta.epic || null,
+    task: meta.task || null,
+    summary: body,
+  };
+}
+
+export function validateChangelogFragments(root) {
+  const dir = path.join(path.resolve(root), '.changelog');
+  if (!fs.existsSync(dir)) return 0;
+
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  let count = 0;
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    if (entry.name.toLowerCase() === 'readme.md') continue;
+    assert.equal(
+      entry.name.toLowerCase().endsWith('.md'),
+      true,
+      `Unexpected non-Markdown file in .changelog/: ${entry.name}`
+    );
+    const fullPath = path.join(dir, entry.name);
+    const raw = fs.readFileSync(fullPath, 'utf8');
+    parseChangelogFragment(raw, `.changelog/${entry.name}`);
+    count++;
+  }
+  return count;
+}
+
 export function runSanityChecks({
   repoRoot = DEFAULT_REPO_ROOT,
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
@@ -342,6 +420,7 @@ export function runSanityChecks({
   );
 
   validateChangelogChannelOrder(changelogText, pkg.version, { enforceChannelOrder });
+  validateChangelogFragments(root);
 
   const bulletLines = changelogText.split('\n').filter((line) => line.startsWith('- '));
   assert.equal(bulletLines.length >= 398, true, `Expected >= 398 bullets, got ${bulletLines.length}`);

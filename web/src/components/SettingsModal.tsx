@@ -35,6 +35,7 @@ import {
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
+import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
@@ -100,7 +101,10 @@ interface SettingsModalProps {
   onExportPrintableSvg?: () => Promise<boolean> | void;
   onExportSnapshotSvg?: (id: string, title: string) => Promise<boolean> | void;
   onExportAllSnapshots?: () => void;
-  onImportSnapshots?: (file: File) => void;
+  onImportSnapshots?: (
+    file: File
+  ) => Promise<{ ok: boolean; importedCount: number; message: string } | void> | void;
+  onRestoreStarterSample?: () => void;
   onHostCoopRoom?: () => Promise<string | null>;
   onJoinCoopRoom?: (code: string) => Promise<boolean>;
   onLeaveCoopRoom?: () => void;
@@ -150,6 +154,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onExportSnapshotSvg,
   onExportAllSnapshots,
   onImportSnapshots,
+  onRestoreStarterSample,
   onHostCoopRoom,
   onJoinCoopRoom,
   onLeaveCoopRoom,
@@ -168,7 +173,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<number>(() => {
     if (initialTab !== undefined) return initialTab;
     try {
-      const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+      const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
       if (saved !== null) {
         const parsed = parseInt(saved, 10);
         if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) return parsed;
@@ -187,7 +192,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [savesViewMode, setSavesViewMode] = useState<'DETAIL' | 'THUMBNAILS'>(() => {
     try {
       return (
-        (localStorage.getItem('capy_saves_view_mode') as 'DETAIL' | 'THUMBNAILS') || 'DETAIL'
+        (localStorage.getItem(resolveScopedStorageKey('capy_saves_view_mode')) as
+          | 'DETAIL'
+          | 'THUMBNAILS') || 'DETAIL'
       );
     } catch {
       return 'DETAIL';
@@ -218,6 +225,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [profileNameDraft, setProfileNameDraft] = useState(playerIdentity.displayName);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hubNotice, setHubNotice] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [failedThumbSrcs, setFailedThumbSrcs] = useState<Record<string, boolean>>({});
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const cloudProviders = useMemo(
     () => ProviderRegistry.auth.getAvailableCloudProviders(),
@@ -245,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSetViewMode = (mode: 'DETAIL' | 'THUMBNAILS') => {
     setSavesViewMode(mode);
     try {
-      localStorage.setItem('capy_saves_view_mode', mode);
+      localStorage.setItem(resolveScopedStorageKey('capy_saves_view_mode'), mode);
     } catch {
       // Ignored
     }
@@ -257,13 +266,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (initialTab !== undefined) {
         setActiveTab(initialTab);
         try {
-          localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(initialTab));
+          localStorage.setItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY), String(initialTab));
         } catch {
           // Ignored
         }
       } else {
         try {
-          const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+          const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
           if (saved !== null) {
             const parsed = parseInt(saved, 10);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
@@ -435,7 +444,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => {
                     setActiveTab(tab.id);
                     try {
-                      localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(tab.id));
+                      localStorage.setItem(
+                        resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY),
+                        String(tab.id)
+                      );
                     } catch {
                       // Ignored
                     }
@@ -717,6 +729,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {(() => {
                   const channelInfo = resolveReleaseChannel();
                   if (!channelInfo.showChannelSwitcher) return null;
+                  const ns = resolveStorageNamespace();
                   const isBeta = channelInfo.channel === 'beta';
                   const isAlpha = channelInfo.channel === 'alpha';
                   const sharesOriginWithBeta =
@@ -756,9 +769,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] leading-relaxed text-slate-400">
-                        {sharesOriginWithBeta
-                          ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.'
-                          : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
+                        {ns.isSandboxed
+                          ? 'Preview upcoming Sprint features early in an isolated channel sandbox so your Production saves and settings stay untouched.'
+                          : sharesOriginWithBeta
+                            ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Beta runs in an isolated browser sandbox so your Production saves and settings stay untouched.'
+                            : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                         <a
@@ -2371,12 +2386,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="file"
                 accept=".capy,.json,application/json,application/octet-stream"
                 className="hidden"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file && onImportSnapshots) {
-                    onImportSnapshots(file);
-                  }
                   if (e.target) e.target.value = '';
+                  if (!file || !onImportSnapshots) return;
+                  try {
+                    const res = await onImportSnapshots(file);
+                    if (res && typeof res === 'object' && 'message' in res) {
+                      setImportNotice({ ok: Boolean(res.ok), message: res.message });
+                    }
+                  } catch (err) {
+                    setImportNotice({
+                      ok: false,
+                      message:
+                        err instanceof Error ? err.message : 'Failed to import Capy save file.',
+                    });
+                  }
                 }}
               />
 
@@ -2526,6 +2551,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               setHubNotice(
                                 'Google Cloud Sign-In requires VITE_GOOGLE_CLIENT_ID (Web) or CAPY_PLAY_GAMES_APP_ID (Android) configured in repository build variables — see CLOUD.md.'
                               );
+                            } else if (
+                              msg === 'PLAY_GAMES_UNAVAILABLE' ||
+                              msg === 'PLAY_GAMES_PROFILE_UNAVAILABLE'
+                            ) {
+                              setHubNotice(
+                                'Google Play Games Services is currently unavailable or offline on this device. Local saves remain safe.'
+                              );
                             } else {
                               setHubNotice(`Google Sign-In failed: ${msg}`);
                             }
@@ -2565,6 +2597,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   : `Cloud Sync up to date (${ProviderRegistry.cloudSave.providerName})!`
                               );
                             }
+                          } catch (err) {
+                            setHubNotice(
+                              `Cloud Sync failed: ${err instanceof Error ? err.message : 'Unable to reach cloud storage.'}`
+                            );
                           } finally {
                             setIsSyncingCloud(false);
                           }
@@ -2743,11 +2779,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             data-testid="join-coop-room-btn"
                             onClick={async () => {
-                              if (!joinCodeInput.trim()) return;
-                              const ok = await onJoinCoopRoom(joinCodeInput.trim());
-                              if (ok) {
-                                setHubNotice(`Joined Co-op Room ${joinCodeInput.trim().toUpperCase()}!`);
-                                setJoinCodeInput('');
+                              const rawCode = joinCodeInput.trim();
+                              if (!rawCode) return;
+                              try {
+                                const ok = await onJoinCoopRoom(rawCode);
+                                if (ok) {
+                                  setHubNotice(`Joined Co-op Room ${rawCode.toUpperCase()}!`);
+                                  setJoinCodeInput('');
+                                } else {
+                                  setHubNotice('Enter a valid 4-8 character Co-op room code.');
+                                }
+                              } catch {
+                                setHubNotice('Unable to join Co-op room. Check code and try again.');
                               }
                             }}
                             className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 cursor-pointer"
@@ -3145,6 +3188,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Inline Accessible Import Status Banner */}
+              {importNotice && (
+                <div
+                  role={importNotice.ok ? 'status' : 'alert'}
+                  data-testid="saves-import-notice"
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
+                    importNotice.ok
+                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                      : 'bg-red-950/60 border-red-500/40 text-red-300'
+                  }`}
+                >
+                  <span>{importNotice.message}</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss import message"
+                    onClick={() => setImportNotice(null)}
+                    className="p-0.5 rounded hover:bg-white/10 cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+
               {/* Snapshots Content: Detail Mode or Thumbnails Mode */}
               {savesViewMode === 'DETAIL' ? (
                 /* Detail List View */
@@ -3153,7 +3219,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isActive = snap.id === activeSnapshotId;
                     const isSelected = snap.id === currentSelectedId;
                     const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                    const thumbSrc = snap.sampleAssetPath || snap.previewDataUrl;
+                    const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                    const fallbackThumb =
+                      primaryThumb &&
+                      failedThumbSrcs[primaryThumb] &&
+                      snap.previewDataUrl &&
+                      snap.previewDataUrl !== primaryThumb
+                        ? snap.previewDataUrl
+                        : undefined;
+                    const thumbSrc =
+                      primaryThumb && !failedThumbSrcs[primaryThumb]
+                        ? primaryThumb
+                        : fallbackThumb && !failedThumbSrcs[fallbackThumb]
+                          ? fallbackThumb
+                          : undefined;
 
                     return (
                       <div
@@ -3183,6 +3262,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <img
                               src={thumbSrc}
                               alt={snap.title}
+                              onError={() =>
+                                setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
+                              }
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -3230,7 +3312,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isActive = snap.id === activeSnapshotId;
                     const isSelected = snap.id === currentSelectedId;
                     const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                    const thumbSrc = snap.sampleAssetPath || snap.previewDataUrl;
+                    const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                    const fallbackThumb =
+                      primaryThumb &&
+                      failedThumbSrcs[primaryThumb] &&
+                      snap.previewDataUrl &&
+                      snap.previewDataUrl !== primaryThumb
+                        ? snap.previewDataUrl
+                        : undefined;
+                    const thumbSrc =
+                      primaryThumb && !failedThumbSrcs[primaryThumb]
+                        ? primaryThumb
+                        : fallbackThumb && !failedThumbSrcs[fallbackThumb]
+                          ? fallbackThumb
+                          : undefined;
 
                     return (
                       <div
@@ -3260,6 +3355,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <img
                               src={thumbSrc}
                               alt={snap.title}
+                              onError={() =>
+                                setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
+                              }
                               className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                             />
                           ) : (
@@ -3300,8 +3398,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
 
               {snapshots.length === 0 && (
-                <div className="text-center py-8 text-slate-500 text-sm">
-                  No saved snapshots yet. Load an image or play a sample to start!
+                <div
+                  data-testid="saves-empty-recovery"
+                  className="text-center py-8 px-4 space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-slate-400 text-sm"
+                >
+                  <p>No saved puzzles yet. Load an image, import a `.capy` save, or restore the starter artwork.</p>
+                  {onRestoreStarterSample && (
+                    <button
+                      type="button"
+                      data-testid="restore-starter-sample-btn"
+                      onClick={onRestoreStarterSample}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-bold hover:bg-amber-300 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw size={13} />
+                      <span>Restore Capy Forest Starter</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

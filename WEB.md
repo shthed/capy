@@ -292,8 +292,9 @@ type WorkerResponse =
 2. **Binary `.capy` v2 Archives & CRDT Progress Deltas ([`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
    - `StorageService.exportSnapshotBinary(id)` / `exportAllSnapshotsBinary()` emit `CAPY\x02<flags>` Gzip archives embedding `SavedSnapshot` metadata (including `customPalette` and `parentSnapshotId`), `CompactPuzzleRecordV2` geometry, and custom image blobs.
    - `CapyCodec.encodeProgressDeltaToken` / `mergeProgressDeltas` encode `ProgressDeltaV2` (`sourceRef`, `filledRegionIds`, `paintedRegionColors`, `isFreeColor`, `updatedAt`) into `< 2 KB` `#s=<token>` URL fragments with CRDT Grow-Only Set-Union (`filledRegionIds`) + Last-Writer-Wins (`paintedRegionColors`) merging.
-3. **Instant First-Launch Sample Archive (`./assets/sample_saves.capy`)**:
-   - On cold start with zero existing snapshots, `restoreSession` fetches `./assets/sample_saves.capy` (`225 KB`) and imports all 4 `SAMPLE_GALLERY` puzzles (`Capy Forest` default index `0`, `Capybara`, `Mushroom Forest`, `Snail Guitar`) directly into `localStorage` and `IndexedDB` without spawning `puzzle.worker.ts`.
+3. **Instant First-Launch Sample Archive (`./assets/sample_saves.capy`) & Atomic `.capy` Imports**:
+   - On cold start with zero existing snapshots, `restoreSession` fetches `./assets/sample_saves.capy` (`225 KB`) and imports all 4 `SAMPLE_GALLERY` puzzles (`Capy Forest` default index `0`, `Capybara`, `Mushroom Forest`, `Snail Guitar`) directly into `localStorage` and `IndexedDB` without spawning `puzzle.worker.ts`. When `sample_saves.capy` is lazily imported alongside existing custom user saves, `StorageService.mergeImportedSnapshots` preserves custom saves first with strictly newer timestamps so `isAutoSample` entries never shadow user artwork.
+   - `StorageService.importSnapshotData` validates and decompresses all puzzle records and blobs in memory before mutating `IndexedDB` or `localStorage`, while `SettingsModal` surfaces inline accessible import notices (`saves-import-notice`, zero blocking `alert()` dialogs) and zero-snapshot starter recovery.
 
 ### Complete Browser Storage Key Inventory (`localStorage` & `sessionStorage`)
 - **`capy_snapshots_v8`** (`localStorage`): Array of `SavedSnapshot` metadata records (mirrored to Android `filesDir/capy_saves/`).
@@ -312,6 +313,8 @@ type WorkerResponse =
 - **`capy_community_ideas_v1`** (`localStorage`): Moderated `CommunityPuzzleIdea` entries and vote state.
 - **`capy_ai_credits_v1`** (`localStorage`): Opt-in `AiCreditLedger` (`availableCredits`, `lifetimeEarnedCredits`, `lifetimeSpentCredits`, `adFreePlatform`, `personalizedAdsConsent`).
 - **`capy_player_stats_v1`** (`localStorage`, backed up via `NativeBridge`): `PlayerLifetimeStats` (`totalRegionsColored`, `puzzlesCompleted`, `zeroHintPuzzles`, `fastestCompletionMs`, `freeColorCreations`, `coopRegionsPainted`).
+- **`capy_preload_reload_v1`** (`sessionStorage`): Single-shot Vite dynamic-import preload-error reload guard in [`main.tsx`](./web/src/main.tsx).
+- **Channel Sandbox Isolation ([`StorageNamespace.ts`](./web/src/services/StorageNamespace.ts))**: On `alpha` (`/capy/alpha/<num>/`) and `beta` (`/capy/beta/`) channels (unless overridden with `?capy_sandbox=0`, or forced with `?capy_sandbox=1`), all 15 `localStorage` keys, both `sessionStorage` keys, and `NativeBridge` backup keys suffix `__sandbox_${channel}`, IndexedDB scopes to `capy_game_storage_v8_${channel}`, and `BroadcastChannel` Co-op rooms scope by channel so preview play never mutates Production saves.
 
 ### 8.1 Comprehensive `UserSettings` Reference (`capy_user_settings_v8`)
 
@@ -359,7 +362,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`soundVolume`**: `number` (default `0.7`, range `0.0`--`1.0`) -- Master gain scalar for procedural Web Audio effects.
 - **`reducedMotion`**: `boolean` (seeded from `window.matchMedia('(prefers-reduced-motion: reduce)').matches`, fallback `false`) -- Skips `canvas-confetti` bursts, multi-frame camera glides, pan-momentum flick glides, and `requestAnimationFrame` hint-pulse oscillations (rendering a steady high-contrast highlight instead).
 - **`detailedLoadingProgress`**: `boolean` (default `false`) -- Switches `LoadingOverlay` between Simple Fast Mode (`false`) and Detailed 6-Stage Inspector Mode (`true`).
-- **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_GENERATOR_CONFIG`) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
+- **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_SETTINGS.generatorConfig` in [`StorageService.ts`](./web/src/services/StorageService.ts)) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
 
 ---
 
@@ -390,7 +393,7 @@ flowchart LR
     P["PwaService.ts"]
     S["Standalone Detection & Install Card"]
   end
-  subgraph ServiceWorker["Offline Service Worker (sw.js - capy-cache-v2)"]
+  subgraph ServiceWorker["Offline Service Worker (sw.js - capy-cache-v&lt;version&gt;:&lt;scope&gt;)"]
     Pre["Pre-cache: Shell, sample_saves.capy, WebP samples & icons"]
     Auto["Auto-discovery: Vite JS/CSS/Worker bundles"]
     Static["Cache-First: Same-origin scripts, styles, workers"]

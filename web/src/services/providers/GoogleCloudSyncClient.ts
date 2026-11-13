@@ -1,3 +1,5 @@
+import { resolveScopedStorageKey } from '../StorageNamespace';
+
 export const GOOGLE_CLIENT_ID_STORAGE_KEY = 'capy_google_oauth_client_id_v1';
 export const GOOGLE_TOKEN_STORAGE_KEY = 'capy_google_oauth_token_v1';
 export const EXPLICIT_SIGNOUT_STORAGE_KEY = 'capy_cloud_explicit_signout_v1';
@@ -77,7 +79,7 @@ declare global {
 export function isExplicitlySignedOut(): boolean {
   try {
     if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem(EXPLICIT_SIGNOUT_STORAGE_KEY) === '1';
+    return localStorage.getItem(resolveScopedStorageKey(EXPLICIT_SIGNOUT_STORAGE_KEY)) === '1';
   } catch {
     return false;
   }
@@ -86,13 +88,14 @@ export function isExplicitlySignedOut(): boolean {
 export function setExplicitlySignedOut(signedOut: boolean): void {
   try {
     if (typeof localStorage === 'undefined') return;
+    const key = resolveScopedStorageKey(EXPLICIT_SIGNOUT_STORAGE_KEY);
     if (signedOut) {
-      localStorage.setItem(EXPLICIT_SIGNOUT_STORAGE_KEY, '1');
+      localStorage.setItem(key, '1');
       if (typeof window !== 'undefined') {
         window.google?.accounts?.id?.disableAutoSelect?.();
       }
     } else {
-      localStorage.removeItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
+      localStorage.removeItem(key);
     }
   } catch {
     // Ignore storage errors
@@ -102,7 +105,9 @@ export function setExplicitlySignedOut(signedOut: boolean): void {
 export function getConfiguredGoogleClientId(): string {
   try {
     if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(GOOGLE_CLIENT_ID_STORAGE_KEY)?.trim();
+      const stored = localStorage
+        .getItem(resolveScopedStorageKey(GOOGLE_CLIENT_ID_STORAGE_KEY))
+        ?.trim();
       if (stored) return stored;
     }
   } catch {
@@ -117,11 +122,12 @@ export function getConfiguredGoogleClientId(): string {
 export function setConfiguredGoogleClientId(clientId: string): void {
   try {
     if (typeof localStorage === 'undefined') return;
+    const key = resolveScopedStorageKey(GOOGLE_CLIENT_ID_STORAGE_KEY);
     const trimmed = clientId.trim();
     if (trimmed) {
-      localStorage.setItem(GOOGLE_CLIENT_ID_STORAGE_KEY, trimmed);
+      localStorage.setItem(key, trimmed);
     } else {
-      localStorage.removeItem(GOOGLE_CLIENT_ID_STORAGE_KEY);
+      localStorage.removeItem(key);
     }
   } catch {
     // Ignore storage write errors
@@ -131,7 +137,7 @@ export function setConfiguredGoogleClientId(clientId: string): void {
 export function loadCachedGoogleSession(): GoogleOAuthSession | null {
   try {
     if (typeof localStorage === 'undefined') return null;
-    const raw = localStorage.getItem(GOOGLE_TOKEN_STORAGE_KEY);
+    const raw = localStorage.getItem(resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as GoogleOAuthSession;
     if (
@@ -153,7 +159,10 @@ export function loadCachedGoogleSession(): GoogleOAuthSession | null {
 export function saveCachedGoogleSession(session: GoogleOAuthSession): void {
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(GOOGLE_TOKEN_STORAGE_KEY, JSON.stringify(session));
+      localStorage.setItem(
+        resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY),
+        JSON.stringify(session)
+      );
     }
   } catch {
     // Ignore
@@ -167,7 +176,7 @@ export function clearCachedGoogleSession(): void {
       window.google?.accounts?.oauth2?.revoke?.(existing.accessToken, () => {});
     }
     if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(GOOGLE_TOKEN_STORAGE_KEY);
+      localStorage.removeItem(resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY));
     }
   } catch {
     // Ignore

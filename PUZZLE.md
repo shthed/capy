@@ -200,10 +200,10 @@ When `detailedProgress` is enabled, `GenerationProgressPayload.inspection` (`Gen
 
 ## 6. Configuration Reference (`GeneratorConfig`)
 
-All fields of `GeneratorConfig` ([`web/src/types/index.ts`](./web/src/types/index.ts), `DEFAULT_GENERATOR_CONFIG`):
+All fields of `GeneratorConfig` ([`web/src/types/index.ts`](./web/src/types/index.ts), `DEFAULT_SETTINGS.generatorConfig` in [`StorageService.ts`](./web/src/services/StorageService.ts)):
 
 - **`imageType`**: `'AUTO' | 'DRAWING' | 'PHOTO'` (default `'AUTO'`) -- High-level artwork hint guiding style classification.
-- **`preset`**: `'SIMPLE' | 'MEDIUM' | 'COMPLEX' | 'CUSTOM'` (default `'MEDIUM'`) -- Difficulty preset controlling default region density and minimum cell size.
+- **`preset`**: `'LOW' | 'MEDIUM' | 'HIGH' | 'CUSTOM'` (default `'MEDIUM'`) -- Difficulty preset controlling default region density and minimum cell size.
 - **`algorithm`**: `'AUTO' | 'LINE_ART' | 'PAINTERLY' | 'POSTERIZED' | 'MOSAIC_CEL'` (default `'AUTO'`) -- Segmentation strategy selector.
 - **`lineHandling`**: `'ABSORB_LINES' | 'UNIFIED_BLACK_REGION'` (default `'ABSORB_LINES'`) -- Medial-axis centerline absorption vs. playable black ink outline region(s).
 - **`paletteDetail`**: `'AUTO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CUSTOM'` (default `'AUTO'`) -- Automatic perceptual cluster sizing vs. manual swatch count.
