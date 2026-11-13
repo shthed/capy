@@ -34,7 +34,7 @@ async function captureGallery() {
       deviceScaleFactor: 2,
     });
     const desktopPage = await desktopContext.newPage();
-    await desktopPage.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
+    await desktopPage.goto('http://localhost:3000/?skipTutorial=1', { waitUntil: 'networkidle' });
     await desktopPage.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
     await desktopPage.waitForTimeout(1000); // Allow render settle
 
@@ -80,7 +80,10 @@ async function captureGallery() {
     console.log('3️⃣ Capturing Settings Modal Customizer...');
     const settingsBtn = await desktopPage.waitForSelector('button[title="Settings and Menu"]');
     await settingsBtn.click();
-    await desktopPage.waitForTimeout(500);
+    await desktopPage.waitForTimeout(300);
+    const settingsTabBtn = await desktopPage.waitForSelector('button:has-text("Settings")');
+    await settingsTabBtn.click();
+    await desktopPage.waitForTimeout(400);
 
     await saveScreenshots(desktopPage, 'settings_customizer.png');
 
@@ -106,7 +109,7 @@ async function captureGallery() {
       deviceScaleFactor: 2,
     });
     const coloringPage = await coloringContext.newPage();
-    await coloringPage.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
+    await coloringPage.goto('http://localhost:3000/?skipTutorial=1', { waitUntil: 'networkidle' });
     await coloringPage.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
 
     // Open Settings -> Create tab -> Pick Mushroom Forest sample
@@ -161,7 +164,7 @@ async function captureGallery() {
       isMobile: true,
     });
     const mobilePage = await mobileContext.newPage();
-    await mobilePage.goto('http://localhost:3000/', { waitUntil: 'networkidle' });
+    await mobilePage.goto('http://localhost:3000/?skipTutorial=1', { waitUntil: 'networkidle' });
     await mobilePage.waitForSelector('[aria-label="Palette dock"]', { timeout: 25000 });
     await mobilePage.waitForTimeout(1000);
 

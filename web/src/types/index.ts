@@ -261,9 +261,9 @@ export const COLORING_PALETTE_PRESETS: PalettePreset[] = [
 ];
 
 export const SAMPLE_GALLERY: SampleArtwork[] = [
+  { id: 'capy_forest', title: 'Capy Forest', assetPath: 'assets/capy_forest.webp', category: 'Nature', tags: ['Animals', 'Nature', 'Detailed'] },
   { id: 'capybara_sample', title: 'Capybara', assetPath: 'assets/capybara.webp', category: 'Animals', tags: ['Animals', 'Cute', 'Illustration'] },
   { id: 'mushrooms', title: 'Mushroom Forest', assetPath: 'assets/mushrooms.webp', category: 'Coloring', tags: ['Coloring', 'Line Art', 'Nature', 'Fantasy'], isFreeColor: true },
-  { id: 'capy_forest', title: 'Capy Forest', assetPath: 'assets/capy_forest.webp', category: 'Nature', tags: ['Animals', 'Nature', 'Detailed'] },
   { id: 'snail_guitar', title: 'Snail Guitar', assetPath: 'assets/snail_guitar.webp', category: 'Music', tags: ['Music', 'Animals', 'Whimsical'] },
 ];
 

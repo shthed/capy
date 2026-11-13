@@ -1,4 +1,8 @@
-### 3.0.5 - 2026-11-13 (Beta)
+### 3.0.6 - 2026-11-13 (Beta)
+
+- Persist post-load replay controls until puzzle interaction, set Capy Forest as default puzzle, add interactive first-run tutorial, and move About tab first [#489](https://github.com/shthed/capy/pull/489)
+
+### 3.0.5 - 2026-11-13
 
 - Serve `/capy/alpha/` preview index manifest with `404.html` redirect from legacy `/capy/PR/NNN` and `/capy/pull/NNN` paths [#491](https://github.com/shthed/capy/pull/491)
 
