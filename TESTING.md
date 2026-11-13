@@ -123,9 +123,9 @@ Capy uses a 3-tier `Alpha -> Beta -> Production` GitHub Actions architecture pai
    - Caches Playwright Chromium (`~/.cache/ms-playwright` via `actions/cache` keyed on `web/package-lock.json`), installs OS shared libraries or Chromium (`npx playwright install --with-deps chromium` on miss / `install-deps chromium` on hit), and executes the complete `npm test` SSR + headless Chromium E2E suite before `deploy` can proceed.
 3. **Deploy to GitHub Pages Job (`deploy-branch.yml`, `contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
    - Guarded by `github.event.repository.has_pages == true` (excluding `dependabot[bot]` PRs and external forks) and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
-    - Publishes open Alpha PR previews to `/pull/<number>/` and `/pull/<number>/capy.apk`.
+    - Publishes open Alpha PR previews to `/alpha/<number>/` and `/alpha/<number>/capy.apk`.
     - Publishes `beta` merges to `/beta/` (`https://shthed.github.io/capy/beta/`) and `/beta/capy.apk` without touching production `/`.
-    - Publishes `main` promotions to `/` (`https://shthed.github.io/capy/`, preserving `/pull/` and `/beta/`) as a single squashed orphan commit on `gh-pages`.
+    - Publishes `main` promotions to `/` (`https://shthed.github.io/capy/`, preserving `/alpha/` and `/beta/`) as a single squashed orphan commit on `gh-pages`.
 4. **Release & Play Store Bundle Workflow ([`release.yml`](./.github/workflows/release.yml))**:
    - Triggered on `v*.*.*` Git tags (or `workflow_dispatch`), compiling `capy-<tag>.apk` (plus unversioned `capy.apk` on stable releases), Google Play Store `capy-<tag>.aab` (`bundleRelease`), and `capy-web-<tag>.tgz` with extracted `CHANGELOG.md` notes.
 5. **Deploy Cloudflare Worker Job ([`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml), `contents: read`)**:
@@ -138,4 +138,4 @@ Capy uses a 3-tier `Alpha -> Beta -> Production` GitHub Actions architecture pai
 <!-- capy-dev-only:end -->
 
 > [!NOTE]
-> **Fast Daily CI + Full E2E Gate**: `npm run test:sanity && npm run lint && npm run build && npm test` is always run locally inside the Antigravity VM before pushing any PR. Draft PRs (`draft == true`) skip Playwright E2E so WIP `/pull/<number>/` Alpha previews deploy rapidly, pure docs-only PRs run `sanity.mjs` (`< 2s`), and all ready-for-review non-docs PRs (`draft == false`) targeting `beta` or `main` enforce `Playwright E2E Release Gate` (with cached Chromium) in GitHub Actions as a second safety net.
+> **Fast Daily CI + Full E2E Gate**: `npm run test:sanity && npm run lint && npm run build && npm test` is always run locally inside the Antigravity VM before pushing any PR. Draft PRs (`draft == true`) skip Playwright E2E so WIP `/alpha/<number>/` Alpha previews deploy rapidly, pure docs-only PRs run `sanity.mjs` (`< 2s`), and all ready-for-review non-docs PRs (`draft == false`) targeting `beta` or `main` enforce `Playwright E2E Release Gate` (with cached Chromium) in GitHub Actions as a second safety net.

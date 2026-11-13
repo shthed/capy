@@ -264,7 +264,7 @@ const findLegacyPreviewDirectories = (rootDir) => {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   return entries
     .filter((entry) => entry.isDirectory())
-    .filter((entry) => !['.git', 'pull', 'beta', 'assets', 'web1'].includes(entry.name))
+    .filter((entry) => !['.git', 'alpha', 'beta', 'assets', 'web1'].includes(entry.name))
     .filter((entry) => entry.name === sanitize(entry.name))
     .map((entry) => {
       const absolutePath = path.join(rootDir, entry.name);
@@ -274,7 +274,7 @@ const findLegacyPreviewDirectories = (rootDir) => {
 };
 
 const findPullPreviewDirectories = (rootDir) => {
-  const pullRoot = path.join(rootDir, 'pull');
+  const pullRoot = path.join(rootDir, 'alpha');
   if (!fs.existsSync(pullRoot) || !fs.statSync(pullRoot).isDirectory()) {
     return [];
   }
@@ -482,7 +482,7 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
     const freshness = entry.isRecent ? '<1 day old' : '>=1 day old';
     const branchState = entry.hasLiveBranch ? 'live branch detected' : 'no matching branch';
     const updatedLabel = entry.lastUpdated instanceof Date ? entry.lastUpdated.toISOString() : new Date(entry.lastUpdated).toISOString();
-    const label = entry.kind === 'pull' ? `pull/${entry.name}` : entry.name;
+    const label = entry.kind === 'pull' ? `alpha/${entry.name}` : entry.name;
 
     console.log(`::debug::- ${label}: ${branchState}; last updated ${updatedLabel}; ${freshness}; PRs: ${prSummary}`);
   }
@@ -505,7 +505,7 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
   console.log(`cleanup-gh-pages: removing ${removalReason}:`);
   const deleted = [];
   for (const entry of deletions) {
-    const label = entry.kind === 'pull' ? `pull/${entry.name}` : entry.name;
+    const label = entry.kind === 'pull' ? `alpha/${entry.name}` : entry.name;
     console.log(`- ${label}`);
     deleteDirectory(entry.absolutePath);
     deleted.push(label);
@@ -528,13 +528,16 @@ export const selectPreviewDeletions = (inventory, options = {}) => {
     }
 
     if (entry.kind === 'legacy') {
+      if (entry.name === 'pull' || entry.name === 'PR') {
+        return true;
+      }
       if (entry.hasLiveBranch) {
         return false;
       }
       return ignoreRecency || !entry.isRecent;
     }
 
-    // For pull/ directories: only deployments for open pull requests are kept.
+    // For alpha/ directories: only deployments for open pull requests are kept.
     return true;
   });
 };

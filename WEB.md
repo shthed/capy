@@ -78,7 +78,7 @@ flowchart TB
 
 ### Core Shell, Types & Styling (`web/src/`)
 - **[`web/src/main.tsx`](./web/src/main.tsx)**: React 19 root mount, one-shot `sessionStorage`-guarded `vite:preloadError` reload recovery, and Service Worker bootstrap.
-- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `capypaint.com` with `showChannelSwitcher: false`, `/capy/`, `/capy/beta/`, `/capy/pull/<num>/`, and `?capy_channel=` overrides).
+- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `capypaint.com` with `showChannelSwitcher: false`, `/capy/`, `/capy/beta/`, `/capy/alpha/<num>/`, and `?capy_channel=` overrides).
 - **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, lifetime stats tracking, release channel wiring, and desktop keyboard gameplay shortcuts.
 - **[`web/src/index.css`](./web/src/index.css)**: Tailwind CSS 4 imports, safe-area utility classes, and `touch-action: none` resets.
 - **[`web/src/types/index.ts`](./web/src/types/index.ts)**: Central TypeScript types (`PuzzleData`, `PaletteColor`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `GENERATION_PIPELINE_STEPS`, `SAMPLE_GALLERY`).
@@ -392,7 +392,7 @@ flowchart LR
   ManifestLayer --> ServiceWorker
 ```
 
-1. **Web App Manifest ([`manifest.webmanifest`](./web/public/manifest.webmanifest))**: Standalone display mode (`display: "standalone"`), `#000000` theme/background colors, maskable adaptive icons, and relative `./` start URL/scope so root (`/capy/`) and PR previews (`/capy/pull/<number>/`) work identically.
+1. **Web App Manifest ([`manifest.webmanifest`](./web/public/manifest.webmanifest))**: Standalone display mode (`display: "standalone"`), `#000000` theme/background colors, maskable adaptive icons, and relative `./` start URL/scope so root (`/capy/`) and PR previews (`/capy/alpha/<number>/`) work identically.
 2. **Offline Service Worker ([`web/public/sw.js`](./web/public/sw.js))**:
    - Pre-caches the app shell (`./`, `./index.html`, `./manifest.webmanifest`), `./assets/sample_saves.capy`, all 4 built-in WebP sample images (`capybara.webp`, `mushrooms.webp`, `capy_forest.webp`, `snail_guitar.webp`), and app icons.
    - Parses `index.html` on `install` to pre-cache hashed Vite JS/CSS/Worker bundles (`assets/index-*.js`, `assets/index-*.css`, `assets/puzzle.worker-*.js`).
