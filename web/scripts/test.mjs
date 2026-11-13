@@ -2364,6 +2364,7 @@ async function runCodecAndEngineTests() {
       reviews = [],
       comments = [],
       aiCommentScore = 98,
+      aiCommentTs = '2026-11-13T01:01:00Z',
       eventName = 'pull_request_review',
       action = 'submitted',
       createCommitStatusImpl = null,
@@ -2380,8 +2381,8 @@ async function runCodecAndEngineTests() {
         allComments.unshift({
           user: { login: 'shthed' },
           body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${headSha} score=${aiCommentScore}% -->`,
-          created_at: '2026-11-13T00:55:00Z',
-          updated_at: '2026-11-13T00:55:00Z',
+          created_at: aiCommentTs,
+          updated_at: aiCommentTs,
         });
       }
       const coreMock = {
@@ -3311,6 +3312,86 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBetaHoldWithLgtmCommentStillFailsRes.status.state, 'failure');
     assert.equal(gateBetaHoldWithLgtmCommentStillFailsRes.calls.createReview.length, 0);
 
+    // ADVERSARIAL-A regression: --base beta with +2m commitDate clock skew still blocks post-AI HOLD / CHANGES REQUESTED / DO NOT MERGE (comments or AI PR review) while ignoring stale pre-push holds
+    for (const [tag, holdBody] of [
+      ['HOLD', 'HOLD - do not merge!'],
+      ['CHANGES REQUESTED', 'CHANGES REQUESTED - needs fixes'],
+      ['DO NOT MERGE', 'DO NOT MERGE yet'],
+    ]) {
+      const gateBetaSkewHoldCommentRes = await runReviewGateCase({
+        prAuthor: 'shthed',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        commitDate: '2026-11-13T01:02:00Z',
+        aiCommentTs: '2026-11-13T01:00:20Z',
+        comments: [
+          {
+            id: 30301,
+            user: { login: 'shthed' },
+            body: holdBody,
+            created_at: '2026-11-13T01:00:40Z',
+            updated_at: '2026-11-13T01:00:40Z',
+          },
+        ],
+        eventName: 'issue_comment',
+        action: 'created',
+      });
+      assert.equal(
+        gateBetaSkewHoldCommentRes.status.state,
+        'failure',
+        `Expected --base beta skewed ${tag} hold to fail`
+      );
+    }
+
+    const gateBetaSkewAiReviewHoldCommentRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      aiCommentScore: null,
+      reviews: [
+        {
+          id: 30302,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'COMMENTED',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          submitted_at: '2026-11-13T01:00:20Z',
+        },
+      ],
+      comments: [
+        {
+          id: 30303,
+          user: { login: 'shthed' },
+          body: 'DO NOT MERGE yet',
+          created_at: '2026-11-13T01:00:40Z',
+          updated_at: '2026-11-13T01:00:40Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBetaSkewAiReviewHoldCommentRes.status.state, 'failure');
+
+    const gateBetaSkewStalePrePushHoldIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      aiCommentTs: '2026-11-13T01:00:20Z',
+      comments: [
+        {
+          id: 30304,
+          user: { login: 'shthed' },
+          body: 'HOLD - stale pre-push',
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaSkewStalePrePushHoldIgnoredRes.status.state, 'success');
+
     const gateBetaDraftRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       baseRef: 'beta',
@@ -3469,6 +3550,169 @@ async function runCodecAndEngineTests() {
     assert.equal(
       gateRetargetBetaToMainRes.status.description,
       'AI review passed; awaiting Project Owner sign-off'
+    );
+
+    // ADVERSARIAL-C regression: DISMISSED and PENDING reviews carrying <!-- capy-review: ... --> markers are ignored for both APPROVED and CHANGES_REQUESTED
+    const gateDismissedAiReviewIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: null,
+      eventName: 'pull_request_review',
+      action: 'dismissed',
+      reviews: [
+        {
+          id: 401,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateDismissedAiReviewIgnoredRes.status.state, 'pending');
+    assert.equal(
+      gateDismissedAiReviewIgnoredRes.status.description,
+      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
+    );
+    assert.deepEqual(
+      gateDismissedAiReviewIgnoredRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    const gatePendingAiReviewIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'labeled',
+      reviews: [
+        {
+          id: 402,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'PENDING',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=99% -->`,
+          submitted_at: null,
+        },
+      ],
+    });
+    assert.equal(gatePendingAiReviewIgnoredRes.status.state, 'pending');
+    assert.deepEqual(
+      gatePendingAiReviewIgnoredRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    const gateDismissedAndPendingAiRejectIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: 98,
+      reviews: [
+        {
+          id: 403,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=${gateHeadSha} score=40% -->`,
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+        {
+          id: 404,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'PENDING',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=${gateHeadSha} score=40% -->`,
+          submitted_at: null,
+        },
+      ],
+    });
+    assert.equal(gateDismissedAndPendingAiRejectIgnoredRes.status.state, 'success');
+
+    // ADVERSARIAL-B regression: draft and converted_to_draft preserve review:changes-requested (failure), while synchronize strips all review labels
+    const gateDraftPreservesChangesRequestedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'labeled',
+    });
+    assert.equal(gateDraftPreservesChangesRequestedRes.status.state, 'failure');
+    assert.equal(
+      gateDraftPreservesChangesRequestedRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.deepEqual(
+      gateDraftPreservesChangesRequestedRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved', 'review:owner-approved']
+    );
+
+    const gateConvertedToDraftPreservesChangesRequestedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'converted_to_draft',
+    });
+    assert.equal(gateConvertedToDraftPreservesChangesRequestedRes.status.state, 'failure');
+    assert.deepEqual(
+      gateConvertedToDraftPreservesChangesRequestedRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    const gateSynchronizeClearsAllReviewLabelsRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
+    assert.equal(
+      gateSynchronizeClearsAllReviewLabelsRes.status.description,
+      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
+    );
+    assert.deepEqual(
+      gateSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
+    );
+
+    const gateDraftSynchronizeClearsAllReviewLabelsRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateDraftSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
+    assert.equal(
+      gateDraftSynchronizeClearsAllReviewLabelsRes.status.description,
+      'Draft PR: complete work, pass AI review, and mark ready'
+    );
+    assert.deepEqual(
+      gateDraftSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
     );
 
     // Extract and unit-test real .github/workflows/open-pr.yml script

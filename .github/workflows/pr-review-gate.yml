@@ -112,15 +112,20 @@ jobs:
               }
             }
 
+            const isSynchronize =
+              context.eventName === 'pull_request' &&
+              context.payload.action === 'synchronize';
             const isNewPushOrDraft =
               isDraft ||
+              isSynchronize ||
               (context.eventName === 'pull_request' &&
-                (context.payload.action === 'synchronize' ||
-                  context.payload.action === 'converted_to_draft'));
+                context.payload.action === 'converted_to_draft');
 
             if (isNewPushOrDraft) {
               await safeRemoveLabel('review:ai-approved');
               await safeRemoveLabel('review:owner-approved');
+            }
+            if (isSynchronize) {
               await safeRemoveLabel('review:changes-requested');
             }
 
@@ -152,9 +157,18 @@ jobs:
                 ALLOWED_AI_ASSOCIATIONS.has(assoc)
               );
             };
+            const isActiveTrustedAiReview = (r) => {
+              const reviewState = String(r?.state || '').toUpperCase();
+              return (
+                reviewState !== 'DISMISSED' &&
+                reviewState !== 'PENDING' &&
+                isTrustedAiReviewer(r)
+              );
+            };
             let latestAiSignal = null;
+            let earliestExactHeadAiMs = 0;
             const allBodies = [
-              ...reviews.filter(isTrustedAiReviewer).map((r) => ({
+              ...reviews.filter(isActiveTrustedAiReview).map((r) => ({
                 body: r.body || '',
                 ts: Date.parse(r.submitted_at || '') || 0,
               })),
@@ -167,6 +181,11 @@ jobs:
             for (const item of allBodies) {
               const m = aiMarkerRegex.exec(item.body);
               if (m) {
+                if (item.ts >= latestForcePushMs && item.ts > 0) {
+                  if (earliestExactHeadAiMs === 0 || item.ts < earliestExactHeadAiMs) {
+                    earliestExactHeadAiMs = item.ts;
+                  }
+                }
                 latestAiSignal = {
                   verdict: m[1].toUpperCase(),
                   score: Number(m[2]),
@@ -257,12 +276,13 @@ jobs:
             const effectiveOwnerApprovals = nativeHeadApprovals;
             const effectiveOwnerApprovalMs = maxSignalTs(effectiveOwnerApprovals);
 
+            const skewAnchorCandidates = [
+              effectiveOwnerApprovalMs,
+              earliestExactHeadReviewMs,
+              earliestExactHeadAiMs,
+            ].filter((ts) => ts > 0);
             const skewAnchorMs =
-              effectiveOwnerApprovalMs > 0
-                ? earliestExactHeadReviewMs > 0
-                  ? Math.min(effectiveOwnerApprovalMs, earliestExactHeadReviewMs)
-                  : effectiveOwnerApprovalMs
-                : earliestExactHeadReviewMs;
+              skewAnchorCandidates.length > 0 ? Math.min(...skewAnchorCandidates) : 0;
             const rejectionFloorMs = Math.max(
               latestForcePushMs,
               Math.min(latestPushMs, skewAnchorMs || latestPushMs)
