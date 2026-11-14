@@ -14,13 +14,14 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: sync-agile-tracker-${{ github.event.pull_request.number }}
+  group: sync-agile-tracker-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
   sync:
     name: Sync Merged PR to Parent Epic Issue
     if: github.repository == 'shthed/capy' && github.event.pull_request.merged == true
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - name: Update Epic issue checklist via GitHub REST API

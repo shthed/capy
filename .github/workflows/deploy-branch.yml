@@ -20,7 +20,6 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - converted_to_draft
   workflow_dispatch:
     inputs:
       target_branch:
@@ -41,9 +40,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build & Test
+  prepare:
+    name: Prepare Deployment Target
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
@@ -55,6 +55,7 @@ jobs:
       preview_url: ${{ steps.target.outputs.preview_url }}
       skip: ${{ steps.target.outputs.skip }}
       is_docs_only: ${{ steps.target.outputs.is_docs_only }}
+      is_draft: ${{ steps.target.outputs.is_draft }}
       checkout_ref: ${{ steps.target.outputs.checkout_ref }}
     steps:
       - name: Determine deployment target
@@ -141,16 +142,22 @@ jobs:
               (!isPullRequest && branch !== 'main' && branch !== 'beta' && !prNumber && !allowWithoutPr);
 
             let prMergeable = context.payload?.pull_request?.mergeable;
-            if (isPullRequest && prNumber && prMergeable == null) {
+            let isDraftPr = Boolean(context.payload?.pull_request?.draft);
+            if (isPullRequest && prNumber) {
               try {
                 const { data: prDetails } = await github.rest.pulls.get({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: prNumber,
                 });
-                prMergeable = prDetails.mergeable;
+                if (prMergeable == null) {
+                  prMergeable = prDetails.mergeable;
+                }
+                if (typeof prDetails.draft === 'boolean') {
+                  isDraftPr = prDetails.draft;
+                }
               } catch (error) {
-                core.warning(`Failed to inspect mergeable state for PR #${prNumber}: ${error.message}`);
+                core.warning(`Failed to inspect PR #${prNumber} state: ${error.message}`);
               }
             }
             const prHeadSha = context.payload?.pull_request?.head?.sha;
@@ -180,18 +187,28 @@ jobs:
             core.setOutput('preview_url', previewUrl);
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
             core.setOutput('is_docs_only', isDocsOnlyPr ? 'true' : 'false');
+            core.setOutput('is_draft', isDraftPr ? 'true' : 'false');
             core.setOutput('checkout_ref', checkoutRef);
 
             core.summary.addRaw(summaryLines.join('\n')).write();
 
+  build:
+    name: Build & Test
+    needs: [prepare]
+    if: needs.prepare.outputs.skip != 'true' || needs.prepare.outputs.is_docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
       - name: Check out source
-        if: steps.target.outputs.skip != 'true' || steps.target.outputs.is_docs_only == 'true'
+        if: needs.prepare.outputs.skip != 'true' || needs.prepare.outputs.is_docs_only == 'true'
         uses: actions/checkout@v7
         with:
-          ref: ${{ steps.target.outputs.checkout_ref }}
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
 
       - name: Use Node.js 22
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -199,18 +216,18 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Use Node.js 22 (docs-only sanity)
-        if: steps.target.outputs.skip == 'true' && steps.target.outputs.is_docs_only == 'true'
+        if: needs.prepare.outputs.skip == 'true' && needs.prepare.outputs.is_docs_only == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       - name: Run repository sanity gate (docs-only)
-        if: steps.target.outputs.skip == 'true' && steps.target.outputs.is_docs_only == 'true'
+        if: needs.prepare.outputs.skip == 'true' && needs.prepare.outputs.is_docs_only == 'true'
         working-directory: web
         run: npm run test:sanity
 
       - name: Run sanity gate, typecheck, and build web app (web/)
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         working-directory: web
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
@@ -222,20 +239,20 @@ jobs:
           npm run build
 
       - name: Set up JDK 17
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Gradle
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
 
       - name: Run unit tests and build Debug APK (app/)
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
@@ -243,7 +260,7 @@ jobs:
         run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
 
       - name: Stage build artifacts
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         run: |
           mkdir -p staging/web
           cp -r web/dist/* staging/web/
@@ -251,7 +268,7 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk staging/apk/capy.apk
 
       - name: Upload build artifacts
-        if: steps.target.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: build-artifacts-${{ github.run_attempt }}
@@ -260,16 +277,17 @@ jobs:
 
   e2e_release_gate:
     name: Playwright E2E Release Gate
-    needs: [build]
-    if: needs.build.outputs.skip != 'true' && github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && github.event.pull_request.draft == false
+    needs: [prepare]
+    if: needs.prepare.outputs.skip != 'true' && github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
       - name: Check out source
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.build.outputs.checkout_ref }}
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -307,12 +325,13 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: [build, e2e_release_gate]
-    if: always() && github.event.repository.has_pages == true && needs.build.result == 'success' && needs.build.outputs.skip != 'true' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped') && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: [prepare, build, e2e_release_gate]
+    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.build.result == 'success' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped') && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
-      url: ${{ needs.build.outputs.preview_url }}
+      url: ${{ needs.prepare.outputs.preview_url }}
     concurrency:
       group: deploy-pages
       cancel-in-progress: false
@@ -320,12 +339,13 @@ jobs:
       contents: write
       pages: write
       id-token: write
+      actions: read
       pull-requests: write
     steps:
       - name: Checkout PR manifest scripts
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.build.outputs.checkout_ref }}
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
           sparse-checkout: |
             .github/scripts
             web/public/404.html
@@ -355,7 +375,7 @@ jobs:
 
       - name: Prepare site content
         env:
-          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
         run: |
           set -euo pipefail
 
@@ -381,7 +401,7 @@ jobs:
 
       - name: Generate PR preview manifest & 404 fallback
         env:
-          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
         run: |
           set -euo pipefail
           REFRESH_FLAG=""
@@ -393,7 +413,7 @@ jobs:
       - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
         run: |
           set -euo pipefail
           if [ -d pages/.git ]; then
@@ -415,7 +435,7 @@ jobs:
 
       - name: Capture deployment directory listing
         env:
-          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
         run: |
           set -euo pipefail
 
@@ -429,19 +449,62 @@ jobs:
           path: pages
           name: github-pages-${{ github.run_attempt }}
 
+      - name: Wait for Pages artifact index visibility
+        uses: actions/github-script@v9
+        env:
+          ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
+        with:
+          script: |
+            const targetName = process.env.ARTIFACT_NAME;
+            const maxAttempts = 8;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: context.runId,
+                  per_page: 100,
+                });
+                const found = (data.artifacts || []).find(
+                  (a) => a.name === targetName && !a.expired
+                );
+                if (found) {
+                  core.info(`Pages artifact "${targetName}" visible (id=${found.id}) on attempt ${attempt}/${maxAttempts}.`);
+                  return;
+                }
+                core.info(`Pages artifact "${targetName}" not yet indexed (attempt ${attempt}/${maxAttempts}); waiting 3s...`);
+              } catch (err) {
+                core.warning(`Failed to list workflow run artifacts on attempt ${attempt}/${maxAttempts}: ${err?.message || err}`);
+              }
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+            }
+            core.warning(`Pages artifact "${targetName}" still not visible after ${maxAttempts} polls; proceeding to deploy-pages.`);
+
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait before retrying GitHub Pages deploy
+        if: steps.deployment.outcome != 'success'
+        run: sleep 10
+
+      - name: Retry Deploy to GitHub Pages
+        id: deployment_retry
+        if: steps.deployment.outcome != 'success'
         uses: actions/deploy-pages@v5
         with:
           artifact_name: github-pages-${{ github.run_attempt }}
 
       - name: Comment PR with preview & APK links
-        if: needs.build.outputs.pr != ''
+        if: needs.prepare.outputs.pr != ''
         uses: actions/github-script@v9
         with:
           script: |
-            const prNumber = Number('${{ needs.build.outputs.pr }}');
-            const previewUrl = '${{ needs.build.outputs.preview_url }}';
+            const prNumber = Number('${{ needs.prepare.outputs.pr }}');
+            const previewUrl = '${{ needs.prepare.outputs.preview_url }}';
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const marker = '<!-- capy-pages-preview -->';
             const body = [
@@ -477,8 +540,8 @@ jobs:
 
       - name: Output preview link
         env:
-          TARGET_DIR: ${{ needs.build.outputs.target_dir }}
-          PREVIEW_URL: ${{ needs.build.outputs.preview_url }}
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
+          PREVIEW_URL: ${{ needs.prepare.outputs.preview_url }}
         run: |
           {
             echo "Preview (Web): ${PREVIEW_URL}"

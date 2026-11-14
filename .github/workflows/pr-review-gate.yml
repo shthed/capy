@@ -20,6 +20,12 @@ on:
     types:
       - created
       - edited
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to re-evaluate'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -28,14 +34,15 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pr-review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: pr-review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   review-gate:
     name: Dual AI & Owner Review Gate
-    if: github.repository == 'shthed/capy' && github.actor != 'github-actions[bot]' && github.actor != 'dependabot[bot]' && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
+    if: github.repository == 'shthed/capy' && (github.event_name == 'workflow_dispatch' || (github.actor != 'github-actions[bot]' && github.actor != 'dependabot[bot]')) && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Evaluate Dual AI + Project Owner Approval State
         uses: actions/github-script@v9
@@ -43,7 +50,10 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prNumber = context.payload.pull_request?.number || context.payload.issue?.number;
+            const prNumber =
+              context.payload.pull_request?.number ||
+              context.payload.issue?.number ||
+              (Number(context.payload.inputs?.pr_number || 0) || null);
             if (!prNumber) {
               core.info('No pull request number associated with event; skipping.');
               return;
@@ -198,7 +208,7 @@ jobs:
               latestAiSignal !== null &&
               latestAiSignal.verdict === 'APPROVED' &&
               Number.isFinite(latestAiSignal.score) &&
-              latestAiSignal.score >= 95;
+              latestAiSignal.score >= 100;
 
             if (activeLabels.has('review:ai-approved') && !hasValidAiMarker) {
               await safeRemoveLabel('review:ai-approved');
@@ -324,7 +334,7 @@ jobs:
             const betaApproved = isBetaTarget && !isDraft && aiApproved && !changesRequested;
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
-            // Bot review rubber-stamping is removed; --base beta passes on AI review (>=95%)
+            // Bot review rubber-stamping is removed; --base beta passes on AI review (100%)
             // without Owner approval, and --base main requires native GitHub APPROVED on HEAD.
             const botReviews = reviews.filter(
               (r) => r.user?.login === 'github-actions[bot]' && r.state === 'APPROVED'
@@ -358,14 +368,14 @@ jobs:
             } else if (isBetaTarget) {
               if (betaApproved) {
                 state = 'success';
-                description = 'Beta gate passed: AI review (>=95%) verified; no holds';
+                description = 'Beta gate passed: AI review (100%) verified; no holds';
               } else {
                 state = 'pending';
                 description = 'Beta gate: awaiting AI review (review:ai-approved) on HEAD';
               }
             } else if (dualApproved) {
               state = 'success';
-              description = 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
+              description = 'Dual-approved: AI review (100%) + Owner sign-off verified';
             } else if (aiApproved && !ownerApproved) {
               state = 'pending';
               description = 'AI review passed; awaiting Project Owner sign-off';
@@ -384,10 +394,15 @@ jobs:
             const latestGateStatus = existingStatuses.find(
               (s) => s.context === 'capy/review-gate'
             );
+            const targetUrl =
+              context.serverUrl && context.runId
+                ? `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+                : `https://github.com/${owner}/${repo}/pull/${prNumber}`;
             if (
               !latestGateStatus ||
               latestGateStatus.state !== state ||
-              latestGateStatus.description !== clippedDesc
+              latestGateStatus.description !== clippedDesc ||
+              !latestGateStatus.target_url
             ) {
               try {
                 await github.rest.repos.createCommitStatus({
@@ -397,6 +412,7 @@ jobs:
                   context: 'capy/review-gate',
                   state,
                   description: clippedDesc,
+                  target_url: targetUrl,
                 });
               } catch (err) {
                 if (isReadOnlyDependabotEvent && err.status === 403) {
