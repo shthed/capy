@@ -96,7 +96,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     title: 'Tap or Paint Shapes',
     description:
       'Tap matching regions to color them, or toggle the right-side Paintbrush button to drag-paint continuously across multiple shapes.',
-    tryPrompt: 'Tap any region on Capy Forest to color it!',
+    tryPrompt: 'Tap any matching shape on the puzzle to color it!',
     icon: Hand,
   },
   {
@@ -111,8 +111,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     key: 'hint',
     title: 'Smart Hints & Highlighting',
     description:
-      'Double-tap any active color swatch to center a remaining shape. Customize Hint Styles, patterns, intensity & colors in Settings > Hints.',
-    tryPrompt: 'Double-tap any swatch below (or tap Try Hint)',
+      'Tap the active color swatch again (or double-tap any swatch) to center a remaining shape. Customize Hint Styles, patterns, intensity & colors in Settings > Hints.',
+    tryPrompt: 'Tap the highlighted swatch again (or tap Try Hint)',
     icon: Sparkles,
   },
   {
