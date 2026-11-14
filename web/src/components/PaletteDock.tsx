@@ -18,9 +18,11 @@ interface PaletteDockProps {
   visibleColorIds: Set<number>;
   raiseDock: boolean;
   isFreeColorMode?: boolean;
+  isReplaying?: boolean;
   reducedMotion?: boolean;
   showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
+  onSyncActiveColor?: (colorId: number) => void;
   onColorHintRequested: (colorId: number) => void;
   onOpenPaletteOptions?: () => void;
   onAddCustomColor?: (hex: string) => void;
@@ -160,15 +162,22 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   visibleColorIds,
   raiseDock,
   isFreeColorMode = false,
+  isReplaying = false,
   reducedMotion = false,
   showCustomColorButton = false,
   onColorSelected,
+  onSyncActiveColor,
   onColorHintRequested,
   onOpenPaletteOptions,
   onAddCustomColor,
   onUpdateColor,
   onApplyPresetPalette,
 }) => {
+  const onColorSelectedRef = useRef(onColorSelected);
+  onColorSelectedRef.current = onColorSelected;
+  const onSyncActiveColorRef = useRef(onSyncActiveColor);
+  onSyncActiveColorRef.current = onSyncActiveColor;
+
   // Remaining counts per color (for standard color-by-number mode)
   const remainingCountMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -288,14 +297,18 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   // Defensively sync active color if current activeColorId is not in dock
   useEffect(() => {
     if (dockPalette.length > 0 && !dockPalette.some((c) => c.id === activeColorId)) {
-      onColorSelected(dockPalette[0].id);
+      if (onSyncActiveColorRef.current) {
+        onSyncActiveColorRef.current(dockPalette[0].id);
+      } else {
+        onColorSelectedRef.current(dockPalette[0].id);
+      }
     }
-  }, [dockPalette, activeColorId, onColorSelected]);
+  }, [dockPalette, activeColorId]);
 
   if (dockPalette.length === 0) return null;
 
   const handleSwatchClick = (c: PaletteColor) => {
-    if (c.id === activeColorId) {
+    if (c.id === activeColorId && !isReplaying) {
       onColorHintRequested(c.id);
     } else {
       onColorSelected(c.id);
