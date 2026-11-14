@@ -37,6 +37,7 @@ const SKIP_DIRS = new Set([
 const DEFAULT_REQUIRE_PROJECT_MD = true;
 const DEFAULT_ENFORCE_CHANNEL_ORDER = true;
 const DEFAULT_ENFORCE_EPIC_NAMING = true;
+const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
 
 function collectMarkdownFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -226,6 +227,196 @@ export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
   assert.equal(/\[EPIC-\d+\s*\(#\d+\)\]/i.test(markdownText), false, hint);
 }
 
+const URL_STRIP_RE = /https?:\/\/[^\s)>\]"']+/gi;
+const LEGACY_PR_RUBRIC_RULES = [
+  { label: 'legacy 5-Pillar phrasing', re: /\b5[- ]+pillar\b/i },
+  { label: 'legacy numbered Pillar item', re: /\bpillar\s+[1-9]\d*\b/i },
+  { label: 'legacy Pillar breakdown phrasing', re: /\bpillar\s+breakdown\b/i },
+  { label: 'legacy Rubric phrasing', re: /\b(?:5[- ]*pillar|pr|readiness)?\s*rubric\b/i },
+  { label: 'legacy 5 x 20 scoring math', re: /\b5\s*[x×*]\s*20\b/i },
+  { label: 'legacy 20 pts scoring unit', re: /(?:(?<![a-zA-Z0-9_])20|`20`)\s*(?:pts?|points?)\b/i },
+  { label: 'legacy -N point delta unit', re: /(?:^|[\s(`])-\s*(?:\d+|N)`?\s*(?:pts?|points?)\b/i },
+  {
+    label: 'legacy /100 or /20 denominator',
+    re: /(?:(?<![a-zA-Z0-9_./-])(?:\d+(?:\.\d+)?|<[a-zA-Z]+>|[NX])\s*|(?:^|[\s(`[*:,;>|]))\/\s*(?:100|20)\b(?![/])/i,
+  },
+];
+
+const CHECKLIST_PERCENT_LINE_RE =
+  /^(?:[-*]|\d+\.)\s+(?:\[[xX ]\]\s+)?(?:\*{1,2}|`)?(\d{1,3}(?:\.\d+)?)%(?:\*{1,2}|`)?(?=\s|$|[:\-—–])/;
+
+export function validateNoLegacyPrRubric(text, relFile = 'document.md') {
+  const withoutUrls = String(text || '').replace(URL_STRIP_RE, 'URL');
+  for (const rule of LEGACY_PR_RUBRIC_RULES) {
+    const match = rule.re.exec(withoutUrls);
+    assert.equal(
+      match,
+      null,
+      `Forbidden ${rule.label} ("${match ? match[0] : ''}") in ${relFile}; use %-first PR Readiness Checklist format`
+    );
+  }
+}
+
+export function validatePrReadinessChecklist(markdown, label = 'PR Readiness') {
+  const normalized = String(markdown || '').replace(/\r\n/g, '\n');
+  const headingMatches = [
+    ...normalized.matchAll(/^(?:#{1,6}\s+[^\n]*\bPR Readiness\b|\*{2}PR Readiness\b)[^\n]*$/gim),
+  ];
+  assert.equal(
+    headingMatches.length > 0,
+    true,
+    `${label} must include a PR Readiness section heading`
+  );
+  const lastHeading = headingMatches[headingMatches.length - 1];
+  const sectionText = normalized.slice(lastHeading.index);
+
+  validateNoLegacyPrRubric(sectionText, label);
+
+  const detailsMatch = /<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/i.exec(
+    sectionText
+  );
+  assert.ok(
+    detailsMatch,
+    `${label} must include a <details><summary>...</summary>...</details> checklist block`
+  );
+
+  const beforeDetails = sectionText.slice(0, detailsMatch.index);
+  const summaryText = detailsMatch[1].trim();
+  assert.equal(summaryText.length > 0, true, `${label} <summary> must not be empty`);
+
+  const overallMatches = [
+    ...beforeDetails.matchAll(
+      /(?:^|[\s:(*`])(?<![<>]=?\s*)(\d{1,3}(?:\.\d+)?)%(?=$|[\s).,;:*`])/gm
+    ),
+  ];
+  assert.equal(
+    overallMatches.length > 0,
+    true,
+    `${label} must include an overall percentage score (e.g. "98%")`
+  );
+  const overallScore = Number(overallMatches[overallMatches.length - 1][1]);
+  assert.equal(
+    Number.isFinite(overallScore) && overallScore >= 0 && overallScore <= 100,
+    true,
+    `${label} overall percentage score out of [0..100]: ${overallScore}%`
+  );
+
+  const itemLines = detailsMatch[2]
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^<!--[\s\S]*?-->$/.test(line));
+  assert.equal(
+    itemLines.length >= 1,
+    true,
+    `${label} <details> checklist must contain at least 1 item`
+  );
+
+  const itemScores = [];
+  for (const line of itemLines) {
+    const match = CHECKLIST_PERCENT_LINE_RE.exec(line);
+    assert.ok(
+      match,
+      `${label} checklist line must start with % (e.g. "- **100%** ..."): "${line}"`
+    );
+    const pct = Number(match[1]);
+    assert.equal(
+      Number.isFinite(pct) && pct >= 0 && pct <= 100,
+      true,
+      `${label} checklist item percentage out of [0..100]: ${pct}%`
+    );
+    itemScores.push(pct);
+  }
+
+  return {
+    overallScore,
+    itemCount: itemScores.length,
+    itemScores,
+    summary: summaryText,
+  };
+}
+
+function collectGithubTextFiles(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectGithubTextFiles(fullPath, out);
+    } else if (entry.isFile() && /\.(?:ya?ml|md)$/i.test(entry.name)) {
+      out.push(fullPath);
+    }
+  }
+  return out;
+}
+
+export function validatePrReadinessSpec(
+  root,
+  {
+    requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
+    enforcePrReadinessSpec = DEFAULT_ENFORCE_PR_READINESS_SPEC,
+  } = {}
+) {
+  const resolvedRoot = path.resolve(root);
+  const governanceRelFiles = ['AGENTS.md', 'PROJECT.md', 'DEV.md', 'TESTING.md', 'README.md'];
+  const scannedFiles = [];
+
+  for (const relFile of governanceRelFiles) {
+    const absPath = path.join(resolvedRoot, relFile);
+    if (!fs.existsSync(absPath)) {
+      if (relFile === 'PROJECT.md' && !requireProjectMd) continue;
+      assert.fail(`Required governance doc missing: ${relFile}`);
+    }
+    const raw = fs.readFileSync(absPath, 'utf8');
+    validateNoLegacyPrRubric(raw, relFile);
+    scannedFiles.push(relFile);
+
+    if (!enforcePrReadinessSpec) continue;
+    const publicText = stripHtmlDevOnlyForSanity(raw);
+
+    if (relFile === 'AGENTS.md') {
+      assert.match(publicText, /pr readiness/i, 'AGENTS.md must document PR Readiness format');
+      assert.match(publicText, /<details>/i, 'AGENTS.md must document <details> PR Readiness block');
+      assert.match(publicText, /95%/, 'AGENTS.md must specify >= 95% PR Readiness threshold');
+      assert.match(
+        publicText,
+        /(?:start of each|at the start|%\s*-first)/i,
+        'AGENTS.md must specify putting % at the start of each checklist line'
+      );
+      assert.match(
+        publicText,
+        /(?:as many|flexible|variable|not (?:capped|limited|fixed)|any number|scope-relevant)/i,
+        'AGENTS.md must allow variable PR Readiness checklist item counts'
+      );
+    } else if (relFile === 'PROJECT.md') {
+      assert.match(publicText, /pr readiness/i, 'PROJECT.md must document PR Readiness format');
+      assert.match(publicText, /checklist/i, 'PROJECT.md must name PR Readiness Checklist');
+      assert.match(publicText, /<details>/i, 'PROJECT.md must document <details> PR Readiness block');
+      assert.match(publicText, /95%/, 'PROJECT.md must specify >= 95% PR Readiness threshold');
+      assert.match(
+        publicText,
+        /(?:start of each|at the start|%\s*-first)/i,
+        'PROJECT.md must specify putting % at the start of each checklist line'
+      );
+      assert.match(
+        publicText,
+        /(?:as many|flexible|variable|not (?:capped|limited|fixed)|any number|scope-relevant)/i,
+        'PROJECT.md must allow variable PR Readiness checklist item counts'
+      );
+    } else if (relFile === 'DEV.md') {
+      assert.match(publicText, /pr readiness/i, 'DEV.md must reference PR Readiness');
+      assert.match(publicText, /95%/, 'DEV.md must reference >= 95% PR Readiness threshold');
+    }
+  }
+
+  for (const absPath of collectGithubTextFiles(path.join(resolvedRoot, '.github'))) {
+    const relFile = path.relative(resolvedRoot, absPath).replace(/\\/g, '/');
+    validateNoLegacyPrRubric(fs.readFileSync(absPath, 'utf8'), relFile);
+    scannedFiles.push(relFile);
+  }
+
+  return { scannedFiles };
+}
+
 export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD } = {}) {
   const resolvedRoot = path.resolve(root);
   const rootMdFiles = fs
@@ -364,6 +555,7 @@ export function runSanityChecks({
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
   enforceChannelOrder = DEFAULT_ENFORCE_CHANNEL_ORDER,
   enforceEpicNaming = DEFAULT_ENFORCE_EPIC_NAMING,
+  enforcePrReadinessSpec = DEFAULT_ENFORCE_PR_READINESS_SPEC,
 } = {}) {
   const t0 = performance.now();
   const root = path.resolve(repoRoot);
@@ -434,6 +626,7 @@ export function runSanityChecks({
 
   // 3. Markdown hygiene & portable relative links across all .md files
   validateRootGuideIndex(root, { requireProjectMd });
+  validatePrReadinessSpec(root, { requireProjectMd, enforcePrReadinessSpec });
 
   const mdFiles = collectMarkdownFiles(root);
   assert.equal(mdFiles.length >= 10, true, 'Expected >= 10 repository .md files');

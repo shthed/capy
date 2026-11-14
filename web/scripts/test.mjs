@@ -12,6 +12,9 @@ import {
   runSanityChecks,
   validateChangelogChannelOrder,
   validateEpicNaming,
+  validateNoLegacyPrRubric,
+  validatePrReadinessChecklist,
+  validatePrReadinessSpec,
   validateRootGuideIndex,
 } from './sanity.mjs';
 
@@ -761,6 +764,150 @@ async function runCodecAndEngineTests() {
       fs.rmSync(tmpGuideDir, { recursive: true, force: true });
     }
 
+    // Standalone %-first PR Readiness Checklist & legacy rubric guards (runs in clean-room export too)
+    {
+      const oneItem = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** **Docs Sync**: Verified.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '1-item test'
+      );
+      assert.equal(oneItem.overallScore, 100);
+      assert.equal(oneItem.itemCount, 1);
+      assert.deepEqual(oneItem.itemScores, [100]);
+      assert.equal(oneItem.summary, 'PR Readiness Checklist');
+
+      const threeItems = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 95.5%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- [x] **100%** — **Functionality**: Verified.',
+          '- **95.5%** — **Tests**: Verified.',
+          '- 91% — **Docs**: Remaining follow-up noted.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '3-item test'
+      );
+      assert.equal(threeItems.overallScore, 95.5);
+      assert.equal(threeItems.itemCount, 3);
+      assert.deepEqual(threeItems.itemScores, [100, 95.5, 91]);
+
+      const sixItems = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100% Check 1**: Functionality verified.',
+          '- **100% Check 2**: Automated tests passed.',
+          '- **100% Check 3**: Zero-allocation invariants preserved.',
+          '- **100% Check 4**: Mobile viewport verified.',
+          '- **100% Check 5**: Docs synced.',
+          '- **100% Check 6**: CI green.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '6-item test'
+      );
+      assert.equal(sixItems.overallScore, 100);
+      assert.equal(sixItems.itemCount, 6);
+
+      const eightItemsFullPr = validatePrReadinessChecklist(
+        [
+          '## Summary',
+          '',
+          '- Improved color layout with Tailwind bg-amber-400/20 accents and clean checks.',
+          '',
+          '- **Beta**: https://capypaint.com/beta/',
+          '- **Related PRs**: [#20](https://github.com/capyboop/capy/pull/20) [#100](https://github.com/capyboop/capy/pull/100)',
+          '',
+          '### PR Readiness Score: 99% (threshold >= 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Functionality & Edge Cases**: Verified.',
+          '- **100%** — **Automated Tests**: Verified.',
+          '- **100%** — **Performance & Golden Invariants**: Verified.',
+          '- **100%** — **Accessibility & Mobile Layout**: Verified.',
+          '- **100%** — **Android / Bridge Parity**: Verified.',
+          '- **100%** — **Cloud Sync / Worker Safety**: Verified.',
+          '- **95%** — **Docs & Changelog Sync**: Minor wording follow-up (-1%).',
+          '- **100%** — **CI, Mergeability & Preview Verification**: Verified.',
+          '',
+          '</details>',
+          '',
+          'Ready with -1% docs polish follow-up.',
+          '- [ ] Polish final release note wording in TODO follow-up.',
+        ].join('\n'),
+        '8-item PR body'
+      );
+      assert.equal(eightItemsFullPr.overallScore, 99);
+      assert.equal(eightItemsFullPr.itemCount, 8);
+
+      const makeInvalidSection = (bodyLines) =>
+        ['### PR Readiness Score: 98%', '', '<details>', '<summary>PR Readiness Checklist</summary>', '', ...bodyLines, '', '</details>'].join('\n');
+
+      for (const badText of [
+        '### 5-Pillar PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### 5 Pillar PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        makeInvalidSection(['- **95/100** — **Check**: Legacy fraction.']),
+        makeInvalidSection(['- **95 / 100** — **Check**: Legacy spaced fraction.']),
+        makeInvalidSection(['- **20/20** — **Check**: Legacy category fraction.']),
+        makeInvalidSection(['- **20 / 20** — **Check**: Legacy spaced category fraction.']),
+        makeInvalidSection(['- **100%** — **Check (20 pts)**: Legacy pts.']),
+        makeInvalidSection(['- **100%** — **Check (5 x 20)**: Legacy math.']),
+        makeInvalidSection(['- **100%** — **Pillar 1**: Legacy pillar number.']),
+        makeInvalidSection(['- **100%** — **Readiness Rubric**: Legacy rubric word.']),
+        makeInvalidSection(['- **Functionality**: 100%']),
+        makeInvalidSection(['1. Tests: 100%']),
+        makeInvalidSection([]),
+        makeInvalidSection(['- **105%** — **Bounds**: Out of range.']),
+        '### PR Readiness Score: 105%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: 100%\n\n- **100%** — **Check**: Missing details block.',
+      ]) {
+        assert.throws(() => validatePrReadinessChecklist(badText, 'negative fixture'));
+      }
+
+      // False-positive guards for legitimate URLs, Tailwind classes, dates, and percentages
+      validateNoLegacyPrRubric(
+        [
+          'See https://github.com/capyboop/capy/pull/20 and https://github.com/capyboop/capy/pull/100',
+          'Classes bg-amber-400/20 width="100%" ~15--20% date 2026/01/20 100% offline per_page: 100',
+        ].join('\n'),
+        'false-positive-guard.md'
+      );
+
+      // Spec validation with requireProjectMd: false (main-branch mode)
+      const tmpMainSpecDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-readiness-main-'));
+      try {
+        fs.writeFileSync(
+          path.join(tmpMainSpecDir, 'AGENTS.md'),
+          '# AGENTS\nReport >= 95% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
+          'utf8'
+        );
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness >= 95%.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
+        const mainSpecRes = validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false });
+        assert.equal(mainSpecRes.scannedFiles.length, 4);
+      } finally {
+        fs.rmSync(tmpMainSpecDir, { recursive: true, force: true });
+      }
+    }
+
     /* capy-dev-only:start */
     const tmpStrictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-sanity-strict-'));
     try {
@@ -797,9 +944,20 @@ async function runCodecAndEngineTests() {
         'LICENSE.md',
       ];
       const strictAllLinks = strictRootMds.map((n) => `[${n}](./${n})`).join(' ');
+      const strictAgentsDoc = `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictDevDoc = `# DEV.md\n${strictAllLinks}\nVerify PR Readiness Score (>= 95%).\n`;
       for (const name of strictRootMds) {
         if (name === 'CHANGELOG.md') continue;
-        fs.writeFileSync(path.join(tmpStrictRepo, name), `# ${name}\n${strictAllLinks}\n`, 'utf8');
+        const content =
+          name === 'AGENTS.md'
+            ? strictAgentsDoc
+            : name === 'PROJECT.md'
+              ? strictProjectDoc
+              : name === 'DEV.md'
+                ? strictDevDoc
+                : `# ${name}\n${strictAllLinks}\n`;
+        fs.writeFileSync(path.join(tmpStrictRepo, name), content, 'utf8');
       }
       const makeStrictChangelog = ({
         headings = ['### 3.0.4 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)', '### 0.1.0 - 2026-10-01'],
@@ -827,6 +985,7 @@ async function runCodecAndEngineTests() {
         requireProjectMd: true,
         enforceChannelOrder: true,
         enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
       });
       assert.equal(strictRes.version, '3.0.4');
       assert.equal(strictRes.markdownFilesChecked, 13);
@@ -844,6 +1003,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /README\.md must link \.\/PROJECT\.md/
       );
@@ -862,6 +1022,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /PROJECT\.md must link \.\/TESTING\.md/
       );
@@ -879,6 +1040,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /PROJECT\.md must link \.\/TESTING\.md/
       );
@@ -886,7 +1048,7 @@ async function runCodecAndEngineTests() {
       // 4. Legacy Epic issue ref fails when enforceEpicNaming: true
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'PROJECT.md'),
-        `# PROJECT\n${strictAllLinks}\nSee #` + '477\n',
+        `${strictProjectDoc}See #` + '477\n',
         'utf8'
       );
       assert.throws(
@@ -896,10 +1058,11 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /EPIC-N/
       );
-      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), `# PROJECT\n${strictAllLinks}\n`, 'utf8');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
 
       // 5. Bare #490 bullet fails clickable PR link check
       fs.writeFileSync(
@@ -914,6 +1077,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /Invalid CHANGELOG bullet suffix/
       );
@@ -938,6 +1102,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /Alpha heading must appear first/
       );
@@ -950,11 +1115,117 @@ async function runCodecAndEngineTests() {
         requireProjectMd: true,
         enforceChannelOrder: true,
         enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
       });
       assert.equal(strictCrlfRes.version, '3.0.4');
       fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
 
-      // 7. Missing PROJECT.md fails requireProjectMd: true
+      // 7. Legacy PR rubric tokens fail across governance docs and .github workflows
+      for (const [relTarget, baseDoc, badSnippet] of [
+        ['PROJECT.md', strictProjectDoc, 'Use 5-Pillar scoring.\n'],
+        ['AGENTS.md', strictAgentsDoc, 'Score 95 / 100.\n'],
+        ['DEV.md', strictDevDoc, 'Check 20/20 items.\n'],
+        ['TESTING.md', `# TESTING.md\n${strictAllLinks}\n`, 'Award 20 pts per category.\n'],
+        ['README.md', `# README.md\n${strictAllLinks}\n`, 'See the PR Rubric.\n'],
+      ]) {
+        fs.writeFileSync(path.join(tmpStrictRepo, relTarget), `${baseDoc}${badSnippet}`, 'utf8');
+        assert.throws(
+          () =>
+            runSanityChecks({
+              repoRoot: tmpStrictRepo,
+              requireProjectMd: true,
+              enforceChannelOrder: true,
+              enforceEpicNaming: true,
+              enforcePrReadinessSpec: true,
+            }),
+          /Forbidden legacy/
+        );
+        fs.writeFileSync(path.join(tmpStrictRepo, relTarget), baseDoc, 'utf8');
+      }
+      fs.mkdirSync(path.join(tmpStrictRepo, '.github/workflows'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, '.github/workflows/ci.yml'),
+        'name: CI\n# Check 5-Pillar 95/100\n',
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /Forbidden legacy/
+      );
+      fs.rmSync(path.join(tmpStrictRepo, '.github'), { recursive: true, force: true });
+
+      // 8. Missing flexible-count or %-start spec fails when enforcePrReadinessSpec: true
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line.\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /PROJECT\.md must allow variable/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
+
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'AGENTS.md'),
+        `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with as many items as needed.\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /AGENTS\.md must specify putting % at the start/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'AGENTS.md'), strictAgentsDoc, 'utf8');
+
+      // 9. CHANGELOG /pull/20 and /pull/100 URLs plus README width="100%" pass runSanityChecks
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'README.md'),
+        `# README.md\n${strictAllLinks}\n<img width="100%" alt="demo" />\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({
+          firstBulletSuffix: '[#100](https://github.com/shthed/capy/pull/100)',
+        }).replace(
+          'Historical change 20 [#20](https://github.com/shthed/capy/pull/20)',
+          'Rebuild interface [#20](https://github.com/shthed/capy/pull/20)'
+        ),
+        'utf8'
+      );
+      const urlGuardRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(urlGuardRes.version, '3.0.4');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'README.md'), `# README.md\n${strictAllLinks}\n`, 'utf8');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 10. Missing PROJECT.md fails requireProjectMd: true
       fs.unlinkSync(path.join(tmpStrictRepo, 'PROJECT.md'));
       assert.throws(
         () =>
@@ -963,6 +1234,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /PROJECT\.md must exist/
       );
