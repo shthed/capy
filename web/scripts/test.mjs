@@ -1164,11 +1164,18 @@ async function runCodecAndEngineTests() {
           '# AGENTS\nReport >= 95% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
           'utf8'
         );
-        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness >= 95%.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness 100%.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
         const mainSpecRes = validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false });
         assert.equal(mainSpecRes.scannedFiles.length, 4);
+
+        fs.writeFileSync(
+          path.join(tmpMainSpecDir, 'AGENTS.md'),
+          '# AGENTS\nReport 100% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
+          'utf8'
+        );
+        assert.equal(validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false }).scannedFiles.length, 4);
       } finally {
         fs.rmSync(tmpMainSpecDir, { recursive: true, force: true });
       }
@@ -1210,9 +1217,9 @@ async function runCodecAndEngineTests() {
         'LICENSE.md',
       ];
       const strictAllLinks = strictRootMds.map((n) => `[${n}](./${n})`).join(' ');
-      const strictAgentsDoc = `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
-      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
-      const strictDevDoc = `# DEV.md\n${strictAllLinks}\nVerify PR Readiness Score (>= 95%).\n`;
+      const strictAgentsDoc = `# AGENTS.md\n${strictAllLinks}\nReport 100% PR Readiness Score inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist 100% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictDevDoc = `# DEV.md\n${strictAllLinks}\nVerify PR Readiness Score (100%).\n`;
       for (const name of strictRootMds) {
         if (name === 'CHANGELOG.md') continue;
         const content =
@@ -1436,7 +1443,7 @@ async function runCodecAndEngineTests() {
       // 8. Missing flexible-count or %-start spec fails when enforcePrReadinessSpec: true
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'PROJECT.md'),
-        `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line.\n`,
+        `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist 100% inside <details> with % at the start of each line.\n`,
         'utf8'
       );
       assert.throws(
@@ -3035,11 +3042,22 @@ async function runCodecAndEngineTests() {
       return bodyLines.join('\n');
     };
 
+    const prReviewGateSource = extractWorkflowScript('.github/workflows/pr-review-gate.yml');
+    const gateRequires100 =
+      /latestAiSignal\.score\s*>=\s*100/.test(prReviewGateSource) ||
+      prReviewGateSource.includes('score >= 100');
+    const gateDualPassDesc = gateRequires100
+      ? 'Dual-approved: AI review (100%) + Owner sign-off verified'
+      : 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
+    const gateBetaPassDesc = gateRequires100
+      ? 'Beta gate passed: AI review (100%) verified; no holds'
+      : 'Beta gate passed: AI review (>=95%) verified; no holds';
+
     const runReviewGateScript = new AsyncFunction(
       'context',
       'github',
       'core',
-      extractWorkflowScript('.github/workflows/pr-review-gate.yml')
+      prReviewGateSource
     );
 
     const runReviewGateCase = async ({
@@ -3052,7 +3070,7 @@ async function runCodecAndEngineTests() {
       events = [],
       reviews = [],
       comments = [],
-      aiCommentScore = 98,
+      aiCommentScore = 100,
       aiCommentTs = '2026-11-13T01:01:00Z',
       eventName = 'pull_request_review',
       action = 'submitted',
@@ -3164,10 +3182,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotNativeRes.status.state, 'success');
-    assert.equal(
-      gateBotNativeRes.status.description,
-      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
-    );
+    assert.equal(gateBotNativeRes.status.description, gateDualPassDesc);
     assert.equal(gateBotNativeRes.calls.createReview.length, 0);
 
     // (b) Bot PR + review:owner-approved label only -> pending awaiting Project Owner sign-off
@@ -3476,10 +3491,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotRecoverySkewRes.status.state, 'success');
-    assert.equal(
-      gateBotRecoverySkewRes.status.description,
-      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
-    );
+    assert.equal(gateBotRecoverySkewRes.status.description, gateDualPassDesc);
     assert.equal(gateBotRecoverySkewRes.calls.createReview.length, 0);
 
     // (j) Bot PR + DISMISSED native APPROVED -> ignored (pending)
@@ -3790,10 +3802,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.status.state, 'success');
-    assert.equal(
-      gateBotSkewStalePrePushHoldWithApprovalRes.status.description,
-      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
-    );
+    assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.status.description, gateDualPassDesc);
     assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.calls.createReview.length, 0);
 
     // (m) Finding 3 regression: same-second review ties use deterministic [ts, id], while omitted IDs & cross-source review/comment ties fail closed
@@ -3851,10 +3860,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateSameSecApproveSupersedesByIdRes.status.state, 'success');
-    assert.equal(
-      gateSameSecApproveSupersedesByIdRes.status.description,
-      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
-    );
+    assert.equal(gateSameSecApproveSupersedesByIdRes.status.description, gateDualPassDesc);
     assert.equal(gateSameSecApproveSupersedesByIdRes.calls.createReview.length, 0);
 
     const gateSameSecOmittedIdsFailClosedRes = await runReviewGateCase({
@@ -3952,10 +3958,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBetaAiOnlyPassRes.status.state, 'success');
-    assert.equal(
-      gateBetaAiOnlyPassRes.status.description,
-      'Beta gate passed: AI review (>=95%) verified; no holds'
-    );
+    assert.equal(gateBetaAiOnlyPassRes.status.description, gateBetaPassDesc);
     assert.equal(gateBetaAiOnlyPassRes.calls.createReview.length, 0);
     assert.equal(gateBetaAiOnlyPassRes.calls.dismissReview.length, 1);
 
@@ -4045,7 +4048,7 @@ async function runCodecAndEngineTests() {
           author_association: 'OWNER',
           state: 'COMMENTED',
           commit_id: gateHeadSha,
-          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
           submitted_at: '2026-11-13T01:00:20Z',
         },
       ],
@@ -4257,7 +4260,7 @@ async function runCodecAndEngineTests() {
           author_association: 'OWNER',
           state: 'DISMISSED',
           commit_id: gateHeadSha,
-          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
           submitted_at: '2026-11-13T01:05:00Z',
         },
       ],
@@ -4287,7 +4290,7 @@ async function runCodecAndEngineTests() {
           author_association: 'OWNER',
           state: 'PENDING',
           commit_id: gateHeadSha,
-          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=99% -->`,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
           submitted_at: null,
         },
       ],
@@ -4303,7 +4306,7 @@ async function runCodecAndEngineTests() {
       baseRef: 'beta',
       headSha: gateHeadSha,
       labels: ['review:ai-approved'],
-      aiCommentScore: 98,
+      aiCommentScore: 100,
       reviews: [
         {
           id: 403,
@@ -4422,10 +4425,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateCapyboopMainApprovedRes.status.state, 'success');
-    assert.equal(
-      gateCapyboopMainApprovedRes.status.description,
-      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
-    );
+    assert.equal(gateCapyboopMainApprovedRes.status.description, gateDualPassDesc);
 
     const gateCapyboopBetaAiMarkerRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
@@ -4436,7 +4436,7 @@ async function runCodecAndEngineTests() {
       comments: [
         {
           user: { login: 'CapyBoop' },
-          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
           created_at: '2026-11-13T01:01:00Z',
           updated_at: '2026-11-13T01:01:00Z',
         },
@@ -4502,10 +4502,18 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateShthedSupersedesCapyboopHoldRes.status.state, 'success');
-    assert.equal(
-      gateShthedSupersedesCapyboopHoldRes.status.description,
-      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
-    );
+    assert.equal(gateShthedSupersedesCapyboopHoldRes.status.description, gateDualPassDesc);
+
+    if (gateRequires100) {
+      const gateBeta99PendingRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        labels: ['review:ai-approved'],
+        aiCommentScore: 99,
+      });
+      assert.equal(gateBeta99PendingRes.status.state, 'pending');
+    }
 
     const gateUntrustedMainApprovedRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
@@ -5451,12 +5459,63 @@ async function runCodecAndEngineTests() {
         paletteSort: 'LIGHTNESS',
       });
       assert.equal(storageMod.StorageService.loadSettings().paletteSort, 'LIGHTNESS');
+
+      // Verify FeatureOffersService persistence, NativeBridge backup fallback, channel sandboxing, and OnboardingTutorial step mapping
+      const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
+      const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
+      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 9);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
+      for (const id of offersMod.FEATURE_OFFER_IDS) {
+        const offer = offersMod.FEATURE_OFFERS[id];
+        assert.equal(
+          offer.tutorialStepIndex >= 0 && offer.tutorialStepIndex < tutorialMod.TUTORIAL_STEPS.length,
+          true,
+          `Offer ${id} tutorialStepIndex (${offer.tutorialStepIndex}) must be in [0..${tutorialMod.TUTORIAL_STEPS.length - 1}]`
+        );
+      }
+
+      const mockBackups = new Map();
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      offersMod.FeatureOffersService.resetSeenOffers();
+      assert.equal(offersMod.FeatureOffersService.loadSeenOffers().size, 0);
+      assert.equal(offersMod.FeatureOffersService.hasSeenOffer('paint_mode'), false);
+      offersMod.FeatureOffersService.markOfferSeen('paint_mode');
+      offersMod.FeatureOffersService.markOfferSeen('saves_export');
+      assert.equal(offersMod.FeatureOffersService.hasSeenOffer('paint_mode'), true);
+      assert.equal(offersMod.FeatureOffersService.hasSeenOffer('saves_export'), true);
+      assert.equal(mockBackups.has('capy_feature_offers_v1'), true);
+
+      // Rehydrate localStorage from NativeBridge backup when localStorage key is cleared
+      mockStorage.delete('capy_feature_offers_v1');
+      assert.equal(offersMod.FeatureOffersService.hasSeenOffer('paint_mode'), true);
+      assert.equal(mockStorage.has('capy_feature_offers_v1'), true);
+
+      // Ignore unknown/malformed entries in localStorage
+      mockStorage.set('capy_feature_offers_v1', JSON.stringify(['unknown_offer', 42, 'cloud_coop']));
+      const filteredOffers = offersMod.FeatureOffersService.loadSeenOffers();
+      assert.equal(filteredOffers.size, 1);
+      assert.equal(filteredOffers.has('cloud_coop'), true);
+
+      // Verify /capy/beta/ sandbox key isolation
+      globalThis.window.location = { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' };
+      assert.equal(offersMod.FeatureOffersService.hasSeenOffer('paint_mode'), false);
+      offersMod.FeatureOffersService.markOfferSeen('free_color');
+      assert.equal(mockStorage.has('capy_feature_offers_v1__sandbox_beta'), true);
+      assert.equal(mockBackups.has('capy_feature_offers_v1__sandbox_beta'), true);
+      offersMod.FeatureOffersService.resetSeenOffers();
+      assert.equal(offersMod.FeatureOffersService.hasSeenOffer('free_color'), false);
     } finally {
       globalThis.localStorage = prevLs;
       globalThis.window = prevSsrWin;
     }
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, FeatureOffersService, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -5569,7 +5628,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 5');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -5589,7 +5648,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 5',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -5604,7 +5663,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 5',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -5618,7 +5677,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 5',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -5627,12 +5686,12 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 5',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
       undefined,
       { timeout: 3000 }
     );
-    // Step 5: Finish Coloring
-    await page.getByTestId('tutorial-finish-btn').click();
+    // Skip remaining steps on main page to preserve clean Capy Forest state; full 14-step tour runs in dedicated tutContext below
+    await page.getByTestId('tutorial-skip-btn').click();
     await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
     const tutorialCompletedFlag = await page.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1'));
     assert.equal(tutorialCompletedFlag, '1');
@@ -5675,6 +5734,356 @@ async function runBrowserBasicsSuite() {
     );
     await escTutPage.close();
     await escTutContext.close();
+
+    // Full 14-step OnboardingTutorial auto-advance tour (Steps 0..13), [All Topics] drawer, Back/Jump onto already-tried steps, modal pause, and Step 13 auto-completion
+    const tutContext = await browser.newContext({ viewport: { width: 1280, height: 860 }, hasTouch: true });
+    const tutPage = await tutContext.newPage();
+    attachErrorListeners(tutPage, 'tutPage');
+    await tutPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(tutPage);
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
+    const expectTutStep = async (stepNum) => {
+      await tutPage.waitForFunction(
+        (expected) =>
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+          `STEP ${expected} OF 14`,
+        stepNum,
+        { timeout: 5000 }
+      );
+    };
+    await expectTutStep(1);
+    // Step 0 -> 1 (palette)
+    await tutPage.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
+    await expectTutStep(2);
+    // Step 1 -> 2 (paint)
+    const tutCanvasBox = await tutPage.locator('canvas').first().boundingBox();
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const xFrac = 0.42 + (attempt % 3) * 0.08;
+      const yFrac = 0.60 + Math.floor(attempt / 3) * 0.08;
+      await tutPage.mouse.click(tutCanvasBox.x + tutCanvasBox.width * xFrac, tutCanvasBox.y + tutCanvasBox.height * yFrac);
+      await tutPage.waitForTimeout(80);
+      if ((await tutPage.getByTestId('tutorial-step-tried-badge').count()) > 0) break;
+    }
+    await expectTutStep(3);
+    // Step 2 -> 3 (zoom)
+    await tutPage.keyboard.press('+');
+    await expectTutStep(4);
+    await tutPage.keyboard.press('0');
+    // Step 3 -> 4 (hint)
+    await tutPage.getByTestId('tutorial-try-hint-btn').click();
+    await expectTutStep(5);
+    // Step 4 -> 5 (undo_redo)
+    await tutPage.getByTestId('undo-btn').click();
+    await expectTutStep(6);
+    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    await tutPage.getByTestId('tutorial-prev-btn').click();
+    await expectTutStep(5);
+    await tutPage.waitForTimeout(950);
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+      'STEP 5 OF 14',
+      'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
+    );
+    await tutPage.keyboard.press('Control+y');
+    await expectTutStep(6);
+    // Step 5 -> 6 (replay via long-press Undo)
+    const tutUndoBox = await tutPage.getByTestId('undo-btn').boundingBox();
+    await tutPage.mouse.move(tutUndoBox.x + tutUndoBox.width / 2, tutUndoBox.y + tutUndoBox.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.waitForTimeout(520);
+    await tutPage.mouse.up();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await expectTutStep(7);
+    await tutPage.getByTestId('replay-exit-btn').click();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    // Step 6 -> 7 (peek_fullscreen)
+    await tutPage.locator('button[title="Show Original Preview"]').click();
+    await expectTutStep(8);
+    await tutPage.locator('button[title="Return to Puzzle"]').click();
+    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open)
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-settings').click();
+    const tutFreeColorLabel = await tutPage.waitForSelector('text=Free Colour Mode');
+    await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await tutPage.waitForTimeout(950);
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+      'STEP 8 OF 14',
+      'Auto-advance timer must stay paused while SettingsModal is open'
+    );
+    await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(9);
+    // Step 8 -> 9 (gallery_daily)
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-create').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(10);
+    // Step 9 -> 10 (custom_photo)
+    const tutPngBytes = await tutPage.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 160;
+      c.height = 120;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(0, 0, 80, 120);
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(80, 0, 80, 120);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    });
+    const tutPhotoPath = path.join(os.tmpdir(), 'capy_tut_photo.png');
+    fs.writeFileSync(tutPhotoPath, Buffer.from(tutPngBytes));
+    await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
+    fs.rmSync(tutPhotoPath, { force: true });
+    await waitForPuzzleLoaded(tutPage);
+    await expectTutStep(11);
+    // Step 10 -> 11 (infinite_zoom)
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-create').click();
+    await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
+    await waitForPuzzleLoaded(tutPage);
+    await expectTutStep(12);
+    // Step 11 -> 12 (saves_export)
+    await tutPage.getByTestId('topbar-saves-btn').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(13);
+    // Step 12 -> 13 (cloud_coop)
+    await tutPage.getByTestId('topbar-coop-btn').click();
+    await tutPage.getByTestId('host-coop-room-btn').click();
+    await tutPage.getByTestId('leave-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.getByTestId('leave-coop-room-btn').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(14);
+    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
+    await tutPage.getByTestId('tutorial-topics-btn').click();
+    await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
+    await tutPage.getByTestId('tutorial-topic-item-0').click();
+    await expectTutStep(1);
+    await tutPage.waitForTimeout(950);
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+      'STEP 1 OF 14',
+      'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
+    );
+    await tutPage.getByTestId('tutorial-topics-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-13').click();
+    await expectTutStep(14);
+    // Step 13 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
+    await tutPage.getByTestId('tutorial-large-text-btn').click();
+    await tutPage.getByTestId('tutorial-large-text-btn').click();
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 4000 });
+    assert.equal(
+      await tutPage.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1')),
+      '1',
+      'Step 13 auto-completion must persist capy_tutorial_completed_v1="1"'
+    );
+    await tutPage.close();
+    await tutContext.close();
+
+    // FeatureOfferBanner E2E: all 9 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
+    const offerContext = await browser.newContext({ viewport: { width: 1280, height: 860 }, hasTouch: true });
+    await offerContext.addInitScript(() => {
+      const store = {};
+      window.__capySavedBackups = store;
+      window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          store[String(k)] = String(v);
+          return true;
+        },
+        loadBackup: (k) =>
+          Object.prototype.hasOwnProperty.call(store, String(k)) ? store[String(k)] : null,
+      };
+    });
+    const offerPage = await offerContext.newPage();
+    attachErrorListeners(offerPage, 'offerPage');
+    await offerPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(offerPage);
+    assert.equal(await offerPage.getByTestId('feature-offer-banner').count(), 0);
+    const expectOfferBanner = async (offerId) => {
+      await offerPage.waitForFunction(
+        (expectedId) =>
+          document.querySelector('[data-testid="feature-offer-banner"]')?.getAttribute('data-offer-id') === expectedId,
+        offerId,
+        { timeout: 8000 }
+      );
+    };
+    const jumpFromOfferAndAssertStep = async (expectedStepNum) => {
+      await offerPage.getByTestId('feature-offer-guide-btn').click();
+      await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+        `STEP ${expectedStepNum} OF 14`
+      );
+      await offerPage.waitForTimeout(950);
+      assert.equal(
+        (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+        `STEP ${expectedStepNum} OF 14`,
+        `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
+      );
+      await offerPage.getByTestId('tutorial-skip-btn').click();
+      await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    };
+    // 1) paint_mode -> Got it
+    const offerPaintBtn = offerPage.locator('button[aria-label="Toggle Paint Mode"]');
+    await offerPaintBtn.click();
+    await expectOfferBanner('paint_mode');
+    await offerPage.getByTestId('feature-offer-dismiss-btn').click();
+    await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+    await offerPaintBtn.click();
+    // 2 & 3) Queue create_gallery -> saves_export while SettingsModal suppresses banner; markOfferSeen stays deferred until shown
+    await offerPage.locator('button[title="Settings and Menu"]').click();
+    await offerPage.getByTestId('settings-tab-create').click();
+    await offerPage.waitForTimeout(120);
+    assert.equal(await offerPage.getByTestId('feature-offer-banner').count(), 0);
+    await offerPage.getByTestId('settings-tab-saves').click();
+    await offerPage.waitForTimeout(120);
+    const seenWhileModalOpen = await offerPage.evaluate(() =>
+      JSON.parse(localStorage.getItem('capy_feature_offers_v1') || '[]')
+    );
+    assert.equal(seenWhileModalOpen.includes('create_gallery'), false, 'create_gallery must not mark seen while suppressed');
+    assert.equal(seenWhileModalOpen.includes('saves_export'), false, 'saves_export must not mark seen while suppressed');
+    await offerPage.getByTestId('settings-modal-close').click();
+    await expectOfferBanner('create_gallery');
+    await offerPage.getByTestId('feature-offer-dismiss-btn').click();
+    await expectOfferBanner('saves_export');
+    await jumpFromOfferAndAssertStep(12);
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
+    const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const xFrac = 0.42 + (attempt % 3) * 0.08;
+      const yFrac = 0.60 + Math.floor(attempt / 3) * 0.08;
+      await offerPage.mouse.click(
+        offerCanvasBox.x + offerCanvasBox.width * xFrac,
+        offerCanvasBox.y + offerCanvasBox.height * yFrac
+      );
+      await offerPage.waitForTimeout(80);
+      if (!(await offerPage.getByTestId('undo-btn').isDisabled())) break;
+    }
+    await offerPage.getByTestId('undo-btn').click();
+    await expectOfferBanner('undo_replay');
+    await jumpFromOfferAndAssertStep(5);
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
+    await offerPage.getByTestId('redo-btn').click();
+    const offerUndoBox = await offerPage.getByTestId('undo-btn').boundingBox();
+    await offerPage.mouse.move(offerUndoBox.x + offerUndoBox.width / 2, offerUndoBox.y + offerUndoBox.height / 2);
+    await offerPage.mouse.down();
+    await offerPage.waitForTimeout(520);
+    await offerPage.mouse.up();
+    await offerPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await offerPage.getByTestId('replay-exit-btn').click();
+    await expectOfferBanner('replay_scrubber');
+    await jumpFromOfferAndAssertStep(6);
+    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
+    await offerPage.locator('button[title="Settings and Menu"]').click();
+    await offerPage.getByTestId('settings-tab-settings').click();
+    const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
+    await offerFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await offerPage.getByTestId('settings-modal-close').click();
+    await expectOfferBanner('free_color');
+    await jumpFromOfferAndAssertStep(8);
+    // 7) photo_upload -> Got it
+    const offerPngBytes = await offerPage.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = 160;
+      c.height = 120;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(0, 0, 80, 120);
+      ctx.fillStyle = '#3b82f6';
+      ctx.fillRect(80, 0, 80, 120);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    });
+    const offerPhotoPath = path.join(os.tmpdir(), 'capy_offer_photo.png');
+    fs.writeFileSync(offerPhotoPath, Buffer.from(offerPngBytes));
+    await offerPage.locator('input[type="file"][accept="image/*"]').setInputFiles(offerPhotoPath);
+    await offerPage.waitForTimeout(300);
+    fs.rmSync(offerPhotoPath, { force: true });
+    await offerPage.waitForFunction(
+      () =>
+        document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_offer_photo') &&
+        !document.body.innerText.includes('Generating Puzzle'),
+      undefined,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(offerPage);
+    await expectOfferBanner('photo_upload');
+    await offerPage.getByTestId('feature-offer-dismiss-btn').click();
+    await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+    // 8) infinite_zoom -> Got it
+    await offerPage.locator('button[title="Settings and Menu"]').click();
+    await offerPage.getByTestId('settings-tab-create').click();
+    await offerPage.getByTestId('infinite-zoom-subtile-btn').click();
+    await offerPage.waitForFunction(
+      () =>
+        document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('2x Detail') &&
+        !document.body.innerText.includes('Generating Puzzle'),
+      undefined,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(offerPage);
+    await expectOfferBanner('infinite_zoom');
+    await offerPage.getByTestId('feature-offer-dismiss-btn').click();
+    await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+    // 9) cloud_coop -> Jump to Guide STEP 13 OF 14
+    await offerPage.getByTestId('topbar-coop-btn').click();
+    await offerPage.getByTestId('settings-modal-close').click();
+    await expectOfferBanner('cloud_coop');
+    await jumpFromOfferAndAssertStep(13);
+
+    // Verify all 9 offers persisted in both localStorage and NativeBridge.saveBackup spy
+    const persistedOfferState = await offerPage.evaluate(() => ({
+      ls: JSON.parse(localStorage.getItem('capy_feature_offers_v1') || '[]'),
+      backup: JSON.parse(window.__capySavedBackups?.capy_feature_offers_v1 || '[]'),
+    }));
+    for (const expectedOffer of [
+      'paint_mode',
+      'undo_replay',
+      'replay_scrubber',
+      'free_color',
+      'create_gallery',
+      'photo_upload',
+      'infinite_zoom',
+      'saves_export',
+      'cloud_coop',
+    ]) {
+      assert.equal(
+        persistedOfferState.ls.includes(expectedOffer),
+        true,
+        `Expected ${expectedOffer} in localStorage capy_feature_offers_v1`
+      );
+      assert.equal(
+        persistedOfferState.backup.includes(expectedOffer),
+        true,
+        `Expected ${expectedOffer} in NativeBridge.saveBackup capy_feature_offers_v1`
+      );
+    }
+    // Seen offers persist across reload (toggling Paint Mode does not re-show paint_mode)
+    await offerPage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(offerPage);
+    await offerPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await offerPage.waitForTimeout(150);
+    assert.equal(await offerPage.getByTestId('feature-offer-banner').count(), 0);
+    await offerPage.close();
+
+    // Verify ?capy_channel=beta isolates capy_feature_offers_v1__sandbox_beta from root offers
+    const betaOfferPage = await offerContext.newPage();
+    attachErrorListeners(betaOfferPage, 'betaOfferPage');
+    await betaOfferPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(betaOfferPage);
+    await betaOfferPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await betaOfferPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await betaOfferPage.getByTestId('feature-offer-banner').getAttribute('data-offer-id'), 'paint_mode');
+    const betaOfferState = await betaOfferPage.evaluate(() => ({
+      ls: JSON.parse(localStorage.getItem('capy_feature_offers_v1__sandbox_beta') || '[]'),
+      backup: JSON.parse(window.__capySavedBackups?.capy_feature_offers_v1__sandbox_beta || '[]'),
+    }));
+    assert.equal(betaOfferState.ls.includes('paint_mode'), true, 'Expected scoped beta localStorage key');
+    assert.equal(betaOfferState.backup.includes('paint_mode'), true, 'Expected scoped beta backup key');
+    await betaOfferPage.close();
+    await offerContext.close();
 
 
     // Verify malformed #s= DoS token degrades cleanly without crashing the app
@@ -7839,13 +8248,14 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(120);
     console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
-    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + SettingsModal tab bar fit
-    const mobileTopbarPage = await context.newPage();
+    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + SettingsModal tab bar fit + OnboardingTutorial & FeatureOfferBanner overflow
+    const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
-    await mobileTopbarPage.setViewportSize({ width: 360, height: 780 });
     await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+    await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
       await mobileTopbarPage.getByTestId('topbar-zoom-badge').count(),
       0,
@@ -7874,6 +8284,36 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+    const normalDocOverflow = await mobileTopbarPage.evaluate(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    }));
+    assert.equal(
+      normalDocOverflow.docOverflow <= 0,
+      true,
+      `Normal mode at 360x780 with OnboardingTutorial must have zero horizontal document overflow (got ${normalDocOverflow.docOverflow})`
+    );
+    const mobileTutorialBox = await mobileTopbarPage.getByTestId('onboarding-tutorial').boundingBox();
+    assert.ok(mobileTutorialBox, 'Expected onboarding-tutorial boundingBox at 360x780');
+    assert.equal(
+      mobileTutorialBox.x >= 0 && mobileTutorialBox.x + mobileTutorialBox.width <= 360,
+      true,
+      `OnboardingTutorial (${mobileTutorialBox.x}..${mobileTutorialBox.x + mobileTutorialBox.width}) must fit within 360px mobile viewport`
+    );
+    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
+    const normalTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
+    assert.ok(normalTopicsBox, 'Expected normal tutorial-topics-drawer boundingBox at 360x780');
+    assert.equal(
+      normalTopicsBox.x >= 0 && normalTopicsBox.x + normalTopicsBox.width <= 360,
+      true,
+      `Normal tutorial-topics-drawer (${normalTopicsBox.x}..${normalTopicsBox.x + normalTopicsBox.width}) must fit within 360px mobile viewport`
+    );
+    const normalTopicsOverflow = await mobileTopbarPage.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth
+    );
+    assert.equal(normalTopicsOverflow <= 0, true, `Normal tutorial-topics-drawer must have zero overflow (got ${normalTopicsOverflow})`);
+    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Open SettingsModal on 360x780 mobile and verify all header tabs fit without horizontal clipping
     await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
@@ -7944,6 +8384,28 @@ async function runBrowserBasicsSuite() {
       true,
       `Large Text mode at 360x780 must have zero horizontal document overflow (got ${largeDocOverflow.docOverflow})`
     );
+    const largeTutorialBox = await mobileTopbarPage.getByTestId('onboarding-tutorial').boundingBox();
+    assert.ok(largeTutorialBox, 'Expected Large Text onboarding-tutorial boundingBox at 360x780');
+    assert.equal(
+      largeTutorialBox.x >= 0 && largeTutorialBox.x + largeTutorialBox.width <= 360,
+      true,
+      `Large Text OnboardingTutorial (${largeTutorialBox.x}..${largeTutorialBox.x + largeTutorialBox.width}) must fit within 360px mobile viewport`
+    );
+    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
+    const largeTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
+    assert.ok(largeTopicsBox, 'Expected Large Text tutorial-topics-drawer boundingBox at 360x780');
+    assert.equal(
+      largeTopicsBox.x >= 0 && largeTopicsBox.x + largeTopicsBox.width <= 360,
+      true,
+      `Large Text tutorial-topics-drawer (${largeTopicsBox.x}..${largeTopicsBox.x + largeTopicsBox.width}) must fit within 360px mobile viewport`
+    );
+    const largeTopicsOverflow = await mobileTopbarPage.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth
+    );
+    assert.equal(largeTopicsOverflow <= 0, true, `Large Text tutorial-topics-drawer must have zero overflow (got ${largeTopicsOverflow})`);
+    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'hidden', timeout: 3000 });
     // Re-open SettingsModal, turn off Large Text, and continue Saves tab verification
     await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
     await mobileTopbarPage.getByTestId('settings-tab-settings').click();
@@ -8022,7 +8484,47 @@ async function runBrowserBasicsSuite() {
       `After scrolling to cloud-coop-hub, non-sticky selected-save-action-bar (${mActionAfterScroll.y + mActionAfterScroll.height}) must remain above hub (${mHubAfterScroll.y})`
     );
 
+    // Close SettingsModal, skip OnboardingTutorial, and verify FeatureOfferBanner fits within 360x780 with zero overflow in both normal & Large Text mode
+    await closeBtn.click();
+    await mobileTopbarPage.getByTestId('tutorial-skip-btn').click();
+    await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    await mobileTopbarPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    const mobileOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
+    assert.ok(mobileOfferBox, 'Expected feature-offer-banner boundingBox at 360x780');
+    assert.equal(
+      mobileOfferBox.x >= 0 && mobileOfferBox.x + mobileOfferBox.width <= 360,
+      true,
+      `FeatureOfferBanner (${mobileOfferBox.x}..${mobileOfferBox.x + mobileOfferBox.width}) must fit within 360px mobile viewport`
+    );
+    const mobileOfferOverflow = await mobileTopbarPage.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth
+    );
+    assert.equal(mobileOfferOverflow <= 0, true, `FeatureOfferBanner at 360x780 must have zero overflow (got ${mobileOfferOverflow})`);
+    await mobileTopbarPage.getByTestId('feature-offer-dismiss-btn').click();
+    await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Enable Large Text and trigger create_gallery offer to verify FeatureOfferBanner bounds & overflow in Large Text mode at 360x780
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-settings').click();
+    await mobileTopbarPage.getByTestId('setting-large-text').click();
+    await mobileTopbarPage.getByTestId('settings-tab-create').click();
+    await closeBtn.click();
+    await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    const largeOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
+    assert.ok(largeOfferBox, 'Expected Large Text feature-offer-banner boundingBox at 360x780');
+    assert.equal(
+      largeOfferBox.x >= 0 && largeOfferBox.x + largeOfferBox.width <= 360,
+      true,
+      `Large Text FeatureOfferBanner (${largeOfferBox.x}..${largeOfferBox.x + largeOfferBox.width}) must fit within 360px mobile viewport`
+    );
+    const largeOfferOverflow = await mobileTopbarPage.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth
+    );
+    assert.equal(largeOfferOverflow <= 0, true, `Large Text FeatureOfferBanner at 360x780 must have zero overflow (got ${largeOfferOverflow})`);
+
     await mobileTopbarPage.close();
+    await mobileTopbarContext.close();
     console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
 
     // -------------------------------------------------------------------------
