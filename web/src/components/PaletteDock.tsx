@@ -422,6 +422,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         {showCustomColorButton && onOpenPaletteOptions && (
           <button
             type="button"
+            data-testid="palette-custom-btn"
             onClick={onOpenPaletteOptions}
             title="Custom Colour & Palette Options"
             className="flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"

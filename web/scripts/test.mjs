@@ -37,7 +37,7 @@ async function waitForPuzzleLoaded(page) {
   await page.waitForFunction(
     () =>
       !document.body.innerText.includes('Analyzing artwork') &&
-      !document.body.innerText.includes('Generating puzzle'),
+      !document.body.innerText.toLowerCase().includes('generating puzzle'),
     { timeout: 25000 }
   );
   await page.waitForSelector(
@@ -5510,12 +5510,66 @@ async function runCodecAndEngineTests() {
       assert.equal(mockBackups.has('capy_feature_offers_v1__sandbox_beta'), true);
       offersMod.FeatureOffersService.resetSeenOffers();
       assert.equal(offersMod.FeatureOffersService.hasSeenOffer('free_color'), false);
+
+      // Verify TargetSpotlightOverlay specs and geometry helpers
+      const spotlightMod = await vite.ssrLoadModule('/src/components/TargetSpotlightOverlay.tsx');
+      for (const step of tutorialMod.TUTORIAL_STEPS) {
+        const specs = spotlightMod.TUTORIAL_STEP_TARGETS[step.key];
+        assert.equal(
+          Array.isArray(specs) && specs.length > 0 && Boolean(specs[0]?.selector),
+          true,
+          `TUTORIAL_STEP_TARGETS must define target(s) for ${step.key}`
+        );
+      }
+      for (const offerId of offersMod.FEATURE_OFFER_IDS) {
+        const specs = spotlightMod.FEATURE_OFFER_TARGETS[offerId];
+        assert.equal(
+          Array.isArray(specs) && specs.length > 0 && Boolean(specs[0]?.selector),
+          true,
+          `FEATURE_OFFER_TARGETS must define target(s) for ${offerId}`
+        );
+      }
+      const clampedRect = spotlightMod.clampRectToBounds(
+        { left: -25, top: 760, width: 140, height: 80 },
+        { width: 360, height: 780 },
+        4
+      );
+      assert.equal(clampedRect.left >= 4, true);
+      assert.equal(clampedRect.top + clampedRect.height <= 776, true);
+
+      const focalRect = spotlightMod.computeCanvasFocalRect(
+        { left: 16, top: 60, width: 328, height: 180 },
+        { width: 360, height: 780 }
+      );
+      assert.equal(focalRect.top >= 250, true, 'Canvas focal box must sit below tutorial card');
+      assert.equal(focalRect.top + focalRect.height <= 772, true);
+      assert.equal(focalRect.width >= 100 && focalRect.height >= 70, true);
+
+      const topConn = spotlightMod.computeSpotlightConnector(
+        { left: 400, top: 60, width: 448, height: 200 },
+        { left: 1100, top: 10, width: 36, height: 36 }
+      );
+      assert.equal(topConn.d.startsWith('M '), true);
+      assert.equal(topConn.arrowPoints.split(' ').length, 3);
+      assert.equal(topConn.endY < topConn.startY, true, 'Connector to topbar must point upward');
+
+      const bottomConn = spotlightMod.computeSpotlightConnector(
+        { left: 400, top: 60, width: 448, height: 200 },
+        { left: 590, top: 720, width: 58, height: 52 }
+      );
+      assert.equal(bottomConn.endY > bottomConn.startY, true, 'Connector to dock must point downward');
+
+      const sideConn = spotlightMod.computeSpotlightConnector(
+        { left: 400, top: 60, width: 448, height: 200 },
+        { left: 1200, top: 140, width: 44, height: 44 }
+      );
+      assert.equal(sideConn.endX > sideConn.startX, true, 'Connector to right side must point right');
     } finally {
       globalThis.localStorage = prevLs;
       globalThis.window = prevSsrWin;
     }
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, FeatureOffersService, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, FeatureOffersService, TargetSpotlightOverlay, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -5735,7 +5789,69 @@ async function runBrowserBasicsSuite() {
     await escTutPage.close();
     await escTutContext.close();
 
-    // Full 14-step OnboardingTutorial auto-advance tour (Steps 0..13), [All Topics] drawer, Back/Jump onto already-tried steps, modal pause, and Step 13 auto-completion
+    const assertSpotlightAligned = async (targetPage, expectedVariant) => {
+      await targetPage.waitForFunction(
+        (variant) => {
+          const overlay = document.querySelector('[data-testid="spotlight-overlay"]');
+          if (!overlay || overlay.getAttribute('data-variant') !== variant) return false;
+          const rings = overlay.querySelectorAll('[data-testid="spotlight-ring"]');
+          const pointer = overlay.querySelector('[data-testid="spotlight-pointer"]');
+          return rings.length > 0 && Boolean(pointer);
+        },
+        expectedVariant,
+        { timeout: 4000 }
+      );
+      const metrics = await targetPage.evaluate(() => {
+        const overlay = document.querySelector('[data-testid="spotlight-overlay"]');
+        const pointer = overlay?.querySelector('[data-testid="spotlight-pointer"]');
+        const path = pointer?.querySelector('path');
+        const poly = pointer?.querySelector('polygon');
+        const rings = Array.from(overlay?.querySelectorAll('[data-testid="spotlight-ring"]') || []);
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        let overlapsTarget = false;
+        const ringsInView = rings.every((ring) => {
+          const rr = ring.getBoundingClientRect();
+          const inView =
+            rr.width > 0 &&
+            rr.height > 0 &&
+            rr.left >= 0 &&
+            rr.top >= 0 &&
+            rr.right <= vw + 1 &&
+            rr.bottom <= vh + 1;
+          const sel = ring.getAttribute('data-target-selector') || '';
+          const targetEl = sel ? document.querySelector(sel) : null;
+          if (targetEl) {
+            const tr = targetEl.getBoundingClientRect();
+            const hits =
+              rr.left <= tr.right + 2 &&
+              rr.right >= tr.left - 2 &&
+              rr.top <= tr.bottom + 2 &&
+              rr.bottom >= tr.top - 2;
+            if (hits) overlapsTarget = true;
+          }
+          return inView;
+        });
+        return {
+          pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : '',
+          ringCount: rings.length,
+          ringsInView,
+          overlapsTarget,
+          hasPath: Boolean(path?.getAttribute('d')),
+          hasArrow: Boolean(poly?.getAttribute('points')),
+          ringAnim: rings[0] ? getComputedStyle(rings[0]).animationName : '',
+          ringTransitionDur: rings[0] ? getComputedStyle(rings[0]).transitionDuration : '',
+        };
+      });
+      assert.equal(metrics.pointerEvents, 'none', 'spotlight-overlay must be non-blocking');
+      assert.equal(metrics.ringCount >= 1, true, 'Expected at least 1 spotlight-ring');
+      assert.equal(metrics.ringsInView, true, `Spotlight rings must fit inside viewport: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.overlapsTarget, true, `Spotlight ring must overlap target element: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.hasPath && metrics.hasArrow, true, 'Expected spotlight-pointer SVG path and arrowhead');
+      return metrics;
+    };
+
+    // Full 14-step OnboardingTutorial auto-advance tour (Steps 0..13), TargetSpotlightOverlay alignment, compact Large Text toggle, Step 6->7 replay auto-dismiss, [All Topics] drawer, Back/Jump onto already-tried steps, modal pause, and Step 13 auto-completion
     const tutContext = await browser.newContext({ viewport: { width: 1280, height: 860 }, hasTouch: true });
     const tutPage = await tutContext.newPage();
     attachErrorListeners(tutPage, 'tutPage');
@@ -5752,9 +5868,18 @@ async function runBrowserBasicsSuite() {
       );
     };
     await expectTutStep(1);
+    const step1LargeBtnBox = await tutPage.getByTestId('tutorial-large-text-btn').boundingBox();
+    assert.ok(step1LargeBtnBox && step1LargeBtnBox.width > 200, 'Step 1 Large Text button must be full-width banner');
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 0 -> 1 (palette)
     await tutPage.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await expectTutStep(2);
+    const step2LargeBtnBox = await tutPage.getByTestId('tutorial-large-text-btn').boundingBox();
+    assert.ok(
+      step2LargeBtnBox && step2LargeBtnBox.width < 150 && step2LargeBtnBox.height <= 34,
+      `Step 2+ Large Text toggle must be compact pill (got ${JSON.stringify(step2LargeBtnBox)})`
+    );
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 1 -> 2 (paint)
     const tutCanvasBox = await tutPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -5765,13 +5890,20 @@ async function runBrowserBasicsSuite() {
       if ((await tutPage.getByTestId('tutorial-step-tried-badge').count()) > 0) break;
     }
     await expectTutStep(3);
+    // Verify topbar-saves-btn exposes data-filled-count >= 1
+    assert.ok(
+      Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')) >= 1,
+      'Expected topbar-saves-btn data-filled-count >= 1 after painting'
+    );
     // Step 2 -> 3 (zoom)
     await tutPage.keyboard.press('+');
     await expectTutStep(4);
     await tutPage.keyboard.press('0');
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 3 -> 4 (hint)
     await tutPage.getByTestId('tutorial-try-hint-btn').click();
     await expectTutStep(5);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
@@ -5786,7 +5918,7 @@ async function runBrowserBasicsSuite() {
     );
     await tutPage.keyboard.press('Control+y');
     await expectTutStep(6);
-    // Step 5 -> 6 (replay via long-press Undo)
+    // Step 5 -> 6 (replay via long-press Undo -> auto-advancing to Step 7 auto-dismisses tutorial-opened ReplayControls!)
     const tutUndoBox = await tutPage.getByTestId('undo-btn').boundingBox();
     await tutPage.mouse.move(tutUndoBox.x + tutUndoBox.width / 2, tutUndoBox.y + tutUndoBox.height / 2);
     await tutPage.mouse.down();
@@ -5794,15 +5926,24 @@ async function runBrowserBasicsSuite() {
     await tutPage.mouse.up();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
     await expectTutStep(7);
-    await tutPage.getByTestId('replay-exit-btn').click();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    const step7Metrics = await assertSpotlightAligned(tutPage, 'tutorial');
+    assert.equal(step7Metrics.ringCount, 2, 'Step 7 (peek_fullscreen) must highlight both Eye and Full Screen');
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes(
+        'Tap the highlighted Eye icon to preview original art, or Full Screen to expand'
+      ),
+      true,
+      'Step 7 tryPrompt must clearly explain Eye vs Full Screen'
+    );
     // Step 6 -> 7 (peek_fullscreen)
     await tutPage.locator('button[title="Show Original Preview"]').click();
     await expectTutStep(8);
     await tutPage.locator('button[title="Return to Puzzle"]').click();
-    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open)
+    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open and hide spotlight)
     await tutPage.locator('button[title="Settings and Menu"]').click();
     await tutPage.getByTestId('settings-tab-settings').click();
+    assert.equal(await tutPage.getByTestId('spotlight-overlay').count(), 0, 'Spotlight must hide while SettingsModal is open');
     const tutFreeColorLabel = await tutPage.waitForSelector('text=Free Colour Mode');
     await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     await tutPage.waitForTimeout(950);
@@ -5819,6 +5960,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('settings-tab-create').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(10);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 9 -> 10 (custom_photo)
     const tutPngBytes = await tutPage.evaluate(async () => {
       const c = document.createElement('canvas');
@@ -5834,9 +5976,19 @@ async function runBrowserBasicsSuite() {
     });
     const tutPhotoPath = path.join(os.tmpdir(), 'capy_tut_photo.png');
     fs.writeFileSync(tutPhotoPath, Buffer.from(tutPngBytes));
-    await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
-    fs.rmSync(tutPhotoPath, { force: true });
-    await waitForPuzzleLoaded(tutPage);
+    try {
+      await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
+      await tutPage.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_tut_photo') &&
+          !document.body.innerText.toLowerCase().includes('generating puzzle'),
+        undefined,
+        { timeout: 15000 }
+      );
+      await waitForPuzzleLoaded(tutPage);
+    } finally {
+      fs.rmSync(tutPhotoPath, { force: true });
+    }
     await expectTutStep(11);
     // Step 10 -> 11 (infinite_zoom)
     await tutPage.locator('button[title="Settings and Menu"]').click();
@@ -5844,10 +5996,12 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
     await waitForPuzzleLoaded(tutPage);
     await expectTutStep(12);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 11 -> 12 (saves_export)
     await tutPage.getByTestId('topbar-saves-btn').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(13);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 12 -> 13 (cloud_coop)
     await tutPage.getByTestId('topbar-coop-btn').click();
     await tutPage.getByTestId('host-coop-room-btn').click();
@@ -5879,6 +6033,82 @@ async function runBrowserBasicsSuite() {
       '1',
       'Step 13 auto-completion must persist capy_tutorial_completed_v1="1"'
     );
+
+    // Verify Jump and Skip from Step 6 auto-dismiss tutorial-opened Replay, while pre-existing manual Replay stays open across Step 6->7
+    const tapSampleAndOpenTutorialAtStep6 = async () => {
+      await tutPage.locator('button[title="Settings and Menu"]').click();
+      await tutPage.getByTestId('settings-tab-about').click();
+      await tutPage.getByTestId('about-replay-tutorial-btn').click();
+      await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+      await tutPage.getByTestId('tutorial-topics-btn').click();
+      await tutPage.getByTestId('tutorial-topic-item-5').click();
+      await expectTutStep(6);
+    };
+    // Paint 1 region first so Undo/Replay is available
+    await tutPage.mouse.click(tutCanvasBox.x + tutCanvasBox.width * 0.5, tutCanvasBox.y + tutCanvasBox.height * 0.62);
+    await tutPage.waitForTimeout(100);
+    await tapSampleAndOpenTutorialAtStep6();
+    const undoBtnForJump = await tutPage.getByTestId('undo-btn').boundingBox();
+    await tutPage.mouse.move(undoBtnForJump.x + undoBtnForJump.width / 2, undoBtnForJump.y + undoBtnForJump.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.waitForTimeout(520);
+    await tutPage.mouse.up();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    // Jump via All Topics to Step 8 -> must dismiss tutorial-opened replay
+    await tutPage.getByTestId('tutorial-topics-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-7').click();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    await tutPage.waitForTimeout(250);
+    // Jump back to Step 6, open replay, and click Skip -> must dismiss tutorial-opened replay
+    await tutPage.getByTestId('tutorial-topics-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-5').click();
+    await expectTutStep(6);
+    const undoBtnForSkip = await tutPage.getByTestId('undo-btn').boundingBox();
+    await tutPage.mouse.move(undoBtnForSkip.x + undoBtnForSkip.width / 2, undoBtnForSkip.y + undoBtnForSkip.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.waitForTimeout(520);
+    await tutPage.mouse.up();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    await tutPage.waitForTimeout(250);
+
+    // Pre-existing manual Replay opened BEFORE tutorial must survive Step 6 -> Step 7 Next
+    const undoBtnPreManual = await tutPage.getByTestId('undo-btn').boundingBox();
+    await tutPage.mouse.move(undoBtnPreManual.x + undoBtnPreManual.width / 2, undoBtnPreManual.y + undoBtnPreManual.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.waitForTimeout(550);
+    await tutPage.mouse.up();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tapSampleAndOpenTutorialAtStep6();
+    await tutPage.getByTestId('tutorial-next-btn').click();
+    await expectTutStep(7);
+    assert.equal(
+      await tutPage.getByTestId('replay-controls-window').isVisible(),
+      true,
+      'Pre-existing manual ReplayControls opened outside tutorial must survive Step 6->7'
+    );
+    await tutPage.getByTestId('replay-exit-btn').click();
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+
+    // Verify reducedMotion disables spotlight pulse & dash animations
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-settings').click();
+    const rmToggle = tutPage.getByTestId('setting-reduced-motion');
+    await rmToggle.scrollIntoViewIfNeeded();
+    if ((await rmToggle.getAttribute('aria-checked')) !== 'true') {
+      await rmToggle.click();
+    }
+    await tutPage.getByTestId('settings-tab-about').click();
+    await tutPage.getByTestId('about-replay-tutorial-btn').click();
+    const rmMetrics = await assertSpotlightAligned(tutPage, 'tutorial');
+    assert.equal(rmMetrics.ringAnim, 'none', 'reducedMotion must disable spotlight pulse animation');
+    assert.equal(rmMetrics.ringTransitionDur, '0s', 'reducedMotion must disable spotlight ring transitions');
+    const rmDashAnim = await tutPage.evaluate(
+      () => getComputedStyle(document.querySelector('[data-testid="spotlight-pointer"] path')).animationName
+    );
+    assert.equal(rmDashAnim, 'none', 'reducedMotion must disable spotlight pointer dash animation');
+
     await tutPage.close();
     await tutContext.close();
 
@@ -5908,6 +6138,7 @@ async function runBrowserBasicsSuite() {
         offerId,
         { timeout: 8000 }
       );
+      await assertSpotlightAligned(offerPage, 'offer');
     };
     const jumpFromOfferAndAssertStep = async (expectedStepNum) => {
       await offerPage.getByTestId('feature-offer-guide-btn').click();
@@ -5998,17 +6229,19 @@ async function runBrowserBasicsSuite() {
     });
     const offerPhotoPath = path.join(os.tmpdir(), 'capy_offer_photo.png');
     fs.writeFileSync(offerPhotoPath, Buffer.from(offerPngBytes));
-    await offerPage.locator('input[type="file"][accept="image/*"]').setInputFiles(offerPhotoPath);
-    await offerPage.waitForTimeout(300);
-    fs.rmSync(offerPhotoPath, { force: true });
-    await offerPage.waitForFunction(
-      () =>
-        document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_offer_photo') &&
-        !document.body.innerText.includes('Generating Puzzle'),
-      undefined,
-      { timeout: 15000 }
-    );
-    await waitForPuzzleLoaded(offerPage);
+    try {
+      await offerPage.locator('input[type="file"][accept="image/*"]').setInputFiles(offerPhotoPath);
+      await offerPage.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_offer_photo') &&
+          !document.body.innerText.toLowerCase().includes('generating puzzle'),
+        undefined,
+        { timeout: 15000 }
+      );
+      await waitForPuzzleLoaded(offerPage);
+    } finally {
+      fs.rmSync(offerPhotoPath, { force: true });
+    }
     await expectOfferBanner('photo_upload');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
@@ -8248,11 +8481,11 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(120);
     console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
-    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + SettingsModal tab bar fit + OnboardingTutorial & FeatureOfferBanner overflow
+    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + ALPHA #520 pill fit + SettingsModal tab bar fit + OnboardingTutorial & FeatureOfferBanner & TargetSpotlightOverlay overflow
     const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
-    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
+    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&capy_pr=520`, { waitUntil: 'networkidle' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
@@ -8267,12 +8500,22 @@ async function runBrowserBasicsSuite() {
     const savesBox = await mobileTopbarPage.getByTestId('topbar-saves-btn').boundingBox();
     const channelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
     const settingsBox = await mobileTopbarPage.locator('button[title="Settings and Menu"]').boundingBox();
+    const leftLaneScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
 
     assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && settingsBox);
     assert.equal(
       leftLaneBox.x + leftLaneBox.width <= rightLaneBox.x,
       true,
       `topbar-left-lane (${leftLaneBox.x + leftLaneBox.width}) must not overlap topbar-right-lane (${rightLaneBox.x}) at 360x780`
+    );
+    assert.equal(
+      leftLaneScrollCheck.scrollWidth <= leftLaneScrollCheck.clientWidth + 1 &&
+        channelBox.x + channelBox.width <= leftLaneBox.x + leftLaneBox.width + 1,
+      true,
+      `ALPHA #520 pill must fit cleanly inside topbar-left-lane without horizontal clipping at 360x780 (${JSON.stringify({ leftLaneScrollCheck, channelBox, leftLaneBox })})`
     );
     assert.equal(
       rightLaneBox.x + rightLaneBox.width <= 360,
@@ -8284,6 +8527,7 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+    await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
     const normalDocOverflow = await mobileTopbarPage.evaluate(() => ({
       docOverflow: document.documentElement.scrollWidth - window.innerWidth,
     }));
@@ -8345,7 +8589,7 @@ async function runBrowserBasicsSuite() {
       );
     }
 
-    // Toggle Large Text (Low-Vision) mode at 360x780 and verify zero clipping in SettingsModal and GameTopBar
+    // Toggle Large Text (Low-Vision) mode at 360x780 and verify zero clipping in SettingsModal and GameTopBar (including ALPHA #520)
     await mobileTopbarPage.getByTestId('settings-tab-settings').click();
     const largeTextSwitch = mobileTopbarPage.getByTestId('setting-large-text');
     await largeTextSwitch.waitFor({ state: 'visible', timeout: 5000 });
@@ -8369,13 +8613,25 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.waitForTimeout(150);
     const largeLeftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
     const largeRightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
-    assert.ok(largeLeftLaneBox && largeRightLaneBox);
+    const largeChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    const largeLeftScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.ok(largeLeftLaneBox && largeRightLaneBox && largeChannelBox);
     assert.equal(
       largeLeftLaneBox.x + largeLeftLaneBox.width <= largeRightLaneBox.x &&
         largeRightLaneBox.x + largeRightLaneBox.width <= 360,
       true,
       'Large Text GameTopBar lanes must not overlap or exceed 360px viewport'
     );
+    assert.equal(
+      largeLeftScrollCheck.scrollWidth <= largeLeftScrollCheck.clientWidth + 1 &&
+        largeChannelBox.x + largeChannelBox.width <= largeLeftLaneBox.x + largeLeftLaneBox.width + 1,
+      true,
+      `Large Text ALPHA #520 pill must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ largeLeftScrollCheck, largeChannelBox, largeLeftLaneBox })})`
+    );
+    await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
     const largeDocOverflow = await mobileTopbarPage.evaluate(() => ({
       docOverflow: document.documentElement.scrollWidth - window.innerWidth,
     }));
@@ -8490,6 +8746,7 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
     await mobileTopbarPage.locator('button[aria-label="Toggle Paint Mode"]').click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    await assertSpotlightAligned(mobileTopbarPage, 'offer');
     const mobileOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
     assert.ok(mobileOfferBox, 'Expected feature-offer-banner boundingBox at 360x780');
     assert.equal(
@@ -8511,6 +8768,7 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     await closeBtn.click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    await assertSpotlightAligned(mobileTopbarPage, 'offer');
     const largeOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
     assert.ok(largeOfferBox, 'Expected Large Text feature-offer-banner boundingBox at 360x780');
     assert.equal(
@@ -8575,9 +8833,12 @@ async function runBrowserBasicsSuite() {
       }),
       'utf8'
     );
-    await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
-    fs.rmSync(badJsonPath, { force: true });
-    await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    try {
+      await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
+      await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    } finally {
+      fs.rmSync(badJsonPath, { force: true });
+    }
     assert.equal(
       await m3Page.getByTestId('saves-import-notice').getAttribute('role'),
       'alert',

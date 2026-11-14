@@ -136,7 +136,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     title: 'Peek Original & Full Screen',
     description:
       'Tap the top Eye button to compare with the original artwork (toggle preview outlines in Settings), or go Full Screen for extra room.',
-    tryPrompt: 'Tap the top Eye or Full Screen icon to preview the original artwork',
+    tryPrompt: 'Tap the highlighted Eye icon to preview original art, or Full Screen to expand',
     icon: Eye,
   },
   {
@@ -293,7 +293,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
         data-testid="onboarding-tutorial"
         className="pointer-events-auto w-full max-w-md max-h-[calc(100dvh-5.75rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl p-3 sm:p-3.5 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200"
       >
-        {onToggleLargeText && (
+        {onToggleLargeText && clampedStep === 0 && (
           <button
             type="button"
             data-testid="tutorial-large-text-btn"
@@ -343,16 +343,36 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onSkip}
-            data-testid="tutorial-skip-btn"
-            aria-label="Skip Tutorial"
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
-          >
-            <span>Skip</span>
-            <X size={13} />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {onToggleLargeText && clampedStep > 0 && (
+              <button
+                type="button"
+                data-testid="tutorial-large-text-btn"
+                aria-pressed={largeText}
+                aria-label={largeText ? 'Large Text On (Tap to Switch Back)' : 'Switch to Large Text'}
+                title={largeText ? 'Large Text On (Tap to Switch Back)' : 'Switch to Large Text'}
+                onClick={onToggleLargeText}
+                className={`inline-flex items-center px-2 py-1 rounded-lg border text-[11px] font-bold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap ${
+                  largeText
+                    ? 'bg-amber-400 text-slate-950 border-amber-300 hover:bg-amber-300'
+                    : 'bg-slate-800/90 text-amber-200 border-amber-400/50 hover:bg-slate-700'
+                }`}
+              >
+                <span>{largeText ? 'Aa On' : 'Large Text'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onSkip}
+              data-testid="tutorial-skip-btn"
+              aria-label="Skip Tutorial"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
+            >
+              <span>Skip</span>
+              <X size={13} />
+            </button>
+          </div>
         </div>
 
         {/* Jump-to-Topic Drawer */}

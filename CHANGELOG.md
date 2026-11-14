@@ -1,4 +1,8 @@
-### 3.0.11 - 2026-11-14 (Production, Beta)
+### 3.0.12 - 2026-11-14 (Alpha)
+
+- Add non-blocking TargetSpotlightOverlay ring and directional arrow for all 14 OnboardingTutorial steps and 9 FeatureOfferBanner tips, auto-dismiss tutorial-opened ReplayControls past Step 6, compact Large Text toggle after Step 1, tighten 360px topbar channel pill fit, and update liveCoopRef synchronously [#523](https://github.com/shthed/capy/pull/523)
+
+### 3.0.11 - 2026-11-14 (Production)
 
 - Upgrade OnboardingTutorial to a 14-step interactive guide with All Topics jump drawer and per-visit auto-advance across all steps, add 9 contextual non-blocking FeatureOfferBanner quick tips with scoped persistence and Jump to Guide, raise PR Readiness and AI review gates to strict 100%, and expand mobile overflow and E2E coverage [#519](https://github.com/shthed/capy/pull/519)
 

@@ -30,7 +30,7 @@ export const FeatureOfferBanner: React.FC<FeatureOfferBannerProps> = ({
 
   return (
     <div
-      className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3"
+      className="fixed inset-x-0 z-[39] pointer-events-none flex justify-center px-3"
       style={{
         top: 'calc(var(--capy-tutorial-top, 3.55rem) + var(--sat, 0px))',
       }}
