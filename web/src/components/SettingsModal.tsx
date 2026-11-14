@@ -191,13 +191,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [selectedSaveId, setSelectedSaveId] = useState<string | null>(null);
   const [savesViewMode, setSavesViewMode] = useState<'DETAIL' | 'THUMBNAILS'>(() => {
     try {
-      return (
-        (localStorage.getItem(resolveScopedStorageKey('capy_saves_view_mode')) as
-          | 'DETAIL'
-          | 'THUMBNAILS') || 'DETAIL'
-      );
+      const stored = localStorage.getItem(resolveScopedStorageKey('capy_saves_view_mode'));
+      return stored === 'DETAIL' || stored === 'THUMBNAILS' ? stored : 'THUMBNAILS';
     } catch {
-      return 'DETAIL';
+      return 'THUMBNAILS';
     }
   });
   const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
@@ -2382,30 +2379,594 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 4: SAVES / SNAPSHOTS */}
           {activeTab === 4 && (
             <div className="space-y-3.5">
-              {/* Hidden file input for Import */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".capy,.json,application/json,application/octet-stream"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (e.target) e.target.value = '';
-                  if (!file || !onImportSnapshots) return;
-                  try {
-                    const res = await onImportSnapshots(file);
-                    if (res && typeof res === 'object' && 'message' in res) {
-                      setImportNotice({ ok: Boolean(res.ok), message: res.message });
-                    }
-                  } catch (err) {
-                    setImportNotice({
-                      ok: false,
-                      message:
-                        err instanceof Error ? err.message : 'Failed to import Capy save file.',
-                    });
-                  }
-                }}
-              />
+              {/* Snapshots Content: List First (Thumbnails Default) or Empty Recovery */}
+              {snapshots.length > 0 ? (
+                <div data-testid="saves-list-section" data-view-mode={savesViewMode}>
+                  {savesViewMode === 'DETAIL' ? (
+                    /* Detail List View */
+                    <div data-testid="saves-list-detail" className="space-y-2">
+                      {sortedSnapshots.map((snap) => {
+                        const isActive = snap.id === activeSnapshotId;
+                        const isSelected = snap.id === currentSelectedId;
+                        const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
+                        const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                        const fallbackThumb =
+                          primaryThumb &&
+                          failedThumbSrcs[primaryThumb] &&
+                          snap.previewDataUrl &&
+                          snap.previewDataUrl !== primaryThumb
+                            ? snap.previewDataUrl
+                            : undefined;
+                        const thumbSrc =
+                          primaryThumb && !failedThumbSrcs[primaryThumb]
+                            ? primaryThumb
+                            : fallbackThumb && !failedThumbSrcs[fallbackThumb]
+                              ? fallbackThumb
+                              : undefined;
+
+                        return (
+                          <div
+                            key={snap.id}
+                            data-testid={`save-card-${snap.id}`}
+                            onClick={() => handleSaveCardClick(snap)}
+                            onDoubleClick={() => {
+                              if (!isActive) onLoadSnapshot(snap);
+                              onClose();
+                            }}
+                            title={
+                              isActive
+                                ? 'Active save (double-tap to resume game)'
+                                : 'Double-tap to load save and close settings'
+                            }
+                            className={`relative flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
+                              isSelected
+                                ? 'border-amber-400 bg-amber-500/15 shadow-md ring-2 ring-amber-400/60'
+                                : isActive
+                                ? 'border-amber-500/50 bg-slate-950/60 hover:bg-slate-850'
+                                : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40 hover:border-slate-700'
+                            }`}
+                          >
+                            {/* Larger Thumbnail Preview */}
+                            <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center relative shadow-inner">
+                              {thumbSrc ? (
+                                <img
+                                  src={thumbSrc}
+                                  alt={snap.title}
+                                  onError={() =>
+                                    setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
+                                  }
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <ImageIcon size={22} className="text-slate-500" />
+                              )}
+                            </div>
+
+                            {/* Info & Title */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="text-xs sm:text-sm font-bold text-slate-200 truncate">
+                                  {snap.title}
+                                </h4>
+                                {snap.isPinned && (
+                                  <Pin size={11} className="text-amber-400 fill-amber-400 flex-shrink-0" />
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 font-medium">
+                                <span className="text-amber-400 font-bold">{progressPct}%</span>
+                                {snap.fileSizeBytes && snap.fileSizeBytes > 0 ? (
+                                  <>
+                                    <span>•</span>
+                                    <span>{Math.max(1, Math.round(snap.fileSizeBytes / 1024))} KB</span>
+                                  </>
+                                ) : null}
+                              </div>
+
+                              {/* Subtle Progress Bar */}
+                              <div className="w-full bg-slate-800/80 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div
+                                  className="bg-amber-400 h-full rounded-full transition-all"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Thumbnails Grid View */
+                    <div data-testid="saves-list-thumbnails" className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+                      {sortedSnapshots.map((snap) => {
+                        const isActive = snap.id === activeSnapshotId;
+                        const isSelected = snap.id === currentSelectedId;
+                        const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
+                        const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                        const fallbackThumb =
+                          primaryThumb &&
+                          failedThumbSrcs[primaryThumb] &&
+                          snap.previewDataUrl &&
+                          snap.previewDataUrl !== primaryThumb
+                            ? snap.previewDataUrl
+                            : undefined;
+                        const thumbSrc =
+                          primaryThumb && !failedThumbSrcs[primaryThumb]
+                            ? primaryThumb
+                            : fallbackThumb && !failedThumbSrcs[fallbackThumb]
+                              ? fallbackThumb
+                              : undefined;
+
+                        return (
+                          <div
+                            key={snap.id}
+                            data-testid={`save-card-${snap.id}`}
+                            onClick={() => handleSaveCardClick(snap)}
+                            onDoubleClick={() => {
+                              if (!isActive) onLoadSnapshot(snap);
+                              onClose();
+                            }}
+                            title={
+                              isActive
+                                ? 'Active save (double-tap to resume game)'
+                                : 'Double-tap to load save and close settings'
+                            }
+                            className={`group relative flex flex-col rounded-xl border overflow-hidden transition-all cursor-pointer select-none ${
+                              isSelected
+                                ? 'border-amber-400 bg-amber-500/15 ring-2 ring-amber-400/60 shadow-lg'
+                                : isActive
+                                ? 'border-amber-500/50 bg-slate-900/60 hover:bg-slate-850'
+                                : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40 hover:border-slate-700'
+                            }`}
+                          >
+                            {/* Rectangular Image Preview */}
+                            <div className="relative w-full aspect-[4/3] bg-slate-900 overflow-hidden flex items-center justify-center">
+                              {thumbSrc ? (
+                                <img
+                                  src={thumbSrc}
+                                  alt={snap.title}
+                                  onError={() =>
+                                    setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
+                                  }
+                                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                                />
+                              ) : (
+                                <ImageIcon size={28} className="text-slate-600" />
+                              )}
+
+                              {/* Pin Badge if Pinned */}
+                              {snap.isPinned && (
+                                <div className="absolute top-1.5 left-1.5 bg-slate-950/85 backdrop-blur-xs text-amber-400 p-1 rounded-md border border-slate-700/60 shadow-sm">
+                                  <Pin size={10} className="fill-current" />
+                                </div>
+                              )}
+
+                              {/* Floating Percentage Badge */}
+                              <div className="absolute top-1.5 right-1.5 bg-slate-950/85 backdrop-blur-xs text-amber-400 text-[11px] font-black px-1.5 py-0.5 rounded-md border border-slate-700/60 shadow-sm">
+                                {progressPct}%
+                              </div>
+
+                              {/* Progress Bar Line */}
+                              <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-900/80">
+                                <div
+                                  className="h-full bg-amber-400 transition-all"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Title Footer */}
+                            <div className="p-2 flex items-center justify-between gap-1">
+                              <span className="text-xs font-bold text-slate-200 truncate" title={snap.title}>
+                                {snap.title}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  data-testid="saves-empty-recovery"
+                  className="text-center py-8 px-4 space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-slate-400 text-sm"
+                >
+                  <p>No saved puzzles yet. Load an image, import a `.capy` save, or restore the starter artwork.</p>
+                  {onRestoreStarterSample && (
+                    <button
+                      type="button"
+                      data-testid="restore-starter-sample-btn"
+                      onClick={onRestoreStarterSample}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-bold hover:bg-amber-300 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw size={13} />
+                      <span>Restore Capy Forest Starter</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Static Selection, View Mode & Bulk Library Actions */}
+              <div
+                data-testid="selected-save-action-bar"
+                className="p-2.5 sm:p-3 rounded-xl bg-slate-950/85 border border-slate-800 shadow-md space-y-2.5"
+              >
+                {/* Row 1: Options & View Mode Switcher */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <select
+                      value={settings.saveSortOrder}
+                      onChange={(e) =>
+                        updateSetting('saveSortOrder', e.target.value as SaveSortOrder)
+                      }
+                      className="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none cursor-pointer"
+                    >
+                      <option value="LAST_ACTIVE">Last Active</option>
+                      <option value="DATE">Date Created</option>
+                      <option value="PERCENT_COMPLETE">Completion</option>
+                    </select>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-slate-300">Replay on Load</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        data-testid="toggle-auto-replay-saves-btn"
+                        aria-checked={settings.autoReplayOnLoad !== false}
+                        onClick={() =>
+                          updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
+                        }
+                        className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                          settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
+                            settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Detail vs Thumbnails View Mode Toggle */}
+                  <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                    <button
+                      type="button"
+                      data-testid="saves-view-detail-btn"
+                      aria-pressed={savesViewMode === 'DETAIL'}
+                      onClick={() => handleSetViewMode('DETAIL')}
+                      title="Detail List View"
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        savesViewMode === 'DETAIL'
+                          ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <List size={13} />
+                      <span>Detail</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="saves-view-thumbnails-btn"
+                      aria-pressed={savesViewMode === 'THUMBNAILS'}
+                      onClick={() => handleSetViewMode('THUMBNAILS')}
+                      title="Thumbnails Grid View"
+                      className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        savesViewMode === 'THUMBNAILS'
+                          ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <LayoutGrid size={13} />
+                      <span>Thumbnails</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: Selected Save Action Toolbar (when a save is selected) */}
+                {selectedSave && (
+                  <div className="pt-2 border-t border-slate-800/80">
+                    {renamingId === selectedSave.id ? (
+                      /* Inline Rename Form */
+                      <div className="flex items-center gap-1.5 w-full">
+                        <input
+                          type="text"
+                          value={renameText}
+                          onChange={(e) => setRenameText(e.target.value)}
+                          className="px-2.5 py-1.5 text-xs bg-slate-800 border border-amber-400 rounded-lg text-white focus:outline-none flex-1 min-w-0"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
+                              setRenamingId(null);
+                            } else if (e.key === 'Escape') {
+                              e.stopPropagation();
+                              setRenamingId(null);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          data-testid="confirm-rename-btn"
+                          onClick={() => {
+                            if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
+                            setRenamingId(null);
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
+                          title="Save Name"
+                        >
+                          <Check size={13} />
+                          <span>Save</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRenamingId(null)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
+                          title="Cancel Rename"
+                        >
+                          <X size={13} />
+                          <span>Cancel</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {/* Pin / Unpin */}
+                        {onTogglePinSnapshot && (
+                          <button
+                            type="button"
+                            data-testid="save-action-pin"
+                            onClick={() => onTogglePinSnapshot(selectedSave.id)}
+                            title={selectedSave.isPinned ? 'Unpin Save from Top' : 'Pin Save to Top'}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors shadow active:scale-95 cursor-pointer ${
+                              selectedSave.isPinned
+                                ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                            }`}
+                          >
+                            <Pin size={12} className={selectedSave.isPinned ? 'fill-current rotate-45' : ''} />
+                            <span>{selectedSave.isPinned ? 'Unpin' : 'Pin'}</span>
+                          </button>
+                        )}
+
+                        {/* Load / Resume */}
+                        <button
+                          type="button"
+                          data-testid="save-action-load"
+                          onClick={() => {
+                            if (selectedSave.id !== activeSnapshotId) {
+                              onLoadSnapshot(selectedSave);
+                            }
+                            onClose();
+                          }}
+                          title={
+                            selectedSave.id === activeSnapshotId
+                              ? 'Resume Current Game'
+                              : 'Load Selected Save'
+                          }
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
+                        >
+                          <Play size={12} fill="currentColor" />
+                          <span>{selectedSave.id === activeSnapshotId ? 'Resume' : 'Load'}</span>
+                        </button>
+
+                        {/* Replay */}
+                        {onReplaySnapshot && (
+                          <button
+                            type="button"
+                            data-testid="save-action-replay"
+                            disabled={selectedSave.filledCount === 0}
+                            onClick={() => {
+                              if (selectedSave.filledCount > 0) {
+                                onReplaySnapshot(selectedSave);
+                                onClose();
+                              }
+                            }}
+                            title={
+                              selectedSave.filledCount === 0
+                                ? 'No regions filled to replay'
+                                : 'Watch Animated Replay'
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors shadow active:scale-95 ${
+                              selectedSave.filledCount === 0
+                                ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed opacity-50'
+                                : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-400/40 cursor-pointer'
+                            }`}
+                          >
+                            <Play size={12} />
+                            <span>Replay</span>
+                          </button>
+                        )}
+
+                        {/* Rename */}
+                        <button
+                          type="button"
+                          data-testid="save-action-rename"
+                          onClick={() => {
+                            setRenamingId(selectedSave.id);
+                            setRenameText(selectedSave.title);
+                          }}
+                          title="Rename Save"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
+                        >
+                          <Edit2 size={12} />
+                          <span>Rename</span>
+                        </button>
+
+                        {/* Export */}
+                        {onExportSnapshot && (
+                          <button
+                            type="button"
+                            data-testid="save-action-export"
+                            onClick={() => onExportSnapshot(selectedSave.id, selectedSave.title)}
+                            title="Export Save File (.capy)"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
+                          >
+                            <Download size={12} />
+                            <span>Export</span>
+                          </button>
+                        )}
+
+                        {/* Printable SVG Coloring Sheet */}
+                        {onExportSnapshotSvg && (
+                          <button
+                            type="button"
+                            data-testid="save-action-export-svg"
+                            onClick={() =>
+                              void onExportSnapshotSvg(selectedSave.id, selectedSave.title)
+                            }
+                            title="Export Printable Vector Coloring Sheet (.svg)"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
+                          >
+                            <Printer size={12} className="text-amber-400" />
+                            <span>SVG Sheet</span>
+                          </button>
+                        )}
+
+                        {/* Delete */}
+                        {confirmDeleteId === selectedSave.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              data-testid="save-action-confirm-delete"
+                              onClick={() => {
+                                onDeleteSnapshot(selectedSave.id);
+                                setConfirmDeleteId(null);
+                              }}
+                              className="px-2.5 py-1.5 text-[11px] font-bold bg-red-600 text-white rounded-lg hover:bg-red-500 cursor-pointer"
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2.5 py-1.5 text-[11px] bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            data-testid="save-action-delete"
+                            onClick={() => setConfirmDeleteId(selectedSave.id)}
+                            title="Delete Save"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-red-950/40 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/40 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
+                          >
+                            <Trash2 size={12} />
+                            <span>Delete</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Row 3: Global Library Actions (Import, Export All, Delete All Saves) */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    {onImportSnapshots && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Import Save (.capy / .json)"
+                        data-testid="import-save-btn"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                      >
+                        <Upload size={13} className="text-amber-400" />
+                        <span>Import</span>
+                      </button>
+                    )}
+
+                    {onExportAllSnapshots && snapshots.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={onExportAllSnapshots}
+                        title="Export All Saves to Backup File"
+                        data-testid="export-all-saves-btn"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                      >
+                        <Download size={13} className="text-amber-400" />
+                        <span>Export All</span>
+                      </button>
+                    )}
+
+                    {onResetProgress && (
+                      <button
+                        type="button"
+                        onClick={onResetProgress}
+                        title="Reset Current Puzzle Progress"
+                        data-testid="reset-progress-btn"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                      >
+                        <RotateCcw size={13} className="text-amber-400" />
+                        <span>Reset Progress</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {snapshots.length > 0 && (
+                    <div>
+                      {confirmClearAll ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-red-400 font-semibold">
+                            Delete all?
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClearAllSnapshots();
+                              setConfirmClearAll(false);
+                            }}
+                            className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-500 cursor-pointer"
+                          >
+                            Yes, Delete All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmClearAll(false)}
+                            className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmClearAll(true)}
+                          className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                        >
+                          Delete All Saves
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Inline Accessible Import Status Banner */}
+              {importNotice && (
+                <div
+                  role={importNotice.ok ? 'status' : 'alert'}
+                  data-testid="saves-import-notice"
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
+                    importNotice.ok
+                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                      : 'bg-red-950/60 border-red-500/40 text-red-300'
+                  }`}
+                >
+                  <span>{importNotice.message}</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss import message"
+                    onClick={() => setImportNotice(null)}
+                    className="p-0.5 rounded hover:bg-white/10 cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
 
               {/* Cloud Sync, Shareable Link & Live Simultaneous Co-op Hub */}
               <div
@@ -2832,592 +3393,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </div>
 
-              {/* Combined Single Region: Always Shown at the Top of the Page */}
-              <div className="sticky -top-3.5 sm:-top-5 z-20 bg-slate-900/95 backdrop-blur-md pt-0.5 pb-2 -mt-1">
-                <div
-                  data-testid="selected-save-action-bar"
-                  className="p-2.5 sm:p-3 rounded-xl bg-slate-950/85 border border-slate-800 shadow-md space-y-2.5"
-                >
-                  {/* Row 1: Options & View Mode Switcher */}
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 sm:gap-2.5">
-                      <select
-                        value={settings.saveSortOrder}
-                        onChange={(e) =>
-                          updateSetting('saveSortOrder', e.target.value as SaveSortOrder)
-                        }
-                        className="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none cursor-pointer"
-                      >
-                        <option value="LAST_ACTIVE">Last Active</option>
-                        <option value="DATE">Date Created</option>
-                        <option value="PERCENT_COMPLETE">Completion</option>
-                      </select>
-
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-300">Replay on Load</span>
-                        <button
-                          type="button"
-                          role="switch"
-                          data-testid="toggle-auto-replay-saves-btn"
-                          aria-checked={settings.autoReplayOnLoad !== false}
-                          onClick={() =>
-                            updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
-                          }
-                          className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
-                            settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
-                          }`}
-                        >
-                          <span
-                            className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
-                              settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Detail vs Thumbnails View Mode Toggle */}
-                    <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-                      <button
-                        type="button"
-                        data-testid="saves-view-detail-btn"
-                        onClick={() => handleSetViewMode('DETAIL')}
-                        title="Detail List View"
-                        className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                          savesViewMode === 'DETAIL'
-                            ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <List size={13} />
-                        <span>Detail</span>
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="saves-view-thumbnails-btn"
-                        onClick={() => handleSetViewMode('THUMBNAILS')}
-                        title="Thumbnails Grid View"
-                        className={`flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                          savesViewMode === 'THUMBNAILS'
-                            ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <LayoutGrid size={13} />
-                        <span>Thumbnails</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Row 2: Selected Save Action Toolbar (when a save is selected) */}
-                  {selectedSave && (
-                    <div className="pt-2 border-t border-slate-800/80">
-                      {renamingId === selectedSave.id ? (
-                        /* Inline Rename Form */
-                        <div className="flex items-center gap-1.5 w-full">
-                          <input
-                            type="text"
-                            value={renameText}
-                            onChange={(e) => setRenameText(e.target.value)}
-                            className="px-2.5 py-1.5 text-xs bg-slate-800 border border-amber-400 rounded-lg text-white focus:outline-none flex-1 min-w-0"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
-                                setRenamingId(null);
-                              } else if (e.key === 'Escape') {
-                                e.stopPropagation();
-                                setRenamingId(null);
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            data-testid="confirm-rename-btn"
-                            onClick={() => {
-                              if (renameText.trim()) onRenameSnapshot(selectedSave.id, renameText.trim());
-                              setRenamingId(null);
-                            }}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
-                            title="Save Name"
-                          >
-                            <Check size={13} />
-                            <span>Save</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setRenamingId(null)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white rounded-lg transition-colors cursor-pointer"
-                            title="Cancel Rename"
-                          >
-                            <X size={13} />
-                            <span>Cancel</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {/* Pin / Unpin */}
-                          {onTogglePinSnapshot && (
-                            <button
-                              type="button"
-                              data-testid="save-action-pin"
-                              onClick={() => onTogglePinSnapshot(selectedSave.id)}
-                              title={selectedSave.isPinned ? 'Unpin Save from Top' : 'Pin Save to Top'}
-                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors shadow active:scale-95 cursor-pointer ${
-                                selectedSave.isPinned
-                                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                              }`}
-                            >
-                              <Pin size={12} className={selectedSave.isPinned ? 'fill-current rotate-45' : ''} />
-                              <span>{selectedSave.isPinned ? 'Unpin' : 'Pin'}</span>
-                            </button>
-                          )}
-
-                          {/* Load / Resume */}
-                          <button
-                            type="button"
-                            data-testid="save-action-load"
-                            onClick={() => {
-                              if (selectedSave.id !== activeSnapshotId) {
-                                onLoadSnapshot(selectedSave);
-                              }
-                              onClose();
-                            }}
-                            title={
-                              selectedSave.id === activeSnapshotId
-                                ? 'Resume Current Game'
-                                : 'Load Selected Save'
-                            }
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300 transition-colors shadow active:scale-95 cursor-pointer"
-                          >
-                            <Play size={12} fill="currentColor" />
-                            <span>{selectedSave.id === activeSnapshotId ? 'Resume' : 'Load'}</span>
-                          </button>
-
-                          {/* Replay */}
-                          {onReplaySnapshot && (
-                            <button
-                              type="button"
-                              data-testid="save-action-replay"
-                              disabled={selectedSave.filledCount === 0}
-                              onClick={() => {
-                                if (selectedSave.filledCount > 0) {
-                                  onReplaySnapshot(selectedSave);
-                                  onClose();
-                                }
-                              }}
-                              title={
-                                selectedSave.filledCount === 0
-                                  ? 'No regions filled to replay'
-                                  : 'Watch Animated Replay'
-                              }
-                              className={`inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-colors shadow active:scale-95 ${
-                                selectedSave.filledCount === 0
-                                  ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed opacity-50'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-400/40 cursor-pointer'
-                              }`}
-                            >
-                              <Play size={12} />
-                              <span>Replay</span>
-                            </button>
-                          )}
-
-                          {/* Rename */}
-                          <button
-                            type="button"
-                            data-testid="save-action-rename"
-                            onClick={() => {
-                              setRenamingId(selectedSave.id);
-                              setRenameText(selectedSave.title);
-                            }}
-                            title="Rename Save"
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
-                          >
-                            <Edit2 size={12} />
-                            <span>Rename</span>
-                          </button>
-
-                          {/* Export */}
-                          {onExportSnapshot && (
-                            <button
-                              type="button"
-                              data-testid="save-action-export"
-                              onClick={() => onExportSnapshot(selectedSave.id, selectedSave.title)}
-                              title="Export Save File (.capy)"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
-                            >
-                              <Download size={12} />
-                              <span>Export</span>
-                            </button>
-                          )}
-
-                          {/* Printable SVG Coloring Sheet */}
-                          {onExportSnapshotSvg && (
-                            <button
-                              type="button"
-                              data-testid="save-action-export-svg"
-                              onClick={() =>
-                                void onExportSnapshotSvg(selectedSave.id, selectedSave.title)
-                              }
-                              title="Export Printable Vector Coloring Sheet (.svg)"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
-                            >
-                              <Printer size={12} className="text-amber-400" />
-                              <span>SVG Sheet</span>
-                            </button>
-                          )}
-
-                          {/* Delete */}
-                          {confirmDeleteId === selectedSave.id ? (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                data-testid="save-action-confirm-delete"
-                                onClick={() => {
-                                  onDeleteSnapshot(selectedSave.id);
-                                  setConfirmDeleteId(null);
-                                }}
-                                className="px-2.5 py-1.5 text-[11px] font-bold bg-red-600 text-white rounded-lg hover:bg-red-500 cursor-pointer"
-                              >
-                                Confirm
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDeleteId(null)}
-                                className="px-2.5 py-1.5 text-[11px] bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 cursor-pointer"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              data-testid="save-action-delete"
-                              onClick={() => setConfirmDeleteId(selectedSave.id)}
-                              title="Delete Save"
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-red-950/40 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/40 rounded-lg transition-colors shadow active:scale-95 cursor-pointer"
-                            >
-                              <Trash2 size={12} />
-                              <span>Delete</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Row 3: Global Library Actions (Import, Export All, Delete All Saves) */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
-                    <div className="flex items-center gap-2">
-                      {onImportSnapshots && (
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          title="Import Save (.capy / .json)"
-                          data-testid="import-save-btn"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
-                        >
-                          <Upload size={13} className="text-amber-400" />
-                          <span>Import</span>
-                        </button>
-                      )}
-
-                      {onExportAllSnapshots && snapshots.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={onExportAllSnapshots}
-                          title="Export All Saves to Backup File"
-                          data-testid="export-all-saves-btn"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
-                        >
-                          <Download size={13} className="text-amber-400" />
-                          <span>Export All</span>
-                        </button>
-                      )}
-
-                      {onResetProgress && (
-                        <button
-                          type="button"
-                          onClick={onResetProgress}
-                          title="Reset Current Puzzle Progress"
-                          data-testid="reset-progress-btn"
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
-                        >
-                          <RotateCcw size={13} className="text-amber-400" />
-                          <span>Reset Progress</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {snapshots.length > 0 && (
-                      <div>
-                        {confirmClearAll ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-red-400 font-semibold">
-                              Delete all?
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onClearAllSnapshots();
-                                setConfirmClearAll(false);
-                              }}
-                              className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded-lg hover:bg-red-500 cursor-pointer"
-                            >
-                              Yes, Delete All
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmClearAll(false)}
-                              className="px-2 py-1 text-xs bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setConfirmClearAll(true)}
-                            className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                          >
-                            Delete All Saves
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Inline Accessible Import Status Banner */}
-              {importNotice && (
-                <div
-                  role={importNotice.ok ? 'status' : 'alert'}
-                  data-testid="saves-import-notice"
-                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
-                    importNotice.ok
-                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                      : 'bg-red-950/60 border-red-500/40 text-red-300'
-                  }`}
-                >
-                  <span>{importNotice.message}</span>
-                  <button
-                    type="button"
-                    aria-label="Dismiss import message"
-                    onClick={() => setImportNotice(null)}
-                    className="p-0.5 rounded hover:bg-white/10 cursor-pointer"
-                  >
-                    <X size={13} />
-                  </button>
-                </div>
-              )}
-
-              {/* Snapshots Content: Detail Mode or Thumbnails Mode */}
-              {savesViewMode === 'DETAIL' ? (
-                /* Detail List View */
-                <div className="space-y-2">
-                  {sortedSnapshots.map((snap) => {
-                    const isActive = snap.id === activeSnapshotId;
-                    const isSelected = snap.id === currentSelectedId;
-                    const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                    const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
-                    const fallbackThumb =
-                      primaryThumb &&
-                      failedThumbSrcs[primaryThumb] &&
-                      snap.previewDataUrl &&
-                      snap.previewDataUrl !== primaryThumb
-                        ? snap.previewDataUrl
-                        : undefined;
-                    const thumbSrc =
-                      primaryThumb && !failedThumbSrcs[primaryThumb]
-                        ? primaryThumb
-                        : fallbackThumb && !failedThumbSrcs[fallbackThumb]
-                          ? fallbackThumb
-                          : undefined;
-
-                    return (
-                      <div
-                        key={snap.id}
-                        data-testid={`save-card-${snap.id}`}
-                        onClick={() => handleSaveCardClick(snap)}
-                        onDoubleClick={() => {
-                          if (!isActive) onLoadSnapshot(snap);
-                          onClose();
-                        }}
-                        title={
-                          isActive
-                            ? 'Active save (double-tap to resume game)'
-                            : 'Double-tap to load save and close settings'
-                        }
-                        className={`relative flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer select-none ${
-                          isSelected
-                            ? 'border-amber-400 bg-amber-500/15 shadow-md ring-2 ring-amber-400/60'
-                            : isActive
-                            ? 'border-amber-500/50 bg-slate-950/60 hover:bg-slate-850'
-                            : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40 hover:border-slate-700'
-                        }`}
-                      >
-                        {/* Larger Thumbnail Preview */}
-                        <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl bg-slate-900 border border-slate-700/80 overflow-hidden flex-shrink-0 flex items-center justify-center relative shadow-inner">
-                          {thumbSrc ? (
-                            <img
-                              src={thumbSrc}
-                              alt={snap.title}
-                              onError={() =>
-                                setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
-                              }
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <ImageIcon size={22} className="text-slate-500" />
-                          )}
-                        </div>
-
-                        {/* Info & Title */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <h4 className="text-xs sm:text-sm font-bold text-slate-200 truncate">
-                              {snap.title}
-                            </h4>
-                            {snap.isPinned && (
-                              <Pin size={11} className="text-amber-400 fill-amber-400 flex-shrink-0" />
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 font-medium">
-                            <span className="text-amber-400 font-bold">{progressPct}%</span>
-                            {snap.fileSizeBytes && snap.fileSizeBytes > 0 ? (
-                              <>
-                                <span>•</span>
-                                <span>{Math.max(1, Math.round(snap.fileSizeBytes / 1024))} KB</span>
-                              </>
-                            ) : null}
-                          </div>
-
-                          {/* Subtle Progress Bar */}
-                          <div className="w-full bg-slate-800/80 rounded-full h-1.5 mt-2 overflow-hidden">
-                            <div
-                              className="bg-amber-400 h-full rounded-full transition-all"
-                              style={{ width: `${progressPct}%` }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                /* Thumbnails Grid View */
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                  {sortedSnapshots.map((snap) => {
-                    const isActive = snap.id === activeSnapshotId;
-                    const isSelected = snap.id === currentSelectedId;
-                    const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                    const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
-                    const fallbackThumb =
-                      primaryThumb &&
-                      failedThumbSrcs[primaryThumb] &&
-                      snap.previewDataUrl &&
-                      snap.previewDataUrl !== primaryThumb
-                        ? snap.previewDataUrl
-                        : undefined;
-                    const thumbSrc =
-                      primaryThumb && !failedThumbSrcs[primaryThumb]
-                        ? primaryThumb
-                        : fallbackThumb && !failedThumbSrcs[fallbackThumb]
-                          ? fallbackThumb
-                          : undefined;
-
-                    return (
-                      <div
-                        key={snap.id}
-                        data-testid={`save-card-${snap.id}`}
-                        onClick={() => handleSaveCardClick(snap)}
-                        onDoubleClick={() => {
-                          if (!isActive) onLoadSnapshot(snap);
-                          onClose();
-                        }}
-                        title={
-                          isActive
-                            ? 'Active save (double-tap to resume game)'
-                            : 'Double-tap to load save and close settings'
-                        }
-                        className={`group relative flex flex-col rounded-xl border overflow-hidden transition-all cursor-pointer select-none ${
-                          isSelected
-                            ? 'border-amber-400 bg-amber-500/15 ring-2 ring-amber-400/60 shadow-lg'
-                            : isActive
-                            ? 'border-amber-500/50 bg-slate-900/60 hover:bg-slate-850'
-                            : 'border-slate-800 bg-slate-950/40 hover:bg-slate-800/40 hover:border-slate-700'
-                        }`}
-                      >
-                        {/* Rectangular Image Preview */}
-                        <div className="relative w-full aspect-[4/3] bg-slate-900 overflow-hidden flex items-center justify-center">
-                          {thumbSrc ? (
-                            <img
-                              src={thumbSrc}
-                              alt={snap.title}
-                              onError={() =>
-                                setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
-                              }
-                              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-                            />
-                          ) : (
-                            <ImageIcon size={28} className="text-slate-600" />
-                          )}
-
-                          {/* Pin Badge if Pinned */}
-                          {snap.isPinned && (
-                            <div className="absolute top-1.5 left-1.5 bg-slate-950/85 backdrop-blur-xs text-amber-400 p-1 rounded-md border border-slate-700/60 shadow-sm">
-                              <Pin size={10} className="fill-current" />
-                            </div>
-                          )}
-
-                          {/* Floating Percentage Badge */}
-                          <div className="absolute top-1.5 right-1.5 bg-slate-950/85 backdrop-blur-xs text-amber-400 text-[11px] font-black px-1.5 py-0.5 rounded-md border border-slate-700/60 shadow-sm">
-                            {progressPct}%
-                          </div>
-
-                          {/* Progress Bar Line */}
-                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-900/80">
-                            <div
-                              className="h-full bg-amber-400 transition-all"
-                              style={{ width: `${progressPct}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Title Footer */}
-                        <div className="p-2 flex items-center justify-between gap-1">
-                          <span className="text-xs font-bold text-slate-200 truncate" title={snap.title}>
-                            {snap.title}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {snapshots.length === 0 && (
-                <div
-                  data-testid="saves-empty-recovery"
-                  className="text-center py-8 px-4 space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-slate-400 text-sm"
-                >
-                  <p>No saved puzzles yet. Load an image, import a `.capy` save, or restore the starter artwork.</p>
-                  {onRestoreStarterSample && (
-                    <button
-                      type="button"
-                      data-testid="restore-starter-sample-btn"
-                      onClick={onRestoreStarterSample}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-bold hover:bg-amber-300 transition-colors cursor-pointer"
-                    >
-                      <RefreshCw size={13} />
-                      <span>Restore Capy Forest Starter</span>
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Hidden file input for Import */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".capy,.json,application/json,application/octet-stream"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (e.target) e.target.value = '';
+                  if (!file || !onImportSnapshots) return;
+                  try {
+                    const res = await onImportSnapshots(file);
+                    if (res && typeof res === 'object' && 'message' in res) {
+                      setImportNotice({ ok: Boolean(res.ok), message: res.message });
+                    }
+                  } catch (err) {
+                    setImportNotice({
+                      ok: false,
+                      message:
+                        err instanceof Error ? err.message : 'Failed to import Capy save file.',
+                    });
+                  }
+                }}
+              />
             </div>
           )}
         </div>
