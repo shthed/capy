@@ -1,6 +1,6 @@
 ### 3.0.9 - 2026-11-14 (Beta)
 
-- Keep PaletteDock visible above ReplayControls with swatch auto-dismiss, default Saves tab to Thumbnails list-first without sticky header occlusion, and expand E2E layout guards [#503](https://github.com/shthed/capy/pull/503)
+- Keep PaletteDock visible above ReplayControls with swatch auto-dismiss, default Saves tab to Thumbnails list-first without sticky header occlusion, and expand E2E layout guards [#514](https://github.com/shthed/capy/pull/514)
 
 ### 3.0.8 - 2026-11-13 (Production)
 
