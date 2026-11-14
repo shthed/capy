@@ -101,6 +101,7 @@ export interface UserSettings {
   soundEnabled: boolean;
   soundVolume: number;
   reducedMotion: boolean;
+  largeText: boolean;
   detailedLoadingProgress: boolean;
   generatorConfig: GeneratorConfig;
 }
