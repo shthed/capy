@@ -60,3 +60,33 @@
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
+
+/* Low-Vision / Large Text Accessibility Mode (scoped to text classes, preserving rem layout) */
+[data-large-text="true"] {
+  --capy-tutorial-top: 4.05rem;
+}
+[data-large-text="true"] .text-\[10px\] {
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+[data-large-text="true"] .text-\[11px\] {
+  font-size: 14px;
+  line-height: 1.35;
+}
+[data-large-text="true"] .text-xs {
+  font-size: 15px;
+  line-height: 1.4;
+}
+[data-large-text="true"] .text-sm {
+  font-size: 17px;
+  line-height: 1.45;
+}
+[data-large-text="true"] .text-base {
+  font-size: 19px;
+  line-height: 1.5;
+}
+[data-large-text="true"] .text-lg {
+  font-size: 21px;
+  line-height: 1.5;
+}
+
