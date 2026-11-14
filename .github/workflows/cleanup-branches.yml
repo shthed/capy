@@ -28,7 +28,34 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Check GitHub Pages and gh-pages branch availability
+        id: pages_check
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            let hasGhPagesBranch = false;
+            if (repo.has_pages) {
+              try {
+                await github.rest.git.getRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: 'heads/gh-pages',
+                });
+                hasGhPagesBranch = true;
+              } catch (err) {
+                if (err.status !== 404) throw err;
+              }
+            }
+            const enabled = Boolean(repo.has_pages && hasGhPagesBranch);
+            core.info(`GitHub Pages cleanup enabled=${enabled} (has_pages=${Boolean(repo.has_pages)}, gh-pages=${hasGhPagesBranch}).`);
+            core.setOutput('can_cleanup_pages', enabled ? 'true' : 'false');
+
       - name: Checkout gh-pages branch
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true'
         uses: actions/checkout@v7
         with:
           ref: gh-pages
@@ -68,9 +95,11 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Refresh remote branch list
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true'
         run: git fetch origin --prune
 
       - name: Prune orphaned gh-pages preview directories
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -79,11 +108,16 @@ jobs:
           node ./.github/scripts/cleanup-gh-pages-previews.mjs --pages-dir ./gh-pages
 
           if [ -f ./.github/scripts/generate-pr-manifest.mjs ]; then
-            node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./gh-pages
+            if [ -n "$(git -C ./gh-pages status --porcelain)" ] || [ ! -f ./gh-pages/alpha/manifest.json ]; then
+              node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./gh-pages
+            else
+              echo "No gh-pages preview changes detected; skipping manifest regeneration."
+            fi
           fi
 
       - name: Commit and push gh-pages updates (squashed history)
         id: sync_pages
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -95,7 +129,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git add -A
-          if git diff --cached --quiet && ! (git cat-file -p HEAD | grep -q '^parent '); then
+          if git diff --cached --quiet; then
             echo "No gh-pages changes to push."
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -111,14 +145,57 @@ jobs:
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
       - name: Upload Pages artifact
-        if: steps.sync_pages.outputs.has_changes == 'true'
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true' && steps.sync_pages.outputs.has_changes == 'true'
         uses: actions/upload-pages-artifact@v5
         with:
           path: gh-pages
           name: github-pages-${{ github.run_attempt }}
 
+      - name: Wait for Pages artifact index propagation
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true' && steps.sync_pages.outputs.has_changes == 'true'
+        uses: actions/github-script@v9
+        env:
+          ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
+        with:
+          script: |
+            const artifactName = process.env.ARTIFACT_NAME;
+            for (let attempt = 1; attempt <= 12; attempt++) {
+              try {
+                const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: context.runId,
+                  per_page: 100,
+                });
+                const found = (data.artifacts || []).find(
+                  (a) => a.name === artifactName && !a.expired
+                );
+                if (found) {
+                  core.info(`Pages artifact "${artifactName}" indexed (id=${found.id}) on attempt ${attempt}.`);
+                  return;
+                }
+                core.info(`Waiting for Pages artifact "${artifactName}" (attempt ${attempt}/12)...`);
+              } catch (err) {
+                core.warning(`Failed to list workflow run artifacts on attempt ${attempt}/12: ${err?.message || err}`);
+              }
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+            core.warning(`Pages artifact "${artifactName}" not yet listed after 24s; proceeding to deploy-pages.`);
+
       - name: Deploy to GitHub Pages
-        if: steps.sync_pages.outputs.has_changes == 'true'
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true' && steps.sync_pages.outputs.has_changes == 'true'
+        id: deployment_primary
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait before retrying GitHub Pages deploy
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true' && steps.sync_pages.outputs.has_changes == 'true' && steps.deployment_primary.outcome != 'success'
+        run: sleep 10
+
+      - name: Retry Deploy to GitHub Pages
+        if: steps.pages_check.outputs.can_cleanup_pages == 'true' && steps.sync_pages.outputs.has_changes == 'true' && steps.deployment_primary.outcome != 'success'
         id: deployment
         uses: actions/deploy-pages@v5
         with:

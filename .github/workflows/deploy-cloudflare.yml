@@ -23,6 +23,7 @@ jobs:
   deploy-worker:
     name: Deploy to capypaint.com
     if: github.repository == 'capyboop/capy'
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Check Cloudflare credentials
