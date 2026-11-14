@@ -64,6 +64,7 @@ jobs:
             const baseRef = (pr.base?.ref || 'main').trim();
             const isBetaTarget = baseRef === 'beta';
             const ownerLogin = owner.toLowerCase();
+            const ALLOWED_OWNER_LOGINS = new Set([ownerLogin, 'capyboop']);
             const prAuthorLogin = (pr.user?.login || '').toLowerCase();
             const isDependabotPr = prAuthorLogin === 'dependabot[bot]';
             const isReadOnlyDependabotEvent =
@@ -152,7 +153,7 @@ jobs:
               const login = (item?.user?.login || '').toLowerCase();
               const assoc = String(item?.author_association || '').toUpperCase();
               return (
-                login === ownerLogin ||
+                ALLOWED_OWNER_LOGINS.has(login) ||
                 login === 'github-actions[bot]' ||
                 ALLOWED_AI_ASSOCIATIONS.has(assoc)
               );
@@ -225,7 +226,7 @@ jobs:
               !body.includes('<!-- capy-review:') && !body.includes('<!-- capy-pages-preview -->');
 
             for (const r of reviews) {
-              if (r.user?.login?.toLowerCase() !== ownerLogin) continue;
+              if (!ALLOWED_OWNER_LOGINS.has(r.user?.login?.toLowerCase())) continue;
               if (r.state === 'PENDING') continue;
               const body = (r.body || '').trim();
               if (!isHumanOwnerBody(body)) continue;
@@ -257,7 +258,7 @@ jobs:
             }
 
             for (const c of comments) {
-              if (c.user?.login?.toLowerCase() !== ownerLogin) continue;
+              if (!ALLOWED_OWNER_LOGINS.has(c.user?.login?.toLowerCase())) continue;
               const body = (c.body || '').trim();
               if (!isHumanOwnerBody(body)) continue;
               const ts = Date.parse(c.updated_at || c.created_at || '') || 0;
