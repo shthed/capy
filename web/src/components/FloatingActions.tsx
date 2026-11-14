@@ -12,6 +12,7 @@ interface FloatingActionsProps {
   showUndo?: boolean;
   isCompleted?: boolean;
   isReplaying?: boolean;
+  isReplayExpanded?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   onLongPressUndo?: () => void;
@@ -33,6 +34,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
   showUndo = true,
   isCompleted = false,
   isReplaying = false,
+  isReplayExpanded = false,
   onUndo,
   onRedo,
   onLongPressUndo,
@@ -79,7 +81,11 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       style={{
         bottom: `calc(${
           isReplaying
-            ? (raiseDock ? '12.5rem' : '10.5rem')
+            ? !isCompleted && isReplayExpanded
+              ? (raiseDock ? '15.25rem' : '13.625rem')
+              : !isCompleted
+              ? (raiseDock ? '9.75rem' : '8.125rem')
+              : (raiseDock ? '12.5rem' : '10.5rem')
             : isCompleted
             ? (raiseDock ? '2.5rem' : '1.25rem')
             : (raiseDock ? '6.25rem' : '4.625rem')
@@ -138,7 +144,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       )}
 
       {/* Undo & Redo History Action Buttons (Redo stacked above Undo, hidden when disabled or hidden via setting) */}
-      {!isReplaying && showUndo && (
+      {showUndo && (
         <div className="flex flex-col items-center gap-2">
           {canRedo && onRedo && (
             <button
@@ -182,21 +188,19 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       )}
 
       {/* Paint Mode (Drag-to-Color) Toggle */}
-      {!isReplaying && (
-        <button
-          type="button"
-          onClick={onTogglePaintMode}
-          aria-label="Toggle Paint Mode"
-          title={isPaintMode ? 'Paint Mode Active (Click to Switch to Tap Mode)' : 'Tap Mode Active (Click to Enable Paint Mode)'}
-          className={`p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
-            isPaintMode
-              ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 scale-105'
-              : 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800'
-          }`}
-        >
-          <Paintbrush size={20} />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onTogglePaintMode}
+        aria-label="Toggle Paint Mode"
+        title={isPaintMode ? 'Paint Mode Active (Click to Switch to Tap Mode)' : 'Tap Mode Active (Click to Enable Paint Mode)'}
+        className={`p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+          isPaintMode
+            ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 scale-105'
+            : 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800'
+        }`}
+      >
+        <Paintbrush size={20} />
+      </button>
     </div>
   );
 };

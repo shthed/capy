@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -24,6 +24,7 @@ interface ReplayControlsProps {
   totalSteps: number;
   replaySpeed: number;
   raiseDock: boolean;
+  stackAbovePalette?: boolean;
   isLooping?: boolean;
   isFollowing?: boolean;
   onTogglePlay: () => void;
@@ -38,6 +39,7 @@ interface ReplayControlsProps {
   onOpenCreate: () => void;
   onResumeFromStep?: (step: number) => void;
   onUserInteract?: () => void;
+  onMinimizedChange?: (minimized: boolean) => void;
 }
 
 export const ReplayControls: React.FC<ReplayControlsProps> = ({
@@ -47,6 +49,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   totalSteps,
   replaySpeed,
   raiseDock,
+  stackAbovePalette = false,
   isLooping = false,
   isFollowing = false,
   onTogglePlay,
@@ -61,11 +64,14 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
   onOpenCreate,
   onResumeFromStep,
   onUserInteract,
+  onMinimizedChange,
 }) => {
   const [isMinimized, setIsMinimized] = useState<boolean>(true);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
   const [hoverStep, setHoverStep] = useState<number | null>(null);
   const [hoverRatio, setHoverRatio] = useState<number>(0);
+  const onMinimizedChangeRef = useRef(onMinimizedChange);
+  onMinimizedChangeRef.current = onMinimizedChange;
 
   useEffect(() => {
     if (isOpen) {
@@ -75,7 +81,19 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    onMinimizedChangeRef.current?.(isOpen ? isMinimized : true);
+  }, [isOpen, isMinimized]);
+
   if (!isOpen || totalSteps <= 0) return null;
+
+  const bottomOffset = stackAbovePalette
+    ? raiseDock
+      ? '6.25rem'
+      : '4.625rem'
+    : raiseDock
+    ? '1.5rem'
+    : '1rem';
 
   const isFinished = currentStep >= totalSteps;
   const exactRatio = Math.min(1, Math.max(0, currentStep / totalSteps));
@@ -218,7 +236,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
       <div
         className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
         style={{
-          bottom: `calc(${raiseDock ? '1.5rem' : '1rem'} + var(--sab, 0px))`,
+          bottom: `calc(${bottomOffset} + var(--sab, 0px))`,
         }}
       >
         <div
@@ -369,7 +387,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
     <div
       className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
       style={{
-        bottom: `calc(${raiseDock ? '1.5rem' : '1rem'} + var(--sab, 0px))`,
+        bottom: `calc(${bottomOffset} + var(--sab, 0px))`,
       }}
     >
       <div

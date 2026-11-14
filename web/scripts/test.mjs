@@ -60,6 +60,27 @@ async function tapCanvasGrid(page, startFrac = 0.32, count = 8, delayMs = 60) {
   await page.waitForTimeout(200);
 }
 
+async function getStableBoundingBox(locator, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  let prev = await locator.boundingBox();
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 60));
+    const cur = await locator.boundingBox();
+    if (
+      prev &&
+      cur &&
+      Math.abs(cur.x - prev.x) < 0.5 &&
+      Math.abs(cur.y - prev.y) < 0.5 &&
+      Math.abs(cur.width - prev.width) < 0.5 &&
+      Math.abs(cur.height - prev.height) < 0.5
+    ) {
+      return cur;
+    }
+    prev = cur;
+  }
+  return prev;
+}
+
 async function runCodecAndEngineTests() {
   console.log('=== PART 1: Engine & Compact Binary Codec v2 Unit Checks ===');
   const vite = await createServer({
@@ -5660,10 +5681,56 @@ async function runBrowserBasicsSuite() {
     assert.equal(await page.getByTestId('gallery-search-input').isVisible(), true, 'Create tab must render gallery-search-input');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'Create tab must not render Hints content');
 
-    // Tab 4: Saves (persist tab 4 across full page reload)
+    // Tab 4: Saves (persist tab 4 across full page reload; cold-start default must be THUMBNAILS with list first)
     await page.getByRole('button', { name: 'Saves', exact: true }).click();
     await page.waitForTimeout(120);
-    assert.equal(await page.getByTestId('cloud-coop-hub').isVisible(), true, 'Saves tab must render cloud-coop-hub');
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem('capy_saves_view_mode')),
+      null,
+      'Cold-start must have no stored capy_saves_view_mode yet'
+    );
+    await page.getByTestId('saves-list-section').waitFor({ state: 'visible' });
+    assert.equal(
+      await page.getByTestId('saves-list-section').getAttribute('data-view-mode'),
+      'THUMBNAILS',
+      'Saves tab must default to THUMBNAILS when capy_saves_view_mode is unset'
+    );
+    assert.equal(
+      await page.getByTestId('saves-list-thumbnails').isVisible(),
+      true,
+      'Thumbnails grid must render by default in Saves tab'
+    );
+    assert.equal(
+      await page.getByTestId('saves-list-detail').count(),
+      0,
+      'Detail list must not render when THUMBNAILS is active'
+    );
+    assert.equal(
+      await page.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'),
+      'true',
+      'Thumbnails toggle button must report aria-pressed="true" by default'
+    );
+    assert.equal(
+      await page.getByTestId('saves-view-detail-btn').getAttribute('aria-pressed'),
+      'false',
+      'Detail toggle button must report aria-pressed="false" by default'
+    );
+    const [savesListBoxInit, savesActionBarBoxInit, savesHubBoxInit] = await Promise.all([
+      page.getByTestId('saves-list-section').boundingBox(),
+      page.getByTestId('selected-save-action-bar').boundingBox(),
+      page.getByTestId('cloud-coop-hub').boundingBox(),
+    ]);
+    assert.ok(savesListBoxInit && savesActionBarBoxInit && savesHubBoxInit);
+    assert.equal(
+      savesListBoxInit.y + savesListBoxInit.height <= savesActionBarBoxInit.y + 1,
+      true,
+      `Saves list (${savesListBoxInit.y + savesListBoxInit.height}) must appear above selected-save-action-bar (${savesActionBarBoxInit.y})`
+    );
+    assert.equal(
+      savesActionBarBoxInit.y + savesActionBarBoxInit.height <= savesHubBoxInit.y + 1,
+      true,
+      `selected-save-action-bar (${savesActionBarBoxInit.y + savesActionBarBoxInit.height}) must appear above cloud-coop-hub (${savesHubBoxInit.y})`
+    );
     await page.keyboard.press('Escape');
     await page.waitForTimeout(150);
     assert.equal(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')), '4');
@@ -5817,10 +5884,41 @@ async function runBrowserBasicsSuite() {
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
     // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
     await page.waitForSelector('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]', { timeout: 5000 });
+    // PaletteDock and ReplayControls must be co-visible on load without programmatic sync self-dismissing replay
+    await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 4000 });
+    await page.waitForTimeout(250);
+    assert.equal(
+      await page.locator('[data-testid="replay-controls-window"]').isVisible(),
+      true,
+      'ReplayControls must remain visible alongside PaletteDock after load'
+    );
+    const [deskZoomOutBox, deskReplayMinBox, deskPaletteBeforeBox] = await Promise.all([
+      page.getByTestId('zoom-out-btn').boundingBox(),
+      page.getByTestId('replay-controls-window').boundingBox(),
+      page.locator('[aria-label="Palette dock"]').boundingBox(),
+    ]);
+    assert.ok(deskZoomOutBox && deskReplayMinBox && deskPaletteBeforeBox);
+    assert.equal(
+      deskZoomOutBox.y + deskZoomOutBox.height <= deskReplayMinBox.y + 1,
+      true,
+      `Desktop FloatingActions bottom (${deskZoomOutBox.y + deskZoomOutBox.height}) must clear minimized ReplayControls top (${deskReplayMinBox.y})`
+    );
+    assert.equal(
+      deskReplayMinBox.y + deskReplayMinBox.height <= deskPaletteBeforeBox.y + 1,
+      true,
+      `Desktop minimized ReplayControls bottom (${deskReplayMinBox.y + deskReplayMinBox.height}) must stack cleanly above PaletteDock top (${deskPaletteBeforeBox.y})`
+    );
     // First Ctrl+Z while awaiting post-load replay dismisses ReplayControls AND immediately performs Undo on the same tick
     await page.keyboard.press('Control+z');
     await page.locator('[data-testid="replay-controls-window"]').waitFor({ state: 'hidden', timeout: 3000 });
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
+    const deskPaletteAfterCtrlZBox = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    assert.ok(deskPaletteAfterCtrlZBox);
+    assert.equal(
+      Math.abs(deskPaletteAfterCtrlZBox.y - deskPaletteBeforeBox.y) < 1.5,
+      true,
+      `PaletteDock must not jump vertically when ReplayControls dismisses (${deskPaletteBeforeBox.y} -> ${deskPaletteAfterCtrlZBox.y})`
+    );
     const progressAfterFirstCtrlZ = await page.evaluate(() => {
       const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
       return list[0]?.filledCount || 0;
@@ -5838,9 +5936,56 @@ async function runBrowserBasicsSuite() {
       'Ctrl+Y after post-load replay dismiss must redo back to 3'
     );
 
+    // Verify expanded ReplayControls non-overlap on desktop AND auto-dismiss when clicking the already-selected active swatch
+    const undoBtnForSwatchTest = await page.waitForSelector('[data-testid="undo-btn"]');
+    const uBoxSwatch = await undoBtnForSwatchTest.boundingBox();
+    await page.mouse.move(uBoxSwatch.x + uBoxSwatch.width / 2, uBoxSwatch.y + uBoxSwatch.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('replay-toggle-minimize-btn').click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.getByTestId('replay-controls-window').getAttribute('data-minimized'),
+      'false',
+      'ReplayControls must expand cleanly while PaletteDock stays visible'
+    );
+    const [deskZoomOutExpBox, deskReplayExpBox, deskPaletteExpBox] = await Promise.all([
+      getStableBoundingBox(page.getByTestId('zoom-out-btn')),
+      getStableBoundingBox(page.getByTestId('replay-controls-window')),
+      getStableBoundingBox(page.locator('[aria-label="Palette dock"]')),
+    ]);
+    assert.ok(deskZoomOutExpBox && deskReplayExpBox && deskPaletteExpBox);
+    assert.equal(
+      deskZoomOutExpBox.y + deskZoomOutExpBox.height <= deskReplayExpBox.y + 1,
+      true,
+      `Desktop FloatingActions bottom (${deskZoomOutExpBox.y + deskZoomOutExpBox.height}) must clear expanded ReplayControls top (${deskReplayExpBox.y})`
+    );
+    assert.equal(
+      deskReplayExpBox.y + deskReplayExpBox.height <= deskPaletteExpBox.y + 1,
+      true,
+      `Desktop expanded ReplayControls bottom (${deskReplayExpBox.y + deskReplayExpBox.height}) must stack cleanly above PaletteDock top (${deskPaletteExpBox.y})`
+    );
+    const activeSwatchDuringReplay = page
+      .locator('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="true"]')
+      .first();
+    await activeSwatchDuringReplay.scrollIntoViewIfNeeded();
+    await activeSwatchDuringReplay.click();
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
+    const deskPaletteAfterSwatchBox = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    assert.ok(deskPaletteAfterSwatchBox);
+    assert.equal(
+      Math.abs(deskPaletteAfterSwatchBox.y - deskPaletteExpBox.y) < 1.5,
+      true,
+      `PaletteDock must not shift vertically on active-swatch replay dismiss (${deskPaletteExpBox.y} -> ${deskPaletteAfterSwatchBox.y})`
+    );
+
     // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
-    const undoBtnAfterLoad = await page.waitForSelector('[data-testid="undo-btn"]');
-    const uBox2 = await undoBtnAfterLoad.boundingBox();
+    const undoBtnAfterLoad = page.getByTestId('undo-btn');
+    await undoBtnAfterLoad.waitFor({ state: 'visible', timeout: 3000 });
+    const uBox2 = await getStableBoundingBox(undoBtnAfterLoad);
     await page.mouse.move(uBox2.x + uBox2.width / 2, uBox2.y + uBox2.height / 2);
     await page.mouse.down();
     await page.waitForTimeout(520);
@@ -5943,7 +6088,58 @@ async function runBrowserBasicsSuite() {
       await page.locator('[data-testid="reset-view-btn"]').click();
       await page.waitForTimeout(350);
     }
-    console.log('   PASS: Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, Follow Painting camera tracking, Auto-Loop, and live pan/zoom during playback verified.');
+
+    // Verify clicking an unselected swatch during replay auto-dismisses ReplayControls, selects the color, and allows immediate painting
+    const filledBeforeUnselected = await page.evaluate(
+      () => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || []).length
+    );
+    const undoBoxUnselected = await (await page.waitForSelector('[data-testid="undo-btn"]')).boundingBox();
+    await page.mouse.move(
+      undoBoxUnselected.x + undoBoxUnselected.width / 2,
+      undoBoxUnselected.y + undoBoxUnselected.height / 2
+    );
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 3000 });
+    const unselectedSwatch = page
+      .locator('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]')
+      .first();
+    const unselectedTestId = await unselectedSwatch.getAttribute('data-testid');
+    assert.ok(unselectedTestId, 'Expected an unselected palette swatch to exist during replay');
+    await unselectedSwatch.scrollIntoViewIfNeeded();
+    await unselectedSwatch.click();
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.getByTestId(unselectedTestId).getAttribute('aria-pressed'),
+      'true',
+      `Clicked swatch ${unselectedTestId} must become active immediately after dismissing replay`
+    );
+    const canvasBoxUnselected = await page.locator('canvas').first().boundingBox();
+    let filledAfterUnselectedTap = filledBeforeUnselected;
+    for (let stepIdx = 0; stepIdx < 16; stepIdx++) {
+      const rx = 0.25 + (stepIdx % 4) * 0.16;
+      const ry = 0.25 + Math.floor(stepIdx / 4) * 0.16;
+      await page.mouse.click(
+        canvasBoxUnselected.x + canvasBoxUnselected.width * rx,
+        canvasBoxUnselected.y + canvasBoxUnselected.height * ry
+      );
+      await page.waitForTimeout(80);
+      filledAfterUnselectedTap = await page.evaluate(
+        () => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || []).length
+      );
+      if (filledAfterUnselectedTap > filledBeforeUnselected) break;
+    }
+    assert.equal(
+      filledAfterUnselectedTap > filledBeforeUnselected,
+      true,
+      `Expected immediate canvas paint after swatch auto-dismissed replay (${filledBeforeUnselected} -> ${filledAfterUnselectedTap})`
+    );
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(150);
+    console.log('   PASS: Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, Follow Painting camera tracking, Auto-Loop, swatch auto-dismiss, and live pan/zoom during playback verified.');
 
     // -------------------------------------------------------------------------
     // 4. Gallery Filters, Community Ideas & Infinite Zoom 2x Detail Sub-Tile
@@ -6111,11 +6307,49 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(150);
 
     await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible' });
-    await page.getByTestId('saves-view-thumbnails-btn').click();
-    await page.waitForTimeout(150);
-    assert.equal(await page.evaluate(() => localStorage.getItem('capy_saves_view_mode')), 'THUMBNAILS');
+    assert.equal(
+      await page.getByTestId('saves-list-section').getAttribute('data-view-mode'),
+      'THUMBNAILS',
+      'Saves tab must start in THUMBNAILS view mode'
+    );
+    assert.equal(
+      await page.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'),
+      'true'
+    );
     await page.getByTestId('saves-view-detail-btn').click();
     await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => localStorage.getItem('capy_saves_view_mode')), 'DETAIL');
+    assert.equal(await page.getByTestId('saves-view-detail-btn').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'), 'false');
+    await page.getByTestId('saves-list-detail').waitFor({ state: 'visible', timeout: 5000 });
+
+    // Verify DETAIL preference persists across full page reload
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.getByTestId('saves-list-detail').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await page.getByTestId('saves-view-detail-btn').getAttribute('aria-pressed'),
+      'true',
+      'Persisted DETAIL view mode must restore across page reload'
+    );
+
+    // Verify invalid localStorage value safely falls back to THUMBNAILS
+    await page.evaluate(() => localStorage.setItem('capy_saves_view_mode', 'INVALID_VIEW_MODE'));
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    await page.getByTestId('topbar-coop-btn').click();
+    await page.getByTestId('saves-list-thumbnails').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await page.getByTestId('saves-list-section').getAttribute('data-view-mode'),
+      'THUMBNAILS',
+      'Invalid capy_saves_view_mode value must fall back cleanly to THUMBNAILS'
+    );
+    assert.equal(
+      await page.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'),
+      'true'
+    );
+    await page.evaluate(() => localStorage.removeItem('capy_saves_view_mode'));
 
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
     await page.locator('[data-testid="export-all-saves-btn"]').click();
@@ -7164,6 +7398,7 @@ async function runBrowserBasicsSuite() {
 
     const mobileReplayWin = page.getByTestId('replay-controls-window');
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 8000 });
+    await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
       await mobileReplayWin.getAttribute('data-minimized'),
       'true',
@@ -7177,26 +7412,229 @@ async function runBrowserBasicsSuite() {
 
     const windowBox360 = await mobileReplayWin.boundingBox();
     const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
-    assert.ok(windowBox360 && exitBox360, 'Expected visible bounding boxes for replay-controls-window and replay-exit-btn at 360x800');
+    const headerBox360 = await page.locator('header').first().boundingBox();
+    const zoomOutMin360 = await page.getByTestId('zoom-out-btn').boundingBox();
+    const undoMin360 = await page.getByTestId('undo-btn').boundingBox();
+    const paintMin360 = await page.locator('[aria-label="Toggle Paint Mode"]').boundingBox();
+    const paletteMin360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    assert.ok(
+      windowBox360 && exitBox360 && headerBox360 && zoomOutMin360 && undoMin360 && paintMin360 && paletteMin360,
+      'Expected visible bounding boxes for mobile replay HUD, FloatingActions (including Undo & Paint Mode), TopBar, and PaletteDock at 360x800'
+    );
     assert.ok(
       exitBox360.x >= windowBox360.x + 4 &&
         exitBox360.x + exitBox360.width <= windowBox360.x + windowBox360.width - 4,
       `Minimized ReplayControls X button (${exitBox360.x}..${exitBox360.x + exitBox360.width}) must fit strictly inside 360px mobile pill border (${windowBox360.x}..${windowBox360.x + windowBox360.width})`
     );
+    assert.equal(
+      headerBox360.y + headerBox360.height <= zoomOutMin360.y + 1,
+      true,
+      `360x800 TopBar bottom (${headerBox360.y + headerBox360.height}) must clear FloatingActions (${zoomOutMin360.y})`
+    );
+    assert.equal(
+      zoomOutMin360.y + zoomOutMin360.height <= windowBox360.y + 1 &&
+        undoMin360.y + undoMin360.height <= windowBox360.y + 1 &&
+        paintMin360.y + paintMin360.height <= windowBox360.y + 1,
+      true,
+      `360x800 FloatingActions bottom (${zoomOutMin360.y + zoomOutMin360.height}) must clear minimized ReplayControls top (${windowBox360.y})`
+    );
+    assert.equal(
+      windowBox360.y + windowBox360.height <= paletteMin360.y + 1,
+      true,
+      `360x800 minimized ReplayControls bottom (${windowBox360.y + windowBox360.height}) must stack above PaletteDock top (${paletteMin360.y})`
+    );
+    // Verify PaletteDock horizontal centering with 2-3 swatches and scrollability with many swatches
+    const dockScrollStats = await page.evaluate(() => {
+      const dock = document.querySelector('[aria-label="Palette dock"]');
+      const scroller = dock?.firstElementChild;
+      if (!scroller) return null;
+      return {
+        scrollWidth: scroller.scrollWidth,
+        clientWidth: scroller.clientWidth,
+        swatchCount: scroller.querySelectorAll('[data-testid^="palette-swatch-"]').length,
+      };
+    });
+    assert.ok(dockScrollStats, 'PaletteDock scroller must exist');
+    if (dockScrollStats.swatchCount > 8) {
+      assert.equal(
+        dockScrollStats.scrollWidth > dockScrollStats.clientWidth,
+        true,
+        `Multi-color PaletteDock (${dockScrollStats.swatchCount} swatches) must be horizontally scrollable on 360px viewport`
+      );
+    }
+    const narrowCenterCheck = await page.evaluate(() => {
+      const dock = document.querySelector('[aria-label="Palette dock"]');
+      const scroller = dock?.firstElementChild;
+      const inner = scroller?.firstElementChild;
+      if (!inner) return null;
+      const swatches = Array.from(inner.querySelectorAll('[data-testid^="palette-swatch-"]'));
+      if (swatches.length < 2) return null;
+      // Temporarily hide extra swatches beyond 3 to verify narrow-dock centering
+      const hidden = [];
+      for (let i = 3; i < swatches.length; i++) {
+        hidden.push([swatches[i], swatches[i].style.display]);
+        swatches[i].style.display = 'none';
+      }
+      const firstRect = swatches[0].getBoundingClientRect();
+      const lastRect = swatches[Math.min(2, swatches.length - 1)].getBoundingClientRect();
+      const midpoint = (firstRect.left + lastRect.right) / 2;
+      const viewportMid = window.innerWidth / 2;
+      for (const [el, prev] of hidden) el.style.display = prev;
+      return { midpoint, viewportMid, diff: Math.abs(midpoint - viewportMid) };
+    });
+    assert.ok(
+      narrowCenterCheck && narrowCenterCheck.diff < 16,
+      `Narrow PaletteDock (<=3 swatches) must be centered horizontally (diff=${narrowCenterCheck?.diff?.toFixed(1)}px)`
+    );
+    assert.equal(
+      paletteMin360.y + paletteMin360.height <= 800,
+      true,
+      `360x800 PaletteDock bottom (${paletteMin360.y + paletteMin360.height}) must fit inside 800px height`
+    );
 
-    // Wait for loaded save replay to finish and verify ReplayControls remains onscreen until user interacts with puzzle
+    // Wait for loaded save replay to finish untouched and verify ReplayControls + PaletteDock remain onscreen until user interacts with puzzle
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await mobileReplayWin.isVisible(), true, 'ReplayControls must remain onscreen after save-load replay finishes');
-    const canvasBox360 = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(canvasBox360.x + canvasBox360.width * 0.5, canvasBox360.y + canvasBox360.height * 0.45);
+    assert.equal(await page.locator('[aria-label="Palette dock"]').isVisible(), true, 'PaletteDock must remain onscreen alongside finished replay');
+    // Click Undo button while ReplayControls is open to exit replay and enable Redo
+    await page.getByTestId('undo-btn').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 5000 });
+    await page.getByTestId('redo-btn').waitFor({ state: 'visible', timeout: 3000 });
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
+    const paletteAfterDismiss360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    assert.ok(paletteAfterDismiss360);
+    assert.equal(
+      Math.abs(paletteAfterDismiss360.y - paletteMin360.y) < 1.5,
+      true,
+      `360x800 PaletteDock must not shift vertically on replay dismiss (${paletteMin360.y} -> ${paletteAfterDismiss360.y})`
+    );
     assert.equal(
       await page.evaluate(
         () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').replayLoop)
       ),
       false,
       'Persisted capy_user_settings_v8.replayLoop must remain false after save-load replay auto-resumes gameplay'
+    );
+
+    // Flow 1: Manual timeline replay -> Toggle Paint Mode exits replay and enables drag painting
+    if (await page.getByTestId('undo-btn').isDisabled()) {
+      await page.getByTestId('redo-btn').click();
+    }
+    const undoBoxFlow1 = await getStableBoundingBox(page.getByTestId('undo-btn'));
+    await page.mouse.move(undoBoxFlow1.x + undoBoxFlow1.width / 2, undoBoxFlow1.y + undoBoxFlow1.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(
+      await mobileReplayWin.isVisible(),
+      false,
+      'Toggling Paint Mode during manual replay must dismiss ReplayControls'
+    );
+    const canvasBoxFlow1 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow1 && canvasBoxFlow1.width > 50 && canvasBoxFlow1.height > 50, 'PuzzleCanvas must be visible');
+    await page.mouse.move(canvasBoxFlow1.x + canvasBoxFlow1.width * 0.35, canvasBoxFlow1.y + canvasBoxFlow1.height * 0.45);
+    await page.mouse.down();
+    await page.mouse.move(canvasBoxFlow1.x + canvasBoxFlow1.width * 0.65, canvasBoxFlow1.y + canvasBoxFlow1.height * 0.55, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    // Flow 2: Post-load replay with Paint Mode ALREADY ON -> 100% -> first canvas drag paints & dismisses ReplayControls
+    await page.reload({ waitUntil: 'networkidle' });
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    const canvasBoxFlow2 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow2);
+    await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.3, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.4);
+    await page.mouse.down();
+    await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.7, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.6, { steps: 10 });
+    await page.mouse.up();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await mobileReplayWin.isVisible(), false, 'First drag in Paint Mode after post-load replay must dismiss ReplayControls');
+
+    // Flow 3: Post-load replay in Tap Mode -> 100% -> first tap dismisses ReplayControls
+    await page.locator('[aria-label="Toggle Paint Mode"]').click(); // Turn Paint Mode OFF -> Tap Mode
+    await page.reload({ waitUntil: 'networkidle' });
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    const canvasBoxFlow3 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow3);
+    await page.mouse.click(canvasBoxFlow3.x + canvasBoxFlow3.width * 0.5, canvasBoxFlow3.y + canvasBoxFlow3.height * 0.5);
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await mobileReplayWin.isVisible(), false, 'First tap in Tap Mode after post-load replay must dismiss ReplayControls');
+
+    // Flow 4: Minor canvas pan during post-load replay must NOT lock ReplayControls open against Toggle Paint Mode
+    await page.reload({ waitUntil: 'networkidle' });
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    const canvasBoxFlow4 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow4);
+    await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5 + 18, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5 + 12, { steps: 4 });
+    await page.mouse.up();
+    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
+
+    // Re-open ReplayControls on 360x800 mobile, expand it, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
+    const mobileUndoLocator = page.getByTestId('undo-btn');
+    await mobileUndoLocator.waitFor({ state: 'visible', timeout: 5000 });
+    const mobileUndoBox = await getStableBoundingBox(mobileUndoLocator);
+    await page.mouse.move(
+      mobileUndoBox.x + mobileUndoBox.width / 2,
+      mobileUndoBox.y + mobileUndoBox.height / 2
+    );
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByTestId('replay-toggle-minimize-btn').click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await mobileReplayWin.getAttribute('data-minimized'),
+      'false',
+      'Mobile ReplayControls must expand when toggle button is clicked'
+    );
+    const [zoomOutExp360, windowExp360, paletteExp360] = await Promise.all([
+      getStableBoundingBox(page.getByTestId('zoom-out-btn')),
+      getStableBoundingBox(mobileReplayWin),
+      getStableBoundingBox(page.locator('[aria-label="Palette dock"]')),
+    ]);
+    assert.ok(zoomOutExp360 && windowExp360 && paletteExp360);
+    assert.equal(
+      headerBox360.y + headerBox360.height <= zoomOutExp360.y + 1,
+      true,
+      `360x800 expanded TopBar bottom (${headerBox360.y + headerBox360.height}) must clear FloatingActions (${zoomOutExp360.y})`
+    );
+    assert.equal(
+      zoomOutExp360.y + zoomOutExp360.height <= windowExp360.y + 1,
+      true,
+      `360x800 FloatingActions bottom (${zoomOutExp360.y + zoomOutExp360.height}) must clear expanded ReplayControls top (${windowExp360.y})`
+    );
+    assert.equal(
+      windowExp360.y + windowExp360.height <= paletteExp360.y + 1,
+      true,
+      `360x800 expanded ReplayControls bottom (${windowExp360.y + windowExp360.height}) must stack above PaletteDock top (${paletteExp360.y})`
+    );
+    assert.equal(
+      paletteExp360.y + paletteExp360.height <= 800,
+      true,
+      `360x800 expanded PaletteDock bottom (${paletteExp360.y + paletteExp360.height}) must fit inside 800px height`
+    );
+    const mobileUnselectedSwatch = page
+      .locator('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]')
+      .first();
+    const mobileSwatchTestId = await mobileUnselectedSwatch.getAttribute('data-testid');
+    assert.ok(mobileSwatchTestId);
+    await mobileUnselectedSwatch.scrollIntoViewIfNeeded();
+    await mobileUnselectedSwatch.click();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 5000 });
+    assert.equal(
+      await page.getByTestId(mobileSwatchTestId).getAttribute('aria-pressed'),
+      'true',
+      `Mobile swatch ${mobileSwatchTestId} must become active immediately on click`
     );
 
     // Restore desktop viewport and default test settings cleanly
@@ -7277,8 +7715,80 @@ async function runBrowserBasicsSuite() {
       );
     }
 
+    // Verify 360x780 Saves tab renders Thumbnails grid first, 2-column mobile grid, static action bar, and zero horizontal overflow
+    await mobileTopbarPage.getByTestId('settings-tab-saves').click();
+    await mobileTopbarPage.getByTestId('saves-list-thumbnails').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await mobileTopbarPage.getByTestId('saves-list-section').getAttribute('data-view-mode'),
+      'THUMBNAILS'
+    );
+    assert.equal(
+      await mobileTopbarPage.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'),
+      'true'
+    );
+    const [mSavesListBox, mSavesActionBox, mSavesHubBox] = await Promise.all([
+      mobileTopbarPage.getByTestId('saves-list-section').boundingBox(),
+      mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
+      mobileTopbarPage.getByTestId('cloud-coop-hub').boundingBox(),
+    ]);
+    assert.ok(mSavesListBox && mSavesActionBox && mSavesHubBox);
+    assert.equal(
+      mSavesListBox.y + mSavesListBox.height <= mSavesActionBox.y + 1,
+      true,
+      `360x780 Saves list (${mSavesListBox.y + mSavesListBox.height}) must appear above selected-save-action-bar (${mSavesActionBox.y})`
+    );
+    assert.equal(
+      mSavesActionBox.y + mSavesActionBox.height <= mSavesHubBox.y + 1,
+      true,
+      `360x780 selected-save-action-bar (${mSavesActionBox.y + mSavesActionBox.height}) must appear above cloud-coop-hub (${mSavesHubBox.y})`
+    );
+    const firstTwoSaveCards = mobileTopbarPage.locator('[data-testid="saves-list-thumbnails"] [data-testid^="save-card-"]');
+    if ((await firstTwoSaveCards.count()) >= 2) {
+      const [c0, c1] = await Promise.all([
+        firstTwoSaveCards.nth(0).boundingBox(),
+        firstTwoSaveCards.nth(1).boundingBox(),
+      ]);
+      assert.ok(c0 && c1);
+      assert.equal(
+        Math.abs(c0.y - c1.y) < 4 && c1.x > c0.x && c1.x + c1.width <= 360,
+        true,
+        `360x780 Saves Thumbnails must place 2 cards side-by-side within 360px (c0=${JSON.stringify(c0)}, c1=${JSON.stringify(c1)})`
+      );
+    }
+    const mobileSavesHorizontalOverflow = await mobileTopbarPage.getByTestId('saves-list-section').evaluate((el) => {
+      const scroller = el.closest('.overflow-y-auto');
+      return scroller ? scroller.scrollWidth > scroller.clientWidth : false;
+    });
+    assert.equal(
+      mobileSavesHorizontalOverflow,
+      false,
+      '360x780 Saves tab must have zero horizontal overflow'
+    );
+    const actionBarPosition = await mobileTopbarPage.getByTestId('selected-save-action-bar').evaluate((el) => {
+      const ownPos = window.getComputedStyle(el).position;
+      const parentPos = el.parentElement ? window.getComputedStyle(el.parentElement).position : '';
+      return { ownPos, parentPos };
+    });
+    assert.equal(
+      actionBarPosition.ownPos !== 'sticky' && actionBarPosition.parentPos !== 'sticky',
+      true,
+      `selected-save-action-bar must not be sticky (${JSON.stringify(actionBarPosition)})`
+    );
+    await mobileTopbarPage.getByTestId('cloud-coop-hub').scrollIntoViewIfNeeded();
+    await mobileTopbarPage.waitForTimeout(100);
+    const [mActionAfterScroll, mHubAfterScroll] = await Promise.all([
+      mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
+      mobileTopbarPage.getByTestId('cloud-coop-hub').boundingBox(),
+    ]);
+    assert.ok(mActionAfterScroll && mHubAfterScroll);
+    assert.equal(
+      mActionAfterScroll.y + mActionAfterScroll.height <= mHubAfterScroll.y + 1,
+      true,
+      `After scrolling to cloud-coop-hub, non-sticky selected-save-action-bar (${mActionAfterScroll.y + mActionAfterScroll.height}) must remain above hub (${mHubAfterScroll.y})`
+    );
+
     await mobileTopbarPage.close();
-    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, and SettingsModal tab fit verified.');
+    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
 
     // -------------------------------------------------------------------------
     // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
@@ -7335,6 +7845,18 @@ async function runBrowserBasicsSuite() {
       await m3Page.getByTestId('saves-import-notice').getAttribute('role'),
       'alert',
       'Malformed save import must display inline role="alert" banner'
+    );
+    const [m3ActionBox, m3NoticeBox, m3HubBox] = await Promise.all([
+      m3Page.getByTestId('selected-save-action-bar').boundingBox(),
+      m3Page.getByTestId('saves-import-notice').boundingBox(),
+      m3Page.getByTestId('cloud-coop-hub').boundingBox(),
+    ]);
+    assert.ok(m3ActionBox && m3NoticeBox && m3HubBox);
+    assert.equal(
+      m3ActionBox.y + m3ActionBox.height <= m3NoticeBox.y + 1 &&
+        m3NoticeBox.y + m3NoticeBox.height <= m3HubBox.y + 1,
+      true,
+      `saves-import-notice (${m3NoticeBox.y}..${m3NoticeBox.y + m3NoticeBox.height}) must appear between selected-save-action-bar (${m3ActionBox.y + m3ActionBox.height}) and cloud-coop-hub (${m3HubBox.y})`
     );
     assert.equal(
       await m3Page.evaluate(() => window.__capyAlertCalls),
