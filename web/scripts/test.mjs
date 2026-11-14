@@ -5949,12 +5949,12 @@ async function runBrowserBasicsSuite() {
     await tutPage.keyboard.press('Control+y');
     await expectTutStep(6);
     // Step 5 -> 6 (replay via long-press Undo -> auto-advancing to Step 7 auto-dismisses tutorial-opened ReplayControls!)
-    const tutUndoBox = await tutPage.getByTestId('undo-btn').boundingBox();
+    const tutUndoBox = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(tutUndoBox, 'Expected stable boundingBox for undo-btn at Step 6');
     await tutPage.mouse.move(tutUndoBox.x + tutUndoBox.width / 2, tutUndoBox.y + tutUndoBox.height / 2);
     await tutPage.mouse.down();
-    await tutPage.waitForTimeout(550);
-    await tutPage.mouse.up();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
     await expectTutStep(7);
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     const step7Metrics = await assertSpotlightAligned(tutPage, 'tutorial');
@@ -6084,12 +6084,12 @@ async function runBrowserBasicsSuite() {
     await tutPage.mouse.click(tutCanvasBox.x + tutCanvasBox.width * 0.5, tutCanvasBox.y + tutCanvasBox.height * 0.62);
     await tutPage.waitForTimeout(100);
     await tapSampleAndOpenTutorialAtStep6();
-    const undoBtnForJump = await tutPage.getByTestId('undo-btn').boundingBox();
+    const undoBtnForJump = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(undoBtnForJump, 'Expected stable boundingBox for undo-btn before Jump');
     await tutPage.mouse.move(undoBtnForJump.x + undoBtnForJump.width / 2, undoBtnForJump.y + undoBtnForJump.height / 2);
     await tutPage.mouse.down();
-    await tutPage.waitForTimeout(520);
-    await tutPage.mouse.up();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
     // Jump via All Topics to Step 8 -> must dismiss tutorial-opened replay
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topic-item-7').click();
@@ -6099,23 +6099,23 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topic-item-5').click();
     await expectTutStep(6);
-    const undoBtnForSkip = await tutPage.getByTestId('undo-btn').boundingBox();
+    const undoBtnForSkip = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(undoBtnForSkip, 'Expected stable boundingBox for undo-btn before Skip');
     await tutPage.mouse.move(undoBtnForSkip.x + undoBtnForSkip.width / 2, undoBtnForSkip.y + undoBtnForSkip.height / 2);
     await tutPage.mouse.down();
-    await tutPage.waitForTimeout(520);
-    await tutPage.mouse.up();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
     await tutPage.getByTestId('tutorial-skip-btn').click();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     await tutPage.waitForTimeout(250);
 
     // Pre-existing manual Replay opened BEFORE tutorial must survive Step 6 -> Step 7 Next
-    const undoBtnPreManual = await tutPage.getByTestId('undo-btn').boundingBox();
+    const undoBtnPreManual = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(undoBtnPreManual, 'Expected stable boundingBox for undo-btn before manual Replay');
     await tutPage.mouse.move(undoBtnPreManual.x + undoBtnPreManual.width / 2, undoBtnPreManual.y + undoBtnPreManual.height / 2);
     await tutPage.mouse.down();
-    await tutPage.waitForTimeout(550);
-    await tutPage.mouse.up();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
     await tapSampleAndOpenTutorialAtStep6();
     await tutPage.getByTestId('tutorial-next-btn').click();
     await expectTutStep(7);
@@ -6161,6 +6161,10 @@ async function runBrowserBasicsSuite() {
       if (after > before) burstPainted++;
     }
     const beforeBurstUndo = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+    assert.ok(
+      beforeBurstUndo >= 2,
+      `Precondition: expected at least 2 filled regions before rapid Ctrl+Z burst, got ${beforeBurstUndo}`
+    );
     await tutPage.evaluate(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
@@ -6169,7 +6173,7 @@ async function runBrowserBasicsSuite() {
     const afterBurstUndo = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
     assert.equal(
       afterBurstUndo,
-      Math.max(0, beforeBurstUndo - 2),
+      beforeBurstUndo - 2,
       `Rapid synchronous Ctrl+Z burst must pop 2 steps cleanly (${beforeBurstUndo} -> ${afterBurstUndo})`
     );
 
@@ -6220,15 +6224,66 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('tutorial-skip-btn').click();
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
     };
-    const initialOfferFilled = Number(
-      await offerPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
-    );
-    if (initialOfferFilled > 0) {
-      assert.equal(
-        await offerPage.getByTestId('undo-btn').isEnabled(),
-        true,
-        'Cold-start sample_saves.capy bootstrap with pre-filled regions must seed undoStack'
+    // Unconditional pre-filled snapshot/bootstrap undoStack parity check (isolated context so offerPage queue stays pristine)
+    {
+      const prefilledContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+      const prefilledPage = await prefilledContext.newPage();
+      attachErrorListeners(prefilledPage, 'prefilledPage');
+      await prefilledPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(prefilledPage);
+      const seeded = await prefilledPage.evaluate(async () => {
+        const snaps = window.capyStorage.loadSnapshots();
+        const active = window.capyStorage.loadActiveState();
+        const targetId = active?.activeSnapshotId || snaps[0]?.id;
+        if (!targetId) return null;
+        const puz = await window.capyStorage.loadPuzzleData(targetId);
+        if (!puz || puz.regions.length < 2) return null;
+        const prefilledIds = puz.regions.slice(0, 2).map((r) => r.id);
+        window.capyStorage.updateSnapshotProgress(
+          targetId,
+          prefilledIds.length,
+          puz.regions.length,
+          prefilledIds
+        );
+        window.capyStorage.saveActiveState({
+          ...(active || {}),
+          activeSnapshotId: targetId,
+          activeColorId: active?.activeColorId || puz.palette[0]?.id || 1,
+          filledRegionIds: prefilledIds,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+        return { targetId, count: prefilledIds.length };
+      });
+      assert.ok(seeded && seeded.count === 2, 'Expected to seed 2 pre-filled regions for bootstrap undoStack test');
+      await prefilledPage.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(prefilledPage);
+      const filledBeforeBootstrapUndo = Number(
+        await prefilledPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
       );
+      assert.equal(filledBeforeBootstrapUndo, 2, 'Reloaded pre-filled snapshot must show 2 filled regions');
+      assert.equal(
+        await prefilledPage.getByTestId('undo-btn').isEnabled(),
+        true,
+        'Pre-filled snapshot bootstrap must seed undoStack so undo-btn is enabled'
+      );
+      await prefilledPage.getByTestId('undo-btn').click();
+      await prefilledPage.waitForFunction(
+        () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
+        undefined,
+        { timeout: 3000 }
+      );
+      const filledAfterBootstrapUndo = Number(
+        await prefilledPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+      );
+      assert.equal(
+        filledAfterBootstrapUndo,
+        1,
+        'Clicking undo-btn after pre-filled snapshot bootstrap must decrement data-filled-count from 2 to 1'
+      );
+      await prefilledPage.close();
+      await prefilledContext.close();
     }
     // 1) paint_mode -> Got it
     const offerPaintBtn = offerPage.locator('button[aria-label="Toggle Paint Mode"]');
@@ -6272,12 +6327,12 @@ async function runBrowserBasicsSuite() {
     await jumpFromOfferAndAssertStep(5);
     // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
     await offerPage.getByTestId('redo-btn').click();
-    const offerUndoBox = await offerPage.getByTestId('undo-btn').boundingBox();
+    const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
+    assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
     await offerPage.mouse.move(offerUndoBox.x + offerUndoBox.width / 2, offerUndoBox.y + offerUndoBox.height / 2);
     await offerPage.mouse.down();
-    await offerPage.waitForTimeout(520);
-    await offerPage.mouse.up();
     await offerPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await offerPage.mouse.up();
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
@@ -7103,13 +7158,30 @@ async function runBrowserBasicsSuite() {
     await pageB.waitForTimeout(200);
     await pageB.getByTestId('join-coop-room-input').fill(roomCode);
     await pageB.getByTestId('join-coop-room-btn').click();
-    await pageB.waitForTimeout(300);
+    await pageB.waitForFunction(
+      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
+      undefined,
+      { timeout: 5000 }
+    );
     assert.equal((await pageB.getByTestId('active-coop-room-code').innerText()).includes('2 online'), true);
     await pageB.keyboard.press('Escape');
-    await pageB.waitForTimeout(200);
+    await pageB.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 
     await tapCanvasGrid(page, 0.56, 8, 40);
-    await pageB.waitForTimeout(350);
+    const filledAfterTapA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    await pageB.waitForFunction(
+      (expectedCount) =>
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) ===
+        expectedCount,
+      filledAfterTapA,
+      { timeout: 5000 }
+    );
+    const filledAfterTapB = Number(
+      await pageB.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(filledAfterTapB, filledAfterTapA, 'Co-op peer data-filled-count must synchronize in real time');
     const extractPct = (s) => Number(s.match(/(\d+)%/)?.[1] ?? -1);
     assert.equal(
       extractPct(await pageB.locator('header').innerText()),
@@ -7140,7 +7212,6 @@ async function runBrowserBasicsSuite() {
     });
     // Tap the same canvas grid points so at least one already-filled region is repainted in Free Colour Mode
     await tapCanvasGrid(page, 0.56, 4, 40);
-    await pageB.waitForTimeout(300);
 
     const afterFreeRepaint = await page.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
@@ -7149,6 +7220,28 @@ async function runBrowserBasicsSuite() {
         paintedRegionColors: active.paintedRegionColors || {},
       };
     });
+    const filledAfterFreeRepaintA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    await pageB.waitForFunction(
+      ({ expectedFilledCount, expectedPaintedJson }) => {
+        const count = Number(
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
+        );
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return count === expectedFilledCount && JSON.stringify(active.paintedRegionColors || {}) === expectedPaintedJson;
+      },
+      {
+        expectedFilledCount: filledAfterFreeRepaintA,
+        expectedPaintedJson: JSON.stringify(afterFreeRepaint.paintedRegionColors),
+      },
+      { timeout: 5000 }
+    );
+    assert.equal(
+      Number(await pageB.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      filledAfterFreeRepaintA,
+      'Co-op peer data-filled-count must match Page A after Free Colour repaint'
+    );
     // Verify original prefix of filledRegionIds preserved its exact chronological sequence
     assert.deepEqual(
       afterFreeRepaint.filledRegionIds.slice(0, orderBeforeFreeRepaint.length),
@@ -7158,12 +7251,34 @@ async function runBrowserBasicsSuite() {
 
     // Undo the last Free Colour repaint on Page A and verify Page B's paintedRegionColors stays synchronized
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(150);
-    await pageB.waitForTimeout(300);
-    const [paintedAfterUndoA, paintedAfterUndoB] = await Promise.all([
+    await page.waitForTimeout(100);
+    const [paintedAfterUndoA, filledAfterUndoA] = await Promise.all([
       page.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
-      pageB.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
+      page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count').then(Number),
     ]);
+    await pageB.waitForFunction(
+      ({ expectedFilledCount, expectedPaintedJson }) => {
+        const count = Number(
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
+        );
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return count === expectedFilledCount && JSON.stringify(active.paintedRegionColors || {}) === expectedPaintedJson;
+      },
+      {
+        expectedFilledCount: filledAfterUndoA,
+        expectedPaintedJson: JSON.stringify(paintedAfterUndoA),
+      },
+      { timeout: 5000 }
+    );
+    const [paintedAfterUndoB, filledAfterUndoB] = await Promise.all([
+      pageB.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
+      pageB.getByTestId('topbar-saves-btn').getAttribute('data-filled-count').then(Number),
+    ]);
+    assert.equal(
+      filledAfterUndoB,
+      filledAfterUndoA,
+      'BF-1: Undoing a Free Colour repaint on Page A must keep data-filled-count synchronized on Page B'
+    );
     assert.deepEqual(
       paintedAfterUndoB,
       paintedAfterUndoA,
@@ -7264,10 +7379,13 @@ async function runBrowserBasicsSuite() {
     });
     const tmpUploadPath = path.join(os.tmpdir(), 'capy_test_upload.png');
     fs.writeFileSync(tmpUploadPath, Buffer.from(pngBytes));
-    await page.locator('input[type="file"][accept="image/*"]').setInputFiles(tmpUploadPath);
-    await page.waitForTimeout(300);
-    await waitForPuzzleLoaded(page);
-    fs.rmSync(tmpUploadPath, { force: true });
+    try {
+      await page.locator('input[type="file"][accept="image/*"]').setInputFiles(tmpUploadPath);
+      await page.waitForTimeout(300);
+      await waitForPuzzleLoaded(page);
+    } finally {
+      fs.rmSync(tmpUploadPath, { force: true });
+    }
 
     const uploadCheck = await page.evaluate(async () => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
@@ -8089,10 +8207,22 @@ async function runBrowserBasicsSuite() {
     await peerS2.waitForTimeout(150);
     await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
     await peerS2.getByTestId('join-coop-room-btn').click();
-    await peerS2.waitForTimeout(450);
+    await peerS2.waitForFunction(
+      (expectedCount) =>
+        Boolean(document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online')) &&
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) ===
+          expectedCount,
+      peerAStateBeforeRoom.filledCount,
+      { timeout: 5000 }
+    );
     await peerS2.keyboard.press('Escape');
-    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      'Peer B data-filled-count must match Peer A immediately upon WELCOME_STATE'
+    );
     assert.equal(
       await readTotalRemainingRegions(peerS2),
       remainingPeerABeforeJoin,
@@ -8126,9 +8256,13 @@ async function runBrowserBasicsSuite() {
     await peerS2.waitForTimeout(150);
     await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
     await peerS2.getByTestId('join-coop-room-btn').click();
-    await peerS2.waitForTimeout(350);
+    await peerS2.waitForFunction(
+      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
+      undefined,
+      { timeout: 5000 }
+    );
     await peerS2.keyboard.press('Escape');
-    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and click Resume Here
     await page.getByTestId('topbar-coop-btn').click();
@@ -8143,11 +8277,24 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('replay-scrubber').fill('1');
     await page.waitForTimeout(120);
     await page.getByTestId('replay-resume-btn').click();
-    await page.waitForTimeout(200);
-    await peerS2.waitForTimeout(400);
+    await page.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
+      undefined,
+      { timeout: 5000 }
+    );
+    await peerS2.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
+      undefined,
+      { timeout: 5000 }
+    );
 
     const remainingAfterRewindA = await readTotalRemainingRegions(page);
     const remainingAfterRewindB = await readTotalRemainingRegions(peerS2);
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      'BUG-1: Replay Scrubber Resume Here data-filled-count must match between Peer A and Peer B'
+    );
     assert.equal(
       remainingAfterRewindA,
       totalPuzzleRegions27 - 1,
@@ -8163,9 +8310,22 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('topbar-coop-btn').click();
     await page.waitForTimeout(150);
     await page.getByTestId('reset-progress-btn').click();
-    await page.waitForTimeout(200);
-    await peerS2.waitForTimeout(400);
+    await page.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 0,
+      undefined,
+      { timeout: 5000 }
+    );
+    await peerS2.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 0,
+      undefined,
+      { timeout: 5000 }
+    );
 
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      'M-08: Reset Progress data-filled-count must match (0) between Peer A and Peer B'
+    );
     assert.equal(
       await readTotalRemainingRegions(page),
       totalPuzzleRegions27,
@@ -8560,9 +8720,14 @@ async function runBrowserBasicsSuite() {
     const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
-    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&capy_pr=520`, { waitUntil: 'networkidle' });
+    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&pr=520`, { waitUntil: 'networkidle' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      (await mobileTopbarPage.getByTestId('topbar-channel-badge').innerText()).trim().toUpperCase(),
+      'ALPHA #520',
+      'Expected ?capy_channel=alpha&pr=520 to render ALPHA #520 badge'
+    );
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
       await mobileTopbarPage.getByTestId('topbar-zoom-badge').count(),
@@ -8587,7 +8752,7 @@ async function runBrowserBasicsSuite() {
       `topbar-left-lane (${leftLaneBox.x + leftLaneBox.width}) must not overlap topbar-right-lane (${rightLaneBox.x}) at 360x780`
     );
     assert.equal(
-      leftLaneScrollCheck.scrollWidth <= leftLaneScrollCheck.clientWidth + 1 &&
+      leftLaneScrollCheck.scrollWidth <= leftLaneScrollCheck.clientWidth &&
         channelBox.x + channelBox.width <= leftLaneBox.x + leftLaneBox.width + 1,
       true,
       `ALPHA #520 pill must fit cleanly inside topbar-left-lane without horizontal clipping at 360x780 (${JSON.stringify({ leftLaneScrollCheck, channelBox, leftLaneBox })})`
@@ -8704,7 +8869,7 @@ async function runBrowserBasicsSuite() {
       'Large Text GameTopBar lanes must not overlap or exceed 360px viewport'
     );
     assert.equal(
-      largeLeftScrollCheck.scrollWidth <= largeLeftScrollCheck.clientWidth + 1 &&
+      largeLeftScrollCheck.scrollWidth <= largeLeftScrollCheck.clientWidth &&
         largeChannelBox.x + largeChannelBox.width <= largeLeftLaneBox.x + largeLeftLaneBox.width + 1,
       true,
       `Large Text ALPHA #520 pill must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ largeLeftScrollCheck, largeChannelBox, largeLeftLaneBox })})`
@@ -8860,9 +9025,110 @@ async function runBrowserBasicsSuite() {
     );
     assert.equal(largeOfferOverflow <= 0, true, `Large Text FeatureOfferBanner at 360x780 must have zero overflow (got ${largeOfferOverflow})`);
 
+    // Verify 100% progress pill + ALPHA #520 fits cleanly at 360x780 in both Large Text and Normal modes
+    await mobileTopbarPage.evaluate(async () => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const active = window.capyStorage.loadActiveState();
+      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
+      if (targetId && puz) {
+        const allIds = puz.regions.map((r) => r.id);
+        window.capyStorage.updateSnapshotProgress(targetId, allIds.length, allIds.length, allIds);
+        window.capyStorage.saveActiveState({
+          ...(active || {}),
+          activeSnapshotId: targetId,
+          filledRegionIds: allIds,
+        });
+      }
+    });
+    await mobileTopbarPage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(mobileTopbarPage);
+    if (await mobileTopbarPage.getByTestId('replay-exit-btn').isVisible()) {
+      await mobileTopbarPage.getByTestId('replay-exit-btn').click();
+    }
+    assert.equal(
+      (await mobileTopbarPage.getByTestId('topbar-saves-btn').innerText()).includes('100%'),
+      true,
+      'Expected topbar-saves-btn to display 100% after completing puzzle'
+    );
+    const large100ScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const large100LaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
+    const large100ChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      large100ScrollCheck.scrollWidth <= large100ScrollCheck.clientWidth &&
+        large100ChannelBox.x + large100ChannelBox.width <= large100LaneBox.x + large100LaneBox.width + 1,
+      true,
+      `Large Text ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ large100ScrollCheck, large100ChannelBox, large100LaneBox })})`
+    );
+    // Toggle Large Text back OFF and verify Normal 100% + ALPHA #520
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-settings').click();
+    await mobileTopbarPage.getByTestId('setting-large-text').click();
+    await mobileTopbarPage.getByTestId('settings-modal-close').click();
+    await mobileTopbarPage.waitForTimeout(100);
+    const normal100ScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const normal100LaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
+    const normal100ChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      normal100ScrollCheck.scrollWidth <= normal100ScrollCheck.clientWidth &&
+        normal100ChannelBox.x + normal100ChannelBox.width <= normal100LaneBox.x + normal100LaneBox.width + 1,
+      true,
+      `Normal ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ normal100ScrollCheck, normal100ChannelBox, normal100LaneBox })})`
+    );
+
     await mobileTopbarPage.close();
     await mobileTopbarContext.close();
-    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
+
+    // Verify BETA (?capy_channel=beta) 360x780 topbar-left-lane fit and badge containment in Normal & Large Text modes
+    const mobileBetaContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    const mobileBetaPage = await mobileBetaContext.newPage();
+    attachErrorListeners(mobileBetaPage, 'mobileBetaPage');
+    await mobileBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(mobileBetaPage);
+    await mobileBetaPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      (await mobileBetaPage.getByTestId('topbar-channel-badge').innerText()).trim().toUpperCase(),
+      'BETA',
+      'Expected ?capy_channel=beta to render BETA badge'
+    );
+    const betaNormalScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const betaNormalLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
+    const betaNormalChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      betaNormalScrollCheck.scrollWidth <= betaNormalScrollCheck.clientWidth &&
+        betaNormalChannelBox.x + betaNormalChannelBox.width <= betaNormalLaneBox.x + betaNormalLaneBox.width + 1,
+      true,
+      `Normal BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaNormalScrollCheck, betaNormalChannelBox, betaNormalLaneBox })})`
+    );
+    await mobileBetaPage.locator('button[title="Settings and Menu"]').click();
+    await mobileBetaPage.getByTestId('settings-tab-settings').click();
+    await mobileBetaPage.getByTestId('setting-large-text').click();
+    await mobileBetaPage.getByTestId('settings-modal-close').click();
+    await mobileBetaPage.waitForTimeout(100);
+    const betaLargeScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const betaLargeLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
+    const betaLargeChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      betaLargeScrollCheck.scrollWidth <= betaLargeScrollCheck.clientWidth &&
+        betaLargeChannelBox.x + betaLargeChannelBox.width <= betaLargeLaneBox.x + betaLargeLaneBox.width + 1,
+      true,
+      `Large Text BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaLargeScrollCheck, betaLargeChannelBox, betaLargeLaneBox })})`
+    );
+    await mobileBetaPage.close();
+    await mobileBetaContext.close();
+    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, ALPHA #520 & BETA fit, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
 
     // -------------------------------------------------------------------------
     // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR

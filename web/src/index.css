@@ -65,6 +65,10 @@
 [data-large-text="true"] {
   --capy-tutorial-top: 4.05rem;
 }
+[data-large-text="true"] .text-\[9\.5px\] {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
 [data-large-text="true"] .text-\[10px\] {
   font-size: 12.5px;
   line-height: 1.3;

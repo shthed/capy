@@ -504,7 +504,6 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
       }
 
       if (!el) {
-        if (spec.optional) continue;
         continue;
       }
 
@@ -595,7 +594,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
       ro = new ResizeObserver(() => measure());
       const cardEl = document.querySelector(cardSelector);
       const headerEl = document.querySelector('header');
-      const dockEl = document.querySelector('[aria-label="Palette dock"]');
+      const dockEl = document.querySelector('[data-testid="palette-dock"]');
       if (cardEl) ro.observe(cardEl);
       if (headerEl) ro.observe(headerEl);
       if (dockEl) ro.observe(dockEl);
