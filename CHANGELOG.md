@@ -1,8 +1,12 @@
-### 3.0.10 - 2026-11-14 (Alpha)
+### 3.0.11 - 2026-11-14 (Beta)
+
+- Upgrade OnboardingTutorial to a 14-step interactive guide with All Topics jump drawer and per-visit auto-advance across all steps, add 9 contextual non-blocking FeatureOfferBanner quick tips with scoped persistence and Jump to Guide, raise PR Readiness and AI review gates to strict 100%, and expand mobile overflow and E2E coverage [#519](https://github.com/shthed/capy/pull/519)
+
+### 3.0.10 - 2026-11-14
 
 - Add Low-Vision Large Text accessibility mode, keep PaletteDock strictly sorted and centered at 50% when scrollable, enable Undo by default with one-time migration, remove stale 1x zoom badge tutorial copy, and add capyboop review-gate unit tests [#518](https://github.com/shthed/capy/pull/518)
 
-### 3.0.9 - 2026-11-14 (Beta)
+### 3.0.9 - 2026-11-14
 
 - Keep PaletteDock visible above ReplayControls with swatch auto-dismiss, default Saves tab to Thumbnails list-first without sticky header occlusion, and expand E2E layout guards [#517](https://github.com/shthed/capy/pull/517)
 

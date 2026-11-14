@@ -119,6 +119,7 @@ interface SettingsModalProps {
   } | null>;
   onZoomIntoDetailTile?: () => void;
   onStartTutorial?: () => void;
+  onTabOpened?: (tabId: number) => void;
 }
 
 const LAST_SETTINGS_TAB_KEY = 'capy_last_settings_tab';
@@ -163,6 +164,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSyncCloudProgress,
   onZoomIntoDetailTile,
   onStartTutorial,
+  onTabOpened,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dailyPuzzle = useMemo(() => getDailyFeaturedPuzzle(), [isOpen]);
@@ -257,10 +259,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const onTabOpenedRef = useRef(onTabOpened);
+  onTabOpenedRef.current = onTabOpened;
+
   // Sync activeTab when modal opens with explicit initialTab or restore last active
   useEffect(() => {
     if (isOpen) {
+      let resolvedTab = activeTab;
       if (initialTab !== undefined) {
+        resolvedTab = initialTab;
         setActiveTab(initialTab);
         try {
           localStorage.setItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY), String(initialTab));
@@ -273,6 +280,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           if (saved !== null) {
             const parsed = parseInt(saved, 10);
             if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
+              resolvedTab = parsed;
               setActiveTab(parsed);
             }
           }
@@ -280,7 +288,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           // Ignored
         }
       }
+      onTabOpenedRef.current?.(resolvedTab);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialTab]);
 
   // Close on Escape key (cancel inline rename first if active)
@@ -441,6 +451,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   data-testid={`settings-tab-${tab.label.toLowerCase()}`}
                   onClick={() => {
                     setActiveTab(tab.id);
+                    onTabOpenedRef.current?.(tab.id);
                     try {
                       localStorage.setItem(
                         resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY),

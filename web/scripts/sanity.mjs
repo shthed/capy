@@ -337,7 +337,7 @@ export function validatePrReadinessChecklist(markdown, label = 'PR Readiness') {
     assert.equal(
       beforeDetailsMatches.length > 0,
       true,
-      `${label} must include an overall percentage score (e.g. "98%")`
+      `${label} must include an overall percentage score (e.g. "100%")`
     );
     overallScore = Number(beforeDetailsMatches[beforeDetailsMatches.length - 1][1]);
   }
@@ -422,7 +422,7 @@ export function validatePrReadinessSpec(
     if (relFile === 'AGENTS.md') {
       assert.match(publicText, /pr readiness/i, 'AGENTS.md must document PR Readiness format');
       assert.match(publicText, /<details>/i, 'AGENTS.md must document <details> PR Readiness block');
-      assert.match(publicText, /95%/, 'AGENTS.md must specify >= 95% PR Readiness threshold');
+      assert.match(publicText, /(?:95|100)%/, 'AGENTS.md must specify >= 95% or 100% PR Readiness threshold');
       assert.match(
         publicText,
         /(?:start of each|at the start|%\s*-first)/i,
@@ -437,7 +437,7 @@ export function validatePrReadinessSpec(
       assert.match(publicText, /pr readiness/i, 'PROJECT.md must document PR Readiness format');
       assert.match(publicText, /checklist/i, 'PROJECT.md must name PR Readiness Checklist');
       assert.match(publicText, /<details>/i, 'PROJECT.md must document <details> PR Readiness block');
-      assert.match(publicText, /95%/, 'PROJECT.md must specify >= 95% PR Readiness threshold');
+      assert.match(publicText, /100%/, 'PROJECT.md must specify 100% PR Readiness threshold');
       assert.match(
         publicText,
         /(?:start of each|at the start|%\s*-first)/i,
@@ -450,7 +450,7 @@ export function validatePrReadinessSpec(
       );
     } else if (relFile === 'DEV.md') {
       assert.match(publicText, /pr readiness/i, 'DEV.md must reference PR Readiness');
-      assert.match(publicText, /95%/, 'DEV.md must reference >= 95% PR Readiness threshold');
+      assert.match(publicText, /100%/, 'DEV.md must reference 100% PR Readiness threshold');
     }
   }
 
