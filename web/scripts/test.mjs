@@ -7443,14 +7443,6 @@ async function runBrowserBasicsSuite() {
       true,
       `360x800 minimized ReplayControls bottom (${windowBox360.y + windowBox360.height}) must stack above PaletteDock top (${paletteMin360.y})`
     );
-    // Verify Paint Mode toggle works during replay
-    await page.locator('[aria-label="Toggle Paint Mode"]').click();
-    assert.equal(
-      await mobileReplayWin.isVisible(),
-      true,
-      'Toggling Paint Mode during replay must keep ReplayControls open'
-    );
-
     // Verify PaletteDock horizontal centering with 2-3 swatches and scrollability with many swatches
     const dockScrollStats = await page.evaluate(() => {
       const dock = document.querySelector('[aria-label="Palette dock"]');
@@ -7523,6 +7515,68 @@ async function runBrowserBasicsSuite() {
       false,
       'Persisted capy_user_settings_v8.replayLoop must remain false after save-load replay auto-resumes gameplay'
     );
+
+    // Flow 1: Manual timeline replay -> Toggle Paint Mode exits replay and enables drag painting
+    if (await page.getByTestId('undo-btn').isDisabled()) {
+      await page.getByTestId('redo-btn').click();
+    }
+    const undoBoxFlow1 = await getStableBoundingBox(page.getByTestId('undo-btn'));
+    await page.mouse.move(undoBoxFlow1.x + undoBoxFlow1.width / 2, undoBoxFlow1.y + undoBoxFlow1.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(
+      await mobileReplayWin.isVisible(),
+      false,
+      'Toggling Paint Mode during manual replay must dismiss ReplayControls'
+    );
+    const canvasBoxFlow1 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow1 && canvasBoxFlow1.width > 50 && canvasBoxFlow1.height > 50, 'PuzzleCanvas must be visible');
+    await page.mouse.move(canvasBoxFlow1.x + canvasBoxFlow1.width * 0.35, canvasBoxFlow1.y + canvasBoxFlow1.height * 0.45);
+    await page.mouse.down();
+    await page.mouse.move(canvasBoxFlow1.x + canvasBoxFlow1.width * 0.65, canvasBoxFlow1.y + canvasBoxFlow1.height * 0.55, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    // Flow 2: Post-load replay with Paint Mode ALREADY ON -> 100% -> first canvas drag paints & dismisses ReplayControls
+    await page.reload({ waitUntil: 'networkidle' });
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    const canvasBoxFlow2 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow2);
+    await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.3, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.4);
+    await page.mouse.down();
+    await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.7, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.6, { steps: 10 });
+    await page.mouse.up();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await mobileReplayWin.isVisible(), false, 'First drag in Paint Mode after post-load replay must dismiss ReplayControls');
+
+    // Flow 3: Post-load replay in Tap Mode -> 100% -> first tap dismisses ReplayControls
+    await page.locator('[aria-label="Toggle Paint Mode"]').click(); // Turn Paint Mode OFF -> Tap Mode
+    await page.reload({ waitUntil: 'networkidle' });
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    const canvasBoxFlow3 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow3);
+    await page.mouse.click(canvasBoxFlow3.x + canvasBoxFlow3.width * 0.5, canvasBoxFlow3.y + canvasBoxFlow3.height * 0.5);
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await mobileReplayWin.isVisible(), false, 'First tap in Tap Mode after post-load replay must dismiss ReplayControls');
+
+    // Flow 4: Minor canvas pan during post-load replay must NOT lock ReplayControls open against Toggle Paint Mode
+    await page.reload({ waitUntil: 'networkidle' });
+    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
+    const canvasBoxFlow4 = await page.locator('canvas').first().boundingBox();
+    assert.ok(canvasBoxFlow4);
+    await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5 + 18, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5 + 12, { steps: 4 });
+    await page.mouse.up();
+    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
 
     // Re-open ReplayControls on 360x800 mobile, expand it, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
     const mobileUndoLocator = page.getByTestId('undo-btn');
