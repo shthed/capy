@@ -14,6 +14,7 @@ export interface SpotlightRect {
 export interface SpotlightTargetSpec {
   selector: string;
   fallbackSelector?: string;
+  fallbackSelectors?: string[];
   optional?: boolean;
   isCanvasFocal?: boolean;
   padding?: number;
@@ -34,8 +35,11 @@ export interface SpotlightConnector {
 export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[]> = {
   palette: [
     {
-      selector: '[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]',
-      fallbackSelector: '[aria-label="Palette dock"]',
+      selector: '[data-testid="palette-dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]',
+      fallbackSelectors: [
+        '[data-testid="palette-dock"] button[data-testid^="palette-swatch-"]',
+        '[data-testid="palette-dock"]',
+      ],
       padding: 6,
       borderRadius: 14,
     },
@@ -64,8 +68,11 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
   ],
   hint: [
     {
-      selector: '[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="true"]',
-      fallbackSelector: '[data-testid="tutorial-try-hint-btn"]',
+      selector: '[data-testid="palette-dock"] button[data-testid^="palette-swatch-"][aria-pressed="true"]',
+      fallbackSelectors: [
+        '[data-testid="tutorial-try-hint-btn"]',
+        '[data-testid="palette-dock"]',
+      ],
       padding: 6,
       borderRadius: 14,
     },
@@ -86,16 +93,14 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
   ],
   replay: [
     {
-      selector: '[data-testid="undo-btn"]',
-      fallbackSelector: '[data-testid="replay-btn"]',
+      selector: '[data-testid="replay-controls-window"]',
+      fallbackSelectors: [
+        '[data-testid="replay-btn"]',
+        '[data-testid="undo-btn"]',
+        '[data-testid="topbar-settings-btn"]',
+      ],
       padding: 6,
-      borderRadius: 9999,
-    },
-    {
-      selector: '[data-testid="replay-btn"]',
-      optional: true,
-      padding: 6,
-      borderRadius: 9999,
+      borderRadius: 16,
     },
   ],
   peek_fullscreen: [
@@ -153,6 +158,12 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       padding: 6,
       borderRadius: 9999,
     },
+    {
+      selector: '[data-testid="topbar-active-coop-pill"]',
+      optional: true,
+      padding: 6,
+      borderRadius: 9999,
+    },
   ],
   settings_a11y: [
     {
@@ -196,7 +207,7 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
   free_color: [
     {
       selector: '[data-testid="palette-custom-btn"]',
-      fallbackSelector: '[aria-label="Palette dock"]',
+      fallbackSelector: '[data-testid="palette-dock"]',
       padding: 6,
       borderRadius: 14,
     },
@@ -360,14 +371,80 @@ export interface TargetSpotlightOverlayProps {
   largeText?: boolean;
 }
 
-function isVisibleElement(el: Element | null): el is HTMLElement {
+interface ClipBounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+function getScrollClipBounds(
+  el: HTMLElement,
+  viewport: { width: number; height: number }
+): ClipBounds {
+  let left = 0;
+  let top = 0;
+  let right = viewport.width;
+  let bottom = viewport.height;
+  let cur: HTMLElement | null = el.parentElement;
+  while (cur && cur !== document.body && cur !== document.documentElement) {
+    const st = window.getComputedStyle(cur);
+    const clipsX =
+      st.overflowX === 'auto' ||
+      st.overflowX === 'scroll' ||
+      st.overflowX === 'hidden' ||
+      st.overflowX === 'clip';
+    const clipsY =
+      st.overflowY === 'auto' ||
+      st.overflowY === 'scroll' ||
+      st.overflowY === 'hidden' ||
+      st.overflowY === 'clip';
+    if (clipsX || clipsY) {
+      const cr = cur.getBoundingClientRect();
+      if (clipsX) {
+        left = Math.max(left, cr.left);
+        right = Math.min(right, cr.right);
+      }
+      if (clipsY) {
+        top = Math.max(top, cr.top);
+        bottom = Math.min(bottom, cr.bottom);
+      }
+    }
+    cur = cur.parentElement;
+  }
+  return { left, top, right, bottom };
+}
+
+function isVisibleElement(
+  el: Element | null,
+  viewport?: { width: number; height: number }
+): el is HTMLElement {
   if (!(el instanceof HTMLElement)) return false;
   const style = window.getComputedStyle(el);
   if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
     return false;
   }
   const rect = el.getBoundingClientRect();
-  return rect.width > 0 && rect.height > 0;
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  if (!viewport) return true;
+  const clip = getScrollClipBounds(el, viewport);
+  const visW = Math.min(rect.right, clip.right) - Math.max(rect.left, clip.left);
+  const visH = Math.min(rect.bottom, clip.bottom) - Math.max(rect.top, clip.top);
+  return visW >= Math.min(8, rect.width) && visH >= Math.min(8, rect.height);
+}
+
+function findFirstVisibleElement(
+  selector: string,
+  viewport: { width: number; height: number }
+): HTMLElement | null {
+  const nodes = document.querySelectorAll(selector);
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    if (isVisibleElement(node, viewport)) {
+      return node;
+    }
+  }
+  return null;
 }
 
 export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
@@ -410,17 +487,23 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
 
     const resolvedRings: ResolvedTargetRing[] = [];
     for (const spec of specs) {
-      let el = document.querySelector(spec.selector);
+      const candidates = [
+        spec.selector,
+        ...(spec.fallbackSelectors || []),
+        ...(spec.fallbackSelector ? [spec.fallbackSelector] : []),
+      ];
+      let el: HTMLElement | null = null;
       let usedSelector = spec.selector;
-      if (!isVisibleElement(el) && spec.fallbackSelector) {
-        const fb = document.querySelector(spec.fallbackSelector);
-        if (isVisibleElement(fb)) {
-          el = fb;
-          usedSelector = spec.fallbackSelector;
+      for (const candidate of candidates) {
+        const match = findFirstVisibleElement(candidate, viewport);
+        if (match) {
+          el = match;
+          usedSelector = candidate;
+          break;
         }
       }
 
-      if (!isVisibleElement(el)) {
+      if (!el) {
         if (spec.optional) continue;
         continue;
       }

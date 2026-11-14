@@ -339,6 +339,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   return (
     <div
       ref={footerRef}
+      data-testid="palette-dock"
       className="fixed z-20 left-0 right-0 pointer-events-none transition-all flex items-center"
       style={{
         bottom: `calc(${raiseDock ? '2rem' : '0.375rem'} + var(--sab, 0px))`,

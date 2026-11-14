@@ -47,6 +47,7 @@ import {
   createInitialTutorialTried,
   OnboardingTutorial,
   TUTORIAL_STEPS,
+  TutorialStepKey,
   TutorialTriedActions,
 } from './components/OnboardingTutorial';
 import { FeatureOfferBanner } from './components/FeatureOfferBanner';
@@ -179,8 +180,32 @@ export const App: React.FC = () => {
   const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
   const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoHistoryEntry[]>([]);
+  const undoStackRef = useRef<UndoHistoryEntry[]>(undoStack);
+  undoStackRef.current = undoStack;
+  const redoStackRef = useRef<UndoHistoryEntry[]>(redoStack);
+  redoStackRef.current = redoStack;
+  const syncUndoStack = useCallback(
+    (nextOrUpdater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])) => {
+      const next =
+        typeof nextOrUpdater === 'function' ? nextOrUpdater(undoStackRef.current) : nextOrUpdater;
+      undoStackRef.current = next;
+      setUndoStack(next);
+    },
+    []
+  );
+  const syncRedoStack = useCallback(
+    (nextOrUpdater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])) => {
+      const next =
+        typeof nextOrUpdater === 'function' ? nextOrUpdater(redoStackRef.current) : nextOrUpdater;
+      redoStackRef.current = next;
+      setRedoStack(next);
+    },
+    []
+  );
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
+  const isPreviewModeRef = useRef<boolean>(false);
+  isPreviewModeRef.current = isPreviewMode;
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
   const [stepZoomTrigger, setStepZoomTrigger] = useState<number>(0);
@@ -611,6 +636,7 @@ export const App: React.FC = () => {
   const autoResumeTimerRef = useRef<number | null>(null);
   const awaitingReplayDismissRef = useRef<boolean>(false);
   const tutorialOpenedReplayRef = useRef<boolean>(false);
+  const tutorialTriggeredPreviewRef = useRef<boolean>(false);
   const replayStepRef = useRef<number>(0);
   replayStepRef.current = replayStep;
 
@@ -647,10 +673,22 @@ export const App: React.FC = () => {
     setActiveColorId(colId);
   }, []);
 
+  const cleanupTutorialTransientModes = useCallback(
+    (nextStepKey: TutorialStepKey | null = null) => {
+      if (tutorialOpenedReplayRef.current && nextStepKey !== 'replay') {
+        exitReplay();
+      }
+      if (tutorialTriggeredPreviewRef.current && nextStepKey !== 'peek_fullscreen') {
+        tutorialTriggeredPreviewRef.current = false;
+        isPreviewModeRef.current = false;
+        setIsPreviewMode(false);
+      }
+    },
+    [exitReplay]
+  );
+
   const completeTutorial = useCallback(() => {
-    if (tutorialOpenedReplayRef.current) {
-      exitReplay();
-    }
+    cleanupTutorialTransientModes(null);
     setShowTutorial(false);
     setTutorialStepTriedInVisit(false);
     try {
@@ -659,7 +697,7 @@ export const App: React.FC = () => {
       // Ignored
     }
     NativeBridge.saveBackup(resolveScopedBackupKey('capy_tutorial_completed_v1'), '1');
-  }, [exitReplay]);
+  }, [cleanupTutorialTransientModes]);
 
   useEffect(() => {
     if (!showTutorial) return;
@@ -670,33 +708,31 @@ export const App: React.FC = () => {
     featureOfferQueueRef.current = [];
     activeFeatureOfferRef.current = null;
     setActiveFeatureOffer(null);
-    tutorialOpenedReplayRef.current = false;
+    cleanupTutorialTransientModes(TUTORIAL_STEPS[0]?.key ?? null);
     setTutorialStepTriedInVisit(false);
     setTutorialStep(0);
     setTutorialTried(createInitialTutorialTried());
     setShowTutorial(true);
-  }, []);
+  }, [cleanupTutorialTransientModes]);
 
   const handleJumpToTutorialStep = useCallback(
     (stepIdx: number) => {
       advanceFeatureOffer();
-      tutorialOpenedReplayRef.current = false;
+      cleanupTutorialTransientModes(TUTORIAL_STEPS[stepIdx]?.key ?? null);
       setTutorialStepTriedInVisit(false);
       setTutorialStep(stepIdx);
       setShowTutorial(true);
     },
-    [advanceFeatureOffer]
+    [advanceFeatureOffer, cleanupTutorialTransientModes]
   );
 
   const handleTutorialStepChange = useCallback(
     (nextStep: number) => {
-      if (tutorialOpenedReplayRef.current && TUTORIAL_STEPS[nextStep]?.key !== 'replay') {
-        exitReplay();
-      }
+      cleanupTutorialTransientModes(TUTORIAL_STEPS[nextStep]?.key ?? null);
       setTutorialStepTriedInVisit(false);
       setTutorialStep(nextStep);
     },
-    [exitReplay]
+    [cleanupTutorialTransientModes]
   );
 
   // Zero-allocation bounding-box frustum check against the current canvas viewport
@@ -997,7 +1033,7 @@ export const App: React.FC = () => {
       setSourceImage(img);
       setPuzzle(null);
       setHintRegionId(null);
-      setRedoStack([]);
+      syncRedoStack([]);
       const targetView = initialViewportOverride || {
         zoomScale: 1.0,
         panOffsetX: 0,
@@ -1103,13 +1139,13 @@ export const App: React.FC = () => {
           setPuzzle(puzzleData);
           setFilledRegionIds(nextFilledSet);
           setPaintedRegionColors(restoredPaintedMap);
-          setUndoStack(
+          syncUndoStack(
             initialOrder.map((rId) => ({
               regionId: rId,
               wasPreviouslyFilled: false,
             }))
           );
-          setRedoStack([]);
+          syncRedoStack([]);
 
           const isFree = Boolean(
             initialIsFreeColor ||
@@ -1364,14 +1400,23 @@ export const App: React.FC = () => {
               setPuzzle(cachedPuzzle);
               setActiveSnapshotId(prebakedSnap.id);
               setActiveColorId(initialColor);
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                puzzle: cachedPuzzle,
+                activeSnapshotId: prebakedSnap.id,
+                activeColorId: initialColor,
+                filledRegionIds: filledSet,
+                paintedRegionColors: restoredPaintedMap,
+                isFreeColorMode: isFree,
+              };
               setFilledRegionIds(filledSet);
-              setUndoStack(
+              syncUndoStack(
                 orderedIds.map((rId) => ({
                   regionId: rId,
                   wasPreviouslyFilled: false,
                 }))
               );
-              setRedoStack([]);
+              syncRedoStack([]);
               setHintRegionId(null);
               StorageService.saveActiveState({
                 activeSnapshotId: prebakedSnap.id,
@@ -1509,14 +1554,23 @@ export const App: React.FC = () => {
           setPuzzle(cachedPuzzle);
           setActiveSnapshotId(candidateSnap.id);
           setActiveColorId(restoredColor);
+          liveCoopRef.current = {
+            ...liveCoopRef.current,
+            puzzle: cachedPuzzle,
+            activeSnapshotId: candidateSnap.id,
+            activeColorId: restoredColor,
+            filledRegionIds: filledSet,
+            paintedRegionColors: restoredPaintedMap,
+            isFreeColorMode: isFree,
+          };
           setFilledRegionIds(filledSet);
-          setUndoStack(
+          syncUndoStack(
             orderedIds.map((rId) => ({
               regionId: rId,
               wasPreviouslyFilled: false,
             }))
           );
-          setRedoStack([]);
+          syncRedoStack([]);
           resetActivePuzzleSessionStats(
             candidateSnap.id,
             cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
@@ -1622,9 +1676,25 @@ export const App: React.FC = () => {
               setPuzzle(firstPuzzle);
               setActiveSnapshotId(firstSnap.id);
               setActiveColorId(initialColor);
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                puzzle: firstPuzzle,
+                activeSnapshotId: firstSnap.id,
+                activeSave: refreshedList.find((s) => s.id === firstSnap.id),
+                activeTitle: firstSnap.title || 'Capy',
+                activeColorId: initialColor,
+                filledRegionIds: filledSet,
+                paintedRegionColors: new Map(),
+                isFreeColorMode: isFree,
+              };
               setFilledRegionIds(filledSet);
-              setUndoStack([]);
-              setRedoStack([]);
+              syncUndoStack(
+                orderedIds.map((rId) => ({
+                  regionId: rId,
+                  wasPreviouslyFilled: false,
+                }))
+              );
+              syncRedoStack([]);
               setHintRegionId(null);
               resetActivePuzzleSessionStats(
                 firstSnap.id,
@@ -1773,14 +1843,17 @@ export const App: React.FC = () => {
 
   // Undo last region completion
   const handleUndo = useCallback((bypassReplayCheck: boolean = false) => {
-    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || undoStack.length === 0 || !isUndoEnabled) return;
+    const currentUndoStack = undoStackRef.current;
+    if (!puzzle || (isReplayingRef.current && bypassReplayCheck !== true) || currentUndoStack.length === 0 || !isUndoEnabled) return;
 
-    const lastAction = undoStack[undoStack.length - 1];
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, lastAction]);
+    const lastAction = currentUndoStack[currentUndoStack.length - 1];
+    syncUndoStack(currentUndoStack.slice(0, -1));
+    syncRedoStack((prev) => [...prev, lastAction]);
 
-    const nextFilled = new Set(filledRegionIds);
-    const nextPainted = new Map(paintedRegionColors);
+    const curFilled = liveCoopRef.current.filledRegionIds;
+    const curPainted = liveCoopRef.current.paintedRegionColors;
+    const nextFilled = new Set(curFilled);
+    const nextPainted = new Map(curPainted);
     const undoneRegion = puzzle.regions.find((r) => r.id === lastAction.regionId);
 
     if (lastAction.wasPreviouslyFilled) {
@@ -1803,7 +1876,8 @@ export const App: React.FC = () => {
       emitCoopUnfill([lastAction.regionId]);
     }
 
-    const nextActiveCol = undoneRegion && !isFreeColorMode ? undoneRegion.colorId : activeColorId;
+    const nextActiveCol =
+      undoneRegion && !isFreeColorMode ? undoneRegion.colorId : liveCoopRef.current.activeColorId;
     liveCoopRef.current = {
       ...liveCoopRef.current,
       filledRegionIds: nextFilled,
@@ -1851,31 +1925,32 @@ export const App: React.FC = () => {
     }
   }, [
     puzzle,
-    isReplaying,
-    undoStack,
-    filledRegionIds,
-    paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
     isUndoEnabled,
     activeSnapshotId,
-    activeColorId,
     emitCoopPaint,
     emitCoopUnfill,
     markTutorialActionTried,
     triggerFeatureOffer,
+    syncUndoStack,
+    syncRedoStack,
   ]);
 
   // Redo last undone region action
   const handleRedo = useCallback((bypassReplayCheck: boolean = false) => {
-    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || redoStack.length === 0 || !isUndoEnabled) return;
+    const currentRedoStack = redoStackRef.current;
+    if (!puzzle || (isReplayingRef.current && bypassReplayCheck !== true) || currentRedoStack.length === 0 || !isUndoEnabled) return;
 
-    const lastRedo = redoStack[redoStack.length - 1];
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev, lastRedo]);
+    const lastRedo = currentRedoStack[currentRedoStack.length - 1];
+    syncRedoStack(currentRedoStack.slice(0, -1));
+    syncUndoStack((prev) => [...prev, lastRedo]);
 
-    const nextFilled = new Set(filledRegionIds);
-    const nextPainted = new Map(paintedRegionColors);
+    const curFilled = liveCoopRef.current.filledRegionIds;
+    const curPainted = liveCoopRef.current.paintedRegionColors;
+    const curActiveColorId = liveCoopRef.current.activeColorId;
+    const nextFilled = new Set(curFilled);
+    const nextPainted = new Map(curPainted);
 
     nextFilled.add(lastRedo.regionId);
     let redonePaintedCol: number | undefined;
@@ -1885,8 +1960,8 @@ export const App: React.FC = () => {
     } else {
       const region = puzzle.regions.find((r) => r.id === lastRedo.regionId);
       if (region && isFreeColorMode) {
-        nextPainted.set(lastRedo.regionId, activeColorId);
-        redonePaintedCol = activeColorId;
+        nextPainted.set(lastRedo.regionId, curActiveColorId);
+        redonePaintedCol = curActiveColorId;
       }
     }
     emitCoopPaint(
@@ -1898,7 +1973,7 @@ export const App: React.FC = () => {
     );
 
     const redoneRegion = puzzle.regions.find((r) => r.id === lastRedo.regionId);
-    const nextActiveCol = redoneRegion && !isFreeColorMode ? redoneRegion.colorId : activeColorId;
+    const nextActiveCol = redoneRegion && !isFreeColorMode ? redoneRegion.colorId : curActiveColorId;
     liveCoopRef.current = {
       ...liveCoopRef.current,
       filledRegionIds: nextFilled,
@@ -1945,17 +2020,14 @@ export const App: React.FC = () => {
     }
   }, [
     puzzle,
-    isReplaying,
-    redoStack,
-    filledRegionIds,
-    paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
     isUndoEnabled,
     activeSnapshotId,
-    activeColorId,
     emitCoopPaint,
     markTutorialActionTried,
+    syncUndoStack,
+    syncRedoStack,
   ]);
 
   // Open replay timeline scrubber from long-press Undo or floating controls
@@ -2039,8 +2111,8 @@ export const App: React.FC = () => {
       };
       setFilledRegionIds(nextFilled);
       setPaintedRegionColors(nextPainted);
-      setUndoStack(newUndoStack);
-      setRedoStack(newRedoStack);
+      syncUndoStack(newUndoStack);
+      syncRedoStack(newRedoStack);
       setIsReplaying(false);
       setIsReplayPlaying(false);
       setHintRegionId(null);
@@ -2266,7 +2338,7 @@ export const App: React.FC = () => {
               : undefined;
         if (effectivePrevColor === activeColorId) return;
 
-        setUndoStack((prev) => [
+        syncUndoStack((prev) => [
           ...prev,
           {
             regionId,
@@ -2275,7 +2347,7 @@ export const App: React.FC = () => {
             paintedColorId: activeColorId,
           },
         ]);
-        setRedoStack([]);
+        syncRedoStack([]);
 
         const nextPainted = new Map(paintedRegionColors);
         nextPainted.set(regionId, activeColorId);
@@ -2353,7 +2425,7 @@ export const App: React.FC = () => {
         setActiveColorId(region.colorId);
       }
 
-      setUndoStack((prev) => [
+      syncUndoStack((prev) => [
         ...prev,
         {
           regionId,
@@ -2361,7 +2433,7 @@ export const App: React.FC = () => {
           paintedColorId: region.colorId,
         },
       ]);
-      setRedoStack([]);
+      syncRedoStack([]);
 
       const nextFilled = new Set(filledRegionIds);
       nextFilled.add(regionId);
@@ -2518,8 +2590,8 @@ export const App: React.FC = () => {
         }
 
         if (changed) {
-          setUndoStack((prev) => [...prev, ...newUndoEntries]);
-          setRedoStack([]);
+          syncUndoStack((prev) => [...prev, ...newUndoEntries]);
+          syncRedoStack([]);
           liveCoopRef.current = {
             ...liveCoopRef.current,
             filledRegionIds: nextFilled,
@@ -2615,8 +2687,8 @@ export const App: React.FC = () => {
       }
 
       if (filledAny) {
-        setUndoStack((prev) => [...prev, ...newUndoEntries]);
-        setRedoStack([]);
+        syncUndoStack((prev) => [...prev, ...newUndoEntries]);
+        syncRedoStack([]);
         liveCoopRef.current = {
           ...liveCoopRef.current,
           filledRegionIds: nextFilled,
@@ -3055,13 +3127,13 @@ export const App: React.FC = () => {
         setPuzzle(cachedPuzzle);
         setActiveColorId(restoredColor);
         setFilledRegionIds(filledSet);
-        setUndoStack(
+        syncUndoStack(
           orderedIds.map((rId) => ({
             regionId: rId,
             wasPreviouslyFilled: false,
           }))
         );
-        setRedoStack([]);
+        syncRedoStack([]);
         resetActivePuzzleSessionStats(
           snapshot.id,
           cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
@@ -3554,13 +3626,13 @@ export const App: React.FC = () => {
               setActiveSnapshotId(prebakedSnap.id);
               setActiveColorId(initialColor);
               setFilledRegionIds(filledSet);
-              setUndoStack(
+              syncUndoStack(
                 orderedIds.map((rId) => ({
                   regionId: rId,
                   wasPreviouslyFilled: false,
                 }))
               );
-              setRedoStack([]);
+              syncRedoStack([]);
               setHintRegionId(null);
               resetActivePuzzleSessionStats(
                 prebakedSnap.id,
@@ -4556,7 +4628,18 @@ export const App: React.FC = () => {
         onTogglePreview={() => {
           dismissPostLoadReplayIfAwaiting();
           markTutorialActionTried('peek_fullscreen');
-          setIsPreviewMode((prev) => !prev);
+          const nextPreview = !isPreviewModeRef.current;
+          isPreviewModeRef.current = nextPreview;
+          if (
+            nextPreview &&
+            showTutorialRef.current &&
+            TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'peek_fullscreen'
+          ) {
+            tutorialTriggeredPreviewRef.current = true;
+          } else if (!nextPreview) {
+            tutorialTriggeredPreviewRef.current = false;
+          }
+          setIsPreviewMode(nextPreview);
         }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
@@ -4713,7 +4796,14 @@ export const App: React.FC = () => {
         onBatchRegionsClicked={attemptBatchFillRegions}
         onVisibleColorsChanged={setVisibleColorIds}
         onVisibleRegionsChanged={setVisibleRegionIds}
-        onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
+        onTogglePreview={() => {
+          const nextPreview = !isPreviewModeRef.current;
+          isPreviewModeRef.current = nextPreview;
+          if (!nextPreview) {
+            tutorialTriggeredPreviewRef.current = false;
+          }
+          setIsPreviewMode(nextPreview);
+        }}
       />
 
       {/* Floating Action Controls (Undo, Redo, Replay, Zoom, Paint Mode) */}
@@ -4910,7 +5000,15 @@ export const App: React.FC = () => {
             markTutorialActionTried('palette');
           }}
           onSyncActiveColor={handleSyncActiveColor}
-          onColorHintRequested={(colId) => triggerHint(colId)}
+          onColorHintRequested={(colId) => {
+            if (showTutorialRef.current && tutorialStepRef.current === 0) {
+              NativeBridge.haptic('tick', settings.hapticsEnabled);
+              setHintRegionId(null);
+              markTutorialActionTried('palette');
+              return;
+            }
+            triggerHint(colId);
+          }}
           onOpenPaletteOptions={() => {
             setShowPaletteOptions(true);
             markTutorialActionTried('free_color');
@@ -5005,12 +5103,19 @@ export const App: React.FC = () => {
               if (updated.length > 0) {
                 handleLoadSnapshot(updated[0], false);
               } else {
+                liveCoopRef.current = {
+                  ...liveCoopRef.current,
+                  activeSnapshotId: null,
+                  puzzle: null,
+                  filledRegionIds: new Set(),
+                  paintedRegionColors: new Map(),
+                };
                 setActiveSnapshotId(null);
                 setPuzzle(null);
                 setFilledRegionIds(new Set());
                 setPaintedRegionColors(new Map());
-                setUndoStack([]);
-                setRedoStack([]);
+                syncUndoStack([]);
+                syncRedoStack([]);
                 setHintRegionId(null);
                 const defaultSample = SAMPLE_GALLERY[0];
                 const img = await loadHtmlImage(defaultSample.assetPath);
@@ -5037,12 +5142,19 @@ export const App: React.FC = () => {
             }
             await StorageService.clearAllSnapshots();
             setSnapshots([]);
+            liveCoopRef.current = {
+              ...liveCoopRef.current,
+              activeSnapshotId: null,
+              puzzle: null,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+            };
             setActiveSnapshotId(null);
             setPuzzle(null);
             setFilledRegionIds(new Set());
             setPaintedRegionColors(new Map());
-            setUndoStack([]);
-            setRedoStack([]);
+            syncUndoStack([]);
+            syncRedoStack([]);
             setHintRegionId(null);
             const defaultSample = SAMPLE_GALLERY[0];
             const img = await loadHtmlImage(defaultSample.assetPath);
@@ -5081,12 +5193,17 @@ export const App: React.FC = () => {
               emitCoopUnfill(previouslyFilled);
             }
             const nextResetEpoch = (activeSave?.resetEpoch ?? 0) + 1;
+            liveCoopRef.current = {
+              ...liveCoopRef.current,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+            };
             setIsReplaying(false);
             setIsReplayPlaying(false);
             setFilledRegionIds(new Set());
             setPaintedRegionColors(new Map());
-            setUndoStack([]);
-            setRedoStack([]);
+            syncUndoStack([]);
+            syncRedoStack([]);
             setHintRegionId(null);
             resetActivePuzzleSessionStats(activeSnapshotId, false);
             if (activeSnapshotId && puzzle) {
@@ -5209,11 +5326,8 @@ export const App: React.FC = () => {
         }}
         onStepChange={handleTutorialStepChange}
         onTriggerHint={() => {
-          if (isReplaying) {
-            flushPendingViewportSave();
-            cancelAutoResume();
-            setIsReplaying(false);
-            setIsReplayPlaying(false);
+          if (isReplayingRef.current) {
+            exitReplay();
           }
           triggerHint();
           markTutorialActionTried('hint');
@@ -5234,6 +5348,10 @@ export const App: React.FC = () => {
           !isLoading &&
           !showSettings &&
           !showPaletteOptions &&
+          (!isPreviewMode ||
+            (showTutorial &&
+              TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ===
+                'peek_fullscreen')) &&
           (showTutorial || Boolean(activeFeatureOffer && !isFeatureOfferSuppressed))
         }
         variant={showTutorial ? 'tutorial' : 'offer'}
