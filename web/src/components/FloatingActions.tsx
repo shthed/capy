@@ -12,6 +12,7 @@ interface FloatingActionsProps {
   showUndo?: boolean;
   isCompleted?: boolean;
   isReplaying?: boolean;
+  isReplayExpanded?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   onLongPressUndo?: () => void;
@@ -33,6 +34,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
   showUndo = true,
   isCompleted = false,
   isReplaying = false,
+  isReplayExpanded = false,
   onUndo,
   onRedo,
   onLongPressUndo,
@@ -79,7 +81,11 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       style={{
         bottom: `calc(${
           isReplaying
-            ? (raiseDock ? '12.5rem' : '10.5rem')
+            ? !isCompleted && isReplayExpanded
+              ? (raiseDock ? '15.25rem' : '13.625rem')
+              : !isCompleted
+              ? (raiseDock ? '9.75rem' : '8.125rem')
+              : (raiseDock ? '12.5rem' : '10.5rem')
             : isCompleted
             ? (raiseDock ? '2.5rem' : '1.25rem')
             : (raiseDock ? '6.25rem' : '4.625rem')

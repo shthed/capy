@@ -207,6 +207,7 @@ export const App: React.FC = () => {
   // Replay State
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
   const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
+  const [isReplayMinimized, setIsReplayMinimized] = useState<boolean>(true);
   const [replayStep, setReplayStep] = useState<number>(0);
   const [replaySequence, setReplaySequence] = useState<number[]>([]);
 
@@ -513,6 +514,10 @@ export const App: React.FC = () => {
     setIsReplaying(false);
     setIsReplayPlaying(false);
     return true;
+  }, []);
+
+  const handleSyncActiveColor = useCallback((colId: number) => {
+    setActiveColorId(colId);
   }, []);
 
   const markTutorialActionTried = useCallback((action: keyof TutorialTriedActions) => {
@@ -4456,6 +4461,7 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
+          isReplayExpanded={isReplaying && !isReplayMinimized}
           onUndo={() => handleUndo()}
           onRedo={() => handleRedo()}
           onLongPressUndo={handleOpenTimelineReplay}
@@ -4494,6 +4500,7 @@ export const App: React.FC = () => {
           isLooping={Boolean(settings.replayLoop)}
           isFollowing={Boolean(settings.replayFollow)}
           raiseDock={settings.raisePaletteDock}
+          stackAbovePalette={!isCompleted}
           onTogglePlay={() => {
             cancelAutoResume();
             if (!isReplayPlaying && replayStepRef.current >= replaySequence.length) {
@@ -4559,11 +4566,12 @@ export const App: React.FC = () => {
           }}
           onResumeFromStep={handleResumeFromReplayStep}
           onUserInteract={cancelAutoResume}
+          onMinimizedChange={setIsReplayMinimized}
         />
       )}
 
       {/* Palette Dock floating above canvas */}
-      {puzzle && !isLoading && !isCompleted && !isReplaying && (
+      {puzzle && !isLoading && !isCompleted && (
         <PaletteDock
           palette={puzzle.palette}
           regions={puzzle.regions}
@@ -4574,17 +4582,25 @@ export const App: React.FC = () => {
           prioritizeOnScreen={settings.prioritizeOnScreen}
           visibleColorIds={visibleColorIds}
           raiseDock={settings.raisePaletteDock}
+          isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}
           isFreeColorMode={isFreeColorMode}
           showCustomColorButton={Boolean(
             isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
           )}
           onColorSelected={(colId) => {
+            if (isReplaying) {
+              flushPendingViewportSave();
+              cancelAutoResume();
+              setIsReplaying(false);
+              setIsReplayPlaying(false);
+            }
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             setActiveColorId(colId);
             setHintRegionId(null);
             markTutorialActionTried('palette');
           }}
+          onSyncActiveColor={handleSyncActiveColor}
           onColorHintRequested={(colId) => triggerHint(colId)}
           onOpenPaletteOptions={() => setShowPaletteOptions(true)}
           onAddCustomColor={handleAddCustomColor}
@@ -4834,6 +4850,12 @@ export const App: React.FC = () => {
         triedActions={tutorialTried}
         onStepChange={setTutorialStep}
         onTriggerHint={() => {
+          if (isReplaying) {
+            flushPendingViewportSave();
+            cancelAutoResume();
+            setIsReplaying(false);
+            setIsReplayPlaying(false);
+          }
           triggerHint();
           markTutorialActionTried('hint');
         }}
