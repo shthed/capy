@@ -6,15 +6,17 @@ Focused **Sprint 1 Queue** ([EPIC-2](https://github.com/shthed/capy/issues/477) 
 
 ---
 
-## Sprint 1 Priority 0: `v3.0.1` Stabilization & Release Ops Gates (`BUG-4`, `TASK-2.5`)
+## Sprint 1 Dev Queue (`v3.0.x` Stabilization)
 
-Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/shthed/capy/pull/484), [#485](https://github.com/shthed/capy/pull/485)), `BUG-2` ([#485](https://github.com/shthed/capy/pull/485)), and `BUG-5` mobile `GameTopBar` overlap & `99%` progress cap ([#486](https://github.com/shthed/capy/pull/486), promoted to `main` in [#488](https://github.com/shthed/capy/pull/488)). Shipped to `beta` (`v3.0.2`--`v3.0.7`, awaiting `main` promotion): prebaked sample `1x` viewport reset & 1-click bot PR approval workflow ([#490](https://github.com/shthed/capy/pull/490)), `TASK-2.5` backlog sync ([#487](https://github.com/shthed/capy/pull/487)), CI/CD & governance hardening ([#491](https://github.com/shthed/capy/pull/491)--[#494](https://github.com/shthed/capy/pull/494)), and `TASK-2.6` post-load replay controls, `Capy Forest` default, onboarding tutorial & `About` tab ([#489](https://github.com/shthed/capy/pull/489)). Delete each remaining item below once shipped to Production / Play Store.
+Zero active agent dev tasks remain in `TODO.md`—all approved Sprint 1 stabilization and UI slices are staged on `beta` (`v3.0.2`--`v3.0.8`) awaiting Production promotion in [#501](https://github.com/shthed/capy/pull/501) (`beta -> main`). Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/shthed/capy/pull/484), [#485](https://github.com/shthed/capy/pull/485)), `BUG-2` ([#485](https://github.com/shthed/capy/pull/485)), and `BUG-5` mobile `GameTopBar` overlap & `99%` progress cap ([#486](https://github.com/shthed/capy/pull/486), promoted to `main` in [#488](https://github.com/shthed/capy/pull/488)). Shipped to `beta` (`v3.0.2`--`v3.0.8`, awaiting `main` promotion in [#501](https://github.com/shthed/capy/pull/501)): prebaked sample `1x` viewport reset & 1-click bot PR approval workflow ([#490](https://github.com/shthed/capy/pull/490)), prior `TASK-2.5` backlog sync ([#487](https://github.com/shthed/capy/pull/487)), CI/CD & governance hardening ([#491](https://github.com/shthed/capy/pull/491)--[#494](https://github.com/shthed/capy/pull/494)), `TASK-2.6` post-load replay controls, `Capy Forest` default, onboarding tutorial & `About` tab ([#489](https://github.com/shthed/capy/pull/489)), `v3.0.7` storage sandbox isolation, DPR/settings/import/deep-link/Play Games fixes & `.changelog/` / Epic tracker automation ([#495](https://github.com/shthed/capy/pull/495)), cross-chat `WHITEBOARD.md` coordination rule ([#496](https://github.com/shthed/capy/pull/496)), `v3.0.8` topbar zoom pill removal & 360px `SettingsModal` tab clipping fix ([#497](https://github.com/shthed/capy/pull/497)), and `main -> beta` `AGENTS.md` syncs ([#499](https://github.com/shthed/capy/pull/499)--[#500](https://github.com/shthed/capy/pull/500)). `TASK-2.5` (Android App Verification & Google Play Store Deployment) moved to [EPIC-3](https://github.com/shthed/capy/issues/478) in [`ROADMAP.md`](./ROADMAP.md#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval). Delete `BUG-4` below once shipped to Production.
+
+## Release & Human Ops Gates
 
 ### BUG-4: `capypaint.com` Live DNS & Cloudflare Worker Cutover
 
 - **Status**: `Open -- Human Ops Gate (Awaiting Cloudflare Zone & DNS Cutover)`
 - **Action**: Point `capypaint.com` registrar nameservers to Cloudflare, connect the repository to Cloudflare Workers Builds per [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers), and add the `www.capypaint.com -> https://capypaint.com` edge `301` Redirect Rule.
-- **Value**: Replaces the Squarespace "under construction" placeholder on `capypaint.com` with the live `v3.0.1` production SPA, `/api/health`, and `CoopRoomDurableObject` WebSocket relay.
+- **Value**: Replaces the Squarespace "under construction" placeholder on `capypaint.com` with the live `v3.0.x` production SPA, `/api/health`, and `CoopRoomDurableObject` WebSocket relay.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
@@ -25,23 +27,5 @@ Shipped to `main` (`Production`): `BUG-1` & `BUG-3` ([#484](https://github.com/s
 - **Acceptance Criteria**:
   - `https://capypaint.com/` serves the live Capy Paint SPA and `https://www.capypaint.com/` `301`-redirects to `https://capypaint.com/`.
   - `https://capypaint.com/api/health` returns `{"ok":true,"service":"capy-paint",...}` and `wss://capypaint.com/api/room?room=<ROOM6>` upgrades to `CoopRoomDurableObject`.
-
-</details>
-
-### TASK-2.5: Android App Verification & Google Play Store Deployment (`v3.0.1`)
-
-- **Status**: `Open -- Release Ops Gate (Awaiting Keystore Secrets, v3.0.1 Tag & Play Console Upload)`
-- **Action**: Configure release signing secrets (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`), verify `./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease` (plus `MainActivity` `onPause`/`onResume` lifecycle & hardware back navigation), tag `v3.0.1` on `main` to trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml), and publish `capy-v3.0.1.aab` to Google Play Console.
-- **Value**: Ships the unified Android wrapper (`com.capypaint.capy`) to Google Play Store alongside the `v3.0.1` web release.
-
-<details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-- **Type & Priority**: `Task` | [EPIC-2](https://github.com/shthed/capy/issues/477) ([Milestone #2](https://github.com/shthed/capy/milestone/2)) | `priority: critical` | `domain: android, ci`
-- **Model & Estimate**: `Gemini 4 Argon` + Owner Play Console / Keystore Setup | `~18,000 tokens` (`~10--15 min agent`)
-- **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/java/com/capypaint/capy/MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt), [`.github/workflows/release.yml`](./.github/workflows/release.yml), [`APP.md`](./APP.md)
-- **Acceptance Criteria**:
-  - `release.yml` builds a Play-signed `capy-v3.0.1.aab` (`versionName = "3.0.1"`, `versionCode = 30001`) and `capy-v3.0.1.apk` cleanly.
-  - `v3.0.1` Android build passes on-device smoke QA (launch, coloring, save/resume, back navigation) and is uploaded to Google Play Console.
 
 </details>
