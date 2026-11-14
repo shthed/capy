@@ -5,6 +5,7 @@ import { CoopParticipant } from '../services/providers/types';
 interface GameTopBarProps {
   activeTitle?: string | null;
   progressPercentage: number;
+  filledCount?: number;
   zoomScale?: number;
   isPreviewMode: boolean;
   isCompleted: boolean;
@@ -27,6 +28,7 @@ interface GameTopBarProps {
 export const GameTopBar: React.FC<GameTopBarProps> = ({
   activeTitle,
   progressPercentage,
+  filledCount = 0,
   zoomScale: _zoomScale = 1,
   isPreviewMode,
   isCompleted,
@@ -48,10 +50,10 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-2.5 sm:px-3 pb-3 safe-top flex justify-between items-center gap-1.5 sm:gap-2"
+      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-2 sm:px-3 pb-3 safe-top flex justify-between items-center gap-1 sm:gap-2"
       style={{
-        paddingLeft: 'max(0.625rem, calc(var(--sal, 0px) + 0.625rem))',
-        paddingRight: 'max(0.625rem, calc(var(--sar, 0px) + 0.625rem))',
+        paddingLeft: 'max(0.5rem, calc(var(--sal, 0px) + 0.5rem))',
+        paddingRight: 'max(0.5rem, calc(var(--sar, 0px) + 0.5rem))',
       }}
     >
       {/* Top Left: Progress % / Title Pill, Channel Badge, Parent Breadcrumb & Zoom Stepper */}
@@ -85,16 +87,19 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
         <button
           type="button"
           data-testid="topbar-saves-btn"
+          data-filled-count={filledCount}
           onClick={onOpenSaves}
           title="View saves and snapshots"
-          className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
+          className={`flex items-center gap-0.5 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
             isCompleted
               ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-300'
               : 'bg-slate-900/80 text-amber-400 border border-slate-700/60 hover:bg-slate-800/80'
           }`}
         >
           {activeTitle ? (
-            <span className="truncate max-w-[74px] sm:max-w-[200px]">{activeTitle}</span>
+            <span className="truncate max-w-[44px] min-[390px]:max-w-[74px] sm:max-w-[200px]">
+              {activeTitle}
+            </span>
           ) : (
             <span>Capy Paint</span>
           )}
@@ -109,7 +114,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
             onClick={onOpenReleaseChannel}
             title={`Running on ${releaseChannelBadge} channel (tap to manage release channel)`}
             aria-label={`Release channel ${releaseChannelBadge}. Activate to manage release channel`}
-            className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[10px] tracking-wider uppercase font-extrabold bg-violet-950/90 text-violet-200 border border-violet-400/60 shadow-lg backdrop-blur-md hover:bg-violet-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0"
+            className="px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[10px] tracking-normal sm:tracking-wider uppercase font-extrabold bg-violet-950/90 text-violet-200 border border-violet-400/60 shadow-lg backdrop-blur-md hover:bg-violet-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0 whitespace-nowrap"
           >
             {releaseChannelBadge}
           </button>
@@ -141,7 +146,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
       {/* Top Right: Actions */}
       <div
         data-testid="topbar-right-lane"
-        className="pointer-events-auto flex items-center gap-1 sm:gap-2 flex-shrink-0"
+        className="pointer-events-auto flex items-center gap-0.5 sm:gap-2 flex-shrink-0"
       >
         {/* Co-op & Share Link Button */}
         {onOpenCoop && (
@@ -151,65 +156,77 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
             onClick={onOpenCoop}
             title={coopRoomCode ? `Manage Co-op Room (${coopRoomCode})` : 'Co-op Multiplayer & Share Link'}
             aria-label="Co-op Multiplayer and Share Link"
-            className={`p-1.5 sm:p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+            className={`p-1 sm:p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
               coopRoomCode
                 ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 ring-1 ring-emerald-400'
                 : 'bg-slate-900/80 text-slate-200 border-slate-700/60 hover:bg-slate-800/80'
             }`}
           >
-            <Users size={18} />
+            <Users className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
           </button>
         )}
 
         {/* Toggle Preview Button */}
         <button
           type="button"
+          data-testid="topbar-preview-btn"
           onClick={onTogglePreview}
           title={isPreviewMode ? 'Return to Puzzle' : 'Show Original Preview'}
-          className={`p-1.5 sm:p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+          className={`p-1 sm:p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
             isPreviewMode
               ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 ring-1 ring-amber-400'
               : 'bg-slate-900/80 text-slate-200 border-slate-700/60 hover:bg-slate-800/80'
           }`}
         >
-          {isPreviewMode ? <EyeOff size={18} /> : <Eye size={18} />}
+          {isPreviewMode ? (
+            <EyeOff className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+          ) : (
+            <Eye className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+          )}
         </button>
 
         {/* Toggle Full Screen Button */}
         {onToggleFullscreen && (
           <button
             type="button"
+            data-testid="topbar-fullscreen-btn"
             onClick={onToggleFullscreen}
             title={isFullscreen ? 'Exit Full Screen' : 'Display Full Screen'}
             aria-label={isFullscreen ? 'Exit Full Screen' : 'Display Full Screen'}
-            className={`p-1.5 sm:p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+            className={`p-1 sm:p-2 rounded-full shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
               isFullscreen
                 ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 ring-1 ring-amber-400'
                 : 'bg-slate-900/80 text-slate-200 border-slate-700/60 hover:bg-slate-800/80'
             }`}
           >
-            {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            {isFullscreen ? (
+              <Minimize2 className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+            ) : (
+              <Maximize2 className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+            )}
           </button>
         )}
 
         {/* Pick Image Button */}
         <button
           type="button"
+          data-testid="topbar-upload-btn"
           onClick={onPickImage}
           title="Load New Photo or Artwork"
-          className="p-1.5 sm:p-2 rounded-full bg-slate-900/80 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md hover:bg-slate-800/80 transition-all active:scale-95 cursor-pointer"
+          className="p-1 sm:p-2 rounded-full bg-slate-900/80 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md hover:bg-slate-800/80 transition-all active:scale-95 cursor-pointer"
         >
-          <ImagePlus size={18} />
+          <ImagePlus className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
 
         {/* Settings Button */}
         <button
           type="button"
+          data-testid="topbar-settings-btn"
           onClick={onOpenSettings}
           title="Settings and Menu"
-          className="p-1.5 sm:p-2 rounded-full bg-slate-900/80 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md hover:bg-slate-800/80 transition-all active:scale-95 cursor-pointer"
+          className="p-1 sm:p-2 rounded-full bg-slate-900/80 text-slate-200 border border-slate-700/60 shadow-lg backdrop-blur-md hover:bg-slate-800/80 transition-all active:scale-95 cursor-pointer"
         >
-          <Settings size={18} />
+          <Settings className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
         </button>
       </div>
     </header>
