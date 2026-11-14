@@ -10,7 +10,7 @@ Create `.changelog/<short-slug>.md` with YAML frontmatter followed by a single-l
 ---
 bump: patch
 epic: EPIC-2
-task: TASK-2.5
+task: BUG-4
 ---
 Describe the player-facing change or fix in one concise line
 ```
@@ -20,7 +20,7 @@ Describe the player-facing change or fix in one concise line
 - **`bump`** *(required)*: `patch`, `minor`, or `major`.
 - **`pr`** *(optional)*: Explicit PR number integer when known ahead of time; otherwise resolved from `--pr-map` or Git commit history at compile time.
 - **`epic`** *(optional)*: Epic tag (`EPIC-1` through `EPIC-5`) for release-note grouping or audit clarity.
-- **`task`** *(optional)*: Active [`TODO.md`](../TODO.md) heading identifier (for example `TASK-2.5` or `BUG-4`) to delete automatically once compiled.
+- **`task`** *(optional)*: Active [`TODO.md`](../TODO.md) heading identifier (for example `BUG-4` or `TASK-3.1b`) to delete automatically once compiled.
 
 ## Compiling Fragments
 
