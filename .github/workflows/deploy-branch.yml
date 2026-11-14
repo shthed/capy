@@ -350,10 +350,44 @@ jobs:
             .github/scripts
             web/public/404.html
 
+      - name: Resolve build artifact name
+        id: build_artifact
+        uses: actions/github-script@v9
+        env:
+          CURRENT_RUN_ATTEMPT: ${{ github.run_attempt }}
+        with:
+          script: |
+            const preferredName = `build-artifacts-${process.env.CURRENT_RUN_ATTEMPT}`;
+            const maxAttempts = 5;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              });
+              const candidates = (data.artifacts || []).filter(
+                (a) => !a.expired && typeof a.name === 'string' && a.name.startsWith('build-artifacts-')
+              );
+              const preferred = candidates.find((a) => a.name === preferredName);
+              const latest = candidates.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+              const chosen = preferred || latest;
+              if (chosen) {
+                core.info(`Resolved build artifact "${chosen.name}" (id=${chosen.id}) on attempt ${attempt}/${maxAttempts}.`);
+                core.setOutput('name', chosen.name);
+                return;
+              }
+              if (attempt < maxAttempts) {
+                core.info(`No build-artifacts-* artifact visible yet (attempt ${attempt}/${maxAttempts}); waiting 3s...`);
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+              }
+            }
+            core.setFailed(`Unable to find any non-expired build-artifacts-* artifact for workflow run ${context.runId}.`);
+
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
-          name: build-artifacts-${{ github.run_attempt }}
+          name: ${{ steps.build_artifact.outputs.name }}
           path: staging
 
       - name: Retrieve existing gh-pages content
