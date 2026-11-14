@@ -1,0 +1,275 @@
+name: Open Bot PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      head:
+        description: 'Source branch name (e.g. feature/my-change)'
+        required: true
+        type: string
+      base:
+        description: 'Target base branch'
+        required: false
+        type: choice
+        options:
+          - beta
+          - main
+        default: 'beta'
+      title:
+        description: 'Pull request title'
+        required: true
+        type: string
+      body:
+        description: 'Pull request body markdown (preserved on update if empty)'
+        required: false
+        type: string
+        default: ''
+      draft:
+        description: 'Create new PR as draft (always enforced on creation so gh pr ready triggers CI checks)'
+        required: false
+        type: boolean
+        default: true
+      labels:
+        description: 'Optional comma-separated GitHub label names'
+        required: false
+        type: string
+        default: ''
+      milestone:
+        description: 'Optional milestone number or title'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: open-pr-${{ inputs.head }}-${{ inputs.base || 'beta' }}
+  cancel-in-progress: false
+
+jobs:
+  open-pr:
+    name: Open or Update Bot PR
+    if: github.repository == 'shthed/capy'
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.open_pr.outputs.pr_number }}
+      pr_url: ${{ steps.open_pr.outputs.pr_url }}
+      action: ${{ steps.open_pr.outputs.action }}
+    steps:
+      - name: Create or update bot-authored pull request
+        id: open_pr
+        uses: actions/github-script@v9
+        env:
+          INPUT_HEAD: ${{ inputs.head }}
+          INPUT_BASE: ${{ inputs.base }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_BODY: ${{ inputs.body }}
+          INPUT_DRAFT: ${{ inputs.draft }}
+          INPUT_LABELS: ${{ inputs.labels }}
+          INPUT_MILESTONE: ${{ inputs.milestone }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const rawHead = String(process.env.INPUT_HEAD ?? '').trim();
+            if (!rawHead) {
+              core.setFailed('Input "head" is required and cannot be empty.');
+              return;
+            }
+
+            let headBranch = rawHead.replace(/^refs\/heads\//i, '').trim();
+            const ownerPrefix = `${owner.toLowerCase()}:`;
+            if (headBranch.toLowerCase().startsWith(ownerPrefix)) {
+              headBranch = headBranch
+                .slice(ownerPrefix.length)
+                .trim()
+                .replace(/^refs\/heads\//i, '')
+                .trim();
+            } else if (headBranch.includes(':')) {
+              core.setFailed(
+                `Invalid "head" branch "${rawHead}": cross-owner head refs are not supported.`
+              );
+              return;
+            }
+            if (headBranch.includes(':')) {
+              core.setFailed(
+                `Invalid "head" branch "${rawHead}": branch name cannot contain ":".`
+              );
+              return;
+            }
+            if (!headBranch) {
+              core.setFailed(`Invalid "head" branch "${rawHead}": branch name cannot be empty.`);
+              return;
+            }
+            const qualifiedHead = `${owner}:${headBranch}`;
+
+            const rawBase = String(process.env.INPUT_BASE ?? '').trim();
+            const base = rawBase === '' ? 'beta' : rawBase;
+            if (base !== 'beta' && base !== 'main') {
+              core.setFailed(`Invalid "base" branch "${base}": expected "beta" or "main".`);
+              return;
+            }
+            if (headBranch === base) {
+              core.setFailed(
+                `Head branch "${headBranch}" cannot be the same as base branch "${base}".`
+              );
+              return;
+            }
+
+            const title = String(process.env.INPUT_TITLE ?? '').trim();
+            if (!title) {
+              core.setFailed('Input "title" is required and cannot be empty.');
+              return;
+            }
+
+            const rawDraft = String(process.env.INPUT_DRAFT ?? '').trim().toLowerCase();
+            let draft = true;
+            if (rawDraft === '' || rawDraft === 'true') {
+              draft = true;
+            } else if (rawDraft === 'false') {
+              draft = false;
+            } else {
+              core.setFailed(
+                `Invalid "draft" value "${process.env.INPUT_DRAFT}": expected "true" or "false".`
+              );
+              return;
+            }
+
+            const bodyInput = String(process.env.INPUT_BODY ?? '');
+            const labels = [
+              ...new Set(
+                String(process.env.INPUT_LABELS ?? '')
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              ),
+            ];
+
+            const milestoneInput = String(process.env.INPUT_MILESTONE ?? '').trim();
+            let milestoneNumber = null;
+            if (milestoneInput) {
+              const milestones = await github.paginate(github.rest.issues.listMilestones, {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+              });
+              let matched = null;
+              if (/^\d+$/.test(milestoneInput)) {
+                const targetNumber = Number(milestoneInput);
+                matched = milestones.find((m) => m.number === targetNumber) || null;
+              } else {
+                matched =
+                  milestones.find((m) => m.title === milestoneInput) ||
+                  milestones.find(
+                    (m) => m.title.trim().toLowerCase() === milestoneInput.toLowerCase()
+                  ) ||
+                  null;
+              }
+              if (!matched) {
+                const available =
+                  milestones.map((m) => `#${m.number} "${m.title}"`).join(', ') || 'none';
+                core.setFailed(
+                  `Milestone "${milestoneInput}" not found among open milestones (available: ${available}).`
+                );
+                return;
+              }
+              milestoneNumber = matched.number;
+            }
+
+            const { data: openPrs } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: qualifiedHead,
+              base,
+              state: 'open',
+              per_page: 10,
+            });
+
+            let pr = null;
+            let action = '';
+            if (openPrs.length > 0) {
+              const existing = openPrs[0];
+              const existingAuthor = (existing.user?.login || '').toLowerCase();
+              if (existingAuthor !== 'github-actions[bot]') {
+                core.warning(
+                  `Existing PR #${existing.number} is authored by "${existing.user?.login || 'unknown'}" rather than "github-actions[bot]"; native Approve may remain disabled for the PR author.`
+                );
+              }
+              if (Boolean(existing.draft) !== draft) {
+                core.warning(
+                  `Existing PR #${existing.number} has draft=${Boolean(existing.draft)} while input draft=${draft}. REST pulls.update omits draft; run "gh pr ready ${existing.number}"${draft ? ' --undo' : ''} as the repository owner.`
+                );
+              }
+
+              const updateParams = {
+                owner,
+                repo,
+                pull_number: existing.number,
+                title,
+              };
+              if (bodyInput.trim().length > 0) {
+                updateParams.body = bodyInput;
+              }
+              const { data: updated } = await github.rest.pulls.update(updateParams);
+              pr = updated;
+              action = 'updated';
+            } else {
+              if (!draft) {
+                core.warning(
+                  `Enforcing draft=true when creating PR for "${headBranch}" -> "${base}" because GITHUB_TOKEN PR creation does not trigger CI checks; run "gh pr ready" after creation.`
+                );
+              }
+              const { data: created } = await github.rest.pulls.create({
+                owner,
+                repo,
+                head: headBranch,
+                base,
+                title,
+                body: bodyInput,
+                draft: true,
+              });
+              pr = created;
+              action = 'created';
+            }
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: pr.number,
+                labels,
+              });
+            }
+            if (milestoneNumber !== null) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: pr.number,
+                milestone: milestoneNumber,
+              });
+            }
+
+            core.setOutput('pr_number', String(pr.number));
+            core.setOutput('pr_url', pr.html_url);
+            core.setOutput('action', action);
+            core.info(
+              `PR #${pr.number} (${action}): ${pr.html_url} [head=${headBranch} -> base=${base}, draft=${Boolean(pr.draft)}, author=${pr.user?.login || 'github-actions[bot]'}]`
+            );
+
+            const summaryLines = [
+              `### Bot PR #${pr.number} (${action})`,
+              `- **URL**: ${pr.html_url}`,
+              `- **Branch**: \`${headBranch}\` -> \`${base}\``,
+              `- **Draft**: \`${Boolean(pr.draft)}\``,
+              `- **Author**: \`${pr.user?.login || 'github-actions[bot]'}\``,
+              ...(labels.length > 0
+                ? [`- **Labels**: ${labels.map((l) => `\`${l}\``).join(', ')}`]
+                : []),
+              ...(milestoneNumber !== null ? [`- **Milestone**: #${milestoneNumber}`] : []),
+            ];
+            await core.summary.addRaw(`${summaryLines.join('\n')}\n`).write();

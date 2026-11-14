@@ -2,23 +2,24 @@
 
 This guide defines the end-to-end human and AI co-development workflow, shared architectural guardrails, model selection strategy, session hygiene, CI/CD architecture, and ongoing maintenance playbooks for **Capy** ([`https://github.com/shthed/capy`](https://github.com/shthed/capy), live at [`https://capypaint.com/`](https://capypaint.com/) and PR previews at [`https://shthed.github.io/capy/`](https://shthed.github.io/capy/)).
 
-**Related Guides**: [`README.md`](./README.md) | [`ROADMAP.md`](./ROADMAP.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+**Related Guides**: [`README.md`](./README.md) | [`PROJECT.md`](./PROJECT.md) | [`ROADMAP.md`](./ROADMAP.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
 
 **Table of Contents**:
 1. [Documentation Map & Architecture](#1-documentation-map--architecture)
-2. [Human + AI Co-Development Philosophy & Optimal Goals](#2-human--ai-co-development-philosophy--optimal-goals)
+2. [Human + AI Co-Development Philosophy & PM Handoff](#2-human--ai-co-development-philosophy--pm-handoff)
 3. [Choosing the Right AI Model, Capability Tier & Workflow](#3-choosing-the-right-ai-model-capability-tier--workflow)
 4. [Antigravity Session, Chat Naming & Pinning Hygiene](#4-antigravity-session-chat-naming--pinning-hygiene)
 5. [Core Technical Guardrails (`web/` & `app/`)](#5-core-technical-guardrails-web--app)
-6. [End-to-End 3-Tier Git, Pull Request & Release Promotion Workflow (`Alpha -> Beta -> Production`)](#6-end-to-end-3-tier-git-pull-request--release-promotion-workflow-alpha---beta---production)
+6. [Git Branching, Local Verification & Release Workflow (`Alpha -> Beta -> Production`)](#6-git-branching-local-verification--release-workflow-alpha---beta---production)
 7. [CI/CD Pipeline & Automated Cleanup Architecture](#7-cicd-pipeline--automated-cleanup-architecture)
 8. [Versioning, Dependency Maintenance & Asset Playbooks](#8-versioning-dependency-maintenance--asset-playbooks)
 9. [Environment Self-Healing & Troubleshooting Recipes](#9-environment-self-healing--troubleshooting-recipes)
 
 > [!IMPORTANT]
-> **Division Between `DEV.md` and `AGENTS.md`**:
+> **Division Between `PROJECT.md`, `DEV.md`, and `AGENTS.md`**:
 > - [`AGENTS.md`](./AGENTS.md) is the **auto-loaded AI operational contract** injected into every agent turn. Keep `AGENTS.md` strictly AI-specific and free of human-only tutorials, while letting it grow to whatever size is needed for optimal agent performance and reliability over raw token savings.
-> - [`DEV.md`](./DEV.md) (this file) is the **comprehensive Human + AI collaboration, Hybrid Agile sprint, coding guardrail, and maintenance manual**, consulted by human contributors and loaded on demand by AI agents when modifying code, planning sprints, choosing models, debugging CI, or updating dependencies.
+> - [`PROJECT.md`](./PROJECT.md) is the **canonical Project Management manual** owning backlog governance, Epic triage, PR sync and readiness gates, release promotion, `CHANGELOG.md` channel governance, and the retro log.
+> - [`DEV.md`](./DEV.md) (this file) is the **engineering & co-development manual** consulted by humans and agents for Gemini model selection, session hygiene, shared technical guardrails, local build/test CLI, CI/CD architecture, and troubleshooting.
 
 ---
 
@@ -27,13 +28,14 @@ This guide defines the end-to-end human and AI co-development workflow, shared a
 ```mermaid
 flowchart TD
     subgraph AutoLoaded["Auto-Loaded Every Agent Turn"]
-        AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Rubric)"]
+        AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Readiness)"]
     end
 
-    subgraph ProcessAndRoadmap["Process, Roadmap, GitHub Agile & Active Sprint"]
-        DEV["DEV.md (Human + AI Workflow, Guardrails, CI/CD & Maintenance)"]
+    subgraph GovernanceAndPlanning["PM Governance, Roadmap, GitHub Agile & Sprint Queue"]
+        PROJECT["PROJECT.md (Agile Triad, PR Sync, Release Promotion & Retro)"]
+        DEV["DEV.md (Engineering Workflow, Guardrails, CI/CD & Maintenance)"]
         ROADMAP["ROADMAP.md (Epics, User Stories, Icebox & Shipped Archive)"]
-        GH_AGILE["GitHub Epic Issues (#476--#480) & Sprint Milestones (#1--#4)"]
+        GH_AGILE["GitHub Epic Issues (EPIC-1..EPIC-5) & Sprint Milestones"]
         TODO["TODO.md (Focused 1-Sprint Ready-for-Dev Queue)"]
         CHANGELOG["CHANGELOG.md (SemVer Rules, Channel Markers & History)"]
     end
@@ -46,12 +48,13 @@ flowchart TD
         TESTING["TESTING.md (Unified Vite SSR + Playwright E2E & JUnit4)"]
     end
 
+    AGENTS --> PROJECT
     AGENTS --> DEV
     ROADMAP <--> GH_AGILE
     ROADMAP --> TODO
     GH_AGILE <--> TODO
-    AGENTS --> TODO
-    AGENTS --> CHANGELOG
+    PROJECT --> TODO
+    PROJECT --> CHANGELOG
     AGENTS --> WEB
     AGENTS --> PUZZLE
     AGENTS --> APP
@@ -62,9 +65,10 @@ flowchart TD
 ### Repository Documentation Index
 
 - **[`README.md`](./README.md)** (*Players & Contributors*): Product showcase, controls cheat sheet, Stable/Beta play links, developer quick start, privacy policy link, and documentation index.
-- **[`ROADMAP.md`](./ROADMAP.md)** (*Humans & AI Agents*): Strategic product Epics (`EPIC-*` paired `1:1` with GitHub Epic Tracking Issues `#476`--`#480`), User Stories (`US-*`), external dependency readiness gates, Platform Icebox (`ICE-*`), and collapsed Shipped Epics & Stories.
-- **[`TODO.md`](./TODO.md)** (*Humans & AI Agents*): Focused **1-Sprint Execution Queue** containing only unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices ready for immediate dev work under the active GitHub Sprint Milestone.
-- **[`DEV.md`](./DEV.md)** (*Humans & AI Agents*): Co-development philosophy, Hybrid Automated Sprints, GitHub Epic Issue CLI playbooks, Gemini 4 model selection, `#NNN` session hygiene, shared technical guardrails, 3-tier CI/CD, and maintenance playbooks.
+- **[`PROJECT.md`](./PROJECT.md)** (*Project Management & Maintainers*): Canonical Lean Agile triad ([EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480)), sprint cadence, Epic triage, PR sync and readiness gates, release promotion, `CHANGELOG.md` channel governance, and continuous improvement retro log.
+- **[`ROADMAP.md`](./ROADMAP.md)** (*Humans & AI Agents*): Strategic product Epics ([EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480)), User Stories (`US-*`), external dependency readiness gates, Platform Icebox (`ICE-*`), and collapsed Shipped Epics & Stories.
+- **[`TODO.md`](./TODO.md)** (*Humans & AI Agents*): Focused **1-Sprint Execution Queue** containing only active sprint `BUG-*` and `TASK-*` items under the active GitHub Sprint Milestone.
+- **[`DEV.md`](./DEV.md)** (*Humans & AI Agents*): Co-development workflow, Gemini 4 model selection, `#NNN` session hygiene, shared technical guardrails, 3-tier CI/CD, SemVer/dependencies/assets, and troubleshooting.
 - **[`AGENTS.md`](./AGENTS.md)** (*AI Agents — Auto-Loaded*): AI-specific guardrails, mobile-first formatting rule, context discipline, task routing, and PR readiness contract.
 - **[`WEB.md`](./WEB.md)** (*Humans & AI Agents*): React 19 UI hierarchy, `PuzzleCanvas.tsx` 3-tier offscreen caching, 6-mode touch gesture engine, Worker IPC, `NativeBridge`, storage keys, and `UserSettings` dictionary.
 - **[`PUZZLE.md`](./PUZZLE.md)** (*Humans & AI Agents*): `puzzle.worker.ts` 5-strategy computer-vision pipeline, Red-Mean K-Means++ clustering, adaptive Otsu/Sobel contours, watershed absorption, and 6-stage telemetry.
@@ -72,6 +76,7 @@ flowchart TD
 - **[`CLOUD.md`](./CLOUD.md)** (*Humans & AI Agents*): Modular `CloudProviderDriver` backends, Google OAuth 2.0 `appDataFolder` & Play Games Services v2 sign-in, CRDT `mergeProgressDeltas`, `#s=<token>` share links, Co-op rooms, and Cloudflare Workers edge hosting (`capypaint.com`).
 - **[`TESTING.md`](./TESTING.md)** (*Humans & AI Agents*): Unified `web/scripts/test.mjs` runner (Vite SSR unit/codec checks + Playwright multi-touch E2E suite) and Android JUnit4 verification.
 - **[`CHANGELOG.md`](./CHANGELOG.md)** (*Humans & AI Agents*): Chronological `MAJOR.MINOR.PATCH` release history and `(Alpha)`/`(Beta)`/`(Production)` channel markers synchronized with `web/package.json` and Android `versionCode`.
+- **[`LICENSE.md`](./LICENSE.md)** (*Contributors*): Capybara Chill Preamble and CC BY-NC-SA 4.0 licensing terms.
 - **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)** (*Players & Storefronts*): Published Privacy Policy and Google Play Data Safety disclosures (`https://capypaint.com/privacy-policy.html`).
 
 ### Documentation Formatting Standards (Mobile-First & Zero-Clutter)
@@ -82,17 +87,17 @@ flowchart TD
 
 ---
 
-## 2. Human + AI Co-Development Philosophy & Optimal Goals
+## 2. Human + AI Co-Development Philosophy & PM Handoff
 
 Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vision, binary RLE/CRDT codecs, and a native Kotlin Android wrapper. Human developers and AI agents have complementary strengths across these layers.
 
 ### Optimal Goals for the Human Developer
 
-1. **Product Vision & Sprint Pull Governance**: Curate Epics and Stories in [`ROADMAP.md`](./ROADMAP.md) (`#476`--`#480`) and promote only unblocked, high-impact tasks into [`TODO.md`](./TODO.md) for the active sprint.
-2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/pull/<number>/` and `/capy/beta/`.
+1. **Product Vision & Sprint Pull Governance**: Curate Epics and Stories in [`ROADMAP.md`](./ROADMAP.md) ([EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480); governance in [`PROJECT.md`](./PROJECT.md)) and promote only unblocked, high-impact tasks into [`TODO.md`](./TODO.md) for the active sprint.
+2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/capy/alpha/<number>/` and `/capy/beta/`.
 3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve `implementation_plan.md` artifacts *before* code generation begins. Five minutes spent aligning on a plan saves tens of thousands of tokens of rework.
 4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/teamwork`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
-5. **Final Merge Gatekeeping**: Verify the live preview link and the **5-Pillar PR Readiness & Perfection Confidence Score (`>= 95%`)** before approving any merge to `main`.
+5. **Final Merge Gatekeeping**: Verify the live preview link and the **PR Readiness Score (`>= 95%`)** with its **`PR Readiness Checklist`** before approving any merge to `main`.
 
 ### Optimal Goals for the AI Agent
 
@@ -102,101 +107,9 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 4. **Thorough Local VM Verification (Fast-CI Partner)**: Run the complete verification suite (`npm run lint && npm run build && npm test`, plus `./gradlew app:testDebugUnitTest` when available) inside the Antigravity VM before pushing, keeping GitHub Actions ultra-fast and lightweight so PR preview deployments never bottleneck the dev/test/release loop.
 5. **Zero-Drift Documentation & Traceability**: Synchronize subsystem `.md` files, [`CHANGELOG.md`](./CHANGELOG.md), [`TODO.md`](./TODO.md), and [`ROADMAP.md`](./ROADMAP.md) in the same PR as the code change, pinning every code reference to an immutable commit SHA (`blob/<sha>/<path>#L<start>-L<end>`).
 
-### Capy Lean Agile Backlog & `TODO.md` Entry Standard
+### Project Management, Agile Triad & Backlog Governance
 
-Capy separates strategic roadmap planning from sprint execution across [`ROADMAP.md`](./ROADMAP.md), [`TODO.md`](./TODO.md), and native GitHub Issues/Milestones/Labels for clean, high-velocity **Hybrid Automated Agile Sprints**:
-
-#### Plain-English Agile & Release Terminology Glossary
-- **Epic (`EPIC-1`..`EPIC-5`)**: A multi-week product theme grouping several related player capabilities (for example, *`EPIC-2`: Mobile Touch Precision & Tactile Sensory Polish*). Never create one long-lived mega-PR per Epic—instead, each Epic is planned in [`ROADMAP.md`](./ROADMAP.md), tracked at a glance via **one Parent GitHub Tracking Issue** (`#476`--`#480` with `- [x]` / `- [ ]` Story & Task checklists that render live progress bars and `Tracked in #<issue>` badges on linked PRs), and filtered with `epic:1`..`epic:5` GitHub Labels.
-- **User Story (`US-2.1`)**: One cohesive, player-visible feature inside an Epic written around player value (for example, *Floating Precision Loupe Magnifier for Micro-Regions*).
-- **Task / Subtask (`TASK-2.1a`, `TASK-2.1b`)**: A small, independently testable `1-PR` coding slice (`~10--30 min` agent effort) implementing part or all of a User Story. Active-sprint tasks live in [`TODO.md`](./TODO.md) and are deleted immediately upon merge.
-- **Bug (`BUG-1`)**: A verified defect, lifecycle guard, or CI reliability fix scheduled at Priority 0 at the top of a Sprint.
-- **Sprint (`Sprint 0`..`Sprint 3`)**: A focused batch of `~8--10` unblocked Tasks and Bugs pulled from `ROADMAP.md` into `TODO.md`, integrated on the `beta` branch, play-tested together on `/capy/beta/`, and promoted to `main` as a cohesive release.
-- **GitHub Milestone (`Sprint 1: ...`)**: GitHub's native Sprint progress bar (`closed PRs / total PRs %`) assigned to every PR and Epic issue in that Sprint.
-- **GitHub Label (`epic:2`, `web`, `android`, `feature`, `fix`, `ui`, `testing`, `ci`, `docs`, `deps`)**: Filterable taxonomy tags attached to Issues and PRs so PR titles remain clean, human-readable, and prefix-free.
-- **Alpha Channel (`/capy/pull/<number>/`)**: Isolated sandbox deployment created automatically for every open Pull Request (`ALPHA #<number>` pill in the top bar; marked `(Alpha)` in `CHANGELOG.md` on standalone experimental branches).
-- **Beta Channel (`beta` branch -> `/capy/beta/`)**: Medium-lived integration branch where merged Sprint PRs soak for real-world play-testing (`https://shthed.github.io/capy/beta/` and `/capy/beta/capy.apk`, `BETA` pill in the top bar, 1-tap opt-in switcher in Settings sharing browser save storage with Stable, marked `(Beta)` in `CHANGELOG.md`) without ever risking live production players.
-- **Production Channel (`main` branch -> `/capy/`)**: Stable live game (`https://shthed.github.io/capy/`, marked `(Production)` in `CHANGELOG.md`), updated **only** via human-approved `beta -> main` Release Promotion PRs that pass the full Playwright Chromium E2E CI gate.
-- **Git Tag (`v2.6.0`) & GitHub Release**: An immutable version bookmark on a `main` commit (`v2.6.0`, or `v2.6.0-beta.1` pre-release on `beta`) that triggers [`release.yml`](./.github/workflows/release.yml) to publish a GitHub Release with `CHANGELOG.md` notes, `capy-vX.Y.Z.apk`, and a Google Play Store `capy-vX.Y.Z.aab` Android App Bundle.
-
-#### Core Backlog Governance Rules
-1. **3-Artefact Agile Triad (`ROADMAP.md` <-> GitHub Epic Issues `#476`--`#480` & Milestones <-> `TODO.md`)**:
-   - **[`ROADMAP.md`](./ROADMAP.md) (*Strategic Epics, Stories, Icebox & Shipped Archive*)**:
-     - Owns all outcome-driven **Epics (`EPIC-2`..`EPIC-5`)**, **User Stories (`US-N.M`)**, readiness badges (`Active in Sprint N`, `Ready for Next Sprint`, or `Blocked -- External Credentials / Infra`), **Platform Icebox (`ICE-*`)**, and a single collapsed `<details>` **Shipped Epics & Stories** archive at the bottom.
-     - Stories blocked on external credentials, OAuth/Play Console provisioning, WebSocket relays, or paid AI endpoints (`EPIC-5` [#480](https://github.com/shthed/capy/issues/480), `ICE-*`) stay in `ROADMAP.md` with an explicit **Unblock Prerequisite** until unblocked.
-   - **GitHub Parent Epic Tracking Issues (`1 Issue = 1 Epic`, `#476`--`#480`) & Sprint Milestones (`#1`--`#4`)**:
-     - Strictly **one GitHub Tracking Issue per chartered Epic**: [#476](https://github.com/shthed/capy/issues/476) (`EPIC-1`, `CLOSED`), [#477](https://github.com/shthed/capy/issues/477) (`EPIC-2`, Sprint 1), [#478](https://github.com/shthed/capy/issues/478) (`EPIC-3`, Sprint 2), [#479](https://github.com/shthed/capy/issues/479) (`EPIC-4`, Sprint 3), and [#480](https://github.com/shthed/capy/issues/480) (`EPIC-5`, Blocked / No Milestone).
-     - **Zero Sub-Issue Sprawl**: Never open separate GitHub Issues for individual `TASK-*` slices, Sprint Priority 0 `BUG-*` items (tracked in `TODO.md` + the active Sprint Milestone), or unscheduled `ICE-1`--`ICE-3` wrappers unless explicitly requested by the user. Charter a new `EPIC-N` issue **only** when promoting an `ICE-*` item or new product theme into active roadmap scheduling.
-   - **[`TODO.md`](./TODO.md) (*Focused 1-Sprint Ready Queue*)**:
-     - Holds **only** the current sprint's unblocked, codebase-verified `BUG-*` and `TASK-*` `1-PR` slices (`~8--10` tasks at a time).
-     - Tag `<= 15 min` (`1--3` file, zero-backend, `Gemini 3.8 Flash` or `Argon`-ready) slices with `[quick-win]` and index them in Section 1 (`Quick-Win Ready Queue`).
-2. **Definition of Ready (Strict Sprint Entry & Anti-Busywork Gate)**:
-   - A task enters [`TODO.md`](./TODO.md) **only** when: (a) it delivers concrete **Player Value** or **Reliability Value** with a clear **Why Now**, (b) all external prerequisites are met, and (c) every referenced file path, component, and type name has been verified against `beta`/`main`.
-   - Reject zero-impact housekeeping chores (e.g., pruning unreferenced catalog keys that add `0 B` to builds, committing dummy config placeholders before credentials exist, or ad-SDK bloat).
-3. **Definition of Done (`TODO.md` Deletion, Epic Issue Sync & `ROADMAP.md` Collapsed Archive)**:
-   - **Delete from `TODO.md` Immediately**: Never leave `[x]` checkboxes in [`TODO.md`](./TODO.md). Delete completed `BUG-*` / `TASK-*` items (and their Quick-Win Ready Queue pointers) in the same PR that ships them, and check off `- [x] ... — #<pr>` on the parent GitHub Epic Tracking Issue (`#476`--`#480`).
-   - **Archive Completed Stories in `ROADMAP.md`**: When a Story or Epic's final task ships, move that Story or Epic out of the active sections of [`ROADMAP.md`](./ROADMAP.md) into the single collapsed `<details>` **Shipped Epics & Stories** summary at the bottom of `ROADMAP.md` with clickable `#<PR>` links (closing the Parent Epic Tracking Issue once `100%` of its Stories reach Production `main`).
-   - **Sprint Replenishment**: When `TODO.md` drains (or `<= 2` tasks remain), open a lightweight `docs/*` sprint-planning PR pulling the next ready Epic/Stories from `ROADMAP.md` into `TODO.md` and ensuring the next GitHub Sprint Milestone is open.
-4. **Hybrid Automated Sprint Execution (`#NNN` Chats, `/goal` & `/teamwork` -> `beta`)**:
-   - **Mode 1 -- Atomic Single-Task PRs (`1-Task = 1-PR` -> `beta`, Default)**: Open a fresh `#NNN` chat for a single `BUG-*` or `TASK-*` on `feature/*` or `fix/*` branched from `origin/beta`, verify locally, open the PR with `--base beta`, and wait for human merge approval.
-   - **Mode 2 -- Story or Sprint-Slice PRs (`/goal` or `/teamwork` -> `beta`)**: When launching an autonomous multi-task run (`/goal` or `/teamwork`), execute a cohesive Story (`TASK-X.Ya` + `TASK-X.Yb`) or P0 bug batch (`BUG-1`..`BUG-3`) onto one `automation/sprint-*` or `feature/*` branch off `origin/beta` using clean atomic commits per task:
-     - With parallel subagents or `/teamwork`, assign non-overlapping file ownership to named worker roles and run the full `npm run lint && npm run build && npm test` gate inside the VM before opening **one PR** targeting `beta` with **one live preview URL** and pausing at the human merge gate.
-5. **Canonical Mobile-First Card & `<details>` Template**:
-   - Keep **Description**, **Value**, **Why Now**, and **1-line `TASK-*` titles** visible on the card surface; wrap verbose **Tags, Priority, Model Tier, Token/Time Estimates, Target Files, and Acceptance Criteria** inside `<details><summary>...</summary></details>` (always keep a blank line after `</summary>` and before `</details>` so GitHub Flavored Markdown renders inner bullet lists):
-   ````markdown
-   ### US-X.Y: Concise Outcome-Focused Title
-
-   - **Description**: Plain-English summary of what is built or fixed.
-   - **Value**: Concrete benefit to player experience, accessibility, or reliability.
-   - **Why Now**: Justification for why this item earns its current sprint priority.
-   - **Tasks**:
-     - **TASK-X.Ya** `[quick-win]`: Independently mergeable 1-PR slice summary.
-     - **TASK-X.Yb**: Follow-up 1-PR slice summary.
-
-   <details>
-   <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
-
-   - **Type & Priority**: `Story` | `EPIC-X` | `priority: high` | `domain: canvas, ui`
-   - **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 3.8 Flash` (`X.Ya`), `Gemini 4 Argon` (`X.Yb`)
-   - **Effort Estimate**: `~35,000 tokens` | `~16--22 min agent` (`~4--6 hrs human`)
-   - **Target Files**: `./web/src/...`
-   - **Acceptance Criteria**:
-     - Concrete, testable invariants verified by `npm test` or `./gradlew app:testDebugUnitTest`.
-
-   </details>
-   ````
-
-#### GitHub Epic Tracking Issues, Sprint Milestones & CLI Playbook (`1 Issue = 1 Epic`)
-
-- **Never Auto-Close an Incomplete Epic (`Tracked in #<epic>` vs. `Closes #<epic>`)**:
-  - GitHub keywords `Closes #<num>`, `Fixes #<num>`, and `Resolves #<num>` automatically close the referenced issue when merged into `main`. **Never** use closing keywords on incremental `TASK-*` or Story PRs—always write `**Agile Scope**: Tracked in #<epic-issue> (EPIC-X / US-X.Y: TASK-X.Ya)` so GitHub renders the PR inside the Epic's tasklist/timeline while keeping the Epic `OPEN`.
-  - **Sprint P0 `BUG-*` Attribution**: Standalone reliability/CI/lifecycle bugs (`BUG-1` & `BUG-3` in [`TODO.md`](./TODO.md)) attach the active Sprint Milestone (`--milestone "Sprint 1: ..."`) plus `fix` and subsystem labels (`web`, `android`, `ci`, `testing`) without attaching an unrelated `epic:N` label.
-- **Standard `gh` CLI Commands for Agents & Maintainers** *(always announce GitHub write commands before running them)*:
-  ```bash
-  # 1. Inspect open Epic Tracking Issues (#477--#480) and Sprint Milestones (#2--#4)
-  gh issue list -R shthed/capy --label epic --state open --json number,title,milestone,labels
-  gh api repos/shthed/capy/milestones?state=open --jq '.[] | {number, title, open_issues, closed_issues}'
-
-  # 2. Open a Draft Sprint PR targeting beta with Epic label + Sprint Milestone
-  gh pr create -R shthed/capy --draft --base beta --head feature/<short-topic> \
-    --title "<Clean Prefix-Free Action Title>" \
-    --label "feature,epic:2,web" \
-    --milestone "Sprint 1: P0 Reliability & EPIC-2 Touch/Audio Polish" \
-    --body-file /tmp/pr_body.md
-
-  # 3. Check off a shipped Story/Task (- [ ] -> - [x] ... — #<pr>) on its Parent Epic Issue
-  gh issue view 477 -R shthed/capy --json body --jq .body > /tmp/epic_477.md
-  # (Edit /tmp/epic_477.md to mark the shipped slice [x] with — #<pr-num>)
-  gh issue edit 477 -R shthed/capy --body-file /tmp/epic_477.md
-
-  # 4. Close a 100%-shipped Epic Issue & Sprint Milestone after beta -> main Release Promotion
-  gh issue close 477 -R shthed/capy --comment "Completed in #<promo-pr> (v2.6.0 Production release)."
-  gh api -X PATCH repos/shthed/capy/milestones/2 -f state=closed
-
-  # 5. Charter a new Epic Issue when promoting an ICE-* item (e.g., ICE-1 -> EPIC-6)
-  gh label create "epic:6" -R shthed/capy --color "0052cc" --description "EPIC-6: <Title>"
-  gh issue create -R shthed/capy --title "EPIC-6: <Title>" --label "epic,epic:6,web" --body-file /tmp/epic_6.md
-  ```
+All Lean Agile backlog rules, terminology glossary, the 3-artefact triad ([`ROADMAP.md`](./ROADMAP.md) <-> [EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480) & Milestones <-> [`TODO.md`](./TODO.md)), Definition of Ready/Done, Epic triage (`EPIC-2` vs. `EPIC-3`--`EPIC-5`), clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` / `[EPIC-N](https://github.com/shthed/capy/issues/<num>)` link conventions, mobile-first `<details>` card templates, and `gh` CLI playbooks live canonically in [`PROJECT.md` Section 2](./PROJECT.md#2-lean-agile-lifecycle-and-backlog-governance) (with Sprint Cadence in [`PROJECT.md` Section 3](./PROJECT.md#3-sprint-cadence-and-hybrid-automated-execution) and Multi-Session Coordination in [`PROJECT.md` Section 1](./PROJECT.md#1-roles-ownership-and-multi-session-coordination)).
 
 ---
 
@@ -268,7 +181,7 @@ When working inside Antigravity:
    - Bundling 3--4 unrelated sequential PRs into a single chat forces frontier models to re-attend over tens of thousands of historical tool outputs on every turn, multiplying thinking-token spend. Start a fresh `#NNN` chat for each new PR so rolling 5-hour/weekly Antigravity quotas stretch much further.
 4. **Canonical `.url.json` Bookmark Cards**:
    - When the agent opens a PR, it bookmarks the PR using `PR_<number>.url.json` (`UserFacing: true`) with `"title": "#<number> <Canonical GitHub PR Title>"`.
-   - Once a PR is merged and its `/pull/<number>/` preview is cleaned up, stale preview `.url.json` cards should not be left pointing to `404` URLs.
+   - Once a PR is merged and its `/alpha/<number>/` preview is cleaned up, stale preview `.url.json` cards should not be left pointing to `404` URLs.
 
 ---
 
@@ -291,7 +204,7 @@ All human and AI contributors modifying Web (`web/`) or Android (`app/`) code mu
    - Execute all CPU-heavy image processing (K-Means clustering, Otsu/Sobel contour extraction, watershed region segmentation) exclusively inside `puzzle.worker.ts` using transferable `ArrayBuffer` payloads.
    - Support clean cancellation/termination whenever a new puzzle generation begins.
 5. **Relative Asset Path Invariance**:
-   - Never use root-relative `/assets/...` URLs in code or CSS. Always use `./assets/...` and keep `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) so assets resolve identically across GitHub Pages (`/`), PR previews (`/pull/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
+   - Never use root-relative `/assets/...` URLs in code or CSS. Always use `./assets/...` and keep `base: './'` in [`web/vite.config.ts`](./web/vite.config.ts) so assets resolve identically across GitHub Pages (`/`), PR previews (`/alpha/<number>/`), and Android WebView (`https://appassets.androidplatform.net/assets/www/`).
 6. **Defensive `NativeBridge` Fallbacks ([`NativeBridge.ts`](./web/src/services/NativeBridge.ts))**:
    - Feature-detect host capabilities on every call (`haptic`, `saveBackup`, `loadBackup`, `saveCloudBinaryChunk`, `loadCloudBinaryChunk`, `setBackModalOpen`, `onSharedImage`, `shareImage`) and fall back safely to Web APIs (`navigator.vibrate`, IndexedDB, Web Share API) without uncaught exceptions.
 7. **Storage Durability, Epoch-Scoped CRDT & IndexedDB Quota Safety ([`StorageService.ts`](./web/src/services/StorageService.ts), [`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
@@ -311,7 +224,7 @@ All human and AI contributors modifying Web (`web/`) or Android (`app/`) code mu
 
 ---
 
-## 6. End-to-End 3-Tier Git, Pull Request & Release Promotion Workflow (`Alpha -> Beta -> Production`)
+## 6. Git Branching, Local Verification & Release Workflow (`Alpha -> Beta -> Production`)
 
 ### Step 1: Session Kick-Off & Linear Branch Creation Off `origin/beta`
 
@@ -330,17 +243,7 @@ git fetch origin beta
 git rebase origin/beta
 ```
 
-When a Sprint or Beta cycle has been play-tested on `https://shthed.github.io/capy/beta/` and approved for Production + Play Store release, open a **Release Promotion PR (`beta -> main`)**:
-
-```bash
-# 1. Promote CHANGELOG.md top heading from (Beta) to (Production, Beta) and clear older (Production) suffix
-gh pr create -R shthed/capy --base main --head beta --title "Promote v2.6 Sprint 1 release from Beta to Production"
-# 2. After human merge sign-off + green Playwright E2E Release Gate, tag main and re-align origin/beta to origin/main
-#    (prevents squash-merge history divergence on the next Sprint's feature/* -> beta PRs):
-git fetch origin main
-git tag -a v2.6.0 origin/main -m "v2.6.0 -- <Release Title>" && git push origin v2.6.0
-git push --force-with-lease origin origin/main:refs/heads/beta
-```
+When a Sprint or Beta cycle has been play-tested on `https://shthed.github.io/capy/beta/` and approved for Production + Play Store release, follow the complete Release Promotion workflow in [`PROJECT.md` Section 5](./PROJECT.md#5-release-promotion-and-changelog-governance): split/promote [`CHANGELOG.md`](./CHANGELOG.md) channel headings cleanly, open a `beta -> main` PR and mark ready so `Playwright E2E Release Gate` runs in CI, tag `vX.Y.Z` on `origin/main` after Owner-approved merge, and re-align `origin/beta` to `origin/main` when appropriate.
 
 ### Step 2: Local Development & Verification
 
@@ -367,63 +270,26 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 # NEVER run ./gradlew app:installDebug unless explicitly requested by the user.
 ```
 
-### Step 3: Pull Request Standards, GitHub Agile Metadata, Overview Bullets & Live Previews
+### Step 3: PR Sync-on-Push, Link Standards & Merge Readiness
 
-1. **Clean, Prefix-Free Action-Oriented PR Titles**: Write clear, high-level action-oriented titles focusing on the overall purpose of the PR (e.g., `Add floating precision loupe magnifier for micro-regions`, `Fix Co-op welcome persistence and replay rewind UNFILL sync`). Never put `feat(scope):`, `EPIC-*`, `US-*`, or comma-separated laundry lists in the PR title—put Agile taxonomy in GitHub Labels, Milestones, and the `**Agile Scope**` header line instead.
-2. **GitHub Labels & Sprint Milestones**: Attach all relevant labels and the active Sprint Milestone (`--milestone "Sprint N: ..."`) when creating or editing a PR:
-   - *Epic & Platform Scope*: `epic` (Parent Epic Tracking Issues `#476`--`#480`), `epic:1`..`epic:5`, `web`, `android`.
-   - *Work Type*: `feature`, `fix`, `docs`, `ui`, `testing`, `ci`, `deps`.
-3. **Top-of-PR Live Preview & `Agile Scope` Callout**: Whenever `deploy-branch.yml` deploys an Alpha PR preview, place the playable preview URL (`https://shthed.github.io/capy/pull/<number>/`), Android preview APK (`https://shthed.github.io/capy/pull/<number>/capy.apk`), and `**Agile Scope**: Tracked in #<epic-issue> (EPIC-X / US-X.Y: TASK-X.Ya) | **Builds on**: #<prev-pr> | **Sprint**: Sprint N` at the very top of the PR body.
-4. **Scannable Plain-English Top Overview Bullets & "Why" Rationale**: Immediately below the live preview and Agile Scope callout (and above the commit-pinned change breakdown), summarize everything included in the PR and *why* it was needed using **concise, scannable bullet points** rather than a dense multi-sentence paragraph. If a PR bundles multiple unrelated bugfixes or cleanup chores together, state that candidly rather than inventing an artificial unifying theme, and explain the *why* behind each major work item.
-5. **Commit-Pinned Line Links**: Whenever referencing code lines in PR bodies, PR comments, or chat summaries, **never** link to `blob/main/...` (which drifts over time) or `blob/<feature-branch>/...` (which `404`s after branch deletion). Always pin to the exact commit SHA or PR diff anchor:
-   - `https://github.com/shthed/capy/blob/<commit-sha>/<path>#L<start>-L<end>`
-   - `https://github.com/shthed/capy/pull/<number>/files#diff-<sha256(path)>R<start>-R<end>`
+All PR title/label/Milestone rules, top-of-PR live preview templates, **`PR Readiness Score` & `PR Readiness Checklist` (`>= 95%`)**, and closed-PR recovery commands live canonically in [`PROJECT.md` Section 4](./PROJECT.md#4-pull-request-lifecycle-and-readiness-gates). Preserve these engineering invariants on every PR:
 
-### Step 4: Pre-Merge Development Summary & End-of-PR 5-Pillar Readiness Score (`>= 95%`)
-
-Before asking the human to merge a PR:
-1. **Check for Merge Conflicts Against Target Base (`origin/beta` or `origin/main`)**: Run `git fetch origin beta main` and `gh pr view <number> --json mergeable,mergeStateStatus` to confirm `mergeable: "MERGEABLE"` (`mergeStateStatus: "CLEAN"`). If the base branch has advanced or any conflict exists, immediately rebase onto the target base, resolve conflicts cleanly, re-verify tests/links, and `git push --force-with-lease` before asking for review.
-2. Post a mobile-friendly **Development Summary comment** on the PR (using structured bullet lists—never wide tables!) documenting user requirements, architectural decisions, commit-pinned implementation links, verification output, and visual checks (never include secrets, tokens, or raw chat transcripts).
-3. Compute the **5-Pillar PR Readiness & Perfection Confidence Score (`0--100%`)**:
-   - **Pillar 1 -- Functionality & Edge Cases (`20` pts)**: Touch/mouse gestures, persistence, modal back-stack, viewport clamping, and fallbacks verified.
-   - **Pillar 2 -- Automated Tests (`20` pts)**: `npm test` (engine, codec, Playwright E2E) and Android JUnit4 tests pass deterministically inside the Antigravity VM.
-   - **Pillar 3 -- Performance & Golden Invariants (`20` pts)**: Zero per-frame allocations, worker-only segmentation, relative `./assets/...` URLs, and safe `NativeBridge` fallbacks.
-   - **Pillar 4 -- Docs & Changelog Sync (`20` pts)**: [`web/package.json`](./web/package.json) version bumped on code PRs, [`CHANGELOG.md`](./CHANGELOG.md) updated with an active `(Alpha)`/`(Beta)`/`(Production)` heading marker and a flat single brief bullet ending in a bare `#<number>` PR link, commit-pinned file/line links included in the PR description and summary comment, completed `BUG-*` / `TASK-*` items deleted from [`TODO.md`](./TODO.md), completed Stories/Epics archived in [`ROADMAP.md`](./ROADMAP.md) + checked off in `#476`--`#480`, and subsystem `.md` files synchronized (zero emojis/ASCII art, mobile-safe lists).
-   - **Pillar 5 -- CI, Mergeability & Preview Verification (`20` pts)**: Zero merge conflicts (`MERGEABLE` / `CLEAN` atop target base), local lint/build and GitHub Actions pass on HEAD, and both the live preview URL and scannable plain-English overview bullets appear at the top of the PR description (or intentional `paths-ignore` skip verified for `.md`-only PRs).
-4. **End-of-PR Placement, Collapsible `<details>` Rubric & Conditional In-PR Subtask Checklist**:
-   - Require **`>= 95%`** before requesting merge approval. Self-correct technical/test/doc gaps automatically; use `/grill-me` if design ambiguity remains.
-   - Place the **`### PR Readiness & Perfection Confidence Score: <N>% (<N> / 100)`** section at the **end** of the PR description (and at the end of the PR Development Summary comment):
-     - Wrap the detailed 5-Pillar breakdown, test commands, and invariant checks inside a collapsible `<details><summary>Expand 5-Pillar Readiness Rubric & Verification Details (100 / 100)</summary> ... </details>` block (with blank lines immediately after `</summary>` and before `</details>`).
-     - Immediately after `</details>`, finish the PR description with a **concise closing note** explaining in plain English why you believe the PR is complete/perfect (or noting the exact `-N` point reason if `< 100%`).
-     - **Only list `TODO.md` subtasks if included in this PR and `< 100%` complete**: Append a `- [ ] ...` Markdown checklist **only** when the PR itself is not yet `100%` complete and still has remaining `TODO.md` subtasks scoped to ship inside *this* PR. Never list unrelated repository-wide backlog items at the bottom of a `100%` complete PR.
-   - Also report the score concisely in the chat message requesting merge approval.
-5. **Wait for Explicit Approval**: Never merge a PR or push directly to `main` or `beta` without explicit user confirmation.
-
-### Reopening & Continuing Work on a Closed Pull Request
-
-- **Closed Without Merging (`state: CLOSED`)**: Can be reopened on the **same PR number**, even after `cleanup-closed-pr.yml` deleted its remote branch, because GitHub retains `refs/pull/<number>/head`:
-  ```bash
-  # 1. Fetch the exact closing commit into the PR's original head branch name
-  git fetch origin pull/<number>/head:<original-branch-name>
-  # 2. Push that exact SHA to origin so GitHub unlocks reopening
-  git push origin <original-branch-name>
-  # 3. Reopen the pull request (automatically triggers a fresh preview deploy)
-  gh pr reopen <number>
-  # 4. Checkout, rebase onto target base (origin/beta or origin/main), and push follow-up commits
-  git checkout <original-branch-name>
-  git pull --rebase origin beta
-  git push --force-with-lease origin <original-branch-name>
-  ```
-- **Already Merged (`state: MERGED`)**: Immutable on GitHub. Always create a new branch from `origin/beta` and open a new PR for follow-up work.
+- **PR Preview Paths vs. GitHub PR URLs**: Alpha GitHub Pages previews deploy to `https://shthed.github.io/capy/alpha/<number>/` (and `/alpha/<number>/capy.apk`), whereas GitHub repository diff links (`https://github.com/shthed/capy/pull/<number>/files#diff-...`) and git recovery refs (`refs/pull/<number>/head`) keep GitHub's native `/pull/` path. Pin code links in PR bodies and comments to exact commit SHAs (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
+- **PR Description Sync-on-Push Rule**: Immediately update PR title, overview bullets, target version, SHA-pinned line links, labels, Milestone, and `gh pr view <num> --json mergeable,mergeStateStatus` (`MERGEABLE` / `CLEAN`) whenever follow-up commits or rebases alter scope or state.
+- **Clickable Link Standard**: Format PR references as clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` links and Epic references as `[EPIC-N](https://github.com/shthed/capy/issues/<num>)` (never bare/backticked `#<epic-issue>` or `[#<epic-issue>](.../issues/...)`).
+- **Wait for Explicit Approval & Close Reports Clearly**: Never merge a PR or push directly to `main` or `beta` without explicit Owner confirmation. Always close status reports, handoffs, and review updates with an explicit **Needs Your Testing / Approval** summary listing any clickable PRs or preview/Beta links awaiting Project Owner action (noting any holds), or explicitly confirming when none is needed yet.
 
 ---
 
 ## 7. CI/CD Pipeline & Automated Cleanup Architecture
 
-Capy runs five coordinated GitHub Actions workflows in [`.github/workflows/`](./.github/workflows):
+Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github/workflows):
+<!-- capy-dev-only:start -->
+*(On `shthed/capy` `beta`, three additional repository-specific automation workflows—[`open-pr.yml`](./.github/workflows/open-pr.yml), [`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml), and [`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml)—bring the total to **8** workflows on `beta`, vs. **7** on `main` prior to `open-pr.yml` promotion.)*
+<!-- capy-dev-only:end -->
 
 ### 1. Unified 3-Tier Build, E2E Release Gate & Pages Deployment ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
-- **Fast Daily CI + Full E2E Production Gate**: Daily `feature/* -> beta` PRs run `< 2s` sanity checks, TypeScript lint, Web compilation, and Android JUnit4 checks without heavy Playwright Chromium downloads so Alpha `/pull/<number>/` previews deploy rapidly (while the AI agent runs `npm test` locally in the Antigravity VM). Marking a **Release Promotion PR (`beta -> main`)** ready for review (`draft == false`) automatically activates the **`Playwright E2E Release Gate`** job in GitHub Actions so live production `/` cannot be updated unless the full SSR + Chromium E2E suite passes in CI.
+- **Fast Daily CI + Full E2E Production Gate**: Daily `feature/* -> beta` PRs run `< 2s` sanity checks, TypeScript lint, Web compilation, and Android JUnit4 checks without heavy Playwright Chromium downloads so Alpha `/alpha/<number>/` previews deploy rapidly (while the AI agent runs `npm test` locally in the Antigravity VM). Marking a **Release Promotion PR (`beta -> main`)** ready for review (`draft == false`) automatically activates the **`Playwright E2E Release Gate`** job in GitHub Actions so live production `/` cannot be updated unless the full SSR + Chromium E2E suite passes in CI.
 - **Sub-2s Documentation Fast-Path (`isDocsOnlyPr`)**: Pull requests that exclusively touch `**.md`, `docs/**`, `notes/**`, `.gitignore`, or `LICENSE` pass the `Build & Test` check run in `< 2s` (satisfying required branch ruleset checks) while skipping Web/Android compilation and Pages deployment.
 - **Job 1 -- `build` (`Build & Test`, `contents: read`)**:
   - Runs concurrently across open PRs (`main` and `beta` bases) with `cancel-in-progress: true` per PR/ref.
@@ -432,29 +298,31 @@ Capy runs five coordinated GitHub Actions workflows in [`.github/workflows/`](./
   - Runs automatically when `github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.draft == false`, executing `npx playwright install --with-deps chromium && npm test` and gating `deploy`.
 - **Job 3 -- `deploy` (`Deploy to GitHub Pages`, `contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
   - Guarded by `github.event.repository.has_pages == true` and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
-  - Publishes open Alpha PR builds to `/pull/<number>/` and `/pull/<number>/capy.apk`, then posts or updates the zero-emoji PR preview comment.
-  - Publishes `beta` branch pushes to `/beta/` (`https://shthed.github.io/capy/beta/`) and `/beta/capy.apk` without modifying production `/`.
-  - Publishes `main` branch pushes to `/` (`https://shthed.github.io/capy/`) and `/capy.apk` (excluding `/pull/` and `/beta/` during `rsync`).
+  - Publishes open Alpha PR builds to `/alpha/<number>/` and `/alpha/<number>/capy.apk`, regenerates `/alpha/index.html` + `/alpha/manifest.json` via [`.github/scripts/generate-pr-manifest.mjs`](./.github/scripts/generate-pr-manifest.mjs) (seeding root `404.html` from [`web/public/404.html`](./web/public/404.html) when missing), and posts or updates the zero-emoji PR preview comment.
+  - Publishes `beta` branch pushes to `/beta/` (`https://shthed.github.io/capy/beta/`) and `/beta/capy.apk` without modifying production `/`, refreshing root `404.html` via `--refresh-404`.
+  - Publishes `main` branch pushes to `/` (`https://shthed.github.io/capy/`) and `/capy.apk` (excluding `/alpha/` and `/beta/` during `rsync`), refreshing root `404.html` via `--refresh-404`.
   - Squashes `gh-pages` into a single **orphan commit** on every push so binary `.apk` artifacts never bloat Git history.
 
 ### 2. Automated GitHub Release & Play Store Bundle Publisher ([`release.yml`](./.github/workflows/release.yml))
 - Triggered automatically on `push: tags: ['v*.*.*']` (supporting both stable `v2.6.0` tags on `main` and `--prerelease` `v2.6.0-beta.1` tags on `beta`) or manually via `workflow_dispatch`.
-- Injects `vars.VITE_GOOGLE_CLIENT_ID`, `vars.CAPY_PLAY_GAMES_APP_ID`, and `vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`, runs `npm run test:sanity && npm run lint && npm run build`, runs `./gradlew app:testDebugUnitTest`, builds `capy-<tag>.apk` (plus unversioned `capy.apk` on stable non-prerelease tags so `https://capypaint.com/capy.apk` always resolves) and the Google Play Store `capy-<tag>.aab` Android App Bundle (`bundleRelease`), packages `capy-web-<tag>.tgz`, extracts the matching `### X.Y` notes from [`CHANGELOG.md`](./CHANGELOG.md), and publishes the GitHub Release.
+- Injects `vars.VITE_GOOGLE_CLIENT_ID`, `vars.CAPY_PLAY_GAMES_APP_ID`, and `vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`, runs `npm run test:sanity && npm run lint && npm run build`, runs `./gradlew app:testDebugUnitTest`, builds `capy-<tag>.apk` (plus unversioned `capy.apk` on stable non-prerelease tags so `https://capypaint.com/capy.apk` always resolves) and the Google Play Store `capy-<tag>.aab` Android App Bundle (`bundleRelease`), packages `capy-web-<tag>.tgz`, extracts the matching `### X.Y.Z` / `### X.Y` notes from [`CHANGELOG.md`](./CHANGELOG.md) via [`.github/scripts/compile-changelog.mjs`](./.github/scripts/compile-changelog.mjs), and publishes the GitHub Release.
 
 ### 3. Closed PR Preview & Branch Cleanup ([`cleanup-closed-pr.yml`](./.github/workflows/cleanup-closed-pr.yml))
 - Triggered automatically on `pull_request: types: [closed]` (both merged and closed-unmerged PRs).
-- Deletes ephemeral PR head branches from `origin` (explicitly protecting both `main` and `beta` so merging a `beta -> main` Release Promotion PR never deletes `origin/beta`) and invokes `.github/scripts/cleanup-gh-pages-previews.mjs --target-pr <number> --ignore-recency` (preserving `/beta/`, `/pull/` open PRs, `/assets/`, and `/web1/`).
+- Deletes ephemeral PR head branches from `origin` (explicitly protecting both `main` and `beta` so merging a `beta -> main` Release Promotion PR never deletes `origin/beta`), invokes `.github/scripts/cleanup-gh-pages-previews.mjs --target-pr <number> --ignore-recency` (preserving `/beta/`, `/alpha/` open PRs, `/assets/`, and `/web1/`), and regenerates `/alpha/index.html` and `/alpha/manifest.json` via [`.github/scripts/generate-pr-manifest.mjs`](./.github/scripts/generate-pr-manifest.mjs).
 
 ### 4. Scheduled Stale Branch & Orphan Sweep ([`cleanup-branches.yml`](./.github/workflows/cleanup-branches.yml))
 - Runs daily at `06:00 UTC` (`cron: '0 6 * * *'`) or manually via `workflow_dispatch`.
-- Invokes `.github/scripts/cleanup-branches.mjs` to prune merged/stale branches (`>= 1` day old) matching `automation/`, `feature/`, `fix/`, `chore/`, `ci/`, `deps/`, `docs/`, or `codex/` (never touching `main` or `beta`), followed by `cleanup-gh-pages-previews.mjs` to remove any orphaned `/pull/` directories while preserving `/beta/`.
+- Invokes `.github/scripts/cleanup-branches.mjs` to prune merged/stale branches (`>= 1` day old) matching `automation/`, `feature/`, `fix/`, `chore/`, `ci/`, `deps/`, `docs/`, or `codex/` (never touching `main` or `beta`), followed by `cleanup-gh-pages-previews.mjs` to remove any orphaned `/alpha/` directories while preserving `/beta/`.
 
 ### 5. Production Cloudflare Workers Deployment ([`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml))
 - Triggered on `push` to `main` (touching `web/**`, `worker/**`, `wrangler.jsonc`, or the workflow file) and `workflow_dispatch`.
 - When `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets are configured (or via Cloudflare Workers Builds native Git integration), runs `npm run test:sanity && npm run lint && npm run build`, deploys [`wrangler.jsonc`](./wrangler.jsonc) + [`worker/index.ts`](./worker/index.ts) (`CoopRoomDurableObject`) to `https://capypaint.com/` via `cloudflare/wrangler-action@v4` (`wranglerVersion: '4.160.1'`), and verifies `https://capypaint.com/api/health`. Repositories without Cloudflare secrets skip cleanly in `< 2s`.
 <!-- capy-dev-only:start -->
-- **Dual AI & Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**: Enforces Draft-first PRs, independent AI Reviewer approval (`review:ai-approved` backed by `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<HEAD_SHA> score=<SCORE>% -->` with `score >= 95%`), and separate post-push Human Project Owner sign-off (`review:owner-approved` or `APPROVED`/`LGTM`) via the required `capy/review-gate` commit status on `HEAD` (paired with `github-actions[bot]` review dismissal on new pushes).
-- **Automated Clean-Room Public Mirror ([`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml))**: Every merge to `shthed/capy` `main` exports a clean-room copy via [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs) (`--stage-dir`), verifies zero `shthed` byte leaks across all files and commit messages, strips dev-only mirror/review workflows, pushes a linear commit authored solely by `capyboop` to `https://github.com/capyboop/capy`, and syncs the `v<version>` release tag when `CAPYBOOP_SYNC_TOKEN` is configured.
+- **Bot-Authored Draft PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)) & CI Triggers**: Opens idempotent `github-actions[bot]`-authored PRs targeting `beta` or `main` via `workflow_dispatch` (`gh workflow run open-pr.yml`, falling back to `gh pr create` only if `open-pr.yml` has not yet landed on `main`) so `shthed` can use GitHub's native 1-click **Approve** button. Opening with `draft=true` pairs with `gh pr ready <num>` (`pull_request: ready_for_review`), follow-up pushes (`synchronize`), or `gh workflow run deploy-branch.yml` to trigger `Build & Test`, Pages previews, and `Playwright E2E Release Gate` on `main`.
+- **Dual AI & Owner PR Review Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml))**: Enforces Draft-first PRs, independent AI Reviewer approval (`review:ai-approved` backed by `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<HEAD_SHA> score=<SCORE>% -->` with `score >= 95%`), and separate post-push Human Project Owner sign-off via the required `capy/review-gate` commit status on `HEAD`. On `github-actions[bot]`-opened PRs, requires a native GitHub **Approve** review matching exact `HEAD` SHA (empty body allowed, tolerant of commit-clock skew relative to `latestForcePushMs`), leaves legacy labels/comments `pending` until native Approve, and skips `github-actions[bot]` self-approval to avoid HTTP 422; manual owner-authored PRs preserve legacy `review:owner-approved` / `APPROVED` / `LGTM` fallback.
+- **Automated Clean-Room Public Mirror ([`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml))**: Every merge to `shthed/capy` `main` exports a clean-room copy via [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs) (`--stage-dir`), verifies zero `shthed` byte leaks across all files and commit messages, strips dev-only mirror/review/bot-PR workflows, pushes a linear commit authored solely by `capyboop` to `https://github.com/capyboop/capy`, and syncs the `v<version>` release tag when `CAPYBOOP_SYNC_TOKEN` is configured.
+- **Automated Epic Checklist Sync ([`sync-agile-tracker.yml`](./.github/workflows/sync-agile-tracker.yml))**: On merged `beta`/`main` PRs (`pull_request_target: closed`), pure `actions/github-script` (zero PR checkout) maps `epic:1`..`epic:5` labels or `**Agile Scope**` (`EPIC-1`..`EPIC-5`) to open Parent Epic Issues and checks off or appends `- [x] [#NNN — Title](...)` automatically.
 <!-- capy-dev-only:end -->
 
 ---
@@ -467,19 +335,16 @@ Capy runs five coordinated GitHub Actions workflows in [`.github/workflows/`](./
 2. **Automatic Propagation**:
    - [`web/src/version.ts`](./web/src/version.ts) derives `APP_VERSION`, `APP_VERSION_CODE = (MAJOR * 10000) + (MINOR * 100) + PATCH` (rendered in `SettingsModal.tsx` `data-testid="app-version-badge"`), and `resolveReleaseChannel()` (`'stable' | 'beta' | 'alpha' | 'dev'`).
    - [`app/build.gradle.kts`](./app/build.gradle.kts) parses `../web/package.json` at Gradle configuration time to set `versionName` and monotonic `versionCode` for Google Play Console uploads.
-3. **When to Bump & How to Format `CHANGELOG.md`**:
-   - **`MAJOR` (`X.0.0`)**: Breaking storage/codec epochs or major platform launches (`0.x` covers pre-monorepo Legacy Web1 milestones `#1`--`#430`; `1.0.0` begins at Unified Monorepo launch `#431`).
+3. **When to Bump & How to Format `CHANGELOG.md`** *(release promotion & channel rules live in [`PROJECT.md` Section 5](./PROJECT.md#5-release-promotion-and-changelog-governance))*:
+   - **`MAJOR` (`X.0.0`)**: Breaking storage/codec epochs or major platform launches (`0.x` covers pre-monorepo Legacy Web1 milestones `#1`--`#430`; `1.0.0` begins at Unified Monorepo launch [#431](https://github.com/shthed/capy/pull/431)).
    - **`MINOR` (`2.Y.0`)**: Backward-compatible gameplay features, replay modes, UI controls, cloud/multiplayer drivers, or new `UserSettings` keys.
    - **`PATCH` (`2.5.Z`)**: Backward-compatible bug fixes, gesture edge-case corrections, performance optimizations, test consolidation, documentation/changelog audits, or dependency updates.
    - **Compact Mobile-First `CHANGELOG.md` Contract & Active Channel Suffixes** (enforced automatically by `npm run test:sanity` in [`web/scripts/sanity.mjs`](./web/scripts/sanity.mjs) and `npm test` in [`web/scripts/test.mjs`](./web/scripts/test.mjs)):
      - **Zero Preamble**: Start [`CHANGELOG.md`](./CHANGELOG.md) directly on line 1 with the newest `###` version heading—no `#` title, introductory prose, or `---` dividers.
-     - **Compact Headings With Active `(Alpha)` / `(Beta)` / `(Production)` Markers**: Format headings as `### MAJOR.MINOR - YYYY-MM-DD` (or `### MAJOR.MINOR.PATCH - YYYY-MM-DD` for standalone patches and `0.x.y` milestones), appending the live channel suffix on active release heads only:
-       - `### 2.6 - YYYY-MM-DD (Beta)` when `beta` is ahead of `main` (`https://shthed.github.io/capy/beta/`), with `### 2.5 - 2026-11-11 (Production)` marking live `main` (`https://shthed.github.io/capy/`).
-       - `### 2.5 - 2026-11-11 (Production, Beta)` immediately after a `beta -> main` Release Promotion when both `main` and `beta` serve the exact same version.
-       - `### 2.7 - YYYY-MM-DD (Alpha)` on standalone experimental Alpha branches ahead of `beta`.
-       - Superseded historical releases (`2.4` and older) carry **no suffix**; `npm run test:sanity` and `npm test` assert `exactly 1` `Production` heading, `<= 1` `Beta` heading, and `<= 1` `Alpha` heading across the entire file.
-     - **Same-Day Patch Rollup**: Combine consecutive `+0.0.1` (`PATCH`) releases on the same day under their `### MAJOR.MINOR - YYYY-MM-DD (...)` heading while still incrementing `"version"` in [`web/package.json`](./web/package.json) on each PR for monotonic Android `versionCode` builds.
-     - **Single Brief Bullet Ending in Bare `#<number>` PR Link**: Every item must be a single, flat, brief bullet ending with its merged PR link formatted as bare `#<number>` (no parentheses or `"PR"` prefix, zero `Added`/`Changed`/`Fixed` category sub-headings, zero nested sub-bullets, and zero inline file/line links).
+     - **Compact Headings With Active `(Alpha)` / `(Beta)` / `(Production)` Markers**: Format headings as `### MAJOR.MINOR - YYYY-MM-DD` (or `### MAJOR.MINOR.PATCH - YYYY-MM-DD` for standalone patches and `0.x.y` milestones), appending the live channel suffix on active release heads only (`npm run test:sanity` and `npm test` assert `exactly 1` `Production` heading, `<= 1` `Beta` heading, and `<= 1` `Alpha` heading; superseded releases carry no suffix).
+     - **Same-Day Patch Rollup & Heading Split Rule**: Consecutive `+0.0.1` (`PATCH`) releases on the same UTC date may roll under `### MAJOR.MINOR - YYYY-MM-DD (Beta)` ONLY while `main` and `beta` do not carry distinct patch versions under that `MAJOR.MINOR`. Whenever `main` and `beta` serve distinct patch versions under the same `MAJOR.MINOR` (e.g., `main` serves `3.0.1` while `beta` advances through `3.0.2` -> `3.0.3`), split into explicit `### MAJOR.MINOR.PATCH - YYYY-MM-DD` headings (`### 3.0.1 - YYYY-MM-DD (Production)`, `### 3.0.2 - YYYY-MM-DD` untagged once superseded, and `### 3.0.3 - YYYY-MM-DD (Beta)` as the single newest Beta head) while incrementing `"version"` in [`web/package.json`](./web/package.json) on every code PR—keep `(Beta)` **only** on the single newest Beta patch heading and drop `(Beta)` from superseded same-day Beta patch headings (`sanity.mjs` enforces `betaHeadingCount <= 1`).
+     - **Single Brief Bullet Ending in Clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` PR Link**: Every item must be a single, flat, brief bullet ending with its clickable Markdown PR link `[#NNN](https://github.com/shthed/capy/pull/NNN)` (no parentheses, no `"PR"` prefix, no unlinked `#NNN`, zero `Added`/`Changed`/`Fixed` category sub-headings, zero nested sub-bullets, and zero inline file/line links).
+     - **Parallel-Safe `.changelog/` Fragments ([`.changelog/README.md`](./.changelog/README.md) & [`web/scripts/compile-changelog.mjs`](./web/scripts/compile-changelog.mjs))**: Feature PRs may drop `.changelog/<slug>.md` fragments (`bump: patch|minor|major`, optional `pr`, `epic`, `task`) validated by `sanity.mjs`, then compile atomically with `npm run changelog:compile` (or `npm run changelog:compile -- --promote` for `beta -> main`).
 
 ### B. Updating Dependencies (`web/` & `app/`)
 

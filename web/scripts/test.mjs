@@ -1,12 +1,22 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import zlib from 'node:zlib';
 import { chromium } from 'playwright';
 import { createServer, preview } from 'vite';
-import { runSanityChecks } from './sanity.mjs';
+import {
+  runSanityChecks,
+  validateChangelogChannelOrder,
+  validateEpicNaming,
+  validateNoLegacyPrRubric,
+  validatePrReadinessChecklist,
+  validatePrReadinessSpec,
+  validateRootGuideIndex,
+} from './sanity.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -30,7 +40,10 @@ async function waitForPuzzleLoaded(page) {
       !document.body.innerText.includes('Generating puzzle'),
     { timeout: 25000 }
   );
-  await page.waitForSelector('[aria-label="Palette dock"], [data-testid="replay-btn"]', { timeout: 25000 });
+  await page.waitForSelector(
+    '[aria-label="Palette dock"], [data-testid="replay-btn"], [data-testid="replay-controls-window"]',
+    { timeout: 25000 }
+  );
   await page.waitForTimeout(250);
 }
 
@@ -381,7 +394,7 @@ async function runCodecAndEngineTests() {
     assert.equal(betaCh.showChannelSwitcher, true);
 
     const alphaCh = versionMod.resolveReleaseChannel(
-      '/capy/pull/481/',
+      '/capy/alpha/481/',
       'https://shthed.github.io',
       ''
     );
@@ -389,6 +402,34 @@ async function runCodecAndEngineTests() {
     assert.equal(alphaCh.badgeLabel, 'ALPHA #481');
     assert.equal(alphaCh.prNumber, 481);
     assert.equal(alphaCh.showChannelSwitcher, true);
+
+    const alphaBranchCh = versionMod.resolveReleaseChannel(
+      '/capy/alpha/feature-x/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(alphaBranchCh.channel, 'alpha');
+    assert.equal(alphaBranchCh.badgeLabel, 'ALPHA');
+    assert.equal(alphaBranchCh.prNumber, null);
+    assert.equal(alphaBranchCh.showChannelSwitcher, true);
+
+    const legacyPrCh = versionMod.resolveReleaseChannel(
+      '/capy/PR/481/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(legacyPrCh.channel, 'alpha');
+    assert.equal(legacyPrCh.badgeLabel, 'ALPHA #481');
+    assert.equal(legacyPrCh.prNumber, 481);
+
+    const legacyPullCh = versionMod.resolveReleaseChannel(
+      '/capy/pull/481/',
+      'https://shthed.github.io',
+      ''
+    );
+    assert.equal(legacyPullCh.channel, 'alpha');
+    assert.equal(legacyPullCh.badgeLabel, 'ALPHA #481');
+    assert.equal(legacyPullCh.prNumber, 481);
 
     const devCh = versionMod.resolveReleaseChannel('/', 'http://localhost:3000', '');
     assert.equal(devCh.channel, 'dev');
@@ -462,12 +503,1415 @@ async function runCodecAndEngineTests() {
       true,
       `Expected >= 398 single-line PR bullets in CHANGELOG.md, got ${changelogBullets.length}`
     );
+    let changelogBulletRe = /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/;
+    /* capy-dev-only:start */
+    changelogBulletRe = /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/;
+    /* capy-dev-only:end */
     for (const bullet of changelogBullets) {
       assert.equal(
-        /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/.test(bullet),
+        changelogBulletRe.test(bullet),
         true,
-        `Each CHANGELOG.md bullet must end with a bare [#000] or #000 PR reference: ${bullet}`
+        `Each CHANGELOG.md bullet must end with a valid PR reference: ${bullet}`
       );
+    }
+
+    // 5b. Chronological changelog, Epic naming, dynamic guide indexing, and CI cleanup script unit checks
+    const validBetaChangelog = [
+      '### 3.0.3 - 2026-11-13 (Beta)',
+      '',
+      '- Beta item #493',
+      '',
+      '### 3.0.2 - 2026-11-13',
+      '',
+      '- Prior beta item #490',
+      '',
+      '### 3.0.1 - 2026-11-12 (Production)',
+      '',
+      '- Prod item #488',
+      '',
+      '### 2.7 - 2026-11-12',
+      '',
+      '- Older item #484',
+      '',
+      '### 0.1.0 - 2026-10-01',
+      '',
+      '- Initial #1',
+    ].join('\n');
+    const betaOrderRes = validateChangelogChannelOrder(validBetaChangelog, '3.0.3', {
+      enforceChannelOrder: true,
+    });
+    assert.equal(betaOrderRes.alphaIdx, -1);
+    assert.equal(betaOrderRes.betaIdx, 0);
+    assert.equal(betaOrderRes.prodIdx, 2);
+
+    const validAlphaBetaProd = [
+      '### 3.1.0 - 2026-11-14 (Alpha)',
+      '- Alpha #500',
+      '### 3.0.3 - 2026-11-13 (Beta)',
+      '- Beta #493',
+      '### 3.0.1 - 2026-11-12 (Production)',
+      '- Prod #488',
+      '### 0.1.0 - 2026-10-01',
+      '- Init #1',
+    ].join('\n');
+    const abpRes = validateChangelogChannelOrder(validAlphaBetaProd, '3.1.0', {
+      enforceChannelOrder: true,
+    });
+    assert.equal(abpRes.alphaIdx, 0);
+    assert.equal(abpRes.betaIdx, 1);
+    assert.equal(abpRes.prodIdx, 2);
+
+    const validCombinedProdBeta = [
+      '### 3.0.1 - 2026-11-12 (Production, Beta)',
+      '- Combined #488',
+      '### 2.7 - 2026-11-11',
+      '- Old #484',
+    ].join('\n');
+    const combinedRes = validateChangelogChannelOrder(validCombinedProdBeta, '3.0.1', {
+      enforceChannelOrder: true,
+    });
+    assert.equal(combinedRes.betaIdx, 0);
+    assert.equal(combinedRes.prodIdx, 0);
+
+    const validProdOnly = [
+      '### 3.0.1 - 2026-11-12 (Production)',
+      '- Prod #488',
+      '### 2.7 - 2026-11-11',
+      '- Old #484',
+    ].join('\n');
+    assert.equal(
+      validateChangelogChannelOrder(validProdOnly, '3.0.1', { enforceChannelOrder: true }).prodIdx,
+      0
+    );
+
+    // Minor rollup heading (3.0) matches patch version 3.0.4
+    const validMinorRollup = [
+      '### 3.0 - 2026-11-13 (Beta)',
+      '- Rollup #493',
+      '### 2.5 - 2026-11-11 (Production)',
+      '- Prod #483',
+    ].join('\n');
+    assert.equal(
+      validateChangelogChannelOrder(validMinorRollup, '3.0.4', { enforceChannelOrder: true }).betaIdx,
+      0
+    );
+
+    const crlfChangelogRes = validateChangelogChannelOrder(
+      validBetaChangelog.replace(/\n/g, '\r\n'),
+      '3.0.3',
+      { enforceChannelOrder: true }
+    );
+    assert.equal(crlfChangelogRes.betaIdx, 0);
+    assert.equal(crlfChangelogRes.prodIdx, 2);
+
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          [
+            '### 3.0 - 2026-11-13 (Beta)',
+            '### 2.7 - 2026-11-12 (Alpha)',
+            '### 2.5 - 2026-11-11 (Production)',
+          ].join('\n'),
+          '3.0.4',
+          { enforceChannelOrder: true }
+        ),
+      /Alpha heading must appear first/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0 - 2026-11-13 (Production)', '### 2.7 - 2026-11-12 (Beta)'].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /Beta heading must appear at or before Production/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          [
+            '### 3.0 - 2026-11-13 (Beta)',
+            '### 2.8 - 2026-11-12 (Production)',
+            '### 2.5 - 2026-11-11 (Beta)',
+          ].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /Expected <= 1 Beta heading|after Production/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          [
+            '### 3.0 - 2026-11-13 (Beta)',
+            '### 2.8 - 2026-11-12 (Production)',
+            '### 2.5 - 2026-11-11 (Alpha)',
+          ].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /Alpha heading must appear first|after Production/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0.1 - 2026-11-13 (Beta)', '### 3.0.2 - 2026-11-12 (Production)'].join('\n'),
+          '3.0.1',
+          { enforceChannelOrder: true }
+        ),
+      /strictly descending by version/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0 - 2026-11-13 (Beta)', '### 3.0.0 - 2026-11-12 (Production)'].join('\n'),
+          '3.0.0',
+          { enforceChannelOrder: true }
+        ),
+      /strictly descending by version/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0.2 - 2026-11-12 (Beta)', '### 3.0.1 - 2026-11-13 (Production)'].join('\n'),
+          '3.0.2',
+          { enforceChannelOrder: true }
+        ),
+      /non-increasing by date/
+    );
+    assert.throws(
+      () =>
+        validateChangelogChannelOrder(
+          ['### 3.0.2 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)'].join('\n'),
+          '3.0.4',
+          { enforceChannelOrder: true }
+        ),
+      /missing active channel heading for 3\.0\.4/
+    );
+
+    const validEpicUrl = 'https://github.com/' + 'capyboop/capy/issues/477';
+    const validPrRef = '[' + '#482](' + 'https://github.com/' + 'capyboop/capy/pull/482)';
+    validateEpicNaming(`See [EPIC-2](${validEpicUrl}), plain EPIC-2, and ${validPrRef}`, 'DEV.md');
+    for (const badNum of ['476', '477', '480']) {
+      assert.throws(
+        () => validateEpicNaming(`Legacy #'${badNum}`.replace("'", ''), 'TODO.md'),
+        /EPIC-N/
+      );
+    }
+    const badIssueLink = '[' + '#481](' + 'https://github.com/' + 'capyboop/capy/issues/481)';
+    assert.throws(() => validateEpicNaming(`Link ${badIssueLink}`, 'ROADMAP.md'), /EPIC-N/);
+    const badCombinedEpic = '[EPIC-2 (' + '#477)](' + validEpicUrl + ')';
+    assert.throws(() => validateEpicNaming(`Combined ${badCombinedEpic}`, 'AGENTS.md'), /EPIC-N/);
+    const badUnlinkedCombinedEpic = '[EPIC-6 (#' + '481)]';
+    assert.throws(() => validateEpicNaming(`Unlinked ${badUnlinkedCombinedEpic}`, 'ROADMAP.md'), /EPIC-N/);
+
+    const tmpGuideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-guide-index-'));
+    try {
+      const rootMdNames = [
+        'README.md',
+        'PROJECT.md',
+        'DEV.md',
+        'AGENTS.md',
+        'ROADMAP.md',
+        'TODO.md',
+        'WEB.md',
+        'PUZZLE.md',
+        'APP.md',
+        'CLOUD.md',
+        'TESTING.md',
+        'CHANGELOG.md',
+        'LICENSE.md',
+      ];
+      for (const name of rootMdNames) {
+        fs.writeFileSync(path.join(tmpGuideDir, name), `# ${name}\n`, 'utf8');
+      }
+      const allLinks = rootMdNames.map((n) => `[${n}](./${n})`).join(' ');
+      fs.writeFileSync(path.join(tmpGuideDir, 'README.md'), `# README\n${allLinks}\n`, 'utf8');
+      fs.writeFileSync(path.join(tmpGuideDir, 'DEV.md'), `# DEV\n${allLinks}\n`, 'utf8');
+      fs.writeFileSync(path.join(tmpGuideDir, 'PROJECT.md'), `# PROJECT\n${allLinks}\n`, 'utf8');
+      const guideRes = validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true });
+      assert.equal(guideRes.hasProjectMd, true);
+      assert.equal(guideRes.rootMdFiles.length, 13);
+
+      fs.writeFileSync(
+        path.join(tmpGuideDir, 'README.md'),
+        `# README\n${allLinks.replace('./PROJECT.md', './OTHER.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () => validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true }),
+        /README\.md must link \.\/PROJECT\.md/
+      );
+      fs.writeFileSync(path.join(tmpGuideDir, 'README.md'), `# README\n${allLinks}\n`, 'utf8');
+
+      fs.writeFileSync(
+        path.join(tmpGuideDir, 'PROJECT.md'),
+        `# PROJECT\n${allLinks.replace('./TESTING.md', './OTHER.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () => validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true }),
+        /PROJECT\.md must link \.\/TESTING\.md/
+      );
+      fs.writeFileSync(path.join(tmpGuideDir, 'PROJECT.md'), `# PROJECT\n${allLinks}\n`, 'utf8');
+
+      fs.unlinkSync(path.join(tmpGuideDir, 'PROJECT.md'));
+      assert.throws(
+        () => validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true }),
+        /PROJECT\.md must exist/
+      );
+    } finally {
+      fs.rmSync(tmpGuideDir, { recursive: true, force: true });
+    }
+
+    // Standalone %-first PR Readiness Checklist & legacy rubric guards (runs in clean-room export too)
+    {
+      const oneItem = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** **Docs Sync**: Verified.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '1-item test'
+      );
+      assert.equal(oneItem.overallScore, 100);
+      assert.equal(oneItem.itemCount, 1);
+      assert.deepEqual(oneItem.itemScores, [100]);
+      assert.equal(oneItem.summary, 'PR Readiness Checklist');
+
+      const threeItems = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 95.5%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- [x] **100%** — **Functionality**: Verified.',
+          '- **95.5%** — **Tests**: Verified.',
+          '- 91% — **Docs**: Remaining follow-up noted.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '3-item test'
+      );
+      assert.equal(threeItems.overallScore, 95.5);
+      assert.equal(threeItems.itemCount, 3);
+      assert.deepEqual(threeItems.itemScores, [100, 95.5, 91]);
+
+      const sixItems = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100% Check 1**: Functionality verified.',
+          '- **100% Check 2**: Automated tests passed.',
+          '- **100% Check 3**: Zero-allocation invariants preserved.',
+          '- **100% Check 4**: Mobile viewport verified.',
+          '- **100% Check 5**: Docs synced.',
+          '- **100% Check 6**: CI green.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '6-item test'
+      );
+      assert.equal(sixItems.overallScore, 100);
+      assert.equal(sixItems.itemCount, 6);
+
+      const eightItemsFullPr = validatePrReadinessChecklist(
+        [
+          '## Summary',
+          '',
+          '- Improved color layout with Tailwind bg-amber-400/20 accents and clean checks.',
+          '',
+          '- **Beta**: https://capypaint.com/beta/',
+          '- **Related PRs**: [#20](https://github.com/capyboop/capy/pull/20) [#100](https://github.com/capyboop/capy/pull/100)',
+          '',
+          '### PR Readiness Score: 99% (threshold >= 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Functionality & Edge Cases**: Verified.',
+          '- **100%** — **Automated Tests**: Verified.',
+          '- **100%** — **Performance & Golden Invariants**: Verified.',
+          '- **100%** — **Accessibility & Mobile Layout**: Verified.',
+          '- **100%** — **Android / Bridge Parity**: Verified.',
+          '- **100%** — **Cloud Sync / Worker Safety**: Verified.',
+          '- **95%** — **Docs & Changelog Sync**: Minor wording follow-up (-1%).',
+          '- **100%** — **CI, Mergeability & Preview Verification**: Verified.',
+          '',
+          '</details>',
+          '',
+          'Ready with -1% docs polish follow-up.',
+          '- [ ] Polish final release note wording in TODO follow-up.',
+        ].join('\n'),
+        '8-item PR body'
+      );
+      assert.equal(eightItemsFullPr.overallScore, 99);
+      assert.equal(eightItemsFullPr.itemCount, 8);
+
+      const prosePercentRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5%',
+          'All 100% of unit tests pass.',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Tests**: All unit checks pass.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'prose 100% before details'
+      );
+      assert.equal(prosePercentRes.overallScore, 97.5);
+      assert.equal(prosePercentRes.itemCount, 1);
+      assert.deepEqual(prosePercentRes.itemScores, [100]);
+
+      const thresholdProseRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5%',
+          'Threshold: 95% minimum; dropped 2.5% for docs follow-up.',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **97.5%** — **Docs**: Follow-up noted.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'threshold prose before details'
+      );
+      assert.equal(thresholdProseRes.overallScore, 97.5);
+      assert.equal(thresholdProseRes.itemCount, 1);
+      assert.deepEqual(thresholdProseRes.itemScores, [97.5]);
+
+      const fallbackProseRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score',
+          'Overall: 96%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **96%** — **Tests**: Verified.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'fallback overall score below heading'
+      );
+      assert.equal(fallbackProseRes.overallScore, 96);
+      assert.equal(fallbackProseRes.itemCount, 1);
+
+      const minParenRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5% (min 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'min 95% parenthetical on heading'
+      );
+      assert.equal(minParenRes.overallScore, 97.5);
+
+      const unicodeGteRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5% (≥ 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'unicode >= 95% threshold after heading score'
+      );
+      assert.equal(unicodeGteRes.overallScore, 97.5);
+
+      const unicodeGteBeforeRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score (≥ 95%): 97.5%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'unicode >= 95% threshold before heading score'
+      );
+      assert.equal(unicodeGteBeforeRes.overallScore, 97.5);
+
+      const trailingBoldNoteRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 99%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **99%** — **Verification**: Passed.',
+          '',
+          '</details>',
+          '',
+          '**PR Readiness Note**: All done.',
+        ].join('\n'),
+        'trailing bold PR Readiness note'
+      );
+      assert.equal(trailingBoldNoteRes.overallScore, 99);
+      assert.equal(trailingBoldNoteRes.itemCount, 1);
+      assert.deepEqual(trailingBoldNoteRes.itemScores, [99]);
+
+      const trailingHeadingRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 98%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **98%** — **Checks**: Passed.',
+          '',
+          '</details>',
+          '',
+          '### PR Readiness Follow-Up',
+          'None.',
+        ].join('\n'),
+        'trailing PR Readiness heading'
+      );
+      assert.equal(trailingHeadingRes.overallScore, 98);
+      assert.equal(trailingHeadingRes.itemCount, 1);
+
+      const multilineCommentRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '<!--',
+          '  note',
+          '-->',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'multiline HTML comment inside details'
+      );
+      assert.equal(multilineCommentRes.overallScore, 100);
+      assert.equal(multilineCommentRes.itemCount, 1);
+      assert.deepEqual(multilineCommentRes.itemScores, [100]);
+
+      const detailsOpenRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details open><summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'details open attribute'
+      );
+      assert.equal(detailsOpenRes.overallScore, 100);
+      assert.equal(detailsOpenRes.itemCount, 1);
+      assert.equal(detailsOpenRes.summary, 'PR Readiness Checklist');
+
+      const nestedBoldBacktickRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **`100%`** — **Tests**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'nested bold and backtick percentage'
+      );
+      assert.equal(nestedBoldBacktickRes.overallScore, 100);
+      assert.equal(nestedBoldBacktickRes.itemCount, 1);
+      assert.deepEqual(nestedBoldBacktickRes.itemScores, [100]);
+
+      const sectionBulletRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '- 5 points to note in this release:',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'unordered bullet inside PR Readiness section'
+      );
+      assert.equal(sectionBulletRes.overallScore, 100);
+      assert.equal(sectionBulletRes.itemCount, 1);
+
+      const makeInvalidSection = (bodyLines) =>
+        ['### PR Readiness Score: 98%', '', '<details>', '<summary>PR Readiness Checklist</summary>', '', ...bodyLines, '', '</details>'].join('\n');
+
+      for (const badText of [
+        '### 5-Pillar PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### 5 Pillar PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        makeInvalidSection(['- **95/100** — **Check**: Legacy fraction.']),
+        makeInvalidSection(['- **95 / 100** — **Check**: Legacy spaced fraction.']),
+        makeInvalidSection(['- **20/20** — **Check**: Legacy category fraction.']),
+        makeInvalidSection(['- **20 / 20** — **Check**: Legacy spaced category fraction.']),
+        makeInvalidSection(['- **100%** — **Check (20 pts)**: Legacy pts.']),
+        makeInvalidSection(['- **100%** — **Check (5 x 20)**: Legacy math.']),
+        makeInvalidSection(['- **100%** — **Pillar 1**: Legacy pillar number.']),
+        makeInvalidSection(['- **100%** — **Readiness Rubric**: Legacy rubric word.']),
+        makeInvalidSection(['- **Functionality**: 100%']),
+        makeInvalidSection(['1. Tests: 100%']),
+        makeInvalidSection([]),
+        makeInvalidSection(['- **105%** — **Bounds**: Out of range.']),
+        '### PR Readiness Score: 105%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: 100%\n\n- **100%** — **Check**: Missing details block.',
+        '### 5-Pillars PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: >= 95%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: ≥ 95%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        makeInvalidSection(['<!--', '  comment only', '-->']),
+        makeInvalidSection(['- **100%**']),
+        makeInvalidSection(['- 100%']),
+        makeInvalidSection(['- [x] **100%**']),
+        makeInvalidSection(['- **100%**:']),
+        makeInvalidSection(['- **95%** — **Docs**: -5 points deduction.']),
+        makeInvalidSection(['- **95%** — **Docs**: Deduction (- 5 points).']),
+        makeInvalidSection(['- **95%** — **Docs**: Explain `-N point` delta.']),
+        makeInvalidSection(['- **100%** — **Check**: 5-Pillars framework.']),
+        makeInvalidSection(['- **100%** — **Check**: 20-point scale.']),
+        makeInvalidSection(['- **100%** — **Check**: Worth **20** pts.']),
+      ]) {
+        assert.throws(() => validatePrReadinessChecklist(badText, 'negative fixture'));
+      }
+
+      // False-positive guards for legitimate URLs, Tailwind classes, dates, percentages, and Markdown bullets
+      validateNoLegacyPrRubric(
+        [
+          '### Overview',
+          '- 5 points to note in this release:',
+          '  - 3 points on readability and accessibility.',
+          '* 2 points for rollout timing.',
+          'Review these 5 points before merging.',
+          'Score: 98% (-2% docs, -5% follow-up).',
+          'See https://github.com/capyboop/capy/pull/20 and https://github.com/capyboop/capy/pull/100',
+          'Classes bg-amber-400/20 width="100%" ~15--20% 0.5x--20x 1/20th date 2026/01/20 100% offline per_page: 100',
+        ].join('\n'),
+        'false-positive-guard.md'
+      );
+
+      for (const badLegacyText of [
+        'Deduction: -5 points for docs.',
+        '- -5 points deducted for docs.',
+        '* -5 points deducted for docs.',
+        'Penalty (- 5 points) applied.',
+        'Score adjusted by - 5 points after review.',
+        'Describe gaps using `-N point` delta syntax.',
+        'Use 5-Pillars scoring.',
+        'Maximum 20-point scale.',
+        'Worth **20** pts per category.',
+        'Award `20` points per check.',
+      ]) {
+        assert.throws(
+          () => validateNoLegacyPrRubric(badLegacyText, 'legacy-negative.md'),
+          /Forbidden legacy/
+        );
+      }
+
+      // Spec validation with requireProjectMd: false (main-branch mode)
+      const tmpMainSpecDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-readiness-main-'));
+      try {
+        fs.writeFileSync(
+          path.join(tmpMainSpecDir, 'AGENTS.md'),
+          '# AGENTS\nReport >= 95% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
+          'utf8'
+        );
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness >= 95%.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
+        const mainSpecRes = validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false });
+        assert.equal(mainSpecRes.scannedFiles.length, 4);
+      } finally {
+        fs.rmSync(tmpMainSpecDir, { recursive: true, force: true });
+      }
+    }
+
+    /* capy-dev-only:start */
+    const tmpStrictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-sanity-strict-'));
+    try {
+      fs.mkdirSync(path.join(tmpStrictRepo, 'web/src'), { recursive: true });
+      fs.mkdirSync(path.join(tmpStrictRepo, 'app'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'web/package.json'),
+        JSON.stringify({ name: 'capy-paint', version: '3.0.4' }, null, 2),
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'web/src/version.ts'),
+        'export const code = major * 10000 + minor * 100 + patch;\n',
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'app/build.gradle.kts'),
+        'val capyVersionCode = (verMajor * 10000) + (verMinor * 100) + verPatch\n',
+        'utf8'
+      );
+      const strictRootMds = [
+        'README.md',
+        'PROJECT.md',
+        'DEV.md',
+        'AGENTS.md',
+        'ROADMAP.md',
+        'TODO.md',
+        'WEB.md',
+        'PUZZLE.md',
+        'APP.md',
+        'CLOUD.md',
+        'TESTING.md',
+        'CHANGELOG.md',
+        'LICENSE.md',
+      ];
+      const strictAllLinks = strictRootMds.map((n) => `[${n}](./${n})`).join(' ');
+      const strictAgentsDoc = `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictDevDoc = `# DEV.md\n${strictAllLinks}\nVerify PR Readiness Score (>= 95%).\n`;
+      for (const name of strictRootMds) {
+        if (name === 'CHANGELOG.md') continue;
+        const content =
+          name === 'AGENTS.md'
+            ? strictAgentsDoc
+            : name === 'PROJECT.md'
+              ? strictProjectDoc
+              : name === 'DEV.md'
+                ? strictDevDoc
+                : `# ${name}\n${strictAllLinks}\n`;
+        fs.writeFileSync(path.join(tmpStrictRepo, name), content, 'utf8');
+      }
+      const makeStrictChangelog = ({
+        headings = ['### 3.0.4 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)', '### 0.1.0 - 2026-10-01'],
+        bulletCount = 398,
+        firstBulletSuffix = '[#493](https://github.com/shthed/capy/pull/493)',
+      } = {}) => {
+        const lines = [headings[0], '', `- Top change ${firstBulletSuffix}`, ''];
+        for (let i = 1; i < headings.length; i++) {
+          lines.push(headings[i], '');
+          if (i === headings.length - 1) {
+            for (let b = 1; b < bulletCount; b++) {
+              lines.push(`- Historical change ${b} [#${b}](https://github.com/shthed/capy/pull/${b})`);
+            }
+          } else {
+            lines.push(`- Channel release [#${i}](https://github.com/shthed/capy/pull/${i})`, '');
+          }
+        }
+        return `${lines.join('\n')}\n`;
+      };
+      const strictChangelogPath = path.join(tmpStrictRepo, 'CHANGELOG.md');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      const strictRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(strictRes.version, '3.0.4');
+      assert.equal(strictRes.markdownFilesChecked, 13);
+
+      // 1. Missing ./PROJECT.md from README.md
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'README.md'),
+        `# README\n${strictAllLinks.replace('./PROJECT.md', './DEV.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /README\.md must link \.\/PROJECT\.md/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'README.md'), `# README\n${strictAllLinks}\n`, 'utf8');
+
+      // 2. Missing ./TESTING.md from PROJECT.md
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT\n${strictAllLinks.replace('./TESTING.md', './DEV.md')}\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /PROJECT\.md must link \.\/TESTING\.md/
+      );
+
+      // 3. Guide link hidden inside HTML capy-dev-only block must fail public indexing check
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT\n${strictAllLinks.replace('[TESTING.md](./TESTING.md)', '')}\n<!-- capy-dev-only:start -->\n[TESTING.md](./TESTING.md)\n<!-- capy-dev-only:end -->\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /PROJECT\.md must link \.\/TESTING\.md/
+      );
+
+      // 4. Legacy Epic issue ref fails when enforceEpicNaming: true
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `${strictProjectDoc}See #` + '477\n',
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /EPIC-N/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
+
+      // 5. Bare #490 bullet fails clickable PR link check
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({ firstBulletSuffix: '#490' }),
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /Invalid CHANGELOG bullet suffix/
+      );
+
+      // 6. Inverted Alpha after Beta fails enforceChannelOrder
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({
+          headings: [
+            '### 3.0.4 - 2026-11-13 (Beta)',
+            '### 2.7 - 2026-11-12 (Alpha)',
+            '### 2.5 - 2026-11-11 (Production)',
+            '### 0.1.0 - 2026-10-01',
+          ],
+        }),
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /Alpha heading must appear first/
+      );
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 6b. CRLF line endings in CHANGELOG.md normalize cleanly
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog().replace(/\n/g, '\r\n'), 'utf8');
+      const strictCrlfRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(strictCrlfRes.version, '3.0.4');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 7. Legacy PR rubric tokens fail across governance docs and .github workflows
+      for (const [relTarget, baseDoc, badSnippet] of [
+        ['PROJECT.md', strictProjectDoc, 'Use 5-Pillar scoring.\n'],
+        ['AGENTS.md', strictAgentsDoc, 'Score 95 / 100.\n'],
+        ['DEV.md', strictDevDoc, 'Check 20/20 items.\n'],
+        ['TESTING.md', `# TESTING.md\n${strictAllLinks}\n`, 'Award 20 pts per category.\n'],
+        ['README.md', `# README.md\n${strictAllLinks}\n`, 'See the PR Rubric.\n'],
+        ['PROJECT.md', strictProjectDoc, 'Use 5-Pillars scoring.\n'],
+        ['DEV.md', strictDevDoc, 'Use a 20-point scale.\n'],
+        ['TESTING.md', `# TESTING.md\n${strictAllLinks}\n`, 'Worth **20** pts per item.\n'],
+        ['README.md', `# README.md\n${strictAllLinks}\n`, 'Apply (- 5 points) penalty.\n'],
+        ['AGENTS.md', strictAgentsDoc, 'Avoid `-N point` phrasing.\n'],
+      ]) {
+        fs.writeFileSync(path.join(tmpStrictRepo, relTarget), `${baseDoc}${badSnippet}`, 'utf8');
+        assert.throws(
+          () =>
+            runSanityChecks({
+              repoRoot: tmpStrictRepo,
+              requireProjectMd: true,
+              enforceChannelOrder: true,
+              enforceEpicNaming: true,
+              enforcePrReadinessSpec: true,
+            }),
+          /Forbidden legacy/
+        );
+        fs.writeFileSync(path.join(tmpStrictRepo, relTarget), baseDoc, 'utf8');
+      }
+      fs.mkdirSync(path.join(tmpStrictRepo, '.github/workflows'), { recursive: true });
+      for (const badWorkflow of [
+        'name: CI\n# Check 5-Pillar 95/100\n',
+        'name: CI\n# Check 5-Pillars (**20** pts)\n',
+      ]) {
+        fs.writeFileSync(path.join(tmpStrictRepo, '.github/workflows/ci.yml'), badWorkflow, 'utf8');
+        assert.throws(
+          () =>
+            runSanityChecks({
+              repoRoot: tmpStrictRepo,
+              requireProjectMd: true,
+              enforceChannelOrder: true,
+              enforceEpicNaming: true,
+              enforcePrReadinessSpec: true,
+            }),
+          /Forbidden legacy/
+        );
+      }
+      fs.rmSync(path.join(tmpStrictRepo, '.github'), { recursive: true, force: true });
+
+      // 8. Missing flexible-count or %-start spec fails when enforcePrReadinessSpec: true
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line.\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /PROJECT\.md must allow variable/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
+
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'AGENTS.md'),
+        `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with as many items as needed.\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /AGENTS\.md must specify putting % at the start/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'AGENTS.md'), strictAgentsDoc, 'utf8');
+
+      // 9. CHANGELOG /pull/20 and /pull/100 URLs plus README width="100%" pass runSanityChecks
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'README.md'),
+        `# README.md\n${strictAllLinks}\n<img width="100%" alt="demo" />\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({
+          firstBulletSuffix: '[#100](https://github.com/shthed/capy/pull/100)',
+        }).replace(
+          'Historical change 20 [#20](https://github.com/shthed/capy/pull/20)',
+          'Rebuild interface [#20](https://github.com/shthed/capy/pull/20)'
+        ),
+        'utf8'
+      );
+      const urlGuardRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(urlGuardRes.version, '3.0.4');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'README.md'), `# README.md\n${strictAllLinks}\n`, 'utf8');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 9b. Unordered Markdown bullet "- 5 points to watch:" in a governance doc passes runSanityChecks
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'DEV.md'),
+        `${strictDevDoc}\n### Notes\n- 5 points to watch:\n  - 3 points on layout stability.\n`,
+        'utf8'
+      );
+      const bulletGuardRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(bulletGuardRes.version, '3.0.4');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'DEV.md'), strictDevDoc, 'utf8');
+
+      // 10. Missing PROJECT.md fails requireProjectMd: true
+      fs.unlinkSync(path.join(tmpStrictRepo, 'PROJECT.md'));
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /PROJECT\.md must exist/
+      );
+    } finally {
+      fs.rmSync(tmpStrictRepo, { recursive: true, force: true });
+    }
+    /* capy-dev-only:end */
+
+    // Unit-test .github/scripts/cleanup-gh-pages-previews.mjs and .github/scripts/cleanup-branches.mjs
+    const previewCleanupMod = await import('../../.github/scripts/cleanup-gh-pages-previews.mjs');
+    const branchCleanupMod = await import('../../.github/scripts/cleanup-branches.mjs');
+
+    const makeMockResponse = ({ ok = true, status = 200, statusText = 'OK', headers = {}, jsonData = null, textData = '' } = {}) => ({
+      ok,
+      status,
+      statusText,
+      headers: {
+        get: (key) => {
+          const found = Object.entries(headers).find(([k]) => k.toLowerCase() === String(key).toLowerCase());
+          return found ? found[1] : null;
+        },
+      },
+      json: async () => jsonData,
+      text: async () => textData,
+    });
+
+    // cleanup-gh-pages-previews: 504 transient retry -> 200
+    {
+      let calls = 0;
+      const sleeps = [];
+      const res = await previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls', {
+        baseDelayMs: 1,
+        sleepImpl: async (ms) => sleeps.push(ms),
+        fetchImpl: async () => {
+          calls += 1;
+          if (calls === 1) {
+            return makeMockResponse({ ok: false, status: 504, statusText: 'Gateway Timeout', textData: 'timeout' });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [] });
+        },
+      });
+      assert.equal(calls, 2);
+      assert.equal(sleeps.length, 1);
+      assert.deepEqual(res.data, []);
+    }
+
+    // cleanup-gh-pages-previews: 429 Retry-After honored -> 200
+    {
+      let calls = 0;
+      const sleeps = [];
+      await previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls', {
+        baseDelayMs: 1,
+        sleepImpl: async (ms) => sleeps.push(ms),
+        fetchImpl: async () => {
+          calls += 1;
+          if (calls === 1) {
+            return makeMockResponse({
+              ok: false,
+              status: 429,
+              statusText: 'Too Many Requests',
+              headers: { 'Retry-After': '0.005' },
+            });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [{ number: 1 }] });
+        },
+      });
+      assert.equal(calls, 2);
+      assert.equal(sleeps[0], 5);
+    }
+
+    // cleanup-gh-pages-previews: non-rate-limit 403 & 404 fail fast without retry
+    {
+      let calls404 = 0;
+      await assert.rejects(
+        () =>
+          previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls/999', {
+            baseDelayMs: 1,
+            sleepImpl: async () => {},
+            fetchImpl: async () => {
+              calls404 += 1;
+              return makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' });
+            },
+          }),
+        /404/
+      );
+      assert.equal(calls404, 1);
+
+      let calls403 = 0;
+      await assert.rejects(
+        () =>
+          previewCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/pulls', {
+            baseDelayMs: 1,
+            sleepImpl: async () => {},
+            fetchImpl: async () => {
+              calls403 += 1;
+              return makeMockResponse({ ok: false, status: 403, statusText: 'Forbidden' });
+            },
+          }),
+        /403/
+      );
+      assert.equal(calls403, 1);
+    }
+
+    // cleanup-gh-pages-previews: fetchPullRequests uses state=open + targeted PR lookup, ignoring 404
+    {
+      const requestedUrls = [];
+      const pulls = await previewCleanupMod.fetchPullRequests({
+        baseUrl: 'https://api.github.com/repos/a/b',
+        headers: {},
+        targetPr: 484,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async (url) => {
+          const href = String(url);
+          requestedUrls.push(href);
+          if (href.includes('/pulls/484')) {
+            return makeMockResponse({ ok: true, status: 200, jsonData: { number: 484, state: 'closed', head: { ref: 'feature/x' } } });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [{ number: 492, state: 'open', head: { ref: 'fix/y' } }] });
+        },
+      });
+      assert.equal(requestedUrls.some((u) => u.includes('state=open')), true);
+      assert.equal(requestedUrls.some((u) => u.includes('state=all')), false);
+      assert.equal(requestedUrls.some((u) => u.endsWith('/pulls/484')), true);
+      assert.equal(pulls.length, 2);
+
+      const missingTargetPulls = await previewCleanupMod.fetchPullRequests({
+        baseUrl: 'https://api.github.com/repos/a/b',
+        headers: {},
+        targetPr: 999,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async (url) => {
+          if (String(url).includes('/pulls/999')) {
+            return makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' });
+          }
+          return makeMockResponse({ ok: true, status: 200, jsonData: [{ number: 492, state: 'open', head: { ref: 'fix/y' } }] });
+        },
+      });
+      assert.equal(missingTargetPulls.length, 1);
+    }
+
+    // cleanup-gh-pages-previews: selectPreviewDeletions & runCleanupGhPagesPreviews temp dir
+    {
+      const selected = previewCleanupMod.selectPreviewDeletions(
+        [
+          { name: '492', kind: 'pull', prNumber: 492, pull: { state: 'open' }, prs: [], hasLiveBranch: true, isRecent: false },
+          { name: '484', kind: 'pull', prNumber: 484, pull: { state: 'closed' }, prs: [], hasLiveBranch: false, isRecent: false },
+          { name: 'pull', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: true },
+          { name: 'PR', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: true },
+          { name: 'legacy-old', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: false, isRecent: false },
+          { name: 'legacy-live', kind: 'legacy', prNumber: null, pull: null, prs: [], hasLiveBranch: true, isRecent: false },
+        ],
+        { targetPr: null, ignoreRecency: false }
+      );
+      assert.deepEqual(
+        selected.map((s) => s.name),
+        ['484', 'pull', 'PR', 'legacy-old']
+      );
+
+      const tmpPages = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-gh-pages-cleanup-'));
+      try {
+        fs.mkdirSync(path.join(tmpPages, 'alpha', '492'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'alpha', '484'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'pull', '123'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'PR', '456'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'stale-legacy-dir'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'live-branch-dir'), { recursive: true });
+        fs.mkdirSync(path.join(tmpPages, 'beta'), { recursive: true });
+        const runRes = await previewCleanupMod.runCleanupGhPagesPreviews({
+          pagesDir: tmpPages,
+          ignoreRecency: false,
+          nowMs: Date.now() + 2 * 24 * 60 * 60 * 1000,
+          repository: 'a/b',
+          token: 'tok',
+          defaultBranch: 'main',
+          remoteBranches: ['main', 'beta', 'live-branch-dir'],
+          baseDelayMs: 1,
+          sleepImpl: async () => {},
+          fetchImpl: async () =>
+            makeMockResponse({
+              ok: true,
+              status: 200,
+              jsonData: [{ number: 492, state: 'open', head: { ref: 'fix/pr-url-rename' } }],
+            }),
+        });
+        assert.deepEqual(runRes.deleted.sort(), ['PR', 'alpha/484', 'pull', 'stale-legacy-dir']);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'alpha', '492')), true);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'alpha', '484')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'pull')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'PR')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'stale-legacy-dir')), false);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'live-branch-dir')), true);
+        assert.equal(fs.existsSync(path.join(tmpPages, 'beta')), true);
+      } finally {
+        fs.rmSync(tmpPages, { recursive: true, force: true });
+      }
+    }
+
+    // cleanup-branches: 503 retry, DELETE 404 on retry attempt > 0 success vs attempt 0 fail
+    {
+      let delCalls = 0;
+      await branchCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/git/refs/heads/feature%2Fx', {
+        method: 'DELETE',
+        retries: 2,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async () => {
+          delCalls += 1;
+          if (delCalls === 1) {
+            return makeMockResponse({ ok: false, status: 502, statusText: 'Bad Gateway' });
+          }
+          return makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' });
+        },
+      });
+      assert.equal(delCalls, 2);
+
+      await assert.rejects(
+        () =>
+          branchCleanupMod.requestWithRetry('https://api.github.com/repos/a/b/git/refs/heads/missing', {
+            method: 'DELETE',
+            retries: 2,
+            baseDelayMs: 1,
+            sleepImpl: async () => {},
+            fetchImpl: async () => makeMockResponse({ ok: false, status: 404, statusText: 'Not Found' }),
+          }),
+        /404/
+      );
+    }
+
+    // cleanup-branches: protected channels even with *, dependabot/ & sync/ prefixes, closed-unmerged, stale zero-PR vs recent WIP, missing timestamp fail-closed
+    {
+      const nowMs = Date.parse('2026-11-13T00:00:00Z');
+      const dayMs = 24 * 60 * 60 * 1000;
+      const commitDates = new Map([
+        ['sha-dep-closed-old', nowMs - 2 * dayMs],
+        ['sha-dep-closed-fresh', nowMs - 6 * 60 * 60 * 1000],
+        ['sha-sync-stale', nowMs - 8 * dayMs],
+        ['sha-wip-recent', nowMs - 3 * dayMs],
+      ]);
+      const evalRes = await branchCleanupMod.evaluateBranchesForCleanup({
+        branches: [
+          { name: 'main', protected: false, commit: { sha: 's1' } },
+          { name: 'beta', protected: false, commit: { sha: 's2' } },
+          { name: 'gh-pages', protected: false, commit: { sha: 's3' } },
+          { name: 'release-lock', protected: true, commit: { sha: 's4' } },
+          { name: 'feature/open-pr', protected: false, commit: { sha: 's5' } },
+          { name: 'dependabot/npm/old-closed', protected: false, commit: { sha: 'sha-dep-closed-old' } },
+          { name: 'dependabot/npm/fresh-closed', protected: false, commit: { sha: 'sha-dep-closed-fresh' } },
+          { name: 'sync/beta-from-main', protected: false, commit: { sha: 'sha-sync-stale' } },
+          { name: 'feature/wip-recent', protected: false, commit: { sha: 'sha-wip-recent' } },
+          { name: 'fix/no-commit-ts', protected: false, commit: { sha: 'sha-missing' } },
+        ],
+        defaultBranch: 'main',
+        includePrefixes: ['*'],
+        activeBranches: new Set(['feature/open-pr']),
+        mergedBranches: new Map(),
+        closedUnmergedBranches: new Map([
+          ['dependabot/npm/old-closed', nowMs - 2 * dayMs],
+          ['dependabot/npm/fresh-closed', nowMs - 6 * 60 * 60 * 1000],
+        ]),
+        getCommitTimestampMs: async (sha) => commitDates.get(sha) ?? 0,
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+      });
+      assert.deepEqual(
+        evalRes.deletions.map((d) => d.name),
+        ['dependabot/npm/old-closed', 'sync/beta-from-main']
+      );
+
+      // Verify explicit prefix list rejects unmatched prefix even when old
+      const prefixOnlyRes = await branchCleanupMod.evaluateBranchesForCleanup({
+        branches: [
+          { name: 'dependabot/npm/old', protected: false, commit: { sha: 'sha-sync-stale' } },
+          { name: 'other/old', protected: false, commit: { sha: 'sha-sync-stale' } },
+        ],
+        includePrefixes: ['dependabot/', 'sync/'],
+        getCommitTimestampMs: async () => nowMs - 10 * dayMs,
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+      });
+      assert.deepEqual(
+        prefixOnlyRes.deletions.map((d) => d.name),
+        ['dependabot/npm/old']
+      );
+
+      // Reused merged branch with fresh commit is NOT deleted; stale merged branch IS deleted; null/error commit timestamp fails closed
+      const reusedMergedRes = await branchCleanupMod.evaluateBranchesForCleanup({
+        branches: [
+          { name: 'sync/reused-fresh', protected: false, commit: { sha: 'sha-reused-fresh' } },
+          { name: 'feature/merged-stale', protected: false, commit: { sha: 'sha-merged-stale' } },
+          { name: 'fix/merged-null-ts', protected: false, commit: { sha: 'sha-null-ts' } },
+          { name: 'fix/merged-error-ts', protected: false, commit: { sha: 'sha-error-ts' } },
+        ],
+        includePrefixes: ['sync/', 'feature/', 'fix/'],
+        mergedBranches: new Map([
+          ['sync/reused-fresh', nowMs - 5 * dayMs],
+          ['feature/merged-stale', nowMs - 5 * dayMs],
+          ['fix/merged-null-ts', nowMs - 5 * dayMs],
+          ['fix/merged-error-ts', nowMs - 5 * dayMs],
+        ]),
+        getCommitTimestampMs: async (sha) => {
+          if (sha === 'sha-reused-fresh') return nowMs - 60 * 60 * 1000;
+          if (sha === 'sha-merged-stale') return nowMs - 5 * dayMs;
+          if (sha === 'sha-null-ts') return null;
+          throw new Error('simulated commit lookup failure');
+        },
+        minAgeDays: 1,
+        nowMs,
+      });
+      assert.deepEqual(reusedMergedRes.deletions, [{ name: 'feature/merged-stale', reason: 'merged' }]);
+      assert.equal(
+        reusedMergedRes.diagnostics.some(
+          (d) =>
+            d.name === 'sync/reused-fresh' &&
+            d.detail.includes('merged branch has newer commit within minAgeDays')
+        ),
+        true
+      );
+      assert.equal(
+        reusedMergedRes.diagnostics.some(
+          (d) =>
+            d.name === 'fix/merged-null-ts' &&
+            d.detail === 'skipped: unable to determine commit timestamp'
+        ),
+        true
+      );
+      assert.equal(
+        reusedMergedRes.diagnostics.some(
+          (d) =>
+            d.name === 'fix/merged-error-ts' &&
+            d.detail === 'skipped: unable to determine commit timestamp'
+        ),
+        true
+      );
+    }
+
+    // cleanup-branches: end-to-end runCleanupBranches with dryRun vs live DELETE
+    {
+      const nowMs = Date.parse('2026-11-13T00:00:00Z');
+      const oldIso = '2026-11-01T00:00:00Z';
+      const createMockFetch = (deleteCalls) => async (url, init = {}) => {
+        const href = String(url);
+        const method = init.method || 'GET';
+        if (method === 'DELETE') {
+          deleteCalls.push(href);
+          return makeMockResponse({ ok: true, status: 204 });
+        }
+        if (href.endsWith('/repos/a/b')) {
+          return makeMockResponse({ ok: true, status: 200, jsonData: { default_branch: 'main' } });
+        }
+        if (href.includes('/pulls') && href.includes('state=open')) {
+          return makeMockResponse({ ok: true, status: 200, jsonData: [] });
+        }
+        if (href.includes('/pulls') && href.includes('state=closed')) {
+          return makeMockResponse({ ok: true, status: 200, jsonData: [] });
+        }
+        if (href.includes('/branches')) {
+          return makeMockResponse({
+            ok: true,
+            status: 200,
+            jsonData: [
+              { name: 'beta', protected: false, commit: { sha: 'sha-beta' } },
+              { name: 'dependabot/npm/stale', protected: false, commit: { sha: 'sha-stale' } },
+            ],
+          });
+        }
+        if (href.includes('/commits/sha-stale')) {
+          return makeMockResponse({
+            ok: true,
+            status: 200,
+            jsonData: { commit: { committer: { date: oldIso } } },
+          });
+        }
+        return makeMockResponse({ ok: false, status: 404 });
+      };
+
+      const dryDeletes = [];
+      await branchCleanupMod.runCleanupBranches({
+        repository: 'a/b',
+        token: 'tok',
+        dryRun: true,
+        includePrefixes: ['dependabot/', 'sync/'],
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: createMockFetch(dryDeletes),
+      });
+      assert.equal(dryDeletes.length, 0);
+
+      const liveDeletes = [];
+      const liveRes = await branchCleanupMod.runCleanupBranches({
+        repository: 'a/b',
+        token: 'tok',
+        dryRun: false,
+        includePrefixes: ['dependabot/', 'sync/'],
+        minAgeDays: 1,
+        unmergedMinAgeDays: 7,
+        nowMs,
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: createMockFetch(liveDeletes),
+      });
+      assert.equal(liveDeletes.length, 1);
+      assert.equal(liveDeletes[0].endsWith('/git/refs/heads/dependabot/npm/stale'), true);
+      assert.deepEqual(liveRes.deleted, ['dependabot/npm/stale']);
     }
 
     // 6. SoundService SSR safety, volume clamping, visibility/disable auto-suspend & rate-throttled woodblock tap
@@ -763,6 +2207,40 @@ async function runCodecAndEngineTests() {
       assert.equal(parsedLink.roomCode, 'ABC123');
       assert.deepEqual(parsedLink.delta?.filledRegionIds, [1, 2, 3]);
       assert.equal(parsedLink.matchedSample?.id, 'capybara_sample');
+    }
+
+    // Corrupt/invalid #s= token must preserve ?room= code and surface tokenError without throwing
+    const corruptTokenLink = await shareLinkMod.parseShareLinkFromUrl(
+      'https://capypaint.com/?room=xy9876#s=not_a_valid_token_!!!'
+    );
+    assert.equal(corruptTokenLink.roomCode, 'XY9876');
+    assert.equal(corruptTokenLink.delta, null);
+    assert.equal(corruptTokenLink.matchedSample, null);
+    assert.equal(corruptTokenLink.hasToken, true);
+    assert.equal(typeof corruptTokenLink.tokenError, 'string');
+
+    // BroadcastChannel Co-op room namespacing across /capy/, /capy/beta/, and /capy/alpha/<num>/ on shared origin
+    const prevChanWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        location: { pathname: '/capy/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const stableChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const betaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/alpha/495/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const alphaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      assert.equal(stableChan, 'capy_coop_room_stable_ABC123');
+      assert.equal(betaChan, 'capy_coop_room_beta_ABC123');
+      assert.equal(alphaChan, 'capy_coop_room_alpha_495_ABC123');
+      assert.notEqual(stableChan, betaChan);
+      assert.notEqual(betaChan, alphaChan);
+    } finally {
+      globalThis.window = prevChanWindow;
     }
 
     assert.equal(
@@ -1348,6 +2826,50 @@ async function runCodecAndEngineTests() {
           null,
           'Missing chunk in PlayGamesAndroidDriver must return null cleanly'
         );
+
+        // 3. Unconfigured / Unavailable Play Games fallback must fail fast (no 8s hang)
+        const prevCapyAndroid = globalThis.window.CapyAndroid;
+        try {
+          globalThis.window.CapyAndroid = {
+            isPlayGamesConfigured: () => false,
+            signInPlayGames: () => null,
+          };
+          assert.equal(pgDriver.getDescriptor().isConfigured, false);
+          const autoSignStart = Date.now();
+          assert.equal(await pgDriver.attemptAutoSignIn(), null);
+          assert.equal(Date.now() - autoSignStart < 500, true, 'Unconfigured Play Games auto-sign-in must return null immediately');
+          let unconfErr = null;
+          const signInStart = Date.now();
+          try {
+            await pgDriver.signIn();
+          } catch (err) {
+            unconfErr = err;
+          }
+          assert.equal(unconfErr?.message, 'PLAY_GAMES_UNCONFIGURED');
+          assert.equal(Date.now() - signInStart < 500, true, 'Unconfigured Play Games signIn must fail fast');
+
+          // Configured Play Games that fires native error callback must reject immediately
+          globalThis.window.CapyAndroid = {
+            isPlayGamesConfigured: () => true,
+            signInPlayGames: () => {
+              setTimeout(() => {
+                globalThis.window.__capyReceivePlayGamesError?.('PLAY_GAMES_UNAVAILABLE');
+              }, 10);
+              return null;
+            },
+          };
+          const failStart = Date.now();
+          let unavailErr = null;
+          try {
+            await pgDriver.signIn();
+          } catch (err) {
+            unavailErr = err;
+          }
+          assert.equal(unavailErr?.message, 'PLAY_GAMES_UNAVAILABLE');
+          assert.equal(Date.now() - failStart < 500, true, 'Play Games error callback must reject signIn immediately');
+        } finally {
+          globalThis.window.CapyAndroid = prevCapyAndroid;
+        }
       } finally {
         globalThis.window = prevWindow;
       }
@@ -1355,8 +2877,11 @@ async function runCodecAndEngineTests() {
 
     /* capy-dev-only:start */
     const {
+      FORBIDDEN_PERSONA_REGEX,
+      stripDevOnlyBlocks,
       transformPersonaContent,
       sanitizeCommitMessage,
+      assertZeroSourcePersonaLeak,
       exportCleanPersonaStage,
     } = await import('./rebrand-persona.mjs');
     const sampleDoc =
@@ -1367,10 +2892,47 @@ async function runCodecAndEngineTests() {
       'Repo https://github.com/capyboop/capy (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
+    const samplePrEpicDoc =
+      'Preview https://shthed.github.io/capy/alpha/492/ and https://shthed.github.io/capy/PR/42/ [EPIC-2](https://github.com/shthed/capy/issues/477)';
+    const transformedPrEpic = transformPersonaContent(samplePrEpicDoc);
+    assert.equal(
+      transformedPrEpic,
+      'Preview https://capypaint.com/ and https://capypaint.com/ EPIC-2'
+    );
+    assert.equal(transformPersonaContent(transformedPrEpic), transformedPrEpic);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('sync-beta-from-main'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('.github/dependabot.yml'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('dependabot[bot]'), false);
+    const devOnlyStartTag = '<!-- capy-dev-' + 'only:start -->';
+    const devOnlyEndTag = '<!-- capy-dev-' + 'only:end -->';
+    const docWithOpenPrBlock = [
+      'Public workflow guide.',
+      devOnlyStartTag,
+      '- **Bot PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml))**: Uses `gh workflow run open-pr.yml`.',
+      devOnlyEndTag,
+      'Remaining public footer.',
+    ].join('\n');
+    const strippedOpenPrDoc = stripDevOnlyBlocks(docWithOpenPrBlock);
+    assert.equal(strippedOpenPrDoc.includes('open-pr.yml'), false);
+    assert.equal(strippedOpenPrDoc.includes('Public workflow guide.'), true);
+    assert.equal(strippedOpenPrDoc.includes('Remaining public footer.'), true);
+    assert.equal(
+      transformPersonaContent(docWithOpenPrBlock).includes('open-pr.yml'),
+      false
+    );
     assert.equal(
       sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
       'Add Cloudflare Worker for capyboop/capy'
     );
+    const tmpLeakCheck = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-leak-check-'));
+    try {
+      fs.writeFileSync(path.join(tmpLeakCheck, 'ok.yml'), 'if: actor != "dependabot[bot]"\n', 'utf8');
+      assert.equal(assertZeroSourcePersonaLeak(tmpLeakCheck), 1);
+      fs.writeFileSync(path.join(tmpLeakCheck, 'leak.md'), 'See sync-beta-from-main workflow\n', 'utf8');
+      assert.throws(() => assertZeroSourcePersonaLeak(tmpLeakCheck), /Forbidden persona token/);
+    } finally {
+      fs.rmSync(tmpLeakCheck, { recursive: true, force: true });
+    }
     const tmpCleanStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-clean-stage-'));
     try {
       const stageStats = exportCleanPersonaStage({ stageDir: tmpCleanStage });
@@ -1385,6 +2947,15 @@ async function runCodecAndEngineTests() {
         false
       );
       assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/open-pr.yml')),
+        false
+      );
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/sync-beta-from-main.yml')),
+        false
+      );
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, '.github/dependabot.yml')), false);
+      assert.equal(
         fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
         false
       );
@@ -1396,12 +2967,2350 @@ async function runCodecAndEngineTests() {
         stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
         true
       );
+      const stagedSanityMod = await import(
+        pathToFileURL(path.join(tmpCleanStage, 'web/scripts/sanity.mjs')).href
+      );
+      const stagedSanity = stagedSanityMod.runSanityChecks({ repoRoot: tmpCleanStage });
+      assert.equal(stagedSanity.elapsedMs < 2000, true);
+      execFileSync(process.execPath, [path.join(tmpCleanStage, 'web/scripts/sanity.mjs')], {
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['--check', path.join(tmpCleanStage, 'web/scripts/test.mjs')], {
+        stdio: 'pipe',
+      });
     } finally {
       fs.rmSync(tmpCleanStage, { recursive: true, force: true });
     }
+
+    // Extract and unit-test real GitHub Actions script blocks from pr-review-gate.yml & open-pr.yml
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const extractWorkflowScript = (workflowRelPath) => {
+      const raw = fs.readFileSync(path.resolve(projectRoot, '..', workflowRelPath), 'utf8');
+      const lines = raw.split(/\r?\n/);
+      const scriptIdx = lines.findIndex((line) => /^\s*script:\s*\|\s*$/.test(line));
+      assert.notEqual(scriptIdx, -1, `Expected script: | block in ${workflowRelPath}`);
+      const headerIndent = lines[scriptIdx].match(/^(\s*)/)[1].length;
+      let bodyIndent = null;
+      const bodyLines = [];
+      for (let i = scriptIdx + 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.trim() === '') {
+          bodyLines.push('');
+          continue;
+        }
+        const indent = line.match(/^(\s*)/)[1].length;
+        if (bodyIndent === null) {
+          assert.equal(
+            indent > headerIndent,
+            true,
+            `Expected indented script body in ${workflowRelPath}`
+          );
+          bodyIndent = indent;
+        } else if (indent < bodyIndent) {
+          break;
+        }
+        bodyLines.push(line.slice(bodyIndent));
+      }
+      return bodyLines.join('\n');
+    };
+
+    const runReviewGateScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/pr-review-gate.yml')
+    );
+
+    const runReviewGateCase = async ({
+      prAuthor = 'github-actions[bot]',
+      baseRef = 'main',
+      isDraft = false,
+      headSha = 'abcdef1234567890abcdef1234567890abcdef12',
+      commitDate = '2026-11-13T01:00:00Z',
+      labels = ['review:ai-approved'],
+      events = [],
+      reviews = [],
+      comments = [],
+      aiCommentScore = 98,
+      aiCommentTs = '2026-11-13T01:01:00Z',
+      eventName = 'pull_request_review',
+      action = 'submitted',
+      createCommitStatusImpl = null,
+      expectCommitStatus = true,
+    } = {}) => {
+      const calls = {
+        createReview: [],
+        dismissReview: [],
+        removeLabel: [],
+        createCommitStatus: [],
+      };
+      const allComments = [...comments];
+      if (aiCommentScore !== null) {
+        allComments.unshift({
+          user: { login: 'shthed' },
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${headSha} score=${aiCommentScore}% -->`,
+          created_at: aiCommentTs,
+          updated_at: aiCommentTs,
+        });
+      }
+      const coreMock = {
+        infos: [],
+        warnings: [],
+        failed: [],
+        info: (msg) => coreMock.infos.push(msg),
+        warning: (msg) => coreMock.warnings.push(msg),
+        setFailed: (msg) => coreMock.failed.push(msg),
+      };
+      const githubMock = {
+        paginate: async (fn, params) => {
+          const res = await fn(params);
+          return res.data;
+        },
+        rest: {
+          pulls: {
+            get: async () => ({
+              data: {
+                number: 490,
+                state: 'open',
+                draft: isDraft,
+                user: { login: prAuthor },
+                base: { ref: baseRef },
+                head: { sha: headSha },
+                labels: labels.map((name) => ({ name })),
+              },
+            }),
+            listReviews: async () => ({ data: reviews }),
+            createReview: async (payload) => {
+              calls.createReview.push(payload);
+              return { data: { id: 9001 } };
+            },
+            dismissReview: async (payload) => {
+              calls.dismissReview.push(payload);
+              return { data: {} };
+            },
+          },
+          repos: {
+            getCommit: async () => ({
+              data: { commit: { committer: { date: commitDate }, author: { date: commitDate } } },
+            }),
+            listCommitStatusesForRef: async () => ({ data: [] }),
+            createCommitStatus: async (payload) => {
+              calls.createCommitStatus.push(payload);
+              if (createCommitStatusImpl) {
+                return createCommitStatusImpl(payload);
+              }
+              return { data: payload };
+            },
+          },
+          issues: {
+            listEvents: async () => ({ data: events }),
+            listComments: async () => ({ data: allComments }),
+            removeLabel: async (payload) => {
+              calls.removeLabel.push(payload);
+              return { data: {} };
+            },
+          },
+        },
+      };
+      const contextMock = {
+        repo: { owner: 'shthed', repo: 'capy' },
+        eventName,
+        payload: { pull_request: { number: 490 }, action },
+      };
+      await runReviewGateScript(contextMock, githubMock, coreMock);
+      assert.equal(coreMock.failed.length, 0);
+      if (expectCommitStatus) {
+        assert.equal(calls.createCommitStatus.length, 1);
+      }
+      return { status: calls.createCommitStatus[0], calls, core: coreMock };
+    };
+
+    const gateHeadSha = '1234567890abcdef1234567890abcdef12345678';
+    // (a) Bot PR + empty-body native APPROVED with commit_id === headSha and future commitMs clock skew
+    const gateBotNativeRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T02:00:00Z',
+      reviews: [
+        {
+          id: 101,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotNativeRes.status.state, 'success');
+    assert.equal(
+      gateBotNativeRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateBotNativeRes.calls.createReview.length, 0);
+
+    // (b) Bot PR + review:owner-approved label only -> pending awaiting Project Owner sign-off
+    const gateBotLabelOnlyRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      eventName: 'pull_request',
+      action: 'labeled',
+    });
+    assert.equal(gateBotLabelOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateBotLabelOnlyRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotLabelOnlyRes.calls.createReview.length, 0);
+
+    // (c) Bot PR + APPROVED/LGTM comment only -> pending awaiting Project Owner sign-off
+    const gateBotCommentOnlyRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBotCommentOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateBotCommentOnlyRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotCommentOnlyRes.calls.createReview.length, 0);
+
+    const gateBotLgtmReviewOnlyRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 102,
+          user: { login: 'shthed' },
+          state: 'COMMENTED',
+          commit_id: gateHeadSha,
+          body: 'LGTM',
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotLgtmReviewOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateBotLgtmReviewOnlyRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotLgtmReviewOnlyRes.calls.createReview.length, 0);
+
+    // (d) Bot PR + stale APPROVED (commit_id !== headSha) or pre-force-push -> pending
+    const gateBotStaleShaRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 103,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotStaleShaRes.status.state, 'pending');
+    assert.equal(
+      gateBotStaleShaRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotStaleShaRes.calls.createReview.length, 0);
+
+    const gateBotPreForcePushRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      events: [{ event: 'head_ref_force_pushed', created_at: '2026-11-13T01:10:00Z' }],
+      reviews: [
+        {
+          id: 104,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotPreForcePushRes.status.state, 'pending');
+    assert.equal(gateBotPreForcePushRes.calls.createReview.length, 0);
+
+    // (e) Bot PR + native APPROVED followed by CHANGES_REQUESTED on headSha (with commitMs skew) -> failure
+    const gateBotChangesReqRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T02:00:00Z',
+      reviews: [
+        {
+          id: 105,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+        {
+          id: 106,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix edge case first',
+          submitted_at: '2026-11-13T01:12:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotChangesReqRes.status.state, 'failure');
+    assert.equal(
+      gateBotChangesReqRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotChangesReqRes.calls.createReview.length, 0);
+
+    // (f) Manual shthed-authored PR + label/comment -> pending (no bot APPROVE rubber-stamping); native APPROVED -> success with stale bot review dismissed
+    const gateManualLabelRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualLabelRes.status.state, 'pending');
+    assert.equal(
+      gateManualLabelRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateManualLabelRes.calls.createReview.length, 0);
+
+    const gateManualCommentRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualCommentRes.status.state, 'pending');
+    assert.equal(
+      gateManualCommentRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateManualCommentRes.calls.createReview.length, 0);
+
+    const gateManualLgtmCommentRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          user: { login: 'shthed' },
+          body: 'LGTM',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualLgtmCommentRes.status.state, 'pending');
+    assert.equal(
+      gateManualLgtmCommentRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateManualLgtmCommentRes.calls.createReview.length, 0);
+
+    const gateManualMainNativeNoBotReviewRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 111,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 112,
+          user: { login: 'github-actions[bot]' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: 'legacy bot approval',
+          submitted_at: '2026-11-13T01:04:00Z',
+        },
+      ],
+    });
+    assert.equal(gateManualMainNativeNoBotReviewRes.status.state, 'success');
+    assert.equal(gateManualMainNativeNoBotReviewRes.calls.createReview.length, 0);
+    assert.equal(gateManualMainNativeNoBotReviewRes.calls.dismissReview.length, 1);
+
+    // (g) Draft bot PR -> pending even with native APPROVED
+    const gateBotDraftRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      isDraft: true,
+      headSha: gateHeadSha,
+      reviews: [
+        {
+          id: 107,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotDraftRes.status.state, 'pending');
+    assert.equal(
+      gateBotDraftRes.status.description,
+      'Draft PR: complete work, pass AI review, and mark ready'
+    );
+    assert.equal(gateBotDraftRes.calls.createReview.length, 0);
+
+    // (h) Bot PR + CHANGES_REQUESTED whose body starts with "APPROVED..." -> failure (not legacy approval)
+    const gateBotChangesReqApprovedPrefixRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 108,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'APPROVED - needs one fix',
+          submitted_at: '2026-11-13T01:12:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotChangesReqApprovedPrefixRes.status.state, 'failure');
+    assert.equal(
+      gateBotChangesReqApprovedPrefixRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotChangesReqApprovedPrefixRes.calls.createReview.length, 0);
+
+    // (i) Bot PR + CHANGES_REQUESTED recovered by newer native APPROVED on headSha under commitMs skew -> success
+    const gateBotRecoverySkewRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T02:00:00Z',
+      reviews: [
+        {
+          id: 109,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix edge case first',
+          submitted_at: '2026-11-13T01:10:00Z',
+        },
+        {
+          id: 110,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:15:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotRecoverySkewRes.status.state, 'success');
+    assert.equal(
+      gateBotRecoverySkewRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateBotRecoverySkewRes.calls.createReview.length, 0);
+
+    // (j) Bot PR + DISMISSED native APPROVED -> ignored (pending)
+    const gateBotDismissedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 111,
+          user: { login: 'shthed' },
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:15:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotDismissedRes.status.state, 'pending');
+    assert.equal(
+      gateBotDismissedRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+    assert.equal(gateBotDismissedRes.calls.createReview.length, 0);
+
+    // (k) Bug 1 regression: bot PR CHANGES_REQUESTED + legacy APPROVED/LGTM comment + review:owner-approved label (with and without earlier native APPROVED) -> failure
+    const gateBotLegacyAfterRejectCommentRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 112,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix required',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 201,
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:10:00Z',
+          updated_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotLegacyAfterRejectCommentRes.status.state, 'failure');
+    assert.equal(
+      gateBotLegacyAfterRejectCommentRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotLegacyAfterRejectCommentRes.calls.createReview.length, 0);
+
+    const gateBotChangesReqLegacyLgtmAndLabelRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          id: 501,
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 113,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Fix Bug 1 first',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 202,
+          user: { login: 'shthed' },
+          body: 'LGTM',
+          created_at: '2026-11-13T01:11:00Z',
+          updated_at: '2026-11-13T01:11:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.state, 'failure');
+    assert.equal(
+      gateBotChangesReqLegacyLgtmAndLabelRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.calls.createReview.length, 0);
+
+    const gateBotLegacyAfterPriorNativeAndRejectRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      labels: ['review:ai-approved', 'review:owner-approved'],
+      events: [
+        {
+          id: 502,
+          event: 'labeled',
+          label: { name: 'review:owner-approved' },
+          actor: { login: 'shthed' },
+          created_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 114,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:02:00Z',
+        },
+        {
+          id: 115,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Needs fix',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 203,
+          user: { login: 'shthed' },
+          body: 'LGTM on UI',
+          created_at: '2026-11-13T01:11:00Z',
+          updated_at: '2026-11-13T01:11:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.state, 'failure');
+    assert.equal(
+      gateBotLegacyAfterPriorNativeAndRejectRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.calls.createReview.length, 0);
+
+    // (l) Bug 2 regression: +120s commitMs skew catches post-approval HOLD comment, reverse-ordered COMMENTED DO NOT MERGE review (non-head & head), and DISMISSED+HOLD; stale pre-push HOLD stays ignored
+    const gateBotSkewHoldCommentRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 116,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+      comments: [
+        {
+          id: 204,
+          user: { login: 'shthed' },
+          body: 'HOLD - do not merge yet',
+          created_at: '2026-11-13T01:00:40Z',
+          updated_at: '2026-11-13T01:00:40Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBotSkewHoldCommentRes.status.state, 'failure');
+    assert.equal(
+      gateBotSkewHoldCommentRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotSkewHoldCommentRes.calls.createReview.length, 0);
+
+    const gateBotSkewNonHeadCommentedReviewRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 118,
+          user: { login: 'shthed' },
+          state: 'COMMENTED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: 'DO NOT MERGE - regression',
+          submitted_at: '2026-11-13T01:00:40Z',
+        },
+        {
+          id: 117,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.state, 'failure');
+    assert.equal(
+      gateBotSkewNonHeadCommentedReviewRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.calls.createReview.length, 0);
+
+    const gateBotSkewHeadCommentedReviewRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 120,
+          user: { login: 'shthed' },
+          state: 'COMMENTED',
+          commit_id: gateHeadSha,
+          body: 'DO NOT MERGE - head regression',
+          submitted_at: '2026-11-13T01:00:40Z',
+        },
+        {
+          id: 119,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewHeadCommentedReviewRes.status.state, 'failure');
+    assert.equal(
+      gateBotSkewHeadCommentedReviewRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateBotSkewHeadCommentedReviewRes.calls.createReview.length, 0);
+
+    const gateBotSkewDismissedHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 121,
+          user: { login: 'shthed' },
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+      comments: [
+        {
+          id: 205,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait after dismiss',
+          created_at: '2026-11-13T01:00:40Z',
+          updated_at: '2026-11-13T01:00:40Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewDismissedHoldRes.status.state, 'failure');
+    assert.equal(gateBotSkewDismissedHoldRes.calls.createReview.length, 0);
+
+    const gateBotStalePrePushHoldPendingRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 206,
+          user: { login: 'shthed' },
+          body: 'HOLD',
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotStalePrePushHoldPendingRes.status.state, 'pending');
+    assert.equal(gateBotStalePrePushHoldPendingRes.calls.createReview.length, 0);
+
+    const gateBotSkewStalePrePushHoldWithApprovalRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      reviews: [
+        {
+          id: 122,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:00:10Z',
+        },
+      ],
+      comments: [
+        {
+          id: 207,
+          user: { login: 'shthed' },
+          body: 'HOLD - fix old commit',
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.status.state, 'success');
+    assert.equal(
+      gateBotSkewStalePrePushHoldWithApprovalRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateBotSkewStalePrePushHoldWithApprovalRes.calls.createReview.length, 0);
+
+    // (m) Finding 3 regression: same-second review ties use deterministic [ts, id], while omitted IDs & cross-source review/comment ties fail closed
+    const gateSameSecRejectWinsByIdRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 10,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 11,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Hold on',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecRejectWinsByIdRes.status.state, 'failure');
+    assert.equal(
+      gateSameSecRejectWinsByIdRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.equal(gateSameSecRejectWinsByIdRes.calls.createReview.length, 0);
+
+    const gateSameSecApproveSupersedesByIdRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 10,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Hold on',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 11,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecApproveSupersedesByIdRes.status.state, 'success');
+    assert.equal(
+      gateSameSecApproveSupersedesByIdRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+    assert.equal(gateSameSecApproveSupersedesByIdRes.calls.createReview.length, 0);
+
+    const gateSameSecOmittedIdsFailClosedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 12,
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Hold on',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecOmittedIdsFailClosedRes.status.state, 'failure');
+    assert.equal(gateSameSecOmittedIdsFailClosedRes.calls.createReview.length, 0);
+
+    const gateSameSecOmittedRejectionIdFailClosedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 12,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          user: { login: 'shthed' },
+          state: 'CHANGES_REQUESTED',
+          commit_id: gateHeadSha,
+          body: 'Missing rejection id fails closed',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecOmittedRejectionIdFailClosedRes.status.state, 'failure');
+    assert.equal(gateSameSecOmittedRejectionIdFailClosedRes.calls.createReview.length, 0);
+
+    const gateSameSecCrossSourceFailClosedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 105,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+      comments: [
+        {
+          id: 50,
+          user: { login: 'shthed' },
+          body: 'HOLD',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateSameSecCrossSourceFailClosedRes.status.state, 'failure');
+    assert.equal(gateSameSecCrossSourceFailClosedRes.calls.createReview.length, 0);
+
+    // (n) --base beta split: AI>=95% passes without Owner sign-off and without creating bot APPROVE review, holds fail closed, spoofing blocked, Dependabot & sync/beta-from-main governed properly
+    const gateBetaAiOnlyPassRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 301,
+          user: { login: 'github-actions[bot]' },
+          state: 'APPROVED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: 'stale',
+          submitted_at: '2026-11-13T00:50:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaAiOnlyPassRes.status.state, 'success');
+    assert.equal(
+      gateBetaAiOnlyPassRes.status.description,
+      'Beta gate passed: AI review (>=95%) verified; no holds'
+    );
+    assert.equal(gateBetaAiOnlyPassRes.calls.createReview.length, 0);
+    assert.equal(gateBetaAiOnlyPassRes.calls.dismissReview.length, 1);
+
+    const gateBetaHoldFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 302,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait for fix',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaHoldFailRes.status.state, 'failure');
+
+    const gateBetaHoldWithLgtmCommentStillFailsRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 30201,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait for fix',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+        {
+          id: 30202,
+          user: { login: 'shthed' },
+          body: 'LGTM',
+          created_at: '2026-11-13T01:06:00Z',
+          updated_at: '2026-11-13T01:06:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaHoldWithLgtmCommentStillFailsRes.status.state, 'failure');
+    assert.equal(gateBetaHoldWithLgtmCommentStillFailsRes.calls.createReview.length, 0);
+
+    // ADVERSARIAL-A regression: --base beta with +2m commitDate clock skew still blocks post-AI HOLD / CHANGES REQUESTED / DO NOT MERGE (comments or AI PR review) while ignoring stale pre-push holds
+    for (const [tag, holdBody] of [
+      ['HOLD', 'HOLD - do not merge!'],
+      ['CHANGES REQUESTED', 'CHANGES REQUESTED - needs fixes'],
+      ['DO NOT MERGE', 'DO NOT MERGE yet'],
+    ]) {
+      const gateBetaSkewHoldCommentRes = await runReviewGateCase({
+        prAuthor: 'shthed',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        commitDate: '2026-11-13T01:02:00Z',
+        aiCommentTs: '2026-11-13T01:00:20Z',
+        comments: [
+          {
+            id: 30301,
+            user: { login: 'shthed' },
+            body: holdBody,
+            created_at: '2026-11-13T01:00:40Z',
+            updated_at: '2026-11-13T01:00:40Z',
+          },
+        ],
+        eventName: 'issue_comment',
+        action: 'created',
+      });
+      assert.equal(
+        gateBetaSkewHoldCommentRes.status.state,
+        'failure',
+        `Expected --base beta skewed ${tag} hold to fail`
+      );
+    }
+
+    const gateBetaSkewAiReviewHoldCommentRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      aiCommentScore: null,
+      reviews: [
+        {
+          id: 30302,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'COMMENTED',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          submitted_at: '2026-11-13T01:00:20Z',
+        },
+      ],
+      comments: [
+        {
+          id: 30303,
+          user: { login: 'shthed' },
+          body: 'DO NOT MERGE yet',
+          created_at: '2026-11-13T01:00:40Z',
+          updated_at: '2026-11-13T01:00:40Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBetaSkewAiReviewHoldCommentRes.status.state, 'failure');
+
+    const gateBetaSkewStalePrePushHoldIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:02:00Z',
+      aiCommentTs: '2026-11-13T01:00:20Z',
+      comments: [
+        {
+          id: 30304,
+          user: { login: 'shthed' },
+          body: 'HOLD - stale pre-push',
+          created_at: '2026-11-13T00:55:00Z',
+          updated_at: '2026-11-13T00:55:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBetaSkewStalePrePushHoldIgnoredRes.status.state, 'success');
+
+    const gateBetaDraftRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateBetaDraftRes.status.state, 'pending');
+
+    const gateBetaMissingAiRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      labels: [],
+      aiCommentScore: null,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateBetaMissingAiRes.status.state, 'pending');
+    assert.equal(
+      gateBetaMissingAiRes.status.description,
+      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
+    );
+
+    // Untrusted external user cannot spoof AI CHANGES_REQUESTED DoS or forged APPROVED marker
+    const gateUntrustedDosIgnoredRes = await runReviewGateCase({
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 303,
+          user: { login: 'stranger' },
+          author_association: 'NONE',
+          body: `<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=${gateHeadSha} score=10% -->`,
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateUntrustedDosIgnoredRes.status.state, 'success');
+
+    const gateUntrustedApproveIgnoredRes = await runReviewGateCase({
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      aiCommentScore: null,
+      comments: [
+        {
+          id: 304,
+          user: { login: 'stranger' },
+          author_association: 'NONE',
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateUntrustedApproveIgnoredRes.status.state, 'pending');
+    assert.deepEqual(gateUntrustedApproveIgnoredRes.calls.removeLabel[0].name, 'review:ai-approved');
+
+    // Dependabot PRs: held pending on beta until AI-reviewed, 403 pull_request warning safety, native Approve required on main
+    const gateDependabotBetaPendingRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      labels: [],
+      aiCommentScore: null,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateDependabotBetaPendingRes.status.state, 'pending');
+
+    const gateDependabotBetaPassRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateDependabotBetaPassRes.status.state, 'success');
+    assert.equal(gateDependabotBetaPassRes.calls.createReview.length, 0);
+
+    const gateDependabotReadOnly403Res = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'pull_request',
+      action: 'opened',
+      expectCommitStatus: false,
+      createCommitStatusImpl: async () => {
+        const err = new Error('Resource not accessible by integration');
+        err.status = 403;
+        throw err;
+      },
+    });
+    assert.equal(
+      gateDependabotReadOnly403Res.core.warnings.some((w) => w.includes('Read-only GITHUB_TOKEN')),
+      true
+    );
+
+    const gateDependabotMainCommentOnlyRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 305,
+          user: { login: 'shthed' },
+          body: 'APPROVED',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateDependabotMainCommentOnlyRes.status.state, 'pending');
+    assert.equal(
+      gateDependabotMainCommentOnlyRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+
+    const gateDependabotMainNativeRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      reviews: [
+        {
+          id: 306,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateDependabotMainNativeRes.status.state, 'success');
+    assert.equal(gateDependabotMainNativeRes.calls.createReview.length, 0);
+
+    // sync/beta-from-main PRs follow --base beta rules uniformly (draft -> pending, ready without AI -> pending, ready with AI -> success)
+    const gateSyncBetaPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+    });
+    assert.equal(gateSyncBetaPassRes.status.state, 'success');
+    assert.equal(gateSyncBetaPassRes.calls.createReview.length, 0);
+
+    // Retargeting an AI-approved PR from beta to main via pull_request edited immediately requires Owner sign-off
+    const gateRetargetBetaToMainRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      isDraft: false,
+      headSha: gateHeadSha,
+      eventName: 'pull_request',
+      action: 'edited',
+    });
+    assert.equal(gateRetargetBetaToMainRes.status.state, 'pending');
+    assert.equal(
+      gateRetargetBetaToMainRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+
+    // ADVERSARIAL-C regression: DISMISSED and PENDING reviews carrying <!-- capy-review: ... --> markers are ignored for both APPROVED and CHANGES_REQUESTED
+    const gateDismissedAiReviewIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: null,
+      eventName: 'pull_request_review',
+      action: 'dismissed',
+      reviews: [
+        {
+          id: 401,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateDismissedAiReviewIgnoredRes.status.state, 'pending');
+    assert.equal(
+      gateDismissedAiReviewIgnoredRes.status.description,
+      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
+    );
+    assert.deepEqual(
+      gateDismissedAiReviewIgnoredRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    const gatePendingAiReviewIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'labeled',
+      reviews: [
+        {
+          id: 402,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'PENDING',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=99% -->`,
+          submitted_at: null,
+        },
+      ],
+    });
+    assert.equal(gatePendingAiReviewIgnoredRes.status.state, 'pending');
+    assert.deepEqual(
+      gatePendingAiReviewIgnoredRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    const gateDismissedAndPendingAiRejectIgnoredRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: 98,
+      reviews: [
+        {
+          id: 403,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=${gateHeadSha} score=40% -->`,
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+        {
+          id: 404,
+          user: { login: 'shthed' },
+          author_association: 'OWNER',
+          state: 'PENDING',
+          commit_id: gateHeadSha,
+          body: `<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=${gateHeadSha} score=40% -->`,
+          submitted_at: null,
+        },
+      ],
+    });
+    assert.equal(gateDismissedAndPendingAiRejectIgnoredRes.status.state, 'success');
+
+    // ADVERSARIAL-B regression: draft and converted_to_draft preserve review:changes-requested (failure), while synchronize strips all review labels
+    const gateDraftPreservesChangesRequestedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'labeled',
+    });
+    assert.equal(gateDraftPreservesChangesRequestedRes.status.state, 'failure');
+    assert.equal(
+      gateDraftPreservesChangesRequestedRes.status.description,
+      'Changes requested or hold active; address feedback before merge'
+    );
+    assert.deepEqual(
+      gateDraftPreservesChangesRequestedRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved', 'review:owner-approved']
+    );
+
+    const gateConvertedToDraftPreservesChangesRequestedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'converted_to_draft',
+    });
+    assert.equal(gateConvertedToDraftPreservesChangesRequestedRes.status.state, 'failure');
+    assert.deepEqual(
+      gateConvertedToDraftPreservesChangesRequestedRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    const gateSynchronizeClearsAllReviewLabelsRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
+    assert.equal(
+      gateSynchronizeClearsAllReviewLabelsRes.status.description,
+      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
+    );
+    assert.deepEqual(
+      gateSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
+    );
+
+    const gateDraftSynchronizeClearsAllReviewLabelsRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: null,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateDraftSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
+    assert.equal(
+      gateDraftSynchronizeClearsAllReviewLabelsRes.status.description,
+      'Draft PR: complete work, pass AI review, and mark ready'
+    );
+    assert.deepEqual(
+      gateDraftSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
+    );
+
+    // Extract and unit-test real .github/workflows/open-pr.yml script
+    const runOpenPrScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/open-pr.yml')
+    );
+
+    const runOpenPrCase = async (envInputs, { openPrs = [], milestones = [] } = {}) => {
+      const prevEnv = {
+        INPUT_HEAD: process.env.INPUT_HEAD,
+        INPUT_BASE: process.env.INPUT_BASE,
+        INPUT_TITLE: process.env.INPUT_TITLE,
+        INPUT_BODY: process.env.INPUT_BODY,
+        INPUT_DRAFT: process.env.INPUT_DRAFT,
+        INPUT_LABELS: process.env.INPUT_LABELS,
+        INPUT_MILESTONE: process.env.INPUT_MILESTONE,
+      };
+      for (const [key, val] of Object.entries(prevEnv)) {
+        if (val === undefined) delete process.env[key];
+      }
+      Object.assign(process.env, envInputs);
+
+      const calls = {
+        listPrs: [],
+        createPr: [],
+        updatePr: [],
+        addLabels: [],
+        updateIssue: [],
+      };
+      const outputs = {};
+      const warnings = [];
+      const infos = [];
+      const failed = [];
+      const summaryBuffer = [];
+      const coreMock = {
+        setOutput: (k, v) => {
+          outputs[k] = v;
+        },
+        warning: (m) => warnings.push(m),
+        info: (m) => infos.push(m),
+        setFailed: (m) => failed.push(m),
+        summary: {
+          addRaw: (text) => {
+            summaryBuffer.push(text);
+            return coreMock.summary;
+          },
+          write: async () => {},
+        },
+      };
+      const githubMock = {
+        paginate: async (fn, params) => (await fn(params)).data,
+        rest: {
+          pulls: {
+            list: async (params) => {
+              calls.listPrs.push(params);
+              return { data: openPrs };
+            },
+            create: async (params) => {
+              calls.createPr.push(params);
+              return {
+                data: {
+                  number: 495,
+                  html_url: 'https://github.com/shthed/capy/pull/495',
+                  draft: params.draft,
+                  user: { login: 'github-actions[bot]' },
+                },
+              };
+            },
+            update: async (params) => {
+              calls.updatePr.push(params);
+              const existing = openPrs[0];
+              return {
+                data: {
+                  number: existing.number,
+                  html_url: existing.html_url,
+                  draft: existing.draft,
+                  user: existing.user,
+                },
+              };
+            },
+          },
+          issues: {
+            listMilestones: async () => ({ data: milestones }),
+            addLabels: async (params) => {
+              calls.addLabels.push(params);
+              return { data: [] };
+            },
+            update: async (params) => {
+              calls.updateIssue.push(params);
+              return { data: {} };
+            },
+          },
+        },
+      };
+      try {
+        await runOpenPrScript(
+          { repo: { owner: 'shthed', repo: 'capy' } },
+          githubMock,
+          coreMock
+        );
+        return { calls, outputs, warnings, infos, failed, summary: summaryBuffer.join('') };
+      } finally {
+        for (const [key, val] of Object.entries(prevEnv)) {
+          if (val === undefined) delete process.env[key];
+          else process.env[key] = val;
+        }
+      }
+    };
+
+    const milestonesFixture = [
+      { number: 2, title: 'Sprint 1: EPIC-2 v3.0.1 Critical Bugfixes' },
+      { number: 3, title: 'Sprint 2: EPIC-3 Features' },
+    ];
+
+    // Create new bot PR with refs/heads/ + shthed: normalization, deduped labels, case-insensitive milestone title
+    const openCreateRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: '  refs/heads/shthed:feature/one-click  ',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Add one-click PR approval',
+        INPUT_BODY: 'Overview text',
+        INPUT_DRAFT: 'true',
+        INPUT_LABELS: 'ci, docs, ci, , testing',
+        INPUT_MILESTONE: 'sprint 1: epic-2 v3.0.1 critical bugfixes',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(openCreateRes.failed.length, 0);
+    assert.equal(openCreateRes.calls.listPrs[0].head, 'shthed:feature/one-click');
+    assert.equal(openCreateRes.calls.createPr.length, 1);
+    assert.equal(openCreateRes.calls.createPr[0].head, 'feature/one-click');
+    assert.equal(openCreateRes.calls.createPr[0].draft, true);
+    assert.deepEqual(openCreateRes.calls.addLabels[0].labels, ['ci', 'docs', 'testing']);
+    assert.equal(openCreateRes.calls.updateIssue[0].milestone, 2);
+    assert.equal(openCreateRes.outputs.pr_number, '495');
+    assert.equal(openCreateRes.outputs.action, 'created');
+    assert.equal(openCreateRes.summary.includes('Bot PR #495 (created)'), true);
+
+    // Idempotent update: omits draft, preserves existing body when INPUT_BODY is empty, resolves numeric milestone, warns on draft mismatch
+    const openUpdateRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'feature/one-click',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Updated PR title',
+        INPUT_BODY: '',
+        INPUT_DRAFT: 'false',
+        INPUT_LABELS: '',
+        INPUT_MILESTONE: '2',
+      },
+      {
+        openPrs: [
+          {
+            number: 495,
+            html_url: 'https://github.com/shthed/capy/pull/495',
+            draft: true,
+            user: { login: 'github-actions[bot]' },
+          },
+        ],
+        milestones: milestonesFixture,
+      }
+    );
+    assert.equal(openUpdateRes.failed.length, 0);
+    assert.equal(openUpdateRes.calls.createPr.length, 0);
+    assert.equal(openUpdateRes.calls.updatePr.length, 1);
+    assert.equal('draft' in openUpdateRes.calls.updatePr[0], false);
+    assert.equal('body' in openUpdateRes.calls.updatePr[0], false);
+    assert.equal(openUpdateRes.calls.addLabels.length, 0);
+    assert.equal(openUpdateRes.calls.updateIssue[0].milestone, 2);
+    assert.equal(openUpdateRes.outputs.action, 'updated');
+    assert.equal(openUpdateRes.warnings.length, 1);
+
+    // Reversed prefix order (owner:refs/heads/) normalizes cleanly
+    const openReversedPrefixRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'shthed:refs/heads/feature/x',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Reversed prefix PR',
+        INPUT_DRAFT: 'true',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(openReversedPrefixRes.failed.length, 0);
+    assert.equal(openReversedPrefixRes.calls.listPrs[0].head, 'shthed:feature/x');
+    assert.equal(openReversedPrefixRes.calls.createPr.length, 1);
+    assert.equal(openReversedPrefixRes.calls.createPr[0].head, 'feature/x');
+
+    // Enforced draft=true on PR creation even when INPUT_DRAFT='false'
+    const openForcedDraftRes = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'feature/force-draft',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Forced draft PR',
+        INPUT_DRAFT: 'false',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(openForcedDraftRes.failed.length, 0);
+    assert.equal(openForcedDraftRes.calls.createPr.length, 1);
+    assert.equal(openForcedDraftRes.calls.createPr[0].draft, true);
+    assert.equal(openForcedDraftRes.warnings.length, 1);
+
+    // Validation rejections: head === base, invalid draft, cross-owner head, extra colon, missing milestone before PR create
+    const sameBranchFail = await runOpenPrCase({
+      INPUT_HEAD: 'refs/heads/beta',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Bad same branch',
+      INPUT_DRAFT: 'true',
+    });
+    assert.equal(sameBranchFail.failed.length, 1);
+    assert.equal(sameBranchFail.calls.createPr.length, 0);
+
+    const badDraftFail = await runOpenPrCase({
+      INPUT_HEAD: 'feature/x',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Bad draft',
+      INPUT_DRAFT: 'maybe',
+    });
+    assert.equal(badDraftFail.failed.length, 1);
+    assert.equal(badDraftFail.calls.createPr.length, 0);
+
+    const crossOwnerFail = await runOpenPrCase({
+      INPUT_HEAD: 'otheruser:feature/x',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Cross-owner PR',
+      INPUT_DRAFT: 'true',
+    });
+    assert.equal(crossOwnerFail.failed.length, 1);
+    assert.equal(crossOwnerFail.failed[0].includes('cross-owner'), true);
+    assert.equal(crossOwnerFail.calls.createPr.length, 0);
+
+    const extraColonFail = await runOpenPrCase({
+      INPUT_HEAD: 'shthed:a:b',
+      INPUT_BASE: 'beta',
+      INPUT_TITLE: 'Extra colon head',
+      INPUT_DRAFT: 'true',
+    });
+    assert.equal(extraColonFail.failed.length, 1);
+    assert.equal(extraColonFail.calls.createPr.length, 0);
+
+    const missingMilestoneFail = await runOpenPrCase(
+      {
+        INPUT_HEAD: 'feature/x',
+        INPUT_BASE: 'beta',
+        INPUT_TITLE: 'Unknown milestone',
+        INPUT_DRAFT: 'true',
+        INPUT_MILESTONE: 'Nonexistent Sprint 99',
+      },
+      { milestones: milestonesFixture }
+    );
+    assert.equal(missingMilestoneFail.failed.length, 1);
+    assert.equal(missingMilestoneFail.calls.createPr.length, 0);
+
+    // Extract and unit-test .github/workflows/deploy-branch.yml target script & Phase 2 workflow invariants
+    const runDeployTargetScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/deploy-branch.yml')
+    );
+
+    const runDeployTargetCase = async ({
+      eventName = 'pull_request',
+      sha = 'mergesha11111111111111111111111111111111',
+      ref = 'refs/pull/499/merge',
+      payload = {},
+      changedFiles = [{ filename: 'web/src/App.tsx' }],
+      prDetails = { mergeable: true },
+      pullsList = [],
+    } = {}) => {
+      const prevBaseUrl = process.env.BASE_PREVIEW_URL;
+      process.env.BASE_PREVIEW_URL = 'https://shthed.github.io/capy';
+      const outputs = {};
+      const warnings = [];
+      const failed = [];
+      const coreMock = {
+        setOutput: (k, v) => {
+          outputs[k] = v;
+        },
+        warning: (m) => warnings.push(m),
+        setFailed: (m) => failed.push(m),
+        summary: {
+          addRaw: () => coreMock.summary,
+          write: async () => {},
+        },
+      };
+      const githubMock = {
+        paginate: async (fn, params) => (await fn(params)).data,
+        rest: {
+          pulls: {
+            list: async () => ({ data: pullsList }),
+            listFiles: async () => ({ data: changedFiles }),
+            get: async () => ({ data: prDetails }),
+          },
+        },
+      };
+      const contextMock = {
+        eventName,
+        sha,
+        ref,
+        repo: { owner: 'shthed', repo: 'capy' },
+        payload,
+      };
+      try {
+        await runDeployTargetScript(contextMock, githubMock, coreMock);
+        return { outputs, warnings, failed };
+      } finally {
+        if (prevBaseUrl === undefined) delete process.env.BASE_PREVIEW_URL;
+        else process.env.BASE_PREVIEW_URL = prevBaseUrl;
+      }
+    };
+
+    const deployDocsRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 499,
+          head: { ref: 'docs/update', sha: 'headsha22222222222222222222222222222222' },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'CHANGELOG.md' }, { filename: 'docs/guide.md' }],
+    });
+    assert.equal(deployDocsRes.failed.length, 0);
+    assert.equal(deployDocsRes.outputs.is_docs_only, 'true');
+    assert.equal(deployDocsRes.outputs.skip, 'true');
+    assert.equal(deployDocsRes.outputs.checkout_ref, 'mergesha11111111111111111111111111111111');
+
+    const deployMergeableRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 499,
+          head: { ref: 'feature/x', sha: 'headsha22222222222222222222222222222222' },
+          mergeable: true,
+        },
+      },
+    });
+    assert.equal(deployMergeableRes.outputs.is_docs_only, 'false');
+    assert.equal(deployMergeableRes.outputs.skip, 'false');
+    assert.equal(deployMergeableRes.outputs.target_dir, 'alpha/499');
+    assert.equal(deployMergeableRes.outputs.preview_url, 'https://shthed.github.io/capy/alpha/499/');
+    assert.equal(deployMergeableRes.outputs.checkout_ref, 'mergesha11111111111111111111111111111111');
+
+    const deployConflictingRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 499,
+          head: { ref: 'feature/x', sha: 'headsha22222222222222222222222222222222' },
+          mergeable: null,
+        },
+      },
+      prDetails: { mergeable: false },
+    });
+    assert.equal(deployConflictingRes.outputs.checkout_ref, 'headsha22222222222222222222222222222222');
+
+    const deployDispatchRes = await runDeployTargetCase({
+      eventName: 'workflow_dispatch',
+      ref: 'refs/heads/beta',
+      payload: {
+        inputs: { target_branch: 'feature/ci-dispatch', allow_without_pr: true },
+      },
+    });
+    assert.equal(deployDispatchRes.outputs.branch, 'feature/ci-dispatch');
+    assert.equal(deployDispatchRes.outputs.target_dir, 'alpha/feature-ci-dispatch');
+    assert.equal(deployDispatchRes.outputs.checkout_ref, 'feature/ci-dispatch');
+    assert.equal(deployDispatchRes.outputs.skip, 'false');
+
+    const deployYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/deploy-branch.yml'),
+      'utf8'
+    );
+    assert.equal(deployYaml.includes('github.event.inputs.target_branch'), true);
+    assert.equal(deployYaml.includes('actions/cache@v6'), true);
+    assert.equal(deployYaml.includes("github.base_ref == 'main' || github.base_ref == 'beta'"), true);
+    assert.equal(deployYaml.includes("github.event.pull_request.user.login != 'dependabot[bot]'"), true);
+    assert.equal(deployYaml.includes('steps.target.outputs.is_docs_only'), true);
+    assert.equal(deployYaml.includes("--exclude 'alpha/'"), true);
+
+    const cleanupClosedPrYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
+      'utf8'
+    );
+    assert.equal(cleanupClosedPrYaml.includes("github.actor != 'dependabot[bot]'"), true);
+    assert.equal(cleanupClosedPrYaml.includes('timeout-minutes: 10'), true);
+
+    const cleanupBranchesYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/cleanup-branches.yml'),
+      'utf8'
+    );
+    assert.equal(cleanupBranchesYaml.includes('dependabot/,sync/'), true);
+    assert.equal(cleanupBranchesYaml.includes('BRANCH_CLEANUP_UNMERGED_MIN_AGE_DAYS'), true);
+    assert.equal(cleanupBranchesYaml.includes('timeout-minutes: 10'), true);
+
+    const syncBetaYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/sync-beta-from-main.yml'),
+      'utf8'
+    );
+    assert.equal(syncBetaYaml.includes('git merge-base --is-ancestor origin/main origin/beta'), true);
+    assert.equal(syncBetaYaml.includes('git merge --no-ff origin/main'), true);
+    assert.equal(syncBetaYaml.includes('github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}'), true);
+    assert.equal(syncBetaYaml.includes('pr-review-gate.yml'), true);
+    assert.equal(syncBetaYaml.includes('draft: !hasPatToken'), true);
+
+    const prReviewGateYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/pr-review-gate.yml'),
+      'utf8'
+    );
+    assert.equal(
+      /pull_request:\s*\r?\n\s*types:[\s\S]*?\n\s*-\s*edited\b[\s\S]*?pull_request_review:/.test(
+        prReviewGateYaml
+      ),
+      true
+    );
+    assert.equal(prReviewGateYaml.includes('github.event.changes.base != null'), true);
+
+    const dependabotYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/dependabot.yml'),
+      'utf8'
+    );
+    assert.equal(dependabotYaml.includes('package-ecosystem: "npm"'), true);
+    assert.equal(dependabotYaml.includes('package-ecosystem: "gradle"'), true);
+    assert.equal(dependabotYaml.includes('package-ecosystem: "github-actions"'), true);
+    assert.equal(dependabotYaml.includes('target-branch: "beta"'), true);
+
+    // Extract and unit-test sync-agile-tracker.yml pure github-script (zero PR checkout)
+    const syncAgileYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/sync-agile-tracker.yml'),
+      'utf8'
+    );
+    assert.equal(syncAgileYaml.includes('actions/checkout'), false);
+    assert.equal(syncAgileYaml.includes('pull_request_target:'), true);
+    const runSyncAgileScript = new AsyncFunction(
+      'context',
+      'github',
+      'core',
+      extractWorkflowScript('.github/workflows/sync-agile-tracker.yml')
+    );
+
+    const runSyncAgileCase = async ({
+      merged = true,
+      baseRef = 'beta',
+      prNumber = 495,
+      prTitle = 'Harden storage sandbox and changelog compiler',
+      labels = [],
+      body = '',
+      issuesByNumber = {},
+    }) => {
+      const updatedIssues = [];
+      const coreMock = {
+        infos: [],
+        info: (msg) => coreMock.infos.push(msg),
+      };
+      const githubMock = {
+        rest: {
+          issues: {
+            get: async ({ issue_number }) => ({ data: issuesByNumber[issue_number] }),
+            update: async (payload) => {
+              updatedIssues.push(payload);
+              return { data: {} };
+            },
+          },
+        },
+      };
+      const contextMock = {
+        repo: { owner: 'shthed', repo: 'capy' },
+        payload: {
+          pull_request: {
+            number: prNumber,
+            title: prTitle,
+            html_url: `https://github.com/shthed/capy/pull/${prNumber}`,
+            merged,
+            base: { ref: baseRef },
+            labels: labels.map((name) => ({ name })),
+            body,
+          },
+        },
+      };
+      await runSyncAgileScript(contextMock, githubMock, coreMock);
+      return updatedIssues;
+    };
+
+    // Case 1: epic:2 label flips unchecked PR checklist line [ ] -> [x]
+    const syncRes1 = await runSyncAgileCase({
+      labels: ['epic:2'],
+      prNumber: 495,
+      issuesByNumber: {
+        477: {
+          number: 477,
+          state: 'open',
+          body: '#### Staged on `beta`\n- [ ] [#495 — Old PR Title](https://github.com/shthed/capy/pull/495)\n',
+        },
+      },
+    });
+    assert.equal(syncRes1.length, 1);
+    assert.equal(syncRes1[0].issue_number, 477);
+    assert.equal(
+      syncRes1[0].body.includes('- [x] [#495 — Old PR Title](https://github.com/shthed/capy/pull/495)'),
+      true
+    );
+
+    // Case 2: Agile Scope EPIC-3 inserts [x] bullet under Staged on beta when absent
+    const syncRes2 = await runSyncAgileCase({
+      prNumber: 499,
+      prTitle: 'Add loupe magnifier',
+      body: '**Agile Scope**: Tracked in [EPIC-3](https://github.com/shthed/capy/issues/478)',
+      issuesByNumber: {
+        478: {
+          number: 478,
+          state: 'open',
+          body: '#### Staged on `beta`\n- [x] [#472 — Zoom](https://github.com/shthed/capy/pull/472)\n\n#### Open\n- [ ] Future\n',
+        },
+      },
+    });
+    assert.equal(syncRes2.length, 1);
+    assert.equal(syncRes2[0].issue_number, 478);
+    assert.equal(
+      syncRes2[0].body.includes('- [x] [#499 — Add loupe magnifier](https://github.com/shthed/capy/pull/499)'),
+      true
+    );
+
+    // Case 3: closed issue or unmerged PR makes zero mutations
+    const syncRes3 = await runSyncAgileCase({
+      labels: ['epic:1'],
+      prNumber: 500,
+      issuesByNumber: {
+        476: { number: 476, state: 'closed', body: '- [ ] #500' },
+      },
+    });
+    assert.equal(syncRes3.length, 0);
+    const syncRes4 = await runSyncAgileCase({ merged: false, labels: ['epic:2'] });
+    assert.equal(syncRes4.length, 0);
     /* capy-dev-only:end */
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, and Version/Changelog sync verified.');
+    // Verify web/public/404.html redirect logic, .github/scripts/pr-index.html, & generate-pr-manifest.mjs
+    console.log('-> Testing 404.html redirect VM behavior, pr-index.html, generate-pr-manifest.mjs & workflow wiring...');
+    const notFoundHtmlPath = path.resolve(projectRoot, 'public/404.html');
+    const notFoundHtml = fs.readFileSync(notFoundHtmlPath, 'utf8');
+    assert.equal(notFoundHtml.includes('/capy/alpha/?missing='), true, '404.html must redirect to /capy/alpha/?missing=');
+    assert.equal(notFoundHtml.includes('(alpha|PR|pull)'), true, '404.html must match /capy/alpha/, /capy/PR/, and /capy/pull/');
+    assert.equal(notFoundHtml.includes('href="/capy/alpha/"'), true, '404.html must include fallback /capy/alpha/ link');
+
+    const scriptMatch = notFoundHtml.match(/<script>([\s\S]*?)<\/script>/);
+    assert.ok(scriptMatch, '404.html must contain an inline redirect script');
+    const run404Redirect = (pathname) => {
+      let replacedWith = null;
+      const msgEl = { textContent: '' };
+      const prLinkEl = {
+        attrs: {},
+        setAttribute(k, v) {
+          this.attrs[k] = v;
+        },
+      };
+      const sandbox = {
+        encodeURIComponent,
+        window: {
+          location: {
+            pathname,
+            replace(url) {
+              replacedWith = url;
+            },
+          },
+        },
+        document: {
+          getElementById(id) {
+            if (id === 'message') return msgEl;
+            if (id === 'pr-link') return prLinkEl;
+            return null;
+          },
+        },
+      };
+      vm.runInNewContext(scriptMatch[1], sandbox);
+      return { replacedWith, msg: msgEl.textContent, href: prLinkEl.attrs.href ?? null };
+    };
+
+    assert.equal(run404Redirect('/capy/alpha/491/').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/PR/491/').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/pull/489/').replacedWith, '/capy/alpha/?missing=489');
+    assert.equal(run404Redirect('/capy/PR/').replacedWith, '/capy/alpha/');
+    assert.equal(run404Redirect('/capy/pull/').replacedWith, '/capy/alpha/');
+    assert.equal(run404Redirect('/capy/alpha/').replacedWith, null, '404.html must not loop on /capy/alpha/');
+    assert.equal(run404Redirect('/capy/alpha').replacedWith, null, '404.html must not loop on /capy/alpha');
+    assert.equal(run404Redirect('/capy/beta/missing').replacedWith, null, '404.html must not redirect /capy/beta/*');
+    assert.equal(run404Redirect('/capy/unknown').replacedWith, null, '404.html must not redirect /capy/unknown');
+    assert.equal(run404Redirect('/capy/privacy-policy.html').replacedWith, null, '404.html must not redirect /capy/privacy-policy.html');
+    assert.equal(run404Redirect('/capy/preview').replacedWith, null, '404.html must not redirect /capy/preview');
+    assert.equal(run404Redirect('/capy/pull-request').replacedWith, null, '404.html must not redirect /capy/pull-request');
+    assert.equal(run404Redirect('/capy/alpha-test').replacedWith, null, '404.html must not redirect /capy/alpha-test');
+    assert.equal(run404Redirect('/capy/alpha/491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/alpha///491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/pull/491').replacedWith, '/capy/alpha/?missing=491');
+    assert.equal(run404Redirect('/capy/PR/491/sub?x=1#y').replacedWith, '/capy/alpha/?missing=491');
+
+    const prIndexHtmlPath = path.resolve(projectRoot, '../.github/scripts/pr-index.html');
+    const prIndexHtml = fs.readFileSync(prIndexHtmlPath, 'utf8');
+    assert.equal(prIndexHtml.includes('/capy/alpha/'), true, 'pr-index.html must target /capy/alpha/');
+    assert.equal(prIndexHtml.includes("fetch('manifest.json', { cache: 'no-store' })"), true, 'pr-index.html must fetch manifest.json with no-store');
+    assert.equal(prIndexHtml.includes("params.get('missing')"), true, 'pr-index.html must read ?missing= query parameter');
+    assert.equal(prIndexHtml.includes('/capy/PR/'), false, 'pr-index.html must not reference legacy /capy/PR/');
+    assert.equal(prIndexHtml.toLowerCase().includes('shthed'), false, 'pr-index.html must not hardcode owner slug');
+    assert.equal(prIndexHtml.includes('deriveRepoSlug'), true, 'pr-index.html must derive repo slug dynamically');
+
+    const { generatePrManifest } = await import('../../.github/scripts/generate-pr-manifest.mjs');
+    const tmpPagesDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-pr-manifest-'));
+    try {
+      const alphaDir = path.join(tmpPagesDir, 'alpha');
+      fs.mkdirSync(path.join(alphaDir, '485'), { recursive: true });
+      fs.mkdirSync(path.join(alphaDir, '491'), { recursive: true });
+      fs.mkdirSync(path.join(alphaDir, 'feature-x'), { recursive: true });
+      fs.mkdirSync(path.join(alphaDir, 'not-a-pr'), { recursive: true });
+      fs.writeFileSync(path.join(alphaDir, '491', 'capy.apk'), 'apk');
+
+      const manifest = generatePrManifest({ pagesDir: tmpPagesDir });
+      assert.deepEqual(
+        manifest.prs.map((p) => ({ number: p.number, path: p.path, hasApk: p.hasApk })),
+        [
+          { number: 491, path: '/capy/alpha/491/', hasApk: true },
+          { number: 485, path: '/capy/alpha/485/', hasApk: false },
+        ],
+        'generatePrManifest must sort numeric PR directories descending, emit /capy/alpha/<id>/, and exclude non-numeric dirs'
+      );
+      const writtenManifest = JSON.parse(fs.readFileSync(path.join(alphaDir, 'manifest.json'), 'utf8'));
+      assert.deepEqual(
+        writtenManifest.prs.map((p) => p.path),
+        ['/capy/alpha/491/', '/capy/alpha/485/']
+      );
+      assert.equal(fs.existsSync(path.join(alphaDir, 'index.html')), true, 'alpha/index.html must be copied');
+      assert.equal(fs.existsSync(path.join(tmpPagesDir, '404.html')), true, 'root 404.html must be seeded when missing');
+
+      // Passing alpha/ subdirectory directly must resolve rootPagesDir cleanly
+      const subManifest = generatePrManifest({ pagesDir: alphaDir });
+      assert.equal(subManifest.prs.length, 2);
+
+      // Existing 404.html must be preserved when refreshNotFound is false, and overwritten when refreshNotFound is true
+      const dest404Path = path.join(tmpPagesDir, '404.html');
+      fs.writeFileSync(dest404Path, 'stale-404-sentinel', 'utf8');
+      generatePrManifest({ pagesDir: tmpPagesDir, refreshNotFound: false });
+      assert.equal(fs.readFileSync(dest404Path, 'utf8'), 'stale-404-sentinel');
+
+      generatePrManifest({ pagesDir: tmpPagesDir, refreshNotFound: true });
+      assert.equal(fs.readFileSync(dest404Path, 'utf8'), notFoundHtml);
+
+      // Verify CLI flags --pages-dir, --not-found-src, and --refresh-404
+      fs.writeFileSync(dest404Path, 'cli-stale-sentinel', 'utf8');
+      execFileSync(process.execPath, [
+        path.resolve(projectRoot, '../.github/scripts/generate-pr-manifest.mjs'),
+        '--pages-dir',
+        tmpPagesDir,
+        '--not-found-src',
+        notFoundHtmlPath,
+        '--refresh-404',
+      ]);
+      assert.equal(fs.readFileSync(dest404Path, 'utf8'), notFoundHtml);
+
+      // cleanup-gh-pages-previews must preserve alpha/index.html and alpha/manifest.json intact
+      const cleanupRes = await previewCleanupMod.runCleanupGhPagesPreviews({
+        pagesDir: tmpPagesDir,
+        ignoreRecency: true,
+        repository: 'a/b',
+        token: 'tok',
+        defaultBranch: 'main',
+        remoteBranches: ['main', 'beta'],
+        baseDelayMs: 1,
+        sleepImpl: async () => {},
+        fetchImpl: async () =>
+          makeMockResponse({
+            ok: true,
+            status: 200,
+            jsonData: [{ number: 491, state: 'open', head: { ref: 'fix/pr-404-redirect' } }],
+          }),
+      });
+      assert.equal(cleanupRes.deleted.includes('alpha/485'), true);
+      assert.equal(fs.existsSync(path.join(alphaDir, '491')), true);
+      assert.equal(fs.existsSync(path.join(alphaDir, '485')), false);
+      assert.equal(fs.existsSync(path.join(alphaDir, 'index.html')), true, 'alpha/index.html must survive preview cleanup');
+      assert.equal(fs.existsSync(path.join(alphaDir, 'manifest.json')), true, 'alpha/manifest.json must survive preview cleanup');
+    } finally {
+      fs.rmSync(tmpPagesDir, { recursive: true, force: true });
+    }
+
+    const deployWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/deploy-branch.yml'),
+      'utf8'
+    );
+    assert.equal(deployWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
+    assert.equal(deployWorkflowYaml.includes('web/public/404.html'), true);
+    assert.equal(deployWorkflowYaml.includes('--refresh-404'), true);
+
+    const cleanupWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
+      'utf8'
+    );
+    assert.equal(cleanupWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
+
+    // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
+    console.log('-> Testing compile-changelog.mjs release note extraction & release.yml wiring...');
+    const { extractReleaseNotes, formatReleaseNotesMarkdown } = await import(
+      '../../.github/scripts/compile-changelog.mjs'
+    );
+    const sampleChangelog = `### 3.0.7 - 2026-11-13 (Beta)
+
+- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)
+
+### 3.0.6 - 2026-11-13
+
+- Prior release note [#489](https://github.com/shthed/capy/pull/489)
+
+### 2.9 - 2026-11-10
+
+- Minor rollup note [#470](https://github.com/shthed/capy/pull/470)`;
+    assert.equal(
+      extractReleaseNotes(sampleChangelog, 'v3.0.7'),
+      '- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)'
+    );
+    assert.equal(
+      extractReleaseNotes(sampleChangelog.replace(/\n/g, '\r\n'), 'v3.0.7-beta.1'),
+      '- Fix Play Games fallback and DPR canvas scaling [#495](https://github.com/shthed/capy/pull/495)'
+    );
+    assert.equal(
+      extractReleaseNotes(sampleChangelog, 'v2.9.4'),
+      '- Minor rollup note [#470](https://github.com/shthed/capy/pull/470)'
+    );
+    assert.equal(extractReleaseNotes(sampleChangelog, 'v9.9.9'), '- Release v9.9.9');
+    assert.throws(() => extractReleaseNotes(sampleChangelog, 'invalid-tag'));
+    assert.equal(
+      formatReleaseNotesMarkdown(sampleChangelog, 'v3.0.6'),
+      '### What\'s New in `v3.0.6`\n\n- Prior release note [#489](https://github.com/shthed/capy/pull/489)\n'
+    );
+    const tmpReleaseNotesOut = path.join(os.tmpdir(), 'capy-release-notes-test.md');
+    try {
+      execFileSync(process.execPath, [
+        path.resolve(projectRoot, '../.github/scripts/compile-changelog.mjs'),
+        '--tag',
+        `v${webPkgJson.version}`,
+        '--changelog',
+        path.resolve(projectRoot, '../CHANGELOG.md'),
+        '--out',
+        tmpReleaseNotesOut,
+      ]);
+      const cliNotes = fs.readFileSync(tmpReleaseNotesOut, 'utf8');
+      assert.equal(cliNotes.startsWith(`### What's New in \`v${webPkgJson.version}\`\n\n`), true);
+    } finally {
+      fs.rmSync(tmpReleaseNotesOut, { force: true });
+    }
+    const releaseWorkflowYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/release.yml'),
+      'utf8'
+    );
+    assert.equal(releaseWorkflowYaml.includes('compile-changelog.mjs'), true);
+    assert.equal(releaseWorkflowYaml.includes('python3'), false);
+
+    // Verify .github/scripts/compile-changelog.mjs stops cleanly at ## headings
+    const changelogWithSubheading = `### 3.0.7 - 2026-11-13 (Beta)
+
+- Top bullet [#495](https://example.invalid/pull/495)
+
+## Archive Section
+
+- Should never bleed into v3.0.7 release notes`;
+    assert.equal(
+      extractReleaseNotes(changelogWithSubheading, 'v3.0.7'),
+      '- Top bullet [#495](https://example.invalid/pull/495)'
+    );
+
+    // Verify sanity.mjs .changelog fragment parser + web/scripts/compile-changelog.mjs
+    console.log('-> Testing .changelog fragment validation, compile-changelog.mjs, StorageNamespace & UserSettings enums...');
+    const sanityMod = await import('./sanity.mjs');
+    const compileMod = await import('./compile-changelog.mjs');
+
+    const validFrag = sanityMod.parseChangelogFragment(
+      '---\nbump: minor\nepic: EPIC-3\ntask: TASK-2.5\n---\nAdd crisp new brush stroke effect\n',
+      '.changelog/brush.md'
+    );
+    assert.equal(validFrag.bump, 'minor');
+    assert.equal(validFrag.task, 'TASK-2.5');
+    assert.throws(() => sanityMod.parseChangelogFragment('---\nbump: invalid\n---\nBad bump\n'));
+    assert.throws(() => sanityMod.parseChangelogFragment('---\nbump: patch\n---\nLine 1\nLine 2\n'));
+
+    assert.equal(compileMod.computeNextSemVer('3.0.7', 'patch').version, '3.0.8');
+    assert.equal(compileMod.computeNextSemVer('3.0.7', 'minor').version, '3.1.0');
+    assert.equal(compileMod.computeNextSemVer('3.0.7', 'major').version, '4.0.0');
+
+    const tmpCompileRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-changelog-compile-'));
+    try {
+      fs.mkdirSync(path.join(tmpCompileRepo, 'web/src'), { recursive: true });
+      fs.mkdirSync(path.join(tmpCompileRepo, 'app'), { recursive: true });
+      fs.mkdirSync(path.join(tmpCompileRepo, '.changelog'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'web/package.json'),
+        JSON.stringify({ name: 'capy-paint', version: '3.0.7' }, null, 2),
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'web/src/version.ts'),
+        `export const APP_VERSION = '3.0.7';\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'app/build.gradle.kts'),
+        `versionCode = 30007\nversionName = "3.0.7"\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'TODO.md'),
+        `# Queue\n\n### TASK-2.5: Finish release\n\nDetails here.\n\n### BUG-4: Keep me\n\nKeep details.\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'CHANGELOG.md'),
+        `### 3.0.7 - 2026-11-12 (Beta)\n\n- Beta item [#495](https://github.com/capyboop/capy/pull/495)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod item [#488](https://github.com/capyboop/capy/pull/488)\n`,
+        'utf8'
+      );
+      fs.writeFileSync(path.join(tmpCompileRepo, '.changelog/README.md'), '# Fragments\n', 'utf8');
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/01-fix.md'),
+        '---\nbump: patch\npr: 496\ntask: TASK-2.5\n---\nFix edge zoom jitter\n',
+        'utf8'
+      );
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/02-feat.md'),
+        '---\nbump: minor\nepic: EPIC-3\n---\nAdd loupe magnifier\n',
+        'utf8'
+      );
+
+      assert.equal(sanityMod.validateChangelogFragments(tmpCompileRepo), 2);
+      const betaCompileRes = compileMod.compileChangelog({
+        repoRoot: tmpCompileRepo,
+        dateStr: '2026-11-13',
+        prMap: { '02-feat': 497 },
+      });
+      assert.equal(betaCompileRes.version, '3.1.0');
+      assert.equal(betaCompileRes.compiledCount, 2);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(tmpCompileRepo, 'web/package.json'), 'utf8')).version, '3.1.0');
+      assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'web/src/version.ts'), 'utf8').includes("'3.1.0'"), true);
+      assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'app/build.gradle.kts'), 'utf8').includes('versionCode = 30100'), true);
+      assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'app/build.gradle.kts'), 'utf8').includes('versionName = "3.1.0"'), true);
+      const todoAfter = fs.readFileSync(path.join(tmpCompileRepo, 'TODO.md'), 'utf8');
+      assert.equal(todoAfter.includes('TASK-2.5'), false);
+      assert.equal(todoAfter.includes('BUG-4'), true);
+      assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/01-fix.md')), false);
+      assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/README.md')), true);
+      const compiledCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
+      assert.equal(compiledCl.startsWith('### 3.1.0 - 2026-11-13 (Beta)\n'), true);
+      assert.equal(compiledCl.includes('### 3.0.7 - 2026-11-12\n'), true);
+      assert.equal(compiledCl.includes('### 3.0.1 - 2026-11-10 (Production)\n'), true);
+
+      // Promote to Production, Beta
+      const promoRes = compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true });
+      assert.equal(promoRes.promoted, true);
+      const promotedCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
+      assert.equal(promotedCl.startsWith('### 3.1.0 - 2026-11-13 (Production, Beta)\n'), true);
+      assert.equal(promotedCl.includes('### 3.0.1 - 2026-11-10\n'), true);
+
+      // Refuse promoting an (Alpha) top heading
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'CHANGELOG.md'),
+        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- Alpha preview [#498](https://github.com/capyboop/capy/pull/498)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod [#488](https://github.com/capyboop/capy/pull/488)\n`,
+        'utf8'
+      );
+      assert.throws(() => compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true }));
+    } finally {
+      fs.rmSync(tmpCompileRepo, { recursive: true, force: true });
+    }
+
+    // Verify StorageNamespace isolation + StorageService UserSettings enum round-trips
+    const nsMod = await vite.ssrLoadModule('/src/services/StorageNamespace.ts');
+    const storageMod = await vite.ssrLoadModule('/src/services/StorageService.ts');
+    assert.deepEqual(nsMod.resolveStorageNamespace('/capy/', 'https://capypaint.com', ''), {
+      channel: 'stable',
+      isSandboxed: false,
+      sandboxSuffix: '',
+      dbName: 'capy_game_storage_v8',
+    });
+    assert.deepEqual(nsMod.resolveStorageNamespace('/capy/beta/', 'https://example.github.io', ''), {
+      channel: 'beta',
+      isSandboxed: true,
+      sandboxSuffix: '__sandbox_beta',
+      dbName: 'capy_game_storage_v8_beta',
+    });
+    assert.deepEqual(nsMod.resolveStorageNamespace('/capy/alpha/495/', 'https://example.github.io', ''), {
+      channel: 'alpha',
+      isSandboxed: true,
+      sandboxSuffix: '__sandbox_alpha',
+      dbName: 'capy_game_storage_v8_alpha',
+    });
+    assert.equal(
+      nsMod.resolveScopedStorageKey('capy_snapshots_v8', '/capy/beta/', 'https://example.github.io', '?capy_sandbox=0'),
+      'capy_snapshots_v8'
+    );
+    assert.equal(
+      nsMod.resolveScopedBackupKey('capy_user_settings_v8', '/capy/alpha/495/', 'https://example.github.io', ''),
+      'capy_user_settings_v8__sandbox_alpha'
+    );
+    assert.equal(
+      nsMod.resolveScopedDbName('/capy/', 'https://capypaint.com', '?capy_sandbox=1'),
+      'capy_game_storage_v8_stable'
+    );
+
+    const prevLs = globalThis.localStorage;
+    const prevSsrWin = globalThis.window;
+    const mockStorage = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (mockStorage.has(k) ? mockStorage.get(k) : null),
+      setItem: (k, v) => mockStorage.set(k, String(v)),
+      removeItem: (k) => mockStorage.delete(k),
+    };
+    globalThis.window = { location: { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' } };
+    try {
+      storageMod.StorageService.saveSettings({
+        ...storageMod.DEFAULT_SETTINGS,
+        difficulty: 'NORMAL',
+        paletteSort: 'HUE',
+        highlightStyle: 'CENTROID_GLOW',
+      });
+      const loadedNormalHue = storageMod.StorageService.loadSettings();
+      assert.equal(loadedNormalHue.difficulty, 'NORMAL');
+      assert.equal(loadedNormalHue.paletteSort, 'HUE');
+      assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
+
+      storageMod.StorageService.saveSettings({
+        ...storageMod.DEFAULT_SETTINGS,
+        paletteSort: 'LIGHTNESS',
+      });
+      assert.equal(storageMod.StorageService.loadSettings().paletteSort, 'LIGHTNESS');
+    } finally {
+      globalThis.localStorage = prevLs;
+      globalThis.window = prevSsrWin;
+    }
+
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -1506,10 +5415,100 @@ async function runBrowserBasicsSuite() {
       };
     }, expectedSwCacheKey);
     assert.equal(bootMeta.count, 4);
-    assert.equal(bootMeta.firstId, 'sample-capybara');
+    assert.equal(bootMeta.firstId, 'sample-capy-forest');
     assert.equal(bootMeta.swReady, true);
     assert.equal(bootMeta.hasScopedCache, true, `Expected Service Worker cache ${expectedSwCacheKey}`);
     assert.equal(bootMeta.hasLegacyCache, false, 'Legacy unscoped capy-cache-v2 must not exist');
+
+    // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
+    const tutorialCard = page.getByTestId('onboarding-tutorial');
+    await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 5');
+    // Step 1: Pick Color (click an unselected palette swatch -> shows Tried! badge and auto-advances to Step 2)
+    await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    // Step 2: Tap & Paint Shape (tap canvas below tutorial card -> shows Tried! badge and auto-advances to Step 3)
+    const canvasBoxTut = await page.locator('canvas').first().boundingBox();
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const xFrac = 0.42 + (attempt % 3) * 0.08;
+      const yFrac = 0.60 + Math.floor(attempt / 3) * 0.08;
+      await page.mouse.click(canvasBoxTut.x + canvasBoxTut.width * xFrac, canvasBoxTut.y + canvasBoxTut.height * yFrac);
+      await page.waitForTimeout(80);
+      if ((await page.getByTestId('tutorial-step-tried-badge').count()) > 0) break;
+    }
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    // Step 3: Zoom & Pan (step zoom -> shows Tried! badge and auto-advances to Step 4, then restore 1x)
+    await page.keyboard.press('+');
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    await page.keyboard.press('0');
+    // Step 4: Smart Hints (use inline Try Hint button -> marks tried and auto-advances to Step 5)
+    await page.getByTestId('tutorial-try-hint-btn').click();
+    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.waitForFunction(
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 5',
+      undefined,
+      { timeout: 3000 }
+    );
+    // Step 5: Finish Coloring
+    await page.getByTestId('tutorial-finish-btn').click();
+    await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
+    const tutorialCompletedFlag = await page.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1'));
+    assert.equal(tutorialCompletedFlag, '1');
+
+    // Verify ?skipTutorial=1 suppresses tutorial AND Escape with modal open closes only modal before tutorial
+    const skipTutContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const skipTutPage = await skipTutContext.newPage();
+    attachErrorListeners(skipTutPage, 'skipTutPage');
+    await skipTutPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(skipTutPage);
+    assert.equal(
+      await skipTutPage.getByTestId('onboarding-tutorial').count(),
+      0,
+      '?skipTutorial=1 must suppress OnboardingTutorial on cold start'
+    );
+    await skipTutPage.close();
+    await skipTutContext.close();
+
+    const escTutContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const escTutPage = await escTutContext.newPage();
+    attachErrorListeners(escTutPage, 'escTutPage');
+    await escTutPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(escTutPage);
+    await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
+    await escTutPage.locator('button[title="Settings and Menu"]').click();
+    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'visible', timeout: 3000 });
+    await escTutPage.keyboard.press('Escape');
+    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(
+      await escTutPage.getByTestId('onboarding-tutorial').isVisible(),
+      true,
+      'Pressing Escape while SettingsModal is open must NOT double-dismiss OnboardingTutorial'
+    );
+    await escTutPage.keyboard.press('Escape');
+    await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(
+      await escTutPage.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1')),
+      '1',
+      'Pressing Escape with no modal open must dismiss OnboardingTutorial and persist completion'
+    );
+    await escTutPage.close();
+    await escTutContext.close();
+
 
     // Verify malformed #s= DoS token degrades cleanly without crashing the app
     const dosSharePage = await context.newPage();
@@ -1612,14 +5611,30 @@ async function runBrowserBasicsSuite() {
     console.log('3. Verifying Undo, Redo, long-press Replay scrubber, Resume Here & Free Colour auto-undo...');
     assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo hidden by default for standard puzzles');
 
-    // Open Settings -> verify version badge, enable Undo, test Charcoal background reset, and verify tab memory
+    // Open Settings -> verify all 5 distinct tabs (About=0, Settings=1, Hints=2, Create=3, Saves=4), zero duplicates, and tab 4 persistence across reload
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
     await settingsBtn.click();
     await page.waitForTimeout(200);
 
+    // Tab 0: About
     const pkgVersion = JSON.parse(fs.readFileSync(path.resolve(projectRoot, 'package.json'), 'utf8')).version;
     const versionBadgeText = await page.locator('[data-testid="app-version-badge"]').textContent();
     assert.equal(versionBadgeText?.trim(), `v${pkgVersion}`, `Expected app-version-badge to equal v${pkgVersion}`);
+    assert.equal(await page.getByTestId('app-version-badge').count(), 1, 'Expected single app-version-badge in About tab');
+    assert.equal(await page.getByTestId('about-screen-card').isVisible(), true, 'About tab must render about-screen-card');
+    assert.equal(await page.getByTestId('about-replay-tutorial-btn').isVisible(), true, 'About tab must render about-replay-tutorial-btn');
+    assert.equal(await page.getByTestId('lifetime-stats-card').isVisible(), true, 'About tab must render lifetime-stats-card');
+    assert.equal(await page.getByTestId('release-channel-card').isVisible(), true, 'About tab must render release-channel-card');
+    assert.equal(await page.getByText('Highlight Style').count(), 0, 'About tab must not render Hints content');
+
+    // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.waitForTimeout(150);
+    assert.equal(await page.getByText('Canvas Background').isVisible(), true, 'Settings tab must render Canvas Background');
+    assert.equal(await page.getByTestId('app-version-badge').count(), 0, 'Settings tab must not duplicate app-version-badge');
+    assert.equal(await page.getByTestId('lifetime-stats-card').count(), 0, 'Settings tab must not duplicate lifetime-stats-card');
+    assert.equal(await page.getByTestId('release-channel-card').count(), 0, 'Settings tab must not duplicate release-channel-card');
+    assert.equal(await page.getByText('Highlight Style').count(), 0, 'Settings tab must not leak Hints content');
 
     await page.locator('button[title="Charcoal"]').first().click();
     for (const labelText of [
@@ -1631,7 +5646,39 @@ async function runBrowserBasicsSuite() {
       await labelEl.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     }
 
-    // Switch to Hints tab and close -> reopen to verify capy_last_settings_tab persistence
+    // Tab 2: Hints
+    await page.getByRole('button', { name: 'Hints', exact: true }).click();
+    await page.waitForTimeout(120);
+    assert.equal(await page.getByText('Highlight Style').isVisible(), true, 'Hints tab must render Highlight Style');
+    assert.equal(await page.getByText('Hint Fill Pattern').isVisible(), true, 'Hints tab must render Hint Fill Pattern');
+    assert.equal(await page.getByText('Canvas Background').count(), 0, 'Hints tab must not render Settings content');
+
+    // Tab 3: Create
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.waitForTimeout(120);
+    assert.equal(await page.getByTestId('daily-puzzle-card').isVisible(), true, 'Create tab must render daily-puzzle-card');
+    assert.equal(await page.getByTestId('gallery-search-input').isVisible(), true, 'Create tab must render gallery-search-input');
+    assert.equal(await page.getByText('Highlight Style').count(), 0, 'Create tab must not render Hints content');
+
+    // Tab 4: Saves (persist tab 4 across full page reload)
+    await page.getByRole('button', { name: 'Saves', exact: true }).click();
+    await page.waitForTimeout(120);
+    assert.equal(await page.getByTestId('cloud-coop-hub').isVisible(), true, 'Saves tab must render cloud-coop-hub');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')), '4');
+
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    await settingsBtn.click();
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.getByTestId('cloud-coop-hub').isVisible(),
+      true,
+      'Saves tab (index 4) must restore after page reload via capy_last_settings_tab'
+    );
+
+    // Switch to Hints tab and close -> verify capy_last_settings_tab === '2'
     await page.getByRole('button', { name: 'Hints', exact: true }).click();
     await page.waitForTimeout(150);
     await page.keyboard.press('Escape');
@@ -1640,7 +5687,7 @@ async function runBrowserBasicsSuite() {
     const updatedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'));
     assert.equal(updatedSettings.canvasBgColor, 'CHARCOAL');
     assert.equal(updatedSettings.canvasBgArgb >>> 0, 0xff18181b);
-    assert.equal(localStorage_tab(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '1');
+    assert.equal(localStorage_tab(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '2');
 
     function localStorage_tab(v) {
       return String(v);
@@ -1716,6 +5763,25 @@ async function runBrowserBasicsSuite() {
     });
     assert.equal(progressAfterCtrlY, 3, 'Expected Ctrl+Y to redo step 3');
 
+    // Verify ReplayControls "Next" button (onOpenCreate) opens Create tab (index 3)
+    const undoBoxForNext = await (await page.waitForSelector('[data-testid="undo-btn"]')).boundingBox();
+    await page.mouse.move(undoBoxForNext.x + undoBoxForNext.width / 2, undoBoxForNext.y + undoBoxForNext.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(520);
+    await page.mouse.up();
+    await page.waitForSelector('[data-testid="replay-controls-window"]', { timeout: 3000 });
+    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
+    await page.waitForTimeout(120);
+    await page.locator('button[title="Pick Next Artwork"]').click();
+    await page.getByTestId('daily-puzzle-card').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')),
+      '3',
+      'ReplayControls Next button must open SettingsModal Create tab (index 3)'
+    );
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+
     // Verify save-load zoom restoration before replay, offscreen step fast-forward, and pan/zoom during playback
     const zoomInBtn = await page.waitForSelector('[data-testid="zoom-in-btn"]');
     await zoomInBtn.click();
@@ -1750,8 +5816,27 @@ async function runBrowserBasicsSuite() {
     // Immediately check that Fit-to-Screen button is visible (meaning previous zoom extent was restored BEFORE replay)
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
     // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
+    await page.waitForSelector('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]', { timeout: 5000 });
+    // First Ctrl+Z while awaiting post-load replay dismisses ReplayControls AND immediately performs Undo on the same tick
+    await page.keyboard.press('Control+z');
+    await page.locator('[data-testid="replay-controls-window"]').waitFor({ state: 'hidden', timeout: 3000 });
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
-    await page.waitForTimeout(220);
+    const progressAfterFirstCtrlZ = await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return list[0]?.filledCount || 0;
+    });
+    assert.equal(
+      progressAfterFirstCtrlZ,
+      2,
+      'First Ctrl+Z while awaiting post-load ReplayControls must dismiss replay AND undo immediately (3 -> 2)'
+    );
+    await page.keyboard.press('Control+y');
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.evaluate(() => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0)),
+      3,
+      'Ctrl+Y after post-load replay dismiss must redo back to 3'
+    );
 
     // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
     const undoBtnAfterLoad = await page.waitForSelector('[data-testid="undo-btn"]');
@@ -2117,6 +6202,10 @@ async function runBrowserBasicsSuite() {
 
     // Verify completed puzzle Replay button starts replay in place without zooming out or resetting viewport
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
+    if (await page.locator('[data-testid="replay-exit-btn"]').isVisible()) {
+      await page.locator('[data-testid="replay-exit-btn"]').click();
+      await page.waitForTimeout(150);
+    }
     const completedReplayBtn = await page.waitForSelector('[data-testid="replay-btn"]', { timeout: 5000 });
     await completedReplayBtn.click();
     await page.waitForTimeout(380);
@@ -2282,33 +6371,57 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
 
-    const zoomBadge = page.getByTestId('topbar-zoom-badge');
-    await zoomBadge.waitFor({ state: 'visible', timeout: 5000 });
-
-    // Align to 1x stop if currently zoomed in from previous E2E steps
-    for (let guard = 0; guard < 6; guard++) {
-      const text = (await zoomBadge.innerText()).trim();
-      if (text === '1x') break;
-      await zoomBadge.click();
-    }
-    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected top HUD zoom badge to align to 1x');
-
-    const expectedZoomCycle = ['2x', '4x', '8x', '12x', '1x'];
-    for (const expectedLabel of expectedZoomCycle) {
-      await zoomBadge.click();
-      const actualLabel = (await zoomBadge.innerText()).trim();
-      assert.equal(
-        actualLabel,
-        expectedLabel,
-        `Expected topbar-zoom-badge to step to '${expectedLabel}', got '${actualLabel}'`
-      );
-    }
-    console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and HUD zoom-badge cycle (1x -> 2x -> 4x -> 8x -> 12x -> 1x) verified.');
+    assert.equal(
+      await page.getByTestId('topbar-zoom-badge').count(),
+      0,
+      'Expected topbar-zoom-badge to be removed from GameTopBar'
+    );
+    console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and topbar-zoom-badge removal verified.');
 
     // ------------------------------------------------------------------
     // 10. Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats
     // ------------------------------------------------------------------
     console.log('-> [E2E 10] Verifying Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats...');
+
+    // Prebaked sample viewport reset regression check (date-independent)
+    await page.reload({ waitUntil: 'load' });
+    await waitForPuzzleLoaded(page);
+
+    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    const snailCard = page.getByTestId('gallery-card-snail_guitar');
+    await snailCard.waitFor({ state: 'visible', timeout: 5000 });
+    await snailCard.getByRole('button', { name: 'Play', exact: true }).click();
+    await waitForPuzzleLoaded(page);
+    await page.waitForTimeout(200);
+
+    assert.equal(
+      await page.getByTestId('reset-view-btn').count(),
+      0,
+      'Expected reset-view-btn to be unmounted after prebaked sample viewport reset'
+    );
+    const prebakedSession = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+    });
+    assert.equal(
+      prebakedSession.zoomScale,
+      1,
+      `Expected capy_active_session_v8 zoomScale === 1 after prebaked sample load, got ${prebakedSession.zoomScale}`
+    );
+    assert.equal(
+      prebakedSession.panOffsetX,
+      0,
+      `Expected capy_active_session_v8 panOffsetX === 0 after prebaked sample load, got ${prebakedSession.panOffsetX}`
+    );
+    assert.equal(
+      prebakedSession.panOffsetY,
+      0,
+      `Expected capy_active_session_v8 panOffsetY === 0 after prebaked sample load, got ${prebakedSession.panOffsetY}`
+    );
+
+    // Zoom in before Play Daily so 10a also verifies daily puzzle launch resets non-1x zoom
+    await page.keyboard.press('+');
+    await page.waitForTimeout(80);
 
     // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
     await page.locator('button[title="Settings and Menu"]').click();
@@ -2392,10 +6505,11 @@ async function runBrowserBasicsSuite() {
     );
 
     // '+' zooms in above 1.0x (press twice so there is ample horizontal pan headroom)
-    assert.equal((await zoomBadge.innerText()).trim(), '1x', 'Expected daily puzzle initial zoom at 1x');
     await page.keyboard.press('+');
-    await page.waitForTimeout(80);
-    const zoomAfterFirstPlus = parseFloat((await zoomBadge.innerText()).replace('x', '').trim());
+    await page.waitForTimeout(420);
+    const zoomAfterFirstPlus = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1;
+    });
     assert.ok(
       zoomAfterFirstPlus > 1.0,
       `Expected keyboard "+" to zoom above 1.0x, got '${zoomAfterFirstPlus}'`
@@ -2428,10 +6542,13 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.keyboard.press('0');
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(420);
+    const zoomAfterReset = await page.evaluate(() => {
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1;
+    });
     assert.equal(
-      (await zoomBadge.innerText()).trim(),
-      '1x',
+      zoomAfterReset,
+      1,
       'Expected keyboard "0" to reset zoom back to 1x'
     );
 
@@ -2452,7 +6569,7 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'About', exact: true }).click();
     const statsCard = page.getByTestId('lifetime-stats-card');
     await statsCard.waitFor({ state: 'visible', timeout: 5000 });
     const renderedTotalText = (await page.getByTestId('stat-total-regions').innerText()).replace(/,/g, '').trim();
@@ -2496,13 +6613,6 @@ async function runBrowserBasicsSuite() {
 
     // 11b. TASK-4.1a: Infinite Zoom detail sub-tile sets parentSnapshotId, renders topbar-parent-puzzle-btn,
     // restores parent puzzle & viewport on tap, and hides breadcrumb pill when parent snapshot is deleted
-    await page.getByTestId('topbar-zoom-badge').click();
-    await page.waitForTimeout(120);
-    assert.equal(
-      (await page.getByTestId('topbar-zoom-badge').innerText()).trim(),
-      '2x',
-      'Parent puzzle should be zoomed to 2x before spawning detail sub-tile'
-    );
     const parentSnapId = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null;
     });
@@ -2554,11 +6664,6 @@ async function runBrowserBasicsSuite() {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null;
     });
     assert.equal(restoredActiveId, parentSnapId, 'Clicking topbar-parent-puzzle-btn must restore parent snapshot');
-    assert.equal(
-      (await page.getByTestId('topbar-zoom-badge').innerText()).trim(),
-      '2x',
-      'Returning to parent puzzle via breadcrumb must restore parent saved 2x viewport zoom'
-    );
     assert.equal(
       await parentBreadcrumbBtn.count(),
       0,
@@ -2621,6 +6726,10 @@ async function runBrowserBasicsSuite() {
     );
     await waitForPuzzleLoaded(page);
     await page.waitForTimeout(200);
+    if (await page.$('[data-testid="replay-exit-btn"]')) {
+      await page.locator('[data-testid="replay-exit-btn"]').click();
+      await page.waitForTimeout(150);
+    }
 
     // Ensure Enable Undo Action is ON and Free Colour Mode is OFF on Peer A
     await page.locator('button[title="Settings and Menu"]').click();
@@ -2630,13 +6739,14 @@ async function runBrowserBasicsSuite() {
     const currentSettings11c = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
     });
+    await page.locator('button:has(span:text-is("Settings"))').click();
+    await page.waitForTimeout(120);
     if (currentSettings11c.isFreeColorMode) {
       const fcLabel = await page.waitForSelector('text=Free Colour Mode');
       await fcLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
       await page.waitForTimeout(80);
     }
-    const isUndoVisibleAlready = (await page.getByTestId('undo-btn').count()) > 0;
-    if (!isUndoVisibleAlready) {
+    if (!currentSettings11c.enableUndo) {
       const undoSettingLabel = await page.waitForSelector('text=Enable Undo Action');
       await undoSettingLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
       await page.waitForTimeout(80);
@@ -2659,6 +6769,10 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(peerB, 'peerB-unfill');
     await peerB.goto(BASE_URL, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerB);
+    if (await peerB.$('[data-testid="replay-exit-btn"]')) {
+      await peerB.locator('[data-testid="replay-exit-btn"]').click();
+      await peerB.waitForTimeout(150);
+    }
     await peerB.getByTestId('topbar-coop-btn').click();
     await peerB.waitForTimeout(150);
     await peerB.getByTestId('join-coop-room-input').fill(undoRoomCode);
@@ -2739,11 +6853,11 @@ async function runBrowserBasicsSuite() {
     );
     await page.locator('button[title="Settings and Menu"]').click();
     await page.waitForTimeout(150);
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'About', exact: true }).click();
     await page.waitForTimeout(100);
     const channelCard = page.getByTestId('release-channel-card');
     await channelCard.scrollIntoViewIfNeeded();
-    assert.equal(await channelCard.isVisible(), true, 'release-channel-card must be visible in Controls tab');
+    assert.equal(await channelCard.isVisible(), true, 'release-channel-card must be visible in About tab');
     assert.equal(
       await page.getByTestId('toggle-beta-channel-btn').getAttribute('href'),
       'https://shthed.github.io/capy/beta/',
@@ -2775,7 +6889,7 @@ async function runBrowserBasicsSuite() {
     assert.equal(
       await betaCard.getAttribute('data-channel'),
       'beta',
-      'Clicking topbar-channel-badge must open Settings Controls tab with data-channel="beta"'
+      'Clicking topbar-channel-badge must open About tab with data-channel="beta"'
     );
     assert.equal(
       await betaPage.getByTestId('toggle-beta-channel-btn').getAttribute('href'),
@@ -2883,6 +6997,10 @@ async function runBrowserBasicsSuite() {
     // Reload Peer B before painting any region and verify welcomed regions survive reload
     await peerS2.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerS2);
+    if (await peerS2.$('[data-testid="replay-exit-btn"]')) {
+      await peerS2.locator('[data-testid="replay-exit-btn"]').click();
+      await peerS2.waitForTimeout(150);
+    }
     assert.equal(
       await readTotalRemainingRegions(peerS2),
       remainingPeerABeforeJoin,
@@ -3066,8 +7184,12 @@ async function runBrowserBasicsSuite() {
       `Minimized ReplayControls X button (${exitBox360.x}..${exitBox360.x + exitBox360.width}) must fit strictly inside 360px mobile pill border (${windowBox360.x}..${windowBox360.x + windowBox360.width})`
     );
 
-    // Wait for loaded save replay to finish and verify it automatically closes ReplayControls and resumes gameplay
-    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 10000 });
+    // Wait for loaded save replay to finish and verify ReplayControls remains onscreen until user interacts with puzzle
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    assert.equal(await mobileReplayWin.isVisible(), true, 'ReplayControls must remain onscreen after save-load replay finishes');
+    const canvasBox360 = await page.locator('canvas').first().boundingBox();
+    await page.mouse.click(canvasBox360.x + canvasBox360.width * 0.5, canvasBox360.y + canvasBox360.height * 0.45);
+    await mobileReplayWin.waitFor({ state: 'hidden', timeout: 5000 });
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
       await page.evaluate(
@@ -3089,24 +7211,26 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(120);
     console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
-    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap with BETA pill + zoomed badge
+    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + SettingsModal tab bar fit
     const mobileTopbarPage = await context.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
     await mobileTopbarPage.setViewportSize({ width: 360, height: 780 });
     await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
-    await mobileTopbarPage.getByTestId('topbar-zoom-badge').click();
-    await mobileTopbarPage.waitForTimeout(100);
+    assert.equal(
+      await mobileTopbarPage.getByTestId('topbar-zoom-badge').count(),
+      0,
+      'Expected topbar-zoom-badge to be absent on 360x780 mobile'
+    );
 
     const leftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
     const rightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
     const savesBox = await mobileTopbarPage.getByTestId('topbar-saves-btn').boundingBox();
     const channelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
-    const zoomBox = await mobileTopbarPage.getByTestId('topbar-zoom-badge').boundingBox();
     const settingsBox = await mobileTopbarPage.locator('button[title="Settings and Menu"]').boundingBox();
 
-    assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && zoomBox && settingsBox);
+    assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && settingsBox);
     assert.equal(
       leftLaneBox.x + leftLaneBox.width <= rightLaneBox.x,
       true,
@@ -3122,8 +7246,247 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+
+    // Open SettingsModal on 360x780 mobile and verify all header tabs fit without horizontal clipping
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    const tabsContainer = mobileTopbarPage.getByTestId('settings-modal-tabs');
+    const closeBtn = mobileTopbarPage.getByTestId('settings-modal-close');
+    await tabsContainer.waitFor({ state: 'visible', timeout: 5000 });
+    await closeBtn.waitFor({ state: 'visible', timeout: 5000 });
+
+    const tabsOverflow = await tabsContainer.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.equal(
+      tabsOverflow.scrollWidth <= tabsOverflow.clientWidth,
+      true,
+      `SettingsModal tabs must not overflow horizontally at 360x780 (scrollWidth=${tabsOverflow.scrollWidth}, clientWidth=${tabsOverflow.clientWidth})`
+    );
+
+    const tabsBox = await tabsContainer.boundingBox();
+    const closeBox = await closeBtn.boundingBox();
+    assert.ok(tabsBox && closeBox);
+    for (const tabKey of ['about', 'settings', 'hints', 'create', 'saves']) {
+      const tabBox = await mobileTopbarPage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
+      assert.ok(tabBox, `Expected settings-tab-${tabKey} boundingBox to exist`);
+      assert.equal(
+        tabBox.x >= tabsBox.x && tabBox.x + tabBox.width <= closeBox.x,
+        true,
+        `settings-tab-${tabKey} (${tabBox.x}..${tabBox.x + tabBox.width}) must fit inside tabs container (${tabsBox.x}) and to the left of close button (${closeBox.x})`
+      );
+    }
+
     await mobileTopbarPage.close();
-    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap with BETA and zoom badges verified.');
+    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, and SettingsModal tab fit verified.');
+
+    // -------------------------------------------------------------------------
+    // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
+    // -------------------------------------------------------------------------
+    console.log('-> [3.0] Verifying malformed import inline notice, sample_saves ordering, zero-snapshot recovery & fractional DPR...');
+    const m3Page = await context.newPage();
+    attachErrorListeners(m3Page, 'm3Page');
+    // Force a fractional devicePixelRatio (1.25) to verify PuzzleCanvas backing store rounds cleanly without drift
+    await m3Page.addInitScript(() => {
+      Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.25, configurable: true });
+      window.__capyAlertCalls = 0;
+      window.alert = () => {
+        window.__capyAlertCalls += 1;
+      };
+    });
+    await m3Page.setViewportSize({ width: 540, height: 420 });
+    await m3Page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(m3Page);
+
+    const fractionalDprCheck = await m3Page.evaluate(() => {
+      const c = document.querySelector('canvas');
+      return {
+        clientWidth: c ? c.clientWidth : 0,
+        canvasWidth: c ? c.width : 0,
+        expectedWidth: c ? Math.round(c.clientWidth * 1.25) : 0,
+      };
+    });
+    assert.equal(
+      fractionalDprCheck.canvasWidth,
+      fractionalDprCheck.expectedWidth,
+      `Expected fractional 1.25x DPR canvas.width=${fractionalDprCheck.expectedWidth}, got ${fractionalDprCheck.canvasWidth}`
+    );
+
+    // Seed a custom user save, then trigger import of malformed .capy JSON -> must show inline notice without alert() or partial state
+    await m3Page.getByTestId('topbar-saves-btn').click();
+    await m3Page.getByTestId('import-save-btn').waitFor({ state: 'visible', timeout: 5000 });
+    const preBadImportSnapCount = await m3Page.evaluate(
+      () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length
+    );
+    const badJsonPath = path.join(os.tmpdir(), 'capy_malformed_test.json');
+    fs.writeFileSync(
+      badJsonPath,
+      JSON.stringify({
+        format: 'capy-single-save',
+        snapshot: { id: 'corrupt_snap_1', title: 'Corrupt Save' },
+        puzzle: { width: -5, height: 10, palette: [], regions: [] },
+      }),
+      'utf8'
+    );
+    await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
+    fs.rmSync(badJsonPath, { force: true });
+    await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      await m3Page.getByTestId('saves-import-notice').getAttribute('role'),
+      'alert',
+      'Malformed save import must display inline role="alert" banner'
+    );
+    assert.equal(
+      await m3Page.evaluate(() => window.__capyAlertCalls),
+      0,
+      'Malformed save import must never call blocking window.alert()'
+    );
+    assert.equal(
+      await m3Page.evaluate(() => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length),
+      preBadImportSnapCount,
+      'Malformed save import must leave zero partial snapshots in localStorage'
+    );
+
+    // Delete all saves -> must clear active session cleanly and auto-regenerate Capy Forest with zero broken thumbnails
+    await m3Page.getByRole('button', { name: 'Delete All Saves' }).click();
+    await m3Page.getByRole('button', { name: 'Yes, Delete All' }).click();
+    await m3Page.waitForFunction(
+      () => {
+        const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+        return snaps.length === 1 && snaps[0].title === 'Capy Forest' && snaps[0].totalCount > 0;
+      },
+      null,
+      { timeout: 15000 }
+    );
+    await m3Page.waitForFunction(
+      () => {
+        const imgs = Array.from(document.querySelectorAll('img'));
+        return imgs.length > 0 && imgs.every((img) => img.complete && img.naturalWidth > 0);
+      },
+      null,
+      { timeout: 5000 }
+    );
+
+    // Verify sample_saves.capy bootstrap import does not shadow existing custom user saves
+    const sampleOrderCheck = await m3Page.evaluate(async () => {
+      const customTs = Date.now() - 60_000;
+      const customSave = {
+        id: 'custom_user_save_check',
+        title: 'Custom User Art',
+        timestamp: customTs,
+        lastOpened: customTs,
+        filledCount: 2,
+        totalCount: 10,
+        filledRegionIds: [1, 2],
+        isAutoSample: false,
+      };
+      window.capyStorage.saveSnapshots([customSave]);
+      const resp = await fetch('./assets/sample_saves.capy');
+      const buf = await resp.arrayBuffer();
+      await window.capyStorage.importSnapshotData(buf, { refreshTimestamps: true });
+      const after = window.capyStorage.loadSnapshots();
+      const samples = after.filter((s) => s.isAutoSample);
+      return {
+        firstId: after[0]?.id,
+        sampleCount: samples.length,
+        allSamplesOlder: samples.every((s) => s.lastOpened < customTs && s.timestamp < customTs),
+      };
+    });
+    assert.equal(sampleOrderCheck.firstId, 'custom_user_save_check', 'Custom user save must remain first');
+    assert.equal(sampleOrderCheck.sampleCount >= 4, true, 'All sample_saves.capy entries must import');
+    assert.equal(sampleOrderCheck.allSamplesOlder, true, 'Auto-sample timestamps must stay strictly older than custom saves');
+
+    // Corrupt #s= deep-link with valid ?room= must join room and strip invalid #s= hash without throwing
+    await m3Page.goto(`${BASE_URL}/?room=ABCD23#s=invalid_corrupt_token`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(m3Page);
+    await m3Page.waitForFunction(
+      () => !window.location.hash.includes('s='),
+      null,
+      { timeout: 5000 }
+    );
+    const m3RoomTitle = await m3Page.getByTestId('topbar-coop-btn').getAttribute('title');
+    assert.equal(
+      Boolean(m3RoomTitle && m3RoomTitle.includes('ABCD23')),
+      true,
+      `Expected ?room=ABCD23 to remain joined even when #s= token is invalid, got ${m3RoomTitle}`
+    );
+
+    await m3Page.close();
+    console.log('   PASS: Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, and fractional DPR verified.');
+
+    // -------------------------------------------------------------------------
+    // 14. Channel Storage Sandbox Isolation & UserSettings Enum Persistence E2E
+    // -------------------------------------------------------------------------
+    console.log('-> [3.0.7] Verifying Beta/Alpha StorageNamespace browser isolation & UserSettings enum persistence...');
+    await page.evaluate(() => {
+      const s = window.capyStorage.loadSettings();
+      s.difficulty = 'NORMAL';
+      s.paletteSort = 'HUE';
+      s.highlightStyle = 'CENTROID_GLOW';
+      window.capyStorage.saveSettings(s);
+    });
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    const persistedEnums = await page.evaluate(() => {
+      const s = window.capyStorage.loadSettings();
+      return {
+        difficulty: s.difficulty,
+        paletteSort: s.paletteSort,
+        highlightStyle: s.highlightStyle,
+      };
+    });
+    assert.deepEqual(persistedEnums, {
+      difficulty: 'NORMAL',
+      paletteSort: 'HUE',
+      highlightStyle: 'CENTROID_GLOW',
+    });
+
+    const sandboxBetaPage = await context.newPage();
+    attachErrorListeners(sandboxBetaPage, 'sandboxBetaPage');
+    await sandboxBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, {
+      waitUntil: 'networkidle',
+    });
+    await waitForPuzzleLoaded(sandboxBetaPage);
+    await sandboxBetaPage.evaluate(() => {
+      const s = window.capyStorage.loadSettings();
+      s.difficulty = 'EASY';
+      s.paletteSort = 'LIGHTNESS';
+      window.capyStorage.saveSettings(s);
+    });
+    const sandboxKeys = await sandboxBetaPage.evaluate(() => ({
+      betaSettingsRaw: localStorage.getItem('capy_user_settings_v8__sandbox_beta'),
+      betaSnapsRaw: localStorage.getItem('capy_snapshots_v8__sandbox_beta'),
+      betaActiveRaw: localStorage.getItem('capy_active_session_v8__sandbox_beta'),
+      betaIdentityRaw: localStorage.getItem('capy_player_identity_v1__sandbox_beta'),
+      betaTabSuffix: sessionStorage.getItem('capy_tab_peer_suffix_v1__sandbox_beta'),
+      prodSettings: JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'),
+    }));
+    assert.ok(sandboxKeys.betaSettingsRaw, 'Beta sandbox must persist capy_user_settings_v8__sandbox_beta');
+    assert.ok(sandboxKeys.betaSnapsRaw, 'Beta sandbox must persist capy_snapshots_v8__sandbox_beta');
+    assert.ok(sandboxKeys.betaActiveRaw, 'Beta sandbox must persist capy_active_session_v8__sandbox_beta');
+    assert.ok(sandboxKeys.betaIdentityRaw, 'Beta sandbox must persist capy_player_identity_v1__sandbox_beta');
+    assert.ok(sandboxKeys.betaTabSuffix, 'Beta sandbox must persist capy_tab_peer_suffix_v1__sandbox_beta');
+    assert.equal(
+      sandboxKeys.prodSettings.difficulty,
+      'NORMAL',
+      'Beta sandbox mutations must never overwrite Production capy_user_settings_v8.difficulty'
+    );
+    assert.equal(
+      sandboxKeys.prodSettings.paletteSort,
+      'HUE',
+      'Beta sandbox mutations must never overwrite Production capy_user_settings_v8.paletteSort'
+    );
+
+    // Check Release Channel card mentions isolated sandbox
+    await sandboxBetaPage.getByTestId('topbar-channel-badge').click();
+    await sandboxBetaPage.getByTestId('release-channel-card').waitFor({ state: 'visible', timeout: 5000 });
+    const betaChannelCopy = await sandboxBetaPage.getByTestId('release-channel-card').innerText();
+    assert.equal(
+      betaChannelCopy.toLowerCase().includes('isolated'),
+      true,
+      'Release Channel card must explain isolated channel sandbox'
+    );
+    await sandboxBetaPage.close();
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

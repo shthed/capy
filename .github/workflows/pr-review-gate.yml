@@ -10,6 +10,7 @@ on:
       - converted_to_draft
       - labeled
       - unlabeled
+      - edited
   pull_request_review:
     types:
       - submitted
@@ -33,7 +34,7 @@ concurrency:
 jobs:
   review-gate:
     name: Dual AI & Owner Review Gate
-    if: github.repository == 'shthed/capy' && github.actor != 'github-actions[bot]' && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+    if: github.repository == 'shthed/capy' && github.actor != 'github-actions[bot]' && github.actor != 'dependabot[bot]' && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate Dual AI + Project Owner Approval State
@@ -60,7 +61,13 @@ jobs:
 
             const headSha = pr.head.sha;
             const isDraft = Boolean(pr.draft);
+            const baseRef = (pr.base?.ref || 'main').trim();
+            const isBetaTarget = baseRef === 'beta';
             const ownerLogin = owner.toLowerCase();
+            const prAuthorLogin = (pr.user?.login || '').toLowerCase();
+            const isDependabotPr = prAuthorLogin === 'dependabot[bot]';
+            const isReadOnlyDependabotEvent =
+              isDependabotPr && context.eventName === 'pull_request';
 
             const { data: headCommit } = await github.rest.repos.getCommit({
               owner,
@@ -105,33 +112,21 @@ jobs:
               }
             }
 
+            const isSynchronize =
+              context.eventName === 'pull_request' &&
+              context.payload.action === 'synchronize';
             const isNewPushOrDraft =
               isDraft ||
+              isSynchronize ||
               (context.eventName === 'pull_request' &&
-                (context.payload.action === 'synchronize' ||
-                  context.payload.action === 'converted_to_draft'));
+                context.payload.action === 'converted_to_draft');
 
             if (isNewPushOrDraft) {
               await safeRemoveLabel('review:ai-approved');
               await safeRemoveLabel('review:owner-approved');
+            }
+            if (isSynchronize) {
               await safeRemoveLabel('review:changes-requested');
-            }
-
-            // Determine latest labeled timestamps for review:owner-approved
-            let latestOwnerLabelMs = 0;
-            for (const ev of issueEvents) {
-              if (
-                ev.event === 'labeled' &&
-                ev.label?.name === 'review:owner-approved' &&
-                ev.actor?.login?.toLowerCase() === ownerLogin &&
-                ev.created_at
-              ) {
-                const ts = Date.parse(ev.created_at) || 0;
-                if (ts > latestOwnerLabelMs) latestOwnerLabelMs = ts;
-              }
-            }
-            if (activeLabels.has('review:owner-approved') && latestOwnerLabelMs < latestPushMs) {
-              await safeRemoveLabel('review:owner-approved');
             }
 
             const reviews = await github.paginate(github.rest.pulls.listReviews, {
@@ -152,13 +147,32 @@ jobs:
               `<!--\\s*capy-review:\\s*actor=ai-agent\\s+verdict=(APPROVED|CHANGES_REQUESTED)\\s+sha=${headSha}\\s+score=([0-9]+(?:\\.[0-9]+)?)%?[^>]*-->`,
               'i'
             );
+            const ALLOWED_AI_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+            const isTrustedAiReviewer = (item) => {
+              const login = (item?.user?.login || '').toLowerCase();
+              const assoc = String(item?.author_association || '').toUpperCase();
+              return (
+                login === ownerLogin ||
+                login === 'github-actions[bot]' ||
+                ALLOWED_AI_ASSOCIATIONS.has(assoc)
+              );
+            };
+            const isActiveTrustedAiReview = (r) => {
+              const reviewState = String(r?.state || '').toUpperCase();
+              return (
+                reviewState !== 'DISMISSED' &&
+                reviewState !== 'PENDING' &&
+                isTrustedAiReviewer(r)
+              );
+            };
             let latestAiSignal = null;
+            let earliestExactHeadAiMs = 0;
             const allBodies = [
-              ...reviews.map((r) => ({
+              ...reviews.filter(isActiveTrustedAiReview).map((r) => ({
                 body: r.body || '',
                 ts: Date.parse(r.submitted_at || '') || 0,
               })),
-              ...comments.map((c) => ({
+              ...comments.filter(isTrustedAiReviewer).map((c) => ({
                 body: c.body || '',
                 ts: Date.parse(c.updated_at || c.created_at || '') || 0,
               })),
@@ -167,6 +181,11 @@ jobs:
             for (const item of allBodies) {
               const m = aiMarkerRegex.exec(item.body);
               if (m) {
+                if (item.ts >= latestForcePushMs && item.ts > 0) {
+                  if (earliestExactHeadAiMs === 0 || item.ts < earliestExactHeadAiMs) {
+                    earliestExactHeadAiMs = item.ts;
+                  }
+                }
                 latestAiSignal = {
                   verdict: m[1].toUpperCase(),
                   score: Number(m[2]),
@@ -189,14 +208,17 @@ jobs:
               latestAiSignal !== null && latestAiSignal.verdict === 'CHANGES_REQUESTED';
 
             // 2. Evaluate Separate Post-Push Human Project Owner Gate
-            let latestOwnerApprovalMs = 0;
-            let latestOwnerRejectionMs = 0;
+            const nativeHeadApprovals = [];
+            const rejectionCandidates = [];
+            let earliestExactHeadReviewMs = 0;
 
-            if (activeLabels.has('review:owner-approved') && latestOwnerLabelMs >= latestPushMs) {
-              latestOwnerApprovalMs = Math.max(latestOwnerApprovalMs, latestOwnerLabelMs);
-            }
             if (activeLabels.has('review:changes-requested')) {
-              latestOwnerRejectionMs = Number.MAX_SAFE_INTEGER;
+              rejectionCandidates.push({
+                ts: Number.MAX_SAFE_INTEGER,
+                id: Number.MAX_SAFE_INTEGER,
+                source: 'label',
+                exactHead: true,
+              });
             }
 
             const isHumanOwnerBody = (body) =>
@@ -204,21 +226,33 @@ jobs:
 
             for (const r of reviews) {
               if (r.user?.login?.toLowerCase() !== ownerLogin) continue;
+              if (r.state === 'PENDING') continue;
               const body = (r.body || '').trim();
               if (!isHumanOwnerBody(body)) continue;
               const ts = Date.parse(r.submitted_at || '') || 0;
-              if (ts < latestPushMs) continue;
+              const id = Number(r.id) || 0;
+              const isExactHead = r.commit_id === headSha;
 
-              if (
-                (r.state === 'APPROVED' && r.commit_id === headSha) ||
-                /^(?:APPROVED|LGTM)\b/i.test(body)
-              ) {
-                latestOwnerApprovalMs = Math.max(latestOwnerApprovalMs, ts);
-              } else if (
-                r.state === 'CHANGES_REQUESTED' ||
-                /^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body)
-              ) {
-                latestOwnerRejectionMs = Math.max(latestOwnerRejectionMs, ts);
+              if (isExactHead && ts >= latestForcePushMs && ts > 0) {
+                if (earliestExactHeadReviewMs === 0 || ts < earliestExactHeadReviewMs) {
+                  earliestExactHeadReviewMs = ts;
+                }
+              }
+              if (r.state === 'DISMISSED') continue;
+
+              const isRejectionBody = /^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body);
+              const isExactHeadNativeApproval =
+                r.state === 'APPROVED' && isExactHead && !isRejectionBody;
+              const isRejection = r.state === 'CHANGES_REQUESTED' || isRejectionBody;
+
+              if (isExactHeadNativeApproval) {
+                if (ts >= latestForcePushMs) {
+                  nativeHeadApprovals.push({ ts, id, source: 'review' });
+                }
+              } else if (isRejection) {
+                if (ts >= latestForcePushMs) {
+                  rejectionCandidates.push({ ts, id, source: 'review', exactHead: isExactHead });
+                }
               }
             }
 
@@ -227,56 +261,74 @@ jobs:
               const body = (c.body || '').trim();
               if (!isHumanOwnerBody(body)) continue;
               const ts = Date.parse(c.updated_at || c.created_at || '') || 0;
-              if (ts < latestPushMs) continue;
+              const id = Number(c.id) || 0;
 
-              if (/^(?:APPROVED|LGTM)\b/i.test(body)) {
-                latestOwnerApprovalMs = Math.max(latestOwnerApprovalMs, ts);
-              } else if (/^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body)) {
-                latestOwnerRejectionMs = Math.max(latestOwnerRejectionMs, ts);
+              if (/^(?:CHANGES\s+REQUESTED|HOLD|DO\s+NOT\s+MERGE)\b/i.test(body)) {
+                if (ts >= latestForcePushMs) {
+                  rejectionCandidates.push({ ts, id, source: 'comment', exactHead: false });
+                }
               }
             }
 
-            const changesRequested =
-              aiChangesRequested || latestOwnerRejectionMs > latestOwnerApprovalMs;
-            const ownerApproved =
-              !isDraft && !changesRequested && latestOwnerApprovalMs >= latestPushMs;
-            const dualApproved = !isDraft && aiApproved && ownerApproved && !changesRequested;
+            const maxSignalTs = (signals) =>
+              signals.reduce((maxTs, s) => (s.ts > maxTs ? s.ts : maxTs), 0);
 
-            // 3. Reconcile github-actions[bot] formal PR review
+            const effectiveOwnerApprovals = nativeHeadApprovals;
+            const effectiveOwnerApprovalMs = maxSignalTs(effectiveOwnerApprovals);
+
+            const skewAnchorCandidates = [
+              effectiveOwnerApprovalMs,
+              earliestExactHeadReviewMs,
+              earliestExactHeadAiMs,
+            ].filter((ts) => ts > 0);
+            const skewAnchorMs =
+              skewAnchorCandidates.length > 0 ? Math.min(...skewAnchorCandidates) : 0;
+            const rejectionFloorMs = Math.max(
+              latestForcePushMs,
+              Math.min(latestPushMs, skewAnchorMs || latestPushMs)
+            );
+
+            const activeRejections = rejectionCandidates.filter((rej) =>
+              rej.exactHead ? rej.ts >= latestForcePushMs : rej.ts >= rejectionFloorMs
+            );
+
+            const compareReviewOrder = (a, b) => (a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1]);
+            const isApprovalStrictlyNewerThanRejection = (approval, rejection) => {
+              if (!approval || !rejection) return false;
+              if (approval.ts !== rejection.ts) return approval.ts > rejection.ts;
+              if (
+                approval.source === rejection.source &&
+                approval.id > 0 &&
+                rejection.id > 0
+              ) {
+                return compareReviewOrder([approval.ts, approval.id], [rejection.ts, rejection.id]) > 0;
+              }
+              return false;
+            };
+
+            const hasActiveOwnerRejection = activeRejections.some(
+              (rej) =>
+                !effectiveOwnerApprovals.some((app) =>
+                  isApprovalStrictlyNewerThanRejection(app, rej)
+                )
+            );
+            const changesRequested = aiChangesRequested || hasActiveOwnerRejection;
+            const hasFreshNativeHeadApproval = nativeHeadApprovals.some((natApp) =>
+              activeRejections.every((rej) =>
+                isApprovalStrictlyNewerThanRejection(natApp, rej)
+              )
+            );
+            const ownerApproved = !isDraft && !changesRequested && hasFreshNativeHeadApproval;
+            const dualApproved = !isDraft && aiApproved && ownerApproved && !changesRequested;
+            const betaApproved = isBetaTarget && !isDraft && aiApproved && !changesRequested;
+
+            // 3. Dismiss any legacy github-actions[bot] formal PR approvals
+            // Bot review rubber-stamping is removed; --base beta passes on AI review (>=95%)
+            // without Owner approval, and --base main requires native GitHub APPROVED on HEAD.
             const botReviews = reviews.filter(
               (r) => r.user?.login === 'github-actions[bot]' && r.state === 'APPROVED'
             );
-
-            if (dualApproved) {
-              let hasBotApprovalForHead = false;
-              for (const br of botReviews) {
-                if (br.commit_id === headSha) {
-                  hasBotApprovalForHead = true;
-                } else {
-                  try {
-                    await github.rest.pulls.dismissReview({
-                      owner,
-                      repo,
-                      pull_number: prNumber,
-                      review_id: br.id,
-                      message: `Superseded by newer commit ${headSha.slice(0, 7)}.`,
-                    });
-                  } catch (err) {
-                    core.warning(`Failed to dismiss stale bot review ${br.id}: ${err.message}`);
-                  }
-                }
-              }
-              if (!hasBotApprovalForHead) {
-                await github.rest.pulls.createReview({
-                  owner,
-                  repo,
-                  pull_number: prNumber,
-                  commit_id: headSha,
-                  event: 'APPROVE',
-                  body: `Dual review gate satisfied for \`${headSha}\` (AI Reviewer score \`${latestAiSignal.score}%\` + Project Owner post-push sign-off).`,
-                });
-              }
-            } else {
+            if (!isReadOnlyDependabotEvent) {
               for (const br of botReviews) {
                 try {
                   await github.rest.pulls.dismissReview({
@@ -284,7 +336,8 @@ jobs:
                     repo,
                     pull_number: prNumber,
                     review_id: br.id,
-                    message: 'Dual AI + Project Owner approval is no longer active for current HEAD.',
+                    message:
+                      'Bot review rubber-stamping is disabled; native GitHub approval on HEAD is required for main.',
                   });
                 } catch (err) {
                   core.warning(`Failed to dismiss bot review ${br.id}: ${err.message}`);
@@ -301,6 +354,14 @@ jobs:
             } else if (isDraft) {
               state = 'pending';
               description = 'Draft PR: complete work, pass AI review, and mark ready';
+            } else if (isBetaTarget) {
+              if (betaApproved) {
+                state = 'success';
+                description = 'Beta gate passed: AI review (>=95%) verified; no holds';
+              } else {
+                state = 'pending';
+                description = 'Beta gate: awaiting AI review (review:ai-approved) on HEAD';
+              }
             } else if (dualApproved) {
               state = 'success';
               description = 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
@@ -327,12 +388,22 @@ jobs:
               latestGateStatus.state !== state ||
               latestGateStatus.description !== clippedDesc
             ) {
-              await github.rest.repos.createCommitStatus({
-                owner,
-                repo,
-                sha: headSha,
-                context: 'capy/review-gate',
-                state,
-                description: clippedDesc,
-              });
+              try {
+                await github.rest.repos.createCommitStatus({
+                  owner,
+                  repo,
+                  sha: headSha,
+                  context: 'capy/review-gate',
+                  state,
+                  description: clippedDesc,
+                });
+              } catch (err) {
+                if (isReadOnlyDependabotEvent && err.status === 403) {
+                  core.warning(
+                    `Read-only GITHUB_TOKEN on Dependabot ${context.eventName} event prevented updating capy/review-gate status: ${err.message}`
+                  );
+                } else {
+                  throw err;
+                }
+              }
             }

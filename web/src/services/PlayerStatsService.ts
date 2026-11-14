@@ -1,4 +1,5 @@
 import { NativeBridge } from './NativeBridge';
+import { resolveScopedBackupKey, resolveScopedStorageKey } from './StorageNamespace';
 
 export const PLAYER_STATS_STORAGE_KEY = 'capy_player_stats_v1';
 
@@ -107,8 +108,8 @@ export class PlayerStatsService {
     try {
       if (this.hasLocalStorage()) {
         const raw =
-          localStorage.getItem(PLAYER_STATS_STORAGE_KEY) ||
-          NativeBridge.loadBackup(PLAYER_STATS_STORAGE_KEY);
+          localStorage.getItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY)) ||
+          NativeBridge.loadBackup(resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY));
         if (!raw) {
           return { ...DEFAULT_PLAYER_STATS };
         }
@@ -128,9 +129,9 @@ export class PlayerStatsService {
     try {
       const serialized = JSON.stringify(sanitized);
       if (this.hasLocalStorage()) {
-        localStorage.setItem(PLAYER_STATS_STORAGE_KEY, serialized);
+        localStorage.setItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY), serialized);
       }
-      NativeBridge.saveBackup(PLAYER_STATS_STORAGE_KEY, serialized);
+      NativeBridge.saveBackup(resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY), serialized);
     } catch {
       // Keep memoryFallback updated if storage quota or sandbox blocks writes
     }
@@ -141,7 +142,7 @@ export class PlayerStatsService {
     this.memoryFallback = { ...DEFAULT_PLAYER_STATS };
     try {
       if (this.hasLocalStorage()) {
-        localStorage.removeItem(PLAYER_STATS_STORAGE_KEY);
+        localStorage.removeItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY));
       }
     } catch {
       // Ignored

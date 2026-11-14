@@ -8,9 +8,9 @@ const __dirname = path.dirname(__filename);
 const OUTPUT_PATH = path.resolve(__dirname, '../public/assets/sample_saves.capy');
 
 const SAMPLES = [
+  { id: 'sample-capy-forest', title: 'Capy Forest', assetPath: 'assets/capy_forest.webp' },
   { id: 'sample-capybara', title: 'Capybara', assetPath: 'assets/capybara.webp' },
   { id: 'sample-mushrooms', title: 'Mushroom Forest', assetPath: 'assets/mushrooms.webp' },
-  { id: 'sample-capy-forest', title: 'Capy Forest', assetPath: 'assets/capy_forest.webp' },
   { id: 'sample-snail-guitar', title: 'Snail Guitar', assetPath: 'assets/snail_guitar.webp' },
 ];
 
@@ -54,9 +54,9 @@ async function generateSampleSaves() {
       console.error('Browser page error:', err.message);
     });
 
-    // 1. Open app with skipSampleBootstrap=1 so Sample 1 (Capybara) generates from source image
-    console.log('1/4 Generating "Capybara"...');
-    await page.goto('http://localhost:3000/?skipSampleBootstrap=1', { waitUntil: 'networkidle' });
+    // 1. Open app with skipSampleBootstrap=1 so Sample 1 (Capy Forest) generates from source image
+    console.log('1/4 Generating "Capy Forest"...');
+    await page.goto('http://localhost:3000/?skipSampleBootstrap=1&skipTutorial=1', { waitUntil: 'networkidle' });
     await waitForFinalizedSnapshotCount(page, 1);
 
     // 2. Generate remaining samples via Settings -> Create tab
@@ -68,7 +68,7 @@ async function generateSampleSaves() {
       await settingsBtn.click();
       await page.waitForTimeout(250);
 
-      const createTabBtn = await page.waitForSelector('button:has-text("Create")');
+      const createTabBtn = await page.waitForSelector('button:has(span:text-is("Create"))');
       await createTabBtn.click();
       await page.waitForTimeout(250);
 

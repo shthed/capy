@@ -14,6 +14,7 @@ import {
   computeProgressPercentage,
 } from './types';
 import { DEFAULT_SETTINGS, StorageService } from './services/StorageService';
+import { resolveScopedBackupKey, resolveScopedStorageKey } from './services/StorageNamespace';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
 import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
@@ -42,6 +43,7 @@ import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
+import { OnboardingTutorial, TutorialTriedActions } from './components/OnboardingTutorial';
 import { resolveReleaseChannel } from './version';
 
 const SettingsModal = React.lazy(() =>
@@ -91,6 +93,26 @@ export function mergeCustomPalette(
     }
   }
   return merged;
+}
+
+function loadHtmlImage(src: string, fallbackSrc?: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => {
+      if (fallbackSrc && fallbackSrc !== src) {
+        const fb = new Image();
+        fb.crossOrigin = 'anonymous';
+        fb.onload = () => resolve(fb);
+        fb.onerror = () => resolve(null);
+        fb.src = fallbackSrc;
+      } else {
+        resolve(null);
+      }
+    };
+    img.src = src;
+  });
 }
 
 interface UndoHistoryEntry {
@@ -178,6 +200,7 @@ export const App: React.FC = () => {
 
   // Co-op Multiplayer & Zero-Allocation Canvas Ripple Buffer
   const coopRippleBufferRef = useRef<CoopRippleBuffer>(new CoopRippleBuffer());
+  const coopJoinSeqRef = useRef<number>(0);
   const [coopRoomCode, setCoopRoomCode] = useState<string | null>(null);
   const [coopParticipants, setCoopParticipants] = useState<CoopParticipant[]>([]);
 
@@ -197,10 +220,19 @@ export const App: React.FC = () => {
   const [loadingStatus, setLoadingStatus] = useState<string>('Loading Capy...');
   const [loadingPayload, setLoadingPayload] = useState<GenerationProgressPayload | null>(null);
 
-  // Modal Sheet & Active Deployment Channel
+  // Modal Sheet, Onboarding Tutorial & Active Deployment Channel
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
+  const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  const [tutorialStep, setTutorialStep] = useState<number>(0);
+  const [tutorialTried, setTutorialTried] = useState<TutorialTriedActions>({
+    palette: false,
+    paint: false,
+    zoom: false,
+    hint: false,
+    menu: false,
+  });
   const releaseChannelInfo = useMemo(() => resolveReleaseChannel(), []);
 
   // Maintain O(1) region lookup map for offscreen replay frustum checks
@@ -461,15 +493,57 @@ export const App: React.FC = () => {
 
   const autoResumeReplayRef = useRef<boolean>(false);
   const autoResumeTimerRef = useRef<number | null>(null);
+  const awaitingReplayDismissRef = useRef<boolean>(false);
   const replayStepRef = useRef<number>(0);
   replayStepRef.current = replayStep;
 
   const cancelAutoResume = useCallback(() => {
     autoResumeReplayRef.current = false;
+    awaitingReplayDismissRef.current = false;
     if (autoResumeTimerRef.current !== null) {
       window.clearTimeout(autoResumeTimerRef.current);
       autoResumeTimerRef.current = null;
     }
+  }, []);
+
+  const dismissPostLoadReplayIfAwaiting = useCallback((): boolean => {
+    if (!awaitingReplayDismissRef.current) return false;
+    awaitingReplayDismissRef.current = false;
+    autoResumeReplayRef.current = false;
+    setIsReplaying(false);
+    setIsReplayPlaying(false);
+    return true;
+  }, []);
+
+  const markTutorialActionTried = useCallback((action: keyof TutorialTriedActions) => {
+    setTutorialTried((prev) => (prev[action] ? prev : { ...prev, [action]: true }));
+  }, []);
+
+  const completeTutorial = useCallback(() => {
+    setShowTutorial(false);
+    try {
+      localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
+    } catch {
+      // Ignored
+    }
+    NativeBridge.saveBackup(resolveScopedBackupKey('capy_tutorial_completed_v1'), '1');
+  }, []);
+
+  useEffect(() => {
+    if (!showTutorial) return;
+    return NativeBridge.pushBackHandler(completeTutorial);
+  }, [showTutorial, completeTutorial]);
+
+  const handleStartTutorial = useCallback(() => {
+    setTutorialStep(0);
+    setTutorialTried({
+      palette: false,
+      paint: false,
+      zoom: false,
+      hint: false,
+      menu: false,
+    });
+    setShowTutorial(true);
   }, []);
 
   // Zero-allocation bounding-box frustum check against the current canvas viewport
@@ -571,6 +645,7 @@ export const App: React.FC = () => {
         window.clearTimeout(autoResumeTimerRef.current);
         autoResumeTimerRef.current = null;
       }
+      awaitingReplayDismissRef.current = false;
       autoResumeReplayRef.current = autoResumeOnFinish;
       if (autoResumeOnFinish) {
         handleUpdateSettings((prev) =>
@@ -593,11 +668,15 @@ export const App: React.FC = () => {
       autoResumeReplayRef.current = false;
       if (autoResumeTimerRef.current !== null) {
         window.clearTimeout(autoResumeTimerRef.current);
-      }
-      autoResumeTimerRef.current = window.setTimeout(() => {
         autoResumeTimerRef.current = null;
+      }
+      if (replaySequence.length === 0) {
+        awaitingReplayDismissRef.current = false;
         setIsReplaying(false);
-      }, 250);
+        return;
+      }
+      // Keep ReplayControls onscreen at 100% until the user interacts with the puzzle
+      awaitingReplayDismissRef.current = true;
     };
 
     if (!isReplaying || !isReplayPlaying) return;
@@ -746,6 +825,10 @@ export const App: React.FC = () => {
       parentSnapshotId?: string
     ) => {
       const currentSeq = ++generationSeqRef.current;
+      if (viewportSaveTimerRef.current !== null) {
+        window.clearTimeout(viewportSaveTimerRef.current);
+        viewportSaveTimerRef.current = null;
+      }
       setIsReplaying(false);
       setIsReplayPlaying(false);
       setIsLoading(true);
@@ -772,7 +855,8 @@ export const App: React.FC = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
-      const ctx = canvas.getContext('2d')!;
+      const ctx =
+        canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
 
       // Pre-register snapshot at 0ms so it appears in Saves instantly!
@@ -973,25 +1057,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
 
-    const loadHtmlImage = (src: string, fallbackSrc?: string): Promise<HTMLImageElement | null> =>
-      new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = () => {
-          if (fallbackSrc && fallbackSrc !== src) {
-            const fb = new Image();
-            fb.crossOrigin = 'anonymous';
-            fb.onload = () => resolve(fb);
-            fb.onerror = () => resolve(null);
-            fb.src = fallbackSrc;
-          } else {
-            resolve(null);
-          }
-        };
-        img.src = src;
-      });
-
     const restoreSession = async () => {
       const skipBootstrap =
         typeof window !== 'undefined' &&
@@ -1000,17 +1065,26 @@ export const App: React.FC = () => {
       if (typeof window !== 'undefined') {
         const parsedLink = await parseShareLinkFromUrl(window.location.href);
         if (parsedLink.roomCode) {
-          const id = ProviderRegistry.auth.getCurrentIdentity();
-          await ProviderRegistry.realtimeRoom.joinRoom(parsedLink.roomCode, {
-            playerId: id.playerId,
-            displayName: id.displayName,
-            avatarColorHex: id.avatarColorHex,
-            lastActiveAt: Date.now(),
-          });
-          if (isMounted) {
-            setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
-            setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+          const joinSeq = ++coopJoinSeqRef.current;
+          try {
+            const id = ProviderRegistry.auth.getCurrentIdentity();
+            await ProviderRegistry.realtimeRoom.joinRoom(parsedLink.roomCode, {
+              playerId: id.playerId,
+              displayName: id.displayName,
+              avatarColorHex: id.avatarColorHex,
+              lastActiveAt: Date.now(),
+            });
+            if (isMounted && joinSeq === coopJoinSeqRef.current) {
+              setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
+              setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+            }
+          } catch {
+            // Ignore malformed room code cleanly
           }
+        }
+
+        if (parsedLink.tokenError || (parsedLink.hasToken && !parsedLink.matchedSample)) {
+          clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsedLink.roomCode);
         }
 
         if (parsedLink.matchedSample && parsedLink.delta) {
@@ -1042,18 +1116,41 @@ export const App: React.FC = () => {
               loadHtmlImage(sharedSample.assetPath),
             ]);
             if (cachedPuzzle && sampleImg && isMounted) {
-              clearShareHashFromWindowUrl(parsedLink.roomCode);
+              clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsedLink.roomCode);
               const validIds = new Set(cachedPuzzle.regions.map((r) => r.id));
-              const orderedIds = parsedLink.delta.filledRegionIds.filter((id) => validIds.has(id));
+              const mergedDelta = mergeProgressDeltas(
+                {
+                  version: 2,
+                  filledRegionIds: prebakedSnap.filledRegionIds || [],
+                  paintedRegionColors: prebakedSnap.paintedRegionColors,
+                  isFreeColor: prebakedSnap.isFreeColor,
+                  ...(prebakedSnap.resetEpoch && prebakedSnap.resetEpoch > 0
+                    ? { resetEpoch: prebakedSnap.resetEpoch }
+                    : {}),
+                  updatedAt: prebakedSnap.lastOpened || prebakedSnap.timestamp || 0,
+                },
+                {
+                  version: 2,
+                  filledRegionIds: parsedLink.delta.filledRegionIds,
+                  paintedRegionColors: parsedLink.delta.paintedRegionColors,
+                  isFreeColor: parsedLink.delta.isFreeColor,
+                  ...(parsedLink.delta.resetEpoch && parsedLink.delta.resetEpoch > 0
+                    ? { resetEpoch: parsedLink.delta.resetEpoch }
+                    : {}),
+                  updatedAt: parsedLink.delta.updatedAt || Date.now(),
+                }
+              );
+              const orderedIds = mergedDelta.filledRegionIds.filter((id) => validIds.has(id));
               const filledSet = new Set(orderedIds);
-              const paintedObj = parsedLink.delta.paintedRegionColors || {};
+              const paintedObj = mergedDelta.paintedRegionColors || {};
+              const mergedEpoch = mergedDelta.resetEpoch ?? 0;
               const restoredPaintedMap = new Map(
                 Object.entries(paintedObj)
                   .map(([k, v]) => [Number(k), v] as [number, number])
                   .filter(([k]) => validIds.has(k))
               );
               const isFree = Boolean(
-                parsedLink.delta.isFreeColor ||
+                mergedDelta.isFreeColor ||
                   prebakedSnap.isFreeColor ||
                   cachedPuzzle.isFreeColor ||
                   restoredPaintedMap.size > 0
@@ -1076,8 +1173,18 @@ export const App: React.FC = () => {
                 undefined,
                 Object.fromEntries(restoredPaintedMap),
                 cachedPuzzle.palette,
-                isFree
+                isFree,
+                undefined,
+                mergedEpoch > 0 ? mergedEpoch : undefined
               );
+              if (viewportSaveTimerRef.current !== null) {
+                window.clearTimeout(viewportSaveTimerRef.current);
+                viewportSaveTimerRef.current = null;
+              }
+              const targetView = { zoomScale: 1.0, panOffsetX: 0, panOffsetY: 0 };
+              viewportRef.current = targetView;
+              setInitialViewport(targetView);
+              setRestoreViewTrigger((prev) => prev + 1);
               setSnapshots(updatedList);
               setPaintedRegionColors(restoredPaintedMap);
               setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -1100,6 +1207,7 @@ export const App: React.FC = () => {
                 filledRegionIds: orderedIds,
                 paintedRegionColors: Object.fromEntries(restoredPaintedMap),
                 isFreeColorMode: isFree,
+                ...(mergedEpoch > 0 ? { resetEpoch: mergedEpoch } : {}),
                 zoomScale: 1.0,
                 panOffsetX: 0,
                 panOffsetY: 0,
@@ -1117,7 +1225,7 @@ export const App: React.FC = () => {
             setIsLoading(false);
             return;
           }
-          clearShareHashFromWindowUrl(parsedLink.roomCode);
+          clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsedLink.roomCode);
           loadArtworkFromImage(
             img,
             sharedSample.title,
@@ -1327,6 +1435,14 @@ export const App: React.FC = () => {
               const initialColor = availableColors[0]?.id || firstPuzzle.palette[0]?.id || 1;
               const isFree = Boolean(firstSnap.isFreeColor || firstPuzzle.isFreeColor);
 
+              if (viewportSaveTimerRef.current !== null) {
+                window.clearTimeout(viewportSaveTimerRef.current);
+                viewportSaveTimerRef.current = null;
+              }
+              const targetView = { zoomScale: 1.0, panOffsetX: 0, panOffsetY: 0 };
+              viewportRef.current = targetView;
+              setInitialViewport(targetView);
+              setRestoreViewTrigger((prev) => prev + 1);
               setSnapshots(refreshedList);
               setPaintedRegionColors(new Map());
               setSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -1355,6 +1471,20 @@ export const App: React.FC = () => {
               });
 
               setIsLoading(false);
+              const skipTutorial =
+                typeof window !== 'undefined' &&
+                new URLSearchParams(window.location.search).has('skipTutorial');
+              let tutorialCompleted = false;
+              try {
+                tutorialCompleted =
+                  localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
+                  NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
+              } catch {
+                // Ignored
+              }
+              if (!skipTutorial && !tutorialCompleted) {
+                setShowTutorial(true);
+              }
               return;
             }
           }
@@ -1363,7 +1493,7 @@ export const App: React.FC = () => {
         }
       }
 
-      // Fallback: dynamically generate Capybara built-in sample
+      // Fallback: dynamically generate default built-in sample (Capy Forest)
       const img = await loadHtmlImage(defaultSample.assetPath);
       if (!isMounted) return;
       if (!img) {
@@ -1478,8 +1608,8 @@ export const App: React.FC = () => {
   }, []);
 
   // Undo last region completion
-  const handleUndo = useCallback(() => {
-    if (!puzzle || isReplaying || undoStack.length === 0 || !isUndoEnabled) return;
+  const handleUndo = useCallback((bypassReplayCheck: boolean = false) => {
+    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || undoStack.length === 0 || !isUndoEnabled) return;
 
     const lastAction = undoStack[undoStack.length - 1];
     setUndoStack((prev) => prev.slice(0, -1));
@@ -1562,8 +1692,8 @@ export const App: React.FC = () => {
   ]);
 
   // Redo last undone region action
-  const handleRedo = useCallback(() => {
-    if (!puzzle || isReplaying || redoStack.length === 0 || !isUndoEnabled) return;
+  const handleRedo = useCallback((bypassReplayCheck: boolean = false) => {
+    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || redoStack.length === 0 || !isUndoEnabled) return;
 
     const lastRedo = redoStack[redoStack.length - 1];
     setRedoStack((prev) => prev.slice(0, -1));
@@ -1657,6 +1787,7 @@ export const App: React.FC = () => {
     if (orderedList.length === 0) return;
 
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    awaitingReplayDismissRef.current = false;
     setHintRegionId(null);
     setReplaySequence(orderedList);
     setReplayStep(orderedList.length);
@@ -1769,14 +1900,18 @@ export const App: React.FC = () => {
       }
 
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-        if (isReplaying || !isUndoEnabled) return;
         const lowerKey = e.key.toLowerCase();
-        if (!e.shiftKey && lowerKey === 'z') {
+        const isUndoKey = !e.shiftKey && lowerKey === 'z';
+        const isRedoKey = lowerKey === 'y' || (e.shiftKey && lowerKey === 'z');
+        if ((isUndoKey || isRedoKey) && isUndoEnabled) {
+          const wasAwaiting = dismissPostLoadReplayIfAwaiting();
+          if (isReplaying && !wasAwaiting) return;
           e.preventDefault();
-          handleUndo();
-        } else if (lowerKey === 'y' || (e.shiftKey && lowerKey === 'z')) {
-          e.preventDefault();
-          handleRedo();
+          if (isUndoKey) {
+            handleUndo(wasAwaiting);
+          } else {
+            handleRedo(wasAwaiting);
+          }
         }
         return;
       }
@@ -1786,7 +1921,8 @@ export const App: React.FC = () => {
       if (!puzzle) return;
 
       if (e.key >= '1' && e.key <= '9') {
-        if (isReplaying || filledRegionIds.size >= puzzle.regions.length) return;
+        const wasAwaiting = dismissPostLoadReplayIfAwaiting();
+        if ((isReplaying && !wasAwaiting) || filledRegionIds.size >= puzzle.regions.length) return;
         const selectablePalette = getVisiblePalette(
           puzzle.palette,
           puzzle.regions,
@@ -1800,6 +1936,7 @@ export const App: React.FC = () => {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
           setActiveColorId(selectablePalette[index].id);
           setHintRegionId(null);
+          markTutorialActionTried('palette');
         }
         return;
       }
@@ -1808,39 +1945,53 @@ export const App: React.FC = () => {
         case '+':
         case '=':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setZoomInTrigger((prev) => prev + 1);
           return;
         case '-':
         case '_':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setZoomOutTrigger((prev) => prev + 1);
           return;
         case '0':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setResetViewTrigger((prev) => prev + 1);
           return;
         case 'ArrowUp':
         case 'w':
         case 'W':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: 0, dy: 64 }));
           return;
         case 'ArrowDown':
         case 's':
         case 'S':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: 0, dy: -64 }));
           return;
         case 'ArrowLeft':
         case 'a':
         case 'A':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: 64, dy: 0 }));
           return;
         case 'ArrowRight':
         case 'd':
         case 'D':
           e.preventDefault();
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           setPanStepRequest((prev) => ({ seq: prev.seq + 1, dx: -64, dy: 0 }));
           return;
       }
@@ -1860,6 +2011,8 @@ export const App: React.FC = () => {
     handleUndo,
     handleRedo,
     isUndoEnabled,
+    dismissPostLoadReplayIfAwaiting,
+    markTutorialActionTried,
   ]);
 
   const recordFirstTimePuzzleCompletionIfNeeded = useCallback(
@@ -1921,6 +2074,7 @@ export const App: React.FC = () => {
         nextFilled.add(regionId);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
+        markTutorialActionTried('paint');
         emitCoopPaint('FILL', [regionId], { [regionId]: activeColorId });
         setLifetimeStats(PlayerStatsService.recordRegionsColored(1, Boolean(coopRoomCode)));
 
@@ -1998,6 +2152,7 @@ export const App: React.FC = () => {
       nextFilled.add(regionId);
       setFilledRegionIds(nextFilled);
       setHintRegionId(null);
+      markTutorialActionTried('paint');
       emitCoopPaint('FILL', [regionId]);
       setLifetimeStats(PlayerStatsService.recordRegionsColored(1, Boolean(coopRoomCode)));
       SoundService.playRegionTap(region.colorId);
@@ -2140,6 +2295,7 @@ export const App: React.FC = () => {
           setPaintedRegionColors(nextPainted);
           setFilledRegionIds(nextFilled);
           setHintRegionId(null);
+          markTutorialActionTried('paint');
           emitCoopPaint(
             'FILL',
             newUndoEntries.map((u) => u.regionId),
@@ -2230,6 +2386,7 @@ export const App: React.FC = () => {
         setRedoStack([]);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
+        markTutorialActionTried('paint');
         emitCoopPaint(
           'FILL',
           newUndoEntries.map((u) => u.regionId)
@@ -2519,8 +2676,16 @@ export const App: React.FC = () => {
       const target = onScreen || unfilled[0];
       hintsUsedInSessionRef.current += 1;
       setHintRegionId(target.id);
+      markTutorialActionTried('hint');
     },
-    [puzzle, activeColorId, filledRegionIds, visibleRegionIds, settings.hapticsEnabled]
+    [
+      puzzle,
+      activeColorId,
+      filledRegionIds,
+      visibleRegionIds,
+      settings.hapticsEnabled,
+      markTutorialActionTried,
+    ]
   );
 
   // File Upload
@@ -2579,6 +2744,7 @@ export const App: React.FC = () => {
       setSnapshots(updated);
     }
 
+    awaitingReplayDismissRef.current = false;
     setIsReplaying(false);
     setIsReplayPlaying(false);
     setIsLoading(true);
@@ -2903,7 +3069,9 @@ export const App: React.FC = () => {
 
   // Import saves from .capy (v2 binary or v1 JSON) or .json file
   const handleImportSnapshots = useCallback(
-    async (file: File) => {
+    async (
+      file: File
+    ): Promise<{ ok: boolean; importedCount: number; message: string }> => {
       try {
         const buffer = await file.arrayBuffer();
         const result = await StorageService.importSnapshotData(buffer);
@@ -2911,11 +3079,23 @@ export const App: React.FC = () => {
           const refreshed = StorageService.loadSnapshots();
           setSnapshots(refreshed);
           NativeBridge.haptic('success', settings.hapticsEnabled);
-        } else if (result.error) {
-          alert(`Failed to import saves: ${result.error}`);
+          return {
+            ok: true,
+            importedCount: result.importedCount,
+            message: `Imported ${result.importedCount} ${result.importedCount === 1 ? 'save' : 'saves'} cleanly.`,
+          };
         }
+        const errorMsg = result.error || 'No valid saves found in file.';
+        NativeBridge.haptic('error', settings.hapticsEnabled);
+        return { ok: false, importedCount: 0, message: `Failed to import saves: ${errorMsg}` };
       } catch (e) {
         console.error('Failed to import file', e);
+        NativeBridge.haptic('error', settings.hapticsEnabled);
+        return {
+          ok: false,
+          importedCount: 0,
+          message: `Failed to import saves: ${e instanceof Error ? e.message : 'Invalid file'}`,
+        };
       }
     },
     [settings.hapticsEnabled]
@@ -3113,6 +3293,15 @@ export const App: React.FC = () => {
                 undefined,
                 mergedEpoch > 0 ? mergedEpoch : undefined
               );
+              if (viewportSaveTimerRef.current !== null) {
+                window.clearTimeout(viewportSaveTimerRef.current);
+                viewportSaveTimerRef.current = null;
+              }
+              ++generationSeqRef.current;
+              const targetView = { zoomScale: 1.0, panOffsetX: 0, panOffsetY: 0 };
+              viewportRef.current = targetView;
+              setInitialViewport(targetView);
+              setRestoreViewTrigger((prev) => prev + 1);
               setIsReplaying(false);
               setIsReplayPlaying(false);
               setShowSettings(false);
@@ -3540,18 +3729,25 @@ export const App: React.FC = () => {
     const handleIncomingUrl = async (rawUrl: string) => {
       const parsed = await parseShareLinkFromUrl(rawUrl);
       if (parsed.roomCode) {
-        const id = ProviderRegistry.auth.getCurrentIdentity();
-        await ProviderRegistry.realtimeRoom.joinRoom(parsed.roomCode, {
-          playerId: id.playerId,
-          displayName: id.displayName,
-          avatarColorHex: id.avatarColorHex,
-          lastActiveAt: Date.now(),
-        });
-        setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
-        setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+        const joinSeq = ++coopJoinSeqRef.current;
+        try {
+          const id = ProviderRegistry.auth.getCurrentIdentity();
+          await ProviderRegistry.realtimeRoom.joinRoom(parsed.roomCode, {
+            playerId: id.playerId,
+            displayName: id.displayName,
+            avatarColorHex: id.avatarColorHex,
+            lastActiveAt: Date.now(),
+          });
+          if (joinSeq === coopJoinSeqRef.current) {
+            setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
+            setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+          }
+        } catch {
+          // Ignore malformed room codes cleanly
+        }
       }
       if (parsed.matchedSample && parsed.delta) {
-        clearShareHashFromWindowUrl(parsed.roomCode);
+        clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsed.roomCode);
         await loadSampleFromPrebakedOrGenerate(
           parsed.matchedSample,
           parsed.delta.filledRegionIds,
@@ -3560,6 +3756,8 @@ export const App: React.FC = () => {
           undefined,
           parsed.delta.resetEpoch
         );
+      } else if (parsed.hasToken || parsed.tokenError) {
+        clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsed.roomCode);
       }
     };
 
@@ -3661,23 +3859,36 @@ export const App: React.FC = () => {
 
   const handleJoinCoopRoom = useCallback(
     async (rawCode: string): Promise<boolean> => {
-      const id = ProviderRegistry.auth.getCurrentIdentity();
-      await ProviderRegistry.realtimeRoom.joinRoom(rawCode, {
-        playerId: id.playerId,
-        displayName: id.displayName,
-        avatarColorHex: id.avatarColorHex,
-        lastActiveAt: Date.now(),
-      });
-      const activeCode = ProviderRegistry.realtimeRoom.activeRoomCode;
-      setCoopRoomCode(activeCode);
-      setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
-      NativeBridge.haptic('success', settings.hapticsEnabled);
-      return Boolean(activeCode);
+      const normalized = rawCode
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 8);
+      if (normalized.length < 4) return false;
+      const joinSeq = ++coopJoinSeqRef.current;
+      try {
+        const id = ProviderRegistry.auth.getCurrentIdentity();
+        await ProviderRegistry.realtimeRoom.joinRoom(normalized, {
+          playerId: id.playerId,
+          displayName: id.displayName,
+          avatarColorHex: id.avatarColorHex,
+          lastActiveAt: Date.now(),
+        });
+        if (joinSeq !== coopJoinSeqRef.current) return false;
+        const activeCode = ProviderRegistry.realtimeRoom.activeRoomCode;
+        setCoopRoomCode(activeCode);
+        setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
+        NativeBridge.haptic('success', settings.hapticsEnabled);
+        return Boolean(activeCode);
+      } catch {
+        return false;
+      }
     },
     [settings.hapticsEnabled]
   );
 
   const handleLeaveCoopRoom = useCallback(() => {
+    ++coopJoinSeqRef.current;
     ProviderRegistry.realtimeRoom.leaveRoom();
     setCoopRoomCode(null);
     setCoopParticipants([]);
@@ -4077,22 +4288,31 @@ export const App: React.FC = () => {
         parentPuzzleTitle={parentSave?.title ?? null}
         releaseChannelBadge={releaseChannelInfo.badgeLabel}
         onPickImage={() => fileInputRef.current?.click()}
-        onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
+        onTogglePreview={() => {
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('menu');
+          setIsPreviewMode((prev) => !prev);
+        }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
+          markTutorialActionTried('menu');
           setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
         onOpenSaves={() => {
-          setSettingsInitialTab(3);
+          markTutorialActionTried('menu');
+          setSettingsInitialTab(4);
           setShowSettings(true);
         }}
         onOpenCoop={() => {
-          setSettingsInitialTab(3);
+          markTutorialActionTried('menu');
+          setSettingsInitialTab(4);
           setShowSettings(true);
         }}
         onStepZoom={() => {
           if (!puzzle || isLoading) return;
+          dismissPostLoadReplayIfAwaiting();
+          markTutorialActionTried('zoom');
           NativeBridge.haptic('tick', settings.hapticsEnabled);
           setStepZoomTrigger((prev) => prev + 1);
         }}
@@ -4206,6 +4426,8 @@ export const App: React.FC = () => {
             }, 350);
           }
         }}
+        onPuzzleInteraction={dismissPostLoadReplayIfAwaiting}
+        onViewportGesture={() => markTutorialActionTried('zoom')}
         onManualPanStart={() => {
           if (isReplaying) {
             cancelAutoResume();
@@ -4234,17 +4456,30 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
+          onUndo={() => handleUndo()}
+          onRedo={() => handleRedo()}
           onLongPressUndo={handleOpenTimelineReplay}
           onStartReplay={() => startReplay(Array.from(filledRegionIds))}
           onTogglePaintMode={() => {
+            dismissPostLoadReplayIfAwaiting();
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings((prev) => ({ ...prev, isPaintMode: !prev.isPaintMode }));
           }}
-          onZoomIn={() => setZoomInTrigger((prev) => prev + 1)}
-          onZoomOut={() => setZoomOutTrigger((prev) => prev + 1)}
-          onResetView={() => setResetViewTrigger((prev) => prev + 1)}
+          onZoomIn={() => {
+            dismissPostLoadReplayIfAwaiting();
+            markTutorialActionTried('zoom');
+            setZoomInTrigger((prev) => prev + 1);
+          }}
+          onZoomOut={() => {
+            dismissPostLoadReplayIfAwaiting();
+            markTutorialActionTried('zoom');
+            setZoomOutTrigger((prev) => prev + 1);
+          }}
+          onResetView={() => {
+            dismissPostLoadReplayIfAwaiting();
+            markTutorialActionTried('zoom');
+            setResetViewTrigger((prev) => prev + 1);
+          }}
         />
       )}
 
@@ -4319,7 +4554,7 @@ export const App: React.FC = () => {
             cancelAutoResume();
             setIsReplaying(false);
             setIsReplayPlaying(false);
-            setSettingsInitialTab(2);
+            setSettingsInitialTab(3);
             setShowSettings(true);
           }}
           onResumeFromStep={handleResumeFromReplayStep}
@@ -4348,6 +4583,7 @@ export const App: React.FC = () => {
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             setActiveColorId(colId);
             setHintRegionId(null);
+            markTutorialActionTried('palette');
           }}
           onColorHintRequested={(colId) => triggerHint(colId)}
           onOpenPaletteOptions={() => setShowPaletteOptions(true)}
@@ -4421,17 +4657,32 @@ export const App: React.FC = () => {
             }
             const updated = await StorageService.deleteSnapshot(id);
             setSnapshots(updated);
-            if (id === activeSnapshotId) {
+            if (id === activeSnapshotId || updated.length === 0) {
               if (updated.length > 0) {
                 handleLoadSnapshot(updated[0], false);
               } else {
+                setActiveSnapshotId(null);
+                setPuzzle(null);
+                setFilledRegionIds(new Set());
+                setPaintedRegionColors(new Map());
+                setUndoStack([]);
+                setRedoStack([]);
+                setHintRegionId(null);
                 const defaultSample = SAMPLE_GALLERY[0];
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => {
-                  loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
-                };
-                img.src = defaultSample.assetPath;
+                const img = await loadHtmlImage(defaultSample.assetPath);
+                if (img) {
+                  loadArtworkFromImage(
+                    img,
+                    defaultSample.title,
+                    settings.generatorConfig,
+                    new Set(),
+                    undefined,
+                    undefined,
+                    defaultSample.assetPath
+                  );
+                } else {
+                  setIsLoading(false);
+                }
               }
             }
           }}
@@ -4442,13 +4693,43 @@ export const App: React.FC = () => {
             }
             await StorageService.clearAllSnapshots();
             setSnapshots([]);
+            setActiveSnapshotId(null);
+            setPuzzle(null);
+            setFilledRegionIds(new Set());
+            setPaintedRegionColors(new Map());
+            setUndoStack([]);
+            setRedoStack([]);
+            setHintRegionId(null);
             const defaultSample = SAMPLE_GALLERY[0];
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-              loadArtworkFromImage(img, defaultSample.title, settings.generatorConfig, new Set(), undefined, undefined, defaultSample.assetPath);
-            };
-            img.src = defaultSample.assetPath;
+            const img = await loadHtmlImage(defaultSample.assetPath);
+            if (img) {
+              loadArtworkFromImage(
+                img,
+                defaultSample.title,
+                settings.generatorConfig,
+                new Set(),
+                undefined,
+                undefined,
+                defaultSample.assetPath
+              );
+            } else {
+              setIsLoading(false);
+            }
+          }}
+          onRestoreStarterSample={async () => {
+            const defaultSample = SAMPLE_GALLERY[0];
+            const img = await loadHtmlImage(defaultSample.assetPath);
+            if (img) {
+              loadArtworkFromImage(
+                img,
+                defaultSample.title,
+                settings.generatorConfig,
+                new Set(),
+                undefined,
+                undefined,
+                defaultSample.assetPath
+              );
+            }
           }}
           onResetProgress={() => {
             const previouslyFilled = Array.from(filledRegionIds);
@@ -4542,8 +4823,23 @@ export const App: React.FC = () => {
           onCopyCoopInviteLink={handleCopyCoopInviteLink}
           onSyncCloudProgress={handleSyncCloudProgress}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
+          onStartTutorial={handleStartTutorial}
         />
       </Suspense>
+
+      <OnboardingTutorial
+        isOpen={showTutorial}
+        isModalOpen={showSettings || showPaletteOptions}
+        stepIndex={tutorialStep}
+        triedActions={tutorialTried}
+        onStepChange={setTutorialStep}
+        onTriggerHint={() => {
+          triggerHint();
+          markTutorialActionTried('hint');
+        }}
+        onComplete={completeTutorial}
+        onSkip={completeTutorial}
+      />
     </div>
   );
 };

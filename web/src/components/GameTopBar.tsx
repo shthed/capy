@@ -24,16 +24,10 @@ interface GameTopBarProps {
   onOpenReleaseChannel?: () => void;
 }
 
-function formatZoomBadge(zoomScale: number): string {
-  const safeZoom = Number.isFinite(zoomScale) && zoomScale > 0 ? zoomScale : 1;
-  const roundedTenths = Math.round(safeZoom * 10) / 10;
-  return Number.isInteger(roundedTenths) ? `${roundedTenths}x` : `${roundedTenths.toFixed(1)}x`;
-}
-
 export const GameTopBar: React.FC<GameTopBarProps> = ({
   activeTitle,
   progressPercentage,
-  zoomScale = 1,
+  zoomScale: _zoomScale = 1,
   isPreviewMode,
   isCompleted,
   isFullscreen,
@@ -47,12 +41,10 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
   onOpenSettings,
   onOpenSaves,
   onOpenCoop,
-  onStepZoom,
+  onStepZoom: _onStepZoom,
   onBackToParentPuzzle,
   onOpenReleaseChannel,
 }) => {
-  const formattedZoom = formatZoomBadge(zoomScale);
-  const isZoomedAwayFromFit = Math.abs(zoomScale - 1) > 0.05;
 
   return (
     <header
@@ -120,23 +112,6 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
             className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[10px] tracking-wider uppercase font-extrabold bg-violet-950/90 text-violet-200 border border-violet-400/60 shadow-lg backdrop-blur-md hover:bg-violet-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0"
           >
             {releaseChannelBadge}
-          </button>
-        )}
-
-        {onStepZoom && (
-          <button
-            type="button"
-            data-testid="topbar-zoom-badge"
-            onClick={onStepZoom}
-            title={`Zoom ${formattedZoom} (tap to cycle 1x, 2x, 4x, 8x, 12x)`}
-            aria-label={`Zoom level ${formattedZoom}. Activate to step zoom`}
-            className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-xs font-extrabold tabular-nums shadow-lg backdrop-blur-md border transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
-              isZoomedAwayFromFit
-                ? 'bg-amber-500/20 text-amber-300 border-amber-400/60 hover:bg-amber-500/30'
-                : 'bg-slate-900/80 text-slate-200 border-slate-700/60 hover:bg-slate-800/80'
-            }`}
-          >
-            {formattedZoom}
           </button>
         )}
 

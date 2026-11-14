@@ -77,6 +77,8 @@ interface PuzzleCanvasProps {
     containerHeight?: number
   ) => void;
   onManualPanStart?: () => void;
+  onPuzzleInteraction?: () => void;
+  onViewportGesture?: () => void;
   onRegionClicked: (regionId: number) => void;
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
   onVisibleColorsChanged: (colorIds: Set<number>) => void;
@@ -237,6 +239,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   coopRippleBuffer,
   onViewExtentChanged,
   onManualPanStart,
+  onPuzzleInteraction,
+  onViewportGesture,
   onRegionClicked,
   onBatchRegionsClicked,
   onVisibleColorsChanged,
@@ -493,6 +497,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (!panStepRequest || panStepRequest.seq <= 0 || !containerRef.current || !puzzle) return;
     stopMomentum();
     onManualPanStartRef.current?.();
+    onViewportGestureRef.current?.();
+    onPuzzleInteractionRef.current?.();
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
     if (w <= 0 || h <= 0) return;
@@ -534,6 +540,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // - Critically-damped 2D spring-damper (SmoothDamp): C1-continuous velocity with smooth ease-in and ease-out (zero jerk)
   const onManualPanStartRef = useRef(onManualPanStart);
   onManualPanStartRef.current = onManualPanStart;
+  const onPuzzleInteractionRef = useRef(onPuzzleInteraction);
+  onPuzzleInteractionRef.current = onPuzzleInteraction;
+  const onViewportGestureRef = useRef(onViewportGesture);
+  onViewportGestureRef.current = onViewportGesture;
   const hasNotifiedManualPanRef = useRef(false);
   const replayFollowRegionIdRef = useRef<number | null>(replayFollowRegionId ?? null);
   replayFollowRegionIdRef.current = replayFollowRegionId ?? null;
@@ -892,11 +902,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         const tmpCanvas = document.createElement('canvas');
         tmpCanvas.width = width;
         tmpCanvas.height = height;
-        const tmpCtx = tmpCanvas.getContext('2d');
+        const tmpCtx = tmpCanvas.getContext('2d', { willReadFrequently: true }) || tmpCanvas.getContext('2d');
         if (tmpCtx) {
           tmpCtx.drawImage(sourceImage, 0, 0, width, height);
           sourcePixelsRef.current = tmpCtx.getImageData(0, 0, width, height).data;
         }
+        tmpCanvas.width = 0;
+        tmpCanvas.height = 0;
       } else {
         sourcePixelsRef.current = null;
       }
@@ -1351,10 +1363,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const h = container.clientHeight;
       if (w <= 0 || h <= 0) return;
 
-      const dpr = window.devicePixelRatio || 1;
-      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
+      const rawDpr = Math.max(1, window.devicePixelRatio || 1);
+      const MAX_BACKING_DIM = 4096;
+      const effDpr = Math.max(
+        1,
+        Math.min(rawDpr, MAX_BACKING_DIM / Math.max(1, w), MAX_BACKING_DIM / Math.max(1, h))
+      );
+      const targetWidth = Math.max(1, Math.round(w * effDpr));
+      const targetHeight = Math.max(1, Math.round(h * effDpr));
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
         canvas.style.width = `${w}px`;
         canvas.style.height = `${h}px`;
       }
@@ -1363,7 +1382,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!ctx) return;
 
       ctx.save();
-      ctx.scale(dpr, dpr);
+      ctx.scale(targetWidth / w, targetHeight / h);
 
       // Canvas stage background
       const bgHex =
@@ -1633,12 +1652,55 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         : null;
     observer?.observe(container);
     window.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+
+    let disposed = false;
+    let currentDprCleanup: (() => void) | null = null;
+    const attachDprListener = () => {
+      currentDprCleanup?.();
+      currentDprCleanup = null;
+      if (disposed || typeof window.matchMedia !== 'function') return;
+      const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      if (!mq) return;
+      const onDprChange = () => {
+        if (disposed) return;
+        handleResize();
+        attachDprListener();
+      };
+      if (typeof mq.addEventListener === 'function') {
+        mq.addEventListener('change', onDprChange);
+        currentDprCleanup = () => mq.removeEventListener('change', onDprChange);
+      } else if (typeof mq.addListener === 'function') {
+        mq.addListener(onDprChange);
+        currentDprCleanup = () => mq.removeListener(onDprChange);
+      }
+    };
+    attachDprListener();
 
     return () => {
+      disposed = true;
       observer?.disconnect();
       window.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      currentDprCleanup?.();
+      currentDprCleanup = null;
     };
   }, [puzzle, drawCompositeFrame]);
+
+  // Release offscreen canvas backing buffers cleanly on unmount
+  useEffect(() => {
+    return () => {
+      for (const ref of [baseCanvasRef, highlightCanvasRef, borderCanvasRef]) {
+        if (ref.current) {
+          ref.current.width = 0;
+          ref.current.height = 0;
+          ref.current = null;
+        }
+      }
+      baseImageDataRef.current = null;
+      sourcePixelsRef.current = null;
+    };
+  }, []);
 
   // Redraw immediately whenever visual props or viewport state change
   useEffect(() => {
@@ -1822,6 +1884,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           } else {
             // Predominantly vertical drag triggers zoom
             isOneFingerZoomingRef.current = true;
+            onViewportGestureRef.current?.();
+            onPuzzleInteractionRef.current?.();
           }
         }
       }
@@ -1830,6 +1894,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         if (!hasNotifiedManualPanRef.current) {
           hasNotifiedManualPanRef.current = true;
           onManualPanStartRef.current?.();
+          onViewportGestureRef.current?.();
+          onPuzzleInteractionRef.current?.();
         }
         const moveDx = e.clientX - lastPointerPosRef.current.x;
         const moveDy = e.clientY - lastPointerPosRef.current.y;
@@ -1949,6 +2015,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!hasNotifiedManualPanRef.current && totalDragDistanceRef.current >= 6) {
         hasNotifiedManualPanRef.current = true;
         onManualPanStartRef.current?.();
+        onViewportGestureRef.current?.();
+        onPuzzleInteractionRef.current?.();
       }
       const w = container.clientWidth;
       const h = container.clientHeight;
@@ -2113,6 +2181,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
           const lx = Math.floor(coords.x);
           const ly = Math.floor(coords.y);
+          onPuzzleInteractionRef.current?.();
           if (lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height) {
             const rId = puzzle.regionMap[ly * puzzle.width + lx];
             if (rId > 0) {
@@ -2216,6 +2285,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       offsetRef.current = nextOffset;
       setScale(newScale);
       setOffset(nextOffset);
+      onViewportGestureRef.current?.();
+      onPuzzleInteractionRef.current?.();
     }
   };
 
@@ -2223,6 +2294,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length >= 2) {
       stopMomentum();
+      onViewportGestureRef.current?.();
+      onPuzzleInteractionRef.current?.();
       isDraggingRef.current = false;
       wasPinchingRef.current = true;
       isPinchPanningRef.current = false;

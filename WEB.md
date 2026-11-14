@@ -32,7 +32,8 @@ flowchart TB
       Actions["FloatingActions"]
       Dock["PaletteDock"]
       Picker["ColorPickerPopover"]
-      Settings["SettingsModal (4 Tabs)"]
+      Settings["SettingsModal (5 Tabs)"]
+      Tutorial["OnboardingTutorial (5 Steps)"]
       Replay["ReplayControls"]
       Loading["LoadingOverlay"]
     end
@@ -74,11 +75,12 @@ flowchart TB
 - **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Workers Static Assets security headers, immutable `/assets/*` caching with `! Cache-Control` overrides for unhashed sample/icon assets, `/capy.apk` `302` release redirect, and SPA fallback rules.
 - **[`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json)**: Root-domain Android Digital Asset Links manifest served at `https://capypaint.com/.well-known/assetlinks.json` for `com.capypaint.capy` (populated at build time from `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`).
 - **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)**: Published Privacy Policy and Google Play / Google Auth Data Safety summary (`https://capypaint.com/privacy-policy.html`).
+- **[`web/public/404.html`](./web/public/404.html)**: GitHub Pages fallback page redirecting expired `/capy/alpha/<id>`, `/capy/PR/<id>`, and `/capy/pull/<id>` preview URLs to `/capy/alpha/?missing=<id>` (with an infinite-redirect guard on `/capy/alpha/`).
 - **[`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy)**: Pre-baked 4-artwork `.capy` v2 Gzip archive for instant zero-worker first boot.
 
 ### Core Shell, Types & Styling (`web/src/`)
 - **[`web/src/main.tsx`](./web/src/main.tsx)**: React 19 root mount, one-shot `sessionStorage`-guarded `vite:preloadError` reload recovery, and Service Worker bootstrap.
-- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `capypaint.com` with `showChannelSwitcher: false`, `/capy/`, `/capy/beta/`, `/capy/pull/<num>/`, and `?capy_channel=` overrides).
+- **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE = MAJOR*10000 + MINOR*100 + PATCH`, `parseSemVer`, and `resolveReleaseChannel` (`'stable' | 'beta' | 'alpha' | 'dev'` channel detection for `capypaint.com` with `showChannelSwitcher: false`, `/capy/`, `/capy/beta/`, `/capy/alpha/<num>/`, and `?capy_channel=` overrides).
 - **[`web/src/App.tsx`](./web/src/App.tsx)**: Top-level state orchestrator, `#s=<token>` share resolution, Co-op room sync, replay loop, lifetime stats tracking, release channel wiring, and desktop keyboard gameplay shortcuts.
 - **[`web/src/index.css`](./web/src/index.css)**: Tailwind CSS 4 imports, safe-area utility classes, and `touch-action: none` resets.
 - **[`web/src/types/index.ts`](./web/src/types/index.ts)**: Central TypeScript types (`PuzzleData`, `PaletteColor`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `GENERATION_PIPELINE_STEPS`, `SAMPLE_GALLERY`).
@@ -88,7 +90,8 @@ flowchart TB
 - **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**: Responsive two-lane top bar (`topbar-left-lane` scrollable pill strip + `topbar-right-lane` fixed-shrink action buttons) with puzzle title, `computeProgressPercentage` completion badge (capped at `99%` until `100%` complete), non-production `BETA` / `ALPHA #<num>` channel pill (`topbar-channel-badge`), sub-tile parent breadcrumb pill (`topbar-parent-puzzle-btn`), active Co-op presence pill (`topbar-active-coop-pill`), interactive relative zoom badge (`topbar-zoom-badge`, cycling `1x -> 2x -> 4x -> 8x -> 12x -> 1x`), preview toggle, fullscreen, image upload, and settings button.
 - **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**: Horizontal swatch dock (`palette-swatch-<n>`) with completion badges, viewport spatial priority (`prioritizeOnScreen`), `reducedMotion` scroll overrides, and dynamic sort modes.
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx)**: Undo (`Ctrl+Z`, long-press `>= 450ms` for timeline scrubber), conditional Redo (`Ctrl+Y`), Watch Puzzle Replay (`replay-btn`), continuous Paint Mode, zoom `+/-`, and fit-to-screen reset.
-- **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 4-tab configuration sheet (`Settings` + `Lifetime Stats` + `Release Channel` Stable/Beta switcher card `release-channel-card`, `Hints`, `Create` + `Puzzle of the Day`, `Saves` & Cloud/Co-op Hub + Printable `.svg` export).
+- **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**: Lazy-loaded 5-tab configuration sheet (`About` with replayable tutorial button, `Privacy Policy`, `Lifetime Stats`, `app-version-badge`, PWA install, Android APK & `release-channel-card`, `Settings`, `Hints`, `Create` + `Puzzle of the Day`, `Saves` & Cloud/Co-op Hub + Printable `.svg` export).
+- **[`OnboardingTutorial.tsx`](./web/src/components/OnboardingTutorial.tsx)**: Non-blocking 5-step interactive first-run tutorial card (`capy_tutorial_completed_v1`, `?skipTutorial=1`, Try-It auto-advance badges, and Android hardware back / modal-aware `Escape` guard).
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)**: Default-minimised YouTube-style playback scrubber HUD (`0.5x`--`20x`, Follow Painting, Auto-Loop, `Resume Here`, `Save PNG`, `Next`).
 - **[`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)**: Lazy-loaded custom HSL/Hex swatch editor and 5 theme presets for Free Colour mode.
 - **[`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx)**: Non-blocking bottom progress HUD supporting Simple (Fast Mode) and Detailed 6-stage pipeline inspection.
@@ -120,7 +123,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **`z-0` (`PuzzleCanvas`)**: Full-bleed interactive pan/zoom 2D canvas.
 - **`z-20` (`FloatingActions`, `PaletteDock`)**: Bottom-right tool stack and bottom horizontal swatch dock.
 - **`z-30` (`GameTopBar`, `ReplayControls`)**: Top safe-area status bar and floating bottom YouTube-style replay scrubber HUD.
-- **`z-40` (`LoadingOverlay`)**: Non-blocking bottom-anchored generation HUD and expandable 6-stage inspector drawer.
+- **`z-40` (`LoadingOverlay`, `OnboardingTutorial`)**: Non-blocking bottom-anchored generation HUD, 6-stage inspector drawer, and non-blocking top-anchored 5-step tutorial card.
 - **`z-50` (`SettingsModal`, `ColorPickerPopover`)**: Modal configuration sheet and nested custom color popover.
 
 ### Component Responsibilities & Key Interactions
@@ -138,11 +141,14 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
   - **`Escape` & `Enter` Keys**: Pressing `Escape` cancels an active inline save-card rename in `SettingsModal` first (`Enter` commits the rename); otherwise `Escape` pops the topmost overlay on the LIFO modal stack (`ColorPickerPopover` -> `SettingsModal` -> `ReplayControls`).
   - Also hosts Watch Puzzle Replay (`replay-btn`), continuous Paint Mode brush toggle, optional `+/-` zoom buttons, and fit-to-screen reset (`reset-view-btn`).
 - **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx)**:
-  - Restores the last open tab via `localStorage['capy_last_settings_tab']` (`'0'`--`'3'`):
-  - **Tab 0 -- Settings**: Difficulty (`EASY` / `NORMAL`), `autoAdvance`, default `replaySpeed` (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), `Replay on Load`, `Follow Painting During Replay` (`toggle-replay-follow-btn`), `Auto-Loop Replay` (`toggle-replay-loop-btn`), Controls (`zoomSensitivity` `0.5x`--`2.0x` slider, `snapZoomLevels` `1x/2x/4x/8x/12x` magnetic stops toggle, `soundEnabled` toggle, `soundVolume` `0%`--`100%` slider, `reducedMotion` `setting-reduced-motion` toggle), `panMomentum`, canvas background presets + `<Pipette>` custom color picker, `raisePaletteDock`, label bounds (`minLabelSize`, `maxLabelSize`, `labelScale`), 2-column **Lifetime Stats** card (`lifetime-stats-card`), PWA install card, and Android APK download link.
-  - **Tab 1 -- Hints**: `highlightStyle` (`FULL_REGION`, `BOUNDARY_ONLY`, `NUMBER_ONLY`, `CENTROID_GLOW`), `hintFillStyle`, custom `hintColorArgb` (`<Pipette>`), `hintIntensity`, and `animateHint`.
-  - **Tab 2 -- Create**: Deterministic UTC **Puzzle of the Day** hero card (`daily-puzzle-card`, `daily-puzzle-play-btn`), real-time gallery search (`gallery-search-input`), category filter chips (`All`, `Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), **Infinite Zoom 2x Detail Tile** cropper (`infinite-zoom-subtile-btn`), moderated **Community Puzzle Ideas** feed (`community-ideas-section`), `GeneratorConfig` controls, and device photo upload.
-  - **Tab 3 -- Saves**: Cloud Sync & Simultaneous Co-op Hub (`cloud-coop-hub`) featuring player name/avatar editor, multi-provider cloud status bar (`data-testid="cloud-providers-bar"`), browser/PWA **Google Account Login** (Google Identity Services OAuth 2.0 -> Google Drive `appDataFolder`), Android **Google Play Games Services v2** sign-in, CRDT `Cloud Sync`, `< 2 KB` `Share Progress Link`, active-puzzle **Printable SVG** export (`export-printable-svg-btn`), and 6-char `Host Co-op Room` / `Join` controls, alongside sticky library actions (Sort, `Replay on Load`, Detail/Thumbnails view toggle, Pin/Unpin, Load, Replay, inline Rename, per-save Printable `.svg` `save-action-export-svg`, Export `.capy`, Import, Export All, `Reset Progress` `reset-progress-btn`, Delete All).
+  - Restores the last open tab via `localStorage['capy_last_settings_tab']` (`'0'`--`'4'`):
+  - **Tab 0 -- About**: App overview, **Replay Interactive Tutorial** (`about-replay-tutorial-btn`), **Privacy Policy** link, 2-column **Lifetime Stats** card (`lifetime-stats-card`), `app-version-badge`, PWA install card / native status, Android APK download link, and **Release Channel** Stable/Beta switcher (`release-channel-card`).
+  - **Tab 1 -- Settings**: Difficulty (`EASY` / `NORMAL`), `autoAdvance`, default `replaySpeed` (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), `Replay on Load`, `Follow Painting During Replay` (`toggle-replay-follow-btn`), `Auto-Loop Replay` (`toggle-replay-loop-btn`), Controls (`zoomSensitivity` `0.5x`--`2.0x` slider, `snapZoomLevels` `1x/2x/4x/8x/12x` magnetic stops toggle, `soundEnabled` toggle, `soundVolume` `0%`--`100%` slider, `reducedMotion` `setting-reduced-motion` toggle), `panMomentum`, canvas background presets + `<Pipette>` custom color picker, `raisePaletteDock`, and label bounds (`minLabelSize`, `maxLabelSize`, `labelScale`).
+  - **Tab 2 -- Hints**: `highlightStyle` (`FULL_REGION`, `BOUNDARY_ONLY`, `NUMBER_ONLY`, `CENTROID_GLOW`), `hintFillStyle`, custom `hintColorArgb` (`<Pipette>`), `hintIntensity`, and `animateHint`.
+  - **Tab 3 -- Create**: Deterministic UTC **Puzzle of the Day** hero card (`daily-puzzle-card`, `daily-puzzle-play-btn`), real-time gallery search (`gallery-search-input`), category filter chips (`All`, `Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), **Infinite Zoom 2x Detail Tile** cropper (`infinite-zoom-subtile-btn`), moderated **Community Puzzle Ideas** feed (`community-ideas-section`), `GeneratorConfig` controls, and device photo upload.
+  - **Tab 4 -- Saves**: Cloud Sync & Simultaneous Co-op Hub (`cloud-coop-hub`) featuring player name/avatar editor, multi-provider cloud status bar (`data-testid="cloud-providers-bar"`), browser/PWA **Google Account Login** (Google Identity Services OAuth 2.0 -> Google Drive `appDataFolder`), Android **Google Play Games Services v2** sign-in, CRDT `Cloud Sync`, `< 2 KB` `Share Progress Link`, active-puzzle **Printable SVG** export (`export-printable-svg-btn`), and 6-char `Host Co-op Room` / `Join` controls, alongside sticky library actions (Sort, `Replay on Load`, Detail/Thumbnails view toggle, Pin/Unpin, Load, Replay, inline Rename, per-save Printable `.svg` `save-action-export-svg`, Export `.capy`, Import, Export All, `Reset Progress` `reset-progress-btn`, Delete All).
+- **[`OnboardingTutorial.tsx`](./web/src/components/OnboardingTutorial.tsx)**:
+  - Launches automatically on first visit unless `?skipTutorial=1` (or `capy_tutorial_completed_v1 === '1'`). Guides new players through 5 interactive steps (`Pick a Color`, `Tap or Paint Shapes`, `Zoom & Pan`, `Smart Hints`, `Preview, Saves & Menu`), auto-advancing `750ms` after live canvas/dock interaction (`Tried!` badge), registering `NativeBridge.pushBackHandler`, and guarding `Escape` dismissal when `SettingsModal` or `ColorPickerPopover` is open (`isModalOpen`).
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)**:
   - Opens minimised by default (`data-minimized="true"`) as a compact mobile-safe YouTube-style bottom control bar (`w-full max-w-2xl`, `min-w-[44px] sm:min-w-[140px]` scrubber track without `overflow-hidden` so `-top-6` scrub preview tooltips are never clipped). **Both** the compact minimised bar and the expanded two-row deck (`data-minimized="false"`, toggled via `replay-toggle-minimize-btn`) render the full-width interactive pointer-captured timeline scrubber (`renderYouTubeScrubber`, `data-testid="replay-scrubber-track"` / `replay-scrubber`), Play/Pause, speed selector (`0.5x`, `1x`, `2x`, `5x`, `10x`, `20x`), **Follow Painting** (`replay-follow-btn`), **Auto-Loop** (`replay-loop-btn`), Skip-to-End, and Exit. Expanding adds `Resume Here` (rewinding active play to step $K$ and pushing later steps onto `redoStack`) plus post-victory `Save PNG` and `Next` actions.
 - **[`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)**:
@@ -286,14 +292,16 @@ type WorkerResponse =
 2. **Binary `.capy` v2 Archives & CRDT Progress Deltas ([`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
    - `StorageService.exportSnapshotBinary(id)` / `exportAllSnapshotsBinary()` emit `CAPY\x02<flags>` Gzip archives embedding `SavedSnapshot` metadata (including `customPalette` and `parentSnapshotId`), `CompactPuzzleRecordV2` geometry, and custom image blobs.
    - `CapyCodec.encodeProgressDeltaToken` / `mergeProgressDeltas` encode `ProgressDeltaV2` (`sourceRef`, `filledRegionIds`, `paintedRegionColors`, `isFreeColor`, `updatedAt`) into `< 2 KB` `#s=<token>` URL fragments with CRDT Grow-Only Set-Union (`filledRegionIds`) + Last-Writer-Wins (`paintedRegionColors`) merging.
-3. **Instant First-Launch Sample Archive (`./assets/sample_saves.capy`)**:
-   - On cold start with zero existing snapshots, `restoreSession` fetches `./assets/sample_saves.capy` (`225 KB`) and imports all 4 `SAMPLE_GALLERY` puzzles (`Capybara`, `Mushroom Forest`, `Capy Forest`, `Snail Guitar`) directly into `localStorage` and `IndexedDB` without spawning `puzzle.worker.ts`.
+3. **Instant First-Launch Sample Archive (`./assets/sample_saves.capy`) & Atomic `.capy` Imports**:
+   - On cold start with zero existing snapshots, `restoreSession` fetches `./assets/sample_saves.capy` (`225 KB`) and imports all 4 `SAMPLE_GALLERY` puzzles (`Capy Forest` default index `0`, `Capybara`, `Mushroom Forest`, `Snail Guitar`) directly into `localStorage` and `IndexedDB` without spawning `puzzle.worker.ts`. When `sample_saves.capy` is lazily imported alongside existing custom user saves, `StorageService.mergeImportedSnapshots` preserves custom saves first with strictly newer timestamps so `isAutoSample` entries never shadow user artwork.
+   - `StorageService.importSnapshotData` validates and decompresses all puzzle records and blobs in memory before mutating `IndexedDB` or `localStorage`, while `SettingsModal` surfaces inline accessible import notices (`saves-import-notice`, zero blocking `alert()` dialogs) and zero-snapshot starter recovery.
 
 ### Complete Browser Storage Key Inventory (`localStorage` & `sessionStorage`)
 - **`capy_snapshots_v8`** (`localStorage`): Array of `SavedSnapshot` metadata records (mirrored to Android `filesDir/capy_saves/`).
 - **`capy_active_session_v8`** (`localStorage`): Currently active `SavedSnapshot.id` string.
 - **`capy_user_settings_v8`** (`localStorage`): Persisted `UserSettings` JSON object.
-- **`capy_last_settings_tab`** (`localStorage`): Last active tab index (`'0'`--`'3'`) in `SettingsModal`.
+- **`capy_last_settings_tab`** (`localStorage`): Last active tab index (`'0'`--`'4'`) in `SettingsModal`.
+- **`capy_tutorial_completed_v1`** (`localStorage`, backed up via `NativeBridge`): `'1'` once the first-run `OnboardingTutorial` is finished or skipped.
 - **`capy_saves_view_mode`** (`localStorage`): Saves tab layout mode (`'DETAIL' | 'THUMBNAILS'`).
 - **`capy_player_identity_v1`** (`localStorage`): `PlayerIdentity` (`playerId`, `displayName`, `avatarColorHex`, `provider`, `isAuthenticated`, optional `email` & `avatarUrl`).
 - **`capy_tab_peer_suffix_v1`** (`sessionStorage`): Per-tab unique suffix isolating multi-tab `BroadcastChannel` Co-op peers.
@@ -305,6 +313,8 @@ type WorkerResponse =
 - **`capy_community_ideas_v1`** (`localStorage`): Moderated `CommunityPuzzleIdea` entries and vote state.
 - **`capy_ai_credits_v1`** (`localStorage`): Opt-in `AiCreditLedger` (`availableCredits`, `lifetimeEarnedCredits`, `lifetimeSpentCredits`, `adFreePlatform`, `personalizedAdsConsent`).
 - **`capy_player_stats_v1`** (`localStorage`, backed up via `NativeBridge`): `PlayerLifetimeStats` (`totalRegionsColored`, `puzzlesCompleted`, `zeroHintPuzzles`, `fastestCompletionMs`, `freeColorCreations`, `coopRegionsPainted`).
+- **`capy_preload_reload_v1`** (`sessionStorage`): Single-shot Vite dynamic-import preload-error reload guard in [`main.tsx`](./web/src/main.tsx).
+- **Channel Sandbox Isolation ([`StorageNamespace.ts`](./web/src/services/StorageNamespace.ts))**: On `alpha` (`/capy/alpha/<num>/`) and `beta` (`/capy/beta/`) channels (unless overridden with `?capy_sandbox=0`, or forced with `?capy_sandbox=1`), all 15 `localStorage` keys, both `sessionStorage` keys, and `NativeBridge` backup keys suffix `__sandbox_${channel}`, IndexedDB scopes to `capy_game_storage_v8_${channel}`, and `BroadcastChannel` Co-op rooms scope by channel so preview play never mutates Production saves.
 
 ### 8.1 Comprehensive `UserSettings` Reference (`capy_user_settings_v8`)
 
@@ -352,7 +362,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`soundVolume`**: `number` (default `0.7`, range `0.0`--`1.0`) -- Master gain scalar for procedural Web Audio effects.
 - **`reducedMotion`**: `boolean` (seeded from `window.matchMedia('(prefers-reduced-motion: reduce)').matches`, fallback `false`) -- Skips `canvas-confetti` bursts, multi-frame camera glides, pan-momentum flick glides, and `requestAnimationFrame` hint-pulse oscillations (rendering a steady high-contrast highlight instead).
 - **`detailedLoadingProgress`**: `boolean` (default `false`) -- Switches `LoadingOverlay` between Simple Fast Mode (`false`) and Detailed 6-Stage Inspector Mode (`true`).
-- **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_GENERATOR_CONFIG`) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
+- **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_SETTINGS.generatorConfig` in [`StorageService.ts`](./web/src/services/StorageService.ts)) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
 
 ---
 
@@ -383,7 +393,7 @@ flowchart LR
     P["PwaService.ts"]
     S["Standalone Detection & Install Card"]
   end
-  subgraph ServiceWorker["Offline Service Worker (sw.js - capy-cache-v2)"]
+  subgraph ServiceWorker["Offline Service Worker (sw.js - capy-cache-v&lt;version&gt;:&lt;scope&gt;)"]
     Pre["Pre-cache: Shell, sample_saves.capy, WebP samples & icons"]
     Auto["Auto-discovery: Vite JS/CSS/Worker bundles"]
     Static["Cache-First: Same-origin scripts, styles, workers"]
@@ -392,7 +402,7 @@ flowchart LR
   ManifestLayer --> ServiceWorker
 ```
 
-1. **Web App Manifest ([`manifest.webmanifest`](./web/public/manifest.webmanifest))**: Standalone display mode (`display: "standalone"`), `#000000` theme/background colors, maskable adaptive icons, and relative `./` start URL/scope so root (`/capy/`) and PR previews (`/capy/pull/<number>/`) work identically.
+1. **Web App Manifest ([`manifest.webmanifest`](./web/public/manifest.webmanifest))**: Standalone display mode (`display: "standalone"`), `#000000` theme/background colors, maskable adaptive icons, and relative `./` start URL/scope so root (`/capy/`) and PR previews (`/capy/alpha/<number>/`) work identically.
 2. **Offline Service Worker ([`web/public/sw.js`](./web/public/sw.js))**:
    - Pre-caches the app shell (`./`, `./index.html`, `./manifest.webmanifest`), `./assets/sample_saves.capy`, all 4 built-in WebP sample images (`capybara.webp`, `mushrooms.webp`, `capy_forest.webp`, `snail_guitar.webp`), and app icons.
    - Parses `index.html` on `install` to pre-cache hashed Vite JS/CSS/Worker bundles (`assets/index-*.js`, `assets/index-*.css`, `assets/puzzle.worker-*.js`).

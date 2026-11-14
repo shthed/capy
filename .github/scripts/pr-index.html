@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Capy Paint — Open PR Previews</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #faf7f2;
+      --card: #ffffff;
+      --text: #2b2118;
+      --muted: #6e5d4f;
+      --accent: #d97706;
+      --border: #e7dfd5;
+      --banner-bg: #fef3c7;
+      --banner-text: #92400e;
+      --banner-border: #f59e0b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #181411;
+        --card: #241e19;
+        --text: #f5efe8;
+        --muted: #b5a697;
+        --accent: #f59e0b;
+        --border: #3a3027;
+        --banner-bg: #3b2a14;
+        --banner-text: #fde68a;
+        --banner-border: #d97706;
+      }
+    }
+    body {
+      margin: 0;
+      padding: 1.25rem;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 1.25rem;
+    }
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: 1.5rem;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .nav a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .banner {
+      display: none;
+      padding: 0.9rem 1rem;
+      border-radius: 12px;
+      background: var(--banner-bg);
+      color: var(--banner-text);
+      border: 1px solid var(--banner-border);
+      margin-bottom: 1.25rem;
+      font-size: 0.95rem;
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .item-title {
+      font-weight: 600;
+      font-size: 1rem;
+    }
+    .item-meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .item-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      margin-top: 0.25rem;
+    }
+    .btn {
+      display: inline-block;
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+    .empty {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Open PR Previews</h1>
+      <p class="subtitle" id="status">Loading deployed PR previews...</p>
+      <nav class="nav">
+        <a href="/capy/">Production</a>
+        <a href="/capy/beta/">Beta</a>
+      </nav>
+    </header>
+    <div class="banner" id="missing-banner" role="status"></div>
+    <main class="list" id="pr-list"></main>
+  </div>
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var missing = params.get('missing');
+      var banner = document.getElementById('missing-banner');
+      if (missing && banner) {
+        banner.style.display = 'block';
+        banner.textContent = 'Preview for PR #' + missing + ' is no longer deployed (the PR was likely merged or closed). Select an active PR preview below.';
+      }
+
+      var statusEl = document.getElementById('status');
+      var listEl = document.getElementById('pr-list');
+
+      function deriveRepoSlug() {
+        var host = window.location.hostname || '';
+        var pathParts = (window.location.pathname || '').split('/').filter(Boolean);
+        var owner = host.endsWith('.github.io') ? host.replace(/\.github\.io$/, '') : '';
+        var repo = pathParts.length > 0 ? pathParts[0] : '';
+        if (owner && repo) {
+          return owner + '/' + repo;
+        }
+        return '';
+      }
+
+      function renderList(prs, metadataMap) {
+        while (listEl.firstChild) {
+          listEl.removeChild(listEl.firstChild);
+        }
+        if (!prs || prs.length === 0) {
+          var empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = 'No open PR previews are currently deployed.';
+          listEl.appendChild(empty);
+          return;
+        }
+
+        prs.forEach(function (pr) {
+          var card = document.createElement('article');
+          card.className = 'item';
+
+          var titleEl = document.createElement('div');
+          titleEl.className = 'item-title';
+          var meta = metadataMap[pr.number];
+          titleEl.textContent = meta && meta.title
+            ? '#' + pr.number + ' — ' + meta.title
+            : 'PR #' + pr.number;
+          card.appendChild(titleEl);
+
+          if (meta && meta.author) {
+            var metaEl = document.createElement('div');
+            metaEl.className = 'item-meta';
+            metaEl.textContent = 'Author: ' + meta.author;
+            card.appendChild(metaEl);
+          }
+
+          var actions = document.createElement('div');
+          actions.className = 'item-actions';
+
+          var webLink = document.createElement('a');
+          webLink.className = 'btn primary';
+          webLink.href = pr.path || ('/capy/alpha/' + pr.number + '/');
+          webLink.textContent = 'Open Web Preview';
+          actions.appendChild(webLink);
+
+          if (pr.hasApk) {
+            var apkLink = document.createElement('a');
+            apkLink.className = 'btn';
+            apkLink.href = (pr.path || ('/capy/alpha/' + pr.number + '/')) + 'capy.apk';
+            apkLink.textContent = 'Download APK';
+            actions.appendChild(apkLink);
+          }
+
+          card.appendChild(actions);
+          listEl.appendChild(card);
+        });
+      }
+
+      fetch('manifest.json', { cache: 'no-store' })
+        .then(function (res) {
+          if (!res.ok) {
+            throw new Error('Failed to load manifest.json');
+          }
+          return res.json();
+        })
+        .then(function (manifest) {
+          var prs = Array.isArray(manifest.prs) ? manifest.prs : [];
+          if (statusEl) {
+            statusEl.textContent = prs.length + ' open PR preview' + (prs.length === 1 ? '' : 's') + ' available.';
+          }
+          renderList(prs, {});
+
+          var slug = deriveRepoSlug();
+          if (!slug || prs.length === 0) {
+            return;
+          }
+          fetch('https://api.github.com/repos/' + slug + '/pulls?state=open&per_page=100')
+            .then(function (res) {
+              return res.ok ? res.json() : [];
+            })
+            .then(function (pulls) {
+              if (!Array.isArray(pulls)) return;
+              var map = {};
+              pulls.forEach(function (p) {
+                if (p && typeof p.number === 'number') {
+                  map[p.number] = {
+                    title: p.title || '',
+                    author: p.user && p.user.login ? p.user.login : ''
+                  };
+                }
+              });
+              renderList(prs, map);
+            })
+            .catch(function () {
+              // Graceful fallback: keep manifest-only list
+            });
+        })
+        .catch(function () {
+          if (statusEl) {
+            statusEl.textContent = 'Unable to load PR manifest.';
+          }
+          renderList([], {});
+        });
+    })();
+  </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { StorageService } from './services/StorageService';
 import { PwaService } from './services/PwaService';
+import { resolveScopedStorageKey } from './services/StorageNamespace';
 import './index.css';
 
 if (typeof window !== 'undefined') {
@@ -13,8 +14,9 @@ if (typeof window !== 'undefined') {
   window.addEventListener('vite:preloadError', (event) => {
     event.preventDefault();
     try {
-      if (!sessionStorage.getItem(PRELOAD_RELOAD_GUARD_KEY)) {
-        sessionStorage.setItem(PRELOAD_RELOAD_GUARD_KEY, '1');
+      const scopedKey = resolveScopedStorageKey(PRELOAD_RELOAD_GUARD_KEY);
+      if (!sessionStorage.getItem(scopedKey)) {
+        sessionStorage.setItem(scopedKey, '1');
         window.location.reload();
       }
     } catch {
