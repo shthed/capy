@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Capy Paint</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #020617;
+      color: #e2e8f0;
+      line-height: 1.65;
+      padding: 2rem 1.25rem 4rem;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    }
+    h1 {
+      color: #fbbf24;
+      margin-top: 0;
+      font-size: 1.75rem;
+    }
+    h2 {
+      color: #f8fafc;
+      font-size: 1.15rem;
+      margin-top: 1.75rem;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 0.35rem;
+    }
+    a {
+      color: #38bdf8;
+    }
+    .meta {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Capy Paint — Privacy Policy</h1>
+    <p class="meta">Effective Date: November 2026 &bull; Package: <code>com.capypaint.capy</code></p>
+
+    <p>
+      Capy Paint is a relaxing color-by-number and free-coloring puzzle application available on Web
+      and Android. Your artwork, photos, and puzzle saves belong to you.
+    </p>
+
+    <h2>1. Local-First Photo &amp; Puzzle Processing</h2>
+    <p>
+      When you choose a personal photo from your device (using the Android system Photo Picker or
+      your browser file selector), color quantization and region segmentation run 100% locally on
+      your device inside a sandboxed Web Worker. By default, your personal photos and puzzle saves
+      stay strictly on your device (IndexedDB and app-private storage) and are never sent to Capy
+      Paint servers. If you opt in to Cloud Sync, custom photo puzzle archives (<code>.capy</code>)
+      are backed up solely to your own private Google Drive <code>appDataFolder</code> or Google
+      Play Games Saved Games storage so you can continue coloring across your own devices.
+    </p>
+
+    <h2>2. Optional Sign-In &amp; Cloud Save Sync</h2>
+    <p>
+      You can play Capy Paint completely offline without creating an account. If you choose to sign
+      in with your Google Account on Web/PWA (via Google Identity Services OAuth 2.0 using
+      <code>openid</code>, <code>profile</code>, <code>email</code>, and the app-isolated
+      <code>drive.appdata</code> scope) or with Google Play Games Services v2 on Android, Capy Paint
+      reads your basic display profile (name, avatar, and account identifier) and syncs your save
+      library manifest and compact <code>.capy</code> v2 puzzle saves exclusively inside your hidden,
+      app-private cloud folder (Google Drive <code>appDataFolder</code> or Play Games
+      <code>SnapshotsClient</code>). Capy Paint cannot view or access any other files in your Google
+      Drive. You may sign out or delete your local and cloud saves at any time from
+      <em>Settings &rarr; Saves</em>.
+    </p>
+
+    <h2>3. Shareable Links &amp; Optional Co-op Rooms</h2>
+    <p>
+      When you generate a Share Progress Link for a gallery puzzle, completion progress is encoded
+      directly into the URL fragment (<code>#s=...</code>). When you host or join a live Co-op room,
+      only your chosen display name, avatar color, and region paint events are shared with
+      participants in that room code.
+    </p>
+
+    <h2>4. Optional Rewarded Credits &amp; Zero Forced Tracking</h2>
+    <p>
+      Capy Paint never displays forced interstitial advertisements during gameplay. On supported
+      mobile builds where optional rewarded video credits are offered to fund AI-generated gallery
+      puzzles, ads are strictly opt-in and respect your regional consent preferences. Web and
+      desktop builds are 100% ad-free.
+    </p>
+
+    <h2>5. Google Play Data Safety &amp; Google Auth Summary</h2>
+    <ul>
+      <li><strong>Personal Photos &amp; Media:</strong> Processed 100% on-device; stored locally by default and backed up only to your own private Google Drive <code>appDataFolder</code> / Play Games Saved Games when you opt in to Cloud Sync.</li>
+      <li><strong>Account Profile &amp; Game Progress:</strong> Stored locally by default; synced via encrypted HTTPS only when you sign in with Google Identity Services (<code>drive.appdata</code>) or Google Play Games Services v2.</li>
+      <li><strong>Account &amp; Data Deletion:</strong> You can play without an account, sign out at any time, and delete local saves from <em>Settings &rarr; Saves</em> or revoke app access from your Google Account settings.</li>
+    </ul>
+
+    <h2>6. Contact &amp; Open Source</h2>
+    <p>
+      Capy Paint is playable on the web at
+      <a href="https://capypaint.com">https://capypaint.com</a>. Questions or data deletion requests
+      can be submitted via the official repository at
+      <a href="https://github.com/shthed/capy">https://github.com/shthed/capy</a>.
+    </p>
+  </main>
+</body>
+</html>
