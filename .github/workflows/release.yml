@@ -122,26 +122,11 @@ jobs:
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
         run: |
-          python3 - <<'PY'
-          import os, re
-          tag = os.environ["TAG_NAME"]
-          m = re.match(r"^v(\d+)\.(\d+)\.(\d+)", tag)
-          major, minor, patch = m.group(1), m.group(2), m.group(3)
-          full_ver = f"{major}.{minor}.{patch}"
-          short_ver = f"{major}.{minor}"
-          text = open("CHANGELOG.md", encoding="utf-8").read()
-          section = None
-          for candidate in (full_ver, short_ver):
-              pat = rf"^### {re.escape(candidate)} - [^\n]+\n+(.*?)(?=^### |\Z)"
-              found = re.search(pat, text, flags=re.M | re.S)
-              if found:
-                  section = found.group(1).strip()
-                  break
-          if not section:
-              section = f"- Release {tag}"
-          with open("release-notes.md", "w", encoding="utf-8") as f:
-              f.write(f"### What's New in `{tag}`\n\n{section}\n")
-          PY
+          set -euo pipefail
+          node ./.github/scripts/compile-changelog.mjs \
+            --tag "${TAG_NAME}" \
+            --changelog CHANGELOG.md \
+            --out release-notes.md
 
       - name: Create or update GitHub Release
         env:

@@ -1,9 +1,41 @@
-### 3.0 - 2026-11-12 (Beta)
+### 3.0.8 - 2026-11-13 (Production, Beta)
 
+- Promote v3.0.8 beta release to Production [#501](https://github.com/shthed/capy/pull/501)
+- Remove topbar zoom pill badge, fix 360px mobile SettingsModal tab clipping, and add E2E overflow guard [#497](https://github.com/shthed/capy/pull/497)
+
+### 3.0.7 - 2026-11-13
+
+- Isolate alpha/beta preview browser storage (`StorageNamespace`), harden canvas DPR listeners and settings persistence, add `.changelog/` fragment compiler, fix `PaletteDock` accessibility labels, and sync Agile docs [#495](https://github.com/shthed/capy/pull/495)
+
+### 3.0.6 - 2026-11-13
+
+- Persist post-load replay controls until puzzle interaction, set Capy Forest as default puzzle, add interactive first-run tutorial, and move About tab first [#489](https://github.com/shthed/capy/pull/489)
+
+### 3.0.5 - 2026-11-13
+
+- Serve `/capy/alpha/` preview index manifest with `404.html` redirect from legacy `/capy/PR/NNN` and `/capy/pull/NNN` paths [#491](https://github.com/shthed/capy/pull/491)
+
+### 3.0.4 - 2026-11-13
+
+- Standardize GitHub Pages PR preview URLs to lowercase /capy/alpha/<num>/ with legacy /PR/ and /pull/ fallbacks and prune stale top-level pull/ and PR/ preview directories [#492](https://github.com/shthed/capy/pull/492)
+
+### 3.0.3 - 2026-11-13
+
+- Harden CI/CD workflow retries, Playwright E2E caching on beta PRs, main-to-beta sync workflow and dependency automation, and changelog/guide sanity checks [#494](https://github.com/shthed/capy/pull/494)
+
+### 3.0.2 - 2026-11-13
+
+- Establish PROJECT.md governance charter, split 3.0.1 vs 3.0.2 changelog channels, and reconcile Epics and backlog links [#493](https://github.com/shthed/capy/pull/493)
+- Add 1-click GitHub PR approval workflow via bot-opened PRs, native review gate tests, and prebaked sample viewport reset [#490](https://github.com/shthed/capy/pull/490)
+- Add Android Play Store release to v3.0.1 scope and remove shipped Sprint 1 bugfixes from active queue [#487](https://github.com/shthed/capy/pull/487)
+
+### 3.0.1 - 2026-11-12
+
+- Promote v3.0.1 mobile topbar and progress cap fixes to Production [#488](https://github.com/shthed/capy/pull/488)
 - Fix mobile topbar badge overlap, cap incomplete puzzle progress at 99%, and log capypaint.com DNS cutover [#486](https://github.com/shthed/capy/pull/486)
 - Prepare v3.0.0 beta release with Cloudflare Worker, Co-op relay hardening, mobile replay controls, and CI sanity gate [#485](https://github.com/shthed/capy/pull/485)
 
-### 2.7 - 2026-11-12 (Alpha)
+### 2.7 - 2026-11-12
 
 - Fix Co-op save and rewind sync, Android large cloud saves, CRDT reset epochs, and mobile replay controls [#484](https://github.com/shthed/capy/pull/484)
 
@@ -11,7 +43,7 @@
 
 - Add capypaint.com Cloudflare Worker, Co-op relay security hardening, clean-room export, and dual-approval CI gate [#482](https://github.com/shthed/capy/pull/482)
 
-### 2.5 - 2026-11-11 (Production)
+### 2.5 - 2026-11-11
 
 - Document 3-artefact roadmap triad, GitHub Epic Issue CLI playbooks, and sprint lifecycle [#483](https://github.com/shthed/capy/pull/483)
 - Add 3-tier Alpha/Beta/Production release pipeline, channel switcher, and GitHub Agile tracking [#481](https://github.com/shthed/capy/pull/481)

@@ -29,10 +29,13 @@ import {
   ZoomIn,
   Copy,
   Printer,
+  Info,
+  ShieldCheck,
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
+import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
@@ -98,7 +101,10 @@ interface SettingsModalProps {
   onExportPrintableSvg?: () => Promise<boolean> | void;
   onExportSnapshotSvg?: (id: string, title: string) => Promise<boolean> | void;
   onExportAllSnapshots?: () => void;
-  onImportSnapshots?: (file: File) => void;
+  onImportSnapshots?: (
+    file: File
+  ) => Promise<{ ok: boolean; importedCount: number; message: string } | void> | void;
+  onRestoreStarterSample?: () => void;
   onHostCoopRoom?: () => Promise<string | null>;
   onJoinCoopRoom?: (code: string) => Promise<boolean>;
   onLeaveCoopRoom?: () => void;
@@ -112,6 +118,7 @@ interface SettingsModalProps {
     backend?: string;
   } | null>;
   onZoomIntoDetailTile?: () => void;
+  onStartTutorial?: () => void;
 }
 
 const LAST_SETTINGS_TAB_KEY = 'capy_last_settings_tab';
@@ -147,6 +154,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onExportSnapshotSvg,
   onExportAllSnapshots,
   onImportSnapshots,
+  onRestoreStarterSample,
   onHostCoopRoom,
   onJoinCoopRoom,
   onLeaveCoopRoom,
@@ -154,6 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onCopyCoopInviteLink,
   onSyncCloudProgress,
   onZoomIntoDetailTile,
+  onStartTutorial,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dailyPuzzle = useMemo(() => getDailyFeaturedPuzzle(), [isOpen]);
@@ -164,10 +173,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<number>(() => {
     if (initialTab !== undefined) return initialTab;
     try {
-      const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+      const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
       if (saved !== null) {
         const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) return parsed;
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) return parsed;
       }
     } catch {
       // Ignored
@@ -183,7 +192,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [savesViewMode, setSavesViewMode] = useState<'DETAIL' | 'THUMBNAILS'>(() => {
     try {
       return (
-        (localStorage.getItem('capy_saves_view_mode') as 'DETAIL' | 'THUMBNAILS') || 'DETAIL'
+        (localStorage.getItem(resolveScopedStorageKey('capy_saves_view_mode')) as
+          | 'DETAIL'
+          | 'THUMBNAILS') || 'DETAIL'
       );
     } catch {
       return 'DETAIL';
@@ -214,6 +225,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [profileNameDraft, setProfileNameDraft] = useState(playerIdentity.displayName);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hubNotice, setHubNotice] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [failedThumbSrcs, setFailedThumbSrcs] = useState<Record<string, boolean>>({});
   const [isSyncingCloud, setIsSyncingCloud] = useState(false);
   const cloudProviders = useMemo(
     () => ProviderRegistry.auth.getAvailableCloudProviders(),
@@ -241,7 +254,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSetViewMode = (mode: 'DETAIL' | 'THUMBNAILS') => {
     setSavesViewMode(mode);
     try {
-      localStorage.setItem('capy_saves_view_mode', mode);
+      localStorage.setItem(resolveScopedStorageKey('capy_saves_view_mode'), mode);
     } catch {
       // Ignored
     }
@@ -253,16 +266,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (initialTab !== undefined) {
         setActiveTab(initialTab);
         try {
-          localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(initialTab));
+          localStorage.setItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY), String(initialTab));
         } catch {
           // Ignored
         }
       } else {
         try {
-          const saved = localStorage.getItem(LAST_SETTINGS_TAB_KEY);
+          const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
           if (saved !== null) {
             const parsed = parseInt(saved, 10);
-            if (!isNaN(parsed) && parsed >= 0 && parsed <= 3) {
+            if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
               setActiveTab(parsed);
             }
           }
@@ -340,10 +353,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const tabs = [
-    { id: 0, label: 'Settings', icon: Sliders },
-    { id: 1, label: 'Hints', icon: Sparkles },
-    { id: 2, label: 'Create', icon: RefreshCw },
-    { id: 3, label: 'Saves', icon: Save },
+    { id: 0, label: 'About', icon: Info },
+    { id: 1, label: 'Settings', icon: Sliders },
+    { id: 2, label: 'Hints', icon: Sparkles },
+    { id: 3, label: 'Create', icon: RefreshCw },
+    { id: 4, label: 'Saves', icon: Save },
   ];
 
   // Sort snapshots: Pinned saves always stay at the top
@@ -419,7 +433,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           }}
         >
           {/* Tab Navigation */}
-          <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
+          <div data-testid="settings-modal-tabs" className="min-w-0 flex-1 flex items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -427,21 +441,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   key={tab.id}
                   type="button"
+                  data-testid={`settings-tab-${tab.label.toLowerCase()}`}
                   onClick={() => {
                     setActiveTab(tab.id);
                     try {
-                      localStorage.setItem(LAST_SETTINGS_TAB_KEY, String(tab.id));
+                      localStorage.setItem(
+                        resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY),
+                        String(tab.id)
+                      );
                     } catch {
                       // Ignored
                     }
                   }}
-                  className={`flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-lg transition-all ${
+                  className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 px-1 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-all ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  <Icon size={15} />
+                  <Icon className="w-3 h-3 sm:w-[15px] sm:h-[15px]" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -451,6 +469,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Close button */}
           <button
             type="button"
+            data-testid="settings-modal-close"
             onClick={onClose}
             className="p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
             title="Close"
@@ -468,8 +487,328 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             paddingRight: 'max(0.875rem, calc(var(--sar, 0px) + 0.75rem))',
           }}
         >
-          {/* TAB 0: SETTINGS */}
+          {/* TAB 0: ABOUT */}
           {activeTab === 0 && (
+            <div className="space-y-4 sm:space-y-5">
+              {/* About Capy Paint Hero Card */}
+              <div
+                data-testid="about-screen-card"
+                className="p-3.5 sm:p-4 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm sm:text-base font-extrabold text-amber-300">
+                      Capy Paint
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-0.5">
+                      Offline-first color-by-number &amp; free-coloring studio. Turn any photo or
+                      built-in artwork into a relaxing, zero-latency puzzle with instant saves,
+                      chronological replays, and live local Co-op.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  {onStartTutorial && (
+                    <button
+                      type="button"
+                      data-testid="about-replay-tutorial-btn"
+                      onClick={() => {
+                        onClose();
+                        onStartTutorial();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer"
+                    >
+                      <Play size={13} className="fill-slate-950" />
+                      <span>Replay Interactive Tutorial</span>
+                    </button>
+                  )}
+                  <a
+                    href="privacy-policy.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="about-privacy-policy-link"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                  >
+                    <ShieldCheck size={13} className="text-emerald-400" />
+                    <span>Privacy Policy</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* How to Play & Core Features */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  How to Play &amp; Core Features
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                    <div className="font-bold text-slate-200">Tap or Paint</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Pick a numbered swatch below and tap matching regions, or toggle Paint Mode to
+                      drag-fill smoothly.
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                    <div className="font-bold text-slate-200">Zoom &amp; Pan</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Pinch, scroll, double-tap &amp; drag, or tap the top 1x zoom badge to inspect
+                      fine details.
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                    <div className="font-bold text-slate-200">Smart Hints &amp; Replay</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Double-tap a swatch to locate remaining spots. Long-press Undo to scrub or
+                      replay your progress.
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
+                    <div className="font-bold text-slate-200">Create, Saves &amp; Co-op</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      Upload any photo in Create, export .capy backups or printable SVGs, and color
+                      together in Co-op.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lifetime Player Statistics (compact 2-column mobile-first grid) */}
+              <div
+                data-testid="lifetime-stats-card"
+                className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-2.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-semibold text-slate-200">
+                    Lifetime Stats
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90">
+                    Local Progress
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Regions Colored
+                    </div>
+                    <div
+                      data-testid="stat-total-regions"
+                      className="text-sm sm:text-base font-extrabold font-mono text-amber-400 tabular-nums"
+                    >
+                      {effectiveStats.totalRegionsColored.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Puzzles Completed
+                    </div>
+                    <div
+                      data-testid="stat-puzzles-completed"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-100 tabular-nums"
+                    >
+                      {effectiveStats.puzzlesCompleted.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Zero-Hint Clears
+                    </div>
+                    <div
+                      data-testid="stat-zero-hint-puzzles"
+                      className="text-sm sm:text-base font-extrabold font-mono text-emerald-400 tabular-nums"
+                    >
+                      {effectiveStats.zeroHintPuzzles.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Fastest Clear
+                    </div>
+                    <div
+                      data-testid="stat-fastest-completion"
+                      className="text-sm sm:text-base font-extrabold font-mono text-sky-300 tabular-nums"
+                    >
+                      {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Free Colour Art
+                    </div>
+                    <div
+                      data-testid="stat-free-color-creations"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                    >
+                      {effectiveStats.freeColorCreations.toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                    <div className="text-[10px] text-slate-400 font-medium truncate">
+                      Co-op Regions
+                    </div>
+                    <div
+                      data-testid="stat-coop-regions"
+                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                    >
+                      {effectiveStats.coopRegionsPainted.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Platform & External Application Links (Relocated from Settings) */}
+              <div
+                data-testid="about-platforms-section"
+                className="pt-3 border-t border-slate-800/80 space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Platforms & Applications
+                  </div>
+                  <span
+                    data-testid="app-version-badge"
+                    className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-400"
+                  >
+                    v{APP_VERSION}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {NativeBridge.isNative ? (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
+                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-emerald-400">Native Application</div>
+                        <div className="text-[10px] text-slate-400 truncate">
+                          Running as installed {NativeBridge.platform === 'android' ? 'Android' : 'iOS'} launcher
+                        </div>
+                      </div>
+                    </div>
+                  ) : isStandalone ? (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
+                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-emerald-400">Installed Web App</div>
+                        <div className="text-[10px] text-slate-400 truncate">Running offline as standalone PWA</div>
+                      </div>
+                    </div>
+                  ) : isInstallable ? (
+                    <button
+                      type="button"
+                      onClick={() => PwaService.promptInstall()}
+                      data-testid="pwa-install-btn"
+                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer text-left"
+                    >
+                      <AppWindow size={16} className="text-amber-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-amber-300">Install Web App</div>
+                        <div className="text-[10px] text-slate-400 truncate">Install on home screen or desktop</div>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-200 text-xs font-semibold">
+                      <AppWindow size={16} className="text-slate-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-slate-200">Progressive Web App</div>
+                        <div className="text-[10px] text-slate-400 truncate">Install via browser menu for offline play</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <a
+                    href="capy.apk"
+                    download="capy.apk"
+                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
+                  >
+                    <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="truncate font-bold text-slate-200">Android APK</div>
+                      <div className="text-[10px] text-slate-400 truncate">Download standalone Android application</div>
+                    </div>
+                  </a>
+                </div>
+
+                {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
+                {(() => {
+                  const channelInfo = resolveReleaseChannel();
+                  if (!channelInfo.showChannelSwitcher) return null;
+                  const ns = resolveStorageNamespace();
+                  const isBeta = channelInfo.channel === 'beta';
+                  const isAlpha = channelInfo.channel === 'alpha';
+                  const sharesOriginWithBeta =
+                    typeof window !== 'undefined' &&
+                    channelInfo.betaWebUrl.startsWith(window.location.origin);
+                  const statusLabel = isBeta
+                    ? `Beta Channel • v${APP_VERSION}`
+                    : isAlpha
+                      ? `Alpha Preview${channelInfo.prNumber ? ` #${channelInfo.prNumber}` : ''} • v${APP_VERSION}`
+                      : channelInfo.channel === 'dev'
+                        ? `Local Dev • v${APP_VERSION}`
+                        : `Stable Release • v${APP_VERSION}`;
+                  const primaryTargetUrl = isBeta ? channelInfo.stableWebUrl : channelInfo.betaWebUrl;
+                  const primaryActionLabel = isBeta
+                    ? 'Return to Stable Release'
+                    : 'Switch to Beta Channel';
+                  return (
+                    <div
+                      data-testid="release-channel-card"
+                      data-channel={channelInfo.channel}
+                      className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
+                          <Sparkles size={14} className="text-violet-400 flex-shrink-0" />
+                          <span>Release Channel</span>
+                        </div>
+                        <span
+                          data-testid="release-channel-status"
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                            isBeta || isAlpha
+                              ? 'bg-violet-950/80 text-violet-200 border-violet-400/50'
+                              : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
+                          }`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-slate-400">
+                        {ns.isSandboxed
+                          ? 'Preview upcoming Sprint features early in an isolated channel sandbox so your Production saves and settings stay untouched.'
+                          : sharesOriginWithBeta
+                            ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Beta runs in an isolated browser sandbox so your Production saves and settings stay untouched.'
+                            : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                        <a
+                          href={primaryTargetUrl}
+                          data-testid="toggle-beta-channel-btn"
+                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                            isBeta
+                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                              : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border-violet-400/50'
+                          }`}
+                        >
+                          <ExternalLink size={13} className="flex-shrink-0" />
+                          <span>{primaryActionLabel}</span>
+                        </a>
+                        <a
+                          href={channelInfo.betaApkUrl}
+                          download="capy-beta.apk"
+                          data-testid="beta-apk-download-link"
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
+                        >
+                          <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
+                          <span>Beta Android APK</span>
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 1: SETTINGS */}
+          {activeTab === 1 && (
             <div className="space-y-4 sm:space-y-5">
               {/* Canvas Background */}
               <div className="space-y-1.5">
@@ -1114,236 +1453,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Lifetime Player Statistics (compact 2-column mobile-first grid) */}
-              <div
-                data-testid="lifetime-stats-card"
-                className="p-3 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-2.5"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs sm:text-sm font-semibold text-slate-200">
-                    Lifetime Stats
-                  </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400/90">
-                    Local Progress
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Regions Colored
-                    </div>
-                    <div
-                      data-testid="stat-total-regions"
-                      className="text-sm sm:text-base font-extrabold font-mono text-amber-400 tabular-nums"
-                    >
-                      {effectiveStats.totalRegionsColored.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Puzzles Completed
-                    </div>
-                    <div
-                      data-testid="stat-puzzles-completed"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-100 tabular-nums"
-                    >
-                      {effectiveStats.puzzlesCompleted.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Zero-Hint Clears
-                    </div>
-                    <div
-                      data-testid="stat-zero-hint-puzzles"
-                      className="text-sm sm:text-base font-extrabold font-mono text-emerald-400 tabular-nums"
-                    >
-                      {effectiveStats.zeroHintPuzzles.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Fastest Clear
-                    </div>
-                    <div
-                      data-testid="stat-fastest-completion"
-                      className="text-sm sm:text-base font-extrabold font-mono text-sky-300 tabular-nums"
-                    >
-                      {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Free Colour Art
-                    </div>
-                    <div
-                      data-testid="stat-free-color-creations"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
-                    >
-                      {effectiveStats.freeColorCreations.toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Co-op Regions
-                    </div>
-                    <div
-                      data-testid="stat-coop-regions"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
-                    >
-                      {effectiveStats.coopRegionsPainted.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Platform & External Application Links */}
-              <div className="pt-3 border-t border-slate-800/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Platforms & Applications
-                  </div>
-                  <span
-                    data-testid="app-version-badge"
-                    className="px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[10px] font-mono font-bold text-slate-400"
-                  >
-                    v{APP_VERSION}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {NativeBridge.isNative ? (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
-                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-emerald-400">Native Application</div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          Running as installed {NativeBridge.platform === 'android' ? 'Android' : 'iOS'} launcher
-                        </div>
-                      </div>
-                    </div>
-                  ) : isStandalone ? (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-emerald-500/30 text-slate-200 text-xs font-semibold">
-                      <Check size={16} className="text-emerald-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-emerald-400">Installed Web App</div>
-                        <div className="text-[10px] text-slate-400 truncate">Running offline as standalone PWA</div>
-                      </div>
-                    </div>
-                  ) : isInstallable ? (
-                    <button
-                      type="button"
-                      onClick={() => PwaService.promptInstall()}
-                      data-testid="pwa-install-btn"
-                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer text-left"
-                    >
-                      <AppWindow size={16} className="text-amber-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-amber-300">Install Web App</div>
-                        <div className="text-[10px] text-slate-400 truncate">Install on home screen or desktop</div>
-                      </div>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-200 text-xs font-semibold">
-                      <AppWindow size={16} className="text-slate-400 flex-shrink-0" />
-                      <div className="min-w-0">
-                        <div className="truncate font-bold text-slate-200">Progressive Web App</div>
-                        <div className="text-[10px] text-slate-400 truncate">Install via browser menu for offline play</div>
-                      </div>
-                    </div>
-                  )}
-
-                  <a
-                    href="capy.apk"
-                    download="capy.apk"
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
-                  >
-                    <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="truncate font-bold text-slate-200">Android APK</div>
-                      <div className="text-[10px] text-slate-400 truncate">Download standalone Android application</div>
-                    </div>
-                  </a>
-                </div>
-
-                {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
-                {(() => {
-                  const channelInfo = resolveReleaseChannel();
-                  if (!channelInfo.showChannelSwitcher) return null;
-                  const isBeta = channelInfo.channel === 'beta';
-                  const isAlpha = channelInfo.channel === 'alpha';
-                  const sharesOriginWithBeta =
-                    typeof window !== 'undefined' &&
-                    channelInfo.betaWebUrl.startsWith(window.location.origin);
-                  const statusLabel = isBeta
-                    ? `Beta Channel • v${APP_VERSION}`
-                    : isAlpha
-                      ? `Alpha Preview${channelInfo.prNumber ? ` #${channelInfo.prNumber}` : ''} • v${APP_VERSION}`
-                      : channelInfo.channel === 'dev'
-                        ? `Local Dev • v${APP_VERSION}`
-                        : `Stable Release • v${APP_VERSION}`;
-                  const primaryTargetUrl = isBeta ? channelInfo.stableWebUrl : channelInfo.betaWebUrl;
-                  const primaryActionLabel = isBeta
-                    ? 'Return to Stable Release'
-                    : 'Switch to Beta Channel';
-                  return (
-                    <div
-                      data-testid="release-channel-card"
-                      data-channel={channelInfo.channel}
-                      className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2"
-                    >
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-                          <Sparkles size={14} className="text-violet-400 flex-shrink-0" />
-                          <span>Release Channel</span>
-                        </div>
-                        <span
-                          data-testid="release-channel-status"
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${
-                            isBeta || isAlpha
-                              ? 'bg-violet-950/80 text-violet-200 border-violet-400/50'
-                              : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                          }`}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-slate-400">
-                        {sharesOriginWithBeta
-                          ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Stable and Beta on GitHub Pages share browser storage, so your saved puzzles and coloring progress carry over automatically.'
-                          : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
-                        <a
-                          href={primaryTargetUrl}
-                          data-testid="toggle-beta-channel-btn"
-                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                            isBeta
-                              ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
-                              : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border-violet-400/50'
-                          }`}
-                        >
-                          <ExternalLink size={13} className="flex-shrink-0" />
-                          <span>{primaryActionLabel}</span>
-                        </a>
-                        <a
-                          href={channelInfo.betaApkUrl}
-                          download="capy-beta.apk"
-                          data-testid="beta-apk-download-link"
-                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
-                        >
-                          <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
-                          <span>Beta Android APK</span>
-                        </a>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
             </div>
           )}
 
-          {/* TAB 1: HINTS */}
-          {activeTab === 1 && (
+          {/* TAB 2: HINTS */}
+          {activeTab === 2 && (
             <div className="space-y-4 sm:space-y-5">
               {/* Highlight Style */}
               <div className="space-y-1.5">
@@ -1547,8 +1661,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: CREATE / GENERATOR */}
-          {activeTab === 2 && (
+          {/* TAB 3: CREATE / GENERATOR */}
+          {activeTab === 3 && (
             <div className="space-y-4 sm:space-y-5">
               {/* Deterministic Offline UTC Puzzle of the Day Hero Card */}
               <div
@@ -2265,8 +2379,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: SAVES / SNAPSHOTS */}
-          {activeTab === 3 && (
+          {/* TAB 4: SAVES / SNAPSHOTS */}
+          {activeTab === 4 && (
             <div className="space-y-3.5">
               {/* Hidden file input for Import */}
               <input
@@ -2274,12 +2388,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="file"
                 accept=".capy,.json,application/json,application/octet-stream"
                 className="hidden"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file && onImportSnapshots) {
-                    onImportSnapshots(file);
-                  }
                   if (e.target) e.target.value = '';
+                  if (!file || !onImportSnapshots) return;
+                  try {
+                    const res = await onImportSnapshots(file);
+                    if (res && typeof res === 'object' && 'message' in res) {
+                      setImportNotice({ ok: Boolean(res.ok), message: res.message });
+                    }
+                  } catch (err) {
+                    setImportNotice({
+                      ok: false,
+                      message:
+                        err instanceof Error ? err.message : 'Failed to import Capy save file.',
+                    });
+                  }
                 }}
               />
 
@@ -2429,6 +2553,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               setHubNotice(
                                 'Google Cloud Sign-In requires VITE_GOOGLE_CLIENT_ID (Web) or CAPY_PLAY_GAMES_APP_ID (Android) configured in repository build variables — see CLOUD.md.'
                               );
+                            } else if (
+                              msg === 'PLAY_GAMES_UNAVAILABLE' ||
+                              msg === 'PLAY_GAMES_PROFILE_UNAVAILABLE'
+                            ) {
+                              setHubNotice(
+                                'Google Play Games Services is currently unavailable or offline on this device. Local saves remain safe.'
+                              );
                             } else {
                               setHubNotice(`Google Sign-In failed: ${msg}`);
                             }
@@ -2468,6 +2599,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   : `Cloud Sync up to date (${ProviderRegistry.cloudSave.providerName})!`
                               );
                             }
+                          } catch (err) {
+                            setHubNotice(
+                              `Cloud Sync failed: ${err instanceof Error ? err.message : 'Unable to reach cloud storage.'}`
+                            );
                           } finally {
                             setIsSyncingCloud(false);
                           }
@@ -2646,11 +2781,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             data-testid="join-coop-room-btn"
                             onClick={async () => {
-                              if (!joinCodeInput.trim()) return;
-                              const ok = await onJoinCoopRoom(joinCodeInput.trim());
-                              if (ok) {
-                                setHubNotice(`Joined Co-op Room ${joinCodeInput.trim().toUpperCase()}!`);
-                                setJoinCodeInput('');
+                              const rawCode = joinCodeInput.trim();
+                              if (!rawCode) return;
+                              try {
+                                const ok = await onJoinCoopRoom(rawCode);
+                                if (ok) {
+                                  setHubNotice(`Joined Co-op Room ${rawCode.toUpperCase()}!`);
+                                  setJoinCodeInput('');
+                                } else {
+                                  setHubNotice('Enter a valid 4-8 character Co-op room code.');
+                                }
+                              } catch {
+                                setHubNotice('Unable to join Co-op room. Check code and try again.');
                               }
                             }}
                             className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 cursor-pointer"
@@ -3048,6 +3190,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Inline Accessible Import Status Banner */}
+              {importNotice && (
+                <div
+                  role={importNotice.ok ? 'status' : 'alert'}
+                  data-testid="saves-import-notice"
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-xs font-semibold ${
+                    importNotice.ok
+                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                      : 'bg-red-950/60 border-red-500/40 text-red-300'
+                  }`}
+                >
+                  <span>{importNotice.message}</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss import message"
+                    onClick={() => setImportNotice(null)}
+                    className="p-0.5 rounded hover:bg-white/10 cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+
               {/* Snapshots Content: Detail Mode or Thumbnails Mode */}
               {savesViewMode === 'DETAIL' ? (
                 /* Detail List View */
@@ -3056,7 +3221,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isActive = snap.id === activeSnapshotId;
                     const isSelected = snap.id === currentSelectedId;
                     const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                    const thumbSrc = snap.sampleAssetPath || snap.previewDataUrl;
+                    const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                    const fallbackThumb =
+                      primaryThumb &&
+                      failedThumbSrcs[primaryThumb] &&
+                      snap.previewDataUrl &&
+                      snap.previewDataUrl !== primaryThumb
+                        ? snap.previewDataUrl
+                        : undefined;
+                    const thumbSrc =
+                      primaryThumb && !failedThumbSrcs[primaryThumb]
+                        ? primaryThumb
+                        : fallbackThumb && !failedThumbSrcs[fallbackThumb]
+                          ? fallbackThumb
+                          : undefined;
 
                     return (
                       <div
@@ -3086,6 +3264,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <img
                               src={thumbSrc}
                               alt={snap.title}
+                              onError={() =>
+                                setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
+                              }
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -3133,7 +3314,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isActive = snap.id === activeSnapshotId;
                     const isSelected = snap.id === currentSelectedId;
                     const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                    const thumbSrc = snap.sampleAssetPath || snap.previewDataUrl;
+                    const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                    const fallbackThumb =
+                      primaryThumb &&
+                      failedThumbSrcs[primaryThumb] &&
+                      snap.previewDataUrl &&
+                      snap.previewDataUrl !== primaryThumb
+                        ? snap.previewDataUrl
+                        : undefined;
+                    const thumbSrc =
+                      primaryThumb && !failedThumbSrcs[primaryThumb]
+                        ? primaryThumb
+                        : fallbackThumb && !failedThumbSrcs[fallbackThumb]
+                          ? fallbackThumb
+                          : undefined;
 
                     return (
                       <div
@@ -3163,6 +3357,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <img
                               src={thumbSrc}
                               alt={snap.title}
+                              onError={() =>
+                                setFailedThumbSrcs((prev) => ({ ...prev, [thumbSrc]: true }))
+                              }
                               className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                             />
                           ) : (
@@ -3203,8 +3400,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
 
               {snapshots.length === 0 && (
-                <div className="text-center py-8 text-slate-500 text-sm">
-                  No saved snapshots yet. Load an image or play a sample to start!
+                <div
+                  data-testid="saves-empty-recovery"
+                  className="text-center py-8 px-4 space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-slate-400 text-sm"
+                >
+                  <p>No saved puzzles yet. Load an image, import a `.capy` save, or restore the starter artwork.</p>
+                  {onRestoreStarterSample && (
+                    <button
+                      type="button"
+                      data-testid="restore-starter-sample-btn"
+                      onClick={onRestoreStarterSample}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-bold hover:bg-amber-300 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw size={13} />
+                      <span>Restore Capy Forest Starter</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>

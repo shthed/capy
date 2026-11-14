@@ -1,0 +1,200 @@
+name: Sync beta from main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: sync-beta-from-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Back-merge main into beta PR
+    if: github.repository == 'shthed/capy'
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out full repository history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Merge origin/main into sync/beta-from-main
+        id: sync_git
+        run: |
+          set -euo pipefail
+
+          git fetch origin +refs/heads/main:refs/remotes/origin/main +refs/heads/beta:refs/remotes/origin/beta
+
+          if ! git rev-parse --verify --quiet origin/beta >/dev/null; then
+            echo "origin/beta branch does not exist; skipping sync."
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor origin/main origin/beta; then
+            echo "origin/main is already an ancestor of origin/beta; nothing to sync."
+            echo "needs_sync=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Beta Ancestry Sync: Up to Date"
+              echo "- \`origin/main\` (\`$(git rev-parse --short origin/main)\`) is already an ancestor of \`origin/beta\` (\`$(git rev-parse --short origin/beta)\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          MAIN_SHA=$(git rev-parse --short origin/main)
+          BETA_SHA=$(git rev-parse --short origin/beta)
+
+          git checkout -B sync/beta-from-main origin/beta
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if ! git merge --no-ff origin/main -m "Sync beta with main (${MAIN_SHA})"; then
+            git merge --abort || true
+            {
+              echo "### Beta Ancestry Sync Conflict"
+              echo "- Merging \`origin/main\` (\`${MAIN_SHA}\`) into \`origin/beta\` (\`${BETA_SHA}\`) produced merge conflicts."
+              echo "- Resolve manually in an isolated worktree:"
+              echo '```bash'
+              echo 'git fetch origin +refs/heads/main:refs/remotes/origin/main +refs/heads/beta:refs/remotes/origin/beta'
+              echo 'git checkout -B sync/beta-from-main origin/beta'
+              echo 'git merge --no-ff origin/main'
+              echo '# resolve conflicts, commit, push, and merge PR with --merge (never squash)'
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          REMOTE_SYNC_SHA=$(git ls-remote --heads origin sync/beta-from-main | awk '{print $1}')
+          if [ -n "${REMOTE_SYNC_SHA}" ]; then
+            git fetch origin +refs/heads/sync/beta-from-main:refs/remotes/origin/sync/beta-from-main
+            if git merge-base --is-ancestor origin/main origin/sync/beta-from-main && \
+               git merge-base --is-ancestor origin/beta origin/sync/beta-from-main && \
+               git diff --quiet origin/sync/beta-from-main HEAD; then
+              echo "Remote sync/beta-from-main already matches merged ancestry and tree; skipping push."
+            else
+              git push --force-with-lease="refs/heads/sync/beta-from-main:${REMOTE_SYNC_SHA}" origin HEAD:refs/heads/sync/beta-from-main
+            fi
+          else
+            git push --force-with-lease="refs/heads/sync/beta-from-main:" origin HEAD:refs/heads/sync/beta-from-main
+          fi
+
+          echo "needs_sync=true" >> "$GITHUB_OUTPUT"
+          echo "main_sha=${MAIN_SHA}" >> "$GITHUB_OUTPUT"
+          echo "beta_sha=${BETA_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update sync/beta-from-main -> beta PR
+        if: steps.sync_git.outputs.needs_sync == 'true'
+        uses: actions/github-script@v9
+        env:
+          HAS_BOT_TOKEN: ${{ secrets.CAPY_BOT_TOKEN != '' }}
+          MAIN_SHA: ${{ steps.sync_git.outputs.main_sha }}
+          BETA_SHA: ${{ steps.sync_git.outputs.beta_sha }}
+        with:
+          github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const hasPatToken = process.env.HAS_BOT_TOKEN === 'true';
+            const mainSha = process.env.MAIN_SHA || '';
+            const betaSha = process.env.BETA_SHA || '';
+            const headBranch = 'sync/beta-from-main';
+            const baseBranch = 'beta';
+            const title = `Sync beta with main (${mainSha})`;
+
+            const body = [
+              'Automated `main -> beta` ancestry back-merge triggered after `main` advanced.',
+              '',
+              `- **Main HEAD**: \`${mainSha}\``,
+              `- **Beta Base**: \`${betaSha}\``,
+              '- **Merge Policy**: **ALWAYS** merge with a merge commit (`gh pr merge <PR_NUM> --merge`). **NEVER** squash-merge or rebase-merge this PR, or `origin/main` ancestry will not be preserved on `beta`.',
+              ...(hasPatToken
+                ? []
+                : [
+                    '',
+                    '> [!NOTE]',
+                    '> Created/updated with `GITHUB_TOKEN` (`draft: true` on new PR creation so `gh pr ready <PR_NUM>` triggers CI status checks). If updating an already-ready PR and checks did not re-run on `synchronize`, trigger `gh workflow run deploy-branch.yml -f target_branch=sync/beta-from-main` and post a PR review/comment event (such as the AI review) to re-run `pr-review-gate.yml` (`Dual AI & Owner Review Gate` / `capy/review-gate`).',
+                  ]),
+            ].join('\n');
+
+            const { data: openPrs } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${headBranch}`,
+              base: baseBranch,
+              state: 'open',
+              per_page: 10,
+            });
+
+            let pr = null;
+            let action = '';
+            if (openPrs.length > 0) {
+              const existing = openPrs[0];
+              const finalBody = body.replaceAll('<PR_NUM>', String(existing.number));
+              const { data: updated } = await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: existing.number,
+                title,
+                body: finalBody,
+              });
+              pr = updated;
+              action = 'updated';
+              const existingLabels = new Set((existing.labels || []).map((l) => l.name));
+              if (!existingLabels.has('ci')) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: pr.number,
+                  labels: ['ci'],
+                });
+              }
+            } else {
+              const { data: created } = await github.rest.pulls.create({
+                owner,
+                repo,
+                head: headBranch,
+                base: baseBranch,
+                title,
+                body,
+                draft: !hasPatToken,
+              });
+              pr = created;
+              action = 'created';
+              const finalBody = body.replaceAll('<PR_NUM>', String(pr.number));
+              if (finalBody !== body) {
+                await github.rest.pulls.update({
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                  body: finalBody,
+                });
+              }
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: pr.number,
+                labels: ['ci'],
+              });
+            }
+
+            core.info(`Sync PR #${pr.number} (${action}): ${pr.html_url}`);
+            await core.summary
+              .addRaw(
+                [
+                  `### Beta Ancestry Sync PR #${pr.number} (${action})`,
+                  `- **URL**: ${pr.html_url}`,
+                  `- **Merge Command**: \`gh pr merge ${pr.number} --merge\``,
+                  `- **Draft**: \`${Boolean(pr.draft)}\``,
+                ].join('\n') + '\n'
+              )
+              .write();

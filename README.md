@@ -48,7 +48,7 @@
 
 ## How to Play
 
-1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capybara*, *Mushroom Forest*, *Capy Forest*, and *Snail Guitar*) with zero generation wait, launch the **Puzzle of the Day** in the **Create** tab, or import your own photo.
+1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capy Forest*, *Capybara*, *Mushroom Forest*, and *Snail Guitar*) with zero generation wait, launch the **Puzzle of the Day** in the **Create** tab, or import your own photo.
 2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any region directly in default **Easy Mode** to auto-select its color). Matching puzzle shapes highlight instantly.
 3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on the **Paint Brush** tool to color continuously by dragging.
 4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
@@ -62,7 +62,6 @@
 - **Drag Canvas**: Pans the artwork smoothly across the screen with inertial gliding momentum.
 - **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible and sensitivity-scalable via Settings).
 - **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`, with optional magnetic zoom detents (`1x`, `2x`, `4x`, `8x`, `12x`) in Settings.
-- **Top-Bar Zoom Badge**: Taps step cleanly through `1x` -> `2x` -> `4x` -> `8x` -> `12x` -> `1x` relative zoom stops anchored at the viewport center.
 - **Desktop Keyboard Shortcuts**: Keys `1`--`9` select the corresponding palette swatch, `+` / `=` zoom in, `-` / `_` zoom out, `0` resets the viewport to `1x` fit view, and `ArrowUp`/`W`, `ArrowDown`/`S`, `ArrowLeft`/`A`, `ArrowRight`/`D` pan the canvas by `64px` steps (automatically ignored when modals or text inputs are active or browser modifiers are held).
 - **Paint Brush Button**: Toggles continuous drag-to-paint stroke mode.
 - **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Colour mode or via Settings toggle).
@@ -102,8 +101,10 @@ All detailed architectural guides, computer vision algorithms, and native bridge
 - **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker 5-strategy segmentation, adaptive Otsu/Sobel line extraction, Red-Mean K-Means++ clustering, and watershed border alignment.
 - **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Unified Vite SSR + Playwright E2E verification suite, multi-touch gesture patterns, and CI pipelines.
 - **Versioning Scheme and Changelog**: [`CHANGELOG.md`](./CHANGELOG.md) -- Semantic Versioning (`MAJOR.MINOR.PATCH`), Android `versionCode` mapping, and chronological release history.
-- **Product Roadmap and Epic Issues**: [`ROADMAP.md`](./ROADMAP.md) -- Strategic Epics (`#476`--`#480` GitHub Epic Tracking Issues), User Stories, external readiness gates, Platform Icebox, and collapsed shipped milestones.
+- **Product Roadmap and Epic Issues**: [`ROADMAP.md`](./ROADMAP.md) -- Strategic Epics ([EPIC-1](https://github.com/shthed/capy/issues/476)--[EPIC-5](https://github.com/shthed/capy/issues/480)), User Stories, external readiness gates, Platform Icebox, and collapsed shipped milestones.
 - **Active Sprint Backlog**: [`TODO.md`](./TODO.md) -- Ready-for-dev Sprint 1 bugfixes, `1-PR` engineering slices, `[quick-win]` queue, and GitHub Sprint Milestone links.
-- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Human + AI co-development workflows, Hybrid Agile sprints, GitHub Epic Issue CLI playbooks, `Alpha -> Beta -> Production` release promotion, Gemini 4 model routing, and technical guardrails.
+- **Project Management and Release Governance**: [`PROJECT.md`](./PROJECT.md) -- Lean Agile triad, sprint cadence, Epic triage, PR sync and readiness gates, release promotion, `CHANGELOG.md` governance, and continuous improvement retro log.
+- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Human + AI co-development workflow, Gemini 4 model routing, session hygiene, shared technical guardrails, 3-tier CI/CD architecture, SemVer versioning, and troubleshooting.
 - **AI Agent Operational Playbook**: [`AGENTS.md`](./AGENTS.md) -- Auto-loaded AI guardrails, mobile-first formatting rules, and PR readiness contract for AI coding agents.
 - **Privacy Policy and Data Safety**: [`web/public/privacy-policy.html`](./web/public/privacy-policy.html) -- Local-first photo processing and optional Google Drive `appDataFolder` / Play Games Cloud Sync disclosures.
+- **License**: [`LICENSE.md`](./LICENSE.md) -- Capybara Chill Preamble and CC BY-NC-SA 4.0 terms.

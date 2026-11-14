@@ -494,8 +494,12 @@ class MainActivity : ComponentActivity() {
     private fun requestPlayGamesSignIn() {
         val appId = getString(R.string.game_services_project_id)
         if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) {
-            Log.d(TAG, "Play Games sign-in requested without configured Project ID; using cached or local profile")
-            deliverCachedPlayGamesProfileIfNeeded()
+            Log.d(TAG, "Play Games sign-in requested without configured Project ID; checking cached profile")
+            if (bridge.loadCachedPlayGamesProfileJson() != null) {
+                deliverCachedPlayGamesProfileIfNeeded()
+            } else {
+                deliverPlayGamesSignInError("PLAY_GAMES_UNCONFIGURED")
+            }
             return
         }
         try {
@@ -506,10 +510,12 @@ class MainActivity : ComponentActivity() {
                     pullSnapshotFromPlayGames(CLOUD_MANIFEST_SLOT_KEY)
                 } else {
                     Log.w(TAG, "Play Games interactive sign-in did not authenticate", task.exception)
+                    deliverPlayGamesSignInError("PLAY_GAMES_UNAVAILABLE")
                 }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to invoke Play Games interactive signIn()", e)
+            deliverPlayGamesSignInError("PLAY_GAMES_UNAVAILABLE")
         }
     }
 
@@ -525,9 +531,11 @@ class MainActivity : ComponentActivity() {
                 }
             }.addOnFailureListener { err ->
                 Log.w(TAG, "Failed to load Google Play Games currentPlayer profile", err)
+                deliverPlayGamesSignInError("PLAY_GAMES_UNAVAILABLE")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error querying PlayGames PlayersClient", e)
+            deliverPlayGamesSignInError("PLAY_GAMES_UNAVAILABLE")
         }
     }
 
@@ -541,6 +549,25 @@ class MainActivity : ComponentActivity() {
                     try {
                         if (window.__capyReceivePlayGamesProfile) {
                             window.__capyReceivePlayGamesProfile($profileJson);
+                        }
+                    } catch (e) {}
+                })();
+                """.trimIndent(),
+                null,
+            )
+        }
+    }
+
+    private fun deliverPlayGamesSignInError(reasonCode: String) {
+        val wv = webView ?: return
+        val safeReason = CapyAndroidBridge.escapeJsString(reasonCode)
+        wv.post {
+            wv.evaluateJavascript(
+                """
+                (function() {
+                    try {
+                        if (window.__capyReceivePlayGamesError) {
+                            window.__capyReceivePlayGamesError("$safeReason");
                         }
                     } catch (e) {}
                 })();

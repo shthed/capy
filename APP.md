@@ -64,7 +64,8 @@ All `@JavascriptInterface` methods exposed on `window.CapyAndroid`:
 - **`loadCloudSnapshot(slotKey: String): String?`**: Reads cached CRDT cloud state from `filesDir/capy_cloud/<sanitized_slotKey>.json` while `MainActivity` reconciles remote Play Games snapshots via `window.__capyReceiveCloudSnapshot`.
 - **`saveCloudBinaryChunk(blobKey: String, chunkIndex: Int, totalChunks: Int, base64Chunk: String): Boolean`**: Atomically persists `<= 180 KB` raw (`<= 300,000` Base64 chars, up to `32` chunks / `3 MB` total) binary save parts to `filesDir/capy_cloud/<sanitized_blobKey>_part_<chunkIndex>.json`, prunes stale trailing chunk files on the final part, and forwards `<sanitized_blobKey>_part_<chunkIndex>` to `PlayGames.getSnapshotsClient(activity)`.
 - **`loadCloudBinaryChunk(blobKey: String, chunkIndex: Int): String?`**: Synchronously reads cached Base64 binary chunk `<sanitized_blobKey>_part_<chunkIndex>` from `filesDir/capy_cloud/`.
-- **`requestCloudSnapshotPull(slotKey: String): Boolean`**: Requests an on-demand asynchronous pull of `<sanitized_slotKey>` from `PlayGames.getSnapshotsClient(activity)` into `window.__capyReceiveCloudSnapshot` when a remote multi-chunk binary save has not yet been cached locally.
+- **`requestCloudSnapshotPull(slotKey: String): Boolean`**: Requests an on-demand asynchronous pull of `<sanitized_slotKey>` from `PlayGames.getSnapshotsClient(activity)` into `window.__capyReceiveCloudSnapshot` when a remote multi-chunk binary save has not yet been cached locally (returning `false` immediately when `isPlayGamesConfigured()` is `false`).
+- **`isPlayGamesConfigured(): Boolean`**: Synchronously reports whether `@string/game_services_project_id` holds a real Play Console numeric Project ID (`isPlayGamesAppIdConfigured`), allowing `PlayGamesAndroidDriver` to fall back immediately when unconfigured or when native sign-in reports `window.__capyReceivePlayGamesError`.
 - **`signInPlayGames(): String?`**: Triggers `onRequestPlayGamesSignIn` (`GamesSignInClient.signIn()` + `PlayersClient.currentPlayer`) and synchronously returns any cached `{"playerId":"...","displayName":"..."}` JSON from `capy_play_games_prefs`.
 - **`showRewardedAd(): Boolean`**: Hook for strictly opt-in rewarded AI credit video ads; returns `false` when no ad SDK is bundled (100% ad-free core gameplay).
 - **`consumePendingSharedImage(): String?`**: Atomically retrieves and clears any cold-start `Intent.ACTION_SEND` shared image JSON (`{"title":"...","dataUrl":"..."}`) queued before WebView hydration.
@@ -72,7 +73,7 @@ All `@JavascriptInterface` methods exposed on `window.CapyAndroid`:
 - **`shareTextLink(title: String, url: String)`**: Launches Android's `Intent.ACTION_SEND` (`text/plain`) chooser for `< 2 KB` progress links and Co-op room invites.
 - **`shareImage(title: String, dataUrl: String)`**: Decodes Base64 PNG data, writes `cacheDir/capy_shared_artwork.png`, and opens Android's Share chooser via AndroidX `FileProvider`.
 - **`shareFile(title: String, fileName: String, mimeType: String, base64Data: String)`**: Writes arbitrary binary or text exports (such as `.capy` v2 archives and PNGs) to `cacheDir/<sanitized_fileName>` and opens Android's Share / Save chooser via `FileProvider`.
-- **`getAppVersion(): String`**: Returns `BuildConfig.VERSION_NAME` (`"2.7.0"`, synchronized automatically with `web/package.json`).
+- **`getAppVersion(): String`**: Returns `BuildConfig.VERSION_NAME` (`"3.0.7"` or latest `web/package.json` `"version"`, synchronized automatically at Gradle configure time).
 
 ---
 
