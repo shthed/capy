@@ -112,7 +112,11 @@ jobs:
             const title = `Sync beta with main (${mainSha})`;
 
             const body = [
-              'Automated `main -> beta` ancestry back-merge triggered after `main` advanced.',
+              '## Summary',
+              '',
+              'Keeps the Beta testing channel up to date with the latest approved changes from the main release branch so upcoming test builds include recent fixes without merge conflicts.',
+              '',
+              '### Sync Details',
               '',
               `- **Main HEAD**: \`${mainSha}\``,
               `- **Beta Base**: \`${betaSha}\``,

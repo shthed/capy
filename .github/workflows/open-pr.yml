@@ -53,6 +53,7 @@ jobs:
   open-pr:
     name: Open or Update Bot PR
     if: github.repository == 'shthed/capy'
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     outputs:
       pr_number: ${{ steps.open_pr.outputs.pr_number }}
