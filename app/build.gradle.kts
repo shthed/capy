@@ -16,7 +16,7 @@ val capyVersionCode = (verMajor * 10000) + (verMinor * 100) + verPatch
 
 android {
     namespace = "com.capypaint.capy"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.capypaint.capy"
