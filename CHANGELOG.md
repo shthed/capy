@@ -1,5 +1,6 @@
-### 3.0.8 - 2026-11-13 (Beta)
+### 3.0.8 - 2026-11-13 (Production, Beta)
 
+- Promote v3.0.8 beta release to Production [#501](https://github.com/shthed/capy/pull/501)
 - Remove topbar zoom pill badge, fix 360px mobile SettingsModal tab clipping, and add E2E overflow guard [#497](https://github.com/shthed/capy/pull/497)
 
 ### 3.0.7 - 2026-11-13
@@ -28,7 +29,7 @@
 - Add 1-click GitHub PR approval workflow via bot-opened PRs, native review gate tests, and prebaked sample viewport reset [#490](https://github.com/shthed/capy/pull/490)
 - Add Android Play Store release to v3.0.1 scope and remove shipped Sprint 1 bugfixes from active queue [#487](https://github.com/shthed/capy/pull/487)
 
-### 3.0.1 - 2026-11-12 (Production)
+### 3.0.1 - 2026-11-12
 
 - Promote v3.0.1 mobile topbar and progress cap fixes to Production [#488](https://github.com/shthed/capy/pull/488)
 - Fix mobile topbar badge overlap, cap incomplete puzzle progress at 99%, and log capypaint.com DNS cutover [#486](https://github.com/shthed/capy/pull/486)
