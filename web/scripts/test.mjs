@@ -4404,6 +4404,131 @@ async function runCodecAndEngineTests() {
       ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
     );
 
+    // capyboop co-owner approval, AI review marker, HOLD, cross-owner supersession & untrusted rejection
+    const gateCapyboopMainApprovedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      reviews: [
+        {
+          id: 701,
+          state: 'APPROVED',
+          body: '',
+          commit_id: gateHeadSha,
+          submitted_at: '2026-11-13T01:02:00Z',
+          user: { login: 'capyboop' },
+        },
+      ],
+    });
+    assert.equal(gateCapyboopMainApprovedRes.status.state, 'success');
+    assert.equal(
+      gateCapyboopMainApprovedRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+
+    const gateCapyboopBetaAiMarkerRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: null,
+      comments: [
+        {
+          user: { login: 'CapyBoop' },
+          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=98% -->`,
+          created_at: '2026-11-13T01:01:00Z',
+          updated_at: '2026-11-13T01:01:00Z',
+        },
+      ],
+    });
+    assert.equal(gateCapyboopBetaAiMarkerRes.status.state, 'success');
+    assert.ok(gateCapyboopBetaAiMarkerRes.status.description.includes('Beta gate passed'));
+
+    for (const targetBase of ['beta', 'main']) {
+      const gateCapyboopHoldRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        labels: ['review:ai-approved'],
+        reviews: [
+          {
+            id: 702,
+            state: 'APPROVED',
+            body: '',
+            commit_id: gateHeadSha,
+            submitted_at: '2026-11-13T01:02:00Z',
+            user: { login: 'shthed' },
+          },
+        ],
+        comments: [
+          {
+            user: { login: 'capyboop' },
+            body: 'HOLD pending final check',
+            created_at: '2026-11-13T01:03:00Z',
+            updated_at: '2026-11-13T01:03:00Z',
+          },
+        ],
+      });
+      assert.equal(gateCapyboopHoldRes.status.state, 'failure');
+      assert.equal(
+        gateCapyboopHoldRes.status.description,
+        'Changes requested or hold active; address feedback before merge'
+      );
+    }
+
+    const gateShthedSupersedesCapyboopHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      reviews: [
+        {
+          id: 703,
+          state: 'APPROVED',
+          body: '',
+          commit_id: gateHeadSha,
+          submitted_at: '2026-11-13T01:04:00Z',
+          user: { login: 'shthed' },
+        },
+      ],
+      comments: [
+        {
+          user: { login: 'capyboop' },
+          body: 'HOLD earlier issue',
+          created_at: '2026-11-13T01:02:00Z',
+          updated_at: '2026-11-13T01:02:00Z',
+        },
+      ],
+    });
+    assert.equal(gateShthedSupersedesCapyboopHoldRes.status.state, 'success');
+    assert.equal(
+      gateShthedSupersedesCapyboopHoldRes.status.description,
+      'Dual-approved: AI review (>=95%) + Owner sign-off verified'
+    );
+
+    const gateUntrustedMainApprovedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      reviews: [
+        {
+          id: 704,
+          state: 'APPROVED',
+          body: '',
+          commit_id: gateHeadSha,
+          submitted_at: '2026-11-13T01:02:00Z',
+          user: { login: 'stranger' },
+        },
+      ],
+    });
+    assert.equal(gateUntrustedMainApprovedRes.status.state, 'pending');
+    assert.equal(
+      gateUntrustedMainApprovedRes.status.description,
+      'AI review passed; awaiting Project Owner sign-off'
+    );
+
     // Extract and unit-test real .github/workflows/open-pr.yml script
     const runOpenPrScript = new AsyncFunction(
       'context',
@@ -5445,6 +5570,21 @@ async function runBrowserBasicsSuite() {
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 5');
+    // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
+    const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
+    await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
+    await tutLargeTextBtn.click();
+    assert.equal(
+      await page.evaluate(() => document.documentElement.dataset.largeText),
+      'true',
+      'tutorial-large-text-btn must enable data-large-text="true"'
+    );
+    await tutLargeTextBtn.click();
+    assert.equal(
+      await page.evaluate(() => document.documentElement.dataset.largeText),
+      'false',
+      'tutorial-large-text-btn must toggle data-large-text back to "false"'
+    );
     // Step 1: Pick Color (click an unselected palette swatch -> shows Tried! badge and auto-advances to Step 2)
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
@@ -5467,6 +5607,12 @@ async function runBrowserBasicsSuite() {
       () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 5',
       undefined,
       { timeout: 3000 }
+    );
+    const step3Text = (await tutorialCard.innerText()).toLowerCase();
+    assert.equal(
+      step3Text.includes('1x zoom badge') || step3Text.includes('1x badge'),
+      false,
+      'OnboardingTutorial Step 3 must not reference stale 1x zoom badge'
     );
     // Step 3: Zoom & Pan (step zoom -> shows Tried! badge and auto-advances to Step 4, then restore 1x)
     await page.keyboard.press('+');
@@ -5630,7 +5776,7 @@ async function runBrowserBasicsSuite() {
     // 3. Undo, Redo, Long-Press Replay Scrubber, Resume Here & Free Colour Undo
     // -------------------------------------------------------------------------
     console.log('3. Verifying Undo, Redo, long-press Replay scrubber, Resume Here & Free Colour auto-undo...');
-    assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo hidden by default for standard puzzles');
+    assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo visible by default for standard puzzles');
 
     // Open Settings -> verify all 5 distinct tabs (About=0, Settings=1, Hints=2, Create=3, Saves=4), zero duplicates, and tab 4 persistence across reload
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
@@ -5661,11 +5807,28 @@ async function runBrowserBasicsSuite() {
     for (const labelText of [
       'Show Zoom (+ / -) Buttons',
       'Show Reset View (Extent) Button',
-      'Enable Undo Action',
     ]) {
       const labelEl = await page.waitForSelector(`text=${labelText}`);
       await labelEl.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     }
+    // Verify toggling Enable Undo Action OFF hides undo-btn & persists, then toggle back ON for Undo/Redo suite
+    const undoToggleLabel = await page.waitForSelector('text=Enable Undo Action');
+    await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.waitForTimeout(100);
+    assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo must hide when toggled off');
+    const undoPersistedOff = await page.evaluate(() => {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.includes('capy_user_settings_v8')) {
+          return JSON.parse(localStorage.getItem(k) || '{}').enableUndo === false;
+        }
+      }
+      return false;
+    });
+    assert.equal(undoPersistedOff, true, 'Opting out of enableUndo must persist to localStorage');
+    await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.waitForTimeout(100);
+    assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo must reappear when toggled back on');
 
     // Tab 2: Hints
     await page.getByRole('button', { name: 'Hints', exact: true }).click();
@@ -7462,29 +7625,22 @@ async function runBrowserBasicsSuite() {
         `Multi-color PaletteDock (${dockScrollStats.swatchCount} swatches) must be horizontally scrollable on 360px viewport`
       );
     }
-    const narrowCenterCheck = await page.evaluate(() => {
+    const scrollablePaddingCheck = await page.evaluate(() => {
       const dock = document.querySelector('[aria-label="Palette dock"]');
       const scroller = dock?.firstElementChild;
       const inner = scroller?.firstElementChild;
-      if (!inner) return null;
-      const swatches = Array.from(inner.querySelectorAll('[data-testid^="palette-swatch-"]'));
-      if (swatches.length < 2) return null;
-      // Temporarily hide extra swatches beyond 3 to verify narrow-dock centering
-      const hidden = [];
-      for (let i = 3; i < swatches.length; i++) {
-        hidden.push([swatches[i], swatches[i].style.display]);
-        swatches[i].style.display = 'none';
-      }
-      const firstRect = swatches[0].getBoundingClientRect();
-      const lastRect = swatches[Math.min(2, swatches.length - 1)].getBoundingClientRect();
-      const midpoint = (firstRect.left + lastRect.right) / 2;
-      const viewportMid = window.innerWidth / 2;
-      for (const [el, prev] of hidden) el.style.display = prev;
-      return { midpoint, viewportMid, diff: Math.abs(midpoint - viewportMid) };
+      if (!inner || !scroller) return null;
+      const cs = getComputedStyle(inner);
+      const padLeft = parseFloat(cs.paddingLeft) || 0;
+      const padRight = parseFloat(cs.paddingRight) || 0;
+      const expectedMinPad = scroller.clientWidth / 2 - 23 - 2;
+      return { padLeft, padRight, expectedMinPad, clientWidth: scroller.clientWidth };
     });
     assert.ok(
-      narrowCenterCheck && narrowCenterCheck.diff < 16,
-      `Narrow PaletteDock (<=3 swatches) must be centered horizontally (diff=${narrowCenterCheck?.diff?.toFixed(1)}px)`
+      scrollablePaddingCheck &&
+        scrollablePaddingCheck.padLeft >= scrollablePaddingCheck.expectedMinPad &&
+        scrollablePaddingCheck.padRight >= scrollablePaddingCheck.expectedMinPad,
+      `Scrollable PaletteDock must apply symmetric ~50% horizontal padding (${JSON.stringify(scrollablePaddingCheck)})`
     );
     assert.equal(
       paletteMin360.y + paletteMin360.height <= 800,
@@ -7500,6 +7656,40 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('undo-btn').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 5000 });
     await page.getByTestId('redo-btn').waitFor({ state: 'visible', timeout: 3000 });
+
+    // Verify PaletteDock keeps strict sorted order and centers #1, middle, and last active swatches at 50%
+    const initialSwatchOrder = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[aria-label="Palette dock"] [data-testid^="palette-swatch-"]')).map(
+        (el) => el.getAttribute('data-testid')
+      )
+    );
+    assert.ok(initialSwatchOrder.length >= 3, 'Expected >= 3 swatches in PaletteDock');
+    for (const idx of [0, Math.floor(initialSwatchOrder.length / 2), initialSwatchOrder.length - 1]) {
+      const targetTestId = initialSwatchOrder[idx];
+      await page.getByTestId(targetTestId).click();
+      await page.waitForTimeout(350);
+      const afterOrder = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('[aria-label="Palette dock"] [data-testid^="palette-swatch-"]')).map(
+          (el) => el.getAttribute('data-testid')
+        )
+      );
+      assert.deepEqual(
+        afterOrder,
+        initialSwatchOrder,
+        `Clicking ${targetTestId} must not reorder PaletteDock`
+      );
+      const centerStats = await page.evaluate((tid) => {
+        const el = document.querySelector(`[data-testid="${tid}"]`);
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        const mid = (rect.left + rect.right) / 2;
+        return { mid, viewportMid: window.innerWidth / 2, diff: Math.abs(mid - window.innerWidth / 2) };
+      }, targetTestId);
+      assert.ok(
+        centerStats && centerStats.diff <= 4,
+        `Active swatch ${targetTestId} must center horizontally at 50% (diff=${centerStats?.diff?.toFixed(1)}px)`
+      );
+    }
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
     const paletteAfterDismiss360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
     assert.ok(paletteAfterDismiss360);
@@ -7714,6 +7904,51 @@ async function runBrowserBasicsSuite() {
         `settings-tab-${tabKey} (${tabBox.x}..${tabBox.x + tabBox.width}) must fit inside tabs container (${tabsBox.x}) and to the left of close button (${closeBox.x})`
       );
     }
+
+    // Toggle Large Text (Low-Vision) mode at 360x780 and verify zero clipping in SettingsModal and GameTopBar
+    await mobileTopbarPage.getByTestId('settings-tab-settings').click();
+    const largeTextSwitch = mobileTopbarPage.getByTestId('setting-large-text');
+    await largeTextSwitch.waitFor({ state: 'visible', timeout: 5000 });
+    await largeTextSwitch.click();
+    await mobileTopbarPage.waitForTimeout(100);
+    assert.equal(
+      await mobileTopbarPage.evaluate(() => document.documentElement.dataset.largeText),
+      'true',
+      'setting-large-text must set data-large-text="true"'
+    );
+    const largeTabsOverflow = await tabsContainer.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.equal(
+      largeTabsOverflow.scrollWidth <= largeTabsOverflow.clientWidth,
+      true,
+      `Large Text SettingsModal tabs must not overflow at 360x780 (scrollWidth=${largeTabsOverflow.scrollWidth}, clientWidth=${largeTabsOverflow.clientWidth})`
+    );
+    await closeBtn.click();
+    await mobileTopbarPage.waitForTimeout(150);
+    const largeLeftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
+    const largeRightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
+    assert.ok(largeLeftLaneBox && largeRightLaneBox);
+    assert.equal(
+      largeLeftLaneBox.x + largeLeftLaneBox.width <= largeRightLaneBox.x &&
+        largeRightLaneBox.x + largeRightLaneBox.width <= 360,
+      true,
+      'Large Text GameTopBar lanes must not overlap or exceed 360px viewport'
+    );
+    const largeDocOverflow = await mobileTopbarPage.evaluate(() => ({
+      docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+    }));
+    assert.equal(
+      largeDocOverflow.docOverflow <= 0,
+      true,
+      `Large Text mode at 360x780 must have zero horizontal document overflow (got ${largeDocOverflow.docOverflow})`
+    );
+    // Re-open SettingsModal, turn off Large Text, and continue Saves tab verification
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-settings').click();
+    await mobileTopbarPage.getByTestId('setting-large-text').click();
+    await mobileTopbarPage.waitForTimeout(100);
 
     // Verify 360x780 Saves tab renders Thumbnails grid first, 2-column mobile grid, static action bar, and zero horizontal overflow
     await mobileTopbarPage.getByTestId('settings-tab-saves').click();
