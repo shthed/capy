@@ -43,7 +43,19 @@ import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
-import { OnboardingTutorial, TutorialTriedActions } from './components/OnboardingTutorial';
+import {
+  createInitialTutorialTried,
+  OnboardingTutorial,
+  TUTORIAL_STEPS,
+  TutorialTriedActions,
+} from './components/OnboardingTutorial';
+import { FeatureOfferBanner } from './components/FeatureOfferBanner';
+import {
+  FEATURE_OFFERS,
+  FeatureOfferDef,
+  FeatureOfferId,
+  FeatureOffersService,
+} from './services/FeatureOffersService';
 import { resolveReleaseChannel } from './version';
 
 const SettingsModal = React.lazy(() =>
@@ -227,19 +239,79 @@ export const App: React.FC = () => {
   const [loadingPayload, setLoadingPayload] = useState<GenerationProgressPayload | null>(null);
 
   // Modal Sheet, Onboarding Tutorial & Active Deployment Channel
+  const settingsRef = useRef<UserSettings>(settings);
+  settingsRef.current = settings;
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  const showTutorialRef = useRef<boolean>(false);
+  showTutorialRef.current = showTutorial;
   const [tutorialStep, setTutorialStep] = useState<number>(0);
-  const [tutorialTried, setTutorialTried] = useState<TutorialTriedActions>({
-    palette: false,
-    paint: false,
-    zoom: false,
-    hint: false,
-    menu: false,
-  });
+  const tutorialStepRef = useRef<number>(0);
+  tutorialStepRef.current = tutorialStep;
+  const [tutorialStepTriedInVisit, setTutorialStepTriedInVisit] = useState<boolean>(false);
+  const [tutorialTried, setTutorialTried] = useState<TutorialTriedActions>(createInitialTutorialTried);
+  const [activeFeatureOffer, setActiveFeatureOffer] = useState<FeatureOfferDef | null>(null);
+  const activeFeatureOfferRef = useRef<FeatureOfferDef | null>(null);
+  activeFeatureOfferRef.current = activeFeatureOffer;
+  const featureOfferQueueRef = useRef<FeatureOfferId[]>([]);
+  const isFeatureOfferSuppressed =
+    isLoading || showTutorial || showSettings || showPaletteOptions;
+  const isFeatureOfferSuppressedRef = useRef<boolean>(isFeatureOfferSuppressed);
+  isFeatureOfferSuppressedRef.current = isFeatureOfferSuppressed;
+  const coopOfferPendingRef = useRef<boolean>(false);
   const releaseChannelInfo = useMemo(() => resolveReleaseChannel(), []);
+
+  const advanceFeatureOffer = useCallback(() => {
+    while (featureOfferQueueRef.current.length > 0) {
+      const nextId = featureOfferQueueRef.current.shift()!;
+      if (!FeatureOffersService.hasSeenOffer(nextId)) {
+        const nextOffer = FEATURE_OFFERS[nextId];
+        activeFeatureOfferRef.current = nextOffer;
+        setActiveFeatureOffer(nextOffer);
+        return;
+      }
+    }
+    activeFeatureOfferRef.current = null;
+    setActiveFeatureOffer(null);
+  }, []);
+
+  useEffect(() => {
+    if (isFeatureOfferSuppressed || showTutorial) return;
+    if (activeFeatureOffer) {
+      FeatureOffersService.markOfferSeen(activeFeatureOffer.id);
+      return;
+    }
+    if (featureOfferQueueRef.current.length > 0) {
+      advanceFeatureOffer();
+    }
+  }, [isFeatureOfferSuppressed, showTutorial, activeFeatureOffer, advanceFeatureOffer]);
+
+  const triggerFeatureOffer = useCallback(
+    (id: FeatureOfferId) => {
+      if (showTutorialRef.current) return;
+      if (FeatureOffersService.hasSeenOffer(id)) return;
+      if (
+        activeFeatureOfferRef.current?.id === id ||
+        featureOfferQueueRef.current.includes(id)
+      ) {
+        return;
+      }
+      featureOfferQueueRef.current.push(id);
+      if (!isFeatureOfferSuppressedRef.current && !activeFeatureOfferRef.current) {
+        advanceFeatureOffer();
+      }
+    },
+    [advanceFeatureOffer]
+  );
+
+  const markTutorialActionTried = useCallback((action: keyof TutorialTriedActions) => {
+    setTutorialTried((prev) => (prev[action] ? prev : { ...prev, [action]: true }));
+    if (showTutorialRef.current && TUTORIAL_STEPS[tutorialStepRef.current]?.key === action) {
+      setTutorialStepTriedInVisit(true);
+    }
+  }, []);
 
   // Maintain O(1) region lookup map for offscreen replay frustum checks
   useEffect(() => {
@@ -348,6 +420,7 @@ export const App: React.FC = () => {
   }, [puzzle, isLoading, isReplaying, showSettings, showPaletteOptions, filledRegionIds.size]);
 
   const handleToggleFullscreen = useCallback(async () => {
+    markTutorialActionTried('peek_fullscreen');
     try {
       if (
         document.fullscreenElement ||
@@ -369,7 +442,7 @@ export const App: React.FC = () => {
     } catch (err) {
       console.warn('Fullscreen request failed or was blocked:', err);
     }
-  }, []);
+  }, [markTutorialActionTried]);
 
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -538,12 +611,9 @@ export const App: React.FC = () => {
     setActiveColorId(colId);
   }, []);
 
-  const markTutorialActionTried = useCallback((action: keyof TutorialTriedActions) => {
-    setTutorialTried((prev) => (prev[action] ? prev : { ...prev, [action]: true }));
-  }, []);
-
   const completeTutorial = useCallback(() => {
     setShowTutorial(false);
+    setTutorialStepTriedInVisit(false);
     try {
       localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
     } catch {
@@ -558,15 +628,28 @@ export const App: React.FC = () => {
   }, [showTutorial, completeTutorial]);
 
   const handleStartTutorial = useCallback(() => {
+    featureOfferQueueRef.current = [];
+    activeFeatureOfferRef.current = null;
+    setActiveFeatureOffer(null);
+    setTutorialStepTriedInVisit(false);
     setTutorialStep(0);
-    setTutorialTried({
-      palette: false,
-      paint: false,
-      zoom: false,
-      hint: false,
-      menu: false,
-    });
+    setTutorialTried(createInitialTutorialTried());
     setShowTutorial(true);
+  }, []);
+
+  const handleJumpToTutorialStep = useCallback(
+    (stepIdx: number) => {
+      advanceFeatureOffer();
+      setTutorialStepTriedInVisit(false);
+      setTutorialStep(stepIdx);
+      setShowTutorial(true);
+    },
+    [advanceFeatureOffer]
+  );
+
+  const handleTutorialStepChange = useCallback((nextStep: number) => {
+    setTutorialStepTriedInVisit(false);
+    setTutorialStep(nextStep);
   }, []);
 
   // Zero-allocation bounding-box frustum check against the current canvas viewport
@@ -1582,11 +1665,6 @@ export const App: React.FC = () => {
   // Undo & Redo capability: disabled by default for standard puzzles, enabled automatically for free colour puzzles or when explicitly enabled in settings
   const isUndoEnabled = Boolean(settings.enableUndo || isFreeColorMode || puzzle?.isFreeColor);
 
-  const handleToggleFreeColorMode = useCallback(() => {
-    handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: !prev.isFreeColorMode }));
-    NativeBridge.haptic('tick', settings.hapticsEnabled);
-  }, [handleUpdateSettings, settings.hapticsEnabled]);
-
   const emitCoopPaint = useCallback(
     (
       action: 'FILL' | 'UNFILL',
@@ -1669,6 +1747,8 @@ export const App: React.FC = () => {
     setPaintedRegionColors(nextPainted);
     setHintRegionId(null);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('undo_redo');
+    triggerFeatureOffer('undo_replay');
 
     if (undoneRegion && !isFreeColorMode) {
       setActiveColorId(undoneRegion.colorId);
@@ -1715,6 +1795,8 @@ export const App: React.FC = () => {
     activeColorId,
     emitCoopPaint,
     emitCoopUnfill,
+    markTutorialActionTried,
+    triggerFeatureOffer,
   ]);
 
   // Redo last undone region action
@@ -1752,6 +1834,7 @@ export const App: React.FC = () => {
     setPaintedRegionColors(nextPainted);
     setHintRegionId(null);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('undo_redo');
 
     const redoneRegion = puzzle.regions.find((r) => r.id === lastRedo.regionId);
     if (redoneRegion && !isFreeColorMode) {
@@ -1798,6 +1881,7 @@ export const App: React.FC = () => {
     activeSnapshotId,
     activeColorId,
     emitCoopPaint,
+    markTutorialActionTried,
   ]);
 
   // Open replay timeline scrubber from long-press Undo or floating controls
@@ -1819,7 +1903,16 @@ export const App: React.FC = () => {
     setReplayStep(orderedList.length);
     setIsReplaying(true);
     setIsReplayPlaying(false);
-  }, [puzzle, filledRegionIds, undoStack, settings.hapticsEnabled]);
+    markTutorialActionTried('replay');
+    triggerFeatureOffer('replay_scrubber');
+  }, [
+    puzzle,
+    filledRegionIds,
+    undoStack,
+    settings.hapticsEnabled,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  ]);
 
   // Resume active gameplay from scrubbed replay step
   const handleResumeFromReplayStep = useCallback(
@@ -2738,6 +2831,8 @@ export const App: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const title = file.name.replace(/\.[^/.]+$/, '');
+        markTutorialActionTried('custom_photo');
+        triggerFeatureOffer('photo_upload');
         loadArtworkFromImage(
           img,
           title,
@@ -3029,9 +3124,10 @@ export const App: React.FC = () => {
     });
     if (ok) {
       NativeBridge.haptic('tick', settings.hapticsEnabled);
+      markTutorialActionTried('saves_export');
     }
     return ok;
-  }, [puzzle, activeTitle, settings.hapticsEnabled]);
+  }, [puzzle, activeTitle, settings.hapticsEnabled, markTutorialActionTried]);
 
   // Export any saved snapshot's puzzle as a printable monochrome vector SVG coloring sheet
   const handleExportSnapshotSvg = useCallback(
@@ -3043,6 +3139,7 @@ export const App: React.FC = () => {
         });
         if (ok) {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
+          markTutorialActionTried('saves_export');
         }
         return ok;
       }
@@ -3061,6 +3158,7 @@ export const App: React.FC = () => {
         });
         if (ok) {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
+          markTutorialActionTried('saves_export');
         }
         return ok;
       } catch (e) {
@@ -3068,7 +3166,7 @@ export const App: React.FC = () => {
         return false;
       }
     },
-    [activeSnapshotId, puzzle, activeTitle, snapshots, settings.hapticsEnabled]
+    [activeSnapshotId, puzzle, activeTitle, snapshots, settings.hapticsEnabled, markTutorialActionTried]
   );
 
   // Export single snapshot to compact .capy v2 binary file
@@ -3084,11 +3182,12 @@ export const App: React.FC = () => {
           data: bytes,
         });
         NativeBridge.haptic('tick', settings.hapticsEnabled);
+        markTutorialActionTried('saves_export');
       } catch (e) {
         console.error('Failed to export snapshot', e);
       }
     },
-    [settings.hapticsEnabled]
+    [settings.hapticsEnabled, markTutorialActionTried]
   );
 
   // Export all saved puzzles to compact .capy v2 backup archive
@@ -3102,10 +3201,11 @@ export const App: React.FC = () => {
         data: bytes,
       });
       NativeBridge.haptic('tick', settings.hapticsEnabled);
+      markTutorialActionTried('saves_export');
     } catch (e) {
       console.error('Failed to export all snapshots', e);
     }
-  }, [settings.hapticsEnabled]);
+  }, [settings.hapticsEnabled, markTutorialActionTried]);
 
   // Import saves from .capy (v2 binary or v1 JSON) or .json file
   const handleImportSnapshots = useCallback(
@@ -3119,6 +3219,7 @@ export const App: React.FC = () => {
           const refreshed = StorageService.loadSnapshots();
           setSnapshots(refreshed);
           NativeBridge.haptic('success', settings.hapticsEnabled);
+          markTutorialActionTried('saves_export');
           return {
             ok: true,
             importedCount: result.importedCount,
@@ -3855,8 +3956,17 @@ export const App: React.FC = () => {
     if (!url) return null;
     await NativeBridge.shareTextLink(`${activeTitle} — Capy Progress`, url);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('cloud_coop');
+    triggerFeatureOffer('cloud_coop');
     return url;
-  }, [canShareActiveLink, buildActiveShareUrl, activeTitle, settings.hapticsEnabled]);
+  }, [
+    canShareActiveLink,
+    buildActiveShareUrl,
+    activeTitle,
+    settings.hapticsEnabled,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  ]);
 
   const handleHostCoopRoom = useCallback(async (): Promise<string | null> => {
     const code = generateCoopRoomCode(6);
@@ -3887,6 +3997,8 @@ export const App: React.FC = () => {
     setCoopRoomCode(activeCode);
     setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
     NativeBridge.haptic('success', settings.hapticsEnabled);
+    markTutorialActionTried('cloud_coop');
+    triggerFeatureOffer('cloud_coop');
     return activeCode;
   }, [
     activeSampleUri,
@@ -3895,6 +4007,8 @@ export const App: React.FC = () => {
     paintedRegionColors,
     isFreeColorMode,
     settings.hapticsEnabled,
+    markTutorialActionTried,
+    triggerFeatureOffer,
   ]);
 
   const handleJoinCoopRoom = useCallback(
@@ -3919,12 +4033,16 @@ export const App: React.FC = () => {
         setCoopRoomCode(activeCode);
         setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
         NativeBridge.haptic('success', settings.hapticsEnabled);
+        if (activeCode) {
+          markTutorialActionTried('cloud_coop');
+          triggerFeatureOffer('cloud_coop');
+        }
         return Boolean(activeCode);
       } catch {
         return false;
       }
     },
-    [settings.hapticsEnabled]
+    [settings.hapticsEnabled, markTutorialActionTried, triggerFeatureOffer]
   );
 
   const handleLeaveCoopRoom = useCallback(() => {
@@ -3941,8 +4059,10 @@ export const App: React.FC = () => {
     if (!url) return null;
     await NativeBridge.shareTextLink(`Join my Capy Co-op Room (${coopRoomCode})`, url);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('cloud_coop');
+    triggerFeatureOffer('cloud_coop');
     return url;
-  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled]);
+  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled, markTutorialActionTried, triggerFeatureOffer]);
 
   const handleSyncCloudProgress = useCallback(async (): Promise<{
     addedFromCloud: number;
@@ -4270,6 +4390,8 @@ export const App: React.FC = () => {
         const subTitle = activeTitle.includes('(2x Detail)')
           ? activeTitle
           : `${activeTitle} (2x Detail)`;
+        markTutorialActionTried('infinite_zoom');
+        triggerFeatureOffer('infinite_zoom');
         loadArtworkFromImage(
           detailImg,
           subTitle,
@@ -4302,6 +4424,8 @@ export const App: React.FC = () => {
     activeTitle,
     settings.generatorConfig,
     loadArtworkFromImage,
+    markTutorialActionTried,
+    triggerFeatureOffer,
   ]);
 
   return (
@@ -4330,22 +4454,24 @@ export const App: React.FC = () => {
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => {
           dismissPostLoadReplayIfAwaiting();
-          markTutorialActionTried('menu');
+          markTutorialActionTried('peek_fullscreen');
           setIsPreviewMode((prev) => !prev);
         }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
-          markTutorialActionTried('menu');
+          markTutorialActionTried('settings_a11y');
           setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
         onOpenSaves={() => {
-          markTutorialActionTried('menu');
+          markTutorialActionTried('saves_export');
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
         onOpenCoop={() => {
-          markTutorialActionTried('menu');
+          coopOfferPendingRef.current = true;
+          markTutorialActionTried('cloud_coop');
+          triggerFeatureOffer('cloud_coop');
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
@@ -4520,8 +4646,13 @@ export const App: React.FC = () => {
             handleRedo();
           }}
           onLongPressUndo={handleOpenTimelineReplay}
-          onStartReplay={() => startReplay(Array.from(filledRegionIds))}
+          onStartReplay={() => {
+            markTutorialActionTried('replay');
+            triggerFeatureOffer('replay_scrubber');
+            startReplay(Array.from(filledRegionIds));
+          }}
           onTogglePaintMode={() => {
+            const enablingPaint = !settings.isPaintMode;
             if (isReplayingRef.current) {
               exitReplay();
             } else {
@@ -4529,6 +4660,9 @@ export const App: React.FC = () => {
             }
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings((prev) => ({ ...prev, isPaintMode: !prev.isPaintMode }));
+            if (enablingPaint) {
+              triggerFeatureOffer('paint_mode');
+            }
           }}
           onZoomIn={() => {
             dismissPostLoadReplayIfAwaiting();
@@ -4630,7 +4764,11 @@ export const App: React.FC = () => {
             setShowSettings(true);
           }}
           onResumeFromStep={handleResumeFromReplayStep}
-          onUserInteract={cancelAutoResume}
+          onUserInteract={() => {
+            cancelAutoResume();
+            markTutorialActionTried('replay');
+            triggerFeatureOffer('replay_scrubber');
+          }}
           onMinimizedChange={setIsReplayMinimized}
         />
       )}
@@ -4667,7 +4805,11 @@ export const App: React.FC = () => {
           }}
           onSyncActiveColor={handleSyncActiveColor}
           onColorHintRequested={(colId) => triggerHint(colId)}
-          onOpenPaletteOptions={() => setShowPaletteOptions(true)}
+          onOpenPaletteOptions={() => {
+            setShowPaletteOptions(true);
+            markTutorialActionTried('free_color');
+            triggerFeatureOffer('free_color');
+          }}
           onAddCustomColor={handleAddCustomColor}
           onUpdateColor={handleUpdateColor}
           onApplyPresetPalette={handleApplyPresetPalette}
@@ -4719,7 +4861,22 @@ export const App: React.FC = () => {
           coopParticipants={coopParticipants}
           canShareActiveLink={canShareActiveLink}
           onClose={() => setShowSettings(false)}
-          onUpdateSettings={handleUpdateSettings}
+          onUpdateSettings={(nextSettings) => {
+            const prev = settingsRef.current;
+            const enablingFreeColor = Boolean(nextSettings.isFreeColorMode && !prev.isFreeColorMode);
+            const toggledFreeColor =
+              nextSettings.isFreeColorMode !== prev.isFreeColorMode ||
+              nextSettings.enableCustomColorForAllPuzzles !== prev.enableCustomColorForAllPuzzles;
+            handleUpdateSettings(nextSettings);
+            if (toggledFreeColor) {
+              markTutorialActionTried('free_color');
+              if (enablingFreeColor) {
+                triggerFeatureOffer('free_color');
+              }
+            } else {
+              markTutorialActionTried('settings_a11y');
+            }
+          }}
           onToggleFullscreen={handleToggleFullscreen}
           onLoadSnapshot={(snap) => handleLoadSnapshot(snap, false)}
           onReplaySnapshot={(snap) => handleLoadSnapshot(snap, true)}
@@ -4883,6 +5040,7 @@ export const App: React.FC = () => {
             }
           }}
           onSelectSample={(sample: SampleArtwork, cfg?: GeneratorConfig) => {
+            markTutorialActionTried('gallery_daily');
             void loadSampleFromPrebakedOrGenerate(
               sample,
               undefined,
@@ -4902,22 +5060,48 @@ export const App: React.FC = () => {
           onLeaveCoopRoom={handleLeaveCoopRoom}
           onShareProgressLink={handleShareProgressLink}
           onCopyCoopInviteLink={handleCopyCoopInviteLink}
-          onSyncCloudProgress={handleSyncCloudProgress}
+          onSyncCloudProgress={async () => {
+            const res = await handleSyncCloudProgress();
+            if (res) {
+              markTutorialActionTried('cloud_coop');
+              triggerFeatureOffer('cloud_coop');
+            }
+            return res;
+          }}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
+          onTabOpened={(tabId) => {
+            if (tabId === 3) {
+              markTutorialActionTried('gallery_daily');
+              triggerFeatureOffer('create_gallery');
+            } else if (tabId === 4) {
+              markTutorialActionTried('saves_export');
+              if (coopOfferPendingRef.current) {
+                coopOfferPendingRef.current = false;
+                triggerFeatureOffer('cloud_coop');
+              } else {
+                triggerFeatureOffer('saves_export');
+              }
+            }
+          }}
         />
       </Suspense>
 
       <OnboardingTutorial
         isOpen={showTutorial}
         isModalOpen={showSettings || showPaletteOptions}
+        isLoading={isLoading}
         stepIndex={tutorialStep}
         triedActions={tutorialTried}
+        triedInCurrentVisit={tutorialStepTriedInVisit}
         largeText={Boolean(settings.largeText)}
-        onToggleLargeText={() =>
-          handleUpdateSettings((prev) => ({ ...prev, largeText: !prev.largeText }))
-        }
-        onStepChange={setTutorialStep}
+        onToggleLargeText={() => {
+          handleUpdateSettings((prev) => ({ ...prev, largeText: !prev.largeText }));
+          if (tutorialStepRef.current === 13) {
+            markTutorialActionTried('settings_a11y');
+          }
+        }}
+        onStepChange={handleTutorialStepChange}
         onTriggerHint={() => {
           if (isReplaying) {
             flushPendingViewportSave();
@@ -4930,6 +5114,13 @@ export const App: React.FC = () => {
         }}
         onComplete={completeTutorial}
         onSkip={completeTutorial}
+      />
+
+      <FeatureOfferBanner
+        offer={activeFeatureOffer}
+        isSuppressed={isFeatureOfferSuppressed}
+        onJumpToGuide={handleJumpToTutorialStep}
+        onDismiss={advanceFeatureOffer}
       />
     </div>
   );
