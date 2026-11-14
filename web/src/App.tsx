@@ -374,6 +374,10 @@ export const App: React.FC = () => {
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    document.documentElement.dataset.largeText = settings.largeText ? 'true' : 'false';
+  }, [settings.largeText]);
+
   // Sync modal & overlay states with native LIFO hardware back button stack
   useEffect(() => {
     if (!showSettings) return;
@@ -4386,7 +4390,11 @@ export const App: React.FC = () => {
         showPreviewBorders={settings.showPreviewBorders}
         labelScale={settings.labelScale}
         minLabelSize={settings.minLabelSize}
-        maxLabelSize={settings.maxLabelSize}
+        maxLabelSize={
+          settings.largeText
+            ? Math.round(Math.max(settings.maxLabelSize * 1.5, 28))
+            : settings.maxLabelSize
+        }
         highlightMatching={isReplaying ? false : settings.highlightMatching}
         highlightStyle={settings.highlightStyle}
         hintColorArgb={settings.hintColorArgb}
@@ -4905,6 +4913,10 @@ export const App: React.FC = () => {
         isModalOpen={showSettings || showPaletteOptions}
         stepIndex={tutorialStep}
         triedActions={tutorialTried}
+        largeText={Boolean(settings.largeText)}
+        onToggleLargeText={() =>
+          handleUpdateSettings((prev) => ({ ...prev, largeText: !prev.largeText }))
+        }
         onStepChange={setTutorialStep}
         onTriggerHint={() => {
           if (isReplaying) {

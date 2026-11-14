@@ -1,3 +1,7 @@
+### 3.0.10 - 2026-11-14 (Alpha)
+
+- Add Low-Vision Large Text accessibility mode, keep PaletteDock strictly sorted and centered at 50% when scrollable, enable Undo by default with one-time migration, remove stale 1x zoom badge tutorial copy, and add capyboop review-gate unit tests [#518](https://github.com/shthed/capy/pull/518)
+
 ### 3.0.9 - 2026-11-14 (Beta)
 
 - Keep PaletteDock visible above ReplayControls with swatch auto-dismiss, default Saves tab to Thumbnails list-first without sticky header occlusion, and expand E2E layout guards [#517](https://github.com/shthed/capy/pull/517)

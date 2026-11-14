@@ -430,7 +430,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           }}
         >
           {/* Tab Navigation */}
-          <div data-testid="settings-modal-tabs" className="min-w-0 flex-1 flex items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
+          <div data-testid="settings-modal-tabs" className="min-w-0 flex-1 flex flex-wrap sm:flex-nowrap items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -549,8 +549,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
                     <div className="font-bold text-slate-200">Zoom &amp; Pan</div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      Pinch, scroll, double-tap &amp; drag, or tap the top 1x zoom badge to inspect
-                      fine details.
+                      Pinch, scroll, or double-tap &amp; drag to inspect fine details.
                     </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
@@ -1019,11 +1018,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Choose your own colours freely and paint any region without number restrictions',
                     },
                     {
-                      key: 'prioritizeOnScreen' as const,
-                      label: 'Prioritise On-Screen Colours',
-                      desc: 'Brings visible viewport colours to front of dock',
-                    },
-                    {
                       key: 'autoAdvance' as const,
                       label: 'Auto-Advance When Completed',
                       desc: 'Jumps to next remaining colour automatically',
@@ -1061,7 +1055,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       key: 'enableUndo' as const,
                       label: 'Enable Undo Action',
-                      desc: 'Show Undo button above palette dock to revert painted regions (Ctrl+Z). Disabled by default, enabled automatically for free colour puzzles',
+                      desc: 'Show Undo button above palette dock to revert painted regions (Ctrl+Z). Enabled by default; turn off to hide',
                     },
                     {
                       key: 'panMomentum' as const,
@@ -1222,6 +1216,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
+                </div>
+
+                {/* Large Text (Low-Vision) */}
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
+                  <div className="pr-3 min-w-0">
+                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
+                      Large Text (Low-Vision)
+                    </div>
+                    <div className="text-[11px] text-slate-400 leading-tight">
+                      Enlarges UI copy and canvas region numbers for easier reading
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    data-testid="setting-large-text"
+                    aria-checked={Boolean(settings.largeText)}
+                    onClick={() => updateSetting('largeText', !settings.largeText)}
+                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                      settings.largeText ? 'bg-amber-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                        settings.largeText ? 'translate-x-4.5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
                 </div>
 
                 {/* Reduced Motion */}

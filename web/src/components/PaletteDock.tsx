@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import { Palette } from 'lucide-react';
 import {
   PaletteColor,
@@ -135,20 +136,11 @@ export function getVisiblePalette(
 
 export function getDockPalette(
   basePalette: PaletteColor[],
-  prioritizeOnScreen: boolean = false,
-  visibleColorIds: Set<number> = new Set(),
-  activeColorId?: number
+  _prioritizeOnScreen: boolean = false,
+  _visibleColorIds: Set<number> = new Set(),
+  _activeColorId?: number
 ): PaletteColor[] {
-  if (!prioritizeOnScreen || visibleColorIds.size === 0) return basePalette;
-  return [...basePalette].sort((a, b) => {
-    if (activeColorId !== undefined) {
-      if (a.id === activeColorId) return -1;
-      if (b.id === activeColorId) return 1;
-    }
-    const aVis = visibleColorIds.has(a.id) ? 1 : 0;
-    const bVis = visibleColorIds.has(b.id) ? 1 : 0;
-    return bVis - aVis;
-  });
+  return basePalette;
 }
 
 export const PaletteDock: React.FC<PaletteDockProps> = ({
@@ -247,32 +239,61 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return getDisplayNumberMap(palette, regions, sortOrder);
   }, [palette, regions, sortOrder]);
 
-  // Order with on-screen prioritization - never hide or deprioritize active colour even if offscreen
-  const dockPalette = useMemo(() => {
-    if (!prioritizeOnScreen || visibleColorIds.size === 0) return sortedPalette;
-    return [...sortedPalette].sort((a, b) => {
-      if (a.id === activeColorId) return -1;
-      if (b.id === activeColorId) return 1;
-      const aVis = visibleColorIds.has(a.id) ? 1 : 0;
-      const bVis = visibleColorIds.has(b.id) ? 1 : 0;
-      return bVis - aVis;
-    });
-  }, [sortedPalette, prioritizeOnScreen, visibleColorIds, activeColorId]);
+  // Keep dock strictly in sorted order (never pull active or visible swatches to front)
+  const dockPalette = sortedPalette;
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   const activeSwatchRef = useRef<HTMLButtonElement | null>(null);
+  const [isScrollable, setIsScrollable] = useState(false);
 
-  // Smoothly center the active color in view when activeColorId changes
-  useEffect(() => {
-    if (activeSwatchRef.current) {
-      activeSwatchRef.current.scrollIntoView({
-        behavior: reducedMotion ? 'auto' : 'smooth',
-        block: 'nearest',
-        inline: 'center',
-      });
+  const itemCount =
+    dockPalette.length + (showCustomColorButton && onOpenPaletteOptions ? 1 : 0);
+
+  useIsomorphicLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const clientW = container.clientWidth;
+      if (clientW <= 0) return;
+      const naturalWidth =
+        itemCount * 46 + Math.max(0, itemCount - 1) * 8 + 24;
+      setIsScrollable(naturalWidth > clientW);
+    };
+
+    measure();
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(container);
+      return () => ro.disconnect();
     }
-  }, [activeColorId, reducedMotion]);
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [itemCount]);
+
+  // Smoothly center the active color in view when activeColorId or dock layout changes
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const swatch = activeSwatchRef.current;
+    if (!container || !swatch) return;
+    if (!isScrollable) {
+      container.scrollLeft = 0;
+      return;
+    }
+    const targetLeft = Math.max(
+      0,
+      swatch.offsetLeft + swatch.offsetWidth / 2 - container.clientWidth / 2
+    );
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({
+        left: targetLeft,
+        behavior: reducedMotion ? 'auto' : 'smooth',
+      });
+    } else {
+      container.scrollLeft = targetLeft;
+    }
+  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -336,8 +357,12 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         <div
           className="flex items-center gap-2 mx-auto min-w-max"
           style={{
-            paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
-            paddingRight: 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
+            paddingLeft: isScrollable
+              ? 'max(calc(50% - 23px), calc(var(--sal, 0px) + 0.75rem))'
+              : 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
+            paddingRight: isScrollable
+              ? 'max(calc(50% - 23px), calc(var(--sar, 0px) + 0.75rem))'
+              : 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
           }}
         >
         {dockPalette.map((color) => {

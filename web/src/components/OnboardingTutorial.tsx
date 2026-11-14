@@ -24,6 +24,8 @@ interface OnboardingTutorialProps {
   isModalOpen?: boolean;
   stepIndex: number;
   triedActions: TutorialTriedActions;
+  largeText?: boolean;
+  onToggleLargeText?: () => void;
   onStepChange: (nextStep: number) => void;
   onTriggerHint: () => void;
   onComplete: () => void;
@@ -59,8 +61,8 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     key: 'zoom',
     title: 'Zoom & Pan',
     description:
-      'Pinch with two fingers, double-tap & drag, scroll, or tap the top 1x zoom badge to inspect details.',
-    tryPrompt: 'Zoom or pan the puzzle (tap 1x badge, scroll, or drag)',
+      'Pinch with two fingers, double-tap & drag, or scroll to inspect details.',
+    tryPrompt: 'Zoom or pan the puzzle (pinch, scroll, or drag)',
     icon: ZoomIn,
   },
   {
@@ -86,6 +88,8 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   isModalOpen = false,
   stepIndex,
   triedActions,
+  largeText = false,
+  onToggleLargeText,
   onStepChange,
   onTriggerHint,
   onComplete,
@@ -136,13 +140,32 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
     <div
       className="fixed inset-x-0 z-40 pointer-events-none flex justify-center px-3"
       style={{
-        top: 'calc(3.55rem + var(--sat, 0px))',
+        top: 'calc(var(--capy-tutorial-top, 3.55rem) + var(--sat, 0px))',
       }}
     >
       <div
         data-testid="onboarding-tutorial"
         className="pointer-events-auto w-full max-w-md rounded-2xl bg-slate-900/94 border border-amber-400/50 shadow-2xl backdrop-blur-xl p-3 sm:p-3.5 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200"
       >
+        {onToggleLargeText && (
+          <button
+            type="button"
+            data-testid="tutorial-large-text-btn"
+            aria-pressed={largeText}
+            onClick={onToggleLargeText}
+            className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-xs font-extrabold transition-colors cursor-pointer ${
+              largeText
+                ? 'bg-amber-400 text-slate-950 border-amber-300 hover:bg-amber-300'
+                : 'bg-slate-950/90 text-amber-200 border-amber-400/60 hover:bg-slate-800'
+            }`}
+          >
+            <span>
+              {largeText
+                ? 'Large Text On (Tap to Switch Back)'
+                : "Is this too small? Can't read this? Switch to Large Text"}
+            </span>
+          </button>
+        )}
         {/* Header */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
