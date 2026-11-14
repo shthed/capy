@@ -1,6 +1,6 @@
 ### 3.0.11 - 2026-11-14 (Beta)
 
-- Upgrade OnboardingTutorial to a 14-step interactive guide with All Topics jump drawer and per-visit auto-advance across all steps, add 9 contextual non-blocking FeatureOfferBanner quick tips with scoped persistence and Jump to Guide, raise PR Readiness and AI review gates to strict 100%, and expand mobile overflow and E2E coverage [#999](https://github.com/shthed/capy/pull/999)
+- Upgrade OnboardingTutorial to a 14-step interactive guide with All Topics jump drawer and per-visit auto-advance across all steps, add 9 contextual non-blocking FeatureOfferBanner quick tips with scoped persistence and Jump to Guide, raise PR Readiness and AI review gates to strict 100%, and expand mobile overflow and E2E coverage [#519](https://github.com/shthed/capy/pull/519)
 
 ### 3.0.10 - 2026-11-14
 
