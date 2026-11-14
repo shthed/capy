@@ -114,13 +114,14 @@ jobs:
             const body = [
               '## Summary',
               '',
-              'Keeps the Beta testing channel up to date with the latest approved changes from the main release branch so upcoming test builds include recent fixes without merge conflicts.',
+              'Keeps the Beta testing channel up to date with the latest approved changes from the main release branch so upcoming test builds include recent fixes without merge conflicts. Once all automated checks and the AI review pass cleanly, this sync PR is automatically merged with a merge commit (never squashed).',
               '',
               '### Sync Details',
               '',
               `- **Main HEAD**: \`${mainSha}\``,
               `- **Beta Base**: \`${betaSha}\``,
-              '- **Merge Policy**: **ALWAYS** merge with a merge commit (`gh pr merge <PR_NUM> --merge`). **NEVER** squash-merge or rebase-merge this PR, or `origin/main` ancestry will not be preserved on `beta`.',
+              '- **Merge Policy**: **Auto-merges strictly via merge commit (`gh pr merge <PR_NUM> --merge`)** once `100%` CI (`Build & Test`), `Playwright E2E Release Gate`, and `100%` AI review (`capy/review-gate`) pass. **Humans: NEVER click "Squash and merge" or "Rebase and merge" on sync PRs**, or `origin/main` ancestry will not be preserved on `beta`.',
+              '- **Execution**: Merge execution stays with GitHub Manager (`gh pr merge <PR_NUM> --merge`) rather than `GITHUB_TOKEN` inside GitHub Actions, because `GITHUB_TOKEN` lacks `workflows` scope to merge `.github/workflows/*.yml` diffs.',
               ...(hasPatToken
                 ? []
                 : [
