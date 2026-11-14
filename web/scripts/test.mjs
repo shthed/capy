@@ -7414,10 +7414,12 @@ async function runBrowserBasicsSuite() {
     const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
     const headerBox360 = await page.locator('header').first().boundingBox();
     const zoomOutMin360 = await page.getByTestId('zoom-out-btn').boundingBox();
+    const undoMin360 = await page.getByTestId('undo-btn').boundingBox();
+    const paintMin360 = await page.locator('[aria-label="Toggle Paint Mode"]').boundingBox();
     const paletteMin360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
     assert.ok(
-      windowBox360 && exitBox360 && headerBox360 && zoomOutMin360 && paletteMin360,
-      'Expected visible bounding boxes for mobile replay HUD, FloatingActions, TopBar, and PaletteDock at 360x800'
+      windowBox360 && exitBox360 && headerBox360 && zoomOutMin360 && undoMin360 && paintMin360 && paletteMin360,
+      'Expected visible bounding boxes for mobile replay HUD, FloatingActions (including Undo & Paint Mode), TopBar, and PaletteDock at 360x800'
     );
     assert.ok(
       exitBox360.x >= windowBox360.x + 4 &&
@@ -7430,7 +7432,9 @@ async function runBrowserBasicsSuite() {
       `360x800 TopBar bottom (${headerBox360.y + headerBox360.height}) must clear FloatingActions (${zoomOutMin360.y})`
     );
     assert.equal(
-      zoomOutMin360.y + zoomOutMin360.height <= windowBox360.y + 1,
+      zoomOutMin360.y + zoomOutMin360.height <= windowBox360.y + 1 &&
+        undoMin360.y + undoMin360.height <= windowBox360.y + 1 &&
+        paintMin360.y + paintMin360.height <= windowBox360.y + 1,
       true,
       `360x800 FloatingActions bottom (${zoomOutMin360.y + zoomOutMin360.height}) must clear minimized ReplayControls top (${windowBox360.y})`
     );
@@ -7438,6 +7442,57 @@ async function runBrowserBasicsSuite() {
       windowBox360.y + windowBox360.height <= paletteMin360.y + 1,
       true,
       `360x800 minimized ReplayControls bottom (${windowBox360.y + windowBox360.height}) must stack above PaletteDock top (${paletteMin360.y})`
+    );
+    // Verify Paint Mode toggle works during replay
+    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    assert.equal(
+      await mobileReplayWin.isVisible(),
+      true,
+      'Toggling Paint Mode during replay must keep ReplayControls open'
+    );
+
+    // Verify PaletteDock horizontal centering with 2-3 swatches and scrollability with many swatches
+    const dockScrollStats = await page.evaluate(() => {
+      const dock = document.querySelector('[aria-label="Palette dock"]');
+      const scroller = dock?.firstElementChild;
+      if (!scroller) return null;
+      return {
+        scrollWidth: scroller.scrollWidth,
+        clientWidth: scroller.clientWidth,
+        swatchCount: scroller.querySelectorAll('[data-testid^="palette-swatch-"]').length,
+      };
+    });
+    assert.ok(dockScrollStats, 'PaletteDock scroller must exist');
+    if (dockScrollStats.swatchCount > 8) {
+      assert.equal(
+        dockScrollStats.scrollWidth > dockScrollStats.clientWidth,
+        true,
+        `Multi-color PaletteDock (${dockScrollStats.swatchCount} swatches) must be horizontally scrollable on 360px viewport`
+      );
+    }
+    const narrowCenterCheck = await page.evaluate(() => {
+      const dock = document.querySelector('[aria-label="Palette dock"]');
+      const scroller = dock?.firstElementChild;
+      const inner = scroller?.firstElementChild;
+      if (!inner) return null;
+      const swatches = Array.from(inner.querySelectorAll('[data-testid^="palette-swatch-"]'));
+      if (swatches.length < 2) return null;
+      // Temporarily hide extra swatches beyond 3 to verify narrow-dock centering
+      const hidden = [];
+      for (let i = 3; i < swatches.length; i++) {
+        hidden.push([swatches[i], swatches[i].style.display]);
+        swatches[i].style.display = 'none';
+      }
+      const firstRect = swatches[0].getBoundingClientRect();
+      const lastRect = swatches[Math.min(2, swatches.length - 1)].getBoundingClientRect();
+      const midpoint = (firstRect.left + lastRect.right) / 2;
+      const viewportMid = window.innerWidth / 2;
+      for (const [el, prev] of hidden) el.style.display = prev;
+      return { midpoint, viewportMid, diff: Math.abs(midpoint - viewportMid) };
+    });
+    assert.ok(
+      narrowCenterCheck && narrowCenterCheck.diff < 16,
+      `Narrow PaletteDock (<=3 swatches) must be centered horizontally (diff=${narrowCenterCheck?.diff?.toFixed(1)}px)`
     );
     assert.equal(
       paletteMin360.y + paletteMin360.height <= 800,
@@ -7449,9 +7504,10 @@ async function runBrowserBasicsSuite() {
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
     assert.equal(await mobileReplayWin.isVisible(), true, 'ReplayControls must remain onscreen after save-load replay finishes');
     assert.equal(await page.locator('[aria-label="Palette dock"]').isVisible(), true, 'PaletteDock must remain onscreen alongside finished replay');
-    const canvasBox360 = await page.locator('canvas').first().boundingBox();
-    await page.mouse.click(canvasBox360.x + canvasBox360.width * 0.5, canvasBox360.y + canvasBox360.height * 0.45);
+    // Click Undo button while ReplayControls is open to exit replay and enable Redo
+    await page.getByTestId('undo-btn').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 5000 });
+    await page.getByTestId('redo-btn').waitFor({ state: 'visible', timeout: 3000 });
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
     const paletteAfterDismiss360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
     assert.ok(paletteAfterDismiss360);
