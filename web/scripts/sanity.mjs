@@ -228,14 +228,22 @@ export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
 }
 
 const URL_STRIP_RE = /https?:\/\/[^\s)>\]"']+/gi;
+const MARKDOWN_NUMBERED_POINTS_BULLET_RE = /^[ \t]*-(?=[ \t]+\d+[ \t]+points?\b)/gm;
 const LEGACY_PR_RUBRIC_RULES = [
-  { label: 'legacy 5-Pillar phrasing', re: /\b5[- ]+pillar\b/i },
+  { label: 'legacy 5-Pillar phrasing', re: /\b5[- ]+pillars?\b/i },
   { label: 'legacy numbered Pillar item', re: /\bpillar\s+[1-9]\d*\b/i },
-  { label: 'legacy Pillar breakdown phrasing', re: /\bpillar\s+breakdown\b/i },
-  { label: 'legacy Rubric phrasing', re: /\b(?:5[- ]*pillar|pr|readiness)?\s*rubric\b/i },
+  { label: 'legacy Pillar breakdown phrasing', re: /\bpillars?\s+breakdown\b/i },
+  { label: 'legacy Rubric phrasing', re: /\b(?:5[- ]*pillars?|pr|readiness)?\s*rubrics?\b/i },
   { label: 'legacy 5 x 20 scoring math', re: /\b5\s*[x×*]\s*20\b/i },
-  { label: 'legacy 20 pts scoring unit', re: /(?:(?<![a-zA-Z0-9_])20|`20`)\s*(?:pts?|points?)\b/i },
-  { label: 'legacy -N point delta unit', re: /(?:^|[\s(`])-\s*(?:\d+|N)`?\s*(?:pts?|points?)\b/i },
+  {
+    label: 'legacy 20 pts scoring unit',
+    re: /(?<![a-zA-Z0-9_./-])[*`_]{0,3}20[*`_]{0,3}(?:-[ \t]*|\s*)(?:pts?|points?)\b/i,
+  },
+  {
+    label: 'legacy -N point delta unit',
+    re: /(?:^|[\s(`*"'])-[ \t]*(?:\d+|N)[*`]{0,2}[ \t]*(?:pts?|points?)\b/i,
+    preprocess: (text) => text.replace(MARKDOWN_NUMBERED_POINTS_BULLET_RE, '*'),
+  },
   {
     label: 'legacy /100 or /20 denominator',
     re: /(?:(?<![a-zA-Z0-9_./-])(?:\d+(?:\.\d+)?|<[a-zA-Z]+>|[NX])\s*|(?:^|[\s(`[*:,;>|]))\/\s*(?:100|20)\b(?![/])/i,
@@ -243,12 +251,33 @@ const LEGACY_PR_RUBRIC_RULES = [
 ];
 
 const CHECKLIST_PERCENT_LINE_RE =
-  /^(?:[-*]|\d+\.)\s+(?:\[[xX ]\]\s+)?(?:\*{1,2}|`)?(\d{1,3}(?:\.\d+)?)%(?:\*{1,2}|`)?(?=\s|$|[:\-—–])/;
+  /^(?:[-*]|\d+\.)\s+(?:\[[xX ]\]\s+)?[*`_]{0,4}(\d{1,3}(?:\.\d+)?)%[*`_]{0,4}(?=\s|[:\-—–,;])[\s:*`_\-—–,;]*[^\s:*`_\-—–,;]/;
+const DETAILS_BLOCK_RE =
+  /<details(?=[>\s])[^>]*>\s*<summary(?=[>\s])[^>]*>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/i;
+
+function stripHtmlComments(text) {
+  const str = String(text || '');
+  const lastCloseIdx = str.lastIndexOf('-->');
+  if (lastCloseIdx === -1) return str;
+  const end = lastCloseIdx + 3;
+  return `${str.slice(0, end).replace(/<!--[\s\S]*?-->/g, '')}${str.slice(end)}`;
+}
+
+function extractNonThresholdPercentages(text) {
+  return [
+    ...String(text || '').matchAll(
+      /(?:^|[\s:(*`])(?<![<>≤≥]=?[\s*`]*)(\d{1,3}(?:\.\d+)?)%(?=$|[\s).,;:*`])/gm
+    ),
+  ];
+}
 
 export function validateNoLegacyPrRubric(text, relFile = 'document.md') {
-  const withoutUrls = String(text || '').replace(URL_STRIP_RE, 'URL');
+  const withoutUrls = String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(URL_STRIP_RE, 'URL');
   for (const rule of LEGACY_PR_RUBRIC_RULES) {
-    const match = rule.re.exec(withoutUrls);
+    const target = rule.preprocess ? rule.preprocess(withoutUrls) : withoutUrls;
+    const match = rule.re.exec(target);
     assert.equal(
       match,
       null,
@@ -267,34 +296,51 @@ export function validatePrReadinessChecklist(markdown, label = 'PR Readiness') {
     true,
     `${label} must include a PR Readiness section heading`
   );
-  const lastHeading = headingMatches[headingMatches.length - 1];
-  const sectionText = normalized.slice(lastHeading.index);
+
+  let selectedHeading = headingMatches[headingMatches.length - 1];
+  let sectionText = normalized.slice(selectedHeading.index);
+  let visibleSection = stripHtmlComments(sectionText);
+  let detailsMatch = DETAILS_BLOCK_RE.exec(visibleSection);
+  if (!detailsMatch && /<details/i.test(normalized.slice(headingMatches[0].index))) {
+    for (let i = headingMatches.length - 2; i >= 0; i--) {
+      const candidateText = normalized.slice(headingMatches[i].index);
+      const candidateVisible = stripHtmlComments(candidateText);
+      const candidateDetails = DETAILS_BLOCK_RE.exec(candidateVisible);
+      if (candidateDetails) {
+        selectedHeading = headingMatches[i];
+        sectionText = candidateText;
+        visibleSection = candidateVisible;
+        detailsMatch = candidateDetails;
+        break;
+      }
+    }
+  }
 
   validateNoLegacyPrRubric(sectionText, label);
 
-  const detailsMatch = /<details>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/i.exec(
-    sectionText
-  );
   assert.ok(
     detailsMatch,
     `${label} must include a <details><summary>...</summary>...</details> checklist block`
   );
 
-  const beforeDetails = sectionText.slice(0, detailsMatch.index);
+  const beforeDetails = visibleSection.slice(0, detailsMatch.index);
+  const headingLine = beforeDetails.split('\n')[0];
   const summaryText = detailsMatch[1].trim();
   assert.equal(summaryText.length > 0, true, `${label} <summary> must not be empty`);
 
-  const overallMatches = [
-    ...beforeDetails.matchAll(
-      /(?:^|[\s:(*`])(?<![<>]=?\s*)(\d{1,3}(?:\.\d+)?)%(?=$|[\s).,;:*`])/gm
-    ),
-  ];
-  assert.equal(
-    overallMatches.length > 0,
-    true,
-    `${label} must include an overall percentage score (e.g. "98%")`
-  );
-  const overallScore = Number(overallMatches[overallMatches.length - 1][1]);
+  const headingOverallMatches = extractNonThresholdPercentages(headingLine);
+  let overallScore;
+  if (headingOverallMatches.length > 0) {
+    overallScore = Number(headingOverallMatches[0][1]);
+  } else {
+    const beforeDetailsMatches = extractNonThresholdPercentages(beforeDetails);
+    assert.equal(
+      beforeDetailsMatches.length > 0,
+      true,
+      `${label} must include an overall percentage score (e.g. "98%")`
+    );
+    overallScore = Number(beforeDetailsMatches[beforeDetailsMatches.length - 1][1]);
+  }
   assert.equal(
     Number.isFinite(overallScore) && overallScore >= 0 && overallScore <= 100,
     true,
@@ -304,7 +350,7 @@ export function validatePrReadinessChecklist(markdown, label = 'PR Readiness') {
   const itemLines = detailsMatch[2]
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !/^<!--[\s\S]*?-->$/.test(line));
+    .filter((line) => line.length > 0);
   assert.equal(
     itemLines.length >= 1,
     true,
