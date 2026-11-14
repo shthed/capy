@@ -28,7 +28,7 @@ This guide defines the end-to-end human and AI co-development workflow, shared a
 ```mermaid
 flowchart TD
     subgraph AutoLoaded["Auto-Loaded Every Agent Turn"]
-        AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Rubric)"]
+        AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Readiness)"]
     end
 
     subgraph GovernanceAndPlanning["PM Governance, Roadmap, GitHub Agile & Sprint Queue"]
@@ -97,7 +97,7 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/capy/alpha/<number>/` and `/capy/beta/`.
 3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve `implementation_plan.md` artifacts *before* code generation begins. Five minutes spent aligning on a plan saves tens of thousands of tokens of rework.
 4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/teamwork`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
-5. **Final Merge Gatekeeping**: Verify the live preview link and the **5-Pillar PR Readiness & Perfection Confidence Score (`>= 95%`)** before approving any merge to `main`.
+5. **Final Merge Gatekeeping**: Verify the live preview link and the **PR Readiness Score (`>= 95%`)** with its **`PR Readiness Checklist`** before approving any merge to `main`.
 
 ### Optimal Goals for the AI Agent
 
@@ -272,12 +272,12 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 
 ### Step 3: PR Sync-on-Push, Link Standards & Merge Readiness
 
-All PR title/label/Milestone rules, top-of-PR live preview templates, 5-Pillar Readiness Rubric (`>= 95%`), and closed-PR recovery commands live canonically in [`PROJECT.md` Section 4](./PROJECT.md#4-pull-request-lifecycle-and-readiness-gates). Preserve these engineering invariants on every PR:
+All PR title/label/Milestone rules, top-of-PR live preview templates, **`PR Readiness Score` & `PR Readiness Checklist` (`>= 95%`)**, and closed-PR recovery commands live canonically in [`PROJECT.md` Section 4](./PROJECT.md#4-pull-request-lifecycle-and-readiness-gates). Preserve these engineering invariants on every PR:
 
 - **PR Preview Paths vs. GitHub PR URLs**: Alpha GitHub Pages previews deploy to `https://shthed.github.io/capy/alpha/<number>/` (and `/alpha/<number>/capy.apk`), whereas GitHub repository diff links (`https://github.com/shthed/capy/pull/<number>/files#diff-...`) and git recovery refs (`refs/pull/<number>/head`) keep GitHub's native `/pull/` path. Pin code links in PR bodies and comments to exact commit SHAs (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
 - **PR Description Sync-on-Push Rule**: Immediately update PR title, overview bullets, target version, SHA-pinned line links, labels, Milestone, and `gh pr view <num> --json mergeable,mergeStateStatus` (`MERGEABLE` / `CLEAN`) whenever follow-up commits or rebases alter scope or state.
 - **Clickable Link Standard**: Format PR references as clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` links and Epic references as `[EPIC-N](https://github.com/shthed/capy/issues/<num>)` (never bare/backticked `#<epic-issue>` or `[#<epic-issue>](.../issues/...)`).
-- **Wait for Explicit Approval**: Never merge a PR or push directly to `main` or `beta` without explicit Owner confirmation.
+- **Wait for Explicit Approval & Close Reports Clearly**: Never merge a PR or push directly to `main` or `beta` without explicit Owner confirmation. Always close status reports, handoffs, and review updates with an explicit **Needs Your Testing / Approval** summary listing any clickable PRs or preview/Beta links awaiting Project Owner action (noting any holds), or explicitly confirming when none is needed yet.
 
 ---
 

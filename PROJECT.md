@@ -142,21 +142,45 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 - **Linear Branching & Clean Titles**:
   - Always `git fetch --all --prune` and branch linearly from `origin/beta` (`feature/`, `automation/`, `fix/`, `docs/`, `ci/`, `deps/`, `chore/`). Rebase promptly (`git fetch origin beta && git rebase origin/beta`) whenever `origin/beta` advances.
   - Write clean, prefix-free action-oriented PR titles (e.g., `Add floating precision loupe magnifier for micro-regions`). Never put `feat():`, `EPIC-*`, `US-*`, version tags, or comma-separated laundry lists in titles.
-- **Labels, Milestones & Top-of-PR Header**:
+- **Labels, Milestones & Top-of-PR Ordering**:
   - Attach `epic:*` (only for scoped Epic slices; omit on standalone P0 `BUG-*`), subsystem labels (`web`, `android`), and work-type labels (`feature`, `fix`, `docs`, `ui`, `testing`, `ci`, `deps`), plus the active Sprint Milestone.
-  - Place the Alpha preview URL (`https://shthed.github.io/capy/alpha/<number>/`, when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys; skipped cleanly on pure-docs `isDocsOnlyPr` PRs), preview APK URL when applicable, and `**Agile Scope**: Tracked in [EPIC-N](https://github.com/shthed/capy/issues/<num>) ... | **Sprint**: Sprint N` at the top of the PR body, followed by scannable plain-English overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`—never drifting `blob/main/...` or deleted branch links).
+  - **Line 1 Plain-English `## Summary` First**: Start every PR description on **line 1** (*above* Alpha preview / Beta links, Test Results, Agile Scope, technical overview bullets, and code diffs) with a concise, plain-English `## Summary` (`1`--`3` everyday sentences or bullets for non-technical readers—zero commit SHAs, file paths, symbol names, CLI commands/flags, or CI workflow/job IDs).
+  - **Links, Agile Scope & Technical Overview Underneath**: Directly below `## Summary`, place the Alpha preview URL (`https://shthed.github.io/capy/alpha/<number>/`, when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys; skipped cleanly on pure-docs `isDocsOnlyPr` PRs), Beta channel links (`https://shthed.github.io/capy/beta/` and `/beta/capy.apk` on Release Promotion PRs), clickable **Test Results** run/job links for the current HEAD SHA, preview APK URL when applicable, and `**Agile Scope**: Tracked in [EPIC-N](https://github.com/shthed/capy/issues/<num>) ... | **Sprint**: Sprint N`, followed by scannable technical overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`—never drifting `blob/main/...` or deleted branch links).
 - **Mandatory PR Sync-on-Every-Push & Rebase Rule**:
   - Whenever follow-up commits are pushed, a PR is rebased, `origin/beta` advances, or scope/version changes, **immediately** synchronize:
     1. PR title, labels, and Sprint Milestone (`gh pr edit`).
-    2. PR body overview bullets, target version, verification test list, and SHA-pinned line references (never leave stale `MERGEABLE` or old-SHA claims in the body or Development Summary comment).
+    2. Top plain-English `## Summary`, clickable **Test Results** links, PR body overview bullets, target version, verification test list, and SHA-pinned line references (never leave stale `MERGEABLE` or old-SHA claims in the body or Development Summary comment).
     3. `gh pr view <num> --json mergeable,mergeStateStatus` confirming `MERGEABLE` / `CLEAN` before requesting review.
-- **End-of-PR 5-Pillar Readiness Rubric (`>= 95%`)**:
-  - **Pillar 1 -- Functionality & Edge Cases (`20` pts)**: Gestures, persistence, modal back-stack, viewport clamping, and fallbacks verified.
-  - **Pillar 2 -- Automated Tests (`20` pts)**: `npm run test:sanity && npm run lint && npm run build && npm test` (plus `./gradlew app:testDebugUnitTest app:assembleDebug` for Android/bridge work) run locally in the VM.
-  - **Pillar 3 -- Performance & Golden Invariants (`20` pts)**: Zero per-frame heap allocations, worker-only segmentation, `./assets/...` relative paths, and safe `NativeBridge` fallbacks per [`DEV.md` Section 5](./DEV.md#5-core-technical-guardrails-web--app).
-  - **Pillar 4 -- Docs & Changelog Sync (`20` pts)**: SemVer bumped on code PRs, [`CHANGELOG.md`](./CHANGELOG.md) entry with active channel marker and clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` link, completed `TODO.md` items deleted, Epics/`ROADMAP.md` synced, mobile-safe zero-emoji formatting verified.
-  - **Pillar 5 -- CI, Mergeability & Preview Verification (`20` pts)**: `MERGEABLE` / `CLEAN` atop target base, CI checks green, live preview URL and overview bullets present.
-  - Place `### PR Readiness & Perfection Confidence Score: <N>% (<N> / 100)` at the **end** of the PR body and Development Summary comment inside `<details><summary>...</summary> ... </details>` (with blank lines after `</summary>` and before `</details>`), followed by a concise closing rationale (and append `- [ ]` subtasks *only* if `< 100%` complete for tasks scoped inside that PR).
+- **End-of-PR Readiness Score & Checklist (`>= 95%`, `%`-First & Flexible Criteria)**:
+  - Score overall readiness strictly as a percentage (`0%--100%`, requiring `>= 95%` before requesting merge approval) without fixed-weight fractions or artificial caps.
+  - **No Fixed 5-Item Limit**: Include as many or as few scope-relevant criteria lines as the PR requires (e.g., `3--4` focused criteria for docs-only PRs, or `5--9+` criteria for multi-platform Web, Worker, Cloud, Accessibility, Android, or CI changes).
+  - **`%` at the Start of Each Line Item**: Place `%` at the start of each checklist bullet (`- **<N>%** — **<Criterion>**: <Verification summary>`), selecting relevant checks from this baseline + domain catalog (and adding PR-specific criteria whenever warranted):
+    - **Functionality & Edge Cases**: Gestures, persistence, modal back-stack, viewport clamping, and fallbacks verified.
+    - **Automated Tests**: `npm run test:sanity && npm run lint && npm run build && npm test` (plus `./gradlew app:testDebugUnitTest app:assembleDebug` for Android/bridge work) run locally in the VM.
+    - **Performance & Golden Invariants**: Zero per-frame heap allocations, worker-only segmentation, `./assets/...` relative paths, and safe `NativeBridge` fallbacks per [`DEV.md` Section 5](./DEV.md#5-core-technical-guardrails-web--app).
+    - **Docs & Changelog Sync**: SemVer bumped on code PRs, [`CHANGELOG.md`](./CHANGELOG.md) entry with active channel marker and clickable `[#NNN](https://github.com/shthed/capy/pull/NNN)` link, completed [`TODO.md`](./TODO.md) items deleted, Epics/[`ROADMAP.md`](./ROADMAP.md) synced, mobile-safe zero-emoji formatting verified.
+    - **CI, Mergeability & Preview Verification**: `MERGEABLE` / `CLEAN` atop target base, CI checks green, overview bullets, clickable **Test Results** links, and live preview (plus **Beta** links on Release Promotion PRs) present.
+    - **Domain Checks *(add when relevant)***: **Accessibility & Mobile Layout** (text scaling, contrast, reduced motion, `360x780` overflow checks), **Android / Bridge Parity** (`WebViewAssetLoader`, Kotlin bridge, Gradle checks), **Cloud Sync / Worker Safety** (CRDT deltas, token scopes, rate limits, Worker endpoints), and **CI / Workflow Hygiene** (triggers, permissions, status gates, and sanity/build checks).
+  - Place `### PR Readiness Score: <N>%` at the **end** of the PR body and Development Summary comment using this mobile-first template (with blank lines immediately after `</summary>` and before `</details>`, followed by a concise closing rationale explaining why the PR is ready or stating the exact `-N%` gap if `< 100%`, plus `- [ ]` subtasks *only* when `< 100%` complete for work scoped inside *this* PR):
+    ```markdown
+    ### PR Readiness Score: 100%
+
+    <details>
+    <summary>PR Readiness Checklist</summary>
+
+    - **100%** — **Functionality & Edge Cases**: Touch gestures, persistence, modal back-stack, and edge-case fallbacks verified.
+    - **100%** — **Automated Tests**: `npm run test:sanity && npm run lint && npm run build && npm test` passed locally in the VM.
+    - **100%** — **Performance & Golden Invariants**: Zero per-frame allocations, worker-only segmentation, and relative asset paths preserved.
+    - **100%** — **Accessibility & Mobile Layout**: `360x780` viewport overflow checks and responsive controls verified (add or omit criteria as scope requires).
+    - **100%** — **Docs & Changelog Sync**: Version bumped, `CHANGELOG.md` updated with clickable PR link, and docs synced cleanly.
+    - **100%** — **CI, Mergeability & Preview Verification**: `MERGEABLE` / `CLEAN` atop target base, CI checks green, clickable Test Results and preview links present.
+
+    </details>
+
+    All scoped requirements, local tests, CI checks, and docs updates are complete with zero open gaps.
+    ```
+- **Closing `Needs Your Testing / Approval` Summary in Status Reports, Handoffs & Reviews**:
+  - Always close status reports, handoffs, and review updates with an explicit **Needs Your Testing / Approval** summary listing any clickable PRs (`[#NNN — PR Title](https://github.com/shthed/capy/pull/NNN)`) or preview/Beta links awaiting Project Owner action (noting any intentional holds), or explicitly confirming when nothing needs Owner testing or approval yet.
 - **Reopening Closed Unmerged PRs**: Recover `refs/pull/<number>/head` onto the original head branch name, push to `origin`, run `gh pr reopen <number>`, rebase onto `origin/beta`, and `git push --force-with-lease`. Merged PRs are immutable—always open a new PR off `origin/beta`.
 <!-- capy-dev-only:start -->
 - **Bot-Authored Draft PRs (`open-pr.yml`) & Dual Review Gate (`pr-review-gate.yml`)**:
