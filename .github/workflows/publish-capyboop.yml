@@ -23,6 +23,7 @@ jobs:
   publish:
     name: Export & Push Clean capyboop Release
     if: github.repository == 'shthed/capy'
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - name: Check CAPYBOOP_SYNC_TOKEN configuration
