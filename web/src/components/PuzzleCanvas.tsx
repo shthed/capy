@@ -1852,6 +1852,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     // Only start continuous paint if touching inside the image region
     if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
+      onPuzzleInteractionRef.current?.();
       hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
       setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
     }
@@ -1893,9 +1894,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (isDoubleTapPanningRef.current && containerRef.current && puzzle) {
         if (!hasNotifiedManualPanRef.current) {
           hasNotifiedManualPanRef.current = true;
+          onPuzzleInteractionRef.current?.();
           onManualPanStartRef.current?.();
           onViewportGestureRef.current?.();
-          onPuzzleInteractionRef.current?.();
         }
         const moveDx = e.clientX - lastPointerPosRef.current.x;
         const moveDy = e.clientY - lastPointerPosRef.current.y;
@@ -2014,9 +2015,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       if (!container || !puzzle) return;
       if (!hasNotifiedManualPanRef.current && totalDragDistanceRef.current >= 6) {
         hasNotifiedManualPanRef.current = true;
+        onPuzzleInteractionRef.current?.();
         onManualPanStartRef.current?.();
         onViewportGestureRef.current?.();
-        onPuzzleInteractionRef.current?.();
       }
       const w = container.clientWidth;
       const h = container.clientHeight;
