@@ -90,14 +90,14 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
           data-filled-count={filledCount}
           onClick={onOpenSaves}
           title="View saves and snapshots"
-          className={`flex items-center gap-0.5 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
+          className={`flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
             isCompleted
               ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-300'
               : 'bg-slate-900/80 text-amber-400 border border-slate-700/60 hover:bg-slate-800/80'
           }`}
         >
           {activeTitle ? (
-            <span className="truncate max-w-[44px] min-[390px]:max-w-[74px] sm:max-w-[200px]">
+            <span className="truncate max-w-[38px] min-[390px]:max-w-[74px] sm:max-w-[200px]">
               {activeTitle}
             </span>
           ) : (
@@ -114,7 +114,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
             onClick={onOpenReleaseChannel}
             title={`Running on ${releaseChannelBadge} channel (tap to manage release channel)`}
             aria-label={`Release channel ${releaseChannelBadge}. Activate to manage release channel`}
-            className="px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[10px] tracking-normal sm:tracking-wider uppercase font-extrabold bg-violet-950/90 text-violet-200 border border-violet-400/60 shadow-lg backdrop-blur-md hover:bg-violet-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0 whitespace-nowrap"
+            className="px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-[9.5px] sm:text-[10px] tracking-normal sm:tracking-wider uppercase font-extrabold bg-violet-950/90 text-violet-200 border border-violet-400/60 shadow-lg backdrop-blur-md hover:bg-violet-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0 whitespace-nowrap"
           >
             {releaseChannelBadge}
           </button>
