@@ -4462,8 +4462,28 @@ export const App: React.FC = () => {
           isCompleted={isCompleted}
           isReplaying={isReplaying}
           isReplayExpanded={isReplaying && !isReplayMinimized}
-          onUndo={() => handleUndo()}
-          onRedo={() => handleRedo()}
+          onUndo={() => {
+            if (isReplaying) {
+              flushPendingViewportSave();
+              cancelAutoResume();
+              setIsReplaying(false);
+              setIsReplayPlaying(false);
+              handleUndo(true);
+              return;
+            }
+            handleUndo();
+          }}
+          onRedo={() => {
+            if (isReplaying) {
+              flushPendingViewportSave();
+              cancelAutoResume();
+              setIsReplaying(false);
+              setIsReplayPlaying(false);
+              handleRedo(true);
+              return;
+            }
+            handleRedo();
+          }}
           onLongPressUndo={handleOpenTimelineReplay}
           onStartReplay={() => startReplay(Array.from(filledRegionIds))}
           onTogglePaintMode={() => {
