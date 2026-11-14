@@ -1,6 +1,6 @@
-### 3.0.12 - 2026-11-14 (Alpha)
+### 3.0.12 - 2026-11-14 (Beta)
 
-- Add non-blocking TargetSpotlightOverlay ring and directional arrow for all 14 OnboardingTutorial steps and 9 FeatureOfferBanner tips, auto-dismiss tutorial-opened ReplayControls past Step 6, compact Large Text toggle after Step 1, tighten 360px topbar channel pill fit, and update liveCoopRef synchronously [#523](https://github.com/shthed/capy/pull/523)
+- Add non-blocking TargetSpotlightOverlay ring and directional arrow across all 14 OnboardingTutorial steps and 9 FeatureOfferBanner tips, auto-dismiss tutorial-opened ReplayControls past Step 6, compact Large Text toggle after Step 1, clarify Step 7 prompt copy, tighten 360px topbar channel pill fit, and update liveCoopRef synchronously [#523](https://github.com/shthed/capy/pull/523)
 
 ### 3.0.11 - 2026-11-14 (Production)
 
