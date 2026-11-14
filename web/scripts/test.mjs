@@ -12,6 +12,9 @@ import {
   runSanityChecks,
   validateChangelogChannelOrder,
   validateEpicNaming,
+  validateNoLegacyPrRubric,
+  validatePrReadinessChecklist,
+  validatePrReadinessSpec,
   validateRootGuideIndex,
 } from './sanity.mjs';
 
@@ -761,6 +764,395 @@ async function runCodecAndEngineTests() {
       fs.rmSync(tmpGuideDir, { recursive: true, force: true });
     }
 
+    // Standalone %-first PR Readiness Checklist & legacy rubric guards (runs in clean-room export too)
+    {
+      const oneItem = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** **Docs Sync**: Verified.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '1-item test'
+      );
+      assert.equal(oneItem.overallScore, 100);
+      assert.equal(oneItem.itemCount, 1);
+      assert.deepEqual(oneItem.itemScores, [100]);
+      assert.equal(oneItem.summary, 'PR Readiness Checklist');
+
+      const threeItems = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 95.5%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- [x] **100%** — **Functionality**: Verified.',
+          '- **95.5%** — **Tests**: Verified.',
+          '- 91% — **Docs**: Remaining follow-up noted.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '3-item test'
+      );
+      assert.equal(threeItems.overallScore, 95.5);
+      assert.equal(threeItems.itemCount, 3);
+      assert.deepEqual(threeItems.itemScores, [100, 95.5, 91]);
+
+      const sixItems = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100% Check 1**: Functionality verified.',
+          '- **100% Check 2**: Automated tests passed.',
+          '- **100% Check 3**: Zero-allocation invariants preserved.',
+          '- **100% Check 4**: Mobile viewport verified.',
+          '- **100% Check 5**: Docs synced.',
+          '- **100% Check 6**: CI green.',
+          '',
+          '</details>',
+        ].join('\n'),
+        '6-item test'
+      );
+      assert.equal(sixItems.overallScore, 100);
+      assert.equal(sixItems.itemCount, 6);
+
+      const eightItemsFullPr = validatePrReadinessChecklist(
+        [
+          '## Summary',
+          '',
+          '- Improved color layout with Tailwind bg-amber-400/20 accents and clean checks.',
+          '',
+          '- **Beta**: https://capypaint.com/beta/',
+          '- **Related PRs**: [#20](https://github.com/capyboop/capy/pull/20) [#100](https://github.com/capyboop/capy/pull/100)',
+          '',
+          '### PR Readiness Score: 99% (threshold >= 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Functionality & Edge Cases**: Verified.',
+          '- **100%** — **Automated Tests**: Verified.',
+          '- **100%** — **Performance & Golden Invariants**: Verified.',
+          '- **100%** — **Accessibility & Mobile Layout**: Verified.',
+          '- **100%** — **Android / Bridge Parity**: Verified.',
+          '- **100%** — **Cloud Sync / Worker Safety**: Verified.',
+          '- **95%** — **Docs & Changelog Sync**: Minor wording follow-up (-1%).',
+          '- **100%** — **CI, Mergeability & Preview Verification**: Verified.',
+          '',
+          '</details>',
+          '',
+          'Ready with -1% docs polish follow-up.',
+          '- [ ] Polish final release note wording in TODO follow-up.',
+        ].join('\n'),
+        '8-item PR body'
+      );
+      assert.equal(eightItemsFullPr.overallScore, 99);
+      assert.equal(eightItemsFullPr.itemCount, 8);
+
+      const prosePercentRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5%',
+          'All 100% of unit tests pass.',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Tests**: All unit checks pass.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'prose 100% before details'
+      );
+      assert.equal(prosePercentRes.overallScore, 97.5);
+      assert.equal(prosePercentRes.itemCount, 1);
+      assert.deepEqual(prosePercentRes.itemScores, [100]);
+
+      const thresholdProseRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5%',
+          'Threshold: 95% minimum; dropped 2.5% for docs follow-up.',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **97.5%** — **Docs**: Follow-up noted.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'threshold prose before details'
+      );
+      assert.equal(thresholdProseRes.overallScore, 97.5);
+      assert.equal(thresholdProseRes.itemCount, 1);
+      assert.deepEqual(thresholdProseRes.itemScores, [97.5]);
+
+      const fallbackProseRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score',
+          'Overall: 96%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **96%** — **Tests**: Verified.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'fallback overall score below heading'
+      );
+      assert.equal(fallbackProseRes.overallScore, 96);
+      assert.equal(fallbackProseRes.itemCount, 1);
+
+      const minParenRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5% (min 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'min 95% parenthetical on heading'
+      );
+      assert.equal(minParenRes.overallScore, 97.5);
+
+      const unicodeGteRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 97.5% (≥ 95%)',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'unicode >= 95% threshold after heading score'
+      );
+      assert.equal(unicodeGteRes.overallScore, 97.5);
+
+      const unicodeGteBeforeRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score (≥ 95%): 97.5%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'unicode >= 95% threshold before heading score'
+      );
+      assert.equal(unicodeGteBeforeRes.overallScore, 97.5);
+
+      const trailingBoldNoteRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 99%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **99%** — **Verification**: Passed.',
+          '',
+          '</details>',
+          '',
+          '**PR Readiness Note**: All done.',
+        ].join('\n'),
+        'trailing bold PR Readiness note'
+      );
+      assert.equal(trailingBoldNoteRes.overallScore, 99);
+      assert.equal(trailingBoldNoteRes.itemCount, 1);
+      assert.deepEqual(trailingBoldNoteRes.itemScores, [99]);
+
+      const trailingHeadingRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 98%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **98%** — **Checks**: Passed.',
+          '',
+          '</details>',
+          '',
+          '### PR Readiness Follow-Up',
+          'None.',
+        ].join('\n'),
+        'trailing PR Readiness heading'
+      );
+      assert.equal(trailingHeadingRes.overallScore, 98);
+      assert.equal(trailingHeadingRes.itemCount, 1);
+
+      const multilineCommentRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '<!--',
+          '  note',
+          '-->',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'multiline HTML comment inside details'
+      );
+      assert.equal(multilineCommentRes.overallScore, 100);
+      assert.equal(multilineCommentRes.itemCount, 1);
+      assert.deepEqual(multilineCommentRes.itemScores, [100]);
+
+      const detailsOpenRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details open><summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'details open attribute'
+      );
+      assert.equal(detailsOpenRes.overallScore, 100);
+      assert.equal(detailsOpenRes.itemCount, 1);
+      assert.equal(detailsOpenRes.summary, 'PR Readiness Checklist');
+
+      const nestedBoldBacktickRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **`100%`** — **Tests**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'nested bold and backtick percentage'
+      );
+      assert.equal(nestedBoldBacktickRes.overallScore, 100);
+      assert.equal(nestedBoldBacktickRes.itemCount, 1);
+      assert.deepEqual(nestedBoldBacktickRes.itemScores, [100]);
+
+      const sectionBulletRes = validatePrReadinessChecklist(
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '- 5 points to note in this release:',
+          '',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Checks**: Passed.',
+          '',
+          '</details>',
+        ].join('\n'),
+        'unordered bullet inside PR Readiness section'
+      );
+      assert.equal(sectionBulletRes.overallScore, 100);
+      assert.equal(sectionBulletRes.itemCount, 1);
+
+      const makeInvalidSection = (bodyLines) =>
+        ['### PR Readiness Score: 98%', '', '<details>', '<summary>PR Readiness Checklist</summary>', '', ...bodyLines, '', '</details>'].join('\n');
+
+      for (const badText of [
+        '### 5-Pillar PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### 5 Pillar PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        makeInvalidSection(['- **95/100** — **Check**: Legacy fraction.']),
+        makeInvalidSection(['- **95 / 100** — **Check**: Legacy spaced fraction.']),
+        makeInvalidSection(['- **20/20** — **Check**: Legacy category fraction.']),
+        makeInvalidSection(['- **20 / 20** — **Check**: Legacy spaced category fraction.']),
+        makeInvalidSection(['- **100%** — **Check (20 pts)**: Legacy pts.']),
+        makeInvalidSection(['- **100%** — **Check (5 x 20)**: Legacy math.']),
+        makeInvalidSection(['- **100%** — **Pillar 1**: Legacy pillar number.']),
+        makeInvalidSection(['- **100%** — **Readiness Rubric**: Legacy rubric word.']),
+        makeInvalidSection(['- **Functionality**: 100%']),
+        makeInvalidSection(['1. Tests: 100%']),
+        makeInvalidSection([]),
+        makeInvalidSection(['- **105%** — **Bounds**: Out of range.']),
+        '### PR Readiness Score: 105%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: 100%\n\n- **100%** — **Check**: Missing details block.',
+        '### 5-Pillars PR Readiness Score: 100%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: >= 95%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        '### PR Readiness Score: ≥ 95%\n\n<details>\n<summary>Checklist</summary>\n\n- **100%** — **Check**: Ok.\n\n</details>',
+        makeInvalidSection(['<!--', '  comment only', '-->']),
+        makeInvalidSection(['- **100%**']),
+        makeInvalidSection(['- 100%']),
+        makeInvalidSection(['- [x] **100%**']),
+        makeInvalidSection(['- **100%**:']),
+        makeInvalidSection(['- **95%** — **Docs**: -5 points deduction.']),
+        makeInvalidSection(['- **95%** — **Docs**: Deduction (- 5 points).']),
+        makeInvalidSection(['- **95%** — **Docs**: Explain `-N point` delta.']),
+        makeInvalidSection(['- **100%** — **Check**: 5-Pillars framework.']),
+        makeInvalidSection(['- **100%** — **Check**: 20-point scale.']),
+        makeInvalidSection(['- **100%** — **Check**: Worth **20** pts.']),
+      ]) {
+        assert.throws(() => validatePrReadinessChecklist(badText, 'negative fixture'));
+      }
+
+      // False-positive guards for legitimate URLs, Tailwind classes, dates, percentages, and Markdown bullets
+      validateNoLegacyPrRubric(
+        [
+          '### Overview',
+          '- 5 points to note in this release:',
+          '  - 3 points on readability and accessibility.',
+          '* 2 points for rollout timing.',
+          'Review these 5 points before merging.',
+          'Score: 98% (-2% docs, -5% follow-up).',
+          'See https://github.com/capyboop/capy/pull/20 and https://github.com/capyboop/capy/pull/100',
+          'Classes bg-amber-400/20 width="100%" ~15--20% 0.5x--20x 1/20th date 2026/01/20 100% offline per_page: 100',
+        ].join('\n'),
+        'false-positive-guard.md'
+      );
+
+      for (const badLegacyText of [
+        'Deduction: -5 points for docs.',
+        '- -5 points deducted for docs.',
+        '* -5 points deducted for docs.',
+        'Penalty (- 5 points) applied.',
+        'Score adjusted by - 5 points after review.',
+        'Describe gaps using `-N point` delta syntax.',
+        'Use 5-Pillars scoring.',
+        'Maximum 20-point scale.',
+        'Worth **20** pts per category.',
+        'Award `20` points per check.',
+      ]) {
+        assert.throws(
+          () => validateNoLegacyPrRubric(badLegacyText, 'legacy-negative.md'),
+          /Forbidden legacy/
+        );
+      }
+
+      // Spec validation with requireProjectMd: false (main-branch mode)
+      const tmpMainSpecDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-readiness-main-'));
+      try {
+        fs.writeFileSync(
+          path.join(tmpMainSpecDir, 'AGENTS.md'),
+          '# AGENTS\nReport >= 95% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
+          'utf8'
+        );
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness >= 95%.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
+        const mainSpecRes = validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false });
+        assert.equal(mainSpecRes.scannedFiles.length, 4);
+      } finally {
+        fs.rmSync(tmpMainSpecDir, { recursive: true, force: true });
+      }
+    }
+
     /* capy-dev-only:start */
     const tmpStrictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-sanity-strict-'));
     try {
@@ -797,9 +1189,20 @@ async function runCodecAndEngineTests() {
         'LICENSE.md',
       ];
       const strictAllLinks = strictRootMds.map((n) => `[${n}](./${n})`).join(' ');
+      const strictAgentsDoc = `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictDevDoc = `# DEV.md\n${strictAllLinks}\nVerify PR Readiness Score (>= 95%).\n`;
       for (const name of strictRootMds) {
         if (name === 'CHANGELOG.md') continue;
-        fs.writeFileSync(path.join(tmpStrictRepo, name), `# ${name}\n${strictAllLinks}\n`, 'utf8');
+        const content =
+          name === 'AGENTS.md'
+            ? strictAgentsDoc
+            : name === 'PROJECT.md'
+              ? strictProjectDoc
+              : name === 'DEV.md'
+                ? strictDevDoc
+                : `# ${name}\n${strictAllLinks}\n`;
+        fs.writeFileSync(path.join(tmpStrictRepo, name), content, 'utf8');
       }
       const makeStrictChangelog = ({
         headings = ['### 3.0.4 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)', '### 0.1.0 - 2026-10-01'],
@@ -827,6 +1230,7 @@ async function runCodecAndEngineTests() {
         requireProjectMd: true,
         enforceChannelOrder: true,
         enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
       });
       assert.equal(strictRes.version, '3.0.4');
       assert.equal(strictRes.markdownFilesChecked, 13);
@@ -844,6 +1248,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /README\.md must link \.\/PROJECT\.md/
       );
@@ -862,6 +1267,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /PROJECT\.md must link \.\/TESTING\.md/
       );
@@ -879,6 +1285,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /PROJECT\.md must link \.\/TESTING\.md/
       );
@@ -886,7 +1293,7 @@ async function runCodecAndEngineTests() {
       // 4. Legacy Epic issue ref fails when enforceEpicNaming: true
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'PROJECT.md'),
-        `# PROJECT\n${strictAllLinks}\nSee #` + '477\n',
+        `${strictProjectDoc}See #` + '477\n',
         'utf8'
       );
       assert.throws(
@@ -896,10 +1303,11 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /EPIC-N/
       );
-      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), `# PROJECT\n${strictAllLinks}\n`, 'utf8');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
 
       // 5. Bare #490 bullet fails clickable PR link check
       fs.writeFileSync(
@@ -914,6 +1322,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /Invalid CHANGELOG bullet suffix/
       );
@@ -938,6 +1347,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /Alpha heading must appear first/
       );
@@ -950,11 +1360,139 @@ async function runCodecAndEngineTests() {
         requireProjectMd: true,
         enforceChannelOrder: true,
         enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
       });
       assert.equal(strictCrlfRes.version, '3.0.4');
       fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
 
-      // 7. Missing PROJECT.md fails requireProjectMd: true
+      // 7. Legacy PR rubric tokens fail across governance docs and .github workflows
+      for (const [relTarget, baseDoc, badSnippet] of [
+        ['PROJECT.md', strictProjectDoc, 'Use 5-Pillar scoring.\n'],
+        ['AGENTS.md', strictAgentsDoc, 'Score 95 / 100.\n'],
+        ['DEV.md', strictDevDoc, 'Check 20/20 items.\n'],
+        ['TESTING.md', `# TESTING.md\n${strictAllLinks}\n`, 'Award 20 pts per category.\n'],
+        ['README.md', `# README.md\n${strictAllLinks}\n`, 'See the PR Rubric.\n'],
+        ['PROJECT.md', strictProjectDoc, 'Use 5-Pillars scoring.\n'],
+        ['DEV.md', strictDevDoc, 'Use a 20-point scale.\n'],
+        ['TESTING.md', `# TESTING.md\n${strictAllLinks}\n`, 'Worth **20** pts per item.\n'],
+        ['README.md', `# README.md\n${strictAllLinks}\n`, 'Apply (- 5 points) penalty.\n'],
+        ['AGENTS.md', strictAgentsDoc, 'Avoid `-N point` phrasing.\n'],
+      ]) {
+        fs.writeFileSync(path.join(tmpStrictRepo, relTarget), `${baseDoc}${badSnippet}`, 'utf8');
+        assert.throws(
+          () =>
+            runSanityChecks({
+              repoRoot: tmpStrictRepo,
+              requireProjectMd: true,
+              enforceChannelOrder: true,
+              enforceEpicNaming: true,
+              enforcePrReadinessSpec: true,
+            }),
+          /Forbidden legacy/
+        );
+        fs.writeFileSync(path.join(tmpStrictRepo, relTarget), baseDoc, 'utf8');
+      }
+      fs.mkdirSync(path.join(tmpStrictRepo, '.github/workflows'), { recursive: true });
+      for (const badWorkflow of [
+        'name: CI\n# Check 5-Pillar 95/100\n',
+        'name: CI\n# Check 5-Pillars (**20** pts)\n',
+      ]) {
+        fs.writeFileSync(path.join(tmpStrictRepo, '.github/workflows/ci.yml'), badWorkflow, 'utf8');
+        assert.throws(
+          () =>
+            runSanityChecks({
+              repoRoot: tmpStrictRepo,
+              requireProjectMd: true,
+              enforceChannelOrder: true,
+              enforceEpicNaming: true,
+              enforcePrReadinessSpec: true,
+            }),
+          /Forbidden legacy/
+        );
+      }
+      fs.rmSync(path.join(tmpStrictRepo, '.github'), { recursive: true, force: true });
+
+      // 8. Missing flexible-count or %-start spec fails when enforcePrReadinessSpec: true
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'PROJECT.md'),
+        `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist >= 95% inside <details> with % at the start of each line.\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /PROJECT\.md must allow variable/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
+
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'AGENTS.md'),
+        `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with as many items as needed.\n`,
+        'utf8'
+      );
+      assert.throws(
+        () =>
+          runSanityChecks({
+            repoRoot: tmpStrictRepo,
+            requireProjectMd: true,
+            enforceChannelOrder: true,
+            enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
+          }),
+        /AGENTS\.md must specify putting % at the start/
+      );
+      fs.writeFileSync(path.join(tmpStrictRepo, 'AGENTS.md'), strictAgentsDoc, 'utf8');
+
+      // 9. CHANGELOG /pull/20 and /pull/100 URLs plus README width="100%" pass runSanityChecks
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'README.md'),
+        `# README.md\n${strictAllLinks}\n<img width="100%" alt="demo" />\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        strictChangelogPath,
+        makeStrictChangelog({
+          firstBulletSuffix: '[#100](https://github.com/shthed/capy/pull/100)',
+        }).replace(
+          'Historical change 20 [#20](https://github.com/shthed/capy/pull/20)',
+          'Rebuild interface [#20](https://github.com/shthed/capy/pull/20)'
+        ),
+        'utf8'
+      );
+      const urlGuardRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(urlGuardRes.version, '3.0.4');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'README.md'), `# README.md\n${strictAllLinks}\n`, 'utf8');
+      fs.writeFileSync(strictChangelogPath, makeStrictChangelog(), 'utf8');
+
+      // 9b. Unordered Markdown bullet "- 5 points to watch:" in a governance doc passes runSanityChecks
+      fs.writeFileSync(
+        path.join(tmpStrictRepo, 'DEV.md'),
+        `${strictDevDoc}\n### Notes\n- 5 points to watch:\n  - 3 points on layout stability.\n`,
+        'utf8'
+      );
+      const bulletGuardRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(bulletGuardRes.version, '3.0.4');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'DEV.md'), strictDevDoc, 'utf8');
+
+      // 10. Missing PROJECT.md fails requireProjectMd: true
       fs.unlinkSync(path.join(tmpStrictRepo, 'PROJECT.md'));
       assert.throws(
         () =>
@@ -963,6 +1501,7 @@ async function runCodecAndEngineTests() {
             requireProjectMd: true,
             enforceChannelOrder: true,
             enforceEpicNaming: true,
+            enforcePrReadinessSpec: true,
           }),
         /PROJECT\.md must exist/
       );
