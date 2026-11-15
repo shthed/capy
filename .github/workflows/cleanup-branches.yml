@@ -150,6 +150,7 @@ jobs:
         with:
           path: gh-pages
           name: github-pages-${{ github.run_attempt }}
+          include-hidden-files: true
 
       - name: Wait for Pages artifact index propagation
         if: steps.pages_check.outputs.can_cleanup_pages == 'true' && steps.sync_pages.outputs.has_changes == 'true'

@@ -1,4 +1,8 @@
-### 3.0.13 - 2026-11-15 (Production, Beta)
+### 3.0.14 - 2026-11-15 (Beta)
+
+- Fail closed on non-string PR bodies, re-evaluate review gate on human body edits and disarm active auto-merge when non-passing, include hidden .well-known/assetlinks.json dotfiles across GitHub Pages uploads and cleanup sweeps, harden clean-room mirror sync auth, ls-remote checks, SIGPIPE-safe log scanning, and tag resets, expand workflow unit tests, and sync CI docs [#534](https://github.com/shthed/capy/pull/534)
+
+### 3.0.13 - 2026-11-15 (Production)
 
 - Preserve active puzzle progress across debounced (`lastSavedViewportRef`) and beforeunload viewport saves, harden async puzzle transition and blob URL cleanup, remove idle polling from `TargetSpotlightOverlay`, speed up CI via async Android/E2E/Pages jobs with headless `--unit` blocking checks and hidden-files artifact preservation, harden PR review gate Probe 9b clock-skew anchoring and strict `100%` AI auto-merge, tighten `AGENTS.md` `100%` sanity check and `stripHtmlComments`, expand Probe 2g/unit/workflow tests, and sync `PROJECT.md` and `TESTING.md` [#530](https://github.com/shthed/capy/pull/530)
 
