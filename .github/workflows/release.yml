@@ -96,24 +96,18 @@ jobs:
           CAPY_KEY_PASSWORD: ${{ secrets.CAPY_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "${CAPY_KEYSTORE_BASE64}" ]; then
-            KEYSTORE_FILE="${RUNNER_TEMP}/capy-release.keystore"
-            printf '%s' "${CAPY_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_FILE}"
-            export CAPY_KEYSTORE_PATH="${KEYSTORE_FILE}"
-            ./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease --build-cache
-            cp app/build/outputs/apk/release/app-release.apk "release-assets/capy-${TAG_NAME}.apk"
-            cp app/build/outputs/bundle/release/app-release.aab "release-assets/capy-${TAG_NAME}.aab"
-            rm -f "${KEYSTORE_FILE}"
-          else
-            ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
-            cp app/build/outputs/apk/debug/app-debug.apk "release-assets/capy-${TAG_NAME}.apk"
-            if ./gradlew app:bundleRelease --build-cache && [ -f app/build/outputs/bundle/release/app-release.aab ]; then
-              cp app/build/outputs/bundle/release/app-release.aab "release-assets/capy-${TAG_NAME}.aab"
-            else
-              ./gradlew app:bundleDebug --build-cache
-              cp app/build/outputs/bundle/debug/app-debug.aab "release-assets/capy-${TAG_NAME}.aab"
-            fi
+          if [ -z "${CAPY_KEYSTORE_BASE64}" ] || [ -z "${CAPY_KEYSTORE_PASSWORD}" ] || [ -z "${CAPY_KEY_ALIAS}" ] || [ -z "${CAPY_KEY_PASSWORD}" ]; then
+            echo "Missing required release signing secrets (CAPY_KEYSTORE_BASE64, CAPY_KEYSTORE_PASSWORD, CAPY_KEY_ALIAS, CAPY_KEY_PASSWORD)." >&2
+            exit 1
           fi
+          KEYSTORE_FILE="${RUNNER_TEMP}/capy-release.keystore"
+          trap 'rm -f "${KEYSTORE_FILE}"' EXIT
+          printf '%s' "${CAPY_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_FILE}"
+          export CAPY_KEYSTORE_PATH="${KEYSTORE_FILE}"
+          ./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleRelease app:bundleRelease --build-cache
+          cp app/build/outputs/apk/release/app-release.apk "release-assets/capy-${TAG_NAME}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "release-assets/capy-${TAG_NAME}.aab"
+          rm -f "${KEYSTORE_FILE}"
           if [ "${IS_PRERELEASE}" = "false" ]; then
             cp "release-assets/capy-${TAG_NAME}.apk" "release-assets/capy.apk"
           fi

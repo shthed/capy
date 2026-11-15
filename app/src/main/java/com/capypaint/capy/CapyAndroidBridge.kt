@@ -244,9 +244,8 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun shareImage(title: String, dataUrl: String) {
-        val commaIndex = dataUrl.indexOf(',')
-        val base64Part = if (commaIndex >= 0) dataUrl.substring(commaIndex + 1) else dataUrl
-        shareFile(title, "capy_shared_artwork.png", "image/png", base64Part)
+        val spec = resolveShareImageSpec(dataUrl)
+        shareFile(title, spec.fileName, spec.mimeType, spec.base64Payload)
     }
 
     @JavascriptInterface
@@ -256,8 +255,7 @@ class CapyAndroidBridge(
             val base64Part = if (commaIndex >= 0) base64Data.substring(commaIndex + 1) else base64Data
             val bytes = Base64.decode(base64Part, Base64.DEFAULT)
 
-            val safeName = sanitizeFileName(fileName)
-            val shareFile = File(context.cacheDir, safeName)
+            val shareFile = prepareSharedExportFile(context.cacheDir, fileName)
             shareFile.writeBytes(bytes)
 
             val uri = FileProvider.getUriForFile(
@@ -277,9 +275,55 @@ class CapyAndroidBridge(
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
-            Log.i(TAG, "Dispatched share chooser for '$safeName' ($resolvedMime, ${bytes.size} bytes)")
+            Log.i(TAG, "Dispatched share chooser for '${shareFile.name}' ($resolvedMime, ${bytes.size} bytes)")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to share file '$fileName'", e)
+        }
+    }
+
+    enum class WebViewNavigationAction {
+        ALLOW_INTERNAL,
+        OPEN_EXTERNAL,
+        BLOCK,
+    }
+
+    data class ShareImageSpec(
+        val fileName: String,
+        val mimeType: String,
+        val base64Payload: String,
+    )
+
+    data class HapticSpec(
+        val normalizedType: String,
+        val viewConstant: Int?,
+        val predefinedEffectId: Int?,
+        val oneShotDurationMs: Long?,
+        val waveformTimings: LongArray?,
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+            other as HapticSpec
+            if (normalizedType != other.normalizedType) return false
+            if (viewConstant != other.viewConstant) return false
+            if (predefinedEffectId != other.predefinedEffectId) return false
+            if (oneShotDurationMs != other.oneShotDurationMs) return false
+            if (waveformTimings != null) {
+                if (other.waveformTimings == null) return false
+                if (!waveformTimings.contentEquals(other.waveformTimings)) return false
+            } else if (other.waveformTimings != null) {
+                return false
+            }
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = normalizedType.hashCode()
+            result = 31 * result + (viewConstant ?: 0)
+            result = 31 * result + (predefinedEffectId ?: 0)
+            result = 31 * result + (oneShotDurationMs?.hashCode() ?: 0)
+            result = 31 * result + (waveformTimings?.contentHashCode() ?: 0)
+            return result
         }
     }
 
@@ -287,10 +331,13 @@ class CapyAndroidBridge(
         const val TAG = "CapyBridge"
         const val BACKUP_FOLDER_NAME = "capy_saves"
         const val CLOUD_FOLDER_NAME = "capy_cloud"
+        const val SHARE_FOLDER_NAME = "shared"
+        const val SHARED_FILE_MAX_AGE_MS = 24L * 60L * 60L * 1000L
         const val PLAY_GAMES_PREFS_NAME = "capy_play_games_prefs"
         const val KEY_PLAY_GAMES_PLAYER_ID = "player_id"
         const val KEY_PLAY_GAMES_DISPLAY_NAME = "display_name"
         const val ALLOWED_DEEP_LINK_HOST = "capypaint.com"
+        const val APP_ASSETS_HOST = "appassets.androidplatform.net"
         val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
         val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io")
 
@@ -597,27 +644,113 @@ class CapyAndroidBridge(
             }
         }
 
+        fun resolveShareImageSpec(dataUrl: String): ShareImageSpec {
+            val trimmed = dataUrl.trim()
+            val commaIndex = trimmed.indexOf(',')
+            if (commaIndex < 0) {
+                return ShareImageSpec(
+                    fileName = "capy_shared_artwork.png",
+                    mimeType = "image/png",
+                    base64Payload = trimmed,
+                )
+            }
+            val header = trimmed.substring(0, commaIndex).lowercase()
+            val payload = trimmed.substring(commaIndex + 1)
+            val mimeMatch = Regex("^data:(image/[a-z0-9.+-]+)").find(header)
+            val rawMime = mimeMatch?.groupValues?.get(1) ?: "image/png"
+            val (normalizedMime, ext) = when (rawMime) {
+                "image/jpeg", "image/jpg" -> "image/jpeg" to "jpg"
+                "image/webp" -> "image/webp" to "webp"
+                "image/gif" -> "image/gif" to "gif"
+                "image/svg+xml" -> "image/svg+xml" to "svg"
+                else -> "image/png" to "png"
+            }
+            return ShareImageSpec(
+                fileName = "capy_shared_artwork.$ext",
+                mimeType = normalizedMime,
+                base64Payload = payload,
+            )
+        }
+
+        fun prepareSharedExportFile(
+            cacheDir: File,
+            fileName: String,
+            nowMs: Long = System.currentTimeMillis(),
+            maxAgeMs: Long = SHARED_FILE_MAX_AGE_MS,
+        ): File {
+            val sharedDir = File(cacheDir, SHARE_FOLDER_NAME)
+            if (!sharedDir.exists()) {
+                sharedDir.mkdirs()
+            } else {
+                sharedDir.listFiles()?.forEach { existing ->
+                    if (existing.isFile && (nowMs - existing.lastModified()) > maxAgeMs) {
+                        existing.delete()
+                    }
+                }
+            }
+            val safeName = sanitizeFileName(fileName)
+            return File(sharedDir, safeName)
+        }
+
+        fun classifyWebViewNavigation(rawUrl: String?): WebViewNavigationAction {
+            if (rawUrl.isNullOrBlank()) return WebViewNavigationAction.BLOCK
+            val trimmed = rawUrl.trim()
+            if (trimmed.equals("about:blank", ignoreCase = true)) {
+                return WebViewNavigationAction.ALLOW_INTERNAL
+            }
+            if (trimmed.any { it.isISOControl() }) return WebViewNavigationAction.BLOCK
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase() ?: return WebViewNavigationAction.BLOCK
+                val host = uri.host?.lowercase()
+                when {
+                    scheme == "https" && host == APP_ASSETS_HOST -> WebViewNavigationAction.ALLOW_INTERNAL
+                    (scheme == "https" || scheme == "http") && !host.isNullOrBlank() -> WebViewNavigationAction.OPEN_EXTERNAL
+                    else -> WebViewNavigationAction.BLOCK
+                }
+            } catch (_: Exception) {
+                WebViewNavigationAction.BLOCK
+            }
+        }
+
+        fun escapeJsonString(value: String, replaceNewlinesWithSpace: Boolean = false): String {
+            val sb = StringBuilder(value.length + 16)
+            for (ch in value) {
+                when {
+                    ch == '\\' -> sb.append("\\\\")
+                    ch == '"' -> sb.append("\\\"")
+                    ch == '\b' -> sb.append("\\b")
+                    ch == '\u000C' -> sb.append("\\f")
+                    ch == '\n' || ch == '\r' -> {
+                        if (replaceNewlinesWithSpace) {
+                            sb.append(' ')
+                        } else if (ch == '\n') {
+                            sb.append("\\n")
+                        } else {
+                            sb.append("\\r")
+                        }
+                    }
+                    ch == '\t' -> sb.append("\\t")
+                    ch == '<' -> sb.append("\\u003c")
+                    ch == '>' -> sb.append("\\u003e")
+                    ch < ' ' || ch == '\u2028' || ch == '\u2029' -> {
+                        sb.append("\\u").append(ch.code.toString(16).padStart(4, '0'))
+                    }
+                    else -> sb.append(ch)
+                }
+            }
+            return sb.toString()
+        }
+
         fun formatSharedImageJson(title: String, dataUrl: String): String {
-            val escapedTitle = title
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", " ")
-                .replace("\r", " ")
-            val escapedUrl = dataUrl
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
+            val escapedTitle = escapeJsonString(title, replaceNewlinesWithSpace = true)
+            val escapedUrl = escapeJsonString(dataUrl)
             return """{"title":"$escapedTitle","dataUrl":"$escapedUrl"}"""
         }
 
         fun escapeJsString(value: String): String {
-            return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("'", "\\'")
-                .replace("\n", " ")
-                .replace("\r", " ")
-                .replace("<", "\\u003c")
-                .replace(">", "\\u003e")
+            val escaped = escapeJsonString(value, replaceNewlinesWithSpace = true)
+            return escaped.replace("'", "\\'")
         }
 
         /**
@@ -647,8 +780,8 @@ class CapyAndroidBridge(
         }
 
         fun formatPlayGamesIdentityJson(playerId: String, displayName: String): String {
-            val safeId = escapeJsString(playerId.trim())
-            val safeName = escapeJsString(displayName.trim())
+            val safeId = escapeJsonString(playerId.trim(), replaceNewlinesWithSpace = true)
+            val safeName = escapeJsonString(displayName.trim(), replaceNewlinesWithSpace = true)
             return """{"playerId":"$safeId","displayName":"$safeName"}"""
         }
 
@@ -691,14 +824,6 @@ class CapyAndroidBridge(
             val targetH = maxOf(1, Math.round(srcHeight * scale).toInt())
             return Pair(targetW, targetH)
         }
-
-        data class HapticSpec(
-            val normalizedType: String,
-            val viewConstant: Int?,
-            val predefinedEffectId: Int?,
-            val oneShotDurationMs: Long?,
-            val waveformTimings: LongArray?,
-        )
 
         fun resolveHapticSpec(type: String): HapticSpec {
             return when (type.trim().lowercase()) {

@@ -73,8 +73,24 @@ class NativeBridgeService {
     | null = null;
   private playGamesErrorHandler: ((reason: string) => void) | null = null;
   private cloudSnapshotHandler: ((slotKey: string, payloadJson: string) => void) | null = null;
+  private pendingSharedImages: Array<{ title: string; dataUrl: string }> = [];
+  private pendingDeepLinks: string[] = [];
+  private pendingPlayGamesProfiles: Array<{ playerId: string; displayName: string }> = [];
+  private pendingPlayGamesErrors: string[] = [];
+  private pendingCloudSnapshots: Array<{ slotKey: string; payloadJson: string }> = [];
+
+  private static pushBounded<T>(queue: T[], item: T, maxItems = 32): void {
+    if (queue.length >= maxItems) {
+      queue.shift();
+    }
+    queue.push(item);
+  }
 
   constructor() {
+    this.attachWindowCallbacks();
+  }
+
+  attachWindowCallbacks(): void {
     if (typeof window !== 'undefined') {
       this.applySafeAreaInsets();
 
@@ -92,14 +108,24 @@ class NativeBridgeService {
       };
 
       window.__capyReceiveSharedImage = (title: string, dataUrl: string) => {
-        if (this.sharedImageHandler && dataUrl) {
-          this.sharedImageHandler(title || 'Shared Photo', dataUrl);
+        if (!dataUrl) return;
+        const resolvedTitle = title || 'Shared Photo';
+        if (this.sharedImageHandler) {
+          this.sharedImageHandler(resolvedTitle, dataUrl);
+        } else {
+          NativeBridgeService.pushBounded(this.pendingSharedImages, {
+            title: resolvedTitle,
+            dataUrl,
+          });
         }
       };
 
       window.__capyReceiveDeepLink = (url: string) => {
-        if (this.deepLinkHandler && url) {
+        if (!url) return;
+        if (this.deepLinkHandler) {
           this.deepLinkHandler(url);
+        } else {
+          NativeBridgeService.pushBounded(this.pendingDeepLinks, url);
         }
       };
 
@@ -109,16 +135,16 @@ class NativeBridgeService {
             typeof raw === 'string'
               ? (JSON.parse(raw) as { playerId?: string; displayName?: string })
               : raw;
-          if (
-            parsed &&
-            parsed.playerId &&
-            parsed.displayName &&
-            this.playGamesProfileHandler
-          ) {
-            this.playGamesProfileHandler({
+          if (parsed && parsed.playerId && parsed.displayName) {
+            const profile = {
               playerId: parsed.playerId.trim(),
               displayName: parsed.displayName.trim(),
-            });
+            };
+            if (this.playGamesProfileHandler) {
+              this.playGamesProfileHandler(profile);
+            } else {
+              NativeBridgeService.pushBounded(this.pendingPlayGamesProfiles, profile);
+            }
           }
         } catch {
           // Ignore malformed payload
@@ -126,14 +152,20 @@ class NativeBridgeService {
       };
 
       window.__capyReceivePlayGamesError = (reason: string) => {
+        const cleanReason = (reason || 'PLAY_GAMES_UNAVAILABLE').trim();
         if (this.playGamesErrorHandler) {
-          this.playGamesErrorHandler((reason || 'PLAY_GAMES_UNAVAILABLE').trim());
+          this.playGamesErrorHandler(cleanReason);
+        } else {
+          NativeBridgeService.pushBounded(this.pendingPlayGamesErrors, cleanReason);
         }
       };
 
       window.__capyReceiveCloudSnapshot = (slotKey: string, payloadJson: string) => {
-        if (slotKey && payloadJson && this.cloudSnapshotHandler) {
+        if (!slotKey || !payloadJson) return;
+        if (this.cloudSnapshotHandler) {
           this.cloudSnapshotHandler(slotKey, payloadJson);
+        } else {
+          NativeBridgeService.pushBounded(this.pendingCloudSnapshots, { slotKey, payloadJson });
         }
       };
     }
@@ -279,6 +311,12 @@ class NativeBridgeService {
 
   onSharedImage(handler: (title: string, dataUrl: string) => void): () => void {
     this.sharedImageHandler = handler;
+    if (this.pendingSharedImages.length > 0) {
+      const queued = this.pendingSharedImages.splice(0, this.pendingSharedImages.length);
+      for (const item of queued) {
+        handler(item.title, item.dataUrl);
+      }
+    }
     try {
       if (window.CapyAndroid?.consumePendingSharedImage) {
         const raw = window.CapyAndroid.consumePendingSharedImage();
@@ -377,6 +415,12 @@ class NativeBridgeService {
 
   onDeepLink(handler: (url: string) => void): () => void {
     this.deepLinkHandler = handler;
+    if (this.pendingDeepLinks.length > 0) {
+      const queued = this.pendingDeepLinks.splice(0, this.pendingDeepLinks.length);
+      for (const url of queued) {
+        handler(url);
+      }
+    }
     try {
       if (window.CapyAndroid?.consumePendingDeepLink) {
         const pendingUrl = window.CapyAndroid.consumePendingDeepLink();
@@ -398,6 +442,15 @@ class NativeBridgeService {
     handler: (profile: { playerId: string; displayName: string }) => void
   ): () => void {
     this.playGamesProfileHandler = handler;
+    if (this.pendingPlayGamesProfiles.length > 0) {
+      const queued = this.pendingPlayGamesProfiles.splice(
+        0,
+        this.pendingPlayGamesProfiles.length
+      );
+      for (const profile of queued) {
+        handler(profile);
+      }
+    }
     return () => {
       if (this.playGamesProfileHandler === handler) {
         this.playGamesProfileHandler = null;
@@ -407,12 +460,11 @@ class NativeBridgeService {
 
   onPlayGamesError(handler: (reason: string) => void): () => void {
     this.playGamesErrorHandler = handler;
-    if (typeof window !== 'undefined' && !window.__capyReceivePlayGamesError) {
-      window.__capyReceivePlayGamesError = (reason: string) => {
-        if (this.playGamesErrorHandler) {
-          this.playGamesErrorHandler((reason || 'PLAY_GAMES_UNAVAILABLE').trim());
-        }
-      };
+    if (this.pendingPlayGamesErrors.length > 0) {
+      const queued = this.pendingPlayGamesErrors.splice(0, this.pendingPlayGamesErrors.length);
+      for (const reason of queued) {
+        handler(reason);
+      }
     }
     return () => {
       if (this.playGamesErrorHandler === handler) {
@@ -435,6 +487,12 @@ class NativeBridgeService {
 
   onCloudSnapshot(handler: (slotKey: string, payloadJson: string) => void): () => void {
     this.cloudSnapshotHandler = handler;
+    if (this.pendingCloudSnapshots.length > 0) {
+      const queued = this.pendingCloudSnapshots.splice(0, this.pendingCloudSnapshots.length);
+      for (const snap of queued) {
+        handler(snap.slotKey, snap.payloadJson);
+      }
+    }
     return () => {
       if (this.cloudSnapshotHandler === handler) {
         this.cloudSnapshotHandler = null;
