@@ -3174,13 +3174,24 @@ async function runCodecAndEngineTests() {
     };
 
     const prReviewGateSource = extractWorkflowScript('.github/workflows/pr-review-gate.yml');
-    const gateDualPassDesc = 'Auto-approved: strict AI review (100%) verified; no holds';
-    const gateBetaPassDesc = 'Beta gate passed: AI review (100%) verified; no holds';
-    const gateMainAwaitingAiDesc = 'Awaiting strict AI review (100% + review:ai-approved) on HEAD';
-    const gateBetaAwaitingAiDesc = 'Beta gate: awaiting strict AI review (100% + review:ai-approved) on HEAD';
-    const gateDraftDesc = 'Draft PR: complete work, pass strict 100% AI review, and mark ready';
+    const gateDualPassDesc =
+      'Main gate passed (Owner Approve verified): AI review (100%) + Owner Approve';
+    const gateBetaPassDesc =
+      'Beta gate passed (no Owner approval needed): AI review (100%) verified';
+    const gateMainAwaitingAiDesc =
+      'Main (Owner Approve required): Blocked by AI review';
+    const gateMainAwaitingAiAndOwnerDesc =
+      'Main (Owner Approve required): Blocked by Owner Approve, AI review';
+    const gateMainAwaitingOwnerDesc =
+      'Main (Owner Approve required): Blocked by Owner Approve';
+    const gateBetaAwaitingAiDesc =
+      'Beta (no Owner approval needed): Blocked by AI review';
+    const gateDraftDesc =
+      'Main (Owner Approve required): Blocked by Draft PR, AI review';
     const gateStrictNotMetDesc =
-      'Strict 100% AI gate not met (requires 100% score, zero unchecked tasks, valid body)';
+      'Beta (no Owner approval needed): Blocked by PR readiness/100% score';
+    const gateMainStrictNotMetNoOwnerDesc =
+      'Main (Owner Approve required): Blocked by Owner Approve, PR readiness/100% score';
 
     const runReviewGateScript = new AsyncFunction(
       'context',
@@ -3345,6 +3356,14 @@ async function runCodecAndEngineTests() {
           issues: {
             listEvents: async () => ({ data: events }),
             listComments: async () => ({ data: allComments }),
+            createComment: async (payload) => {
+              calls.createComment.push(payload);
+              return { data: { id: 8001, body: payload.body } };
+            },
+            updateComment: async (payload) => {
+              calls.updateComment.push(payload);
+              return { data: { id: payload.comment_id, body: payload.body } };
+            },
             removeLabel: async (payload) => {
               calls.removeLabel.push(payload);
               return { data: {} };
@@ -3407,7 +3426,7 @@ async function runCodecAndEngineTests() {
       action: 'labeled',
     });
     assert.equal(gateBotLabelOnlyRes.status.state, 'pending');
-    assert.equal(gateBotLabelOnlyRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateBotLabelOnlyRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateBotLabelOnlyRes.calls.createReview.length, 0);
     assert.equal(gateBotLabelOnlyRes.calls.graphql.length, 0);
 
@@ -3430,7 +3449,7 @@ async function runCodecAndEngineTests() {
       action: 'created',
     });
     assert.equal(gateBotCommentOnlyRes.status.state, 'pending');
-    assert.equal(gateBotCommentOnlyRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateBotCommentOnlyRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateBotCommentOnlyRes.calls.createReview.length, 0);
 
     const gateBotLgtmReviewOnlyRes = await runReviewGateCase({
@@ -3451,7 +3470,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLgtmReviewOnlyRes.status.state, 'pending');
-    assert.equal(gateBotLgtmReviewOnlyRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateBotLgtmReviewOnlyRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateBotLgtmReviewOnlyRes.calls.createReview.length, 0);
 
     // (d) Stale APPROVED (commit_id !== headSha) or pre-force-push -> pending without AI AND cannot clear active HOLD
@@ -3473,7 +3492,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotStaleShaRes.status.state, 'pending');
-    assert.equal(gateBotStaleShaRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateBotStaleShaRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateBotStaleShaRes.calls.createReview.length, 0);
 
     const gateBotStaleShaCannotClearHoldRes = await runReviewGateCase({
@@ -3577,8 +3596,10 @@ async function runCodecAndEngineTests() {
     });
     assert.equal(gateBotChangesReqRes.status.state, 'failure');
     assert.equal(
-      gateBotChangesReqRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
+      gateBotChangesReqRes.status.description.startsWith(
+        'Main (Owner Approve required): Blocked by Changes requested / hold'
+      ),
+      true
     );
     assert.equal(gateBotChangesReqRes.calls.createReview.length, 0);
     assert.equal(gateBotChangesReqRes.calls.graphql.length, 1);
@@ -3605,7 +3626,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualLabelRes.status.state, 'pending');
-    assert.equal(gateManualLabelRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateManualLabelRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateManualLabelRes.calls.createReview.length, 0);
 
     const gateManualCommentRes = await runReviewGateCase({
@@ -3625,7 +3646,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualCommentRes.status.state, 'pending');
-    assert.equal(gateManualCommentRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateManualCommentRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateManualCommentRes.calls.createReview.length, 0);
 
     const gateManualLgtmCommentRes = await runReviewGateCase({
@@ -3645,7 +3666,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualLgtmCommentRes.status.state, 'pending');
-    assert.equal(gateManualLgtmCommentRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateManualLgtmCommentRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateManualLgtmCommentRes.calls.createReview.length, 0);
 
     const gateManualMainNativeNoBotReviewRes = await runReviewGateCase({
@@ -3715,10 +3736,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotChangesReqApprovedPrefixRes.status.state, 'failure');
-    assert.equal(
-      gateBotChangesReqApprovedPrefixRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotChangesReqApprovedPrefixRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotChangesReqApprovedPrefixRes.calls.createReview.length, 0);
 
     // (i) Bot PR + CHANGES_REQUESTED recovered by newer native APPROVED on headSha under commitMs skew -> success
@@ -3768,7 +3786,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotDismissedRes.status.state, 'pending');
-    assert.equal(gateBotDismissedRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateBotDismissedRes.status.description, gateMainAwaitingAiAndOwnerDesc);
     assert.equal(gateBotDismissedRes.calls.createReview.length, 0);
 
     const gateBotDismissedCannotClearHoldRes = await runReviewGateCase({
@@ -3823,10 +3841,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLegacyAfterRejectCommentRes.status.state, 'failure');
-    assert.equal(
-      gateBotLegacyAfterRejectCommentRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotLegacyAfterRejectCommentRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotLegacyAfterRejectCommentRes.calls.createReview.length, 0);
 
     const gateBotChangesReqLegacyLgtmAndLabelRes = await runReviewGateCase({
@@ -3864,10 +3879,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.state, 'failure');
-    assert.equal(
-      gateBotChangesReqLegacyLgtmAndLabelRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.calls.createReview.length, 0);
 
     const gateBotLegacyAfterPriorNativeAndRejectRes = await runReviewGateCase({
@@ -3913,10 +3925,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.state, 'failure');
-    assert.equal(
-      gateBotLegacyAfterPriorNativeAndRejectRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.calls.createReview.length, 0);
 
     // (l) Bug 2 regression: +120s commitMs skew catches post-approval HOLD comment, reverse-ordered COMMENTED DO NOT MERGE review (non-head & head), and DISMISSED+HOLD; stale pre-push HOLD stays ignored
@@ -3947,10 +3956,7 @@ async function runCodecAndEngineTests() {
       action: 'created',
     });
     assert.equal(gateBotSkewHoldCommentRes.status.state, 'failure');
-    assert.equal(
-      gateBotSkewHoldCommentRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotSkewHoldCommentRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewHoldCommentRes.calls.createReview.length, 0);
 
     const gateBotSkewNonHeadCommentedReviewRes = await runReviewGateCase({
@@ -3977,10 +3983,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.state, 'failure');
-    assert.equal(
-      gateBotSkewNonHeadCommentedReviewRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewNonHeadCommentedReviewRes.calls.createReview.length, 0);
 
     const gateBotSkewHeadCommentedReviewRes = await runReviewGateCase({
@@ -4007,10 +4010,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewHeadCommentedReviewRes.status.state, 'failure');
-    assert.equal(
-      gateBotSkewHeadCommentedReviewRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateBotSkewHeadCommentedReviewRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewHeadCommentedReviewRes.calls.createReview.length, 0);
 
     const gateBotSkewDismissedHoldRes = await runReviewGateCase({
@@ -4112,10 +4112,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateSameSecRejectWinsByIdRes.status.state, 'failure');
-    assert.equal(
-      gateSameSecRejectWinsByIdRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateSameSecRejectWinsByIdRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
     assert.equal(gateSameSecRejectWinsByIdRes.calls.createReview.length, 0);
 
     const gateSameSecApproveSupersedesByIdRes = await runReviewGateCase({
@@ -4478,7 +4475,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateDependabotMainPendingRes.status.state, 'pending');
-    assert.equal(gateDependabotMainPendingRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateDependabotMainPendingRes.status.description, gateMainAwaitingAiAndOwnerDesc);
 
     const gateDependabotMainStrictPassRes = await runReviewGateCase({
       prAuthor: 'dependabot[bot]',
@@ -4488,6 +4485,16 @@ async function runCodecAndEngineTests() {
       body: 'Dependabot bump details without unchecked checkboxes.',
       eventName: 'issue_comment',
       action: 'created',
+      reviews: [
+        {
+          id: 306,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+      ],
     });
     assert.equal(gateDependabotMainStrictPassRes.status.state, 'success');
     assert.equal(gateDependabotMainStrictPassRes.status.description, gateDualPassDesc);
@@ -4504,7 +4511,7 @@ async function runCodecAndEngineTests() {
       action: 'created',
     });
     assert.equal(gateDependabotMainUncheckedTaskFailRes.status.state, 'pending');
-    assert.equal(gateDependabotMainUncheckedTaskFailRes.status.description, gateStrictNotMetDesc);
+    assert.equal(gateDependabotMainUncheckedTaskFailRes.status.description, gateMainStrictNotMetNoOwnerDesc);
     assert.deepEqual(
       gateDependabotMainUncheckedTaskFailRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved']
@@ -4522,7 +4529,19 @@ async function runCodecAndEngineTests() {
     assert.equal(gateSyncBetaPassRes.calls.createReview.length, 0);
     assert.equal(gateSyncBetaPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
-    // Retargeting an AI-approved PR from beta to main via pull_request edited preserves auto-approval and upgrades mergeMethod SQUASH -> MERGE
+    // Retargeting an AI-approved PR from beta to main via pull_request edited requires Owner Approve, and with Owner Approve upgrades SQUASH -> MERGE
+    const gateRetargetBetaToMainAwaitingOwnerRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'main',
+      isDraft: false,
+      headSha: gateHeadSha,
+      autoMerge: { merge_method: 'SQUASH' },
+      eventName: 'pull_request',
+      action: 'edited',
+    });
+    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.state, 'pending');
+    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.description, gateMainAwaitingOwnerDesc);
+
     const gateRetargetBetaToMainRes = await runReviewGateCase({
       prAuthor: 'shthed',
       baseRef: 'main',
@@ -4531,6 +4550,16 @@ async function runCodecAndEngineTests() {
       autoMerge: { merge_method: 'SQUASH' },
       eventName: 'pull_request',
       action: 'edited',
+      reviews: [
+        {
+          id: 307,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+      ],
     });
     assert.equal(gateRetargetBetaToMainRes.status.state, 'success');
     assert.equal(gateRetargetBetaToMainRes.status.description, gateDualPassDesc);
@@ -4631,10 +4660,7 @@ async function runCodecAndEngineTests() {
       action: 'labeled',
     });
     assert.equal(gateDraftPreservesChangesRequestedRes.status.state, 'failure');
-    assert.equal(
-      gateDraftPreservesChangesRequestedRes.status.description,
-      'Changes requested or hold active; address feedback before merge'
-    );
+    assert.equal(gateDraftPreservesChangesRequestedRes.status.description.startsWith('Beta (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.deepEqual(
       gateDraftPreservesChangesRequestedRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved', 'review:owner-approved']
@@ -4684,7 +4710,12 @@ async function runCodecAndEngineTests() {
       action: 'synchronize',
     });
     assert.equal(gateDraftSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
-    assert.equal(gateDraftSynchronizeClearsAllReviewLabelsRes.status.description, gateDraftDesc);
+    assert.equal(
+      gateDraftSynchronizeClearsAllReviewLabelsRes.status.description.startsWith(
+        'Beta (no Owner approval needed): Blocked by Draft PR'
+      ),
+      true
+    );
     assert.deepEqual(
       gateDraftSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
@@ -4754,10 +4785,7 @@ async function runCodecAndEngineTests() {
         ],
       });
       assert.equal(gateCapyboopHoldRes.status.state, 'failure');
-      assert.equal(
-        gateCapyboopHoldRes.status.description,
-        'Changes requested or hold active; address feedback before merge'
-      );
+      assert.equal(gateCapyboopHoldRes.status.description.includes('Blocked by Changes requested / hold'), true);
     }
 
     const gateShthedSupersedesCapyboopHoldRes = await runReviewGateCase({
@@ -4819,7 +4847,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateUntrustedMainApprovedRes.status.state, 'pending');
-    assert.equal(gateUntrustedMainApprovedRes.status.description, gateMainAwaitingAiDesc);
+    assert.equal(gateUntrustedMainApprovedRes.status.description, gateMainAwaitingAiAndOwnerDesc);
 
     const gateUntrustedMainCannotClearHoldRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
@@ -4857,6 +4885,19 @@ async function runCodecAndEngineTests() {
         baseRef: targetBase,
         headSha: gateHeadSha,
         body: validStrictPrBody,
+        reviews:
+          targetBase === 'main'
+            ? [
+                {
+                  id: 8101,
+                  user: { login: 'shthed' },
+                  state: 'APPROVED',
+                  commit_id: gateHeadSha,
+                  body: '',
+                  submitted_at: '2026-11-13T01:06:00Z',
+                },
+              ]
+            : [],
         aiCommentBody: [
           'Independent review passed.',
           '- **100%** — **All Checks**: Verified.',
@@ -5031,6 +5072,19 @@ async function runCodecAndEngineTests() {
         baseRef: targetBase,
         headSha: gateHeadSha,
         body: validStrictPrBody,
+        reviews:
+          targetBase === 'main'
+            ? [
+                {
+                  id: 8102,
+                  user: { login: 'shthed' },
+                  state: 'APPROVED',
+                  commit_id: gateHeadSha,
+                  body: '',
+                  submitted_at: '2026-11-13T01:06:00Z',
+                },
+              ]
+            : [],
         graphqlImpl: async () => {
           throw new Error('Pull request is in clean status');
         },
@@ -5176,7 +5230,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateMainSyncExactPassRes.status.state, 'success');
     assert.equal(
       gateMainSyncExactPassRes.status.description,
-      'Beta gate passed: verified origin/main ancestry sync; no holds'
+      'Beta gate passed (no Owner approval needed): verified origin/main sync'
     );
 
     const gateMainSyncFastForwardPassRes = await runReviewGateCase({
@@ -5304,7 +5358,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateMainSyncDivergedPassRes.status.state, 'success');
     assert.equal(
       gateMainSyncDivergedPassRes.status.description,
-      'Beta gate passed: verified origin/main ancestry sync; no holds'
+      'Beta gate passed (no Owner approval needed): verified origin/main sync'
     );
 
     // Defect 1A regression (PR #525 pattern): shared-file 3-way conflict (even clean merge) & evil-merge clobber both fail closed -> pending
@@ -6283,6 +6337,13 @@ async function runCodecAndEngineTests() {
     assert.equal(syncBetaYaml.includes('pr-review-gate.yml'), true);
     assert.equal(syncBetaYaml.includes('draft: !hasPatToken'), true);
     assert.equal(syncBetaYaml.includes('WORKFLOW_DIFFS'), true);
+    assert.equal(syncBetaYaml.includes('git push origin HEAD:refs/heads/beta'), true);
+    assert.equal(syncBetaYaml.includes('beta ruleset 27162684'), true);
+    assert.equal(syncBetaYaml.includes('deploy-branch.yml'), true);
+    assert.equal(syncBetaYaml.includes('Sync beta with main conflict'), true);
+    assert.equal(syncBetaYaml.includes('enablePullRequestAutoMerge'), true);
+    assert.equal(syncBetaYaml.includes('actions: write'), true);
+    assert.equal(syncBetaYaml.includes('name: Sync beta with main'), true);
 
     const prReviewGateYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/pr-review-gate.yml'),
@@ -6296,12 +6357,17 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(prReviewGateYaml.includes('github.event.changes.base != null'), true);
     assert.equal(prReviewGateYaml.includes('github.event.changes.body != null'), true);
+    assert.equal(prReviewGateYaml.includes('needs: [ai-review]'), true);
+    assert.equal(prReviewGateYaml.includes('always()'), true);
+    assert.equal(prReviewGateYaml.includes('GEMINI_API_KEY'), true);
+    assert.equal(prReviewGateYaml.includes('gemini-2.5-flash'), true);
     assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
     assert.equal(prReviewGateYaml.includes('strictAiReady'), true);
     assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
     assert.equal(prReviewGateYaml.includes('disablePullRequestAutoMerge'), true);
     assert.equal(prReviewGateYaml.includes('isStrictPrBodyValid'), true);
     assert.equal(prReviewGateYaml.includes('hasChecklistSub100OrUnchecked'), true);
+    assert.equal(prReviewGateYaml.includes('<!-- capy-gate-status -->'), true);
     assert.equal(
       prReviewGateYaml.includes('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'),
       true
@@ -6324,7 +6390,9 @@ async function runCodecAndEngineTests() {
       /(?<![\w'"])github(?:\.[a-zA-Z0-9_]+)+/g,
       (match) => match.replaceAll('.', '?.')
     );
-    const evalReviewGateIf = new Function('github', 'contains', 'fromJSON', `return Boolean(${reviewGateIfJs});`);
+    const rawEvalReviewGateIf = new Function('github', 'contains', 'fromJSON', 'always', `return Boolean(${reviewGateIfJs});`);
+    const evalReviewGateIf = (githubCtx, containsFn, fromJsonFn) =>
+      rawEvalReviewGateIf(githubCtx, containsFn, fromJsonFn, () => true);
     const ghFromJson = (raw) => JSON.parse(raw);
     const ghContains = (haystack, needle) =>
       Array.isArray(haystack) ? haystack.includes(needle) : String(haystack).includes(String(needle));
@@ -6530,6 +6598,178 @@ async function runCodecAndEngineTests() {
     } finally {
       fs.rmSync(tmpPublishRepoDir, { recursive: true, force: true });
     }
+
+    // Extract and unit-test ai-review job script block from pr-review-gate.yml
+    const aiReviewYamlLines = prReviewGateYaml.split(/\r?\n/);
+    const aiJobIdx = aiReviewYamlLines.findIndex((line) => /^\s{2}ai-review:\s*$/.test(line));
+    assert.notEqual(aiJobIdx, -1, 'Expected ai-review job in pr-review-gate.yml');
+    const aiScriptIdx = aiReviewYamlLines.findIndex(
+      (line, idx) => idx > aiJobIdx && /^\s*script:\s*\|\s*$/.test(line)
+    );
+    assert.notEqual(aiScriptIdx, -1, 'Expected script: | block in ai-review job');
+    const aiHeaderIndent = aiReviewYamlLines[aiScriptIdx].match(/^(\s*)/)[1].length;
+    let aiBodyIndent = null;
+    const aiBodyLines = [];
+    for (let i = aiScriptIdx + 1; i < aiReviewYamlLines.length; i++) {
+      const line = aiReviewYamlLines[i];
+      if (line.trim() === '') {
+        aiBodyLines.push('');
+        continue;
+      }
+      const indent = line.match(/^(\s*)/)[1].length;
+      if (aiBodyIndent === null) {
+        assert.equal(indent > aiHeaderIndent, true);
+        aiBodyIndent = indent;
+      } else if (indent < aiBodyIndent) {
+        break;
+      }
+      aiBodyLines.push(line.slice(aiBodyIndent));
+    }
+    const runAiReviewScript = new AsyncFunction('context', 'github', 'core', aiBodyLines.join('\n'));
+    const runAiReviewCase = async ({
+      geminiApiKey = '',
+      baseRef = 'beta',
+      headRef = 'feature/test',
+      isDraft = false,
+      headRepo = 'shthed/capy',
+      existingComments = [],
+      fetchResponse = null,
+    } = {}) => {
+      const warnings = [];
+      const infos = [];
+      const createdReviews = [];
+      const addedLabels = [];
+      const prevKey = process.env.GEMINI_API_KEY;
+      const prevFetch = globalThis.fetch;
+      if (geminiApiKey) process.env.GEMINI_API_KEY = geminiApiKey;
+      else delete process.env.GEMINI_API_KEY;
+      if (fetchResponse) {
+        globalThis.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => fetchResponse,
+          text: async () => JSON.stringify(fetchResponse),
+        });
+      }
+      try {
+        const mockGithub = {
+          paginate: async (fn) => fn(),
+          rest: {
+            pulls: {
+              get: async ({ mediaType } = {}) =>
+                mediaType?.format === 'diff'
+                  ? { data: 'diff --git a/a.ts b/a.ts\n+const x = 1;' }
+                  : {
+                      data: {
+                        number: 999,
+                        state: 'open',
+                        draft: isDraft,
+                        title: 'Test PR',
+                        body: '## Summary\n\nTest\n\n### PR Readiness Score: 100%',
+                        base: { ref: baseRef },
+                        head: { ref: headRef, sha: '1111222233334444555566667777888899990000', repo: { full_name: headRepo } },
+                      },
+                    },
+              listReviews: async () => [],
+              createReview: async (arg) => {
+                createdReviews.push(arg);
+                return { data: { id: 1 } };
+              },
+            },
+            issues: {
+              listComments: async () => existingComments,
+              addLabels: async (arg) => {
+                addedLabels.push(...(arg.labels || []));
+              },
+            },
+          },
+        };
+        const mockCore = {
+          info: (m) => infos.push(String(m)),
+          warning: (m) => warnings.push(String(m)),
+        };
+        const mockContext = {
+          repo: { owner: 'shthed', repo: 'capy' },
+          payload: { pull_request: { number: 999 } },
+        };
+        await runAiReviewScript(mockContext, mockGithub, mockCore);
+        return { warnings, infos, createdReviews, addedLabels };
+      } finally {
+        if (prevKey === undefined) delete process.env.GEMINI_API_KEY;
+        else process.env.GEMINI_API_KEY = prevKey;
+        globalThis.fetch = prevFetch;
+      }
+    };
+
+    const missingKeyRes = await runAiReviewCase({ geminiApiKey: '' });
+    assert.equal(missingKeyRes.warnings.some((w) => w.includes('GEMINI_API_KEY')), true);
+    assert.equal(missingKeyRes.createdReviews.length, 0);
+    assert.equal(missingKeyRes.addedLabels.length, 0);
+
+    const skipDraftRes = await runAiReviewCase({ geminiApiKey: 'test-key', isDraft: true });
+    assert.equal(skipDraftRes.createdReviews.length, 0);
+
+    const skipMainRes = await runAiReviewCase({ geminiApiKey: 'test-key', baseRef: 'main' });
+    assert.equal(skipMainRes.createdReviews.length, 0);
+
+    const skipSyncRes = await runAiReviewCase({ geminiApiKey: 'test-key', headRef: 'sync/beta-from-main' });
+    assert.equal(skipSyncRes.createdReviews.length, 0);
+
+    const skipForkRes = await runAiReviewCase({ geminiApiKey: 'test-key', headRepo: 'attacker/capy' });
+    assert.equal(skipForkRes.createdReviews.length, 0);
+
+    const approveRes = await runAiReviewCase({
+      geminiApiKey: 'test-key',
+      fetchResponse: {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    verdict: 'APPROVED',
+                    score: 100,
+                    summary: 'All checks and invariants verified.',
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    assert.equal(approveRes.createdReviews.length, 1);
+    assert.equal(approveRes.createdReviews[0].event, 'COMMENT');
+    assert.equal(
+      approveRes.createdReviews[0].body.includes(
+        '<!-- capy-review: actor=ai-agent verdict=APPROVED sha=1111222233334444555566667777888899990000 score=100% -->'
+      ),
+      true
+    );
+    assert.deepEqual(approveRes.addedLabels, ['review:ai-approved']);
+
+    const rejectRes = await runAiReviewCase({
+      geminiApiKey: 'test-key',
+      fetchResponse: {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    verdict: 'CHANGES_REQUESTED',
+                    score: 70,
+                    summary: 'Missing tests.',
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    assert.equal(rejectRes.createdReviews.length, 1);
+    assert.deepEqual(rejectRes.addedLabels, ['review:changes-requested']);
 
     const dependabotYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/dependabot.yml'),
