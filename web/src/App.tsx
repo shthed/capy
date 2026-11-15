@@ -43,7 +43,21 @@ import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
-import { OnboardingTutorial, TutorialTriedActions } from './components/OnboardingTutorial';
+import {
+  createInitialTutorialTried,
+  OnboardingTutorial,
+  TUTORIAL_STEPS,
+  TutorialStepKey,
+  TutorialTriedActions,
+} from './components/OnboardingTutorial';
+import { FeatureOfferBanner } from './components/FeatureOfferBanner';
+import { TargetSpotlightOverlay } from './components/TargetSpotlightOverlay';
+import {
+  FEATURE_OFFERS,
+  FeatureOfferDef,
+  FeatureOfferId,
+  FeatureOffersService,
+} from './services/FeatureOffersService';
 import { resolveReleaseChannel } from './version';
 
 const SettingsModal = React.lazy(() =>
@@ -166,8 +180,32 @@ export const App: React.FC = () => {
   const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
   const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoHistoryEntry[]>([]);
+  const undoStackRef = useRef<UndoHistoryEntry[]>(undoStack);
+  undoStackRef.current = undoStack;
+  const redoStackRef = useRef<UndoHistoryEntry[]>(redoStack);
+  redoStackRef.current = redoStack;
+  const syncUndoStack = useCallback(
+    (nextOrUpdater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])) => {
+      const next =
+        typeof nextOrUpdater === 'function' ? nextOrUpdater(undoStackRef.current) : nextOrUpdater;
+      undoStackRef.current = next;
+      setUndoStack(next);
+    },
+    []
+  );
+  const syncRedoStack = useCallback(
+    (nextOrUpdater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])) => {
+      const next =
+        typeof nextOrUpdater === 'function' ? nextOrUpdater(redoStackRef.current) : nextOrUpdater;
+      redoStackRef.current = next;
+      setRedoStack(next);
+    },
+    []
+  );
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
+  const isPreviewModeRef = useRef<boolean>(false);
+  isPreviewModeRef.current = isPreviewMode;
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
   const [stepZoomTrigger, setStepZoomTrigger] = useState<number>(0);
@@ -206,7 +244,13 @@ export const App: React.FC = () => {
 
   // Replay State
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const isReplayingRef = useRef<boolean>(false);
+  isReplayingRef.current = isReplaying;
+  const [isPostLoadReplay, setIsPostLoadReplay] = useState<boolean>(false);
+  const isPostLoadReplayRef = useRef<boolean>(false);
+  isPostLoadReplayRef.current = isPostLoadReplay;
   const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
+  const [isReplayMinimized, setIsReplayMinimized] = useState<boolean>(true);
   const [replayStep, setReplayStep] = useState<number>(0);
   const [replaySequence, setReplaySequence] = useState<number[]>([]);
 
@@ -221,19 +265,111 @@ export const App: React.FC = () => {
   const [loadingPayload, setLoadingPayload] = useState<GenerationProgressPayload | null>(null);
 
   // Modal Sheet, Onboarding Tutorial & Active Deployment Channel
+  const settingsRef = useRef<UserSettings>(settings);
+  settingsRef.current = settings;
+  const isFreeColorMode = Boolean(settings.isFreeColorMode);
+  const activeSave = snapshots.find((s) => s.id === activeSnapshotId);
+  const parentSave = useMemo(
+    () =>
+      activeSave?.parentSnapshotId
+        ? snapshots.find((s) => s.id === activeSave.parentSnapshotId) ?? null
+        : null,
+    [activeSave?.parentSnapshotId, snapshots]
+  );
+  const activeTitle = activeSave?.title || 'Capy';
+  const liveCoopRef = useRef({
+    puzzle,
+    activeSnapshotId,
+    activeSave,
+    activeTitle,
+    filledRegionIds,
+    paintedRegionColors,
+    isFreeColorMode,
+    activeColorId,
+    settings,
+  });
+  liveCoopRef.current = {
+    puzzle,
+    activeSnapshotId,
+    activeSave,
+    activeTitle,
+    filledRegionIds,
+    paintedRegionColors,
+    isFreeColorMode,
+    activeColorId,
+    settings,
+  };
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  const showTutorialRef = useRef<boolean>(false);
+  showTutorialRef.current = showTutorial;
   const [tutorialStep, setTutorialStep] = useState<number>(0);
-  const [tutorialTried, setTutorialTried] = useState<TutorialTriedActions>({
-    palette: false,
-    paint: false,
-    zoom: false,
-    hint: false,
-    menu: false,
-  });
+  const tutorialStepRef = useRef<number>(0);
+  tutorialStepRef.current = tutorialStep;
+  const [tutorialStepTriedInVisit, setTutorialStepTriedInVisit] = useState<boolean>(false);
+  const [tutorialTried, setTutorialTried] = useState<TutorialTriedActions>(createInitialTutorialTried);
+  const [activeFeatureOffer, setActiveFeatureOffer] = useState<FeatureOfferDef | null>(null);
+  const activeFeatureOfferRef = useRef<FeatureOfferDef | null>(null);
+  activeFeatureOfferRef.current = activeFeatureOffer;
+  const featureOfferQueueRef = useRef<FeatureOfferId[]>([]);
+  const isFeatureOfferSuppressed =
+    isLoading || showTutorial || showSettings || showPaletteOptions;
+  const isFeatureOfferSuppressedRef = useRef<boolean>(isFeatureOfferSuppressed);
+  isFeatureOfferSuppressedRef.current = isFeatureOfferSuppressed;
+  const coopOfferPendingRef = useRef<boolean>(false);
   const releaseChannelInfo = useMemo(() => resolveReleaseChannel(), []);
+
+  const advanceFeatureOffer = useCallback(() => {
+    while (featureOfferQueueRef.current.length > 0) {
+      const nextId = featureOfferQueueRef.current.shift()!;
+      if (!FeatureOffersService.hasSeenOffer(nextId)) {
+        const nextOffer = FEATURE_OFFERS[nextId];
+        activeFeatureOfferRef.current = nextOffer;
+        setActiveFeatureOffer(nextOffer);
+        return;
+      }
+    }
+    activeFeatureOfferRef.current = null;
+    setActiveFeatureOffer(null);
+  }, []);
+
+  useEffect(() => {
+    if (isFeatureOfferSuppressed || showTutorial) return;
+    if (activeFeatureOffer) {
+      FeatureOffersService.markOfferSeen(activeFeatureOffer.id);
+      return;
+    }
+    if (featureOfferQueueRef.current.length > 0) {
+      advanceFeatureOffer();
+    }
+  }, [isFeatureOfferSuppressed, showTutorial, activeFeatureOffer, advanceFeatureOffer]);
+
+  const triggerFeatureOffer = useCallback(
+    (id: FeatureOfferId) => {
+      if (showTutorialRef.current) return;
+      if (FeatureOffersService.hasSeenOffer(id)) return;
+      if (
+        activeFeatureOfferRef.current?.id === id ||
+        featureOfferQueueRef.current.includes(id)
+      ) {
+        return;
+      }
+      featureOfferQueueRef.current.push(id);
+      if (!isFeatureOfferSuppressedRef.current && !activeFeatureOfferRef.current) {
+        advanceFeatureOffer();
+      }
+    },
+    [advanceFeatureOffer]
+  );
+
+  const markTutorialActionTried = useCallback((action: keyof TutorialTriedActions) => {
+    setTutorialTried((prev) => (prev[action] ? prev : { ...prev, [action]: true }));
+    if (showTutorialRef.current && TUTORIAL_STEPS[tutorialStepRef.current]?.key === action) {
+      setTutorialStepTriedInVisit(true);
+    }
+  }, []);
 
   // Maintain O(1) region lookup map for offscreen replay frustum checks
   useEffect(() => {
@@ -342,6 +478,7 @@ export const App: React.FC = () => {
   }, [puzzle, isLoading, isReplaying, showSettings, showPaletteOptions, filledRegionIds.size]);
 
   const handleToggleFullscreen = useCallback(async () => {
+    markTutorialActionTried('peek_fullscreen');
     try {
       if (
         document.fullscreenElement ||
@@ -363,10 +500,14 @@ export const App: React.FC = () => {
     } catch (err) {
       console.warn('Fullscreen request failed or was blocked:', err);
     }
-  }, []);
+  }, [markTutorialActionTried]);
 
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    document.documentElement.dataset.largeText = settings.largeText ? 'true' : 'false';
+  }, [settings.largeText]);
 
   // Sync modal & overlay states with native LIFO hardware back button stack
   useEffect(() => {
@@ -379,13 +520,6 @@ export const App: React.FC = () => {
     return NativeBridge.pushBackHandler(() => setShowPaletteOptions(false));
   }, [showPaletteOptions]);
 
-  useEffect(() => {
-    if (!isReplaying) return;
-    return NativeBridge.pushBackHandler(() => {
-      setIsReplaying(false);
-      setIsReplayPlaying(false);
-    });
-  }, [isReplaying]);
 
   // Sync settings updates to storage without stale closure overwrites
   const handleUpdateSettings = useCallback(
@@ -494,6 +628,8 @@ export const App: React.FC = () => {
   const autoResumeReplayRef = useRef<boolean>(false);
   const autoResumeTimerRef = useRef<number | null>(null);
   const awaitingReplayDismissRef = useRef<boolean>(false);
+  const tutorialOpenedReplayRef = useRef<boolean>(false);
+  const tutorialTriggeredPreviewRef = useRef<boolean>(false);
   const replayStepRef = useRef<number>(0);
   replayStepRef.current = replayStep;
 
@@ -506,28 +642,60 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  const dismissPostLoadReplayIfAwaiting = useCallback((): boolean => {
-    if (!awaitingReplayDismissRef.current) return false;
-    awaitingReplayDismissRef.current = false;
-    autoResumeReplayRef.current = false;
+  const flushPendingViewportSaveRef = useRef<() => void>(() => {});
+
+  const exitReplay = useCallback(() => {
+    flushPendingViewportSaveRef.current();
+    cancelAutoResume();
+    tutorialOpenedReplayRef.current = false;
+    isReplayingRef.current = false;
+    isPostLoadReplayRef.current = false;
+    setIsPostLoadReplay(false);
     setIsReplaying(false);
     setIsReplayPlaying(false);
+  }, [cancelAutoResume]);
+
+  useEffect(() => {
+    if (!isReplaying) return;
+    return NativeBridge.pushBackHandler(exitReplay);
+  }, [isReplaying, exitReplay]);
+
+  const dismissPostLoadReplayIfAwaiting = useCallback((): boolean => {
+    if (!awaitingReplayDismissRef.current) return false;
+    exitReplay();
     return true;
+  }, [exitReplay]);
+
+  const handleSyncActiveColor = useCallback((colId: number) => {
+    liveCoopRef.current = { ...liveCoopRef.current, activeColorId: colId };
+    setActiveColorId(colId);
   }, []);
 
-  const markTutorialActionTried = useCallback((action: keyof TutorialTriedActions) => {
-    setTutorialTried((prev) => (prev[action] ? prev : { ...prev, [action]: true }));
-  }, []);
+  const cleanupTutorialTransientModes = useCallback(
+    (nextStepKey: TutorialStepKey | null = null) => {
+      if (tutorialOpenedReplayRef.current && nextStepKey !== 'replay') {
+        exitReplay();
+      }
+      if (tutorialTriggeredPreviewRef.current && nextStepKey !== 'peek_fullscreen') {
+        tutorialTriggeredPreviewRef.current = false;
+        isPreviewModeRef.current = false;
+        setIsPreviewMode(false);
+      }
+    },
+    [exitReplay]
+  );
 
   const completeTutorial = useCallback(() => {
+    cleanupTutorialTransientModes(null);
     setShowTutorial(false);
+    setTutorialStepTriedInVisit(false);
     try {
       localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
     } catch {
       // Ignored
     }
     NativeBridge.saveBackup(resolveScopedBackupKey('capy_tutorial_completed_v1'), '1');
-  }, []);
+  }, [cleanupTutorialTransientModes]);
 
   useEffect(() => {
     if (!showTutorial) return;
@@ -535,16 +703,35 @@ export const App: React.FC = () => {
   }, [showTutorial, completeTutorial]);
 
   const handleStartTutorial = useCallback(() => {
+    featureOfferQueueRef.current = [];
+    activeFeatureOfferRef.current = null;
+    setActiveFeatureOffer(null);
+    cleanupTutorialTransientModes(TUTORIAL_STEPS[0]?.key ?? null);
+    setTutorialStepTriedInVisit(false);
     setTutorialStep(0);
-    setTutorialTried({
-      palette: false,
-      paint: false,
-      zoom: false,
-      hint: false,
-      menu: false,
-    });
+    setTutorialTried(createInitialTutorialTried());
     setShowTutorial(true);
-  }, []);
+  }, [cleanupTutorialTransientModes]);
+
+  const handleJumpToTutorialStep = useCallback(
+    (stepIdx: number) => {
+      advanceFeatureOffer();
+      cleanupTutorialTransientModes(TUTORIAL_STEPS[stepIdx]?.key ?? null);
+      setTutorialStepTriedInVisit(false);
+      setTutorialStep(stepIdx);
+      setShowTutorial(true);
+    },
+    [advanceFeatureOffer, cleanupTutorialTransientModes]
+  );
+
+  const handleTutorialStepChange = useCallback(
+    (nextStep: number) => {
+      cleanupTutorialTransientModes(TUTORIAL_STEPS[nextStep]?.key ?? null);
+      setTutorialStepTriedInVisit(false);
+      setTutorialStep(nextStep);
+    },
+    [cleanupTutorialTransientModes]
+  );
 
   // Zero-allocation bounding-box frustum check against the current canvas viewport
   const isRegionVisibleInViewport = useCallback(
@@ -656,6 +843,9 @@ export const App: React.FC = () => {
       setReplaySequence(sequence);
       replayStepRef.current = 0;
       setReplayStep(0);
+      isReplayingRef.current = true;
+      isPostLoadReplayRef.current = autoResumeOnFinish;
+      setIsPostLoadReplay(autoResumeOnFinish);
       setIsReplaying(true);
       setIsReplayPlaying(true);
     },
@@ -672,6 +862,9 @@ export const App: React.FC = () => {
       }
       if (replaySequence.length === 0) {
         awaitingReplayDismissRef.current = false;
+        isReplayingRef.current = false;
+        isPostLoadReplayRef.current = false;
+        setIsPostLoadReplay(false);
         setIsReplaying(false);
         return;
       }
@@ -829,6 +1022,11 @@ export const App: React.FC = () => {
         window.clearTimeout(viewportSaveTimerRef.current);
         viewportSaveTimerRef.current = null;
       }
+      cancelAutoResume();
+      tutorialOpenedReplayRef.current = false;
+      isReplayingRef.current = false;
+      isPostLoadReplayRef.current = false;
+      setIsPostLoadReplay(false);
       setIsReplaying(false);
       setIsReplayPlaying(false);
       setIsLoading(true);
@@ -841,7 +1039,7 @@ export const App: React.FC = () => {
       setSourceImage(img);
       setPuzzle(null);
       setHintRegionId(null);
-      setRedoStack([]);
+      syncRedoStack([]);
       const targetView = initialViewportOverride || {
         zoomScale: 1.0,
         panOffsetX: 0,
@@ -933,20 +1131,27 @@ export const App: React.FC = () => {
           }
 
           const initialOrder = Array.from(initialFilledRegionIds);
+          const nextFilledSet = new Set(initialOrder);
           const restoredPaintedMap = initialPaintedColors
             ? new Map(Object.entries(initialPaintedColors).map(([k, v]) => [Number(k), v]))
             : new Map<number, number>();
+          liveCoopRef.current = {
+            ...liveCoopRef.current,
+            puzzle: puzzleData,
+            filledRegionIds: nextFilledSet,
+            paintedRegionColors: restoredPaintedMap,
+          };
           setSourceImage(img);
           setPuzzle(puzzleData);
-          setFilledRegionIds(new Set(initialOrder));
+          setFilledRegionIds(nextFilledSet);
           setPaintedRegionColors(restoredPaintedMap);
-          setUndoStack(
+          syncUndoStack(
             initialOrder.map((rId) => ({
               regionId: rId,
               wasPreviouslyFilled: false,
             }))
           );
-          setRedoStack([]);
+          syncRedoStack([]);
 
           const isFree = Boolean(
             initialIsFreeColor ||
@@ -1006,6 +1211,15 @@ export const App: React.FC = () => {
             isFree,
             estSaveBytes
           );
+          const syncedLoadedSave = finalizedSnapshots.find((s) => s.id === snapId);
+          liveCoopRef.current = {
+            ...liveCoopRef.current,
+            activeSnapshotId: snapId,
+            activeColorId: targetColor,
+            isFreeColorMode: isFree,
+            activeSave: syncedLoadedSave,
+            activeTitle: syncedLoadedSave?.title || 'Capy',
+          };
           setSnapshots(finalizedSnapshots);
 
           // Persist puzzle in IndexedDB
@@ -1048,6 +1262,7 @@ export const App: React.FC = () => {
       settings,
       generatePreviewDataUrl,
       startReplay,
+      cancelAutoResume,
       handleUpdateSettings,
       resetActivePuzzleSessionStats,
     ]
@@ -1192,14 +1407,23 @@ export const App: React.FC = () => {
               setPuzzle(cachedPuzzle);
               setActiveSnapshotId(prebakedSnap.id);
               setActiveColorId(initialColor);
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                puzzle: cachedPuzzle,
+                activeSnapshotId: prebakedSnap.id,
+                activeColorId: initialColor,
+                filledRegionIds: filledSet,
+                paintedRegionColors: restoredPaintedMap,
+                isFreeColorMode: isFree,
+              };
               setFilledRegionIds(filledSet);
-              setUndoStack(
+              syncUndoStack(
                 orderedIds.map((rId) => ({
                   regionId: rId,
                   wasPreviouslyFilled: false,
                 }))
               );
-              setRedoStack([]);
+              syncRedoStack([]);
               setHintRegionId(null);
               StorageService.saveActiveState({
                 activeSnapshotId: prebakedSnap.id,
@@ -1337,14 +1561,23 @@ export const App: React.FC = () => {
           setPuzzle(cachedPuzzle);
           setActiveSnapshotId(candidateSnap.id);
           setActiveColorId(restoredColor);
+          liveCoopRef.current = {
+            ...liveCoopRef.current,
+            puzzle: cachedPuzzle,
+            activeSnapshotId: candidateSnap.id,
+            activeColorId: restoredColor,
+            filledRegionIds: filledSet,
+            paintedRegionColors: restoredPaintedMap,
+            isFreeColorMode: isFree,
+          };
           setFilledRegionIds(filledSet);
-          setUndoStack(
+          syncUndoStack(
             orderedIds.map((rId) => ({
               regionId: rId,
               wasPreviouslyFilled: false,
             }))
           );
-          setRedoStack([]);
+          syncRedoStack([]);
           resetActivePuzzleSessionStats(
             candidateSnap.id,
             cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
@@ -1450,9 +1683,25 @@ export const App: React.FC = () => {
               setPuzzle(firstPuzzle);
               setActiveSnapshotId(firstSnap.id);
               setActiveColorId(initialColor);
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                puzzle: firstPuzzle,
+                activeSnapshotId: firstSnap.id,
+                activeSave: refreshedList.find((s) => s.id === firstSnap.id),
+                activeTitle: firstSnap.title || 'Capy',
+                activeColorId: initialColor,
+                filledRegionIds: filledSet,
+                paintedRegionColors: new Map(),
+                isFreeColorMode: isFree,
+              };
               setFilledRegionIds(filledSet);
-              setUndoStack([]);
-              setRedoStack([]);
+              syncUndoStack(
+                orderedIds.map((rId) => ({
+                  regionId: rId,
+                  wasPreviouslyFilled: false,
+                }))
+              );
+              syncRedoStack([]);
               setHintRegionId(null);
               resetActivePuzzleSessionStats(
                 firstSnap.id,
@@ -1550,16 +1799,8 @@ export const App: React.FC = () => {
     return getDisplayNumberMap(puzzle.palette, puzzle.regions, settings.paletteSort);
   }, [puzzle, settings.paletteSort]);
 
-  // Free colour mode indicator
-  const isFreeColorMode = Boolean(settings.isFreeColorMode);
-
   // Undo & Redo capability: disabled by default for standard puzzles, enabled automatically for free colour puzzles or when explicitly enabled in settings
   const isUndoEnabled = Boolean(settings.enableUndo || isFreeColorMode || puzzle?.isFreeColor);
-
-  const handleToggleFreeColorMode = useCallback(() => {
-    handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: !prev.isFreeColorMode }));
-    NativeBridge.haptic('tick', settings.hapticsEnabled);
-  }, [handleUpdateSettings, settings.hapticsEnabled]);
 
   const emitCoopPaint = useCallback(
     (
@@ -1609,14 +1850,17 @@ export const App: React.FC = () => {
 
   // Undo last region completion
   const handleUndo = useCallback((bypassReplayCheck: boolean = false) => {
-    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || undoStack.length === 0 || !isUndoEnabled) return;
+    const currentUndoStack = undoStackRef.current;
+    if (!puzzle || (isReplayingRef.current && bypassReplayCheck !== true) || currentUndoStack.length === 0 || !isUndoEnabled) return;
 
-    const lastAction = undoStack[undoStack.length - 1];
-    setUndoStack((prev) => prev.slice(0, -1));
-    setRedoStack((prev) => [...prev, lastAction]);
+    const lastAction = currentUndoStack[currentUndoStack.length - 1];
+    syncUndoStack(currentUndoStack.slice(0, -1));
+    syncRedoStack((prev) => [...prev, lastAction]);
 
-    const nextFilled = new Set(filledRegionIds);
-    const nextPainted = new Map(paintedRegionColors);
+    const curFilled = liveCoopRef.current.filledRegionIds;
+    const curPainted = liveCoopRef.current.paintedRegionColors;
+    const nextFilled = new Set(curFilled);
+    const nextPainted = new Map(curPainted);
     const undoneRegion = puzzle.regions.find((r) => r.id === lastAction.regionId);
 
     if (lastAction.wasPreviouslyFilled) {
@@ -1639,10 +1883,20 @@ export const App: React.FC = () => {
       emitCoopUnfill([lastAction.regionId]);
     }
 
+    const nextActiveCol =
+      undoneRegion && !isFreeColorMode ? undoneRegion.colorId : liveCoopRef.current.activeColorId;
+    liveCoopRef.current = {
+      ...liveCoopRef.current,
+      filledRegionIds: nextFilled,
+      paintedRegionColors: nextPainted,
+      activeColorId: nextActiveCol,
+    };
     setFilledRegionIds(nextFilled);
     setPaintedRegionColors(nextPainted);
     setHintRegionId(null);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('undo_redo');
+    triggerFeatureOffer('undo_replay');
 
     if (undoneRegion && !isFreeColorMode) {
       setActiveColorId(undoneRegion.colorId);
@@ -1667,7 +1921,7 @@ export const App: React.FC = () => {
       setSnapshots(updated);
       StorageService.saveActiveState({
         activeSnapshotId,
-        activeColorId: undoneRegion && !isFreeColorMode ? undoneRegion.colorId : activeColorId,
+        activeColorId: nextActiveCol,
         filledRegionIds: Array.from(nextFilled),
         paintedRegionColors: paintedObj,
         isFreeColorMode,
@@ -1678,29 +1932,32 @@ export const App: React.FC = () => {
     }
   }, [
     puzzle,
-    isReplaying,
-    undoStack,
-    filledRegionIds,
-    paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
     isUndoEnabled,
     activeSnapshotId,
-    activeColorId,
     emitCoopPaint,
     emitCoopUnfill,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+    syncUndoStack,
+    syncRedoStack,
   ]);
 
   // Redo last undone region action
   const handleRedo = useCallback((bypassReplayCheck: boolean = false) => {
-    if (!puzzle || (isReplaying && bypassReplayCheck !== true) || redoStack.length === 0 || !isUndoEnabled) return;
+    const currentRedoStack = redoStackRef.current;
+    if (!puzzle || (isReplayingRef.current && bypassReplayCheck !== true) || currentRedoStack.length === 0 || !isUndoEnabled) return;
 
-    const lastRedo = redoStack[redoStack.length - 1];
-    setRedoStack((prev) => prev.slice(0, -1));
-    setUndoStack((prev) => [...prev, lastRedo]);
+    const lastRedo = currentRedoStack[currentRedoStack.length - 1];
+    syncRedoStack(currentRedoStack.slice(0, -1));
+    syncUndoStack((prev) => [...prev, lastRedo]);
 
-    const nextFilled = new Set(filledRegionIds);
-    const nextPainted = new Map(paintedRegionColors);
+    const curFilled = liveCoopRef.current.filledRegionIds;
+    const curPainted = liveCoopRef.current.paintedRegionColors;
+    const curActiveColorId = liveCoopRef.current.activeColorId;
+    const nextFilled = new Set(curFilled);
+    const nextPainted = new Map(curPainted);
 
     nextFilled.add(lastRedo.regionId);
     let redonePaintedCol: number | undefined;
@@ -1710,8 +1967,8 @@ export const App: React.FC = () => {
     } else {
       const region = puzzle.regions.find((r) => r.id === lastRedo.regionId);
       if (region && isFreeColorMode) {
-        nextPainted.set(lastRedo.regionId, activeColorId);
-        redonePaintedCol = activeColorId;
+        nextPainted.set(lastRedo.regionId, curActiveColorId);
+        redonePaintedCol = curActiveColorId;
       }
     }
     emitCoopPaint(
@@ -1722,12 +1979,20 @@ export const App: React.FC = () => {
         : undefined
     );
 
+    const redoneRegion = puzzle.regions.find((r) => r.id === lastRedo.regionId);
+    const nextActiveCol = redoneRegion && !isFreeColorMode ? redoneRegion.colorId : curActiveColorId;
+    liveCoopRef.current = {
+      ...liveCoopRef.current,
+      filledRegionIds: nextFilled,
+      paintedRegionColors: nextPainted,
+      activeColorId: nextActiveCol,
+    };
     setFilledRegionIds(nextFilled);
     setPaintedRegionColors(nextPainted);
     setHintRegionId(null);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('undo_redo');
 
-    const redoneRegion = puzzle.regions.find((r) => r.id === lastRedo.regionId);
     if (redoneRegion && !isFreeColorMode) {
       setActiveColorId(redoneRegion.colorId);
     }
@@ -1751,7 +2016,7 @@ export const App: React.FC = () => {
       setSnapshots(updated);
       StorageService.saveActiveState({
         activeSnapshotId,
-        activeColorId: redoneRegion && !isFreeColorMode ? redoneRegion.colorId : activeColorId,
+        activeColorId: nextActiveCol,
         filledRegionIds: Array.from(nextFilled),
         paintedRegionColors: paintedObj,
         isFreeColorMode,
@@ -1762,16 +2027,14 @@ export const App: React.FC = () => {
     }
   }, [
     puzzle,
-    isReplaying,
-    redoStack,
-    filledRegionIds,
-    paintedRegionColors,
     settings.hapticsEnabled,
     isFreeColorMode,
     isUndoEnabled,
     activeSnapshotId,
-    activeColorId,
     emitCoopPaint,
+    markTutorialActionTried,
+    syncUndoStack,
+    syncRedoStack,
   ]);
 
   // Open replay timeline scrubber from long-press Undo or floating controls
@@ -1788,12 +2051,24 @@ export const App: React.FC = () => {
 
     NativeBridge.haptic('tick', settings.hapticsEnabled);
     awaitingReplayDismissRef.current = false;
+    if (showTutorialRef.current && TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'replay') {
+      tutorialOpenedReplayRef.current = true;
+    }
     setHintRegionId(null);
     setReplaySequence(orderedList);
     setReplayStep(orderedList.length);
     setIsReplaying(true);
     setIsReplayPlaying(false);
-  }, [puzzle, filledRegionIds, undoStack, settings.hapticsEnabled]);
+    markTutorialActionTried('replay');
+    triggerFeatureOffer('replay_scrubber');
+  }, [
+    puzzle,
+    filledRegionIds,
+    undoStack,
+    settings.hapticsEnabled,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  ]);
 
   // Resume active gameplay from scrubbed replay step
   const handleResumeFromReplayStep = useCallback(
@@ -1826,15 +2101,6 @@ export const App: React.FC = () => {
         })
         .reverse();
 
-      setFilledRegionIds(nextFilled);
-      setPaintedRegionColors(nextPainted);
-      setUndoStack(newUndoStack);
-      setRedoStack(newRedoStack);
-      setIsReplaying(false);
-      setIsReplayPlaying(false);
-      setHintRegionId(null);
-      NativeBridge.haptic('success', settings.hapticsEnabled);
-
       let resolvedActiveColorId = activeColorId;
       if (!isFreeColorMode && undoneRegionIds.length > 0) {
         const nextRegion = puzzle.regions.find((r) => r.id === undoneRegionIds[0]);
@@ -1843,6 +2109,26 @@ export const App: React.FC = () => {
           setActiveColorId(nextRegion.colorId);
         }
       }
+
+      liveCoopRef.current = {
+        ...liveCoopRef.current,
+        filledRegionIds: nextFilled,
+        paintedRegionColors: nextPainted,
+        activeColorId: resolvedActiveColorId,
+      };
+      setFilledRegionIds(nextFilled);
+      setPaintedRegionColors(nextPainted);
+      syncUndoStack(newUndoStack);
+      syncRedoStack(newRedoStack);
+      cancelAutoResume();
+      tutorialOpenedReplayRef.current = false;
+      isReplayingRef.current = false;
+      isPostLoadReplayRef.current = false;
+      setIsPostLoadReplay(false);
+      setIsReplaying(false);
+      setIsReplayPlaying(false);
+      setHintRegionId(null);
+      NativeBridge.haptic('success', settings.hapticsEnabled);
 
       if (activeSnapshotId) {
         const paintedObj = Object.fromEntries(nextPainted);
@@ -1882,6 +2168,7 @@ export const App: React.FC = () => {
       isFreeColorMode,
       activeSnapshotId,
       activeColorId,
+      cancelAutoResume,
       emitCoopUnfill,
     ]
   );
@@ -1933,8 +2220,10 @@ export const App: React.FC = () => {
         const index = Number(e.key) - 1;
         if (index >= 0 && index < selectablePalette.length) {
           e.preventDefault();
+          const chosenColId = selectablePalette[index].id;
           NativeBridge.haptic('tick', settings.hapticsEnabled);
-          setActiveColorId(selectablePalette[index].id);
+          liveCoopRef.current = { ...liveCoopRef.current, activeColorId: chosenColId };
+          setActiveColorId(chosenColId);
           setHintRegionId(null);
           markTutorialActionTried('palette');
         }
@@ -2039,7 +2328,14 @@ export const App: React.FC = () => {
   // Handle single region coloring
   const attemptFillRegion = useCallback(
     (regionId: number) => {
-      if (!puzzle || isReplaying) return;
+      if (!puzzle) return;
+      if (isReplayingRef.current) {
+        if (isPostLoadReplayRef.current && filledRegionIds.size < puzzle.regions.length) {
+          exitReplay();
+        } else {
+          return;
+        }
+      }
       const region = puzzle.regions.find((r) => r.id === regionId);
       if (!region) return;
       const wasPuzzleIncomplete = filledRegionIds.size < puzzle.regions.length;
@@ -2055,7 +2351,7 @@ export const App: React.FC = () => {
               : undefined;
         if (effectivePrevColor === activeColorId) return;
 
-        setUndoStack((prev) => [
+        syncUndoStack((prev) => [
           ...prev,
           {
             regionId,
@@ -2064,14 +2360,18 @@ export const App: React.FC = () => {
             paintedColorId: activeColorId,
           },
         ]);
-        setRedoStack([]);
+        syncRedoStack([]);
 
         const nextPainted = new Map(paintedRegionColors);
         nextPainted.set(regionId, activeColorId);
-        setPaintedRegionColors(nextPainted);
-
         const nextFilled = new Set(filledRegionIds);
         nextFilled.add(regionId);
+        liveCoopRef.current = {
+          ...liveCoopRef.current,
+          filledRegionIds: nextFilled,
+          paintedRegionColors: nextPainted,
+        };
+        setPaintedRegionColors(nextPainted);
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
         markTutorialActionTried('paint');
@@ -2138,7 +2438,7 @@ export const App: React.FC = () => {
         setActiveColorId(region.colorId);
       }
 
-      setUndoStack((prev) => [
+      syncUndoStack((prev) => [
         ...prev,
         {
           regionId,
@@ -2146,10 +2446,15 @@ export const App: React.FC = () => {
           paintedColorId: region.colorId,
         },
       ]);
-      setRedoStack([]);
+      syncRedoStack([]);
 
       const nextFilled = new Set(filledRegionIds);
       nextFilled.add(regionId);
+      liveCoopRef.current = {
+        ...liveCoopRef.current,
+        filledRegionIds: nextFilled,
+        activeColorId: isEasy ? region.colorId : activeColorId,
+      };
       setFilledRegionIds(nextFilled);
       setHintRegionId(null);
       markTutorialActionTried('paint');
@@ -2204,6 +2509,7 @@ export const App: React.FC = () => {
           const nextCol = dockPalette[0] || basePalette[0];
           if (nextCol) {
             nextActiveColId = nextCol.id;
+            liveCoopRef.current = { ...liveCoopRef.current, activeColorId: nextCol.id };
             setActiveColorId(nextCol.id);
           }
         }
@@ -2258,7 +2564,14 @@ export const App: React.FC = () => {
   // Handle batch fill (for Paint Mode drag-to-color)
   const attemptBatchFillRegions = useCallback(
     (regionIds: Set<number>) => {
-      if (!puzzle || isReplaying || regionIds.size === 0) return;
+      if (!puzzle || regionIds.size === 0) return;
+      if (isReplayingRef.current) {
+        if (isPostLoadReplayRef.current && filledRegionIds.size < puzzle.regions.length) {
+          exitReplay();
+        } else {
+          return;
+        }
+      }
       const wasPuzzleIncomplete = filledRegionIds.size < puzzle.regions.length;
 
       if (isFreeColorMode) {
@@ -2290,8 +2603,13 @@ export const App: React.FC = () => {
         }
 
         if (changed) {
-          setUndoStack((prev) => [...prev, ...newUndoEntries]);
-          setRedoStack([]);
+          syncUndoStack((prev) => [...prev, ...newUndoEntries]);
+          syncRedoStack([]);
+          liveCoopRef.current = {
+            ...liveCoopRef.current,
+            filledRegionIds: nextFilled,
+            paintedRegionColors: nextPainted,
+          };
           setPaintedRegionColors(nextPainted);
           setFilledRegionIds(nextFilled);
           setHintRegionId(null);
@@ -2360,6 +2678,7 @@ export const App: React.FC = () => {
       let filledAny = false;
       const nextFilled = new Set(filledRegionIds);
       const newUndoEntries: UndoHistoryEntry[] = [];
+      let nextActiveColorId = liveCoopRef.current.activeColorId;
 
       for (const rId of regionIds) {
         if (nextFilled.has(rId)) continue;
@@ -2368,7 +2687,8 @@ export const App: React.FC = () => {
 
         const canFill = isEasy || region.colorId === activeColorId;
         if (canFill) {
-          if (isEasy && !isPaintMode && activeColorId !== region.colorId) {
+          if (isEasy && !isPaintMode && nextActiveColorId !== region.colorId) {
+            nextActiveColorId = region.colorId;
             setActiveColorId(region.colorId);
           }
           nextFilled.add(rId);
@@ -2382,8 +2702,13 @@ export const App: React.FC = () => {
       }
 
       if (filledAny) {
-        setUndoStack((prev) => [...prev, ...newUndoEntries]);
-        setRedoStack([]);
+        syncUndoStack((prev) => [...prev, ...newUndoEntries]);
+        syncRedoStack([]);
+        liveCoopRef.current = {
+          ...liveCoopRef.current,
+          filledRegionIds: nextFilled,
+          activeColorId: nextActiveColorId,
+        };
         setFilledRegionIds(nextFilled);
         setHintRegionId(null);
         markTutorialActionTried('paint');
@@ -2395,7 +2720,7 @@ export const App: React.FC = () => {
           PlayerStatsService.recordRegionsColored(newUndoEntries.length, Boolean(coopRoomCode))
         );
         SoundService.playRegionTap(
-          newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? activeColorId
+          newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? nextActiveColorId
         );
 
         const orderedList = Array.from(nextFilled);
@@ -2415,10 +2740,10 @@ export const App: React.FC = () => {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
         }
 
-        let nextActiveColId = activeColorId;
+        let nextActiveColId = nextActiveColorId;
         if (settings.autoAdvance && !isComplete) {
           const remainingForCurrent = puzzle.regions.filter(
-            (r) => r.colorId === activeColorId && !nextFilled.has(r.id)
+            (r) => r.colorId === nextActiveColorId && !nextFilled.has(r.id)
           );
           if (remainingForCurrent.length === 0) {
             const basePalette = getVisiblePalette(
@@ -2435,6 +2760,7 @@ export const App: React.FC = () => {
             const nextCol = dockPalette[0] || basePalette[0];
             if (nextCol) {
               nextActiveColId = nextCol.id;
+              liveCoopRef.current = { ...liveCoopRef.current, activeColorId: nextCol.id };
               setActiveColorId(nextCol.id);
             }
           }
@@ -2511,6 +2837,11 @@ export const App: React.FC = () => {
       };
       const updatedPalette = [...puzzle.palette, newColor];
       const updatedPuzzle = { ...puzzle, palette: updatedPalette };
+      liveCoopRef.current = {
+        ...liveCoopRef.current,
+        puzzle: updatedPuzzle,
+        activeColorId: nextId,
+      };
       setPuzzle(updatedPuzzle);
       setActiveColorId(nextId);
       NativeBridge.haptic('tick', settings.hapticsEnabled);
@@ -2661,6 +2992,7 @@ export const App: React.FC = () => {
       if (!puzzle) return;
       const targetColor = colorId ?? activeColorId;
       if (colorId !== undefined && activeColorId !== colorId) {
+        liveCoopRef.current = { ...liveCoopRef.current, activeColorId: colorId };
         setActiveColorId(colorId);
       }
 
@@ -2694,10 +3026,18 @@ export const App: React.FC = () => {
     if (!file) return;
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      console.warn('Failed to read selected image file');
+    };
     reader.onload = (event) => {
       const img = new Image();
+      img.onerror = () => {
+        console.warn('Failed to decode selected image file');
+      };
       img.onload = () => {
         const title = file.name.replace(/\.[^/.]+$/, '');
+        markTutorialActionTried('custom_photo');
+        triggerFeatureOffer('photo_upload');
         loadArtworkFromImage(
           img,
           title,
@@ -2744,7 +3084,11 @@ export const App: React.FC = () => {
       setSnapshots(updated);
     }
 
-    awaitingReplayDismissRef.current = false;
+    cancelAutoResume();
+    tutorialOpenedReplayRef.current = false;
+    isReplayingRef.current = false;
+    isPostLoadReplayRef.current = false;
+    setIsPostLoadReplay(false);
     setIsReplaying(false);
     setIsReplayPlaying(false);
     setIsLoading(true);
@@ -2767,15 +3111,11 @@ export const App: React.FC = () => {
         if (snapshot.customPalette && snapshot.customPalette.length > 0) {
           cachedPuzzle.palette = mergeCustomPalette(cachedPuzzle.palette, snapshot.customPalette);
         }
-        let paintedObj: Record<number, number> = {};
-        if (snapshot.paintedRegionColors) {
-          paintedObj = snapshot.paintedRegionColors;
-          setPaintedRegionColors(
-            new Map(Object.entries(snapshot.paintedRegionColors).map(([k, v]) => [Number(k), v]))
-          );
-        } else {
-          setPaintedRegionColors(new Map());
-        }
+        const nextPaintedMap = snapshot.paintedRegionColors
+          ? new Map(Object.entries(snapshot.paintedRegionColors).map(([k, v]) => [Number(k), v]))
+          : new Map<number, number>();
+        const paintedObj = snapshot.paintedRegionColors || {};
+        setPaintedRegionColors(nextPaintedMap);
         const isFree = Boolean(snapshot.isFreeColor || cachedPuzzle.isFreeColor);
         handleUpdateSettings((prev) => ({
           ...prev,
@@ -2797,17 +3137,28 @@ export const App: React.FC = () => {
         viewportRef.current = restoredView;
         setInitialViewport(restoredView);
         setRestoreViewTrigger((prev) => prev + 1);
+        liveCoopRef.current = {
+          ...liveCoopRef.current,
+          puzzle: cachedPuzzle,
+          activeSnapshotId: snapshot.id,
+          activeSave: snapshot,
+          activeTitle: snapshot.title || 'Capy',
+          activeColorId: restoredColor,
+          filledRegionIds: filledSet,
+          paintedRegionColors: nextPaintedMap,
+          isFreeColorMode: isFree,
+        };
         setSourceImage(img);
         setPuzzle(cachedPuzzle);
         setActiveColorId(restoredColor);
         setFilledRegionIds(filledSet);
-        setUndoStack(
+        syncUndoStack(
           orderedIds.map((rId) => ({
             regionId: rId,
             wasPreviouslyFilled: false,
           }))
         );
-        setRedoStack([]);
+        syncRedoStack([]);
         resetActivePuzzleSessionStats(
           snapshot.id,
           cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
@@ -2875,16 +3226,7 @@ export const App: React.FC = () => {
     img.src = resolvedSrc;
   };
 
-  // Active Save Title & Progress
-  const activeSave = snapshots.find((s) => s.id === activeSnapshotId);
-  const parentSave = useMemo(
-    () =>
-      activeSave?.parentSnapshotId
-        ? snapshots.find((s) => s.id === activeSave.parentSnapshotId) ?? null
-        : null,
-    [activeSave?.parentSnapshotId, snapshots]
-  );
-  const activeTitle = activeSave?.title || 'Capy';
+  // Active Save Progress
   const totalCount = puzzle?.regions.length || 0;
   const filledCount = filledRegionIds.size;
   const progressPercentage = computeProgressPercentage(filledCount, totalCount);
@@ -2989,9 +3331,10 @@ export const App: React.FC = () => {
     });
     if (ok) {
       NativeBridge.haptic('tick', settings.hapticsEnabled);
+      markTutorialActionTried('saves_export');
     }
     return ok;
-  }, [puzzle, activeTitle, settings.hapticsEnabled]);
+  }, [puzzle, activeTitle, settings.hapticsEnabled, markTutorialActionTried]);
 
   // Export any saved snapshot's puzzle as a printable monochrome vector SVG coloring sheet
   const handleExportSnapshotSvg = useCallback(
@@ -3003,6 +3346,7 @@ export const App: React.FC = () => {
         });
         if (ok) {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
+          markTutorialActionTried('saves_export');
         }
         return ok;
       }
@@ -3021,6 +3365,7 @@ export const App: React.FC = () => {
         });
         if (ok) {
           NativeBridge.haptic('tick', settings.hapticsEnabled);
+          markTutorialActionTried('saves_export');
         }
         return ok;
       } catch (e) {
@@ -3028,7 +3373,7 @@ export const App: React.FC = () => {
         return false;
       }
     },
-    [activeSnapshotId, puzzle, activeTitle, snapshots, settings.hapticsEnabled]
+    [activeSnapshotId, puzzle, activeTitle, snapshots, settings.hapticsEnabled, markTutorialActionTried]
   );
 
   // Export single snapshot to compact .capy v2 binary file
@@ -3044,11 +3389,12 @@ export const App: React.FC = () => {
           data: bytes,
         });
         NativeBridge.haptic('tick', settings.hapticsEnabled);
+        markTutorialActionTried('saves_export');
       } catch (e) {
         console.error('Failed to export snapshot', e);
       }
     },
-    [settings.hapticsEnabled]
+    [settings.hapticsEnabled, markTutorialActionTried]
   );
 
   // Export all saved puzzles to compact .capy v2 backup archive
@@ -3062,10 +3408,11 @@ export const App: React.FC = () => {
         data: bytes,
       });
       NativeBridge.haptic('tick', settings.hapticsEnabled);
+      markTutorialActionTried('saves_export');
     } catch (e) {
       console.error('Failed to export all snapshots', e);
     }
-  }, [settings.hapticsEnabled]);
+  }, [settings.hapticsEnabled, markTutorialActionTried]);
 
   // Import saves from .capy (v2 binary or v1 JSON) or .json file
   const handleImportSnapshots = useCallback(
@@ -3079,6 +3426,7 @@ export const App: React.FC = () => {
           const refreshed = StorageService.loadSnapshots();
           setSnapshots(refreshed);
           NativeBridge.haptic('success', settings.hapticsEnabled);
+          markTutorialActionTried('saves_export');
           return {
             ok: true,
             importedCount: result.importedCount,
@@ -3101,29 +3449,7 @@ export const App: React.FC = () => {
     [settings.hapticsEnabled]
   );
 
-  // Live state ref for zero-stale-closure Co-op & Deep-Link event handlers
-  const liveCoopRef = useRef({
-    puzzle,
-    activeSnapshotId,
-    activeSave,
-    activeTitle,
-    filledRegionIds,
-    paintedRegionColors,
-    isFreeColorMode,
-    activeColorId,
-    settings,
-  });
-  liveCoopRef.current = {
-    puzzle,
-    activeSnapshotId,
-    activeSave,
-    activeTitle,
-    filledRegionIds,
-    paintedRegionColors,
-    isFreeColorMode,
-    activeColorId,
-    settings,
-  };
+  // Snapshot sync helper uses liveCoopRef declared near top of App
 
   const flushPendingViewportSave = useCallback(() => {
     if (viewportSaveTimerRef.current !== null) {
@@ -3151,6 +3477,7 @@ export const App: React.FC = () => {
       panOffsetY,
     });
   }, []);
+  flushPendingViewportSaveRef.current = flushPendingViewportSave;
 
   useEffect(() => {
     const handlePageFlush = () => {
@@ -3302,9 +3629,26 @@ export const App: React.FC = () => {
               viewportRef.current = targetView;
               setInitialViewport(targetView);
               setRestoreViewTrigger((prev) => prev + 1);
+              cancelAutoResume();
+              tutorialOpenedReplayRef.current = false;
+              isReplayingRef.current = false;
+              isPostLoadReplayRef.current = false;
+              setIsPostLoadReplay(false);
               setIsReplaying(false);
               setIsReplayPlaying(false);
               setShowSettings(false);
+              const syncedSnap = updatedList.find((s) => s.id === prebakedSnap.id);
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                puzzle: cachedPuzzle,
+                activeSnapshotId: prebakedSnap.id,
+                activeSave: syncedSnap,
+                activeTitle: syncedSnap?.title || 'Capy',
+                activeColorId: initialColor,
+                filledRegionIds: filledSet,
+                paintedRegionColors: restoredPaintedMap,
+                isFreeColorMode: isFree,
+              };
               setSnapshots(updatedList);
               setPaintedRegionColors(restoredPaintedMap);
               handleUpdateSettings((prev) => ({ ...prev, isFreeColorMode: isFree }));
@@ -3313,13 +3657,13 @@ export const App: React.FC = () => {
               setActiveSnapshotId(prebakedSnap.id);
               setActiveColorId(initialColor);
               setFilledRegionIds(filledSet);
-              setUndoStack(
+              syncUndoStack(
                 orderedIds.map((rId) => ({
                   regionId: rId,
                   wasPreviouslyFilled: false,
                 }))
               );
-              setRedoStack([]);
+              syncRedoStack([]);
               setHintRegionId(null);
               resetActivePuzzleSessionStats(
                 prebakedSnap.id,
@@ -3369,7 +3713,7 @@ export const App: React.FC = () => {
       };
       img.src = sample.assetPath;
     },
-    [generatePreviewDataUrl, handleUpdateSettings, loadArtworkFromImage]
+    [generatePreviewDataUrl, handleUpdateSettings, loadArtworkFromImage, cancelAutoResume]
   );
 
   // Subscribe to Realtime Co-op Room events (Collaborator Paints, Welcome Convergence, Presence)
@@ -3417,6 +3761,11 @@ export const App: React.FC = () => {
       if (!changed) return;
       const orderedList = Array.from(nextFilled);
       const paintedObj = Object.fromEntries(nextPainted);
+      liveCoopRef.current = {
+        ...cur,
+        filledRegionIds: nextFilled,
+        paintedRegionColors: nextPainted,
+      };
       setFilledRegionIds(nextFilled);
       setPaintedRegionColors(nextPainted);
 
@@ -3496,6 +3845,12 @@ export const App: React.FC = () => {
         (wasCompleted || cur.activeColorId === 0) && firstUnfilledColorId !== null
           ? firstUnfilledColorId
           : cur.activeColorId;
+      liveCoopRef.current = {
+        ...cur,
+        filledRegionIds: nextFilled,
+        paintedRegionColors: nextPainted,
+        activeColorId: nextActiveColorId,
+      };
       if (nextActiveColorId !== cur.activeColorId) {
         setActiveColorId(nextActiveColorId);
       }
@@ -3631,6 +3986,12 @@ export const App: React.FC = () => {
               }
             }
           }
+          liveCoopRef.current = {
+            ...cur,
+            filledRegionIds: nextFilled,
+            paintedRegionColors: nextPainted,
+            activeColorId: nextActiveColorId,
+          };
           setFilledRegionIds(nextFilled);
           setPaintedRegionColors(nextPainted);
           if (cur.activeSnapshotId) {
@@ -3815,8 +4176,17 @@ export const App: React.FC = () => {
     if (!url) return null;
     await NativeBridge.shareTextLink(`${activeTitle} — Capy Progress`, url);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('cloud_coop');
+    triggerFeatureOffer('cloud_coop');
     return url;
-  }, [canShareActiveLink, buildActiveShareUrl, activeTitle, settings.hapticsEnabled]);
+  }, [
+    canShareActiveLink,
+    buildActiveShareUrl,
+    activeTitle,
+    settings.hapticsEnabled,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  ]);
 
   const handleHostCoopRoom = useCallback(async (): Promise<string | null> => {
     const code = generateCoopRoomCode(6);
@@ -3847,6 +4217,8 @@ export const App: React.FC = () => {
     setCoopRoomCode(activeCode);
     setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
     NativeBridge.haptic('success', settings.hapticsEnabled);
+    markTutorialActionTried('cloud_coop');
+    triggerFeatureOffer('cloud_coop');
     return activeCode;
   }, [
     activeSampleUri,
@@ -3855,6 +4227,8 @@ export const App: React.FC = () => {
     paintedRegionColors,
     isFreeColorMode,
     settings.hapticsEnabled,
+    markTutorialActionTried,
+    triggerFeatureOffer,
   ]);
 
   const handleJoinCoopRoom = useCallback(
@@ -3879,12 +4253,16 @@ export const App: React.FC = () => {
         setCoopRoomCode(activeCode);
         setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
         NativeBridge.haptic('success', settings.hapticsEnabled);
+        if (activeCode) {
+          markTutorialActionTried('cloud_coop');
+          triggerFeatureOffer('cloud_coop');
+        }
         return Boolean(activeCode);
       } catch {
         return false;
       }
     },
-    [settings.hapticsEnabled]
+    [settings.hapticsEnabled, markTutorialActionTried, triggerFeatureOffer]
   );
 
   const handleLeaveCoopRoom = useCallback(() => {
@@ -3901,8 +4279,10 @@ export const App: React.FC = () => {
     if (!url) return null;
     await NativeBridge.shareTextLink(`Join my Capy Co-op Room (${coopRoomCode})`, url);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
+    markTutorialActionTried('cloud_coop');
+    triggerFeatureOffer('cloud_coop');
     return url;
-  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled]);
+  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled, markTutorialActionTried, triggerFeatureOffer]);
 
   const handleSyncCloudProgress = useCallback(async (): Promise<{
     addedFromCloud: number;
@@ -4028,6 +4408,11 @@ export const App: React.FC = () => {
       ) {
         const orderedList = Array.from(combinedFilled);
         const mergedPaintedObj = Object.fromEntries(nextPainted);
+        liveCoopRef.current = {
+          ...liveCoopRef.current,
+          filledRegionIds: combinedFilled,
+          paintedRegionColors: nextPainted,
+        };
         setFilledRegionIds(combinedFilled);
         setPaintedRegionColors(nextPainted);
 
@@ -4230,6 +4615,8 @@ export const App: React.FC = () => {
         const subTitle = activeTitle.includes('(2x Detail)')
           ? activeTitle
           : `${activeTitle} (2x Detail)`;
+        markTutorialActionTried('infinite_zoom');
+        triggerFeatureOffer('infinite_zoom');
         loadArtworkFromImage(
           detailImg,
           subTitle,
@@ -4262,6 +4649,8 @@ export const App: React.FC = () => {
     activeTitle,
     settings.generatorConfig,
     loadArtworkFromImage,
+    markTutorialActionTried,
+    triggerFeatureOffer,
   ]);
 
   return (
@@ -4279,6 +4668,7 @@ export const App: React.FC = () => {
       <GameTopBar
         activeTitle={activeTitle}
         progressPercentage={progressPercentage}
+        filledCount={filledCount}
         zoomScale={currentZoomScale}
         isPreviewMode={isPreviewMode}
         isCompleted={isCompleted}
@@ -4290,22 +4680,35 @@ export const App: React.FC = () => {
         onPickImage={() => fileInputRef.current?.click()}
         onTogglePreview={() => {
           dismissPostLoadReplayIfAwaiting();
-          markTutorialActionTried('menu');
-          setIsPreviewMode((prev) => !prev);
+          markTutorialActionTried('peek_fullscreen');
+          const nextPreview = !isPreviewModeRef.current;
+          isPreviewModeRef.current = nextPreview;
+          if (
+            nextPreview &&
+            showTutorialRef.current &&
+            TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'peek_fullscreen'
+          ) {
+            tutorialTriggeredPreviewRef.current = true;
+          } else if (!nextPreview) {
+            tutorialTriggeredPreviewRef.current = false;
+          }
+          setIsPreviewMode(nextPreview);
         }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
-          markTutorialActionTried('menu');
+          markTutorialActionTried('settings_a11y');
           setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
         onOpenSaves={() => {
-          markTutorialActionTried('menu');
+          markTutorialActionTried('saves_export');
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
         onOpenCoop={() => {
-          markTutorialActionTried('menu');
+          coopOfferPendingRef.current = true;
+          markTutorialActionTried('cloud_coop');
+          triggerFeatureOffer('cloud_coop');
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
@@ -4340,7 +4743,7 @@ export const App: React.FC = () => {
         hintRegionId={isCompleted || isReplaying ? null : hintRegionId}
         isPreviewMode={isPreviewMode}
         isFreeColorMode={isFreeColorMode}
-        isPaintMode={isReplaying ? false : settings.isPaintMode}
+        isPaintMode={settings.isPaintMode && (!isReplaying || (!isCompleted && isPostLoadReplay))}
         canvasBgColor={settings.canvasBgColor}
         canvasBgArgb={settings.canvasBgArgb}
         sortOrder={settings.paletteSort}
@@ -4350,7 +4753,11 @@ export const App: React.FC = () => {
         showPreviewBorders={settings.showPreviewBorders}
         labelScale={settings.labelScale}
         minLabelSize={settings.minLabelSize}
-        maxLabelSize={settings.maxLabelSize}
+        maxLabelSize={
+          settings.largeText
+            ? Math.round(Math.max(settings.maxLabelSize * 1.5, 28))
+            : settings.maxLabelSize
+        }
         highlightMatching={isReplaying ? false : settings.highlightMatching}
         highlightStyle={settings.highlightStyle}
         hintColorArgb={settings.hintColorArgb}
@@ -4429,8 +4836,10 @@ export const App: React.FC = () => {
         onPuzzleInteraction={dismissPostLoadReplayIfAwaiting}
         onViewportGesture={() => markTutorialActionTried('zoom')}
         onManualPanStart={() => {
-          if (isReplaying) {
-            cancelAutoResume();
+          if (isReplayingRef.current) {
+            if (!(isPostLoadReplayRef.current && isReplayPlaying)) {
+              cancelAutoResume();
+            }
             if (settings.replayFollow) {
               handleUpdateSettings((prev) => ({ ...prev, replayFollow: false }));
             }
@@ -4440,7 +4849,14 @@ export const App: React.FC = () => {
         onBatchRegionsClicked={attemptBatchFillRegions}
         onVisibleColorsChanged={setVisibleColorIds}
         onVisibleRegionsChanged={setVisibleRegionIds}
-        onTogglePreview={() => setIsPreviewMode((prev) => !prev)}
+        onTogglePreview={() => {
+          const nextPreview = !isPreviewModeRef.current;
+          isPreviewModeRef.current = nextPreview;
+          if (!nextPreview) {
+            tutorialTriggeredPreviewRef.current = false;
+          }
+          setIsPreviewMode(nextPreview);
+        }}
       />
 
       {/* Floating Action Controls (Undo, Redo, Replay, Zoom, Paint Mode) */}
@@ -4456,14 +4872,44 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
-          onUndo={() => handleUndo()}
-          onRedo={() => handleRedo()}
+          isReplayExpanded={isReplaying && !isReplayMinimized}
+          onUndo={() => {
+            if (isReplayingRef.current) {
+              exitReplay();
+              handleUndo(true);
+              return;
+            }
+            handleUndo();
+          }}
+          onRedo={() => {
+            if (isReplayingRef.current) {
+              exitReplay();
+              handleRedo(true);
+              return;
+            }
+            handleRedo();
+          }}
           onLongPressUndo={handleOpenTimelineReplay}
-          onStartReplay={() => startReplay(Array.from(filledRegionIds))}
+          onStartReplay={() => {
+            if (showTutorialRef.current && TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'replay') {
+              tutorialOpenedReplayRef.current = true;
+            }
+            markTutorialActionTried('replay');
+            triggerFeatureOffer('replay_scrubber');
+            startReplay(Array.from(filledRegionIds));
+          }}
           onTogglePaintMode={() => {
-            dismissPostLoadReplayIfAwaiting();
+            const enablingPaint = !settings.isPaintMode;
+            if (isReplayingRef.current) {
+              exitReplay();
+            } else {
+              dismissPostLoadReplayIfAwaiting();
+            }
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings((prev) => ({ ...prev, isPaintMode: !prev.isPaintMode }));
+            if (enablingPaint) {
+              triggerFeatureOffer('paint_mode');
+            }
           }}
           onZoomIn={() => {
             dismissPostLoadReplayIfAwaiting();
@@ -4494,8 +4940,11 @@ export const App: React.FC = () => {
           isLooping={Boolean(settings.replayLoop)}
           isFollowing={Boolean(settings.replayFollow)}
           raiseDock={settings.raisePaletteDock}
+          stackAbovePalette={!isCompleted}
           onTogglePlay={() => {
             cancelAutoResume();
+            isPostLoadReplayRef.current = false;
+            setIsPostLoadReplay(false);
             if (!isReplayPlaying && replayStepRef.current >= replaySequence.length) {
               replayStepRef.current = 0;
               setReplayStep(0);
@@ -4506,6 +4955,8 @@ export const App: React.FC = () => {
           }}
           onToggleLoop={() => {
             cancelAutoResume();
+            isPostLoadReplayRef.current = false;
+            setIsPostLoadReplay(false);
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             const nextLoop = !settings.replayLoop;
             handleUpdateSettings((prev) => ({ ...prev, replayLoop: nextLoop }));
@@ -4517,6 +4968,8 @@ export const App: React.FC = () => {
           }}
           onToggleFollow={() => {
             cancelAutoResume();
+            isPostLoadReplayRef.current = false;
+            setIsPostLoadReplay(false);
             NativeBridge.haptic('tick', settings.hapticsEnabled);
             handleUpdateSettings((prev) => ({ ...prev, replayFollow: !prev.replayFollow }));
           }}
@@ -4542,28 +4995,25 @@ export const App: React.FC = () => {
             cancelAutoResume();
             handleUpdateSettings((prev) => ({ ...prev, replaySpeed: spd }));
           }}
-          onExitReplay={() => {
-            flushPendingViewportSave();
-            cancelAutoResume();
-            setIsReplaying(false);
-            setIsReplayPlaying(false);
-          }}
+          onExitReplay={exitReplay}
           onExportImage={handleExportArtwork}
           onOpenCreate={() => {
-            flushPendingViewportSave();
-            cancelAutoResume();
-            setIsReplaying(false);
-            setIsReplayPlaying(false);
+            exitReplay();
             setSettingsInitialTab(3);
             setShowSettings(true);
           }}
           onResumeFromStep={handleResumeFromReplayStep}
-          onUserInteract={cancelAutoResume}
+          onUserInteract={() => {
+            cancelAutoResume();
+            markTutorialActionTried('replay');
+            triggerFeatureOffer('replay_scrubber');
+          }}
+          onMinimizedChange={setIsReplayMinimized}
         />
       )}
 
       {/* Palette Dock floating above canvas */}
-      {puzzle && !isLoading && !isCompleted && !isReplaying && (
+      {puzzle && !isLoading && !isCompleted && (
         <PaletteDock
           palette={puzzle.palette}
           regions={puzzle.regions}
@@ -4574,19 +5024,37 @@ export const App: React.FC = () => {
           prioritizeOnScreen={settings.prioritizeOnScreen}
           visibleColorIds={visibleColorIds}
           raiseDock={settings.raisePaletteDock}
+          isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}
           isFreeColorMode={isFreeColorMode}
           showCustomColorButton={Boolean(
             isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
           )}
           onColorSelected={(colId) => {
+            if (isReplayingRef.current) {
+              exitReplay();
+            }
             NativeBridge.haptic('tick', settings.hapticsEnabled);
+            liveCoopRef.current = { ...liveCoopRef.current, activeColorId: colId };
             setActiveColorId(colId);
             setHintRegionId(null);
             markTutorialActionTried('palette');
           }}
-          onColorHintRequested={(colId) => triggerHint(colId)}
-          onOpenPaletteOptions={() => setShowPaletteOptions(true)}
+          onSyncActiveColor={handleSyncActiveColor}
+          onColorHintRequested={(colId) => {
+            if (showTutorialRef.current && tutorialStepRef.current === 0) {
+              NativeBridge.haptic('tick', settings.hapticsEnabled);
+              setHintRegionId(null);
+              markTutorialActionTried('palette');
+              return;
+            }
+            triggerHint(colId);
+          }}
+          onOpenPaletteOptions={() => {
+            setShowPaletteOptions(true);
+            markTutorialActionTried('free_color');
+            triggerFeatureOffer('free_color');
+          }}
           onAddCustomColor={handleAddCustomColor}
           onUpdateColor={handleUpdateColor}
           onApplyPresetPalette={handleApplyPresetPalette}
@@ -4638,7 +5106,22 @@ export const App: React.FC = () => {
           coopParticipants={coopParticipants}
           canShareActiveLink={canShareActiveLink}
           onClose={() => setShowSettings(false)}
-          onUpdateSettings={handleUpdateSettings}
+          onUpdateSettings={(nextSettings) => {
+            const prev = settingsRef.current;
+            const enablingFreeColor = Boolean(nextSettings.isFreeColorMode && !prev.isFreeColorMode);
+            const toggledFreeColor =
+              nextSettings.isFreeColorMode !== prev.isFreeColorMode ||
+              nextSettings.enableCustomColorForAllPuzzles !== prev.enableCustomColorForAllPuzzles;
+            handleUpdateSettings(nextSettings);
+            if (toggledFreeColor) {
+              markTutorialActionTried('free_color');
+              if (enablingFreeColor) {
+                triggerFeatureOffer('free_color');
+              }
+            } else {
+              markTutorialActionTried('settings_a11y');
+            }
+          }}
           onToggleFullscreen={handleToggleFullscreen}
           onLoadSnapshot={(snap) => handleLoadSnapshot(snap, false)}
           onReplaySnapshot={(snap) => handleLoadSnapshot(snap, true)}
@@ -4661,12 +5144,19 @@ export const App: React.FC = () => {
               if (updated.length > 0) {
                 handleLoadSnapshot(updated[0], false);
               } else {
+                liveCoopRef.current = {
+                  ...liveCoopRef.current,
+                  activeSnapshotId: null,
+                  puzzle: null,
+                  filledRegionIds: new Set(),
+                  paintedRegionColors: new Map(),
+                };
                 setActiveSnapshotId(null);
                 setPuzzle(null);
                 setFilledRegionIds(new Set());
                 setPaintedRegionColors(new Map());
-                setUndoStack([]);
-                setRedoStack([]);
+                syncUndoStack([]);
+                syncRedoStack([]);
                 setHintRegionId(null);
                 const defaultSample = SAMPLE_GALLERY[0];
                 const img = await loadHtmlImage(defaultSample.assetPath);
@@ -4693,12 +5183,19 @@ export const App: React.FC = () => {
             }
             await StorageService.clearAllSnapshots();
             setSnapshots([]);
+            liveCoopRef.current = {
+              ...liveCoopRef.current,
+              activeSnapshotId: null,
+              puzzle: null,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+            };
             setActiveSnapshotId(null);
             setPuzzle(null);
             setFilledRegionIds(new Set());
             setPaintedRegionColors(new Map());
-            setUndoStack([]);
-            setRedoStack([]);
+            syncUndoStack([]);
+            syncRedoStack([]);
             setHintRegionId(null);
             const defaultSample = SAMPLE_GALLERY[0];
             const img = await loadHtmlImage(defaultSample.assetPath);
@@ -4737,12 +5234,22 @@ export const App: React.FC = () => {
               emitCoopUnfill(previouslyFilled);
             }
             const nextResetEpoch = (activeSave?.resetEpoch ?? 0) + 1;
+            liveCoopRef.current = {
+              ...liveCoopRef.current,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+            };
+            cancelAutoResume();
+            tutorialOpenedReplayRef.current = false;
+            isReplayingRef.current = false;
+            isPostLoadReplayRef.current = false;
+            setIsPostLoadReplay(false);
             setIsReplaying(false);
             setIsReplayPlaying(false);
             setFilledRegionIds(new Set());
             setPaintedRegionColors(new Map());
-            setUndoStack([]);
-            setRedoStack([]);
+            syncUndoStack([]);
+            syncRedoStack([]);
             setHintRegionId(null);
             resetActivePuzzleSessionStats(activeSnapshotId, false);
             if (activeSnapshotId && puzzle) {
@@ -4802,6 +5309,7 @@ export const App: React.FC = () => {
             }
           }}
           onSelectSample={(sample: SampleArtwork, cfg?: GeneratorConfig) => {
+            markTutorialActionTried('gallery_daily');
             void loadSampleFromPrebakedOrGenerate(
               sample,
               undefined,
@@ -4821,24 +5329,90 @@ export const App: React.FC = () => {
           onLeaveCoopRoom={handleLeaveCoopRoom}
           onShareProgressLink={handleShareProgressLink}
           onCopyCoopInviteLink={handleCopyCoopInviteLink}
-          onSyncCloudProgress={handleSyncCloudProgress}
+          onSyncCloudProgress={async () => {
+            const res = await handleSyncCloudProgress();
+            if (res) {
+              markTutorialActionTried('cloud_coop');
+              triggerFeatureOffer('cloud_coop');
+            }
+            return res;
+          }}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
+          onTabOpened={(tabId) => {
+            if (tabId === 3) {
+              markTutorialActionTried('gallery_daily');
+              triggerFeatureOffer('create_gallery');
+            } else if (tabId === 4) {
+              markTutorialActionTried('saves_export');
+              if (coopOfferPendingRef.current) {
+                coopOfferPendingRef.current = false;
+                triggerFeatureOffer('cloud_coop');
+              } else {
+                triggerFeatureOffer('saves_export');
+              }
+            }
+          }}
         />
       </Suspense>
 
       <OnboardingTutorial
         isOpen={showTutorial}
         isModalOpen={showSettings || showPaletteOptions}
+        isLoading={isLoading}
         stepIndex={tutorialStep}
         triedActions={tutorialTried}
-        onStepChange={setTutorialStep}
+        triedInCurrentVisit={tutorialStepTriedInVisit}
+        largeText={Boolean(settings.largeText)}
+        onToggleLargeText={() => {
+          handleUpdateSettings((prev) => ({ ...prev, largeText: !prev.largeText }));
+          if (tutorialStepRef.current === 13) {
+            markTutorialActionTried('settings_a11y');
+          }
+        }}
+        onStepChange={handleTutorialStepChange}
         onTriggerHint={() => {
+          if (isReplayingRef.current) {
+            exitReplay();
+          }
           triggerHint();
           markTutorialActionTried('hint');
         }}
         onComplete={completeTutorial}
         onSkip={completeTutorial}
+      />
+
+      <FeatureOfferBanner
+        offer={activeFeatureOffer}
+        isSuppressed={isFeatureOfferSuppressed}
+        onJumpToGuide={handleJumpToTutorialStep}
+        onDismiss={advanceFeatureOffer}
+      />
+
+      <TargetSpotlightOverlay
+        isActive={
+          !isLoading &&
+          !showSettings &&
+          !showPaletteOptions &&
+          (!isPreviewMode ||
+            (showTutorial &&
+              TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ===
+                'peek_fullscreen')) &&
+          (showTutorial || Boolean(activeFeatureOffer && !isFeatureOfferSuppressed))
+        }
+        variant={showTutorial ? 'tutorial' : 'offer'}
+        targetKey={
+          showTutorial
+            ? TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ?? null
+            : activeFeatureOffer?.id ?? null
+        }
+        cardSelector={
+          showTutorial
+            ? '[data-testid="onboarding-tutorial"]'
+            : '[data-testid="feature-offer-banner"]'
+        }
+        reducedMotion={Boolean(settings.reducedMotion)}
+        largeText={Boolean(settings.largeText)}
       />
     </div>
   );

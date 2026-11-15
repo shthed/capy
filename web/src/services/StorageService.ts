@@ -22,6 +22,7 @@ import {
 } from './StorageNamespace';
 
 const SETTINGS_KEY = 'capy_user_settings_v8';
+const UNDO_DEFAULT_MIGRATED_KEY = 'capy_undo_default_migrated_v1';
 const SNAPSHOTS_KEY = 'capy_snapshots_v8';
 const ACTIVE_STATE_KEY = 'capy_active_session_v8';
 const DB_VERSION = 1;
@@ -55,11 +56,11 @@ export const DEFAULT_SETTINGS: UserSettings = {
   showZoomButtons: false,
   showResetViewButton: false,
   paletteSort: 'NUMBER',
-  prioritizeOnScreen: true,
+  prioritizeOnScreen: false,
   hapticsEnabled: true,
   panMomentum: true,
   enableCustomColorForAllPuzzles: false,
-  enableUndo: false,
+  enableUndo: true,
   replaySpeed: 1,
   autoReplayOnLoad: true,
   replayLoop: false,
@@ -70,6 +71,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   soundEnabled: true,
   soundVolume: 0.7,
   reducedMotion: false,
+  largeText: false,
   detailedLoadingProgress: false,
   generatorConfig: {
     algorithm: 'AUTO',
@@ -175,6 +177,17 @@ export class StorageService {
         : DEFAULT_SETTINGS.soundVolume;
       const reducedMotion =
         typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : systemReducedMotion;
+      const largeText =
+        typeof parsed.largeText === 'boolean' ? parsed.largeText : DEFAULT_SETTINGS.largeText;
+      const undoMigrationKey = resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY);
+      const hasUndoMigration =
+        Boolean((parsed as Record<string, unknown>).undoDefaultMigrated) ||
+        localStorage.getItem(undoMigrationKey) === '1';
+      const enableUndo = hasUndoMigration
+        ? typeof parsed.enableUndo === 'boolean'
+          ? parsed.enableUndo
+          : DEFAULT_SETTINGS.enableUndo
+        : true;
       const difficulty =
         parsed.difficulty === 'EASY' || parsed.difficulty === 'NORMAL'
           ? parsed.difficulty
@@ -218,7 +231,7 @@ export class StorageService {
         parsed.generatorConfig && typeof parsed.generatorConfig === 'object' && !Array.isArray(parsed.generatorConfig)
           ? parsed.generatorConfig
           : {};
-      return {
+      const resolved: UserSettings = {
         ...DEFAULT_SETTINGS,
         ...parsed,
         difficulty,
@@ -233,11 +246,17 @@ export class StorageService {
         soundEnabled,
         soundVolume,
         reducedMotion,
+        largeText,
+        enableUndo,
         generatorConfig: {
           ...DEFAULT_SETTINGS.generatorConfig,
           ...genCfg,
         },
       };
+      if (!hasUndoMigration) {
+        StorageService.saveSettings(resolved);
+      }
+      return resolved;
     } catch {
       return {
         ...DEFAULT_SETTINGS,
@@ -248,8 +267,10 @@ export class StorageService {
 
   static saveSettings(settings: UserSettings): void {
     try {
-      const serialized = JSON.stringify(settings);
+      const payload = { ...settings, undoDefaultMigrated: true };
+      const serialized = JSON.stringify(payload);
       localStorage.setItem(resolveScopedStorageKey(SETTINGS_KEY), serialized);
+      localStorage.setItem(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY), '1');
       NativeBridge.saveBackup(resolveScopedBackupKey(SETTINGS_KEY), serialized);
     } catch {
       // ignore

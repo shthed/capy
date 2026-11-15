@@ -151,8 +151,8 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
     1. PR title, labels, and Sprint Milestone (`gh pr edit`).
     2. Top plain-English `## Summary`, clickable **Test Results** links, PR body overview bullets, target version, verification test list, and SHA-pinned line references (never leave stale `MERGEABLE` or old-SHA claims in the body or Development Summary comment).
     3. `gh pr view <num> --json mergeable,mergeStateStatus` confirming `MERGEABLE` / `CLEAN` before requesting review.
-- **End-of-PR Readiness Score & Checklist (`>= 95%`, `%`-First & Flexible Criteria)**:
-  - Score overall readiness strictly as a percentage (`0%--100%`, requiring `>= 95%` before requesting merge approval) without fixed-weight fractions or artificial caps.
+- **End-of-PR Readiness Score & Checklist (`100%`, `%`-First & Flexible Criteria)**:
+  - Score overall readiness strictly as a percentage (`0%--100%`, requiring `100%` before requesting merge approval) without fixed-weight fractions or artificial caps.
   - **No Fixed 5-Item Limit**: Include as many or as few scope-relevant criteria lines as the PR requires (e.g., `3--4` focused criteria for docs-only PRs, or `5--9+` criteria for multi-platform Web, Worker, Cloud, Accessibility, Android, or CI changes).
   - **`%` at the Start of Each Line Item**: Place `%` at the start of each checklist bullet (`- **<N>%** — **<Criterion>**: <Verification summary>`), selecting relevant checks from this baseline + domain catalog (and adding PR-specific criteria whenever warranted):
     - **Functionality & Edge Cases**: Gestures, persistence, modal back-stack, viewport clamping, and fallbacks verified.
@@ -184,7 +184,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 - **Reopening Closed Unmerged PRs**: Recover `refs/pull/<number>/head` onto the original head branch name, push to `origin`, run `gh pr reopen <number>`, rebase onto `origin/beta`, and `git push --force-with-lease`. Merged PRs are immutable—always open a new PR off `origin/beta`.
 <!-- capy-dev-only:start -->
 - **Bot-Authored Draft PRs (`open-pr.yml`) & Dual Review Gate (`pr-review-gate.yml`)**:
-  - Open Draft PRs via `gh workflow run open-pr.yml` once live on `main` (falling back to `gh pr create` beforehand), verify locally, run `gh pr ready <num>` FIRST (emitting `ready_for_review` to trigger CI + previews), then post an independent read-only AI Reviewer comment containing `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<40_CHAR_HEAD_SHA> score=<SCORE>% -->` (`score >= 95`) and apply `review:ai-approved`.
+  - Open Draft PRs via `gh workflow run open-pr.yml` once live on `main` (falling back to `gh pr create` beforehand), verify locally, run `gh pr ready <num>` FIRST (emitting `ready_for_review` to trigger CI + previews), then post an independent read-only AI Reviewer comment containing `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<40_CHAR_HEAD_SHA> score=<SCORE>% -->` (`score >= 100`) and apply `review:ai-approved`.
   - On `github-actions[bot]`-opened PRs, only the Project Owner's 1-click native GitHub **Approve** on current `HEAD` satisfies [`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml) (`capy/review-gate`); never apply `review:owner-approved` or post human approval comments unprompted.
 - **Automated Epic Checklist Sync ([`sync-agile-tracker.yml`](./.github/workflows/sync-agile-tracker.yml))**:
   - On merged `beta` / `main` PRs (`pull_request_target: types: [closed]` with zero PR code checkout), pure `github-script` maps `epic:1`..`epic:5` labels or `**Agile Scope**` (`EPIC-1`..`EPIC-5`) to the corresponding open Parent Epic Issue and checks off or appends `- [x] [#NNN — Title](...)` automatically.
