@@ -27,6 +27,7 @@ Instead of maintaining a duplicate Kotlin implementation of vector quantization,
 - **OS Share Sheet & Background-Downsampled Incoming Share Intents** (`Intent.ACTION_SEND` with `image/*` and binary `.capy` exports via `FileProvider`)
 - **Google Play Games Services v2 Sign-In & Saved Games Sync** (`GamesSignInClient`, `PlayersClient`, and `SnapshotsClient`)
 - **Persistent Internal Disk Backups** (`filesDir/capy_saves/` and `filesDir/capy_cloud/`)
+- **Android TV Leanback Launcher & Banner Support** (`android.intent.category.LEANBACK_LAUNCHER`, optional `android.hardware.touchscreen` & `android.software.leanback` `required="false"` declarations, and `320x180` [`tv_banner.png`](./app/src/main/res/drawable-xhdpi/tv_banner.png) referenced via `android:banner="@drawable/tv_banner"` in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml) so phones, tablets, and Android TVs share one APK)
 - **Network Capability** (`android.permission.INTERNET` declared in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml) for cloud sync, co-op rooms, and remote URLs)
 
 ---
@@ -130,7 +131,7 @@ cd web && npm ci && npm run build
 # OR directly via Gradle:
 ./gradlew app:buildWeb
 
-# Run JUnit4 unit tests for the Android launcher
+# Run JUnit4 unit tests for the Android launcher (`CapyAndroidBridgeTest.kt` + `AndroidTvManifestAndBridgeTest.kt`)
 ./gradlew app:testDebugUnitTest
 
 # Build Debug APK (outputs to app/build/outputs/apk/debug/app-debug.apk)
