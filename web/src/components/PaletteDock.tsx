@@ -356,7 +356,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         }}
       >
         <div
-          className="flex items-center gap-2 mx-auto min-w-max"
+          className="flex items-center mx-auto min-w-max"
           style={{
             paddingLeft: isScrollable
               ? 'max(calc(50% - 23px), calc(var(--sal, 0px) + 0.75rem))'
@@ -366,6 +366,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
               : 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
           }}
         >
+        <div data-testid="palette-dock-tray" className="flex items-center gap-2">
         {dockPalette.map((color) => {
           const isActive = color.id === activeColorId;
           const isVisibleOnScreen = visibleColorIds.has(color.id);
@@ -434,6 +435,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
             </span>
           </button>
         )}
+        </div>
         </div>
       </div>
     </div>

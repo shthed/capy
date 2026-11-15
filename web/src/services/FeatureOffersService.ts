@@ -24,65 +24,65 @@ export interface FeatureOfferDef {
 export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
   paint_mode: {
     id: 'paint_mode',
-    title: 'Paint Mode Drag-Fill',
+    title: 'Brush Mode On',
     message:
-      'Paint Mode is active — drag continuously across matching shapes. Two fingers or outer margins still pan.',
+      'Drag your finger across shapes to fill them fast. Use two fingers to move the picture.',
     tutorialStepIndex: 1,
   },
   undo_replay: {
     id: 'undo_replay',
-    title: 'Undo, Redo & Long-Press Replay',
+    title: 'Undo, Redo & Replay',
     message:
-      'Made a slip? Redo appears above Undo if you change your mind, or long-press Undo anytime to scrub your replay.',
+      'Use Undo or Redo on the right anytime, or hold Undo to watch a replay.',
     tutorialStepIndex: 4,
   },
   replay_scrubber: {
     id: 'replay_scrubber',
-    title: 'Timeline Replay Controls',
+    title: 'Replay Controls',
     message:
-      'Expand Replay to switch speed (0.5x–20x), Follow Painting, Auto-Loop, or tap Resume Here from any step.',
+      'Open this bar to change speed or keep coloring from any point in your replay.',
     tutorialStepIndex: 5,
   },
   free_color: {
     id: 'free_color',
-    title: 'Free Colour & Custom Palettes',
+    title: 'Paint Any Color',
     message:
-      'Paint any region any shade! Tap + Custom in the palette dock for HSL/Hex editing and 5 curated themes.',
+      'Tap + Custom in the color bar to pick your own colors or try a preset theme.',
     tutorialStepIndex: 7,
   },
   create_gallery: {
     id: 'create_gallery',
-    title: 'Daily Puzzle & Artwork Gallery',
+    title: 'Daily Puzzle & Gallery',
     message:
-      'Try today’s UTC Puzzle of the Day, filter gallery categories, or vote on Community Puzzle Ideas in Menu > Create.',
+      'Open Create in the menu for today’s Daily Puzzle, extra pictures, and new ideas.',
     tutorialStepIndex: 8,
   },
   photo_upload: {
     id: 'photo_upload',
-    title: 'Custom Photo Generator',
+    title: 'Photo Styles',
     message:
-      'Tune Auto, Line Art, Painterly, Posterized, or Mosaic styles and outline handling anytime in Menu > Create.',
+      'Adjust puzzle style and detail level anytime under Create in the menu.',
     tutorialStepIndex: 9,
   },
   infinite_zoom: {
     id: 'infinite_zoom',
-    title: 'Infinite Zoom 2x Detail Tile',
+    title: 'Detail View Created',
     message:
-      'Sub-puzzle created! Tap the Parent Puzzle pill in the top bar anytime to return to your saved view.',
+      'Tap the Parent button in the top-left corner anytime to go back to your full picture.',
     tutorialStepIndex: 10,
   },
   saves_export: {
     id: 'saves_export',
-    title: 'Saves, .capy Backups & SVG',
+    title: 'Saved Pictures',
     message:
-      'Pin favorites, switch Thumbnails or Detail view, back up .capy files, or export Printable .svg sheets in Saves.',
+      'Pin favorites, rename pictures, save backups, or print coloring pages here.',
     tutorialStepIndex: 11,
   },
   cloud_coop: {
     id: 'cloud_coop',
-    title: 'Cloud Sync, Share Links & Live Co-op',
+    title: 'Color Together',
     message:
-      'Sync across devices with Google or Play Games, share <2 KB progress links, or Host / Join a 6-char Co-op room.',
+      'Back up online, share a progress link, or join a live Co-op room with friends.',
     tutorialStepIndex: 12,
   },
 };

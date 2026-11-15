@@ -63,7 +63,7 @@
 
 /* Low-Vision / Large Text Accessibility Mode (scoped to text classes, preserving rem layout) */
 [data-large-text="true"] {
-  --capy-tutorial-top: 4.05rem;
+  --capy-tutorial-top: 5.05rem;
 }
 [data-large-text="true"] .text-\[9\.5px\] {
   font-size: 11.5px;
@@ -96,12 +96,10 @@
 
 @keyframes capy-spotlight-pulse {
   0%, 100% {
-    opacity: 0.92;
-    transform: scale(1);
+    opacity: 0.68;
   }
   50% {
     opacity: 1;
-    transform: scale(1.04);
   }
 }
 

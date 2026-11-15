@@ -16,7 +16,6 @@ export interface SpotlightTargetSpec {
   fallbackSelector?: string;
   fallbackSelectors?: string[];
   optional?: boolean;
-  isCanvasFocal?: boolean;
   padding?: number;
   borderRadius?: number;
 }
@@ -35,45 +34,41 @@ export interface SpotlightConnector {
 export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[]> = {
   palette: [
     {
-      selector: '[data-testid="palette-dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]',
-      fallbackSelectors: [
-        '[data-testid="palette-dock"] button[data-testid^="palette-swatch-"]',
-        '[data-testid="palette-dock"]',
-      ],
-      padding: 6,
+      selector: '[data-testid="palette-dock-tray"]',
+      fallbackSelector: '[data-testid="palette-dock"]',
+      padding: 4,
       borderRadius: 14,
     },
   ],
   paint: [
     {
-      selector: '[data-testid="puzzle-canvas"]',
-      isCanvasFocal: true,
-      padding: 8,
-      borderRadius: 18,
-    },
-    {
       selector: '[data-testid="paint-mode-btn"]',
-      optional: true,
-      padding: 6,
+      padding: 4,
       borderRadius: 9999,
     },
   ],
   zoom: [
     {
-      selector: '[data-testid="puzzle-canvas"]',
-      isCanvasFocal: true,
-      padding: 8,
-      borderRadius: 18,
+      selector: '[data-testid="zoom-in-btn"]',
+      optional: true,
+      padding: 4,
+      borderRadius: 9999,
+    },
+    {
+      selector: '[data-testid="zoom-out-btn"]',
+      optional: true,
+      padding: 4,
+      borderRadius: 9999,
     },
   ],
   hint: [
     {
       selector: '[data-testid="palette-dock"] button[data-testid^="palette-swatch-"][aria-pressed="true"]',
       fallbackSelectors: [
-        '[data-testid="tutorial-try-hint-btn"]',
+        '[data-testid="palette-dock-tray"]',
         '[data-testid="palette-dock"]',
       ],
-      padding: 6,
+      padding: 4,
       borderRadius: 14,
     },
   ],
@@ -81,13 +76,13 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
     {
       selector: '[data-testid="undo-btn"]',
       fallbackSelector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
     {
       selector: '[data-testid="redo-btn"]',
       optional: true,
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -99,20 +94,20 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
         '[data-testid="undo-btn"]',
         '[data-testid="topbar-settings-btn"]',
       ],
-      padding: 6,
+      padding: 4,
       borderRadius: 16,
     },
   ],
   peek_fullscreen: [
     {
       selector: '[data-testid="topbar-preview-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
     {
       selector: '[data-testid="topbar-fullscreen-btn"]',
       optional: true,
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -120,55 +115,56 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
     {
       selector: '[data-testid="palette-custom-btn"]',
       fallbackSelector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 14,
     },
   ],
   gallery_daily: [
     {
       selector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   custom_photo: [
     {
       selector: '[data-testid="topbar-upload-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   infinite_zoom: [
     {
-      selector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      selector: '[data-testid="topbar-parent-puzzle-btn"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   saves_export: [
     {
       selector: '[data-testid="topbar-saves-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   cloud_coop: [
     {
       selector: '[data-testid="topbar-coop-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
     {
       selector: '[data-testid="topbar-active-coop-pill"]',
       optional: true,
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   settings_a11y: [
     {
       selector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -178,7 +174,7 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
   paint_mode: [
     {
       selector: '[data-testid="paint-mode-btn"]',
-      padding: 6,
+      padding: 4,
       borderRadius: 9999,
     },
   ],
@@ -186,13 +182,13 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
     {
       selector: '[data-testid="undo-btn"]',
       fallbackSelector: '[data-testid="redo-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
     {
       selector: '[data-testid="redo-btn"]',
       optional: true,
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -200,22 +196,25 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
     {
       selector: '[data-testid="replay-controls-window"]',
       fallbackSelector: '[data-testid="undo-btn"]',
-      padding: 6,
+      padding: 4,
       borderRadius: 16,
     },
   ],
   free_color: [
     {
       selector: '[data-testid="palette-custom-btn"]',
-      fallbackSelector: '[data-testid="palette-dock"]',
-      padding: 6,
+      fallbackSelectors: [
+        '[data-testid="palette-dock-tray"]',
+        '[data-testid="palette-dock"]',
+      ],
+      padding: 4,
       borderRadius: 14,
     },
   ],
   create_gallery: [
     {
       selector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -223,7 +222,7 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
     {
       selector: '[data-testid="topbar-upload-btn"]',
       fallbackSelector: '[data-testid="topbar-settings-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -231,21 +230,21 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
     {
       selector: '[data-testid="topbar-parent-puzzle-btn"]',
       fallbackSelector: '[data-testid="topbar-saves-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   saves_export: [
     {
       selector: '[data-testid="topbar-saves-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
   cloud_coop: [
     {
       selector: '[data-testid="topbar-coop-btn"]',
-      padding: 6,
+      padding: 3,
       borderRadius: 9999,
     },
   ],
@@ -265,68 +264,113 @@ export function clampRectToBounds(
   return { left, top, width, height };
 }
 
-export function computeCanvasFocalRect(
-  cardRect: SpotlightRect | null,
-  viewport: { width: number; height: number }
-): SpotlightRect {
-  const width = Math.max(110, Math.min(240, Math.round(viewport.width * 0.56)));
-  const topFloor = cardRect ? cardRect.top + cardRect.height + 22 : Math.round(viewport.height * 0.38);
-  const bottomCeil = Math.max(topFloor + 72, viewport.height - 108);
-  const availableH = Math.max(72, bottomCeil - topFloor);
-  const height = Math.max(72, Math.min(168, Math.round(availableH * 0.68)));
-  const top = topFloor + Math.max(0, Math.round((availableH - height) / 2));
-  const left = Math.round((viewport.width - width) / 2);
-  return clampRectToBounds({ left, top, width, height }, viewport, 8);
+export function preventRingOverlap(
+  rects: SpotlightRect[],
+  minGap: number = 2
+): SpotlightRect[] {
+  const out = rects.map((r) => ({ ...r }));
+  for (let i = 0; i < out.length; i++) {
+    for (let j = i + 1; j < out.length; j++) {
+      const a = out[i];
+      const b = out[j];
+      const horizOverlap = Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left);
+      const vertOverlap = Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top);
+      if (horizOverlap > -minGap && vertOverlap > -minGap) {
+        const acx = a.left + a.width / 2;
+        const bcx = b.left + b.width / 2;
+        const acy = a.top + a.height / 2;
+        const bcy = b.top + b.height / 2;
+        if (Math.abs(bcx - acx) >= Math.abs(bcy - acy)) {
+          const leftRing = acx <= bcx ? a : b;
+          const rightRing = acx <= bcx ? b : a;
+          const splitX = (leftRing.left + leftRing.width + rightRing.left) / 2;
+          const nextLeftW = Math.max(16, splitX - minGap / 2 - leftRing.left);
+          const nextRightLeft = splitX + minGap / 2;
+          const nextRightW = Math.max(16, rightRing.left + rightRing.width - nextRightLeft);
+          leftRing.width = nextLeftW;
+          rightRing.left = nextRightLeft;
+          rightRing.width = nextRightW;
+        } else {
+          const topRing = acy <= bcy ? a : b;
+          const bottomRing = acy <= bcy ? b : a;
+          const splitY = (topRing.top + topRing.height + bottomRing.top) / 2;
+          const nextTopH = Math.max(16, splitY - minGap / 2 - topRing.top);
+          const nextBottomTop = splitY + minGap / 2;
+          const nextBottomH = Math.max(16, bottomRing.top + bottomRing.height - nextBottomTop);
+          topRing.height = nextTopH;
+          bottomRing.top = nextBottomTop;
+          bottomRing.height = nextBottomH;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 export function computeSpotlightConnector(
   cardRect: SpotlightRect,
   targetRect: SpotlightRect
-): SpotlightConnector {
+): SpotlightConnector | null {
   const cardCx = cardRect.left + cardRect.width / 2;
   const targetCx = targetRect.left + targetRect.width / 2;
   const targetCy = targetRect.top + targetRect.height / 2;
+  const targetBottom = targetRect.top + targetRect.height;
+  const cardBottom = cardRect.top + cardRect.height;
 
   let startX = cardCx;
-  let startY = cardRect.top + cardRect.height;
+  let startY = cardBottom;
   let endX = targetCx;
-  let endY = targetRect.top - 5;
+  let endY = targetRect.top - 4;
   let ctrlX = (startX + endX) / 2;
   let ctrlY = (startY + endY) / 2;
 
-  if (targetCy < cardRect.top + 4) {
-    startX = Math.max(cardRect.left + 20, Math.min(cardRect.left + cardRect.width - 20, targetCx));
-    startY = cardRect.top;
+  if (targetBottom <= cardRect.top + 4) {
+    // Target sits above the card (e.g., top bar controls)
+    startX = Math.max(cardRect.left + 16, Math.min(cardRect.left + cardRect.width - 16, targetCx));
+    startY = cardRect.top - 1;
+    const rawGap = startY - targetBottom;
+    if (rawGap < 6) return null;
     endX = targetCx;
-    endY = Math.min(startY - 6, targetRect.top + targetRect.height + 5);
+    endY = Math.min(startY - 5, targetBottom + Math.min(4, rawGap * 0.25));
     const dx = endX - startX;
     const dy = endY - startY;
-    ctrlX = startX + dx * 0.35 + (Math.abs(dx) < 16 ? 18 : 0);
-    ctrlY = startY + dy * 0.55;
-  } else if (targetCy > cardRect.top + cardRect.height - 4) {
-    startX = Math.max(cardRect.left + 20, Math.min(cardRect.left + cardRect.width - 20, targetCx));
-    startY = cardRect.top + cardRect.height;
+    ctrlX = Math.abs(dx) < 8 ? (startX + endX) / 2 : startX + dx * 0.3;
+    ctrlY = startY + dy * 0.6;
+  } else if (targetRect.top >= cardBottom - 4) {
+    // Target sits below the card (e.g., bottom palette dock or right floating actions)
+    startX = Math.max(cardRect.left + 16, Math.min(cardRect.left + cardRect.width - 16, targetCx));
+    startY = cardBottom + 1;
+    const rawGap = targetRect.top - startY;
+    if (rawGap < 6) return null;
     endX = targetCx;
-    endY = Math.max(startY + 6, targetRect.top - 5);
+    endY = Math.max(startY + 5, targetRect.top - Math.min(4, rawGap * 0.25));
     const dx = endX - startX;
     const dy = endY - startY;
-    ctrlX = startX + dx * 0.35 + (Math.abs(dx) < 16 ? 18 : 0);
-    ctrlY = startY + dy * 0.55;
+    ctrlX = Math.abs(dx) < 8 ? (startX + endX) / 2 : startX + dx * 0.3;
+    ctrlY = startY + dy * 0.6;
   } else if (targetCx >= cardCx) {
-    startX = cardRect.left + cardRect.width;
-    startY = Math.max(cardRect.top + 16, Math.min(cardRect.top + cardRect.height - 16, targetCy));
-    endX = Math.max(startX + 6, targetRect.left - 5);
+    startX = cardRect.left + cardRect.width + 1;
+    const rawGap = targetRect.left - startX;
+    if (rawGap < 6) return null;
+    startY = Math.max(cardRect.top + 16, Math.min(cardBottom - 16, targetCy));
+    endX = Math.max(startX + 5, targetRect.left - Math.min(4, rawGap * 0.25));
     endY = targetCy;
     ctrlX = (startX + endX) / 2;
-    ctrlY = (startY + endY) / 2 - 16;
+    ctrlY = (startY + endY) / 2 - 12;
   } else {
-    startX = cardRect.left;
-    startY = Math.max(cardRect.top + 16, Math.min(cardRect.top + cardRect.height - 16, targetCy));
-    endX = Math.min(startX - 6, targetRect.left + targetRect.width + 5);
+    startX = cardRect.left - 1;
+    const targetRight = targetRect.left + targetRect.width;
+    const rawGap = startX - targetRight;
+    if (rawGap < 6) return null;
+    startY = Math.max(cardRect.top + 16, Math.min(cardBottom - 16, targetCy));
+    endX = Math.min(startX - 5, targetRight + Math.min(4, rawGap * 0.25));
     endY = targetCy;
     ctrlX = (startX + endX) / 2;
-    ctrlY = (startY + endY) / 2 - 16;
+    ctrlY = (startY + endY) / 2 - 12;
   }
+
+  const dist = Math.hypot(endX - startX, endY - startY);
+  if (dist < 6) return null;
 
   const tx = endX - ctrlX;
   const ty = endY - ctrlY;
@@ -335,8 +379,8 @@ export function computeSpotlightConnector(
   const uy = ty / len;
   const px = -uy;
   const py = ux;
-  const headLen = 9;
-  const headHalfW = 5;
+  const headLen = Math.min(8, Math.max(4, dist * 0.42));
+  const headHalfW = Math.min(4.5, headLen * 0.6);
   const baseX = endX - ux * headLen;
   const baseY = endY - uy * headLen;
   const leftX = baseX + px * headHalfW;
@@ -485,7 +529,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
       return;
     }
 
-    const resolvedRings: ResolvedTargetRing[] = [];
+    const rawRings: ResolvedTargetRing[] = [];
     for (const spec of specs) {
       const candidates = [
         spec.selector,
@@ -507,34 +551,47 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
         continue;
       }
 
-      const pad = spec.padding ?? 6;
+      const pad = spec.padding ?? 4;
       const borderRadius = spec.borderRadius ?? 14;
       const targetTestId = el.getAttribute('data-testid') || '';
 
-      if (spec.isCanvasFocal) {
-        const focalRect = computeCanvasFocalRect(cardRect, viewport);
-        resolvedRings.push({
-          rect: focalRect,
-          borderRadius,
-          targetTestId,
-          targetSelector: usedSelector,
-        });
-      } else {
-        const raw = el.getBoundingClientRect();
-        const padded: SpotlightRect = {
-          left: raw.left - pad,
-          top: raw.top - pad,
-          width: raw.width + pad * 2,
-          height: raw.height + pad * 2,
-        };
-        resolvedRings.push({
-          rect: clampRectToBounds(padded, viewport, 2),
-          borderRadius,
-          targetTestId,
-          targetSelector: usedSelector,
-        });
-      }
+      const raw = el.getBoundingClientRect();
+      const clip = getScrollClipBounds(el, viewport);
+      const minX = Math.max(4, clip.left);
+      const maxX = Math.min(viewport.width - 4, clip.right);
+      const minY = Math.max(4, clip.top);
+      const maxY = Math.min(viewport.height - 4, clip.bottom);
+      const clippedLeft = Math.max(raw.left - pad, minX);
+      const clippedRight = Math.min(raw.left + raw.width + pad, maxX);
+      const clippedTop = Math.max(raw.top - pad, minY);
+      const clippedBottom = Math.min(raw.top + raw.height + pad, maxY);
+      const padded: SpotlightRect =
+        clippedRight > clippedLeft + 8 && clippedBottom > clippedTop + 8
+          ? {
+              left: clippedLeft,
+              top: clippedTop,
+              width: clippedRight - clippedLeft,
+              height: clippedBottom - clippedTop,
+            }
+          : {
+              left: raw.left - pad,
+              top: raw.top - pad,
+              width: raw.width + pad * 2,
+              height: raw.height + pad * 2,
+            };
+      rawRings.push({
+        rect: clampRectToBounds(padded, viewport, 2),
+        borderRadius,
+        targetTestId,
+        targetSelector: usedSelector,
+      });
     }
+
+    const separatedRects = preventRingOverlap(rawRings.map((r) => r.rect), 2);
+    const resolvedRings = rawRings.map((ring, idx) => ({
+      ...ring,
+      rect: separatedRects[idx],
+    }));
 
     let connector: SpotlightConnector | null = null;
     if (cardRect && resolvedRings.length > 0) {
@@ -613,8 +670,8 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
   const accentStroke = variant === 'tutorial' ? 'rgba(251, 191, 36, 0.95)' : 'rgba(56, 189, 248, 0.95)';
   const accentGlow =
     variant === 'tutorial'
-      ? '0 0 0 2px rgba(251, 191, 36, 0.35), 0 0 18px rgba(251, 191, 36, 0.45)'
-      : '0 0 0 2px rgba(56, 189, 248, 0.35), 0 0 18px rgba(56, 189, 248, 0.45)';
+      ? '0 0 0 1px rgba(251, 191, 36, 0.25), 0 0 12px rgba(251, 191, 36, 0.35)'
+      : '0 0 0 1px rgba(56, 189, 248, 0.25), 0 0 12px rgba(56, 189, 248, 0.35)';
 
   return (
     <div
@@ -631,7 +688,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
           data-target-selector={ring.targetSelector}
           className={`fixed pointer-events-none ${
             !reducedMotion
-              ? 'transition-[left,top,width,height] duration-150 motion-reduce:transition-none capy-spotlight-pulse'
+              ? 'transition-opacity duration-150 motion-reduce:transition-none capy-spotlight-pulse'
               : 'transition-none'
           }`}
           style={{
@@ -640,7 +697,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
             width: `${ring.rect.width}px`,
             height: `${ring.rect.height}px`,
             borderRadius: ring.borderRadius === 9999 ? '9999px' : `${ring.borderRadius}px`,
-            border: `2.5px solid ${accentStroke}`,
+            border: `2px solid ${accentStroke}`,
             boxShadow: accentGlow,
           }}
         />
@@ -655,7 +712,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
             d={layout.connector.d}
             fill="none"
             stroke={accentStroke}
-            strokeWidth={2.5}
+            strokeWidth={2}
             strokeLinecap="round"
             strokeDasharray={!reducedMotion ? '5 4' : undefined}
             className={!reducedMotion ? 'capy-spotlight-dash' : undefined}
