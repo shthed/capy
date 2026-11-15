@@ -83,16 +83,53 @@ jobs:
         run: |
           set -euo pipefail
           cd /tmp/capyboop-stage
+
+          ASKPASS_SCRIPT="$(mktemp)"
+          LOG_FILE="$(mktemp)"
+          cleanup() {
+            rm -f "${ASKPASS_SCRIPT}" "${LOG_FILE}"
+          }
+          trap cleanup EXIT
+
+          chmod 700 "${ASKPASS_SCRIPT}"
+          cat <<'EOF' > "${ASKPASS_SCRIPT}"
+          #!/usr/bin/env bash
+          case "${1:-}" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *) printf '%s\n' "${CAPYBOOP_SYNC_TOKEN}" ;;
+          esac
+          EOF
+          export GIT_ASKPASS="${ASKPASS_SCRIPT}"
+          export GIT_TERMINAL_PROMPT=0
+
           git init -b main
           git config user.name "${GIT_AUTHOR_NAME}"
           git config user.email "${GIT_AUTHOR_EMAIL}"
-          git remote add target "https://x-access-token:${CAPYBOOP_SYNC_TOKEN}@github.com/capyboop/capy.git"
+          git config credential.helper ""
+          git remote add target "https://x-access-token@github.com/capyboop/capy.git"
           git add -A
 
+          NEEDS_CLEAN_RESET="false"
+          if [ "${RESET_CLEAN_ROOT}" = "true" ]; then
+            NEEDS_CLEAN_RESET="true"
+          fi
+
           PUSHED_COMMIT_SHA=""
-          if git ls-remote --exit-code --heads target main >/dev/null 2>&1; then
+          MAIN_LS_RC=0
+          git ls-remote --exit-code --heads target main >/dev/null || MAIN_LS_RC=$?
+          if [ "${MAIN_LS_RC}" -eq 0 ]; then
             git fetch target main
-            if [ "${RESET_CLEAN_ROOT}" = "true" ] || git log FETCH_HEAD --format="%an %ae %cn %ce %B" | grep -iqE "shthed|hairy dog trumpet"; then
+            git log FETCH_HEAD --format="%an %ae %cn %ce %B%x00" > "${LOG_FILE}"
+            GREP_RC=0
+            grep -iaqzE "shthed|hairy[[:space:]_-]*dog[[:space:]_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|dependabot\.ya?ml" "${LOG_FILE}" || GREP_RC=$?
+            if [ "${GREP_RC}" -eq 0 ]; then
+              NEEDS_CLEAN_RESET="true"
+            elif [ "${GREP_RC}" -ne 1 ]; then
+              echo "Failed to scan FETCH_HEAD commit history (grep exit ${GREP_RC})." >&2
+              exit "${GREP_RC}"
+            fi
+
+            if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
               echo "Initializing fresh clean-room root history authored solely by capyboop..."
               git commit -m "Release Capy Paint v${version}"
               PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
@@ -110,21 +147,32 @@ jobs:
                 git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
               fi
             fi
-          else
+          elif [ "${MAIN_LS_RC}" -eq 2 ]; then
             echo "Target repository has no main branch yet; pushing initial clean root commit..."
             git commit -m "Release Capy Paint v${version}"
             PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
             git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+          else
+            echo "git ls-remote --heads target main failed with exit code ${MAIN_LS_RC}." >&2
+            exit "${MAIN_LS_RC}"
           fi
 
           TAG_NAME="v${version}"
-          if [ "${RESET_CLEAN_ROOT}" = "true" ]; then
+          if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
+            echo "Force-syncing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) onto clean root..."
             git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
             git push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
-          elif ! git ls-remote --exit-code --tags target "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
-            echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/capy..."
-            git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
-            git push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
           else
-            echo "Tag ${TAG_NAME} already exists on capyboop/capy; skipping tag push."
+            TAG_LS_RC=0
+            git ls-remote --exit-code --tags target "refs/tags/${TAG_NAME}" >/dev/null || TAG_LS_RC=$?
+            if [ "${TAG_LS_RC}" -eq 2 ]; then
+              echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/capy..."
+              git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+              git push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+            elif [ "${TAG_LS_RC}" -eq 0 ]; then
+              echo "Tag ${TAG_NAME} already exists on capyboop/capy; skipping tag push."
+            else
+              echo "git ls-remote --tags target refs/tags/${TAG_NAME} failed with exit code ${TAG_LS_RC}." >&2
+              exit "${TAG_LS_RC}"
+            fi
           fi

@@ -40,7 +40,7 @@ concurrency:
 jobs:
   review-gate:
     name: Dual AI & Owner Review Gate
-    if: github.repository == 'shthed/capy' && (github.event_name == 'workflow_dispatch' || (github.actor != 'dependabot[bot]' && (github.actor != 'github-actions[bot]' || (github.event_name == 'pull_request' && contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'), github.event.action))))) && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
+    if: github.repository == 'shthed/capy' && (github.event_name == 'workflow_dispatch' || (github.actor != 'dependabot[bot]' && (github.actor != 'github-actions[bot]' || (github.event_name == 'pull_request' && contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'), github.event.action))))) && (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) && (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null || github.event.changes.body != null)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -136,6 +136,7 @@ jobs:
             const latestPushMs = Math.max(effectiveCommitMs, latestForcePushMs);
 
             const activeLabels = new Set((pr.labels || []).map((l) => l.name));
+            const hadAiApprovedLabel = activeLabels.has('review:ai-approved');
 
             async function safeRemoveLabel(labelName) {
               if (!activeLabels.has(labelName)) return;
@@ -253,7 +254,7 @@ jobs:
             };
 
             const isStrictPrBodyValid = (() => {
-              if (typeof pr.body !== 'string') return true;
+              if (typeof pr.body !== 'string') return false;
               if (isDependabotPr) return !hasChecklistSub100OrUnchecked(pr.body);
               if (pr.head?.ref === 'sync/beta-from-main') return true;
               const trimmed = pr.body.trim();
@@ -769,7 +770,13 @@ jobs:
                     }
                   }
                 }
-              } else if (state === 'failure' && pr.auto_merge) {
+              } else if (
+                pr.auto_merge &&
+                (state === 'failure' ||
+                  isDraft ||
+                  hadAiApprovedLabel ||
+                  (latestAiSignal !== null && !hasValidAiMarker))
+              ) {
                 try {
                   await github.graphql(
                     `mutation($pullRequestId: ID!) {
