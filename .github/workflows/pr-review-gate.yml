@@ -89,7 +89,6 @@ jobs:
             const nowMs = Date.now();
             const rawCommitMs =
               Date.parse(headCommit.commit.committer?.date || headCommit.commit.author?.date || '') || 0;
-            const commitMs = rawCommitMs > nowMs ? 0 : rawCommitMs;
 
             const issueEvents = await github.paginate(github.rest.issues.listEvents, {
               owner,
@@ -105,7 +104,36 @@ jobs:
                 if (ts > latestForcePushMs) latestForcePushMs = ts;
               }
             }
-            const latestPushMs = Math.max(commitMs, latestForcePushMs);
+
+            const existingStatuses = await github.paginate(
+              github.rest.repos.listCommitStatusesForRef,
+              {
+                owner,
+                repo,
+                ref: headSha,
+                per_page: 100,
+              }
+            );
+            const prCreatedMs = Date.parse(pr.created_at || '') || 0;
+            let earliestHeadStatusMs = 0;
+            for (const s of existingStatuses || []) {
+              if (s?.context !== 'capy/review-gate' || !s?.created_at) continue;
+              const ts = Date.parse(s.created_at) || 0;
+              if (ts >= Math.max(latestForcePushMs, prCreatedMs) && ts > 0 && ts <= nowMs + 60_000) {
+                if (earliestHeadStatusMs === 0 || ts < earliestHeadStatusMs) {
+                  earliestHeadStatusMs = ts;
+                }
+              }
+            }
+
+            const effectiveCommitMs =
+              rawCommitMs > nowMs ||
+              (earliestHeadStatusMs > 0 && rawCommitMs > earliestHeadStatusMs) ||
+              (latestForcePushMs > 0 && rawCommitMs > latestForcePushMs)
+                ? 0
+                : rawCommitMs;
+            const commitMs = effectiveCommitMs;
+            const latestPushMs = Math.max(effectiveCommitMs, latestForcePushMs);
 
             const activeLabels = new Set((pr.labels || []).map((l) => l.name));
 
@@ -324,27 +352,6 @@ jobs:
 
             const effectiveOwnerApprovals = nativeHeadApprovals;
             const effectiveOwnerApprovalMs = maxSignalTs(effectiveOwnerApprovals);
-
-            const existingStatuses = await github.paginate(
-              github.rest.repos.listCommitStatusesForRef,
-              {
-                owner,
-                repo,
-                ref: headSha,
-                per_page: 100,
-              }
-            );
-            const prCreatedMs = Date.parse(pr.created_at || '') || 0;
-            let earliestHeadStatusMs = 0;
-            for (const s of existingStatuses || []) {
-              if (s?.context !== 'capy/review-gate' || !s?.created_at) continue;
-              const ts = Date.parse(s.created_at) || 0;
-              if (ts >= Math.max(latestForcePushMs, prCreatedMs) && ts > 0 && ts <= nowMs + 60_000) {
-                if (earliestHeadStatusMs === 0 || ts < earliestHeadStatusMs) {
-                  earliestHeadStatusMs = ts;
-                }
-              }
-            }
 
             const skewAnchorCandidates = [
               effectiveOwnerApprovalMs,
