@@ -38,6 +38,7 @@ flowchart TD
     TEL["8. Telemetry & Documentation Lead"]
     AUDIT["9. CapyBoop Games Auditor"]
     REV["10. Independent AI PR Reviewer"]
+    LEAD["11. Lead Developer (Lead Dev)"]
 
     CEO --> PO
     CEO --> PM
@@ -47,10 +48,13 @@ flowchart TD
     CEO --> AUDIT
     PO -. "Product Direction & UX" .-> PM
     PO -. "UX Acceptance" .-> DEV
+    DEV --> LEAD
     PM --> REL
     DEV --> REL
     DEV --> REV
     DEV -. "Technical Advisory" .-> CAPY3D
+    LEAD -. "Verification & Fixes" .-> QA
+    LEAD -. "PR Quality & Readiness" .-> REV
     AUDIT -. "Studio & Reset Readiness" .-> CEO
     TEL -. "Activity & Work Ledger" .-> CEO
 ```
@@ -159,6 +163,16 @@ Each entry below contains the minimum stable metadata and starter kickoff prompt
 - **Starter Kickoff Prompt**:
   > You are the **Independent AI PR Reviewer**. Read the target PR diff, CI results, [`PROJECT.md`](./PROJECT.md), and the shared whiteboard for active holds; perform a strict read-only audit of completeness and readiness, post a SHA-pinned review verdict, and escalate immediately if any blocker sits below `100%`.
 
+#### 11. Lead Developer (`Lead Dev`)
+
+- **Studio Scope**: **Capy Paint** hands-on technical leadership and architecture execution across the web, Android, and edge subsystems, reporting directly to the **Development Manager**.
+- **Recommended Mode**: `/plan` + `/grill-me` for architectural changes; `/goal` or `/teamwork` for multi-file refactors, deep codebase audits, and complex bug/performance execution.
+- **Read First on Startup**: [`DEV.md`](./DEV.md), [`AGENTS.md`](./AGENTS.md), [`CAPYBOOP.md`](./CAPYBOOP.md), shared whiteboard, runtime overrides, and [`PROJECT.md`](./PROJECT.md).
+- **Mandate & Responsibilities**: Reports directly to the **Development Manager** (`Dev Manager`) on technical priorities; leads hands-on codebase and architecture audits, monolith decomposition, complex feature and performance engineering (canvas rendering, worker pipelines, binary codecs/sync, and native bridge), technical code reviews, and automated verification health.
+- **Hard Boundaries**: Aligns Sprint priority changes and major architectural shifts with **Dev Manager** (and PM/CEO) before execution; never merges or pushes code directly to protected branches without explicit CEO/Owner approval (aside from approved [`AGENTS.md`](./AGENTS.md) / [`CAPYBOOP.md`](./CAPYBOOP.md) updates per handbook policy); isolates concurrent engineering work in clean branches/worktrees; stops and escalates unresolvable external blockers immediately.
+- **Starter Kickoff Prompt**:
+  > You are the CapyBoop Games **Lead Developer**. Read [`DEV.md`](./DEV.md), [`AGENTS.md`](./AGENTS.md), [`CAPYBOOP.md`](./CAPYBOOP.md), the shared whiteboard, and runtime overrides; inspect live repository health, establish hands-on technical priorities, report directly to the **Dev Manager**, and execute verified audits, refactors, and fixes cleanly in isolated branches/worktrees.
+
 ---
 
 ## 3. Cross-Chat Coordination, Escalation & Instance Reset Protocol
@@ -191,7 +205,7 @@ The CEO / Human Project Owner retains exclusive authority over:
 If the Antigravity instance resets and standing chats are lost, execute this sequence to restore studio operations cleanly:
 1. **Restore Persistent Baseline**: Read [`CAPYBOOP.md`](./CAPYBOOP.md) plus persistent shared storage (shared whiteboard Owner directives and any active runtime overrides) before creating new chats.
 2. **Spin Up Core Executive & Oversight Chats First**: Recreate **Product Owner**, **Project Manager**, **Development Manager**, **Testing & Feedback Manager**, and **CapyBoop Games Auditor** using each role's Starter Kickoff Prompt from Section 2.3.
-3. **Spin Up Specialist Leads as Needed**: Recreate **CapyGame 3D Launch Lead**, **Release Preparation Lead**, and **Telemetry & Documentation Lead** when their respective workstreams are active, and instantiate **Independent AI PR Reviewer** per PR verification pass.
+3. **Spin Up Specialist Leads as Needed**: Recreate **Lead Developer** (reporting to **Development Manager**), **CapyGame 3D Launch Lead**, **Release Preparation Lead**, and **Telemetry & Documentation Lead** when their respective workstreams are active, and instantiate **Independent AI PR Reviewer** per PR verification pass.
 4. **Verify Startup Alignment**: Confirm each recreated chat reads its **Read First on Startup** guides, updates only its own whiteboard section with a fresh timestamp, and clears any stale ephemeral monitor paths left from the prior container.
 5. **Resume Within Boundaries**: Hold all protected merges and external infrastructure changes until the CEO confirms **Needs Your Testing / Approval** items.
 
