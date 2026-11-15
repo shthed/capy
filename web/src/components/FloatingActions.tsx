@@ -23,7 +23,7 @@ interface FloatingActionsProps {
   onResetView?: () => void;
 }
 
-export const FloatingActions: React.FC<FloatingActionsProps> = ({
+export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
   isPaintMode,
   showZoomButtons,
   showResetViewButton = false,
@@ -204,4 +204,4 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       </button>
     </div>
   );
-};
+});

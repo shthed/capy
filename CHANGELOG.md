@@ -1,4 +1,8 @@
-### 3.0.14 - 2026-11-15 (Beta)
+### 3.0.15 - 2026-11-15 (Beta)
+
+- Offload save thumbnails out of `capy_snapshots_v8` into IndexedDB (`preview_${id}`) with async hydration, debounced native backups (`flushPendingBackups`), persistent storage requests, and a `z-[60]` `QuotaExceededError` alert toast, optimize `PuzzleCanvas` hot paths with zero-allocation gesture rings, cached bounding rects, reusable highlight buffers, `React.memo` HUD wrappers, and `~20fps` idle pulse throttling, code-split `PuzzleGenerator` worker fallback, harden `App.tsx` O(1) region lookup, `Set`-equality viewport filters, and async cloud sync stroke preservation, and add Co-op sender identity binding and SQLite hibernation checkpoints [#535](https://github.com/shthed/capy/pull/535)
+
+### 3.0.14 - 2026-11-15
 
 - Fail closed on non-string PR bodies, re-evaluate review gate on human body edits and disarm active auto-merge when non-passing, include hidden .well-known/assetlinks.json dotfiles across GitHub Pages uploads and cleanup sweeps, harden clean-room mirror sync auth, ls-remote checks, SIGPIPE-safe log scanning, and tag resets, expand workflow unit tests, and sync CI docs [#534](https://github.com/shthed/capy/pull/534)
 

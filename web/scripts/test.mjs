@@ -2592,6 +2592,45 @@ async function runCodecAndEngineTests() {
       ).reason,
       'room_mismatch'
     );
+    assert.equal(relayProtoMod.RESERVED_RELAY_PLAYER_ID, '__capy_room_relay__');
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'ABC123',
+          sender: { playerId: ' __capy_room_relay__ ', displayName: 'Fake', avatarColorHex: '#fff', lastActiveAt: 1 },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'reserved_sender_id'
+    );
+    assert.deepEqual(
+      relayProtoMod.resolveBoundSocketSender(null, {
+        playerId: 'p1',
+        displayName: 'Capy',
+        avatarColorHex: '#fff',
+        lastActiveAt: 1,
+      }),
+      { ok: true, boundPlayerId: 'p1' }
+    );
+    assert.deepEqual(
+      relayProtoMod.resolveBoundSocketSender('p1', {
+        playerId: 'p2',
+        displayName: 'Spoofer',
+        avatarColorHex: '#fff',
+        lastActiveAt: 1,
+      }),
+      { ok: false, reason: 'sender_mismatch' }
+    );
+    const workerIndexSrc = fs.readFileSync(path.resolve(projectRoot, '../worker/index.ts'), 'utf8');
+    assert.equal(
+      workerIndexSrc.includes('resolveBoundSocketSender') &&
+        workerIndexSrc.includes('RESERVED_RELAY_PLAYER_ID') &&
+        workerIndexSrc.includes("'pending_seed'"),
+      true,
+      'worker/index.ts must bind socket sender IDs, block reserved relay IDs, and checkpoint pending_seed in SQLite'
+    );
 
     // Rate limiting (40 frames / 5000ms) & write-once initial HELLO seedToken policy
     let rlTimestamps = [];
@@ -7096,7 +7135,103 @@ async function runCodecAndEngineTests() {
       );
       assert.ok(sideConn, 'Expected valid connector for side target');
       assert.equal(sideConn.endX > sideConn.startX, true, 'Connector to right side must point right');
+
+      // Verify StorageService inline preview stripping, legacy migration, debounced backups, QuotaExceededError notifications, and PuzzleWorkerService code-split
+      globalThis.window.location = { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' };
+      const previewFixture = 'data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=';
+      storageMod.StorageService.saveSnapshots([
+        {
+          id: 'snap-strip-1',
+          title: 'Preview Strip Test',
+          timestamp: 1000,
+          lastOpened: 2000,
+          filledCount: 2,
+          totalCount: 10,
+          filledRegionIds: [1, 2],
+          config: storageMod.DEFAULT_SETTINGS.generatorConfig,
+          previewDataUrl: previewFixture,
+        },
+      ]);
+      const rawStrippedSnaps = JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]');
+      assert.equal(rawStrippedSnaps.length, 1);
+      assert.equal(
+        'previewDataUrl' in rawStrippedSnaps[0],
+        false,
+        'saveSnapshots must strip inline previewDataUrl from localStorage'
+      );
+      const cachedLoaded = storageMod.StorageService.loadSnapshots();
+      assert.equal(cachedLoaded[0]?.previewDataUrl, previewFixture, 'loadSnapshots must keep cached previewDataUrl in memory');
+
+      // Legacy snapshot entry with inline previewDataUrl migrates out of localStorage on loadSnapshots()
+      mockStorage.set(
+        'capy_snapshots_v8',
+        JSON.stringify([
+          {
+            id: 'snap-legacy-migrate',
+            title: 'Legacy Inline Preview',
+            timestamp: 1500,
+            lastOpened: 2500,
+            filledCount: 1,
+            totalCount: 5,
+            filledRegionIds: [3],
+            config: storageMod.DEFAULT_SETTINGS.generatorConfig,
+            previewDataUrl: previewFixture,
+          },
+        ])
+      );
+      const migratedLoaded = storageMod.StorageService.loadSnapshots();
+      assert.equal(migratedLoaded[0]?.previewDataUrl, previewFixture);
+      const postMigrateRaw = JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]');
+      assert.equal(
+        'previewDataUrl' in postMigrateRaw[0],
+        false,
+        'loadSnapshots must migrate legacy inline previewDataUrl out of localStorage'
+      );
+
+      // Debounced backup writes coalesce and flush synchronously via flushPendingBackups()
+      mockBackups.delete('capy_user_settings_v8');
+      storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, zoomSensitivity: 1.5 });
+      storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, zoomSensitivity: 1.75 });
+      assert.equal(mockBackups.has('capy_user_settings_v8'), false, 'Backup writes must debounce before timer/flush');
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(
+        JSON.parse(mockBackups.get('capy_user_settings_v8') || '{}').zoomSensitivity,
+        1.75,
+        'flushPendingBackups must coalesce and flush the latest backup payload'
+      );
+
+      // QuotaExceededError triggers registered listeners cleanly
+      const quotaEvents = [];
+      const unsubQuota = storageMod.StorageService.onQuotaWarning((w) => quotaEvents.push(w));
+      const origLsSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_user_settings_v8') {
+          const err = new Error('Storage quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return origLsSet(k, v);
+      };
+      try {
+        storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, largeText: true });
+      } finally {
+        globalThis.localStorage.setItem = origLsSet;
+        unsubQuota();
+      }
+      assert.equal(quotaEvents.length >= 1, true, 'QuotaExceededError must notify quota warning listeners');
+      assert.equal(quotaEvents[0]?.reason, 'quota');
+
+      const workerSvcSrc = fs.readFileSync(
+        path.resolve(projectRoot, 'src/services/PuzzleWorkerService.ts'),
+        'utf8'
+      );
+      assert.equal(
+        /^\s*import\s+[^;]*PuzzleGenerator/m.test(workerSvcSrc),
+        false,
+        'PuzzleWorkerService.ts must dynamically import PuzzleGenerator on fallback instead of static bundle import'
+      );
     } finally {
+      storageMod.StorageService.flushPendingBackups();
       globalThis.localStorage = prevLs;
       globalThis.window = prevSsrWin;
     }
@@ -11466,6 +11601,180 @@ async function runBrowserBasicsSuite() {
       'Release Channel card must explain isolated channel sandbox'
     );
     await sandboxBetaPage.close();
+
+    // -------------------------------------------------------------------------
+    // 15. PR 2A (v3.0.15): IndexedDB Preview Offload, Quota Toast & Cloud Sync Race E2E
+    // -------------------------------------------------------------------------
+    console.log('-> [3.0.15] Verifying inline preview offloading, storage quota toast above modal, and async cloud sync stroke preservation...');
+    const rawSnapsBeforeReload = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')
+    );
+    assert.equal(rawSnapsBeforeReload.length >= 4, true);
+    assert.equal(
+      rawSnapsBeforeReload.some((s) => typeof s.previewDataUrl === 'string' && s.previewDataUrl.length > 0),
+      false,
+      'capy_snapshots_v8 in localStorage must never inline previewDataUrl'
+    );
+
+    await page.getByTestId('topbar-saves-btn').click();
+    await page.getByTestId('saves-list-section').waitFor({ state: 'visible', timeout: 5000 });
+    await page.waitForFunction(
+      async () => {
+        const snaps = window.capyStorage?.loadSnapshots?.() || [];
+        if (snaps.length === 0) return false;
+        const hydrated = await window.capyStorage.hydrateSnapshotPreviews(snaps);
+        return hydrated.some(
+          (s) => typeof s.previewDataUrl === 'string' && s.previewDataUrl.startsWith('data:image/')
+        );
+      },
+      null,
+      { timeout: 5000 }
+    );
+
+    await page.evaluate(() => {
+      const origSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (typeof key === 'string' && key.includes('capy_user_settings_v8')) {
+          const err = new Error('Simulated QuotaExceededError');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return origSetItem.call(this, key, value);
+      };
+      try {
+        window.capyStorage.saveSettings(window.capyStorage.loadSettings());
+      } finally {
+        Storage.prototype.setItem = origSetItem;
+      }
+    });
+    const quotaToast = page.getByTestId('storage-quota-toast');
+    await quotaToast.waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('storage-quota-dismiss').click();
+    await quotaToast.waitFor({ state: 'hidden', timeout: 3000 });
+    await page.keyboard.press('Escape');
+    await page.getByTestId('saves-list-section').waitFor({ state: 'hidden', timeout: 3000 });
+
+    const syncRaceContext = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    const syncRacePage = await syncRaceContext.newPage();
+    attachErrorListeners(syncRacePage, 'syncRacePage');
+    let holdDriveRead = false;
+    let heldReadStartedResolve = null;
+    let releaseHeldRead = null;
+    let heldReadStartedPromise = new Promise((resolve) => {
+      heldReadStartedResolve = resolve;
+    });
+
+    await syncRacePage.route('https://www.googleapis.com/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+      if (url.includes('/oauth2/v3/userinfo')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ sub: 'g-race-1', name: 'Race Tester', email: 'race@example.com' }),
+        });
+        return;
+      }
+      if (holdDriveRead && method === 'GET' && url.includes('/drive/v3/files')) {
+        holdDriveRead = false;
+        heldReadStartedResolve?.();
+        await new Promise((resolve) => {
+          releaseHeldRead = resolve;
+        });
+      }
+      if (method === 'GET' && url.includes('/drive/v3/files')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ files: [] }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ id: 'mock-drive-file-id' }),
+      });
+    });
+
+    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(syncRacePage);
+    await syncRacePage.evaluate(() => {
+      localStorage.setItem(
+        'capy_google_oauth_token_v1',
+        JSON.stringify({
+          accessToken: 'mock-race-token',
+          expiresAt: Date.now() + 3600 * 1000,
+          sub: 'g-race-1',
+          displayName: 'Race Tester',
+          email: 'race@example.com',
+        })
+      );
+      localStorage.setItem(
+        'capy_player_identity_v1',
+        JSON.stringify({
+          playerId: 'google:g-race-1',
+          displayName: 'Race Tester',
+          avatarColorHex: '#fbbf24',
+          provider: 'google',
+          isAuthenticated: true,
+          email: 'race@example.com',
+        })
+      );
+    });
+    await syncRacePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(syncRacePage);
+    await syncRacePage.waitForTimeout(300);
+
+    await syncRacePage.getByTestId('topbar-coop-btn').click();
+    await syncRacePage.getByTestId('reset-progress-btn').click();
+    await syncRacePage.waitForTimeout(250);
+    await syncRacePage.keyboard.press('Escape');
+    await syncRacePage.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+
+    holdDriveRead = true;
+    await syncRacePage.evaluate(() => {
+      window.__capyReceiveCloudSnapshot?.(
+        'capy_cloud_manifest_v2',
+        JSON.stringify({ syncedAt: Date.now() })
+      );
+    });
+    await heldReadStartedPromise;
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const curFilled = Number(
+        await syncRacePage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+      );
+      if (curFilled >= 1) break;
+      await tapCanvasGrid(syncRacePage, 0.42 + attempt * 0.04, 8, 80);
+    }
+    const midFlightCount = Number(
+      await syncRacePage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(midFlightCount >= 1, true, 'Expected at least 1 mid-flight canvas stroke before releasing cloud sync');
+
+    releaseHeldRead?.();
+    await syncRacePage.waitForTimeout(450);
+
+    const postSyncCount = Number(
+      await syncRacePage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    const postSyncStoredLen = await syncRacePage.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0;
+    });
+    assert.equal(
+      postSyncCount,
+      midFlightCount,
+      'Async cloud sync completion must preserve mid-flight painted regions'
+    );
+    assert.equal(
+      postSyncStoredLen,
+      midFlightCount,
+      'Async cloud sync completion must preserve mid-flight filledRegionIds in capy_active_session_v8'
+    );
+    await syncRacePage.close();
+    await syncRaceContext.close();
 
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');

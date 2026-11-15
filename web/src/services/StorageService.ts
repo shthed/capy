@@ -97,8 +97,189 @@ function detectSystemReducedMotion(): boolean {
   }
 }
 
+export interface QuotaWarning {
+  reason: 'quota';
+  key: string;
+  message: string;
+}
+
 export class StorageService {
   private static dbPromises = new Map<string, Promise<IDBDatabase>>();
+  private static quotaListeners = new Set<(warning: QuotaWarning) => void>();
+  private static persistentStorageRequested = false;
+  private static pendingBackupWrites = new Map<string, string>();
+  private static backupFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static lifecycleFlushRegistered = false;
+  private static previewCache = new Map<string, string>();
+
+  static isQuotaError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const rec = err as { name?: unknown; code?: unknown; message?: unknown };
+    const name = typeof rec.name === 'string' ? rec.name : '';
+    const code = typeof rec.code === 'number' ? rec.code : 0;
+    const msg = typeof rec.message === 'string' ? rec.message : '';
+    return (
+      name === 'QuotaExceededError' ||
+      name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      code === 22 ||
+      code === 1014 ||
+      /quota/i.test(msg)
+    );
+  }
+
+  static onQuotaWarning(listener: (warning: QuotaWarning) => void): () => void {
+    this.quotaListeners.add(listener);
+    return () => {
+      this.quotaListeners.delete(listener);
+    };
+  }
+
+  private static notifyQuotaWarning(key: string): void {
+    const warning: QuotaWarning = {
+      reason: 'quota',
+      key,
+      message: 'Browser storage is full. Export older saves or free space to keep your progress safe.',
+    };
+    for (const listener of this.quotaListeners) {
+      try {
+        listener(warning);
+      } catch {
+        // Ignore listener failure
+      }
+    }
+    try {
+      if (
+        typeof window !== 'undefined' &&
+        typeof window.dispatchEvent === 'function' &&
+        typeof CustomEvent === 'function'
+      ) {
+        window.dispatchEvent(new CustomEvent('capy:storage-quota', { detail: warning }));
+      }
+    } catch {
+      // Ignore event dispatch failure in headless mocks
+    }
+  }
+
+  static requestPersistentStorageOnce(): void {
+    if (this.persistentStorageRequested) return;
+    this.persistentStorageRequested = true;
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.storage &&
+        typeof navigator.storage.persist === 'function'
+      ) {
+        void navigator.storage.persist().catch(() => {});
+      }
+    } catch {
+      // Ignore unsupported storage.persist
+    }
+  }
+
+  private static ensureLifecycleFlushRegistered(): void {
+    if (this.lifecycleFlushRegistered) return;
+    this.lifecycleFlushRegistered = true;
+    const flush = () => this.flushPendingBackups();
+    try {
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', flush);
+      }
+      if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') {
+            flush();
+          }
+        });
+      }
+    } catch {
+      // Ignore partial SSR/DOM mocks
+    }
+  }
+
+  static flushPendingBackups(): void {
+    if (this.backupFlushTimer !== null) {
+      clearTimeout(this.backupFlushTimer);
+      this.backupFlushTimer = null;
+    }
+    if (this.pendingBackupWrites.size === 0) return;
+    const entries = Array.from(this.pendingBackupWrites.entries());
+    this.pendingBackupWrites.clear();
+    for (const [backupKey, serialized] of entries) {
+      try {
+        NativeBridge.saveBackup(backupKey, serialized);
+      } catch {
+        // Ignore native backup failure
+      }
+    }
+  }
+
+  private static scheduleBackupWrite(
+    backupKey: string,
+    serialized: string,
+    immediate: boolean = false
+  ): void {
+    this.ensureLifecycleFlushRegistered();
+    if (immediate) {
+      this.pendingBackupWrites.delete(backupKey);
+      try {
+        NativeBridge.saveBackup(backupKey, serialized);
+      } catch {
+        // Ignore native backup failure
+      }
+      return;
+    }
+    this.pendingBackupWrites.set(backupKey, serialized);
+    if (this.backupFlushTimer === null) {
+      this.backupFlushTimer = setTimeout(() => {
+        this.backupFlushTimer = null;
+        this.flushPendingBackups();
+      }, 400);
+      if (
+        typeof this.backupFlushTimer === 'object' &&
+        this.backupFlushTimer !== null &&
+        typeof (this.backupFlushTimer as { unref?: () => void }).unref === 'function'
+      ) {
+        (this.backupFlushTimer as { unref: () => void }).unref();
+      }
+    }
+  }
+
+  private static loadRawWithBackupFallback(storageKey: string, backupKey: string): string | null {
+    const localVal = localStorage.getItem(storageKey);
+    if (localVal) return localVal;
+    if (this.pendingBackupWrites.has(backupKey)) {
+      return this.pendingBackupWrites.get(backupKey) || null;
+    }
+    return NativeBridge.loadBackup(backupKey);
+  }
+
+  private static writeLocalAndScheduleBackup(
+    storageKey: string,
+    backupKey: string,
+    serialized: string,
+    immediateBackup: boolean = false
+  ): void {
+    try {
+      localStorage.setItem(storageKey, serialized);
+    } catch (err) {
+      if (this.isQuotaError(err)) {
+        this.notifyQuotaWarning(storageKey);
+      }
+    }
+    try {
+      this.scheduleBackupWrite(backupKey, serialized, immediateBackup);
+    } catch {
+      // Ignore native backup failure
+    }
+  }
+
+  private static previewCacheKey(id: string): string {
+    return `${resolveScopedDbName()}::${id}`;
+  }
+
+  private static previewStoreKey(id: string): string {
+    return `preview_${id}`;
+  }
 
   private static getDB(): Promise<IDBDatabase> {
     const dbName = resolveScopedDbName();
@@ -115,7 +296,25 @@ export class StorageService {
             db.createObjectStore(STORE_IMAGES);
           }
         };
-        req.onsuccess = () => resolve(req.result);
+        req.onblocked = () => {
+          this.dbPromises.delete(dbName);
+          reject(new Error('IndexedDB open blocked'));
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          db.onversionchange = () => {
+            try {
+              db.close();
+            } catch {
+              // ignore
+            }
+            this.dbPromises.delete(dbName);
+          };
+          db.onclose = () => {
+            this.dbPromises.delete(dbName);
+          };
+          resolve(db);
+        };
         req.onerror = () => {
           this.dbPromises.delete(dbName);
           reject(req.error);
@@ -145,7 +344,7 @@ export class StorageService {
     try {
       const storageKey = resolveScopedStorageKey(SETTINGS_KEY);
       const backupKey = resolveScopedBackupKey(SETTINGS_KEY);
-      const raw = localStorage.getItem(storageKey) || NativeBridge.loadBackup(backupKey);
+      const raw = this.loadRawWithBackupFallback(storageKey, backupKey);
       if (!raw) {
         return {
           ...DEFAULT_SETTINGS,
@@ -269,35 +468,141 @@ export class StorageService {
     try {
       const payload = { ...settings, undoDefaultMigrated: true };
       const serialized = JSON.stringify(payload);
-      localStorage.setItem(resolveScopedStorageKey(SETTINGS_KEY), serialized);
-      localStorage.setItem(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY), '1');
-      NativeBridge.saveBackup(resolveScopedBackupKey(SETTINGS_KEY), serialized);
+      this.writeLocalAndScheduleBackup(
+        resolveScopedStorageKey(SETTINGS_KEY),
+        resolveScopedBackupKey(SETTINGS_KEY),
+        serialized
+      );
+      try {
+        localStorage.setItem(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY), '1');
+      } catch (err) {
+        if (this.isQuotaError(err)) {
+          this.notifyQuotaWarning(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY));
+        }
+      }
     } catch {
       // ignore
     }
   }
 
+  static async savePreviewDataUrl(id: string, previewDataUrl: string): Promise<void> {
+    if (!id || !previewDataUrl) return;
+    this.previewCache.set(this.previewCacheKey(id), previewDataUrl);
+    if (typeof indexedDB === 'undefined') return;
+    try {
+      const key = this.previewStoreKey(id);
+      await this.runTransaction(STORE_IMAGES, (tx) => {
+        tx.objectStore(STORE_IMAGES).put(previewDataUrl, key);
+      });
+    } catch (e) {
+      if (this.isQuotaError(e)) {
+        this.notifyQuotaWarning(this.previewStoreKey(id));
+      } else {
+        console.warn('Failed to save preview data URL to IndexedDB', e);
+      }
+    }
+  }
+
+  static async loadPreviewDataUrl(id: string): Promise<string | null> {
+    if (!id) return null;
+    const cacheKey = this.previewCacheKey(id);
+    const cached = this.previewCache.get(cacheKey);
+    if (cached) return cached;
+    if (typeof indexedDB === 'undefined') return null;
+    try {
+      const db = await this.getDB();
+      const key = this.previewStoreKey(id);
+      const result = await new Promise<string | null>((resolve) => {
+        const tx = db.transaction(STORE_IMAGES, 'readonly');
+        const req = tx.objectStore(STORE_IMAGES).get(key);
+        req.onsuccess = () => {
+          resolve(typeof req.result === 'string' && req.result.length > 0 ? req.result : null);
+        };
+        req.onerror = () => resolve(null);
+      });
+      if (result) {
+        this.previewCache.set(cacheKey, result);
+      }
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
+  static async hydrateSnapshotPreviews(snapshots: SavedSnapshot[]): Promise<SavedSnapshot[]> {
+    if (snapshots.length === 0) return snapshots;
+    const hydrated = await Promise.all(
+      snapshots.map(async (snap) => {
+        if (typeof snap.previewDataUrl === 'string' && snap.previewDataUrl.length > 0) {
+          this.previewCache.set(this.previewCacheKey(snap.id), snap.previewDataUrl);
+          return snap;
+        }
+        const preview = await this.loadPreviewDataUrl(snap.id);
+        return preview ? { ...snap, previewDataUrl: preview } : snap;
+      })
+    );
+    return hydrated;
+  }
+
+  private static stripInlinePreviews(snapshots: SavedSnapshot[]): SavedSnapshot[] {
+    return snapshots.map((s) => {
+      if (typeof s.previewDataUrl === 'string' && s.previewDataUrl.length > 0) {
+        this.previewCache.set(this.previewCacheKey(s.id), s.previewDataUrl);
+        void this.savePreviewDataUrl(s.id, s.previewDataUrl);
+      }
+      if ('previewDataUrl' in s) {
+        const copy = { ...s };
+        delete copy.previewDataUrl;
+        return copy;
+      }
+      return s;
+    });
+  }
+
   static loadSnapshots(): SavedSnapshot[] {
     try {
-      const raw =
-        localStorage.getItem(resolveScopedStorageKey(SNAPSHOTS_KEY)) ||
-        NativeBridge.loadBackup(resolveScopedBackupKey(SNAPSHOTS_KEY));
+      const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
+      const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
+      const raw = this.loadRawWithBackupFallback(storageKey, backupKey);
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
+      let hadLegacyInlinePreview = false;
+      const valid = parsed.filter(
         (s): s is SavedSnapshot =>
           Boolean(s && typeof s === 'object' && typeof s.id === 'string' && s.id.length > 0 && typeof s.title === 'string')
-      ).map((s) => ({
-        ...s,
-        filledRegionIds: Array.isArray(s.filledRegionIds)
-          ? s.filledRegionIds.filter((id) => typeof id === 'number' && Number.isFinite(id))
-          : [],
-        filledCount: typeof s.filledCount === 'number' && Number.isFinite(s.filledCount) ? Math.max(0, s.filledCount) : 0,
-        totalCount: typeof s.totalCount === 'number' && Number.isFinite(s.totalCount) ? Math.max(0, s.totalCount) : 0,
-        timestamp: typeof s.timestamp === 'number' && Number.isFinite(s.timestamp) ? s.timestamp : 0,
-        lastOpened: typeof s.lastOpened === 'number' && Number.isFinite(s.lastOpened) ? s.lastOpened : 0,
-      }));
+      );
+      const normalized = valid.map((s) => {
+        const inlinePreview =
+          typeof s.previewDataUrl === 'string' && s.previewDataUrl.length > 0 ? s.previewDataUrl : undefined;
+        if (inlinePreview) {
+          hadLegacyInlinePreview = true;
+          this.previewCache.set(this.previewCacheKey(s.id), inlinePreview);
+          void this.savePreviewDataUrl(s.id, inlinePreview);
+        }
+        const cachedPreview = inlinePreview || this.previewCache.get(this.previewCacheKey(s.id));
+        const base: SavedSnapshot = {
+          ...s,
+          filledRegionIds: Array.isArray(s.filledRegionIds)
+            ? s.filledRegionIds.filter((id) => typeof id === 'number' && Number.isFinite(id))
+            : [],
+          filledCount: typeof s.filledCount === 'number' && Number.isFinite(s.filledCount) ? Math.max(0, s.filledCount) : 0,
+          totalCount: typeof s.totalCount === 'number' && Number.isFinite(s.totalCount) ? Math.max(0, s.totalCount) : 0,
+          timestamp: typeof s.timestamp === 'number' && Number.isFinite(s.timestamp) ? s.timestamp : 0,
+          lastOpened: typeof s.lastOpened === 'number' && Number.isFinite(s.lastOpened) ? s.lastOpened : 0,
+        };
+        if (cachedPreview) {
+          base.previewDataUrl = cachedPreview;
+        } else {
+          delete base.previewDataUrl;
+        }
+        return base;
+      });
+      if (hadLegacyInlinePreview) {
+        const stripped = this.stripInlinePreviews(normalized);
+        this.writeLocalAndScheduleBackup(storageKey, backupKey, JSON.stringify(stripped), false);
+      }
+      return normalized;
     } catch {
       return [];
     }
@@ -305,9 +610,14 @@ export class StorageService {
 
   static saveSnapshots(snapshots: SavedSnapshot[]): void {
     try {
-      const serialized = JSON.stringify(snapshots);
-      localStorage.setItem(resolveScopedStorageKey(SNAPSHOTS_KEY), serialized);
-      NativeBridge.saveBackup(resolveScopedBackupKey(SNAPSHOTS_KEY), serialized);
+      const stripped = this.stripInlinePreviews(snapshots);
+      const serialized = JSON.stringify(stripped);
+      this.writeLocalAndScheduleBackup(
+        resolveScopedStorageKey(SNAPSHOTS_KEY),
+        resolveScopedBackupKey(SNAPSHOTS_KEY),
+        serialized,
+        stripped.length === 0
+      );
     } catch {
       // ignore
     }
@@ -408,6 +718,7 @@ export class StorageService {
   }
 
   static async deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
+    this.previewCache.delete(this.previewCacheKey(id));
     const list = this.loadSnapshots();
     const updated = list.filter((s) => s.id !== id);
     this.saveSnapshots(updated);
@@ -416,28 +727,40 @@ export class StorageService {
       this.clearActiveState();
     }
 
-    try {
-      await this.runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
-        tx.objectStore(STORE_PUZZLES).delete(id);
-        tx.objectStore(STORE_IMAGES).delete(id);
-      });
-    } catch (e) {
-      console.warn('Failed to delete snapshot IndexedDB entries', e);
+    if (typeof indexedDB !== 'undefined') {
+      try {
+        const previewKey = this.previewStoreKey(id);
+        await this.runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
+          tx.objectStore(STORE_PUZZLES).delete(id);
+          tx.objectStore(STORE_IMAGES).delete(id);
+          tx.objectStore(STORE_IMAGES).delete(previewKey);
+        });
+      } catch (e) {
+        console.warn('Failed to delete snapshot IndexedDB entries', e);
+      }
     }
 
     return updated;
   }
 
   static async clearAllSnapshots(): Promise<void> {
+    const dbPrefix = `${resolveScopedDbName()}::`;
+    for (const key of this.previewCache.keys()) {
+      if (key.startsWith(dbPrefix)) {
+        this.previewCache.delete(key);
+      }
+    }
     this.saveSnapshots([]);
     this.clearActiveState();
-    try {
-      await this.runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
-        tx.objectStore(STORE_PUZZLES).clear();
-        tx.objectStore(STORE_IMAGES).clear();
-      });
-    } catch (e) {
-      console.warn('Failed to clear snapshot IndexedDB stores', e);
+    if (typeof indexedDB !== 'undefined') {
+      try {
+        await this.runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
+          tx.objectStore(STORE_PUZZLES).clear();
+          tx.objectStore(STORE_IMAGES).clear();
+        });
+      } catch (e) {
+        console.warn('Failed to clear snapshot IndexedDB stores', e);
+      }
     }
   }
 
@@ -552,8 +875,11 @@ export class StorageService {
           ? { ...state, resetEpoch: effectiveEpoch }
           : state;
       const serialized = JSON.stringify(payload);
-      localStorage.setItem(resolveScopedStorageKey(ACTIVE_STATE_KEY), serialized);
-      NativeBridge.saveBackup(resolveScopedBackupKey(ACTIVE_STATE_KEY), serialized);
+      this.writeLocalAndScheduleBackup(
+        resolveScopedStorageKey(ACTIVE_STATE_KEY),
+        resolveScopedBackupKey(ACTIVE_STATE_KEY),
+        serialized
+      );
     } catch {
       // ignore
     }
@@ -561,8 +887,11 @@ export class StorageService {
 
   static clearActiveState(): void {
     try {
-      localStorage.removeItem(resolveScopedStorageKey(ACTIVE_STATE_KEY));
-      NativeBridge.saveBackup(resolveScopedBackupKey(ACTIVE_STATE_KEY), '');
+      const storageKey = resolveScopedStorageKey(ACTIVE_STATE_KEY);
+      const backupKey = resolveScopedBackupKey(ACTIVE_STATE_KEY);
+      this.pendingBackupWrites.delete(backupKey);
+      localStorage.removeItem(storageKey);
+      this.scheduleBackupWrite(backupKey, '', true);
     } catch {
       // ignore
     }
@@ -580,9 +909,10 @@ export class StorageService {
     panOffsetY: number;
   } | null {
     try {
-      const raw =
-        localStorage.getItem(resolveScopedStorageKey(ACTIVE_STATE_KEY)) ||
-        NativeBridge.loadBackup(resolveScopedBackupKey(ACTIVE_STATE_KEY));
+      const raw = this.loadRawWithBackupFallback(
+        resolveScopedStorageKey(ACTIVE_STATE_KEY),
+        resolveScopedBackupKey(ACTIVE_STATE_KEY)
+      );
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
@@ -634,8 +964,10 @@ export class StorageService {
    */
   static async exportSnapshotBinary(id: string): Promise<Uint8Array> {
     const snapshots = this.loadSnapshots();
-    const snapshot = snapshots.find((s) => s.id === id);
-    if (!snapshot) throw new Error('Snapshot not found');
+    const rawSnapshot = snapshots.find((s) => s.id === id);
+    if (!rawSnapshot) throw new Error('Snapshot not found');
+    const preview = rawSnapshot.previewDataUrl || (await this.loadPreviewDataUrl(id));
+    const snapshot: SavedSnapshot = preview ? { ...rawSnapshot, previewDataUrl: preview } : rawSnapshot;
 
     const compactRecord = await this.loadCompactPuzzleRecord(id);
     const isZeroCopyRef =
@@ -652,7 +984,7 @@ export class StorageService {
    * Exports all saves into a single Compact Binary Archive v2 (`CAPY\x02...`).
    */
   static async exportAllSnapshotsBinary(): Promise<Uint8Array> {
-    const snapshots = this.loadSnapshots();
+    const snapshots = await this.hydrateSnapshotPreviews(this.loadSnapshots());
     const compactRecords: Record<string, CompactPuzzleRecordV2> = {};
     const imageBlobs: Record<string, Blob> = {};
 
@@ -682,8 +1014,10 @@ export class StorageService {
    */
   static async exportSnapshot(id: string): Promise<string> {
     const snapshots = this.loadSnapshots();
-    const snapshot = snapshots.find((s) => s.id === id);
-    if (!snapshot) throw new Error('Snapshot not found');
+    const rawSnapshot = snapshots.find((s) => s.id === id);
+    if (!rawSnapshot) throw new Error('Snapshot not found');
+    const preview = rawSnapshot.previewDataUrl || (await this.loadPreviewDataUrl(id));
+    const snapshot: SavedSnapshot = preview ? { ...rawSnapshot, previewDataUrl: preview } : rawSnapshot;
     const puzzle = await this.loadPuzzleData(id);
     const bundle = {
       version: 2,
@@ -696,7 +1030,7 @@ export class StorageService {
   }
 
   static async exportAllSnapshots(): Promise<string> {
-    const snapshots = this.loadSnapshots();
+    const snapshots = await this.hydrateSnapshotPreviews(this.loadSnapshots());
     const puzzles: Record<string, SerializedPuzzleData> = {};
     for (const snap of snapshots) {
       const p = await this.loadPuzzleData(snap.id);
@@ -810,6 +1144,9 @@ export class StorageService {
             if (preparedBlob) {
               await this.saveImageBlob(snap.id, preparedBlob);
             }
+            if (snap.previewDataUrl) {
+              await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
+            }
             this.addSnapshot(snap);
             return { importedCount: 1, firstSnapshot: snap, firstPuzzle };
           }
@@ -856,6 +1193,11 @@ export class StorageService {
             await this.saveMultipleCompactPuzzleRecords(compactEntries);
             for (const imgEntry of imageEntries) {
               await this.saveImageBlob(imgEntry.id, imgEntry.blob);
+            }
+            for (const snap of toPersist) {
+              if (snap.previewDataUrl) {
+                await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
+              }
             }
             this.saveSnapshots(mergedList);
             return {
@@ -909,6 +1251,9 @@ export class StorageService {
         if (firstPuzzle) {
           await this.savePuzzleData(snap.id, firstPuzzle);
         }
+        if (snap.previewDataUrl) {
+          await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
+        }
         this.addSnapshot(snap);
         return { importedCount: 1, firstSnapshot: snap, firstPuzzle };
       }
@@ -946,6 +1291,11 @@ export class StorageService {
         }
 
         await this.saveMultiplePuzzleData(puzzleEntries);
+        for (const snap of toPersist) {
+          if (snap.previewDataUrl) {
+            await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
+          }
+        }
         this.saveSnapshots(mergedList);
 
         return {
@@ -967,6 +1317,11 @@ export class StorageService {
           validSnapshots,
           options?.refreshTimestamps
         );
+        for (const snap of toPersist) {
+          if (snap.previewDataUrl) {
+            await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
+          }
+        }
         this.saveSnapshots(mergedList);
         return {
           importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,

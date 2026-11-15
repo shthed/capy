@@ -143,7 +143,7 @@ export function getDockPalette(
   return basePalette;
 }
 
-export const PaletteDock: React.FC<PaletteDockProps> = ({
+export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   palette,
   regions,
   activeColorId,
@@ -440,4 +440,4 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
       </div>
     </div>
   );
-};
+});
