@@ -2867,6 +2867,7 @@ async function runCodecAndEngineTests() {
         addEventListener() {},
         removeEventListener() {},
       };
+      nativeBridgeMod.NativeBridge.attachWindowCallbacks();
       try {
         const pgDriver = new driversMod.PlayGamesAndroidDriver();
         const largeBinary = new Uint8Array(420_000);
@@ -2959,6 +2960,72 @@ async function runCodecAndEngineTests() {
           }
           assert.equal(unavailErr?.message, 'PLAY_GAMES_UNAVAILABLE');
           assert.equal(Date.now() - failStart < 500, true, 'Play Games error callback must reject signIn immediately');
+
+          // 4. Cold-start bridge callbacks arriving before listener mount must flush on subscribe
+          globalThis.window.__capyReceiveSharedImage?.('Early Photo', 'data:image/png;base64,AA==');
+          globalThis.window.__capyReceiveDeepLink?.('https://capypaint.com/#s=early_token');
+          globalThis.window.__capyReceivePlayGamesProfile?.(
+            JSON.stringify({ playerId: 'pg_early', displayName: 'Early Capy' })
+          );
+          globalThis.window.__capyReceivePlayGamesError?.('PLAY_GAMES_EARLY_ERR');
+          globalThis.window.__capyReceiveCloudSnapshot?.('slot_early', '{"v":1}');
+
+          const receivedShared = [];
+          const receivedDeep = [];
+          const receivedProfiles = [];
+          const receivedErrors = [];
+          const receivedSnaps = [];
+          const offShared = nativeBridgeMod.NativeBridge.onSharedImage((t, d) =>
+            receivedShared.push({ t, d })
+          );
+          const offDeep = nativeBridgeMod.NativeBridge.onDeepLink((u) => receivedDeep.push(u));
+          const offProf = nativeBridgeMod.NativeBridge.onPlayGamesProfile((p) =>
+            receivedProfiles.push(p)
+          );
+          const offErr = nativeBridgeMod.NativeBridge.onPlayGamesError((e) =>
+            receivedErrors.push(e)
+          );
+          const offSnap = nativeBridgeMod.NativeBridge.onCloudSnapshot((k, v) =>
+            receivedSnaps.push({ k, v })
+          );
+          try {
+            assert.deepEqual(receivedShared, [
+              { t: 'Early Photo', d: 'data:image/png;base64,AA==' },
+            ]);
+            assert.deepEqual(receivedDeep, ['https://capypaint.com/#s=early_token']);
+            assert.deepEqual(receivedProfiles, [{ playerId: 'pg_early', displayName: 'Early Capy' }]);
+            assert.deepEqual(receivedErrors, ['PLAY_GAMES_EARLY_ERR']);
+            assert.deepEqual(receivedSnaps, [{ k: 'slot_early', v: '{"v":1}' }]);
+          } finally {
+            offShared();
+            offDeep();
+            offProf();
+            offErr();
+            offSnap();
+          }
+
+          // 5. Structural check: Android APK cards hidden inside NativeBridge.isAndroid & OAuth never falls back to GIS
+          const settingsSrc = fs.readFileSync(
+            path.join(projectRoot, 'src/components/SettingsModal.tsx'),
+            'utf8'
+          );
+          const providerRegistrySrc = fs.readFileSync(
+            path.join(projectRoot, 'src/services/providers/ProviderRegistry.ts'),
+            'utf8'
+          );
+          assert.equal(
+            settingsSrc.includes('{!NativeBridge.isAndroid && (') &&
+              settingsSrc.includes('data-testid="android-apk-download-link"') &&
+              settingsSrc.includes('data-testid="beta-apk-download-link"'),
+            true,
+            'SettingsModal must hide Android APK download cards when running inside NativeBridge.isAndroid'
+          );
+          assert.equal(
+            providerRegistrySrc.includes("return this.signInWithProvider('play_games_v2');") &&
+              !providerRegistrySrc.includes('// Fall through to Google OAuth'),
+            true,
+            'ProviderRegistry must not fall back from Play Games to web Google OAuth popup inside Android WebView'
+          );
         } finally {
           globalThis.window.CapyAndroid = prevCapyAndroid;
         }

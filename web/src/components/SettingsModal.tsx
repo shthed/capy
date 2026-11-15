@@ -721,17 +721,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   )}
 
-                  <a
-                    href="capy.apk"
-                    download="capy.apk"
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
-                  >
-                    <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="truncate font-bold text-slate-200">Android APK</div>
-                      <div className="text-[10px] text-slate-400 truncate">Download standalone Android application</div>
-                    </div>
-                  </a>
+                  {!NativeBridge.isAndroid && (
+                    <a
+                      href="capy.apk"
+                      download="capy.apk"
+                      data-testid="android-apk-download-link"
+                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
+                    >
+                      <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-slate-200">Android APK</div>
+                        <div className="text-[10px] text-slate-400 truncate">Download standalone Android application</div>
+                      </div>
+                    </a>
+                  )}
                 </div>
 
                 {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
@@ -784,7 +787,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             ? 'Preview upcoming Sprint features early on the Beta channel before they ship to Production. Beta runs in an isolated browser sandbox so your Production saves and settings stay untouched.'
                             : 'Preview upcoming Sprint features early on the Beta channel before they ship to Production.'}
                       </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                      <div className={`grid grid-cols-1 ${NativeBridge.isAndroid ? '' : 'sm:grid-cols-2'} gap-2 pt-0.5`}>
                         <a
                           href={primaryTargetUrl}
                           data-testid="toggle-beta-channel-btn"
@@ -797,15 +800,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           <ExternalLink size={13} className="flex-shrink-0" />
                           <span>{primaryActionLabel}</span>
                         </a>
-                        <a
-                          href={channelInfo.betaApkUrl}
-                          download="capy-beta.apk"
-                          data-testid="beta-apk-download-link"
-                          className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
-                        >
-                          <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
-                          <span>Beta Android APK</span>
-                        </a>
+                        {!NativeBridge.isAndroid && (
+                          <a
+                            href={channelInfo.betaApkUrl}
+                            download="capy-beta.apk"
+                            data-testid="beta-apk-download-link"
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
+                          >
+                            <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
+                            <span>Beta Android APK</span>
+                          </a>
+                        )}
                       </div>
                     </div>
                   );

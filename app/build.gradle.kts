@@ -3,14 +3,14 @@ plugins {
 }
 
 val webPackageJson = layout.projectDirectory.file("../web/package.json").asFile
-val semverMatch = if (webPackageJson.exists()) {
-    Regex(""""version"\s*:\s*"(\d+)\.(\d+)\.(\d+)"""").find(webPackageJson.readText())
-} else {
-    null
+if (!webPackageJson.exists()) {
+    throw GradleException("Missing web/package.json at '${webPackageJson.absolutePath}'.")
 }
-val verMajor = semverMatch?.groupValues?.get(1)?.toIntOrNull() ?: 2
-val verMinor = semverMatch?.groupValues?.get(2)?.toIntOrNull() ?: 5
-val verPatch = semverMatch?.groupValues?.get(3)?.toIntOrNull() ?: 0
+val semverMatch = Regex(""""version"\s*:\s*"(\d+)\.(\d+)\.(\d+)"""").find(webPackageJson.readText())
+    ?: throw GradleException("Unable to parse SemVer 'version' field from '${webPackageJson.absolutePath}'.")
+val verMajor = semverMatch.groupValues[1].toInt()
+val verMinor = semverMatch.groupValues[2].toInt()
+val verPatch = semverMatch.groupValues[3].toInt()
 val capyVersionName = "$verMajor.$verMinor.$verPatch"
 val capyVersionCode = (verMajor * 10000) + (verMinor * 100) + verPatch
 
@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "com.capypaint.capy"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = capyVersionCode
         versionName = capyVersionName
 

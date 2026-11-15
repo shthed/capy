@@ -330,4 +330,104 @@ class CapyAndroidBridgeTest {
         assertFalse(CapyAndroidBridge.isPlayGamesAppIdConfigured("12345"))
         assertTrue(CapyAndroidBridge.isPlayGamesAppIdConfigured("123456"))
     }
+
+    @Test
+    fun `resolveShareImageSpec preserves JPEG WEBP GIF and SVG MIME types and extensions`() {
+        val jpegSpec = CapyAndroidBridge.resolveShareImageSpec("data:image/jpeg;base64,/9j/4AAQ")
+        assertEquals("capy_shared_artwork.jpg", jpegSpec.fileName)
+        assertEquals("image/jpeg", jpegSpec.mimeType)
+        assertEquals("/9j/4AAQ", jpegSpec.base64Payload)
+
+        val webpSpec = CapyAndroidBridge.resolveShareImageSpec("data:image/webp;base64,UklGRg==")
+        assertEquals("capy_shared_artwork.webp", webpSpec.fileName)
+        assertEquals("image/webp", webpSpec.mimeType)
+
+        val pngSpec = CapyAndroidBridge.resolveShareImageSpec("iVBORw0KGgo=")
+        assertEquals("capy_shared_artwork.png", pngSpec.fileName)
+        assertEquals("image/png", pngSpec.mimeType)
+        assertEquals("iVBORw0KGgo=", pngSpec.base64Payload)
+    }
+
+    @Test
+    fun `prepareSharedExportFile isolates exports under cacheDir shared and prunes stale files`() {
+        val cacheDir = tempFolder.newFolder("capy_cache_shared")
+        val sharedDir = File(cacheDir, CapyAndroidBridge.SHARE_FOLDER_NAME)
+        assertTrue(sharedDir.mkdirs())
+
+        val staleFile = File(sharedDir, "stale_export.png")
+        staleFile.writeBytes(byteArrayOf(1, 2, 3))
+        staleFile.setLastModified(1_000L)
+
+        val freshFile = File(sharedDir, "recent_export.capy")
+        freshFile.writeBytes(byteArrayOf(4, 5, 6))
+        val nowMs = 1_000_000_000L
+        freshFile.setLastModified(nowMs - 60_000L)
+
+        val target = CapyAndroidBridge.prepareSharedExportFile(
+            cacheDir = cacheDir,
+            fileName = "../../my export.png",
+            nowMs = nowMs,
+            maxAgeMs = 86_400_000L,
+        )
+        assertEquals(sharedDir, target.parentFile)
+        assertEquals("_.._my_export.png", target.name)
+        assertFalse("Stale shared export older than maxAgeMs should be pruned", staleFile.exists())
+        assertTrue("Fresh shared export should be preserved", freshFile.exists())
+    }
+
+    @Test
+    fun `classifyWebViewNavigation allows appassets and about blank opens http externally and blocks unsafe schemes`() {
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.ALLOW_INTERNAL,
+            CapyAndroidBridge.classifyWebViewNavigation("https://appassets.androidplatform.net/assets/www/index.html"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.ALLOW_INTERNAL,
+            CapyAndroidBridge.classifyWebViewNavigation("about:blank"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.OPEN_EXTERNAL,
+            CapyAndroidBridge.classifyWebViewNavigation("https://capypaint.com/privacy-policy.html"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.OPEN_EXTERNAL,
+            CapyAndroidBridge.classifyWebViewNavigation("http://example.com/help"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.BLOCK,
+            CapyAndroidBridge.classifyWebViewNavigation("javascript:alert(1)"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.BLOCK,
+            CapyAndroidBridge.classifyWebViewNavigation("file:///data/data/com.capypaint.capy/shared_prefs"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.BLOCK,
+            CapyAndroidBridge.classifyWebViewNavigation("content://com.android.contacts/data/1"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.BLOCK,
+            CapyAndroidBridge.classifyWebViewNavigation(null),
+        )
+    }
+
+    @Test
+    fun `formatSharedImageJson escapes control characters tabs and script tags`() {
+        val json = CapyAndroidBridge.formatSharedImageJson(
+            title = "Col\tTitle</script>",
+            dataUrl = "data:image/png;base64,AA==",
+        )
+        assertEquals(
+            """{"title":"Col\tTitle\u003c/script\u003e","dataUrl":"data:image/png;base64,AA=="}""",
+            json,
+        )
+    }
+
+    @Test
+    fun `HapticSpec implements content-based equals and hashCode for waveform arrays`() {
+        val first = CapyAndroidBridge.resolveHapticSpec("success")
+        val second = CapyAndroidBridge.resolveHapticSpec("success")
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+    }
 }
