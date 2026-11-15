@@ -1,5 +1,4 @@
 import { GenerationProgressPayload, GeneratorConfig, PuzzleData } from '../types';
-import { AutoPuzzleGenerator } from '../engine/PuzzleGenerator';
 
 export class GenerationCancelledError extends Error {
   constructor(message = 'Generation cancelled by newer request') {
@@ -11,6 +10,17 @@ export class GenerationCancelledError extends Error {
 export class PuzzleWorkerService {
   private static worker: Worker | null = null;
   private static activeReject: ((reason?: unknown) => void) | null = null;
+
+  private static async generateOnMainThreadFallback(
+    sourceCanvas: HTMLCanvasElement,
+    config: GeneratorConfig,
+    onProgress?: (progress: number, status: string, payload?: GenerationProgressPayload) => void,
+    detailedProgress: boolean = false
+  ): Promise<PuzzleData> {
+    const { AutoPuzzleGenerator } = await import('../engine/PuzzleGenerator');
+    const generator = new AutoPuzzleGenerator();
+    return generator.generate(sourceCanvas, config, onProgress, detailedProgress);
+  }
 
   private static getWorker(): Worker {
     if (!this.worker) {
@@ -47,15 +57,12 @@ export class PuzzleWorkerService {
     detailedProgress: boolean = false
   ): Promise<PuzzleData> {
     return new Promise((resolve, reject) => {
-      // If Web Worker is not supported, fallback to main-thread execution
+      // If Web Worker is not supported, fallback to lazy main-thread execution
       if (typeof Worker === 'undefined') {
-        try {
-          const generator = new AutoPuzzleGenerator();
-          const result = generator.generate(sourceCanvas, config, onProgress, detailedProgress);
-          resolve(result);
-        } catch (err) {
-          reject(err);
-        }
+        this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
+          resolve,
+          reject
+        );
         return;
       }
 
@@ -139,15 +146,12 @@ export class PuzzleWorkerService {
           // Clean up worker
           worker.terminate();
           this.worker = null;
-          // Fallback to synchronous execution
+          // Fallback to lazy main-thread execution
           console.warn('Worker error encountered, falling back to local thread:', err);
-          try {
-            const generator = new AutoPuzzleGenerator();
-            const fallbackResult = generator.generate(sourceCanvas, config, onProgress, detailedProgress);
-            resolve(fallbackResult);
-          } catch (syncErr) {
-            reject(syncErr);
-          }
+          this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
+            resolve,
+            reject
+          );
         };
 
         worker.addEventListener('message', handleMessage);
@@ -168,13 +172,10 @@ export class PuzzleWorkerService {
         );
       } catch (err) {
         console.warn('Failed to dispatch worker task, falling back to local:', err);
-        try {
-          const generator = new AutoPuzzleGenerator();
-          const fallbackResult = generator.generate(sourceCanvas, config, onProgress, detailedProgress);
-          resolve(fallbackResult);
-        } catch (syncErr) {
-          reject(syncErr);
-        }
+        this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
+          resolve,
+          reject
+        );
       }
     });
   }

@@ -187,7 +187,7 @@ export function clampCanvasOffset(
   return { x: cx, y: cy };
 }
 
-export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
+export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   puzzle,
   sourceImage,
   activeColorId,
@@ -264,17 +264,72 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const prevColorsRef = useRef<Map<number, number>>(new Map());
 
   const highlightCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const highlightImageDataRef = useRef<ImageData | null>(null);
   const hasHighlightPixelsRef = useRef<boolean>(false);
   const borderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastBorderPuzzleRef = useRef<PuzzleData | null>(null);
+
+  // Cached canvas bounding rect for zero-layout-thrash pointer coordinate mapping
+  const canvasRectRef = useRef<DOMRect | null>(null);
+  const refreshCanvasRect = useCallback((): DOMRect | null => {
+    const rect = canvasRef.current?.getBoundingClientRect() ?? null;
+    canvasRectRef.current = rect;
+    return rect;
+  }, []);
+  const getCachedCanvasRect = useCallback((): DOMRect | null => {
+    if (canvasRectRef.current) return canvasRectRef.current;
+    return refreshCanvasRect();
+  }, [refreshCanvasRect]);
 
   // Transform state
   const [scale, setScale] = useState(initialZoomScale);
   const [offset, setOffset] = useState({ x: initialPanOffsetX, y: initialPanOffsetY });
   const scaleRef = useRef(initialZoomScale);
   const offsetRef = useRef({ x: initialPanOffsetX, y: initialPanOffsetY });
-  scaleRef.current = scale;
-  offsetRef.current = offset;
+
+  const redrawRafIdRef = useRef<number | null>(null);
+  const drawCompositeFrameRef = useRef<(pulseAlpha: number) => void>(() => {});
+  const transformCommitTimerRef = useRef<number | null>(null);
+  const lastTransformCommitMsRef = useRef<number>(0);
+
+  const scheduleCanvasRedraw = useCallback(() => {
+    if (typeof requestAnimationFrame !== 'function') {
+      drawCompositeFrameRef.current(pulseAlphaRef.current);
+      return;
+    }
+    if (redrawRafIdRef.current !== null) return;
+    redrawRafIdRef.current = requestAnimationFrame(() => {
+      redrawRafIdRef.current = null;
+      drawCompositeFrameRef.current(pulseAlphaRef.current);
+    });
+  }, []);
+
+  const commitTransformState = useCallback(
+    (force: boolean = false) => {
+      const flush = () => {
+        if (transformCommitTimerRef.current !== null) {
+          window.clearTimeout(transformCommitTimerRef.current);
+          transformCommitTimerRef.current = null;
+        }
+        lastTransformCommitMsRef.current = performance.now();
+        const s = scaleRef.current;
+        const o = offsetRef.current;
+        setScale((prev) => (prev === s ? prev : s));
+        setOffset((prev) => (prev.x === o.x && prev.y === o.y ? prev : { x: o.x, y: o.y }));
+      };
+      if (force) {
+        flush();
+        return;
+      }
+      const elapsed = performance.now() - lastTransformCommitMsRef.current;
+      if (elapsed >= 16) {
+        flush();
+      } else if (transformCommitTimerRef.current === null) {
+        transformCommitTimerRef.current = window.setTimeout(flush, Math.max(1, 16 - elapsed));
+      }
+    },
+    []
+  );
 
   const effectiveZoomSensitivity = Math.min(
     2.0,
@@ -324,9 +379,35 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   const initialDragZoomOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isTouchingOutsideImageRef = useRef(false);
 
-  // Smooth Pan Momentum tracking (Google Maps style inertial gliding)
-  const pointerHistoryRef = useRef<Array<{ x: number; y: number; time: number }>>([]);
+  // Smooth Pan Momentum tracking via fixed 16-slot circular buffer (zero per-move allocations)
+  const POINTER_RING_CAPACITY = 16;
+  const pointerRingRef = useRef<Array<{ x: number; y: number; time: number }>>(
+    Array.from({ length: POINTER_RING_CAPACITY }, () => ({ x: 0, y: 0, time: 0 }))
+  );
+  const pointerRingHeadRef = useRef(0);
+  const pointerRingCountRef = useRef(0);
   const momentumAnimIdRef = useRef<number | null>(null);
+
+  const resetPointerRing = useCallback((x: number, y: number, time: number) => {
+    const slot = pointerRingRef.current[0];
+    slot.x = x;
+    slot.y = y;
+    slot.time = time;
+    pointerRingHeadRef.current = 1;
+    pointerRingCountRef.current = 1;
+  }, []);
+
+  const pushPointerSample = useCallback((x: number, y: number, time: number) => {
+    const idx = pointerRingHeadRef.current;
+    const slot = pointerRingRef.current[idx];
+    slot.x = x;
+    slot.y = y;
+    slot.time = time;
+    pointerRingHeadRef.current = (idx + 1) % POINTER_RING_CAPACITY;
+    if (pointerRingCountRef.current < POINTER_RING_CAPACITY) {
+      pointerRingCountRef.current++;
+    }
+  }, []);
 
   const stopMomentum = useCallback(() => {
     if (momentumAnimIdRef.current !== null) {
@@ -338,6 +419,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   useEffect(() => {
     return () => {
       stopMomentum();
+      if (redrawRafIdRef.current !== null) {
+        cancelAnimationFrame(redrawRafIdRef.current);
+        redrawRafIdRef.current = null;
+      }
+      if (transformCommitTimerRef.current !== null) {
+        window.clearTimeout(transformCommitTimerRef.current);
+        transformCommitTimerRef.current = null;
+      }
     };
   }, [stopMomentum]);
 
@@ -527,11 +616,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const w = containerRef.current.clientWidth;
     const h = containerRef.current.clientHeight;
     if (w <= 0 || h <= 0) return;
-    setOffset((prev) => {
-      const clamped = clampCanvasOffset(prev, scaleRef.current, puzzle.width, puzzle.height, w, h);
+    const cur = offsetRef.current;
+    const clamped = clampCanvasOffset(cur, scaleRef.current, puzzle.width, puzzle.height, w, h);
+    if (clamped.x !== cur.x || clamped.y !== cur.y) {
       offsetRef.current = clamped;
-      return clamped.x === prev.x && clamped.y === prev.y ? prev : clamped;
-    });
+      setOffset(clamped);
+    }
   }, [scale, puzzle, containerSize]);
 
   // Smooth predictive camera controller for Replay Follow Mode:
@@ -1426,14 +1516,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         return;
       }
 
+      const curScale = scaleRef.current;
+      const curOffset = offsetRef.current;
       const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
       const baseOffsetX = (w - puzzle.width * baseScale) / 2;
       const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-      const effScale = scale * baseScale;
+      const effScale = curScale * baseScale;
 
       // Draw artwork drop shadow framing on stage
-      const artScreenX = offset.x + baseOffsetX;
-      const artScreenY = offset.y + baseOffsetY;
+      const artScreenX = curOffset.x + baseOffsetX;
+      const artScreenY = curOffset.y + baseOffsetY;
       const artScreenW = puzzle.width * effScale;
       const artScreenH = puzzle.height * effScale;
 
@@ -1447,7 +1539,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       ctx.restore();
 
       ctx.save();
-      ctx.translate(offset.x + baseOffsetX, offset.y + baseOffsetY);
+      ctx.translate(curOffset.x + baseOffsetX, curOffset.y + baseOffsetY);
       ctx.scale(effScale, effScale);
 
       const isEffectivePreview = isPreviewMode;
@@ -1509,8 +1601,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         : showRegionLabels;
 
       if (drawLabelsNow || highlightMatching || hintRegionId !== null) {
-        const visLeft = (-offset.x - baseOffsetX) / effScale;
-        const visTop = (-offset.y - baseOffsetY) / effScale;
+        const visLeft = (-curOffset.x - baseOffsetX) / effScale;
+        const visTop = (-curOffset.y - baseOffsetY) / effScale;
         const visRight = visLeft + w / effScale;
         const visBottom = visTop + h / effScale;
 
@@ -1579,8 +1671,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     [
       puzzle,
       sourceImage,
-      scale,
-      offset,
       activeColorId,
       filledRegionIds,
       paintedRegionColors,
@@ -1612,6 +1702,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       coopRippleBuffer,
     ]
   );
+  drawCompositeFrameRef.current = drawCompositeFrame;
 
   // Observe container dimension changes (window resize, mobile orientation change, fullscreen toggle)
   useEffect(() => {
@@ -1623,6 +1714,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const h = container.clientHeight;
       if (w <= 0 || h <= 0) return;
 
+      refreshCanvasRect();
       setContainerSize((prev) =>
         prev.width === w && prev.height === h ? prev : { width: w, height: h }
       );
@@ -1685,7 +1777,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       currentDprCleanup?.();
       currentDprCleanup = null;
     };
-  }, [puzzle, drawCompositeFrame]);
+  }, [puzzle, drawCompositeFrame, refreshCanvasRect]);
 
   // Release offscreen canvas backing buffers cleanly on unmount
   useEffect(() => {
@@ -1698,6 +1790,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         }
       }
       baseImageDataRef.current = null;
+      highlightImageDataRef.current = null;
+      canvasRectRef.current = null;
       sourcePixelsRef.current = null;
     };
   }, []);
@@ -1705,7 +1799,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // Redraw immediately whenever visual props or viewport state change
   useEffect(() => {
     drawCompositeFrame(pulseAlphaRef.current);
-  }, [drawCompositeFrame]);
+  }, [drawCompositeFrame, scale, offset]);
 
   // Demand-driven Co-op Ripple decay rAF loop (sleeps completely when idle; zero React state updates)
   useEffect(() => {
@@ -1750,9 +1844,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
     let animId = 0;
     const startTime = performance.now();
+    let lastPulseDraw = 0;
 
     const loop = (now: number) => {
-      if (!document.hidden) {
+      if (!document.hidden && now - lastPulseDraw >= 50) {
+        lastPulseDraw = now;
         const elapsed = now - startTime;
         const t = (Math.sin(elapsed / 250) + 1) / 2;
         const nextAlpha = 0.35 + t * 0.6;
@@ -1781,7 +1877,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
   // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
     stopMomentum();
-    pointerHistoryRef.current = [{ x: e.clientX, y: e.clientY, time: performance.now() }];
+    refreshCanvasRect();
+    resetPointerRing(e.clientX, e.clientY, performance.now());
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     const isRightClick = e.button === 2 || (e.buttons & 2) !== 0;
@@ -1918,9 +2015,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           gestureClampedOffsetRef.current
         );
         if (clamped.x !== offsetRef.current.x || clamped.y !== offsetRef.current.y) {
-          const nextOffset = { x: clamped.x, y: clamped.y };
-          offsetRef.current = nextOffset;
-          setOffset(nextOffset);
+          offsetRef.current.x = clamped.x;
+          offsetRef.current.y = clamped.y;
+          scheduleCanvasRedraw();
+          commitTransformState(false);
         }
         return;
       }
@@ -1940,7 +2038,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         const newScale = applyZoomSnapDetent(clampedRawScale, snapZoomLevels);
         const actualZoom = newScale / initialDragZoomScaleRef.current;
 
-        const rect = canvasRef.current.getBoundingClientRect();
+        const rect = getCachedCanvasRect();
+        if (!rect) return;
         const focalScreenX = doubleTapFocalRef.current.x - rect.left;
         const focalScreenY = doubleTapFocalRef.current.y - rect.top;
 
@@ -1971,11 +2070,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           clamped.x !== offsetRef.current.x ||
           clamped.y !== offsetRef.current.y
         ) {
-          const nextOffset = { x: clamped.x, y: clamped.y };
           scaleRef.current = newScale;
-          offsetRef.current = nextOffset;
-          setScale(newScale);
-          setOffset(nextOffset);
+          offsetRef.current.x = clamped.x;
+          offsetRef.current.y = clamped.y;
+          scheduleCanvasRedraw();
+          commitTransformState(false);
         }
 
         lastPointerPosRef.current.x = e.clientX;
@@ -1990,8 +2089,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     const now = performance.now();
-    pointerHistoryRef.current.push({ x: e.clientX, y: e.clientY, time: now });
-    pointerHistoryRef.current = pointerHistoryRef.current.filter((p) => now - p.time <= 100);
+    pushPointerSample(e.clientX, e.clientY, now);
 
     const dx = e.clientX - lastPointerPosRef.current.x;
     const dy = e.clientY - lastPointerPosRef.current.y;
@@ -2021,20 +2119,24 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       }
       const w = container.clientWidth;
       const h = container.clientHeight;
-      const targetOffset = {
-        x: offsetRef.current.x + dx,
-        y: offsetRef.current.y + dy,
-      };
+      const rawTarget = gestureRawOffsetRef.current;
+      rawTarget.x = offsetRef.current.x + dx;
+      rawTarget.y = offsetRef.current.y + dy;
       const clamped = clampCanvasOffset(
-        targetOffset,
+        rawTarget,
         scaleRef.current,
         puzzle.width,
         puzzle.height,
         w,
-        h
+        h,
+        gestureClampedOffsetRef.current
       );
-      offsetRef.current = clamped;
-      setOffset(clamped);
+      if (clamped.x !== offsetRef.current.x || clamped.y !== offsetRef.current.y) {
+        offsetRef.current.x = clamped.x;
+        offsetRef.current.y = clamped.y;
+        scheduleCanvasRedraw();
+        commitTransformState(false);
+      }
     }
   };
 
@@ -2060,6 +2162,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (remainingPos) {
             lastPointerPosRef.current = { x: remainingPos.x, y: remainingPos.y };
             dragStartRef.current = { x: remainingPos.x, y: remainingPos.y };
+            resetPointerRing(remainingPos.x, remainingPos.y, performance.now());
           }
           totalDragDistanceRef.current = 100;
         }
@@ -2075,6 +2178,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       isDraggingRef.current = false;
       isRightClickRef.current = false;
       lastTapUpTimeRef.current = 0; // Consume double-tap gesture
+      commitTransformState(true);
       return;
     }
 
@@ -2086,11 +2190,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         wasPinchingRef.current = false;
         isPinchPanningRef.current = false;
       }
+      commitTransformState(true);
       return;
     }
 
     const wasRightClick = isRightClickRef.current;
-    const wasPinch = wasPinchingRef.current;
     const wasPinchPan = isPinchPanningRef.current;
     isDraggingRef.current = false;
     isRightClickRef.current = false;
@@ -2101,16 +2205,28 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     }
 
     if (wasRightClick || touchStartDistRef.current !== null) {
+      commitTransformState(true);
       return;
     }
 
     // Trigger smooth pan momentum if dragged sufficiently
     if (totalDragDistanceRef.current >= 12) {
+      commitTransformState(true);
       if (panMomentum && !reducedMotionRef.current && (!isPaintMode || isPreviewMode || wasPinchPan)) {
-        const history = pointerHistoryRef.current;
-        if (history.length >= 2) {
-          const oldest = history[0];
-          const newest = history[history.length - 1];
+        const count = pointerRingCountRef.current;
+        if (count >= 2) {
+          const ring = pointerRingRef.current;
+          const newestIdx = (pointerRingHeadRef.current - 1 + POINTER_RING_CAPACITY) % POINTER_RING_CAPACITY;
+          const newest = ring[newestIdx];
+          let oldest = newest;
+          for (let i = count - 1; i >= 0; i--) {
+            const idx = (pointerRingHeadRef.current - 1 - i + POINTER_RING_CAPACITY * 2) % POINTER_RING_CAPACITY;
+            const candidate = ring[idx];
+            if (newest.time - candidate.time <= 100) {
+              oldest = candidate;
+              break;
+            }
+          }
           const dt = newest.time - oldest.time;
           const timeSinceLast = performance.now() - newest.time;
 
@@ -2141,22 +2257,32 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
                 const w = container.clientWidth;
                 const h = container.clientHeight;
 
-                const targetOffset = {
-                  x: curOffset.x + vx * frameDt,
-                  y: curOffset.y + vy * frameDt,
-                };
-                const clamped = clampCanvasOffset(targetOffset, scaleRef.current, puzzle.width, puzzle.height, w, h);
+                const rawTarget = gestureRawOffsetRef.current;
+                rawTarget.x = curOffset.x + vx * frameDt;
+                rawTarget.y = curOffset.y + vy * frameDt;
+                const clamped = clampCanvasOffset(
+                  rawTarget,
+                  scaleRef.current,
+                  puzzle.width,
+                  puzzle.height,
+                  w,
+                  h,
+                  gestureClampedOffsetRef.current
+                );
 
                 if (clamped.x === curOffset.x && Math.abs(vx) > 0.1) vx = 0;
                 if (clamped.y === curOffset.y && Math.abs(vy) > 0.1) vy = 0;
 
-                offsetRef.current = clamped;
-                setOffset(clamped);
+                curOffset.x = clamped.x;
+                curOffset.y = clamped.y;
+                scheduleCanvasRedraw();
 
                 if (Math.hypot(vx, vy) > 0.02) {
+                  commitTransformState(false);
                   momentumAnimIdRef.current = requestAnimationFrame(stepMomentum);
                 } else {
                   momentumAnimIdRef.current = null;
+                  commitTransformState(true);
                 }
               };
 
@@ -2219,6 +2345,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
           if (remainingPos) {
             lastPointerPosRef.current = { x: remainingPos.x, y: remainingPos.y };
             dragStartRef.current = { x: remainingPos.x, y: remainingPos.y };
+            resetPointerRing(remainingPos.x, remainingPos.y, performance.now());
           }
           totalDragDistanceRef.current = 100;
         }
@@ -2234,6 +2361,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     if (touchPointerCountRef.current === 0) {
       wasPinchingRef.current = false;
     }
+    commitTransformState(true);
   };
 
   // Wheel zoom around cursor
@@ -2249,7 +2377,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
     const newScale = applyZoomSnapDetent(clampedRawScale, snapZoomLevels);
     const actualZoom = newScale / currentScale;
 
-    const rect = canvasRef.current?.getBoundingClientRect();
+    const rect = refreshCanvasRect();
     if (!rect) return;
 
     const mouseX = e.clientX - rect.left;
@@ -2281,11 +2409,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       clamped.x !== currentOffset.x ||
       clamped.y !== currentOffset.y
     ) {
-      const nextOffset = { x: clamped.x, y: clamped.y };
       scaleRef.current = newScale;
-      offsetRef.current = nextOffset;
-      setScale(newScale);
-      setOffset(nextOffset);
+      offsetRef.current.x = clamped.x;
+      offsetRef.current.y = clamped.y;
+      scheduleCanvasRedraw();
+      commitTransformState(true);
       onViewportGestureRef.current?.();
       onPuzzleInteractionRef.current?.();
     }
@@ -2293,6 +2421,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
 
   // Multi-touch 2-finger focal-point pinch-to-zoom & pan
   const handleTouchStart = (e: React.TouchEvent) => {
+    refreshCanvasRect();
     if (e.touches.length >= 2) {
       stopMomentum();
       onViewportGestureRef.current?.();
@@ -2347,7 +2476,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       const newScale = applyZoomSnapDetent(clampedRawScale, snapZoomLevels);
       const zoomRatio = newScale / initialTouchScaleRef.current;
 
-      const rect = canvasRef.current.getBoundingClientRect();
+      const rect = getCachedCanvasRect();
+      if (!rect) return;
       const focalScreenX = initialTouchCenterRef.current.x - rect.left;
       const focalScreenY = initialTouchCenterRef.current.y - rect.top;
 
@@ -2381,11 +2511,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         clamped.x !== offsetRef.current.x ||
         clamped.y !== offsetRef.current.y
       ) {
-        const nextOffset = { x: clamped.x, y: clamped.y };
         scaleRef.current = newScale;
-        offsetRef.current = nextOffset;
-        setScale(newScale);
-        setOffset(nextOffset);
+        offsetRef.current.x = clamped.x;
+        offsetRef.current.y = clamped.y;
+        scheduleCanvasRedraw();
+        commitTransformState(false);
       }
     }
   };
@@ -2401,6 +2531,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
         const remaining = e.touches[0];
         lastPointerPosRef.current = { x: remaining.clientX, y: remaining.clientY };
         dragStartRef.current = { x: remaining.clientX, y: remaining.clientY };
+        resetPointerRing(remaining.clientX, remaining.clientY, performance.now());
         totalDragDistanceRef.current = 100;
       }
     } else if (e.touches.length === 0) {
@@ -2411,6 +2542,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       isDraggingRef.current = false;
       isPinchPanningRef.current = false;
       wasPinchingRef.current = false;
+      commitTransformState(true);
     }
   };
 
@@ -2434,7 +2566,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       <canvas ref={canvasRef} data-testid="puzzle-canvas" className="block w-full h-full" />
     </div>
   );
-};
+});
 
 // --- Canvas Label & Centroid Glow Renderer ---
 
