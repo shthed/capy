@@ -8,7 +8,7 @@ This document explains how modular multi-platform cloud login (`Google`, `Google
 1. [Plain-English Overview: How Everything Works](#1-plain-english-overview-how-everything-works)
 2. [End-to-End Architecture Diagrams](#2-end-to-end-architecture-diagrams)
 3. [Step-by-Step Developer Guide: Provisioning Google Cloud OAuth 2.0 & Play Games v2](#3-step-by-step-developer-guide-provisioning-google-cloud-oauth-20--play-games-v2)
-4. [Step-by-Step Developer Guide: Deploying capypaint.com on Cloudflare Workers](#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers)
+4. [Step-by-Step Developer Guide: Deploying capypaint.com & capyboop.com on Cloudflare Workers](#4-step-by-step-developer-guide-deploying-capypaintcom-and-capyboopcom-on-cloudflare-workers)
 
 ---
 
@@ -181,27 +181,31 @@ flowchart TD
 
 ---
 
-## 4. Step-by-Step Developer Guide: Deploying capypaint.com on Cloudflare Workers
+## 4. Step-by-Step Developer Guide: Deploying capypaint.com and capyboop.com on Cloudflare Workers
 
 ### Architecture Overview ([`wrangler.jsonc`](./wrangler.jsonc), [`package.json`](./package.json) & [`worker/index.ts`](./worker/index.ts))
 - **Edge Static Assets (`0` Worker Invocations for Static Files)**: `wrangler.jsonc` (`workers_dev: false`, `preview_urls: false`) serves `./web/dist` (`not_found_handling: "single-page-application"`, `run_worker_first: ["/api/*"]`) with immutable hashed bundle caching (`Cache-Control: public, max-age=31536000, immutable` on `/assets/*` and `! Cache-Control` revalidation overrides on unhashed sample/icon files in [`web/public/_headers`](./web/public/_headers)).
 - **SQLite-Backed WebSocket Hibernation (`CoopRoomDurableObject`)**: `/api/room?room=<ROOM6>` validates `Origin` (`capypaint.com`, `*.capypaint.com`, `capyboop.github.io`, `appassets.androidplatform.net`, `localhost`, plus optional `ALLOWED_EXTRA_ORIGINS`) and upgrades to a per-room Durable Object using `new_sqlite_classes` (supported on both **Cloudflare Workers Free and Paid plans**). Sockets hibernate between strokes (`0` idle CPU ms via C++ `WebSocketRequestResponsePair('PING', 'PONG')`), reject spoofed `RESERVED_RELAY_PLAYER_ID` senders and bind each socket's `boundPlayerId` (`resolveBoundSocketSender`), enforce `<= 6 KB` frames, `<= 4096`-char Base64URL+header `seedToken` checks, and `40 frames / 5s` sliding-window rate limits, write the initial `HELLO` `seed_token` once, persist debounced `WELCOME_STATE` `'pending_seed'` checkpoints in SQLite (`5s`) so hibernation never drops pending checkpoints, broadcast `LEAVE` on disconnect, and prune idle rooms after 24 hours via `alarm()`.
 - **Canonical Domain Redirect, `/capy.apk` Download & Health Check**:
-  - [`web/index.html`](./web/index.html) executes a synchronous pre-React `www.capypaint.com -> https://capypaint.com` redirect preserving path, query, and `#s=` hash fragments, [`worker/index.ts`](./worker/index.ts) `301`-redirects `/api/*` requests on `www.capypaint.com`, and [`web/public/_redirects`](./web/public/_redirects) `302`-redirects `/capy.apk` to `releases/latest/download/capy.apk` (uploaded on stable tags by [`release.yml`](./.github/workflows/release.yml)).
+  - [`web/index.html`](./web/index.html) executes a synchronous pre-React redirect from [www.capypaint.com](https://www.capypaint.com/) to [capypaint.com](https://capypaint.com/) preserving path, query, and `#s=` hash fragments, [`worker/index.ts`](./worker/index.ts) `301`-redirects `/api/*` requests on [www.capypaint.com](https://www.capypaint.com/), and [`web/public/_redirects`](./web/public/_redirects) `302`-redirects `/capy.apk` to `releases/latest/download/capy.apk` (uploaded on stable tags by [`release.yml`](./.github/workflows/release.yml)).
   - **Recommended 1-Click Cloudflare Edge `301` Rule**: Because `run_worker_first` is scoped strictly to `["/api/*"]` so static assets consume `0` Worker invocations, add a **Cloudflare Dashboard -> Rules -> Redirect Rules -> Single Redirect** matching `Hostname equals www.capypaint.com` -> Dynamic `301` redirect to `concat("https://capypaint.com", http.request.uri.path)` with **Preserve query string** enabled so `www` redirects at the CDN edge before Static Assets.
-  - `GET /api/health` returns JSON service status (`{"ok":true,"service":"capy-paint",...}`).
+  - `GET /api/health` ([capypaint.com/api/health](https://capypaint.com/api/health)) returns JSON service status (`{"ok":true,"service":"capy-paint",...}`).
 
-### Connecting to Cloudflare Workers (`capypaint.com`)
+### Connecting to Cloudflare Workers ([capypaint.com](https://capypaint.com/))
 Choose either native Cloudflare Git builds (zero GitHub secrets) or GitHub Actions deployment:
 
 - **Option 1 -- Cloudflare Workers Builds Git Integration (Recommended)**:
-  1. Add `capypaint.com` as a zone in Cloudflare Dashboard and point your registrar's nameservers to Cloudflare.
-  2. Open **Compute (Workers) -> Workers & Pages -> Create application -> Import a repository**, select `https://github.com/shthed/capy`, and keep Project Name `capy-paint`.
+  1. Add [capypaint.com](https://capypaint.com/) as a zone in [Cloudflare Dashboard](https://dash.cloudflare.com/), verify registrar nameservers (`guy.ns.cloudflare.com` and `maleah.ns.cloudflare.com`), and remove legacy Squarespace `A`/`AAAA`/`CNAME` records on `@` and `www`.
+  2. Open **Compute (Workers) -> Workers & Pages -> Create application -> Import a repository**, select [shthed/capy](https://github.com/shthed/capy), and keep Project Name `capy-paint`.
   3. Root [`package.json`](./package.json) provides `"build": "npm --prefix web ci && npm --prefix web run build"` and `"deploy": "wrangler deploy"` (`wrangler@^4.160.1`), so either `npm run build` + `npx wrangler deploy` or `npm --prefix web ci && npm --prefix web run build` + `npx wrangler deploy` works out of the box from Root directory `/`.
-  4. Click **Save and Deploy**. Cloudflare automatically provisions custom domains `capypaint.com` and `www.capypaint.com` (`custom_domain: true` in [`wrangler.jsonc`](./wrangler.jsonc)) with managed SSL certificates and runs the `v1` SQLite Durable Object migration.
+  4. Click **Save and Deploy**. Cloudflare automatically provisions custom domains [capypaint.com](https://capypaint.com/) and [www.capypaint.com](https://www.capypaint.com/) (`custom_domain: true` in [`wrangler.jsonc`](./wrangler.jsonc)) with managed SSL certificates and runs the `v1` SQLite Durable Object migration.
 - **Option 2 -- GitHub Actions Workflow ([`.github/workflows/deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml))**:
   1. In **Settings -> Secrets and variables -> Actions -> Secrets**, add `CLOUDFLARE_API_TOKEN` (*Edit Cloudflare Workers* template) and `CLOUDFLARE_ACCOUNT_ID` (optionally add `VITE_GOOGLE_CLIENT_ID` and `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` under **Variables**).
-  2. Every push to `main` (or manual `workflow_dispatch`) runs `npm run test:sanity`, `npm run lint`, and `npm run build`, deploys via `cloudflare/wrangler-action@v4` (`wranglerVersion: '4.160.1'`), and verifies `https://capypaint.com/api/health`. Repositories without Cloudflare secrets skip cleanly in `< 2s`.
+  2. Every push to `main` (or manual `workflow_dispatch`) runs `npm run test:sanity`, `npm run lint`, and `npm run build`, deploys via `cloudflare/wrangler-action@v4` (`wranglerVersion: '4.160.1'`), and verifies [capypaint.com/api/health](https://capypaint.com/api/health). Repositories without Cloudflare secrets skip cleanly in `< 2s`.
+
+### Companion Studio Domain ([capyboop.com](https://capyboop.com/))
+- **Studio Domain Split**: [capypaint.com](https://capypaint.com/) hosts **Capy Paint** (`capy-paint` Worker + `CoopRoomDurableObject`), while [capyboop.com](https://capyboop.com/) hosts the **CapyGame 3D** web app ([CapyGame GitHub Pages](https://shthed.github.io/capygame/) mirror at [capyboop/capygame](https://github.com/capyboop/capygame)).
+- **Cloudflare Workers Cutover (`capyboop.com`)**: Connect the standalone non-fork [capyboop/capygame](https://github.com/capyboop/capygame) repo via Cloudflare Workers Builds (`npm run build` -> `./dist/`, keeping `public/_headers` `COOP`/`COEP` headers for `SharedArrayBuffer` in `physics.worker.ts` and `workers_dev: false`) and add a `301` Single Redirect from [www.capyboop.com](https://www.capyboop.com/) to [capyboop.com](https://capyboop.com/) so [capyboop.com](https://capyboop.com/) no longer serves stale unbuilt `v2.5.11` `/src/main.tsx` HTML.
 <!-- capy-dev-only:start -->
 
 ### Automated Clean-Room Public Mirror (`shthed/capy` -> `capyboop/capy`)
@@ -209,5 +213,5 @@ Choose either native Cloudflare Git builds (zero GitHub secrets) or GitHub Actio
 - **One-Time Setup**:
   1. Ensure `https://github.com/capyboop/capy` is created as a **standalone public repository** (not a GitHub Fork, so GitHub displays zero `forked from` subtitle).
   2. Signed in as `capyboop`, create a Fine-Grained Personal Access Token scoped strictly to `capyboop/capy` with **Contents: Read and write** and **Workflows: Read and write**, then save it in `shthed/capy` **Settings -> Secrets and variables -> Actions -> Secrets** as `CAPYBOOP_SYNC_TOKEN`.
-  3. Connect `capyboop/capy` to Cloudflare Workers Builds (`Option 1` above) so every push from `publish-capyboop.yml` automatically deploys `https://capypaint.com/`.
+  3. Connect `capyboop/capy` to Cloudflare Workers Builds (`Option 1` above) so every push from `publish-capyboop.yml` automatically deploys [capypaint.com](https://capypaint.com/).
 <!-- capy-dev-only:end -->
