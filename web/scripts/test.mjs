@@ -1190,8 +1190,10 @@ async function runCodecAndEngineTests() {
         fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness 100%.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
-        const mainSpecRes = validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false });
-        assert.equal(mainSpecRes.scannedFiles.length, 4);
+        assert.throws(
+          () => validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false }),
+          /AGENTS\.md must specify 100% PR Readiness threshold/
+        );
 
         fs.writeFileSync(
           path.join(tmpMainSpecDir, 'AGENTS.md'),
@@ -1484,7 +1486,7 @@ async function runCodecAndEngineTests() {
 
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'AGENTS.md'),
-        `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with as many items as needed.\n`,
+        `# AGENTS.md\n${strictAllLinks}\nReport 100% PR Readiness Score inside <details> with as many items as needed.\n`,
         'utf8'
       );
       assert.throws(
@@ -4762,6 +4764,12 @@ async function runCodecAndEngineTests() {
 
     for (const [labelCase, overrides] of [
       [
+        'empty body',
+        {
+          body: '   ',
+        },
+      ],
+      [
         'missing ## Summary',
         {
           body: '### PR Readiness Score: 100%\n\n- **100%** — **Checks**: Passed.',
@@ -4783,6 +4791,19 @@ async function runCodecAndEngineTests() {
         'unchecked PR task checkbox',
         {
           body: `${validStrictPrBody}\n- [ ] Remaining subtask`,
+        },
+      ],
+      [
+        'unchecked star checkbox',
+        {
+          body: `${validStrictPrBody}\n* [ ] Follow up`,
+        },
+      ],
+      [
+        'sub-100% heading in AI body',
+        {
+          body: validStrictPrBody,
+          aiCommentBody: `### PR Readiness Score: 98%\n<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
         },
       ],
       [
@@ -4838,6 +4859,86 @@ async function runCodecAndEngineTests() {
       assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
       assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
     }
+
+    // Dependabot PRs omit ## Summary / PR Readiness Score, yet still reject unchecked or sub-100% lines
+    const gateDependabotBetaExemptPassRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: 'Bump vite from 7.0.0 to 7.0.1.',
+      labels: ['review:ai-approved'],
+      aiCommentScore: 100,
+    });
+    assert.equal(gateDependabotBetaExemptPassRes.status.state, 'success');
+    assert.equal(gateDependabotBetaExemptPassRes.status.description, gateBetaPassDesc);
+
+    const gateDependabotBetaBadChecklistRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: 'Bump vite.\n\n- [ ] Check release notes\n',
+      labels: ['review:ai-approved'],
+      aiCommentScore: 100,
+    });
+    assert.equal(gateDependabotBetaBadChecklistRes.status.state, 'pending');
+    assert.equal(gateDependabotBetaBadChecklistRes.status.description, gateStrictNotMetDesc);
+    assert.deepEqual(
+      gateDependabotBetaBadChecklistRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    // sync/beta-from-main PR body is exempted from ## Summary / PR Readiness Score even under AI review
+    const gateSyncBodyExemptPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: gateHeadSha,
+      body: 'Automated merge of origin/main into beta.',
+      labels: ['review:ai-approved'],
+      aiCommentScore: 100,
+    });
+    assert.equal(gateSyncBodyExemptPassRes.status.state, 'success');
+    assert.equal(gateSyncBodyExemptPassRes.calls.graphql.length, 1);
+    assert.equal(gateSyncBodyExemptPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
+
+    // GraphQL enablePullRequestAutoMerge preserves existing MERGE method on beta, and held PR disables active auto-merge
+    const gateBetaPreservesMergeMethodRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      autoMerge: { merge_method: 'MERGE' },
+    });
+    assert.equal(gateBetaPreservesMergeMethodRes.status.state, 'success');
+    assert.equal(gateBetaPreservesMergeMethodRes.calls.graphql.length, 0);
+
+    const gateHeldDisablesAutoMergeRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      nodeId: 'PR_node_490',
+      autoMerge: { merge_method: 'SQUASH' },
+      comments: [
+        {
+          id: 950,
+          user: { login: 'shthed' },
+          body: 'HOLD - pause auto-merge',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateHeldDisablesAutoMergeRes.status.state, 'failure');
+    assert.equal(gateHeldDisablesAutoMergeRes.calls.graphql.length, 1);
+    assert.equal(
+      gateHeldDisablesAutoMergeRes.calls.graphql[0].query.includes('disablePullRequestAutoMerge'),
+      true
+    );
+    assert.equal(
+      gateHeldDisablesAutoMergeRes.calls.graphql[0].variables.pullRequestId,
+      'PR_node_490'
+    );
+    assert.equal(gateHeldDisablesAutoMergeRes.calls.merge.length, 0);
 
     // (o) Verified sync/beta-from-main -> beta fast-pass & fail-closed checks
     const baseSyncSha = 'basesha000000000000000000000000000000000';
@@ -6018,6 +6119,7 @@ async function runCodecAndEngineTests() {
     assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
     assert.equal(prReviewGateYaml.includes('disablePullRequestAutoMerge'), true);
     assert.equal(prReviewGateYaml.includes('isStrictPrBodyValid'), true);
+    assert.equal(prReviewGateYaml.includes('hasChecklistSub100OrUnchecked'), true);
     assert.equal(
       prReviewGateYaml.includes('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'),
       true

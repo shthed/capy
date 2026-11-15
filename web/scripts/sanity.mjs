@@ -434,7 +434,7 @@ export function validatePrReadinessSpec(
     if (relFile === 'AGENTS.md') {
       assert.match(publicText, /pr readiness/i, 'AGENTS.md must document PR Readiness format');
       assert.match(publicText, /<details>/i, 'AGENTS.md must document <details> PR Readiness block');
-      assert.match(publicText, /(?:95|100)%/, 'AGENTS.md must specify >= 95% or 100% PR Readiness threshold');
+      assert.match(publicText, /100%/, 'AGENTS.md must specify 100% PR Readiness threshold');
       assert.match(
         publicText,
         /(?:start of each|at the start|%\s*-first)/i,
