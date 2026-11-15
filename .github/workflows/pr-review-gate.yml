@@ -57,6 +57,8 @@ jobs:
     steps:
       - name: Evaluate Strict 100% AI Approval & Auto-Merge State
         uses: actions/github-script@v9
+        env:
+          ACTIONS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -731,10 +733,42 @@ jobs:
                   target_url: targetUrl,
                 });
               } catch (err) {
-                if (isReadOnlyDependabotEvent && err.status === 403) {
+                const isForbidden = Number(err?.status) === 403;
+                const fallbackToken = (process.env.ACTIONS_GITHUB_TOKEN || '').trim();
+                if (isReadOnlyDependabotEvent && isForbidden) {
                   core.warning(
                     `Read-only GITHUB_TOKEN on Dependabot ${context.eventName} event prevented updating capy/review-gate status: ${err.message}`
                   );
+                } else if (isForbidden && !isReadOnlyDependabotEvent && fallbackToken) {
+                  core.warning(
+                    `Primary token returned 403 when updating capy/review-gate status; retrying with ACTIONS_GITHUB_TOKEN.`
+                  );
+                  const statusRes = await fetch(
+                    `https://api.github.com/repos/${owner}/${repo}/statuses/${headSha}`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        Accept: 'application/vnd.github+json',
+                        Authorization: `Bearer ${fallbackToken}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'capy-pr-review-gate',
+                        'X-GitHub-Api-Version': '2022-11-28',
+                      },
+                      body: JSON.stringify({
+                        state,
+                        target_url: targetUrl,
+                        description: clippedDesc,
+                        context: 'capy/review-gate',
+                      }),
+                    }
+                  );
+                  if (!statusRes.ok) {
+                    const statusErrText =
+                      typeof statusRes.text === 'function' ? await statusRes.text() : '';
+                    throw new Error(
+                      `Fallback createCommitStatus failed with HTTP ${statusRes.status}: ${statusErrText.slice(0, 300)}`
+                    );
+                  }
                 } else {
                   throw err;
                 }
@@ -889,7 +923,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
-          github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -986,25 +1020,41 @@ jobs:
               `Diff:\n${clippedDiff}`,
             ].join('\n\n');
 
-            const resp = await fetch(
-              'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'x-goog-api-key': apiKey,
-                },
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: prompt }] }],
-                  generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
-                }),
+            const GEMINI_MODELS = [
+              'gemini-3.8-flash',
+              'gemini-4-argon',
+              'gemini-2.5-flash',
+            ];
+            let payload = null;
+            for (let i = 0; i < GEMINI_MODELS.length; i++) {
+              const model = GEMINI_MODELS[i];
+              const resp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey,
+                  },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+                  }),
+                }
+              );
+              if (resp.ok) {
+                payload = await resp.json();
+                break;
               }
-            );
-            if (!resp.ok) {
-              const errText = await resp.text();
-              throw new Error(`Gemini API HTTP ${resp.status}: ${errText.slice(0, 300)}`);
+              const errText = typeof resp.text === 'function' ? await resp.text() : '';
+              if (resp.status === 404 && i < GEMINI_MODELS.length - 1) {
+                core.warning(
+                  `Gemini model ${model} returned HTTP 404; retrying with ${GEMINI_MODELS[i + 1]}.`
+                );
+                continue;
+              }
+              throw new Error(`Gemini API HTTP ${resp.status} (${model}): ${errText.slice(0, 300)}`);
             }
-            const payload = await resp.json();
             const rawText = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '';
             const parsed = JSON.parse(rawText);
             const verdict = String(parsed?.verdict || '').toUpperCase();
