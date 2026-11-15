@@ -1,4 +1,24 @@
-### 3.0.13 - 2026-11-15 (Production, Beta)
+### 3.0.18 - 2026-11-15 (Beta)
+
+- Wait two animation frames after the second wheel zoom in `web/scripts/test.mjs` so React's `useEffect` schedules the `350ms` `viewportSaveTimer` before `reload()` triggers `beforeunload`, eliminating the `1.2 vs 1.2` `flushPendingViewportSave` race [#540](https://github.com/shthed/capy/pull/540)
+
+### 3.0.17 - 2026-11-15
+
+- Replace brittle fixed UI-transition, long-press, modal, Co-op, resize, shortcut, and breadcrumb sleeps across `web/scripts/test.mjs` with deterministic Playwright locator, attribute, canvas-dimension, IndexedDB, and URL-hash waits while preserving intentional timer, debounce, live-playback, and starvation assertions, and sync `TESTING.md`, `TODO.md`, and `ROADMAP.md` [#539](https://github.com/shthed/capy/pull/539)
+
+### 3.0.16 - 2026-11-15
+
+- Target Android API 36 with modern `enableEdgeToEdge()`, IME window insets, `onSaveInstanceState` restoration, WebView navigation classification (`shouldOverrideUrlLoading`, Safe Browsing, `allowContentAccess = false`, `canGoBack()`), `cacheDir/shared/` FileProvider isolation with 24h cleanup and MIME-preserving `shareImage`, RFC-8259 bridge JSON escaping, `HapticSpec` value equality, and strict `web/package.json` SemVer parsing, add `backup_rules.xml`, `data_extraction_rules.xml`, `*.jks`/`*.keystore` gitignore entries, Gradle catalog pruning, and `NativeBridge.ts` cold-start queue buffering with Android OAuth/APK card gating, enforce required release signing secrets in `release.yml`, add `@JavascriptInterface` parity enforcement in `sanity.mjs`, and expand Kotlin JUnit, JS unit, and Android docs [#537](https://github.com/shthed/capy/pull/537)
+
+### 3.0.15 - 2026-11-15
+
+- Offload save thumbnails out of `capy_snapshots_v8` into IndexedDB (`preview_${id}`) with async hydration, debounced native backups (`flushPendingBackups`), persistent storage requests, and a `z-[60]` `QuotaExceededError` alert toast, optimize `PuzzleCanvas` hot paths with zero-allocation gesture rings, cached bounding rects, reusable highlight buffers, `React.memo` HUD wrappers, and `~20fps` idle pulse throttling, code-split `PuzzleGenerator` worker fallback, harden `App.tsx` O(1) region lookup, `Set`-equality viewport filters, and async cloud sync stroke preservation, and add Co-op sender identity binding and SQLite hibernation checkpoints [#535](https://github.com/shthed/capy/pull/535)
+
+### 3.0.14 - 2026-11-15
+
+- Fail closed on non-string PR bodies, re-evaluate review gate on human body edits and disarm active auto-merge when non-passing, include hidden .well-known/assetlinks.json dotfiles across GitHub Pages uploads and cleanup sweeps, harden clean-room mirror sync auth, ls-remote checks, SIGPIPE-safe log scanning, and tag resets, expand workflow unit tests, and sync CI docs [#534](https://github.com/shthed/capy/pull/534)
+
+### 3.0.13 - 2026-11-15 (Production)
 
 - Preserve active puzzle progress across debounced (`lastSavedViewportRef`) and beforeunload viewport saves, harden async puzzle transition and blob URL cleanup, remove idle polling from `TargetSpotlightOverlay`, speed up CI via async Android/E2E/Pages jobs with headless `--unit` blocking checks and hidden-files artifact preservation, harden PR review gate Probe 9b clock-skew anchoring and strict `100%` AI auto-merge, tighten `AGENTS.md` `100%` sanity check and `stripHtmlComments`, expand Probe 2g/unit/workflow tests, and sync `PROJECT.md` and `TESTING.md` [#530](https://github.com/shthed/capy/pull/530)
 
