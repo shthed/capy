@@ -1,8 +1,8 @@
-### 3.0.13 - 2026-11-15 (Beta)
+### 3.0.13 - 2026-11-15 (Production, Beta)
 
 - Preserve active puzzle progress across debounced (`lastSavedViewportRef`) and beforeunload viewport saves, harden async puzzle transition and blob URL cleanup, remove idle polling from `TargetSpotlightOverlay`, speed up CI via async Android/E2E/Pages jobs with headless `--unit` blocking checks and hidden-files artifact preservation, harden PR review gate Probe 9b clock-skew anchoring and strict `100%` AI auto-merge, tighten `AGENTS.md` `100%` sanity check and `stripHtmlComments`, expand Probe 2g/unit/workflow tests, and sync `PROJECT.md` and `TESTING.md` [#530](https://github.com/shthed/capy/pull/530)
 
-### 3.0.12 - 2026-11-14 (Production)
+### 3.0.12 - 2026-11-14
 
 - Add non-blocking TargetSpotlightOverlay ring and directional arrow across all 14 OnboardingTutorial steps and 9 FeatureOfferBanner tips, auto-dismiss tutorial-opened ReplayControls past Step 6, compact Large Text toggle after Step 1, clarify Step 7 prompt copy, tighten 360px topbar channel pill fit, and update liveCoopRef synchronously [#523](https://github.com/shthed/capy/pull/523)
 
