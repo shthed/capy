@@ -3083,35 +3083,52 @@ async function runCodecAndEngineTests() {
       prReviewGateSource
     );
 
-    const runReviewGateCase = async ({
-      prAuthor = 'github-actions[bot]',
-      baseRef = 'main',
-      isDraft = false,
-      headSha = 'abcdef1234567890abcdef1234567890abcdef12',
-      headRef = undefined,
-      headRepoFullName = 'shthed/capy',
-      headTreeSha = 'tree-main',
-      body = undefined,
-      nodeId = 'PR_node_1',
-      autoMerge = null,
-      commitsByRef = null,
-      compareMap = null,
-      commitDate = '2026-11-13T01:00:00Z',
-      labels = ['review:ai-approved'],
-      events = [],
-      reviews = [],
-      comments = [],
-      commitStatuses = [],
-      aiCommentScore = 100,
-      aiCommentBody = null,
-      aiCommentTs = '2026-11-13T01:01:00Z',
-      eventName = 'pull_request_review',
-      action = 'submitted',
-      createCommitStatusImpl = null,
-      graphqlImpl = null,
-      mergeImpl = null,
-      expectCommitStatus = true,
-    } = {}) => {
+    const validStrictPrBody = [
+      '## Summary',
+      '',
+      'Ships clean async CI checks and strict readiness verification.',
+      '',
+      '### PR Readiness Score: 100%',
+      '',
+      '<details>',
+      '<summary>PR Readiness Checklist</summary>',
+      '',
+      '- **100%** — **Functionality & Edge Cases**: Verified cleanly.',
+      '- **100%** — **Automated Tests**: Passed locally.',
+      '',
+      '</details>',
+    ].join('\n');
+
+    const runReviewGateCase = async (options = {}) => {
+      const {
+        prAuthor = 'github-actions[bot]',
+        baseRef = 'main',
+        isDraft = false,
+        headSha = 'abcdef1234567890abcdef1234567890abcdef12',
+        headRef = undefined,
+        headRepoFullName = 'shthed/capy',
+        headTreeSha = 'tree-main',
+        nodeId = 'PR_node_1',
+        autoMerge = null,
+        commitsByRef = null,
+        compareMap = null,
+        commitDate = '2026-11-13T01:00:00Z',
+        labels = ['review:ai-approved'],
+        events = [],
+        reviews = [],
+        comments = [],
+        commitStatuses = [],
+        aiCommentScore = 100,
+        aiCommentBody = null,
+        aiCommentTs = '2026-11-13T01:01:00Z',
+        eventName = 'pull_request_review',
+        action = 'submitted',
+        createCommitStatusImpl = null,
+        graphqlImpl = null,
+        mergeImpl = null,
+        expectCommitStatus = true,
+      } = options;
+      const body = 'body' in options ? options.body : validStrictPrBody;
       const calls = {
         createReview: [],
         dismissReview: [],
@@ -4725,22 +4742,6 @@ async function runCodecAndEngineTests() {
     assert.equal(gateUntrustedMainCannotClearHoldRes.status.state, 'failure');
 
     // Strict 100% PR body / AI review body enforcement & auto-merge GraphQL + clean-status merge fallback (2ae9e78)
-    const validStrictPrBody = [
-      '## Summary',
-      '',
-      'Ships clean async CI checks and strict readiness verification.',
-      '',
-      '### PR Readiness Score: 100%',
-      '',
-      '<details>',
-      '<summary>PR Readiness Checklist</summary>',
-      '',
-      '- **100%** — **Functionality & Edge Cases**: Verified cleanly.',
-      '- **100%** — **Automated Tests**: Passed locally.',
-      '',
-      '</details>',
-    ].join('\n');
-
     for (const [targetBase, expectedMethod, expectedDesc] of [
       ['beta', 'SQUASH', gateBetaPassDesc],
       ['main', 'MERGE', gateDualPassDesc],
@@ -4763,6 +4764,18 @@ async function runCodecAndEngineTests() {
     }
 
     for (const [labelCase, overrides] of [
+      [
+        'null body',
+        {
+          body: null,
+        },
+      ],
+      [
+        'undefined/missing body',
+        {
+          body: undefined,
+        },
+      ],
       [
         'empty body',
         {
@@ -4840,6 +4853,68 @@ async function runCodecAndEngineTests() {
       );
       assert.equal(strictRejectRes.calls.graphql.length, 0);
     }
+
+    // Tampering with PR body via pull_request edited strips review:ai-approved, holds pending, and disarms prior auto-merge
+    for (const [tamperCase, tamperedBody] of [
+      ['## Summary removed', '### PR Readiness Score: 100%\n\n- **100%** — **Checks**: Passed.'],
+      ['unchecked task added', `${validStrictPrBody}\n- [ ] Incomplete follow-up`],
+      ['null body', null],
+    ]) {
+      const tamperedNoAutoMergeRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        body: tamperedBody,
+        labels: ['review:ai-approved'],
+        eventName: 'pull_request',
+        action: 'edited',
+      });
+      assert.equal(
+        tamperedNoAutoMergeRes.status.state,
+        'pending',
+        `Expected edited ${tamperCase} to return pending`
+      );
+      assert.equal(tamperedNoAutoMergeRes.status.description, gateStrictNotMetDesc);
+      assert.deepEqual(
+        tamperedNoAutoMergeRes.calls.removeLabel.map((r) => r.name),
+        ['review:ai-approved']
+      );
+      assert.equal(tamperedNoAutoMergeRes.calls.graphql.length, 0);
+
+      const tamperedWithAutoMergeRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        nodeId: 'PR_node_tamper',
+        body: tamperedBody,
+        autoMerge: { merge_method: 'SQUASH' },
+        labels: ['review:ai-approved'],
+        eventName: 'pull_request',
+        action: 'edited',
+      });
+      assert.equal(tamperedWithAutoMergeRes.status.state, 'pending');
+      assert.deepEqual(
+        tamperedWithAutoMergeRes.calls.removeLabel.map((r) => r.name),
+        ['review:ai-approved']
+      );
+      assert.equal(tamperedWithAutoMergeRes.calls.graphql.length, 1);
+      assert.equal(
+        tamperedWithAutoMergeRes.calls.graphql[0].query.includes('disablePullRequestAutoMerge'),
+        true
+      );
+    }
+
+    // Pre-existing Owner-armed auto-merge awaiting initial AI review is preserved while capy/review-gate stays pending
+    const preAiAutoMergePreservedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      autoMerge: { merge_method: 'SQUASH' },
+      labels: [],
+      aiCommentScore: null,
+    });
+    assert.equal(preAiAutoMergePreservedRes.status.state, 'pending');
+    assert.equal(preAiAutoMergePreservedRes.calls.graphql.length, 0);
 
     for (const [targetBase, expectedMergeMethod] of [
       ['beta', 'squash'],
@@ -6114,6 +6189,7 @@ async function runCodecAndEngineTests() {
       true
     );
     assert.equal(prReviewGateYaml.includes('github.event.changes.base != null'), true);
+    assert.equal(prReviewGateYaml.includes('github.event.changes.body != null'), true);
     assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
     assert.equal(prReviewGateYaml.includes('strictAiReady'), true);
     assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
@@ -6124,6 +6200,230 @@ async function runCodecAndEngineTests() {
       prReviewGateYaml.includes('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'),
       true
     );
+
+    const parsedPrReviewGate = JSON.parse(
+      execFileSync(
+        'python3',
+        [
+          '-c',
+          'import json, sys, yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))))',
+          path.resolve(projectRoot, '../.github/workflows/pr-review-gate.yml'),
+        ],
+        { encoding: 'utf8' }
+      )
+    );
+    const reviewGateIfExpr = parsedPrReviewGate?.jobs?.['review-gate']?.if;
+    assert.equal(typeof reviewGateIfExpr, 'string');
+    const reviewGateIfJs = reviewGateIfExpr.replace(
+      /(?<![\w'"])github(?:\.[a-zA-Z0-9_]+)+/g,
+      (match) => match.replaceAll('.', '?.')
+    );
+    const evalReviewGateIf = new Function('github', 'contains', 'fromJSON', `return Boolean(${reviewGateIfJs});`);
+    const ghFromJson = (raw) => JSON.parse(raw);
+    const ghContains = (haystack, needle) =>
+      Array.isArray(haystack) ? haystack.includes(needle) : String(haystack).includes(String(needle));
+
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'shthed',
+          event: { action: 'edited', changes: { body: { from: 'old' } } },
+        },
+        ghContains,
+        ghFromJson
+      ),
+      true,
+      'Human PR body edit must trigger review-gate'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'github-actions[bot]',
+          event: { action: 'edited', changes: { body: { from: 'old' } } },
+        },
+        ghContains,
+        ghFromJson
+      ),
+      false,
+      'Bot PR body edit must remain excluded from review-gate'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'shthed',
+          event: { action: 'edited', changes: { title: { from: 'old' } } },
+        },
+        ghContains,
+        ghFromJson
+      ),
+      false,
+      'Human PR title-only edit must not trigger review-gate'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'shthed',
+          event: { action: 'edited', changes: { base: { ref: { from: 'beta' } } } },
+        },
+        ghContains,
+        ghFromJson
+      ),
+      true,
+      'Human PR base retarget edit must trigger review-gate'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'github-actions[bot]',
+          event: { action: 'synchronize' },
+        },
+        ghContains,
+        ghFromJson
+      ),
+      true,
+      'Bot PR synchronize must still trigger review-gate'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'dependabot[bot]',
+          event: { action: 'edited', changes: { body: { from: 'old' } } },
+        },
+        ghContains,
+        ghFromJson
+      ),
+      false,
+      'Dependabot PR body edit must remain excluded from review-gate'
+    );
+
+    const parsedPublishCapyboop = JSON.parse(
+      execFileSync(
+        'python3',
+        [
+          '-c',
+          'import json, sys, yaml; print(json.dumps(yaml.safe_load(open(sys.argv[1], encoding="utf-8"))))',
+          path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
+        ],
+        { encoding: 'utf8' }
+      )
+    );
+    const publishStep = (parsedPublishCapyboop?.jobs?.publish?.steps || []).find((s) =>
+      String(s?.name || '').includes('Commit as capyboop')
+    );
+    assert.ok(publishStep && typeof publishStep.run === 'string');
+    const publishScript = publishStep.run;
+    execFileSync(
+      'bash',
+      ['-n'],
+      {
+        input: publishScript.replace(/\$\{(?:version|commit_msg)\}/g, 'x'),
+        encoding: 'utf8',
+      }
+    );
+    assert.equal(
+      /git\s+log[^\n]*\|\s*grep/i.test(publishScript),
+      false,
+      'publish-capyboop.yml must never pipe git log into grep under set -euo pipefail'
+    );
+    assert.equal(
+      publishScript.includes('git log FETCH_HEAD --format="%an %ae %cn %ce %B%x00" > "${LOG_FILE}"'),
+      true
+    );
+    assert.equal(publishScript.includes('grep -iaqzE'), true);
+    assert.equal(publishScript.includes('NEEDS_CLEAN_RESET'), true);
+    assert.equal(publishScript.includes('GIT_ASKPASS'), true);
+    assert.equal(publishScript.includes('chmod 700 "${ASKPASS_SCRIPT}"'), true);
+    assert.equal(publishScript.includes('trap cleanup EXIT'), true);
+    assert.equal(publishScript.includes('git config credential.helper ""'), true);
+    assert.equal(
+      /https:\/\/[^\s]*CAPYBOOP_SYNC_TOKEN[^\s]*@/.test(publishScript),
+      false,
+      'publish-capyboop.yml must not embed CAPYBOOP_SYNC_TOKEN inside git remote URL'
+    );
+    assert.equal(publishScript.includes('>/dev/null 2>&1'), false);
+    assert.equal(publishScript.includes('MAIN_LS_RC'), true);
+    assert.equal(publishScript.includes('TAG_LS_RC'), true);
+
+    // Behavioral verification: temp-file grep -iaqzE detects leaked early commit across 80+ commits without SIGPIPE, and ls-remote differentiates 0 / 2 / fatal errors
+    const tmpPublishRepoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-publish-check-'));
+    try {
+      const bareRemoteDir = path.join(tmpPublishRepoDir, 'remote.git');
+      const workRepoDir = path.join(tmpPublishRepoDir, 'work');
+      const logOutPath = path.join(tmpPublishRepoDir, 'fetch_head.log');
+      fs.mkdirSync(workRepoDir, { recursive: true });
+      execFileSync('git', ['init', '--bare', bareRemoteDir], { stdio: 'pipe' });
+      execFileSync('git', ['init', '-b', 'main'], { cwd: workRepoDir, stdio: 'pipe' });
+      execFileSync('git', ['config', 'user.name', 'capyboop'], { cwd: workRepoDir, stdio: 'pipe' });
+      execFileSync('git', ['config', 'user.email', 'capyboop@example.com'], {
+        cwd: workRepoDir,
+        stdio: 'pipe',
+      });
+      execFileSync('git', ['commit', '--allow-empty', '-m', 'Early commit with 381055+leak'], {
+        cwd: workRepoDir,
+        stdio: 'pipe',
+      });
+      for (let i = 0; i < 60; i++) {
+        execFileSync('git', ['commit', '--allow-empty', '-m', `Clean commit ${i}`], {
+          cwd: workRepoDir,
+          stdio: 'pipe',
+        });
+      }
+      execFileSync('git', ['remote', 'add', 'target', bareRemoteDir], { cwd: workRepoDir, stdio: 'pipe' });
+      execFileSync('git', ['push', 'target', 'main'], { cwd: workRepoDir, stdio: 'pipe' });
+      const scanRc = execFileSync(
+        'bash',
+        [
+          '-euo',
+          'pipefail',
+          '-c',
+          [
+            `git -C "${workRepoDir}" log HEAD --format="%an %ae %cn %ce %B%x00" > "${logOutPath}"`,
+            'GREP_RC=0',
+            `grep -iaqzE "shthed|hairy[[:space:]_-]*dog[[:space:]_-]*trumpet|381055\\+|CAPYBOOP_SYNC_TOKEN" "${logOutPath}" || GREP_RC=$?`,
+            'printf "%s" "$GREP_RC"',
+          ].join('\n'),
+        ],
+        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '' } }
+      ).trim();
+      assert.equal(scanRc, '0');
+
+      const lsRemoteCodes = execFileSync(
+        'bash',
+        [
+          '-euo',
+          'pipefail',
+          '-c',
+          [
+            'rc_hit=0',
+            `git -C "${workRepoDir}" ls-remote --exit-code --heads target main >/dev/null || rc_hit=$?`,
+            'rc_miss=0',
+            `git -C "${workRepoDir}" ls-remote --exit-code --heads target missing-branch >/dev/null || rc_miss=$?`,
+            'rc_err=0',
+            `git -C "${workRepoDir}" ls-remote --exit-code --heads "${tmpPublishRepoDir}/does-not-exist.git" main >/dev/null 2>/dev/null || rc_err=$?`,
+            'printf "%s:%s:%s" "$rc_hit" "$rc_miss" "$rc_err"',
+          ].join('\n'),
+        ],
+        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '' } }
+      ).trim();
+      const [rcHit, rcMiss, rcErr] = lsRemoteCodes.split(':').map(Number);
+      assert.equal(rcHit, 0);
+      assert.equal(rcMiss, 2);
+      assert.equal(rcErr > 2, true, `Expected fatal ls-remote exit > 2, got ${rcErr}`);
+    } finally {
+      fs.rmSync(tmpPublishRepoDir, { recursive: true, force: true });
+    }
 
     const dependabotYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/dependabot.yml'),
@@ -6396,12 +6696,50 @@ async function runCodecAndEngineTests() {
     assert.equal(deployWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
     assert.equal(deployWorkflowYaml.includes('web/public/404.html'), true);
     assert.equal(deployWorkflowYaml.includes('--refresh-404'), true);
+    assert.equal(deployWorkflowYaml.includes('ls -lah "${LIST_PATH}"'), true);
 
     const cleanupWorkflowYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
       'utf8'
     );
     assert.equal(cleanupWorkflowYaml.includes('generate-pr-manifest.mjs'), true);
+
+    // Parse all .github/workflows/*.yml via yaml.safe_load and verify Upload Pages artifact preserves hidden dotfiles
+    const parsedWorkflows = JSON.parse(
+      execFileSync(
+        'python3',
+        [
+          '-c',
+          [
+            'import glob, json, os, sys, yaml',
+            'wf_dir = sys.argv[1]',
+            'out = {}',
+            'for p in sorted(glob.glob(os.path.join(wf_dir, "*.yml"))):',
+            '    with open(p, encoding="utf-8") as f:',
+            '        out[os.path.basename(p)] = yaml.safe_load(f)',
+            'print(json.dumps(out))',
+          ].join('\n'),
+          path.resolve(projectRoot, '../.github/workflows'),
+        ],
+        { encoding: 'utf8' }
+      )
+    );
+    for (const [wfFile, jobName] of [
+      ['deploy-branch.yml', 'deploy'],
+      ['cleanup-closed-pr.yml', 'cleanup'],
+      ['cleanup-branches.yml', 'cleanup'],
+    ]) {
+      const steps = parsedWorkflows?.[wfFile]?.jobs?.[jobName]?.steps || [];
+      const uploadPagesStep = steps.find(
+        (s) => typeof s?.uses === 'string' && s.uses.startsWith('actions/upload-pages-artifact@')
+      );
+      assert.ok(uploadPagesStep, `Expected actions/upload-pages-artifact step in ${wfFile}`);
+      assert.equal(
+        uploadPagesStep?.with?.['include-hidden-files'],
+        true,
+        `${wfFile} Upload Pages artifact step must set include-hidden-files: true`
+      );
+    }
 
     // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
     console.log('-> Testing compile-changelog.mjs release note extraction & release.yml wiring...');
