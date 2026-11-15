@@ -645,6 +645,41 @@ export function runSanityChecks({
     'app/build.gradle.kts must compute (verMajor * 10000) + (verMinor * 100) + verPatch'
   );
 
+  // 1b. Android @JavascriptInterface <-> NativeBridge.ts CapyAndroidInterface parity
+  const bridgeKtPath = path.join(root, 'app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt');
+  const nativeBridgeTsPath = path.join(root, 'web/src/services/NativeBridge.ts');
+  if (fs.existsSync(bridgeKtPath) || fs.existsSync(nativeBridgeTsPath)) {
+    assert.equal(fs.existsSync(bridgeKtPath), true, 'Missing CapyAndroidBridge.kt for bridge parity check');
+    assert.equal(fs.existsSync(nativeBridgeTsPath), true, 'Missing NativeBridge.ts for bridge parity check');
+    const bridgeKt = fs.readFileSync(bridgeKtPath, 'utf8');
+    const nativeBridgeTs = fs.readFileSync(nativeBridgeTsPath, 'utf8');
+    const ktMethods = new Set(
+      [...bridgeKt.matchAll(/@JavascriptInterface\s+(?:@\w+(?:\([^)]*\))?\s+)*fun\s+([A-Za-z0-9_]+)\s*\(/g)].map(
+        (m) => m[1]
+      )
+    );
+    const tsInterfaceBlock = /interface\s+CapyAndroidInterface\s*\{([\s\S]*?)\n\}/.exec(nativeBridgeTs);
+    assert.ok(tsInterfaceBlock, 'NativeBridge.ts must declare interface CapyAndroidInterface');
+    const tsMethods = new Set(
+      [...tsInterfaceBlock[1].matchAll(/^\s{2}([A-Za-z0-9_]+)\??:\s*\(/gm)].map((m) => m[1])
+    );
+    assert.equal(ktMethods.size >= 15, true, `Expected >= 15 @JavascriptInterface methods, found ${ktMethods.size}`);
+    for (const ktName of ktMethods) {
+      assert.equal(
+        tsMethods.has(ktName),
+        true,
+        `CapyAndroidBridge.kt @JavascriptInterface '${ktName}' missing from NativeBridge.ts CapyAndroidInterface`
+      );
+    }
+    for (const tsName of tsMethods) {
+      assert.equal(
+        ktMethods.has(tsName),
+        true,
+        `NativeBridge.ts CapyAndroidInterface method '${tsName}' missing @JavascriptInterface in CapyAndroidBridge.kt`
+      );
+    }
+  }
+
   // 2. CHANGELOG.md contract
   const changelogPath = path.join(root, 'CHANGELOG.md');
   const changelogText = fs.readFileSync(changelogPath, 'utf8').replace(/\r\n/g, '\n');

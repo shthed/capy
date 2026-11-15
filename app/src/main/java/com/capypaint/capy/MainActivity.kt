@@ -23,10 +23,12 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.graphics.scale
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import com.google.android.gms.games.PlayGames
@@ -44,6 +46,10 @@ class MainActivity : ComponentActivity() {
     private lateinit var bridge: CapyAndroidBridge
     private var isPageLoaded: Boolean = false
     private val shareDecodeExecutor = Executors.newSingleThreadExecutor()
+
+    private fun updateBackCallbackState() {
+        backPressedCallback.isEnabled = bridge.isModalOpen || (webView?.canGoBack() == true)
+    }
 
     private val pickMediaLauncher = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -74,6 +80,9 @@ class MainActivity : ComponentActivity() {
             val wv = webView
             if ((wv != null) && bridge.isModalOpen) {
                 wv.evaluateJavascript("window.__capyCloseModal && window.__capyCloseModal();", null)
+            } else if ((wv != null) && wv.canGoBack()) {
+                wv.goBack()
+                updateBackCallbackState()
             } else {
                 isEnabled = false
                 onBackPressedDispatcher.onBackPressed()
@@ -83,26 +92,24 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.BLACK),
+        )
         super.onCreate(savedInstanceState)
 
         if (BuildConfig.DEBUG) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
 
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        @Suppress("DEPRECATION")
-        window.statusBarColor = Color.TRANSPARENT
-        @Suppress("DEPRECATION")
-        window.navigationBarColor = Color.BLACK
-
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
 
         bridge = CapyAndroidBridge(
             context = applicationContext,
             rootViewProvider = { webView },
-            onModalStateChanged = { isOpen ->
+            onModalStateChanged = { _ ->
                 runOnUiThread {
-                    backPressedCallback.isEnabled = isOpen
+                    updateBackCallbackState()
                 }
             },
             onRequestPlayGamesSignIn = {
@@ -143,7 +150,7 @@ class MainActivity : ComponentActivity() {
                 javaScriptEnabled = true
                 domStorageEnabled = true
                 allowFileAccess = false
-                allowContentAccess = true
+                allowContentAccess = false
                 mediaPlaybackRequiresUserGesture = false
                 cacheMode = WebSettings.LOAD_DEFAULT
                 setSupportZoom(false)
@@ -151,7 +158,7 @@ class MainActivity : ComponentActivity() {
                 displayZoomControls = false
                 textZoom = 100
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    safeBrowsingEnabled = false
+                    safeBrowsingEnabled = true
                 }
             }
 
@@ -165,9 +172,45 @@ class MainActivity : ComponentActivity() {
                     return assetLoader.shouldInterceptRequest(request.url)
                 }
 
+                override fun shouldOverrideUrlLoading(
+                    view: WebView,
+                    request: WebResourceRequest,
+                ): Boolean {
+                    val targetUrl = request.url?.toString()
+                    return when (CapyAndroidBridge.classifyWebViewNavigation(targetUrl)) {
+                        CapyAndroidBridge.WebViewNavigationAction.ALLOW_INTERNAL -> false
+                        CapyAndroidBridge.WebViewNavigationAction.OPEN_EXTERNAL -> {
+                            if (request.isForMainFrame) {
+                                try {
+                                    startActivity(Intent(Intent.ACTION_VIEW, request.url))
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "No handler available for external URL: $targetUrl", e)
+                                }
+                            }
+                            true
+                        }
+                        CapyAndroidBridge.WebViewNavigationAction.BLOCK -> {
+                            Log.w(TAG, "Blocked unsafe WebView navigation URL: $targetUrl")
+                            true
+                        }
+                    }
+                }
+
+                override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    isPageLoaded = false
+                    bridge.setModalOpen(false)
+                }
+
+                override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                    super.doUpdateVisitedHistory(view, url, isReload)
+                    updateBackCallbackState()
+                }
+
                 override fun onPageFinished(view: WebView, url: String?) {
                     super.onPageFinished(view, url)
                     isPageLoaded = true
+                    updateBackCallbackState()
                     Log.d(TAG, "WebView page finished loading: $url")
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
@@ -231,7 +274,9 @@ class MainActivity : ComponentActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(wv) { _, windowInsets ->
             val insets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.ime(),
             )
             val d = resources.displayMetrics.density
             val topCss = (insets.top / d).toInt()
@@ -241,14 +286,17 @@ class MainActivity : ComponentActivity() {
 
             bridge.updateSafeAreaInsets(topCss, bottomCss, leftCss, rightCss)
             applySafeAreaInsetsToWebView()
-            WindowInsetsCompat.CONSUMED
+            windowInsets
         }
 
         webView = wv
         setContentView(wv)
 
         handleIncomingIntent(intent)
-        wv.loadUrl(START_URL)
+        val restored = if (savedInstanceState != null) wv.restoreState(savedInstanceState) else null
+        if (restored == null) {
+            wv.loadUrl(START_URL)
+        }
     }
 
     private fun applySafeAreaInsetsToWebView() {
@@ -373,7 +421,7 @@ class MainActivity : ComponentActivity() {
                     CapyAndroidBridge.MAX_SHARED_IMAGE_DIMENSION,
                 )
                 val finalBitmap = if (targetW != decoded.width || targetH != decoded.height) {
-                    val scaled = Bitmap.createScaledBitmap(decoded, targetW, targetH, true)
+                    val scaled = decoded.scale(targetW, targetH)
                     if (scaled !== decoded) {
                         decoded.recycle()
                     }
@@ -659,6 +707,11 @@ class MainActivity : ComponentActivity() {
                 null,
             )
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        webView?.saveState(outState)
     }
 
     override fun onPause() {

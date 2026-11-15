@@ -34,22 +34,22 @@ Instead of maintaining a duplicate Kotlin implementation of vector quantization,
 ## 2. Component & `@JavascriptInterface` Reference
 
 ### [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)
-Extends `androidx.activity.ComponentActivity` with edge-to-edge window decor (`WindowCompat.setDecorFitsSystemWindows(window, false)`).
-- **`WebViewAssetLoader`**: Resolves local assets at `https://appassets.androidplatform.net/assets/www/index.html` so ES module imports, Web Workers, and Fetch requests run inside a secure HTTPS origin without `file://` CORS errors.
-- **`OnApplyWindowInsetsListener`**: Intercepts `WindowInsetsCompat.Type.systemBars() or displayCutout()`, converts physical pixels (`px / density`), and injects `--safe-area-top`, `--safe-area-bottom`, `--safe-area-left`, and `--safe-area-right` into `document.documentElement.style` (with fallback `status_bar_height` / `navigation_bar_height` queries during `onCreate` to prevent frame-0 layout shifts).
-- **`OnBackPressedCallback`**: Tracks `bridge.isModalOpen` (driven by `NativeBridge.pushBackHandler` / `setBackModalOpen`). When open, pressing Android system back evaluates `window.__capyCloseModal && window.__capyCloseModal()` instead of exiting the Activity.
+Extends `androidx.activity.ComponentActivity` using `enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT), navigationBarStyle = SystemBarStyle.dark(Color.BLACK))`.
+- **`WebViewAssetLoader` & Navigation Security**: Resolves local assets at `https://appassets.androidplatform.net/assets/www/index.html` with `safeBrowsingEnabled = true`, `allowFileAccess = false`, and `allowContentAccess = false`. `shouldOverrideUrlLoading` delegates URL classification to `CapyAndroidBridge.classifyWebViewNavigation`—allowing only `appassets.androidplatform.net` / `about:blank` inside the WebView, opening external `http`/`https` links via `Intent.ACTION_VIEW` so `@JavascriptInterface` is never exposed to third-party origins, and blocking unsafe schemes (`javascript:`, `file:`, `content:`).
+- **`OnApplyWindowInsetsListener` & IME Insets**: Intercepts `WindowInsetsCompat.Type.systemBars() or displayCutout() or ime()`, converts physical pixels (`px / density`), and injects `--safe-area-top`, `--safe-area-bottom`, `--safe-area-left`, and `--safe-area-right` into `document.documentElement.style` (returning `windowInsets` unconsumed so Chromium adjusts focused inputs smoothly when the soft keyboard opens, alongside fallback `status_bar_height` / `navigation_bar_height` queries during `onCreate`).
+- **System Back & State Restoration (`OnBackPressedCallback` + `onSaveInstanceState`)**: Tracks both `bridge.isModalOpen` and `webView.canGoBack()` via `updateBackCallbackState()` (updated in `doUpdateVisitedHistory`, `onPageFinished`, and modal changes), resets modal state in `onPageStarted`, and preserves WebView state across Activity recreation via `onSaveInstanceState` / `restoreState`.
 - **Dual File Chooser Routing (`PickVisualMedia` & `OpenDocument`)**: Intercepts `WebChromeClient.onShowFileChooser` and checks `CapyAndroidBridge.shouldUsePhotoPicker(acceptTypes)`—routing `image/*` uploads to Android's system `PickVisualMedia` picker and `.capy`/`.json` imports to SAF `OpenDocument`.
 - **Incoming Share Intents, Verified App Links & Google Play Games Services v2**:
-  - `Intent.ACTION_SEND` (`image/*`, `BF-5`): Extracts `Intent.EXTRA_STREAM` in `onCreate` and `onNewIntent` and offloads image decoding onto a single-thread background executor (`shareDecodeExecutor`) off the UI thread. Probes bounds via `inJustDecodeBounds = true`, computes subsampling via `CapyAndroidBridge.calculateInSampleSize(width, height, MAX_SHARED_IMAGE_DIMENSION = 2048)` and exact target bounds via `CapyAndroidBridge.calculateTargetDimensions`, downsamples oversized camera photos to `<= 2048px` (or reads bounded raw bytes up to `MAX_RAW_SHARED_IMAGE_BYTES = 4 MB`), and posts the Base64 data URL back to the main thread for `window.__capyReceiveSharedImage`.
+  - `Intent.ACTION_SEND` (`image/*`, `BF-5`): Extracts `Intent.EXTRA_STREAM` in `onCreate` and `onNewIntent`, offloads decoding onto `shareDecodeExecutor`, subsamples via `calculateInSampleSize` / `calculateTargetDimensions` (`<= 2048px`), scales via `decoded.scale(targetW, targetH)`, and delivers buffered payloads safely even if WebView listeners mount after page load ([`NativeBridge.ts`](./web/src/services/NativeBridge.ts) cold-start queues).
   - `Intent.ACTION_VIEW` (`https://capypaint.com/...`, `https://www.capypaint.com/...`, and `https://shthed.github.io/capy...` with `android:autoVerify="${appLinksAutoVerify}"` in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), dynamically enabled by [`app/build.gradle.kts`](./app/build.gradle.kts) and `CapyAndroidBridge.isAppLinksCertConfigured` when `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` is set): Validates incoming HTTPS App Links via `CapyAndroidBridge.isAllowedCapyDeepLink` (`ROOT_DEEP_LINK_HOSTS` + `GITHUB_PAGES_DEEP_LINK_HOSTS`) and forwards `#s=<token>` and `?room=<ROOM6>` links to `window.__capyReceiveDeepLink`.
-  - **Google Play Games Services v2 (`com.google.android.gms:play-services-games-v2:22.1.0`) & Live `SnapshotsClient` Sync**: When a real Play Console Project ID is configured (`@string/game_services_project_id` / `CAPY_PLAY_GAMES_APP_ID`), `MainActivity` initializes `PlayGamesSdk.initialize(this)`, checks `PlayGames.getGamesSignInClient(this).isAuthenticated` (automatically invoking `requestPlayGamesSignIn()` on launch if not yet signed in), queries `PlayGames.getPlayersClient(this).currentPlayer` (`displayName`, `playerId`), caches the profile in `SharedPreferences` (`capy_play_games_prefs`), pushes it to `window.__capyReceivePlayGamesProfile(...)`, and actively syncs cloud save slots (`capy_cloud_manifest_v2` plus multi-chunk `pgblob_*_part_<i>` binary slots) against `PlayGames.getSnapshotsClient(this)` using `SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED`, pushing remote snapshot payloads into the WebView via `window.__capyReceiveCloudSnapshot(slotKey, payloadJson)`. See [`CLOUD.md`](./CLOUD.md) for full details.
+  - **Google Play Games Services v2 (`com.google.android.gms:play-services-games-v2:22.1.0`) & Live `SnapshotsClient` Sync**: When a real Play Console Project ID is configured (`@string/game_services_project_id` / `CAPY_PLAY_GAMES_APP_ID`), `MainActivity` initializes `PlayGamesSdk.initialize(this)`, checks `PlayGames.getGamesSignInClient(this).isAuthenticated` (automatically invoking `requestPlayGamesSignIn()` on launch if not yet signed in), queries `PlayGames.getPlayersClient(this).currentPlayer` (`displayName`, `playerId`), caches the profile in `SharedPreferences` (`capy_play_games_prefs`), pushes it to `window.__capyReceivePlayGamesProfile(...)`, and actively syncs cloud save slots (`capy_cloud_manifest_v2` plus multi-chunk `pgblob_*_part_<i>` binary slots) against `PlayGames.getSnapshotsClient(this)` using `SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED`, pushing remote snapshot payloads into the WebView via `window.__capyReceiveCloudSnapshot(slotKey, payloadJson)`. Android WebView auth stays strictly on Play Games v2 (never falling back to web Google GIS popups) and hides browser APK download cards (`!NativeBridge.isAndroid`). See [`CLOUD.md`](./CLOUD.md) for full details.
 - **Foreground / Background WebView Lifecycle Guard (`onPause` / `onResume` / `onDestroy`)**: `MainActivity` overrides `onPause()` (`webView?.onPause()`) and `onResume()` (`webView?.onResume()`) alongside `onDestroy()` (`shareDecodeExecutor.shutdownNow()`, `webView?.destroy()`) so Android WebView rendering, `requestAnimationFrame` loops, and Web Audio (`SoundService.ts`) suspend cleanly at the OS layer whenever the app is backgrounded or the screen locks.
 
 ### [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt)
-Registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")` (with `webView.isHapticFeedbackEnabled = true` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt)). Also exposes pure companion helpers (`MAX_SHARED_IMAGE_DIMENSION = 2048`, `MAX_RAW_SHARED_IMAGE_BYTES = 4 * 1024 * 1024`, `DEFAULT_CLOUD_BINARY_CHUNK_BYTES = 180_000`, `MAX_CLOUD_BINARY_CHUNKS = 32`, `MAX_CLOUD_BINARY_TOTAL_BYTES = 3 * 1024 * 1024`, `calculateInSampleSize`, `calculateTargetDimensions`, `resolveHapticSpec`, `saveCloudBinaryChunkToDir`, `loadCloudBinaryChunkFromDir`, `saveCloudBinaryBytesToDir`, `loadCloudBinaryBytesFromDir`, `isPlayGamesAppIdConfigured`, `isAppLinksCertConfigured`).
+Registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")` (with `webView.isHapticFeedbackEnabled = true` in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) and `@JavascriptInterface` <-> `CapyAndroidInterface` parity enforced by `npm run test:sanity`). Also exposes pure companion helpers (`MAX_SHARED_IMAGE_DIMENSION = 2048`, `MAX_RAW_SHARED_IMAGE_BYTES = 4 * 1024 * 1024`, `DEFAULT_CLOUD_BINARY_CHUNK_BYTES = 180_000`, `MAX_CLOUD_BINARY_CHUNKS = 32`, `MAX_CLOUD_BINARY_TOTAL_BYTES = 3 * 1024 * 1024`, `calculateInSampleSize`, `calculateTargetDimensions`, `resolveHapticSpec`, `resolveShareImageSpec`, `prepareSharedExportFile`, `classifyWebViewNavigation`, `escapeJsonString`, `saveCloudBinaryChunkToDir`, `loadCloudBinaryChunkFromDir`, `saveCloudBinaryBytesToDir`, `loadCloudBinaryBytesFromDir`, `isPlayGamesAppIdConfigured`, `isAppLinksCertConfigured`).
 
 All `@JavascriptInterface` methods exposed on `window.CapyAndroid`:
-- **`haptic(type: String)`**: Resolves tactile parameters via `CapyAndroidBridge.resolveHapticSpec(type)` (`HapticSpec`) and dispatches hardware haptics across Android API levels:
+- **`haptic(type: String)`**: Resolves tactile parameters via `CapyAndroidBridge.resolveHapticSpec(type)` (`HapticSpec`, with content-based `equals`/`hashCode` for waveform arrays) and dispatches hardware haptics across Android API levels:
   - `"tick"`: `VibrationEffect.EFFECT_TICK` (API 29+) / `HapticFeedbackConstants.CLOCK_TICK` / 10ms pulse.
   - `"success"`: Custom 4-step waveform (`[0, 14, 45, 24]`).
   - `"warning"`: `VibrationEffect.EFFECT_HEAVY_CLICK` (API 29+) / direct `vibrateOneShot(18L)` fallback on older APIs (intentionally bypassing `view.performHapticFeedback` so warning pulses feel distinct from long-press UI menus).
@@ -71,18 +71,18 @@ All `@JavascriptInterface` methods exposed on `window.CapyAndroid`:
 - **`consumePendingSharedImage(): String?`**: Atomically retrieves and clears any cold-start `Intent.ACTION_SEND` shared image JSON (`{"title":"...","dataUrl":"..."}`) queued before WebView hydration.
 - **`consumePendingDeepLink(): String?`**: Atomically retrieves and clears any cold-start verified App Link URL (`#s=<token>` or `?room=<ROOM6>`).
 - **`shareTextLink(title: String, url: String)`**: Launches Android's `Intent.ACTION_SEND` (`text/plain`) chooser for `< 2 KB` progress links and Co-op room invites.
-- **`shareImage(title: String, dataUrl: String)`**: Decodes Base64 PNG data, writes `cacheDir/capy_shared_artwork.png`, and opens Android's Share chooser via AndroidX `FileProvider`.
-- **`shareFile(title: String, fileName: String, mimeType: String, base64Data: String)`**: Writes arbitrary binary or text exports (such as `.capy` v2 archives and PNGs) to `cacheDir/<sanitized_fileName>` and opens Android's Share / Save chooser via `FileProvider`.
-- **`getAppVersion(): String`**: Returns `BuildConfig.VERSION_NAME` (`"3.0.7"` or latest `web/package.json` `"version"`, synchronized automatically at Gradle configure time).
+- **`shareImage(title: String, dataUrl: String)`**: Resolves MIME type (`image/png`, `image/jpeg`, `image/webp`, `image/gif`, `image/svg+xml`) via `resolveShareImageSpec`, writes `cacheDir/shared/capy_shared_artwork.<ext>`, and opens Android's Share chooser via AndroidX `FileProvider`.
+- **`shareFile(title: String, fileName: String, mimeType: String, base64Data: String)`**: Writes arbitrary binary or text exports (such as `.capy` v2 archives and images) into `cacheDir/shared/<sanitized_fileName>` via `prepareSharedExportFile` (pruning expired exports older than 24h) scoped strictly by [`file_paths.xml`](./app/src/main/res/xml/file_paths.xml) and opens Android's Share / Save chooser via `FileProvider`.
+- **`getAppVersion(): String`**: Returns `BuildConfig.VERSION_NAME` (synchronized automatically from [`web/package.json`](./web/package.json) at Gradle configure time, failing loudly if missing or malformed).
 
 ---
 
 ## 3. Safe-Area Inset Architecture (Pixel 7 / Cutouts)
 
 On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cutouts):
-1. The Android window uses transparent status and navigation bars.
+1. The Android window uses `enableEdgeToEdge(...)` with transparent status bar and dark navigation bar.
 2. Android `WebView` does **not** reliably populate CSS `env(safe-area-inset-*)` on all OEM builds.
-3. [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) bridges exact physical insets into CSS custom properties (`--safe-area-top` ~48px, `--safe-area-bottom` ~24px).
+3. [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) bridges exact physical insets (`systemBars`, `displayCutout`, and `ime`) into CSS custom properties (`--safe-area-top` ~48px, `--safe-area-bottom` ~24px+).
 4. In [`web/src/index.css`](./web/src/index.css):
    ```css
    :root {
@@ -97,7 +97,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
    }
    ```
    - `.safe-top` keeps `GameTopBar` clear of status bar icons and camera cutouts.
-   - `.safe-bottom-raised` floats `PaletteDock` comfortably above the system gesture pill.
+   - `.safe-bottom-raised` floats `PaletteDock` comfortably above the system gesture pill and soft keyboard.
 
 ---
 
@@ -106,7 +106,8 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
 - **Web Bundle Compilation & Synchronization ([`app/build.gradle.kts`](./app/build.gradle.kts))**:
   - `:app:buildWeb`: Runs `npm run build` in `web/` with Gradle input/output caching across `web/src/`, `web/public/`, `web/package.json`, and Vite/TS configs.
   - `:app:syncWebAssets`: Validates `web/dist/index.html` (throwing an actionable `GradleException` if missing) and syncs `web/dist/` into `app/src/main/assets/www/` automatically before `preBuild`.
-  - **Single-Source Versioning**: Parses `"version"` from `../web/package.json` at configuration time to set `versionName` and `versionCode = (MAJOR * 10000) + (MINOR * 100) + PATCH`.
+  - **Single-Source Versioning**: Parses `"version"` from `../web/package.json` at configuration time (throwing `GradleException` if missing/unparseable) to set `versionName` and `versionCode = (MAJOR * 10000) + (MINOR * 100) + PATCH`.
+- **Auto Backup & Data Extraction Rules**: [`backup_rules.xml`](./app/src/main/res/xml/backup_rules.xml) and [`data_extraction_rules.xml`](./app/src/main/res/xml/data_extraction_rules.xml) preserve local `capy_saves/` while excluding ephemeral `capy_play_games_prefs.xml` and `capy_cloud/` caches.
 - **R8 / ProGuard ([`app/proguard-rules.pro`](./app/proguard-rules.pro)) & Release Signing**:
   ```proguard
   -keepclassmembers class * {
@@ -116,7 +117,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
   -keep class com.capypaint.capy.CapyAndroidBridge { *; }
   ```
   - Release builds enable `isMinifyEnabled = true` and `isShrinkResources = true`.
-  - Setting `CAPY_KEYSTORE_PATH`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` activates release signing for Google Play Store App Bundles (`./gradlew app:bundleRelease`).
+  - [`.github/workflows/release.yml`](./.github/workflows/release.yml) requires `CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` for tagged release builds and runs `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleRelease app:bundleRelease` (failing loudly rather than substituting unsigned/debug binaries).
   - Privacy Policy and Data Safety disclosures live at `https://capypaint.com/privacy-policy.html` ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)).
 
 ---
@@ -150,10 +151,10 @@ cd web && npm ci && npm run build
 1. Open Android Studio and select **Open** (`File > Open...`).
 2. Select the **monorepo root directory** (`/path/to/capy`), **not** the `/app` subdirectory.
    - [`settings.gradle.kts`](./settings.gradle.kts) registers the unified `:app` module.
-3. Gradle Sync configures **JDK 17** and Android SDK **API 37** (`compileSdk = 37`, `minSdk = 24`, `targetSdk = 35`).
+3. Gradle Sync configures **JDK 17** and Android SDK **API 37** (`compileSdk = 37`, `minSdk = 24`, `targetSdk = 36`).
 
 ### Running & Debugging Locally
-1. Select the **`app`** run configuration and a **Pixel 7 (API 34/35)** emulator or USB-connected Android device.
+1. Select the **`app`** run configuration and a **Pixel 7 (API 34/35/36)** emulator or USB-connected Android device.
 2. Run `./gradlew app:buildWeb` first if `web/dist/` has not been built yet, then click **Run** (`Shift+F10`) or **Debug 'app'** (`Shift+F9`).
 3. **Native Kotlin Debugging**: Set breakpoints in [`MainActivity.kt`](./app/src/main/java/com/capypaint/capy/MainActivity.kt) or [`CapyAndroidBridge.kt`](./app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt) to inspect incoming share intents, window insets, modal back-press states, Play Games `SnapshotsClient` sync, and internal disk backup reads/writes.
 4. **WebView Chrome DevTools**: Debug builds enable `WebView.setWebContentsDebuggingEnabled(true)`. Open `chrome://inspect/#devices` in desktop Chrome/Edge and click **Inspect** under `com.capypaint.capy` to inspect live console logs, DOM/`--sat`/`--sab` CSS variables, Web Worker threads, and `https://appassets.androidplatform.net/assets/www/*` asset loads.

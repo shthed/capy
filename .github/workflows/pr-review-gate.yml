@@ -51,7 +51,7 @@ jobs:
             (github.event_name == 'pull_request_review' && contains(github.event.review.body || '', '<!-- capy-review:')) ||
             (github.event_name == 'issue_comment' && contains(github.event.comment.body || '', '<!-- capy-review:') && !contains(github.event.comment.body || '', '<!-- capy-pages-preview -->'))))) &&
       (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && !contains(github.event.comment.body || '', '<!-- capy-gate-status -->'))) &&
-      (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
+      (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null || github.event.changes.body != null)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -147,6 +147,7 @@ jobs:
             const latestPushMs = Math.max(effectiveCommitMs, latestForcePushMs);
 
             const activeLabels = new Set((pr.labels || []).map((l) => l.name));
+            const hadAiApprovedLabel = activeLabels.has('review:ai-approved');
 
             async function safeRemoveLabel(labelName) {
               if (!activeLabels.has(labelName)) return;
@@ -264,7 +265,7 @@ jobs:
             };
 
             const isStrictPrBodyValid = (() => {
-              if (typeof pr.body !== 'string') return true;
+              if (typeof pr.body !== 'string') return false;
               if (isDependabotPr) return !hasChecklistSub100OrUnchecked(pr.body);
               if (pr.head?.ref === 'sync/beta-from-main') return true;
               const trimmed = pr.body.trim();
@@ -849,7 +850,13 @@ jobs:
                     }
                   }
                 }
-              } else if (state === 'failure' && pr.auto_merge) {
+              } else if (
+                pr.auto_merge &&
+                (state === 'failure' ||
+                  isDraft ||
+                  hadAiApprovedLabel ||
+                  (latestAiSignal !== null && !hasValidAiMarker))
+              ) {
                 try {
                   await github.graphql(
                     `mutation($pullRequestId: ID!) {
