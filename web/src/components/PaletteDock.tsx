@@ -339,6 +339,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   return (
     <div
       ref={footerRef}
+      data-testid="palette-dock"
       className="fixed z-20 left-0 right-0 pointer-events-none transition-all flex items-center"
       style={{
         bottom: `calc(${raiseDock ? '2rem' : '0.375rem'} + var(--sab, 0px))`,
@@ -355,7 +356,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         }}
       >
         <div
-          className="flex items-center gap-2 mx-auto min-w-max"
+          className="flex items-center mx-auto min-w-max"
           style={{
             paddingLeft: isScrollable
               ? 'max(calc(50% - 23px), calc(var(--sal, 0px) + 0.75rem))'
@@ -365,6 +366,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
               : 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
           }}
         >
+        <div data-testid="palette-dock-tray" className="flex items-center gap-2">
         {dockPalette.map((color) => {
           const isActive = color.id === activeColorId;
           const isVisibleOnScreen = visibleColorIds.has(color.id);
@@ -422,6 +424,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         {showCustomColorButton && onOpenPaletteOptions && (
           <button
             type="button"
+            data-testid="palette-custom-btn"
             onClick={onOpenPaletteOptions}
             title="Custom Colour & Palette Options"
             className="flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
@@ -432,6 +435,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
             </span>
           </button>
         )}
+        </div>
         </div>
       </div>
     </div>

@@ -30,9 +30,9 @@ export const FeatureOfferBanner: React.FC<FeatureOfferBannerProps> = ({
 
   return (
     <div
-      className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3"
+      className="fixed inset-x-0 z-[39] pointer-events-none flex justify-center px-3"
       style={{
-        top: 'calc(var(--capy-tutorial-top, 3.55rem) + var(--sat, 0px))',
+        top: 'calc(var(--capy-tutorial-top, 4.75rem) + var(--sat, 0px))',
       }}
     >
       <div
@@ -40,7 +40,7 @@ export const FeatureOfferBanner: React.FC<FeatureOfferBannerProps> = ({
         aria-live="polite"
         data-testid="feature-offer-banner"
         data-offer-id={offer.id}
-        className="pointer-events-auto w-full max-w-md rounded-2xl bg-slate-900/95 border border-sky-400/50 shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200"
+        className="pointer-events-auto w-full max-w-md rounded-2xl bg-slate-900/95 border border-sky-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 text-slate-100 space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
