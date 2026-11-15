@@ -484,10 +484,17 @@ Parked native desktop/mobile store wrappers awaiting completion of [EPIC-2](http
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#534)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#545)</summary>
 
-- **Sprint 1 `v3.0.0`--`v3.0.14` Bugfix, Onboarding, Mobile UI & Automation Slices (`BUG-1`--`BUG-3`, `BUG-5`, `TASK-2.6`, PR Workflows & Governance)**:
-  - **`v3.0.14` Fail-Closed Review Gate, Pages Hidden Dotfiles & Mirror Sync Hardening (Staged on `beta`)** -- [#534](https://github.com/shthed/capy/pull/534)
+- **Sprint 1 `v3.0.0`--`v3.0.19` Bugfix, Onboarding, Mobile UI & Automation Slices (`BUG-1`--`BUG-3`, `BUG-5`, `TASK-2.6`, PR Workflows & Governance)**:
+  - **`v3.0.19` Android TV Leanback Manifest/Banner, Ad-Free Privacy Policy & Review-Gate Tests (Staged on `beta`)** -- [#545 — Add Android TV launcher banner, ad-free privacy policy, and review-gate tests (v3.0.19)](https://github.com/shthed/capy/pull/545)
+  - **`.agents/environment.json` Setup & `capypaint.com` / `capyboop.com` Cutover Tracking (Staged on `beta`)** -- [#544 — Add repo-scoped environment setup and link capypaint.com and capyboop.com cutovers](https://github.com/shthed/capy/pull/544)
+  - **`v3.0.18` Production Promotion (`v3.0.14`--`v3.0.18` Stabilization & CI Bundle)** -- [#538 — Promote v3.0.18 beta release to main](https://github.com/shthed/capy/pull/538)
+  - **`v3.0.18` Viewport-Save Reload Race Fix** -- [#540 — Fix beforeunload viewport save race in Playwright E2E suite](https://github.com/shthed/capy/pull/540)
+  - **`v3.0.17` Deterministic Playwright E2E Wait Hardening** -- [#539 — Harden E2E waits in test suite and sync beta docs](https://github.com/shthed/capy/pull/539)
+  - **`v3.0.16` Android API 36 Edge-to-Edge, WebView Allowlisting, Release Signing & Bridge Parity** -- [#537 — Harden Android API 36 WebView security, release signing, and bridge parity](https://github.com/shthed/capy/pull/537)
+  - **`v3.0.15` Web Storage Durability, `PuzzleCanvas` Optimization & Co-op Worker SQLite Checkpoints** -- [#535 — Harden web storage durability, canvas performance, and Co-op Worker state](https://github.com/shthed/capy/pull/535)
+  - **`v3.0.14` Fail-Closed Review Gate, Pages Hidden Dotfiles & Mirror Sync Hardening** -- [#534 — Harden PR review gate, Pages dotfiles, and mirror sync](https://github.com/shthed/capy/pull/534)
   - **`v3.0.13` Viewport-Save Progress Preservation, Async Android/E2E/Pages CI Speedup & Strict `100%` AI Auto-Merge** -- [#528](https://github.com/shthed/capy/pull/528), [#530](https://github.com/shthed/capy/pull/530), [#531](https://github.com/shthed/capy/pull/531), [#532](https://github.com/shthed/capy/pull/532)
   - **`v3.0.12` Non-Blocking Tutorial Target Spotlight, Replay Auto-Dismissal & Mobile Badge Polish** -- [#523](https://github.com/shthed/capy/pull/523)
   - **`v3.0.11` Production Promotion (`v3.0.9`--`v3.0.11` Bundle & `beta` Syncs)** -- [#521](https://github.com/shthed/capy/pull/521), [#522](https://github.com/shthed/capy/pull/522), [#524](https://github.com/shthed/capy/pull/524), [#526](https://github.com/shthed/capy/pull/526)
