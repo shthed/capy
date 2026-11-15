@@ -6395,7 +6395,7 @@ async function runCodecAndEngineTests() {
             'printf "%s" "$GREP_RC"',
           ].join('\n'),
         ],
-        { encoding: 'utf8' }
+        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '' } }
       ).trim();
       assert.equal(scanRc, '0');
 
@@ -6415,7 +6415,7 @@ async function runCodecAndEngineTests() {
             'printf "%s:%s:%s" "$rc_hit" "$rc_miss" "$rc_err"',
           ].join('\n'),
         ],
-        { encoding: 'utf8' }
+        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '' } }
       ).trim();
       const [rcHit, rcMiss, rcErr] = lsRemoteCodes.split(':').map(Number);
       assert.equal(rcHit, 0);
