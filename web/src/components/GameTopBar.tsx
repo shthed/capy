@@ -25,7 +25,7 @@ interface GameTopBarProps {
   onOpenReleaseChannel?: () => void;
 }
 
-export const GameTopBar: React.FC<GameTopBarProps> = ({
+export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
   activeTitle,
   progressPercentage,
   filledCount = 0,
@@ -231,4 +231,4 @@ export const GameTopBar: React.FC<GameTopBarProps> = ({
       </div>
     </header>
   );
-};
+});

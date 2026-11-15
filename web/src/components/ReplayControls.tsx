@@ -42,7 +42,7 @@ interface ReplayControlsProps {
   onMinimizedChange?: (minimized: boolean) => void;
 }
 
-export const ReplayControls: React.FC<ReplayControlsProps> = ({
+export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
   isOpen,
   isPlaying,
   currentStep,
@@ -601,4 +601,4 @@ export const ReplayControls: React.FC<ReplayControlsProps> = ({
       </div>
     </div>
   );
-};
+});

@@ -8,6 +8,7 @@ export const MAX_REGION_ID_VALUE = 16_777_216;
 export const RATE_LIMIT_MAX_FRAMES = 40;
 export const RATE_LIMIT_WINDOW_MS = 5000;
 export const SEED_CHECKPOINT_DEBOUNCE_MS = 5000;
+export const RESERVED_RELAY_PLAYER_ID = '__capy_room_relay__';
 
 export type RelayMessageType =
   | 'HELLO'
@@ -295,16 +296,23 @@ export function validateCoopFrame(
   }
 
   const sender = record.sender as Record<string, unknown> | undefined;
+  const trimmedPlayerId =
+    sender && typeof sender === 'object' && typeof sender.playerId === 'string'
+      ? sender.playerId.trim()
+      : '';
   if (
     !sender ||
     typeof sender !== 'object' ||
     typeof sender.playerId !== 'string' ||
-    sender.playerId.trim().length === 0 ||
+    trimmedPlayerId.length === 0 ||
     sender.playerId.length > 64 ||
     typeof sender.displayName !== 'string' ||
     sender.displayName.length > 64
   ) {
     return { ok: false, reason: 'invalid_sender' };
+  }
+  if (trimmedPlayerId === RESERVED_RELAY_PLAYER_ID) {
+    return { ok: false, reason: 'reserved_sender_id' };
   }
 
   if (record.seedToken !== undefined) {
@@ -332,7 +340,7 @@ export function validateCoopFrame(
   }
 
   const sanitizedSender: RelayParticipant = {
-    playerId: sender.playerId.trim(),
+    playerId: trimmedPlayerId,
     displayName: sender.displayName.trim().slice(0, 40) || 'Capy Painter',
     avatarColorHex:
       typeof sender.avatarColorHex === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(sender.avatarColorHex)
@@ -365,6 +373,20 @@ export function validateCoopFrame(
     message: normalizedMessage,
     serialized: JSON.stringify(normalizedMessage),
   };
+}
+
+export function resolveBoundSocketSender(
+  boundPlayerId: string | null | undefined,
+  incomingSender: RelayParticipant
+): { ok: true; boundPlayerId: string } | { ok: false; reason: 'sender_mismatch' } {
+  const incomingId = incomingSender.playerId.trim();
+  if (!boundPlayerId) {
+    return { ok: true, boundPlayerId: incomingId };
+  }
+  if (boundPlayerId !== incomingId) {
+    return { ok: false, reason: 'sender_mismatch' };
+  }
+  return { ok: true, boundPlayerId };
 }
 
 export function checkSocketRateLimit(

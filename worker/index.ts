@@ -7,6 +7,8 @@ import {
   MAX_ROOM_PARTICIPANTS,
   normalizeRoomCode,
   RelayParticipant,
+  RESERVED_RELAY_PLAYER_ID,
+  resolveBoundSocketSender,
   ROOM_STATE_TTL_MS,
   SEED_CHECKPOINT_DEBOUNCE_MS,
   validateCoopFrame,
@@ -14,6 +16,7 @@ import {
 
 interface SocketAttachment {
   roomCode: string;
+  boundPlayerId?: string | null;
   participant: RelayParticipant | null;
   joinedAt?: number;
   frameTimestamps?: number[];
@@ -45,6 +48,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
           updated_at INTEGER NOT NULL
         )
       `);
+      this.restorePendingCheckpointFromSql(Date.now());
     });
   }
 
@@ -71,6 +75,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
 
     const initialAttachment: SocketAttachment = {
       roomCode,
+      boundPlayerId: null,
       participant: null,
       frameTimestamps: [],
     };
@@ -116,11 +121,24 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       ws.serializeAttachment(attachment);
       if (validation.reason === 'frame_size_exceeded') {
         ws.close(1009, `Frame exceeds ${MAX_COOP_FRAME_BYTES} byte limit`);
+      } else if (validation.reason === 'reserved_sender_id') {
+        ws.close(1008, 'Reserved sender ID');
       }
       return;
     }
 
     const parsed = validation.message;
+    const senderCheck = resolveBoundSocketSender(
+      attachment.boundPlayerId ?? attachment.participant?.playerId ?? null,
+      parsed.sender
+    );
+    if (!senderCheck.ok) {
+      ws.serializeAttachment(attachment);
+      ws.close(1008, 'Sender identity mismatch');
+      return;
+    }
+
+    attachment.boundPlayerId = senderCheck.boundPlayerId;
     attachment.participant = parsed.sender;
     if (parsed.type === 'HELLO' && !attachment.joinedAt) {
       attachment.joinedAt = now;
@@ -133,8 +151,9 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         this.lastSeedWriteAt = currentRecord.updatedAt;
         this.lastSavedSeedToken = currentRecord.seedToken;
       }
+      const pending = this.getPendingCheckpoint(now);
       const effectiveSeed =
-        this.pendingCheckpoint?.seedToken ?? currentRecord?.seedToken ?? this.lastSavedSeedToken;
+        pending?.seedToken ?? currentRecord?.seedToken ?? this.lastSavedSeedToken;
       const seedAction = evaluateRoomSeedAction({
         messageType: parsed.type,
         incomingSeedToken: parsed.seedToken,
@@ -148,10 +167,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       if (seedAction === 'write_now') {
         this.saveRoomSeedToken(attachment.roomCode, parsed.seedToken, now);
       } else if (seedAction === 'debounce') {
-        this.pendingCheckpoint = {
-          roomCode: attachment.roomCode,
-          seedToken: parsed.seedToken,
-        };
+        this.savePendingCheckpoint(attachment.roomCode, parsed.seedToken, now);
         await this.ctx.storage.setAlarm(this.lastSeedWriteAt + SEED_CHECKPOINT_DEBOUNCE_MS);
       }
     }
@@ -171,7 +187,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     // If a player joins or reconnects when no active peer replied yet, hydrate from SQLite seedToken
     if (parsed.type === 'HELLO' && deliveredCount === 0) {
       const storedSeed =
-        this.pendingCheckpoint?.seedToken ?? this.loadRoomSeedRecord(now)?.seedToken ?? null;
+        this.getPendingCheckpoint(now)?.seedToken ?? this.loadRoomSeedRecord(now)?.seedToken ?? null;
       if (storedSeed && storedSeed !== parsed.seedToken) {
         try {
           ws.send(
@@ -179,7 +195,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
               type: 'WELCOME_STATE',
               roomCode: attachment.roomCode,
               sender: {
-                playerId: '__capy_room_relay__',
+                playerId: RESERVED_RELAY_PLAYER_ID,
                 displayName: 'Room Relay',
                 avatarColorHex: '#38bdf8',
                 lastActiveAt: now,
@@ -229,21 +245,64 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         const expiresAt = record.updatedAt + ROOM_STATE_TTL_MS;
         if (now >= expiresAt) {
           this.ctx.storage.sql.exec('DELETE FROM room_state');
+          this.pendingCheckpoint = null;
         } else {
           await this.ctx.storage.setAlarm(expiresAt);
         }
       } else {
         this.ctx.storage.sql.exec('DELETE FROM room_state');
+        this.pendingCheckpoint = null;
       }
     } else {
       await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
     }
   }
 
+  private getPendingCheckpoint(now: number): { roomCode: string; seedToken: string } | null {
+    if (!this.pendingCheckpoint) {
+      this.restorePendingCheckpointFromSql(now);
+    }
+    return this.pendingCheckpoint;
+  }
+
+  private savePendingCheckpoint(roomCode: string, seedToken: string, now: number): void {
+    this.pendingCheckpoint = { roomCode, seedToken };
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_state (key, value, updated_at)
+       VALUES ('pending_seed', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      JSON.stringify({ roomCode, seedToken }),
+      now
+    );
+  }
+
+  private restorePendingCheckpointFromSql(now: number): void {
+    const rows = this.ctx.storage.sql
+      .exec<{ value: string; updated_at: number }>(
+        `SELECT value, updated_at FROM room_state WHERE key = 'pending_seed' LIMIT 1`
+      )
+      .toArray();
+    if (rows.length === 0) return;
+    const row = rows[0];
+    if (now - row.updated_at > ROOM_STATE_TTL_MS) {
+      this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
+      this.pendingCheckpoint = null;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(row.value) as { roomCode?: string; seedToken?: string };
+      if (typeof parsed.roomCode === 'string' && typeof parsed.seedToken === 'string') {
+        this.pendingCheckpoint = { roomCode: parsed.roomCode, seedToken: parsed.seedToken };
+      }
+    } catch {
+      this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
+    }
+  }
+
   private flushPendingCheckpoint(now: number): void {
-    if (!this.pendingCheckpoint) return;
-    const { roomCode, seedToken } = this.pendingCheckpoint;
-    this.saveRoomSeedToken(roomCode, seedToken, now);
+    const pending = this.getPendingCheckpoint(now);
+    if (!pending) return;
+    this.saveRoomSeedToken(pending.roomCode, pending.seedToken, now);
   }
 
   private broadcastDeparture(closedWs: WebSocket): void {
@@ -277,6 +336,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       roomCode,
       now
     );
+    this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
     this.lastSeedWriteAt = now;
     this.lastSavedSeedToken = seedToken;
     this.pendingCheckpoint = null;
@@ -294,6 +354,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       this.ctx.storage.sql.exec('DELETE FROM room_state');
       this.lastSavedSeedToken = null;
       this.lastSeedWriteAt = 0;
+      this.pendingCheckpoint = null;
       return null;
     }
     return {
