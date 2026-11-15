@@ -15,8 +15,9 @@ Zero active agent dev tasks remain in `TODO.md`—`v3.0.14`--`v3.0.17` CI/review
 ### [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](https://github.com/shthed/capy/issues/543)
 
 - **Status**: `Open -- Human Ops Gate (Cloudflare Nameservers Active; Awaiting Dashboard DNS Cleanup & Workers Builds Cutover)`
-- **Action**: Delete the legacy Squarespace `A`/`CNAME` records on `@` and `www` in [Cloudflare Dashboard](https://dash.cloudflare.com/) (nameservers `guy.ns.cloudflare.com` and `maleah.ns.cloudflare.com` are already active, with zero `MX` records), connect `shthed/capy` (`main`) to Cloudflare Workers Builds per [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-on-cloudflare-workers), and add the `www.capypaint.com -> https://capypaint.com` edge `301` Redirect Rule.
-- **Value**: Replaces the Squarespace placeholder on `capypaint.com` with the live `v3.0.x` production SPA, `/api/health`, and `CoopRoomDurableObject` WebSocket relay.
+- **Live & Target Links**: [capypaint.com](https://capypaint.com/) | [www.capypaint.com](https://www.capypaint.com/) | [capypaint.com/api/health](https://capypaint.com/api/health) | [Capy Production (GitHub Pages)](https://shthed.github.io/capy/) | [Capy Beta (GitHub Pages)](https://shthed.github.io/capy/beta/)
+- **Action**: Delete the legacy Squarespace `A`/`CNAME` records on `@` and `www` in [Cloudflare Dashboard](https://dash.cloudflare.com/) (nameservers `guy.ns.cloudflare.com` and `maleah.ns.cloudflare.com` are already active, with zero `MX` records), connect [shthed/capy](https://github.com/shthed/capy) (`main`) to Cloudflare Workers Builds per [`CLOUD.md` Section 4](./CLOUD.md#4-step-by-step-developer-guide-deploying-capypaintcom-and-capyboopcom-on-cloudflare-workers), and add the [www.capypaint.com](https://www.capypaint.com/) to [capypaint.com](https://capypaint.com/) edge `301` Redirect Rule.
+- **Value**: Replaces the Squarespace placeholder on [capypaint.com](https://capypaint.com/) with the live `v3.0.x` production SPA, `/api/health`, and `CoopRoomDurableObject` WebSocket relay.
 
 <details>
 <summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
@@ -25,7 +26,14 @@ Zero active agent dev tasks remain in `TODO.md`—`v3.0.14`--`v3.0.17` CI/review
 - **Model & Estimate**: `ops` (Human Cloudflare Dashboard Cutover)
 - **Target Files**: `.agents/environment.json`, [`wrangler.jsonc`](./wrangler.jsonc), [`worker/index.ts`](./worker/index.ts), [`.github/workflows/deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
-  - `https://capypaint.com/` serves the live Capy Paint SPA and `https://www.capypaint.com/` `301`-redirects to `https://capypaint.com/`.
-  - `https://capypaint.com/api/health` returns `{"ok":true,"service":"capy-paint",...}` and `wss://capypaint.com/api/room?room=<ROOM6>` upgrades to `CoopRoomDurableObject`.
+  - [capypaint.com](https://capypaint.com/) serves the live Capy Paint SPA and [www.capypaint.com](https://www.capypaint.com/) `301`-redirects to [capypaint.com](https://capypaint.com/).
+  - [capypaint.com/api/health](https://capypaint.com/api/health) returns `{"ok":true,"service":"capy-paint",...}` and `wss://capypaint.com/api/room?room=<ROOM6>` upgrades to `CoopRoomDurableObject`.
 
 </details>
+
+### Companion Studio Domain: [capyboop.com](https://capyboop.com/) (`CapyGame 3D` Cloudflare Workers & Non-Fork Mirror)
+
+- **Status**: `Open -- Human Ops Gate (Currently serving stale unbuilt v2.5.11 source HTML; awaiting clean-room Cloudflare Workers cutover)`
+- **Live & Target Links**: [capyboop.com](https://capyboop.com/) | [www.capyboop.com](https://www.capyboop.com/) | [CapyGame (GitHub Pages)](https://shthed.github.io/capygame/) | [capyboop/capygame](https://github.com/capyboop/capygame) | [shthed/capygame](https://github.com/shthed/capygame)
+- **Action**: Recreate [capyboop/capygame](https://github.com/capyboop/capygame) as a standalone non-fork public repository (paired with `CAPYBOOP_SYNC_TOKEN`), connect it to Cloudflare Workers Builds in [Cloudflare Dashboard](https://dash.cloudflare.com/) retaining `public/_headers` (`COOP`/`COEP` headers for `SharedArrayBuffer` in `physics.worker.ts`) and `workers_dev: false`, and add a [www.capyboop.com](https://www.capyboop.com/) to [capyboop.com](https://capyboop.com/) edge `301` Single Redirect rule.
+- **Value**: Replaces the stale unbuilt `v2.5.11` `/src/main.tsx` placeholder on [capyboop.com](https://capyboop.com/) with the compiled **CapyGame 3D** production bundle cleanly alongside [capypaint.com](https://capypaint.com/).
