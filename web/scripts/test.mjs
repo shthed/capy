@@ -6102,6 +6102,11 @@ async function runCodecAndEngineTests() {
     assert.equal(syncBetaYaml.includes('pr-review-gate.yml'), true);
     assert.equal(syncBetaYaml.includes('draft: !hasPatToken'), true);
     assert.equal(syncBetaYaml.includes('WORKFLOW_DIFFS'), true);
+    assert.equal(syncBetaYaml.includes('git push origin HEAD:refs/heads/beta'), true);
+    assert.equal(syncBetaYaml.includes('beta ruleset 27162684'), true);
+    assert.equal(syncBetaYaml.includes('deploy-branch.yml'), true);
+    assert.equal(syncBetaYaml.includes('Sync beta with main conflict'), true);
+    assert.equal(syncBetaYaml.includes('enablePullRequestAutoMerge'), true);
 
     const prReviewGateYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/pr-review-gate.yml'),
@@ -6114,6 +6119,10 @@ async function runCodecAndEngineTests() {
       true
     );
     assert.equal(prReviewGateYaml.includes('github.event.changes.base != null'), true);
+    assert.equal(prReviewGateYaml.includes('needs: [ai-review]'), true);
+    assert.equal(prReviewGateYaml.includes('always()'), true);
+    assert.equal(prReviewGateYaml.includes('GEMINI_API_KEY'), true);
+    assert.equal(prReviewGateYaml.includes('gemini-2.5-flash'), true);
     assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
     assert.equal(prReviewGateYaml.includes('strictAiReady'), true);
     assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
@@ -6124,6 +6133,178 @@ async function runCodecAndEngineTests() {
       prReviewGateYaml.includes('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'),
       true
     );
+
+    // Extract and unit-test ai-review job script block from pr-review-gate.yml
+    const aiReviewYamlLines = prReviewGateYaml.split(/\r?\n/);
+    const aiJobIdx = aiReviewYamlLines.findIndex((line) => /^\s{2}ai-review:\s*$/.test(line));
+    assert.notEqual(aiJobIdx, -1, 'Expected ai-review job in pr-review-gate.yml');
+    const aiScriptIdx = aiReviewYamlLines.findIndex(
+      (line, idx) => idx > aiJobIdx && /^\s*script:\s*\|\s*$/.test(line)
+    );
+    assert.notEqual(aiScriptIdx, -1, 'Expected script: | block in ai-review job');
+    const aiHeaderIndent = aiReviewYamlLines[aiScriptIdx].match(/^(\s*)/)[1].length;
+    let aiBodyIndent = null;
+    const aiBodyLines = [];
+    for (let i = aiScriptIdx + 1; i < aiReviewYamlLines.length; i++) {
+      const line = aiReviewYamlLines[i];
+      if (line.trim() === '') {
+        aiBodyLines.push('');
+        continue;
+      }
+      const indent = line.match(/^(\s*)/)[1].length;
+      if (aiBodyIndent === null) {
+        assert.equal(indent > aiHeaderIndent, true);
+        aiBodyIndent = indent;
+      } else if (indent < aiBodyIndent) {
+        break;
+      }
+      aiBodyLines.push(line.slice(aiBodyIndent));
+    }
+    const runAiReviewScript = new AsyncFunction('context', 'github', 'core', aiBodyLines.join('\n'));
+    const runAiReviewCase = async ({
+      geminiApiKey = '',
+      baseRef = 'beta',
+      headRef = 'feature/test',
+      isDraft = false,
+      headRepo = 'shthed/capy',
+      existingComments = [],
+      fetchResponse = null,
+    } = {}) => {
+      const warnings = [];
+      const infos = [];
+      const createdReviews = [];
+      const addedLabels = [];
+      const prevKey = process.env.GEMINI_API_KEY;
+      const prevFetch = globalThis.fetch;
+      if (geminiApiKey) process.env.GEMINI_API_KEY = geminiApiKey;
+      else delete process.env.GEMINI_API_KEY;
+      if (fetchResponse) {
+        globalThis.fetch = async () => ({
+          ok: true,
+          status: 200,
+          json: async () => fetchResponse,
+          text: async () => JSON.stringify(fetchResponse),
+        });
+      }
+      try {
+        const mockGithub = {
+          paginate: async (fn) => fn(),
+          rest: {
+            pulls: {
+              get: async ({ mediaType } = {}) =>
+                mediaType?.format === 'diff'
+                  ? { data: 'diff --git a/a.ts b/a.ts\n+const x = 1;' }
+                  : {
+                      data: {
+                        number: 999,
+                        state: 'open',
+                        draft: isDraft,
+                        title: 'Test PR',
+                        body: '## Summary\n\nTest\n\n### PR Readiness Score: 100%',
+                        base: { ref: baseRef },
+                        head: { ref: headRef, sha: '1111222233334444555566667777888899990000', repo: { full_name: headRepo } },
+                      },
+                    },
+              listReviews: async () => [],
+              createReview: async (arg) => {
+                createdReviews.push(arg);
+                return { data: { id: 1 } };
+              },
+            },
+            issues: {
+              listComments: async () => existingComments,
+              addLabels: async (arg) => {
+                addedLabels.push(...(arg.labels || []));
+              },
+            },
+          },
+        };
+        const mockCore = {
+          info: (m) => infos.push(String(m)),
+          warning: (m) => warnings.push(String(m)),
+        };
+        const mockContext = {
+          repo: { owner: 'shthed', repo: 'capy' },
+          payload: { pull_request: { number: 999 } },
+        };
+        await runAiReviewScript(mockContext, mockGithub, mockCore);
+        return { warnings, infos, createdReviews, addedLabels };
+      } finally {
+        if (prevKey === undefined) delete process.env.GEMINI_API_KEY;
+        else process.env.GEMINI_API_KEY = prevKey;
+        globalThis.fetch = prevFetch;
+      }
+    };
+
+    const missingKeyRes = await runAiReviewCase({ geminiApiKey: '' });
+    assert.equal(missingKeyRes.warnings.some((w) => w.includes('GEMINI_API_KEY')), true);
+    assert.equal(missingKeyRes.createdReviews.length, 0);
+    assert.equal(missingKeyRes.addedLabels.length, 0);
+
+    const skipDraftRes = await runAiReviewCase({ geminiApiKey: 'test-key', isDraft: true });
+    assert.equal(skipDraftRes.createdReviews.length, 0);
+
+    const skipMainRes = await runAiReviewCase({ geminiApiKey: 'test-key', baseRef: 'main' });
+    assert.equal(skipMainRes.createdReviews.length, 0);
+
+    const skipSyncRes = await runAiReviewCase({ geminiApiKey: 'test-key', headRef: 'sync/beta-from-main' });
+    assert.equal(skipSyncRes.createdReviews.length, 0);
+
+    const skipForkRes = await runAiReviewCase({ geminiApiKey: 'test-key', headRepo: 'attacker/capy' });
+    assert.equal(skipForkRes.createdReviews.length, 0);
+
+    const approveRes = await runAiReviewCase({
+      geminiApiKey: 'test-key',
+      fetchResponse: {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    verdict: 'APPROVED',
+                    score: 100,
+                    summary: 'All checks and invariants verified.',
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    assert.equal(approveRes.createdReviews.length, 1);
+    assert.equal(approveRes.createdReviews[0].event, 'COMMENT');
+    assert.equal(
+      approveRes.createdReviews[0].body.includes(
+        '<!-- capy-review: actor=ai-agent verdict=APPROVED sha=1111222233334444555566667777888899990000 score=100% -->'
+      ),
+      true
+    );
+    assert.deepEqual(approveRes.addedLabels, ['review:ai-approved']);
+
+    const rejectRes = await runAiReviewCase({
+      geminiApiKey: 'test-key',
+      fetchResponse: {
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    verdict: 'CHANGES_REQUESTED',
+                    score: 70,
+                    summary: 'Missing tests.',
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    assert.equal(rejectRes.createdReviews.length, 1);
+    assert.deepEqual(rejectRes.addedLabels, ['review:changes-requested']);
 
     const dependabotYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/dependabot.yml'),
