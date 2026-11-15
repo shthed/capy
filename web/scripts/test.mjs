@@ -3240,6 +3240,8 @@ async function runCodecAndEngineTests() {
         aiCommentTs = '2026-11-13T01:01:00Z',
         eventName = 'pull_request_review',
         action = 'submitted',
+        actionsGithubToken = undefined,
+        fetchImpl = null,
         createCommitStatusImpl = null,
         graphqlImpl = null,
         mergeImpl = null,
@@ -3249,8 +3251,10 @@ async function runCodecAndEngineTests() {
       const calls = {
         createReview: [],
         dismissReview: [],
+        addLabels: [],
         removeLabel: [],
         createCommitStatus: [],
+        fetch: [],
         graphql: [],
         merge: [],
       };
@@ -3364,6 +3368,10 @@ async function runCodecAndEngineTests() {
               calls.updateComment.push(payload);
               return { data: { id: payload.comment_id, body: payload.body } };
             },
+            addLabels: async (payload) => {
+              calls.addLabels.push(payload);
+              return { data: {} };
+            },
             removeLabel: async (payload) => {
               calls.removeLabel.push(payload);
               return { data: {} };
@@ -3376,7 +3384,30 @@ async function runCodecAndEngineTests() {
         eventName,
         payload: { pull_request: { number: 490 }, action },
       };
-      await runReviewGateScript(contextMock, githubMock, coreMock);
+      const prevActionsGithubToken = process.env.ACTIONS_GITHUB_TOKEN;
+      const prevFetch = globalThis.fetch;
+      if (actionsGithubToken) {
+        process.env.ACTIONS_GITHUB_TOKEN = actionsGithubToken;
+      } else {
+        delete process.env.ACTIONS_GITHUB_TOKEN;
+      }
+      globalThis.fetch = async (url, init) => {
+        calls.fetch.push({ url, init });
+        if (fetchImpl) {
+          return fetchImpl(url, init);
+        }
+        throw new Error(`Unexpected fetch call in runReviewGateCase: ${url}`);
+      };
+      try {
+        await runReviewGateScript(contextMock, githubMock, coreMock);
+      } finally {
+        if (prevActionsGithubToken === undefined) {
+          delete process.env.ACTIONS_GITHUB_TOKEN;
+        } else {
+          process.env.ACTIONS_GITHUB_TOKEN = prevActionsGithubToken;
+        }
+        globalThis.fetch = prevFetch;
+      }
       assert.equal(coreMock.failed.length, 0);
       if (expectCommitStatus) {
         assert.equal(calls.createCommitStatus.length, 1);
@@ -4457,6 +4488,52 @@ async function runCodecAndEngineTests() {
       true
     );
 
+    const gateDependabotPr403SkipsFallbackRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'pull_request',
+      action: 'synchronize',
+      actionsGithubToken: 'ghs_ro_dependabot',
+      fetchImpl: async () => ({ ok: true, status: 201 }),
+      createCommitStatusImpl: async () => {
+        const err = new Error('Resource not accessible by integration');
+        err.status = 403;
+        throw err;
+      },
+    });
+    assert.equal(gateDependabotPr403SkipsFallbackRes.calls.fetch.length, 0);
+    assert.equal(
+      gateDependabotPr403SkipsFallbackRes.core.warnings.some((w) => w.includes('Read-only GITHUB_TOKEN')),
+      true
+    );
+    assert.equal(gateDependabotPr403SkipsFallbackRes.calls.graphql.length, 0);
+
+    const gateDependabotIssueComment403UsesFallbackRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'issue_comment',
+      action: 'created',
+      actionsGithubToken: 'ghs_test_tok',
+      fetchImpl: async () => ({ ok: true, status: 201 }),
+      createCommitStatusImpl: async () => {
+        const err = new Error('Resource not accessible by personal access token');
+        err.status = 403;
+        throw err;
+      },
+    });
+    assert.equal(gateDependabotIssueComment403UsesFallbackRes.calls.fetch.length, 1);
+    assert.equal(
+      gateDependabotIssueComment403UsesFallbackRes.calls.fetch[0].url,
+      `https://api.github.com/repos/shthed/capy/statuses/${gateHeadSha}`
+    );
+    assert.equal(
+      JSON.parse(gateDependabotIssueComment403UsesFallbackRes.calls.fetch[0].init.body).state,
+      'success'
+    );
+    assert.equal(gateDependabotIssueComment403UsesFallbackRes.calls.graphql[0].variables.mergeMethod, 'SQUASH');
+
     const gateDependabotMainPendingRes = await runReviewGateCase({
       prAuthor: 'dependabot[bot]',
       baseRef: 'main',
@@ -4720,6 +4797,112 @@ async function runCodecAndEngineTests() {
       gateDraftSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
     );
+
+    // edc70ed regression: synchronize preserves review:ai-approved when hasValidAiMarker holds while stripping owner/changes-requested labels
+    const gateSynchronizePreservesAiApprovedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: 100,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateSynchronizePreservesAiApprovedRes.status.state, 'success');
+    assert.deepEqual(
+      gateSynchronizePreservesAiApprovedRes.calls.removeLabel.map((r) => r.name),
+      ['review:owner-approved', 'review:changes-requested']
+    );
+    assert.equal(gateSynchronizePreservesAiApprovedRes.calls.addLabels.length, 0);
+
+    const gateSynchronizeReaddsAiApprovedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      labels: ['review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: 100,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateSynchronizeReaddsAiApprovedRes.status.state, 'success');
+    assert.deepEqual(
+      gateSynchronizeReaddsAiApprovedRes.calls.addLabels.flatMap((a) => a.labels),
+      ['review:ai-approved']
+    );
+    assert.deepEqual(
+      gateSynchronizeReaddsAiApprovedRes.calls.removeLabel.map((r) => r.name),
+      ['review:owner-approved', 'review:changes-requested']
+    );
+
+    // ACTIONS_GITHUB_TOKEN 403 commit status REST fallback across success, pending, and failure states
+    const gatePrimaryStatusNoFallbackRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      actionsGithubToken: 'ghs_actions_token',
+    });
+    assert.equal(gatePrimaryStatusNoFallbackRes.status.state, 'success');
+    assert.equal(gatePrimaryStatusNoFallbackRes.calls.fetch.length, 0);
+
+    for (const fallbackCase of [
+      {
+        expectedState: 'success',
+        aiCommentScore: 100,
+        labels: ['review:ai-approved'],
+        comments: [],
+      },
+      {
+        expectedState: 'pending',
+        aiCommentScore: null,
+        labels: [],
+        comments: [],
+      },
+      {
+        expectedState: 'failure',
+        aiCommentScore: 100,
+        labels: ['review:ai-approved'],
+        comments: [
+          {
+            user: { login: 'shthed' },
+            body: 'HOLD pending fix',
+            created_at: '2026-11-13T01:02:00Z',
+            updated_at: '2026-11-13T01:02:00Z',
+          },
+        ],
+      },
+    ]) {
+      const fallbackRes = await runReviewGateCase({
+        prAuthor: 'shthed',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        aiCommentScore: fallbackCase.aiCommentScore,
+        labels: fallbackCase.labels,
+        comments: fallbackCase.comments,
+        actionsGithubToken: 'ghs_test_tok',
+        fetchImpl: async () => ({ ok: true, status: 201 }),
+        createCommitStatusImpl: async () => {
+          const err = new Error('Resource not accessible by personal access token');
+          err.status = 403;
+          throw err;
+        },
+      });
+      assert.equal(fallbackRes.calls.fetch.length, 1);
+      const { url: fetchUrl, init: fetchInit } = fallbackRes.calls.fetch[0];
+      assert.equal(fetchUrl, `https://api.github.com/repos/shthed/capy/statuses/${gateHeadSha}`);
+      assert.equal(fetchInit.method, 'POST');
+      assert.equal(fetchInit.headers.Authorization, 'Bearer ghs_test_tok');
+      assert.equal(fetchInit.headers.Accept, 'application/vnd.github+json');
+      const fallbackBody = JSON.parse(fetchInit.body);
+      assert.equal(fallbackBody.state, fallbackCase.expectedState);
+      assert.equal(fallbackBody.context, 'capy/review-gate');
+      assert.equal(fallbackBody.description.length <= 140, true);
+      assert.equal(fallbackBody.target_url, 'https://github.com/shthed/capy/pull/490');
+      if (fallbackCase.expectedState === 'success') {
+        assert.equal(fallbackRes.calls.graphql[0].variables.mergeMethod, 'SQUASH');
+      }
+    }
 
     // capyboop co-owner approval, AI review marker, HOLD, cross-owner supersession & untrusted rejection
     const gateCapyboopMainApprovedRes = await runReviewGateCase({
@@ -6360,7 +6543,10 @@ async function runCodecAndEngineTests() {
     assert.equal(prReviewGateYaml.includes('needs: [ai-review]'), true);
     assert.equal(prReviewGateYaml.includes('always()'), true);
     assert.equal(prReviewGateYaml.includes('GEMINI_API_KEY'), true);
-    assert.equal(prReviewGateYaml.includes('gemini-2.5-flash'), true);
+    assert.equal(prReviewGateYaml.includes('gemini-3.8-flash'), true);
+    assert.equal(prReviewGateYaml.includes('gemini-4-argon'), true);
+    assert.equal(prReviewGateYaml.includes('ACTIONS_GITHUB_TOKEN'), true);
+    assert.equal(prReviewGateYaml.includes('safeAddLabel'), true);
     assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
     assert.equal(prReviewGateYaml.includes('strictAiReady'), true);
     assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
@@ -6383,6 +6569,10 @@ async function runCodecAndEngineTests() {
         ],
         { encoding: 'utf8' }
       )
+    );
+    assert.equal(
+      parsedPrReviewGate?.jobs?.['review-gate']?.steps?.[0]?.env?.ACTIONS_GITHUB_TOKEN,
+      '${{ secrets.GITHUB_TOKEN }}'
     );
     const reviewGateIfExpr = parsedPrReviewGate?.jobs?.['review-gate']?.if;
     assert.equal(typeof reviewGateIfExpr, 'string');
@@ -6634,22 +6824,32 @@ async function runCodecAndEngineTests() {
       headRepo = 'shthed/capy',
       existingComments = [],
       fetchResponse = null,
+      fetchImpl = null,
     } = {}) => {
       const warnings = [];
       const infos = [];
       const createdReviews = [];
       const addedLabels = [];
+      const fetchCalls = [];
       const prevKey = process.env.GEMINI_API_KEY;
       const prevFetch = globalThis.fetch;
       if (geminiApiKey) process.env.GEMINI_API_KEY = geminiApiKey;
       else delete process.env.GEMINI_API_KEY;
-      if (fetchResponse) {
-        globalThis.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => fetchResponse,
-          text: async () => JSON.stringify(fetchResponse),
-        });
+      if (fetchImpl) {
+        globalThis.fetch = async (url, init) => {
+          fetchCalls.push({ url, init });
+          return fetchImpl(url, init);
+        };
+      } else if (fetchResponse) {
+        globalThis.fetch = async (url, init) => {
+          fetchCalls.push({ url, init });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => fetchResponse,
+            text: async () => JSON.stringify(fetchResponse),
+          };
+        };
       }
       try {
         const mockGithub = {
@@ -6693,7 +6893,7 @@ async function runCodecAndEngineTests() {
           payload: { pull_request: { number: 999 } },
         };
         await runAiReviewScript(mockContext, mockGithub, mockCore);
-        return { warnings, infos, createdReviews, addedLabels };
+        return { warnings, infos, createdReviews, addedLabels, fetchCalls };
       } finally {
         if (prevKey === undefined) delete process.env.GEMINI_API_KEY;
         else process.env.GEMINI_API_KEY = prevKey;
@@ -6738,6 +6938,17 @@ async function runCodecAndEngineTests() {
         ],
       },
     });
+    assert.equal(approveRes.fetchCalls.length, 1);
+    assert.equal(
+      approveRes.fetchCalls[0].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'
+    );
+    assert.equal(approveRes.fetchCalls[0].init.method, 'POST');
+    assert.equal(approveRes.fetchCalls[0].init.headers['x-goog-api-key'], 'test-key');
+    assert.equal(
+      JSON.parse(approveRes.fetchCalls[0].init.body).generationConfig.responseMimeType,
+      'application/json'
+    );
     assert.equal(approveRes.createdReviews.length, 1);
     assert.equal(approveRes.createdReviews[0].event, 'COMMENT');
     assert.equal(
@@ -6769,7 +6980,81 @@ async function runCodecAndEngineTests() {
       },
     });
     assert.equal(rejectRes.createdReviews.length, 1);
+    assert.equal(
+      rejectRes.createdReviews[0].body.includes(
+        '<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=1111222233334444555566667777888899990000 score=70% -->'
+      ),
+      true
+    );
     assert.deepEqual(rejectRes.addedLabels, ['review:changes-requested']);
+    assert.equal(rejectRes.addedLabels.includes('review:ai-approved'), false);
+
+    // 404 fallback from gemini-3.8-flash to gemini-4-argon returns APPROVED 100%
+    const gemini404FallbackRes = await runAiReviewCase({
+      geminiApiKey: 'test-key',
+      fetchImpl: async (url) => {
+        if (url.includes('/gemini-3.8-flash:generateContent')) {
+          return {
+            ok: false,
+            status: 404,
+            text: async () => 'models/gemini-3.8-flash is not found',
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        verdict: 'APPROVED',
+                        score: 100,
+                        summary: 'Fallback argon ok.',
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        };
+      },
+    });
+    assert.equal(gemini404FallbackRes.fetchCalls.length, 2);
+    assert.equal(
+      gemini404FallbackRes.fetchCalls[0].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'
+    );
+    assert.equal(
+      gemini404FallbackRes.fetchCalls[1].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent'
+    );
+    assert.equal(
+      gemini404FallbackRes.warnings.some((w) => w.includes('gemini-3.8-flash') && w.includes('404')),
+      true
+    );
+    assert.equal(gemini404FallbackRes.createdReviews.length, 1);
+    assert.deepEqual(gemini404FallbackRes.addedLabels, ['review:ai-approved']);
+
+    // Non-404 errors (401/500) fail fast without trying fallback models
+    for (const errStatus of [401, 500]) {
+      const fastFailUrls = [];
+      await assert.rejects(
+        () =>
+          runAiReviewCase({
+            geminiApiKey: 'test-key',
+            fetchImpl: async (url) => {
+              fastFailUrls.push(url);
+              return { ok: false, status: errStatus, text: async () => `HTTP ${errStatus} error` };
+            },
+          }),
+        new RegExp(`Gemini API HTTP ${errStatus} \\(gemini-3\\.8-flash\\)`)
+      );
+      assert.equal(fastFailUrls.length, 1);
+    }
 
     const dependabotYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/dependabot.yml'),
@@ -6888,6 +7173,121 @@ async function runCodecAndEngineTests() {
     const syncRes4 = await runSyncAgileCase({ merged: false, labels: ['epic:2'] });
     assert.equal(syncRes4.length, 0);
     /* capy-dev-only:end */
+
+    // Verify Android TV Leanback manifest declarations and 320x180 tv_banner.png asset (TC-B1-T1-01..06, TC-B1-T2-01..06)
+    console.log('-> Testing Android TV Leanback AndroidManifest.xml and 320x180 tv_banner.png...');
+    const androidManifestPath = path.resolve(projectRoot, '../app/src/main/AndroidManifest.xml');
+    const tvManifestInfo = JSON.parse(
+      execFileSync(
+        'python3',
+        [
+          '-c',
+          [
+            'import json, sys, xml.etree.ElementTree as ET',
+            'ns = "{http://schemas.android.com/apk/res/android}"',
+            'root = ET.parse(sys.argv[1]).getroot()',
+            'features = {el.attrib.get(ns + "name"): el.attrib.get(ns + "required") for el in root.findall("uses-feature")}',
+            'app = root.find("application")',
+            'main_act = next(a for a in app.findall("activity") if a.attrib.get(ns + "name") == "com.capypaint.capy.MainActivity")',
+            'filters = []',
+            'for flt in main_act.findall("intent-filter"):',
+            '    filters.append({',
+            '        "actions": [e.attrib.get(ns + "name") for e in flt.findall("action")],',
+            '        "categories": [e.attrib.get(ns + "name") for e in flt.findall("category")],',
+            '        "data": [{"scheme": d.attrib.get(ns + "scheme"), "host": d.attrib.get(ns + "host"), "mimeType": d.attrib.get(ns + "mimeType"), "pathPrefix": d.attrib.get(ns + "pathPrefix")} for d in flt.findall("data")],',
+            '    })',
+            'print(json.dumps({',
+            '    "features": features,',
+            '    "banner": app.attrib.get(ns + "banner"),',
+            '    "exported": main_act.attrib.get(ns + "exported"),',
+            '    "launchMode": main_act.attrib.get(ns + "launchMode"),',
+            '    "configChanges": main_act.attrib.get(ns + "configChanges"),',
+            '    "filters": filters,',
+            '}))',
+          ].join('\n'),
+          androidManifestPath,
+        ],
+        { encoding: 'utf8' }
+      )
+    );
+    assert.equal(tvManifestInfo.features['android.hardware.touchscreen'], 'false');
+    assert.equal(tvManifestInfo.features['android.software.leanback'], 'false');
+    assert.equal(tvManifestInfo.banner, '@drawable/tv_banner');
+    assert.equal(tvManifestInfo.exported, 'true');
+    assert.equal(tvManifestInfo.launchMode, 'singleTask');
+    for (const cfgFlag of ['uiMode', 'navigation', 'keyboard', 'keyboardHidden', 'screenSize']) {
+      assert.equal(
+        String(tvManifestInfo.configChanges || '').split('|').includes(cfgFlag),
+        true,
+        `AndroidManifest configChanges must include ${cfgFlag}`
+      );
+    }
+    const mainIntentFilter = tvManifestInfo.filters.find((f) =>
+      f.actions.includes('android.intent.action.MAIN')
+    );
+    assert.ok(mainIntentFilter, 'MainActivity must declare MAIN intent-filter');
+    assert.equal(mainIntentFilter.categories.includes('android.intent.category.LAUNCHER'), true);
+    assert.equal(
+      mainIntentFilter.categories.includes('android.intent.category.LEANBACK_LAUNCHER'),
+      true
+    );
+    const sendIntentFilter = tvManifestInfo.filters.find((f) =>
+      f.actions.includes('android.intent.action.SEND')
+    );
+    assert.ok(sendIntentFilter, 'MainActivity must preserve ACTION_SEND intent-filter');
+    assert.equal(
+      sendIntentFilter.data.some((d) => d.mimeType === 'image/*'),
+      true
+    );
+    const viewIntentFilter = tvManifestInfo.filters.find((f) =>
+      f.actions.includes('android.intent.action.VIEW')
+    );
+    assert.ok(viewIntentFilter, 'MainActivity must preserve ACTION_VIEW App Links intent-filter');
+    assert.equal(
+      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'capypaint.com'),
+      true
+    );
+    assert.equal(
+      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'www.capypaint.com'),
+      true
+    );
+    assert.equal(
+      viewIntentFilter.data.some(
+        (d) => d.scheme === 'https' && String(d.host || '').endsWith('.github.io') && d.pathPrefix === '/capy'
+      ),
+      true
+    );
+
+    const parseTvBannerPng = (buf) => {
+      const pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      if (!Buffer.isBuffer(buf) || buf.length < 26) return null;
+      if (!buf.subarray(0, 8).equals(pngMagic)) return null;
+      if (buf.subarray(12, 16).toString('ascii') !== 'IHDR') return null;
+      return {
+        width: buf.readUInt32BE(16),
+        height: buf.readUInt32BE(20),
+        bitDepth: buf[24],
+        colorType: buf[25],
+      };
+    };
+
+    const tvBannerPath = path.resolve(projectRoot, '../app/src/main/res/drawable-xhdpi/tv_banner.png');
+    assert.equal(fs.existsSync(tvBannerPath), true, 'drawable-xhdpi/tv_banner.png must exist');
+    const tvBannerBuf = fs.readFileSync(tvBannerPath);
+    assert.equal(tvBannerBuf.length > 100 && tvBannerBuf.length <= 1024 * 1024, true);
+    const tvBannerHeader = parseTvBannerPng(tvBannerBuf);
+    assert.ok(tvBannerHeader, 'tv_banner.png must have valid PNG magic and IHDR chunk');
+    assert.equal(tvBannerHeader.width, 320);
+    assert.equal(tvBannerHeader.height, 180);
+    assert.equal(tvBannerHeader.bitDepth, 8);
+    assert.equal(tvBannerHeader.colorType === 6 || tvBannerHeader.colorType === 2, true);
+
+    assert.equal(parseTvBannerPng(Buffer.alloc(16)), null);
+    const badBannerBuf = Buffer.from(tvBannerBuf);
+    badBannerBuf.writeUInt32BE(512, 16);
+    badBannerBuf.writeUInt32BE(512, 20);
+    const badBannerHeader = parseTvBannerPng(badBannerBuf);
+    assert.equal(badBannerHeader.width === 320 && badBannerHeader.height === 180, false);
 
     // Verify web/public/404.html redirect logic, .github/scripts/pr-index.html, & generate-pr-manifest.mjs
     console.log('-> Testing 404.html redirect VM behavior, pr-index.html, generate-pr-manifest.mjs & workflow wiring...');

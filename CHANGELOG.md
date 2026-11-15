@@ -1,4 +1,8 @@
-### 3.0.18 - 2026-11-15 (Beta)
+### 3.0.19 - 2026-11-15 (Beta)
+
+- Declare Android TV Leanback launcher support (`LEANBACK_LAUNCHER`, optional `touchscreen`/`leanback` features) and add `320x180` `drawable-xhdpi/tv_banner.png`, update `privacy-policy.html` to reflect 100% ad-free builds, add `AndroidTvManifestAndBridgeTest.kt` and pure-Node TV checks, expand CI review-gate unit tests (`gemini-3.8-flash`/`gemini-4-argon` fallback, `ACTIONS_GITHUB_TOKEN` `403` fallback, Dependabot `403`, `synchronize` label reconciliation), and sync `APP.md`, `DEV.md`, `TESTING.md`, `ROADMAP.md`, and `TODO.md` [#545](https://github.com/shthed/capy/pull/545)
+
+### 3.0.18 - 2026-11-15
 
 - Add repo-scoped `.agents/environment.json` for repeatable root `wrangler` and `web/` dependency setup, reclassify legacy `BUG-4` as clickable environment/ops Issue [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](https://github.com/shthed/capy/issues/543), and update `TODO.md`, `ROADMAP.md`, and `CLOUD.md` with clickable [capypaint.com](https://capypaint.com/), [capyboop.com](https://capyboop.com/), and preview/Pages deployment links [#544](https://github.com/shthed/capy/pull/544)
 - Wait two animation frames after the second wheel zoom in `web/scripts/test.mjs` so React's `useEffect` schedules the `350ms` `viewportSaveTimer` before `reload()` triggers `beforeunload`, eliminating the `1.2 vs 1.2` `flushPendingViewportSave` race [#540](https://github.com/shthed/capy/pull/540)
