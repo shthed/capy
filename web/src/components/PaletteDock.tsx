@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 import { Palette } from 'lucide-react';
 import {
   PaletteColor,
@@ -18,9 +19,11 @@ interface PaletteDockProps {
   visibleColorIds: Set<number>;
   raiseDock: boolean;
   isFreeColorMode?: boolean;
+  isReplaying?: boolean;
   reducedMotion?: boolean;
   showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
+  onSyncActiveColor?: (colorId: number) => void;
   onColorHintRequested: (colorId: number) => void;
   onOpenPaletteOptions?: () => void;
   onAddCustomColor?: (hex: string) => void;
@@ -133,20 +136,11 @@ export function getVisiblePalette(
 
 export function getDockPalette(
   basePalette: PaletteColor[],
-  prioritizeOnScreen: boolean = false,
-  visibleColorIds: Set<number> = new Set(),
-  activeColorId?: number
+  _prioritizeOnScreen: boolean = false,
+  _visibleColorIds: Set<number> = new Set(),
+  _activeColorId?: number
 ): PaletteColor[] {
-  if (!prioritizeOnScreen || visibleColorIds.size === 0) return basePalette;
-  return [...basePalette].sort((a, b) => {
-    if (activeColorId !== undefined) {
-      if (a.id === activeColorId) return -1;
-      if (b.id === activeColorId) return 1;
-    }
-    const aVis = visibleColorIds.has(a.id) ? 1 : 0;
-    const bVis = visibleColorIds.has(b.id) ? 1 : 0;
-    return bVis - aVis;
-  });
+  return basePalette;
 }
 
 export const PaletteDock: React.FC<PaletteDockProps> = ({
@@ -160,15 +154,22 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   visibleColorIds,
   raiseDock,
   isFreeColorMode = false,
+  isReplaying = false,
   reducedMotion = false,
   showCustomColorButton = false,
   onColorSelected,
+  onSyncActiveColor,
   onColorHintRequested,
   onOpenPaletteOptions,
   onAddCustomColor,
   onUpdateColor,
   onApplyPresetPalette,
 }) => {
+  const onColorSelectedRef = useRef(onColorSelected);
+  onColorSelectedRef.current = onColorSelected;
+  const onSyncActiveColorRef = useRef(onSyncActiveColor);
+  onSyncActiveColorRef.current = onSyncActiveColor;
+
   // Remaining counts per color (for standard color-by-number mode)
   const remainingCountMap = useMemo(() => {
     const map = new Map<number, number>();
@@ -238,32 +239,61 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
     return getDisplayNumberMap(palette, regions, sortOrder);
   }, [palette, regions, sortOrder]);
 
-  // Order with on-screen prioritization - never hide or deprioritize active colour even if offscreen
-  const dockPalette = useMemo(() => {
-    if (!prioritizeOnScreen || visibleColorIds.size === 0) return sortedPalette;
-    return [...sortedPalette].sort((a, b) => {
-      if (a.id === activeColorId) return -1;
-      if (b.id === activeColorId) return 1;
-      const aVis = visibleColorIds.has(a.id) ? 1 : 0;
-      const bVis = visibleColorIds.has(b.id) ? 1 : 0;
-      return bVis - aVis;
-    });
-  }, [sortedPalette, prioritizeOnScreen, visibleColorIds, activeColorId]);
+  // Keep dock strictly in sorted order (never pull active or visible swatches to front)
+  const dockPalette = sortedPalette;
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   const activeSwatchRef = useRef<HTMLButtonElement | null>(null);
+  const [isScrollable, setIsScrollable] = useState(false);
 
-  // Smoothly center the active color in view when activeColorId changes
-  useEffect(() => {
-    if (activeSwatchRef.current) {
-      activeSwatchRef.current.scrollIntoView({
-        behavior: reducedMotion ? 'auto' : 'smooth',
-        block: 'nearest',
-        inline: 'center',
-      });
+  const itemCount =
+    dockPalette.length + (showCustomColorButton && onOpenPaletteOptions ? 1 : 0);
+
+  useIsomorphicLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const clientW = container.clientWidth;
+      if (clientW <= 0) return;
+      const naturalWidth =
+        itemCount * 46 + Math.max(0, itemCount - 1) * 8 + 24;
+      setIsScrollable(naturalWidth > clientW);
+    };
+
+    measure();
+    if (typeof ResizeObserver === 'function') {
+      const ro = new ResizeObserver(measure);
+      ro.observe(container);
+      return () => ro.disconnect();
     }
-  }, [activeColorId, reducedMotion]);
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [itemCount]);
+
+  // Smoothly center the active color in view when activeColorId or dock layout changes
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const swatch = activeSwatchRef.current;
+    if (!container || !swatch) return;
+    if (!isScrollable) {
+      container.scrollLeft = 0;
+      return;
+    }
+    const targetLeft = Math.max(
+      0,
+      swatch.offsetLeft + swatch.offsetWidth / 2 - container.clientWidth / 2
+    );
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({
+        left: targetLeft,
+        behavior: reducedMotion ? 'auto' : 'smooth',
+      });
+    } else {
+      container.scrollLeft = targetLeft;
+    }
+  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -288,14 +318,18 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   // Defensively sync active color if current activeColorId is not in dock
   useEffect(() => {
     if (dockPalette.length > 0 && !dockPalette.some((c) => c.id === activeColorId)) {
-      onColorSelected(dockPalette[0].id);
+      if (onSyncActiveColorRef.current) {
+        onSyncActiveColorRef.current(dockPalette[0].id);
+      } else {
+        onColorSelectedRef.current(dockPalette[0].id);
+      }
     }
-  }, [dockPalette, activeColorId, onColorSelected]);
+  }, [dockPalette, activeColorId]);
 
   if (dockPalette.length === 0) return null;
 
   const handleSwatchClick = (c: PaletteColor) => {
-    if (c.id === activeColorId) {
+    if (c.id === activeColorId && !isReplaying) {
       onColorHintRequested(c.id);
     } else {
       onColorSelected(c.id);
@@ -305,6 +339,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
   return (
     <div
       ref={footerRef}
+      data-testid="palette-dock"
       className="fixed z-20 left-0 right-0 pointer-events-none transition-all flex items-center"
       style={{
         bottom: `calc(${raiseDock ? '2rem' : '0.375rem'} + var(--sab, 0px))`,
@@ -314,14 +349,24 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
       {/* Scrollable swatches floating all the way to screen edges with no outer border and ample vertical padding for active ring */}
       <div
         ref={scrollContainerRef}
-        className="pointer-events-auto w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-3"
+        className="pointer-events-auto w-full flex overflow-x-auto no-scrollbar py-3"
         style={{
-          paddingLeft: 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
-          paddingRight: 'max(4.5rem, calc(var(--sar, 0px) + 4.5rem))',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
         }}
       >
+        <div
+          className="flex items-center mx-auto min-w-max"
+          style={{
+            paddingLeft: isScrollable
+              ? 'max(calc(50% - 23px), calc(var(--sal, 0px) + 0.75rem))'
+              : 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
+            paddingRight: isScrollable
+              ? 'max(calc(50% - 23px), calc(var(--sar, 0px) + 0.75rem))'
+              : 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
+          }}
+        >
+        <div data-testid="palette-dock-tray" className="flex items-center gap-2">
         {dockPalette.map((color) => {
           const isActive = color.id === activeColorId;
           const isVisibleOnScreen = visibleColorIds.has(color.id);
@@ -379,6 +424,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
         {showCustomColorButton && onOpenPaletteOptions && (
           <button
             type="button"
+            data-testid="palette-custom-btn"
             onClick={onOpenPaletteOptions}
             title="Custom Colour & Palette Options"
             className="flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
@@ -389,6 +435,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = ({
             </span>
           </button>
         )}
+        </div>
+        </div>
       </div>
     </div>
   );
