@@ -411,23 +411,15 @@ class MultiProviderAuthManager implements AuthProvider {
     const hasMockToken =
       typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
 
-    if (NativeBridge.isAndroid && !clientId && !hasMockToken) {
-      try {
-        return await this.signInWithProvider('play_games_v2');
-      } catch {
-        // Fall through to Google OAuth
-      }
+    if (NativeBridge.isAndroid && !hasMockToken) {
+      return this.signInWithProvider('play_games_v2');
     }
     return this.signInWithProvider('google', { clientId });
   }
 
   async signInWithPlayGames(): Promise<PlayerIdentity> {
     if (NativeBridge.isAndroid) {
-      try {
-        return await this.signInWithProvider('play_games_v2');
-      } catch {
-        // Fall through to Google OAuth
-      }
+      return this.signInWithProvider('play_games_v2');
     }
     return this.signInWithGoogle();
   }
