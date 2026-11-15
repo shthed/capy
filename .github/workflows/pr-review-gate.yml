@@ -168,21 +168,22 @@ jobs:
               }
             }
 
-            const isSynchronize =
-              context.eventName === 'pull_request' &&
-              context.payload.action === 'synchronize';
-            const isNewPushOrDraft =
-              isDraft ||
-              isSynchronize ||
-              (context.eventName === 'pull_request' &&
-                context.payload.action === 'converted_to_draft');
-
-            if (isNewPushOrDraft) {
-              await safeRemoveLabel('review:ai-approved');
-              await safeRemoveLabel('review:owner-approved');
-            }
-            if (isSynchronize) {
-              await safeRemoveLabel('review:changes-requested');
+            async function safeAddLabel(labelName) {
+              if (activeLabels.has(labelName)) return;
+              if (isReadOnlyDependabotEvent || typeof github.rest.issues?.addLabels !== 'function') {
+                return;
+              }
+              try {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  labels: [labelName],
+                });
+                activeLabels.add(labelName);
+              } catch (err) {
+                core.warning(`Failed to add label ${labelName}: ${err.message}`);
+              }
             }
 
             const reviews = await github.paginate(github.rest.pulls.listReviews, {
@@ -290,13 +291,30 @@ jobs:
               isStrictAiBodyValid &&
               isStrictPrBodyValid;
 
-            if (activeLabels.has('review:ai-approved') && !hasValidAiMarker) {
+            const aiChangesRequested =
+              latestAiSignal !== null && latestAiSignal.verdict === 'CHANGES_REQUESTED';
+
+            const isSynchronize =
+              context.eventName === 'pull_request' &&
+              context.payload.action === 'synchronize';
+            const isDraftOrConverted =
+              isDraft ||
+              (context.eventName === 'pull_request' &&
+                context.payload.action === 'converted_to_draft');
+
+            if (isDraftOrConverted || !hasValidAiMarker) {
               await safeRemoveLabel('review:ai-approved');
+            } else {
+              await safeAddLabel('review:ai-approved');
+            }
+            if (isDraftOrConverted || isSynchronize) {
+              await safeRemoveLabel('review:owner-approved');
+            }
+            if (isSynchronize && !aiChangesRequested) {
+              await safeRemoveLabel('review:changes-requested');
             }
 
             const aiApproved = !isDraft && activeLabels.has('review:ai-approved') && hasValidAiMarker;
-            const aiChangesRequested =
-              latestAiSignal !== null && latestAiSignal.verdict === 'CHANGES_REQUESTED';
 
             // 2. Evaluate Post-Push Human Project Owner Holds / Overrides
             const nativeHeadApprovals = [];
