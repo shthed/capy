@@ -55,6 +55,7 @@ jobs:
       preview_url: ${{ steps.target.outputs.preview_url }}
       skip: ${{ steps.target.outputs.skip }}
       is_docs_only: ${{ steps.target.outputs.is_docs_only }}
+      is_main_sync: ${{ steps.target.outputs.is_main_sync }}
       is_draft: ${{ steps.target.outputs.is_draft }}
       checkout_ref: ${{ steps.target.outputs.checkout_ref }}
     steps:
@@ -143,6 +144,9 @@ jobs:
 
             let prMergeable = context.payload?.pull_request?.mergeable;
             let isDraftPr = Boolean(context.payload?.pull_request?.draft);
+            let baseRef = context.payload?.pull_request?.base?.ref || '';
+            let prHeadRepoFullName = context.payload?.pull_request?.head?.repo?.full_name || '';
+            let prHeadSha = context.payload?.pull_request?.head?.sha;
             if (isPullRequest && prNumber) {
               try {
                 const { data: prDetails } = await github.rest.pulls.get({
@@ -156,14 +160,158 @@ jobs:
                 if (typeof prDetails.draft === 'boolean') {
                   isDraftPr = prDetails.draft;
                 }
+                if (!baseRef && prDetails.base?.ref) {
+                  baseRef = prDetails.base.ref;
+                }
+                if (!prHeadRepoFullName && prDetails.head?.repo?.full_name) {
+                  prHeadRepoFullName = prDetails.head.repo.full_name;
+                }
+                if (!prHeadSha && prDetails.head?.sha) {
+                  prHeadSha = prDetails.head.sha;
+                }
               } catch (error) {
                 core.warning(`Failed to inspect PR #${prNumber} state: ${error.message}`);
               }
             }
-            const prHeadSha = context.payload?.pull_request?.head?.sha;
             const checkoutRef = isPullRequest
               ? (prMergeable === false ? (prHeadSha || context.sha) : (context.sha || prHeadSha))
               : (branchInput || context.sha);
+
+            let isMainSync = false;
+            if (
+              isPullRequest &&
+              prNumber &&
+              !isDocsOnlyPr &&
+              branch === 'sync/beta-from-main' &&
+              baseRef === 'beta' &&
+              prHeadRepoFullName === `${context.repo.owner}/${context.repo.repo}` &&
+              prHeadSha &&
+              typeof github.rest.repos?.getCommit === 'function' &&
+              typeof github.rest.repos?.compareCommitsWithBasehead === 'function'
+            ) {
+              try {
+                const commitRequests = [
+                  github.rest.repos.getCommit({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: prHeadSha,
+                  }),
+                  github.rest.repos.getCommit({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: 'heads/main',
+                  }),
+                  github.rest.repos.getCommit({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: 'heads/beta',
+                  }),
+                ];
+                if (checkoutRef && checkoutRef !== prHeadSha) {
+                  commitRequests.push(
+                    github.rest.repos.getCommit({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: checkoutRef,
+                    })
+                  );
+                }
+                const [
+                  { data: headCommit },
+                  { data: mainCommit },
+                  { data: betaCommit },
+                  checkoutCommitResp,
+                ] = await Promise.all(commitRequests);
+                const checkoutCommit =
+                  checkoutRef && checkoutRef !== prHeadSha ? checkoutCommitResp?.data : headCommit;
+                const headSha = prHeadSha;
+                const mainSha = mainCommit?.sha;
+                const betaSha = betaCommit?.sha;
+                const headTreeSha = headCommit?.commit?.tree?.sha;
+                const mainTreeSha = mainCommit?.commit?.tree?.sha;
+                const checkoutTreeSha = checkoutCommit?.commit?.tree?.sha;
+
+                if (
+                  headTreeSha &&
+                  mainTreeSha &&
+                  checkoutTreeSha &&
+                  headTreeSha === mainTreeSha &&
+                  checkoutTreeSha === mainTreeSha &&
+                  mainSha &&
+                  betaSha
+                ) {
+                  const [
+                    { data: cmpHeadToMain },
+                    { data: cmpHeadToBeta },
+                    { data: cmpMainToBeta },
+                  ] = await Promise.all([
+                    github.rest.repos.compareCommitsWithBasehead({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      basehead: `${headSha}...${mainSha}`,
+                    }),
+                    github.rest.repos.compareCommitsWithBasehead({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      basehead: `${headSha}...${betaSha}`,
+                    }),
+                    github.rest.repos.compareCommitsWithBasehead({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      basehead: `${mainSha}...${betaSha}`,
+                    }),
+                  ]);
+                  const mainIsAncestorOfHead = cmpHeadToMain?.ahead_by === 0;
+                  const betaIsAncestorOfHead = cmpHeadToBeta?.ahead_by === 0;
+                  const betaIsAncestorOfMain = cmpMainToBeta?.ahead_by === 0;
+                  if (mainIsAncestorOfHead && betaIsAncestorOfHead && betaIsAncestorOfMain) {
+                    const cmpMainToHead =
+                      headSha === mainSha
+                        ? { ahead_by: 0, total_commits: 0 }
+                        : (
+                            await github.rest.repos.compareCommitsWithBasehead({
+                              owner: context.repo.owner,
+                              repo: context.repo.repo,
+                              basehead: `${mainSha}...${headSha}`,
+                            })
+                          ).data;
+                    const isExactFastForwardSync =
+                      headSha === mainSha &&
+                      cmpHeadToMain?.ahead_by === 0 &&
+                      (cmpHeadToMain?.total_commits ?? 0) === 0 &&
+                      cmpMainToHead?.ahead_by === 0 &&
+                      (cmpMainToHead?.total_commits ?? 0) === 0;
+                    const mergeCommit =
+                      Array.isArray(cmpMainToHead?.commits) && cmpMainToHead.commits.length === 1
+                        ? cmpMainToHead.commits[0]
+                        : null;
+                    const mergeParentShas = (mergeCommit?.parents || [])
+                      .map((p) => p?.sha)
+                      .filter(Boolean);
+                    const isExactCleanNoFfSync =
+                      betaSha !== mainSha &&
+                      headSha !== mainSha &&
+                      cmpHeadToMain?.ahead_by === 0 &&
+                      (cmpHeadToMain?.total_commits ?? 0) === 0 &&
+                      cmpMainToHead?.ahead_by === 1 &&
+                      (cmpMainToHead?.total_commits ?? 0) === 1 &&
+                      (cmpMainToHead?.files || []).length === 0 &&
+                      mergeCommit?.sha === headSha &&
+                      mergeParentShas.length === 2 &&
+                      new Set(mergeParentShas).size === 2 &&
+                      mergeParentShas.includes(betaSha) &&
+                      mergeParentShas.includes(mainSha);
+                    if (isExactFastForwardSync || isExactCleanNoFfSync) {
+                      isMainSync = true;
+                    }
+                  }
+                }
+              } catch (error) {
+                core.warning(
+                  `Failed to verify main-sync parity for #${prNumber}: ${error.message}`
+                );
+              }
+            }
 
             const summaryLines = [
               `Branch: ${branch}`,
@@ -176,6 +324,8 @@ jobs:
 
             if (isDocsOnlyPr) {
               summaryLines.push('Fast-path pass: PR modifies documentation/metadata files only (running sanity gate; skipping Web/Android build and Pages deploy).');
+            } else if (isMainSync) {
+              summaryLines.push('Fast-path pass: sync/beta-from-main -> beta tree matches origin/main (running sanity gate; skipping redundant Android/E2E/Alpha deploy).');
             } else if (shouldSkip) {
               summaryLines.push('Deployment skipped: branch has no open PR (override with allow_without_pr).');
             }
@@ -187,6 +337,7 @@ jobs:
             core.setOutput('preview_url', previewUrl);
             core.setOutput('skip', shouldSkip ? 'true' : 'false');
             core.setOutput('is_docs_only', isDocsOnlyPr ? 'true' : 'false');
+            core.setOutput('is_main_sync', isMainSync ? 'true' : 'false');
             core.setOutput('is_draft', isDraftPr ? 'true' : 'false');
             core.setOutput('checkout_ref', checkoutRef);
 
@@ -195,64 +346,102 @@ jobs:
   build:
     name: Build & Test
     needs: [prepare]
-    if: needs.prepare.outputs.skip != 'true' || needs.prepare.outputs.is_docs_only == 'true'
+    if: needs.prepare.outputs.skip != 'true' || needs.prepare.outputs.is_docs_only == 'true' || needs.prepare.outputs.is_main_sync == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - name: Check out source
-        if: needs.prepare.outputs.skip != 'true' || needs.prepare.outputs.is_docs_only == 'true'
+        if: needs.prepare.outputs.skip != 'true' || needs.prepare.outputs.is_docs_only == 'true' || needs.prepare.outputs.is_main_sync == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
 
       - name: Use Node.js 22
-        if: needs.prepare.outputs.skip != 'true'
+        if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
-      - name: Use Node.js 22 (docs-only sanity)
-        if: needs.prepare.outputs.skip == 'true' && needs.prepare.outputs.is_docs_only == 'true'
+      - name: Use Node.js 22 (fast-path sanity)
+        if: (needs.prepare.outputs.skip == 'true' && needs.prepare.outputs.is_docs_only == 'true') || needs.prepare.outputs.is_main_sync == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
 
-      - name: Run repository sanity gate (docs-only)
-        if: needs.prepare.outputs.skip == 'true' && needs.prepare.outputs.is_docs_only == 'true'
+      - name: Run repository sanity gate (fast-path)
+        if: (needs.prepare.outputs.skip == 'true' && needs.prepare.outputs.is_docs_only == 'true') || needs.prepare.outputs.is_main_sync == 'true'
         working-directory: web
         run: npm run test:sanity
 
-      - name: Run sanity gate, typecheck, and build web app (web/)
-        if: needs.prepare.outputs.skip != 'true'
+      - name: Cache web node_modules
+        id: node-modules-cache
+        if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true'
+        uses: actions/cache@v6
+        with:
+          path: web/node_modules
+          key: ${{ runner.os }}-node22-modules-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Run sanity gate, typecheck, build, and fast unit suite (web/)
+        if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true'
         working-directory: web
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
-          npm ci --prefer-offline --no-audit --no-fund
+          if [ "${{ steps.node-modules-cache.outputs.cache-hit }}" != "true" ]; then
+            npm ci --prefer-offline --no-audit --no-fund
+          fi
           npm run test:sanity
           npm run lint
           npm run build
+          if grep -q -- '--unit' scripts/test.mjs; then
+            node scripts/test.mjs --unit
+          fi
+
+      - name: Upload web dist artifact
+        if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-dist-${{ github.run_attempt }}
+          path: web/dist
+          retention-days: 1
+
+  android_build:
+    name: Android Build & JUnit Tests
+    needs: [prepare, build]
+    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+
+      - name: Download web dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist-${{ github.run_attempt }}
+          path: web/dist
 
       - name: Set up JDK 17
-        if: needs.prepare.outputs.skip != 'true'
         uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Gradle
-        if: needs.prepare.outputs.skip != 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
 
       - name: Run unit tests and build Debug APK (app/)
-        if: needs.prepare.outputs.skip != 'true'
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
@@ -260,7 +449,6 @@ jobs:
         run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
 
       - name: Stage build artifacts
-        if: needs.prepare.outputs.skip != 'true'
         run: |
           mkdir -p staging/web
           cp -r web/dist/* staging/web/
@@ -268,7 +456,6 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk staging/apk/capy.apk
 
       - name: Upload build artifacts
-        if: needs.prepare.outputs.skip != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: build-artifacts-${{ github.run_attempt }}
@@ -277,8 +464,8 @@ jobs:
 
   e2e_release_gate:
     name: Playwright E2E Release Gate
-    needs: [prepare]
-    if: needs.prepare.outputs.skip != 'true' && github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'
+    needs: [prepare, build]
+    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')) || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -296,6 +483,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
+      - name: Cache web node_modules
+        id: node-modules-cache
+        uses: actions/cache@v6
+        with:
+          path: web/node_modules
+          key: ${{ runner.os }}-node22-modules-${{ hashFiles('web/package-lock.json') }}
+
       - name: Cache Playwright Chromium
         id: playwright-cache
         uses: actions/cache@v6
@@ -303,16 +497,18 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('web/package-lock.json') }}
 
-      - name: Install dependencies, build web bundle, and prepare Playwright Chromium
+      - name: Download web dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist-${{ github.run_attempt }}
+          path: web/dist
+
+      - name: Install dependencies (on cache miss) and prepare Playwright Chromium
         working-directory: web
-        env:
-          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
-          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
-          npm ci --prefer-offline --no-audit --no-fund
-          npm run test:sanity
-          npm run lint
-          npm run build
+          if [ "${{ steps.node-modules-cache.outputs.cache-hit }}" != "true" ]; then
+            npm ci --prefer-offline --no-audit --no-fund
+          fi
           if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
             npx playwright install --with-deps chromium
           else
@@ -325,8 +521,8 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: [prepare, build, e2e_release_gate]
-    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.build.result == 'success' && (needs.e2e_release_gate.result == 'success' || needs.e2e_release_gate.result == 'skipped') && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: [prepare, build, android_build]
+    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && needs.android_build.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
