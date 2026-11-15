@@ -1,6 +1,6 @@
 {
   "name": "capy-paint",
-  "version": "3.0.12",
+  "version": "3.0.13",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "lint": "tsc --noEmit && tsc --noEmit -p ../worker/tsconfig.json",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "test": "node scripts/test.mjs",
+    "test:unit": "node scripts/test.mjs --unit",
     "test:sanity": "node scripts/sanity.mjs",
     "changelog:compile": "node scripts/compile-changelog.mjs",
     "persona:capyboop": "node scripts/rebrand-persona.mjs",

@@ -1119,6 +1119,29 @@ async function runCodecAndEngineTests() {
         makeInvalidSection(['- **100%** — **Check**: 5-Pillars framework.']),
         makeInvalidSection(['- **100%** — **Check**: 20-point scale.']),
         makeInvalidSection(['- **100%** — **Check**: Worth **20** pts.']),
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<!-- unclosed comment hides remaining markdown',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Check**: Hidden by unclosed comment.',
+          '',
+          '</details>',
+        ].join('\n'),
+        [
+          '### PR Readiness Score: 100%',
+          '',
+          '<!-- closed comment -->',
+          '<!-- unclosed trailing comment',
+          '<details>',
+          '<summary>PR Readiness Checklist</summary>',
+          '',
+          '- **100%** — **Check**: Hidden by second unclosed comment.',
+          '',
+          '</details>',
+        ].join('\n'),
       ]) {
         assert.throws(() => validatePrReadinessChecklist(badText, 'negative fixture'));
       }
@@ -1167,8 +1190,10 @@ async function runCodecAndEngineTests() {
         fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness 100%.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
-        const mainSpecRes = validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false });
-        assert.equal(mainSpecRes.scannedFiles.length, 4);
+        assert.throws(
+          () => validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false }),
+          /AGENTS\.md must specify 100% PR Readiness threshold/
+        );
 
         fs.writeFileSync(
           path.join(tmpMainSpecDir, 'AGENTS.md'),
@@ -1461,7 +1486,7 @@ async function runCodecAndEngineTests() {
 
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'AGENTS.md'),
-        `# AGENTS.md\n${strictAllLinks}\nReport >= 95% PR Readiness Score inside <details> with as many items as needed.\n`,
+        `# AGENTS.md\n${strictAllLinks}\nReport 100% PR Readiness Score inside <details> with as many items as needed.\n`,
         'utf8'
       );
       assert.throws(
@@ -3043,15 +3068,13 @@ async function runCodecAndEngineTests() {
     };
 
     const prReviewGateSource = extractWorkflowScript('.github/workflows/pr-review-gate.yml');
-    const gateRequires100 =
-      /latestAiSignal\.score\s*>=\s*100/.test(prReviewGateSource) ||
-      prReviewGateSource.includes('score >= 100');
-    const gateDualPassDesc = gateRequires100
-      ? 'Dual-approved: AI review (100%) + Owner sign-off verified'
-      : 'Dual-approved: AI review (>=95%) + Owner sign-off verified';
-    const gateBetaPassDesc = gateRequires100
-      ? 'Beta gate passed: AI review (100%) verified; no holds'
-      : 'Beta gate passed: AI review (>=95%) verified; no holds';
+    const gateDualPassDesc = 'Auto-approved: strict AI review (100%) verified; no holds';
+    const gateBetaPassDesc = 'Beta gate passed: AI review (100%) verified; no holds';
+    const gateMainAwaitingAiDesc = 'Awaiting strict AI review (100% + review:ai-approved) on HEAD';
+    const gateBetaAwaitingAiDesc = 'Beta gate: awaiting strict AI review (100% + review:ai-approved) on HEAD';
+    const gateDraftDesc = 'Draft PR: complete work, pass strict 100% AI review, and mark ready';
+    const gateStrictNotMetDesc =
+      'Strict 100% AI gate not met (requires 100% score, zero unchecked tasks, valid body)';
 
     const runReviewGateScript = new AsyncFunction(
       'context',
@@ -3065,16 +3088,28 @@ async function runCodecAndEngineTests() {
       baseRef = 'main',
       isDraft = false,
       headSha = 'abcdef1234567890abcdef1234567890abcdef12',
+      headRef = undefined,
+      headRepoFullName = 'shthed/capy',
+      headTreeSha = 'tree-main',
+      body = undefined,
+      nodeId = 'PR_node_1',
+      autoMerge = null,
+      commitsByRef = null,
+      compareMap = null,
       commitDate = '2026-11-13T01:00:00Z',
       labels = ['review:ai-approved'],
       events = [],
       reviews = [],
       comments = [],
+      commitStatuses = [],
       aiCommentScore = 100,
+      aiCommentBody = null,
       aiCommentTs = '2026-11-13T01:01:00Z',
       eventName = 'pull_request_review',
       action = 'submitted',
       createCommitStatusImpl = null,
+      graphqlImpl = null,
+      mergeImpl = null,
       expectCommitStatus = true,
     } = {}) => {
       const calls = {
@@ -3082,12 +3117,16 @@ async function runCodecAndEngineTests() {
         dismissReview: [],
         removeLabel: [],
         createCommitStatus: [],
+        graphql: [],
+        merge: [],
       };
       const allComments = [...comments];
       if (aiCommentScore !== null) {
         allComments.unshift({
           user: { login: 'shthed' },
-          body: `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${headSha} score=${aiCommentScore}% -->`,
+          body:
+            aiCommentBody ??
+            `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${headSha} score=${aiCommentScore}% -->`,
           created_at: aiCommentTs,
           updated_at: aiCommentTs,
         });
@@ -3105,6 +3144,13 @@ async function runCodecAndEngineTests() {
           const res = await fn(params);
           return res.data;
         },
+        graphql: async (query, variables) => {
+          calls.graphql.push({ query, variables });
+          if (graphqlImpl) {
+            return graphqlImpl(query, variables);
+          }
+          return {};
+        },
         rest: {
           pulls: {
             get: async () => ({
@@ -3114,7 +3160,14 @@ async function runCodecAndEngineTests() {
                 draft: isDraft,
                 user: { login: prAuthor },
                 base: { ref: baseRef },
-                head: { sha: headSha },
+                head: {
+                  sha: headSha,
+                  ...(headRef ? { ref: headRef } : {}),
+                  repo: { full_name: headRepoFullName },
+                },
+                ...(body !== undefined ? { body } : {}),
+                node_id: nodeId,
+                auto_merge: autoMerge,
                 labels: labels.map((name) => ({ name })),
               },
             }),
@@ -3127,12 +3180,37 @@ async function runCodecAndEngineTests() {
               calls.dismissReview.push(payload);
               return { data: {} };
             },
+            merge: async (payload) => {
+              calls.merge.push(payload);
+              if (mergeImpl) {
+                return mergeImpl(payload);
+              }
+              return { data: { merged: true, sha: headSha } };
+            },
           },
           repos: {
-            getCommit: async () => ({
-              data: { commit: { committer: { date: commitDate }, author: { date: commitDate } } },
-            }),
-            listCommitStatusesForRef: async () => ({ data: [] }),
+            getCommit: async ({ ref }) => {
+              if (commitsByRef && commitsByRef[ref]) {
+                return { data: commitsByRef[ref] };
+              }
+              return {
+                data: {
+                  sha: headSha,
+                  commit: {
+                    committer: { date: commitDate },
+                    author: { date: commitDate },
+                    tree: { sha: headTreeSha },
+                  },
+                },
+              };
+            },
+            compareCommitsWithBasehead: async ({ basehead }) => {
+              if (compareMap && compareMap[basehead]) {
+                return { data: compareMap[basehead] };
+              }
+              return { data: { ahead_by: 1, commits: [], files: [] } };
+            },
+            listCommitStatusesForRef: async () => ({ data: commitStatuses }),
             createCommitStatus: async (payload) => {
               calls.createCommitStatus.push(payload);
               if (createCommitStatusImpl) {
@@ -3165,7 +3243,7 @@ async function runCodecAndEngineTests() {
     };
 
     const gateHeadSha = '1234567890abcdef1234567890abcdef12345678';
-    // (a) Bot PR + empty-body native APPROVED with commit_id === headSha and future commitMs clock skew
+    // (a) Bot PR on main + strict 100% AI review -> auto-approved with MERGE auto-merge (and no bot review creation)
     const gateBotNativeRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
@@ -3184,13 +3262,16 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotNativeRes.status.state, 'success');
     assert.equal(gateBotNativeRes.status.description, gateDualPassDesc);
     assert.equal(gateBotNativeRes.calls.createReview.length, 0);
+    assert.equal(gateBotNativeRes.calls.graphql.length, 1);
+    assert.equal(gateBotNativeRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
-    // (b) Bot PR + review:owner-approved label only -> pending awaiting Project Owner sign-off
+    // (b) Bot PR + review:owner-approved label without AI approval -> pending awaiting strict 100% AI review
     const gateBotLabelOnlyRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
-      labels: ['review:ai-approved', 'review:owner-approved'],
+      labels: ['review:owner-approved'],
+      aiCommentScore: null,
       events: [
         {
           event: 'labeled',
@@ -3203,17 +3284,17 @@ async function runCodecAndEngineTests() {
       action: 'labeled',
     });
     assert.equal(gateBotLabelOnlyRes.status.state, 'pending');
-    assert.equal(
-      gateBotLabelOnlyRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateBotLabelOnlyRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateBotLabelOnlyRes.calls.createReview.length, 0);
+    assert.equal(gateBotLabelOnlyRes.calls.graphql.length, 0);
 
-    // (c) Bot PR + APPROVED/LGTM comment only -> pending awaiting Project Owner sign-off
+    // (c) Bot PR + APPROVED/LGTM comment without AI approval -> pending awaiting strict 100% AI review
     const gateBotCommentOnlyRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       comments: [
         {
           user: { login: 'shthed' },
@@ -3226,16 +3307,15 @@ async function runCodecAndEngineTests() {
       action: 'created',
     });
     assert.equal(gateBotCommentOnlyRes.status.state, 'pending');
-    assert.equal(
-      gateBotCommentOnlyRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateBotCommentOnlyRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateBotCommentOnlyRes.calls.createReview.length, 0);
 
     const gateBotLgtmReviewOnlyRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       reviews: [
         {
           id: 102,
@@ -3248,17 +3328,16 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLgtmReviewOnlyRes.status.state, 'pending');
-    assert.equal(
-      gateBotLgtmReviewOnlyRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateBotLgtmReviewOnlyRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateBotLgtmReviewOnlyRes.calls.createReview.length, 0);
 
-    // (d) Bot PR + stale APPROVED (commit_id !== headSha) or pre-force-push -> pending
+    // (d) Stale APPROVED (commit_id !== headSha) or pre-force-push -> pending without AI AND cannot clear active HOLD
     const gateBotStaleShaRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       reviews: [
         {
           id: 103,
@@ -3271,16 +3350,41 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotStaleShaRes.status.state, 'pending');
-    assert.equal(
-      gateBotStaleShaRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateBotStaleShaRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateBotStaleShaRes.calls.createReview.length, 0);
+
+    const gateBotStaleShaCannotClearHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 1031,
+          user: { login: 'shthed' },
+          body: 'HOLD - fix required',
+          created_at: '2026-11-13T01:04:00Z',
+          updated_at: '2026-11-13T01:04:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 103,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: '0000000000000000000000000000000000000000',
+          body: '',
+          submitted_at: '2026-11-13T01:06:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotStaleShaCannotClearHoldRes.status.state, 'failure');
 
     const gateBotPreForcePushRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       events: [{ event: 'head_ref_force_pushed', created_at: '2026-11-13T01:10:00Z' }],
       reviews: [
         {
@@ -3296,11 +3400,39 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotPreForcePushRes.status.state, 'pending');
     assert.equal(gateBotPreForcePushRes.calls.createReview.length, 0);
 
-    // (e) Bot PR + native APPROVED followed by CHANGES_REQUESTED on headSha (with commitMs skew) -> failure
+    const gateBotPreForcePushCannotClearHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      events: [{ event: 'head_ref_force_pushed', created_at: '2026-11-13T01:10:00Z' }],
+      comments: [
+        {
+          id: 1041,
+          user: { login: 'shthed' },
+          body: 'HOLD - after force push',
+          created_at: '2026-11-13T01:11:00Z',
+          updated_at: '2026-11-13T01:11:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 104,
+          user: { login: 'shthed' },
+          state: 'APPROVED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotPreForcePushCannotClearHoldRes.status.state, 'failure');
+
+    // (e) Bot PR + native APPROVED followed by CHANGES_REQUESTED on headSha (with commitMs skew) -> failure + disables active auto-merge
     const gateBotChangesReqRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T02:00:00Z',
+      autoMerge: { merge_method: 'MERGE' },
       reviews: [
         {
           id: 105,
@@ -3326,14 +3458,20 @@ async function runCodecAndEngineTests() {
       'Changes requested or hold active; address feedback before merge'
     );
     assert.equal(gateBotChangesReqRes.calls.createReview.length, 0);
+    assert.equal(gateBotChangesReqRes.calls.graphql.length, 1);
+    assert.equal(
+      gateBotChangesReqRes.calls.graphql[0].query.includes('disablePullRequestAutoMerge'),
+      true
+    );
 
-    // (f) Manual shthed-authored PR + label/comment -> pending (no bot APPROVE rubber-stamping); native APPROVED -> success with stale bot review dismissed
+    // (f) Manual shthed-authored PR without AI approval stays pending; with strict 100% AI review succeeds & dismisses stale bot approval
     const gateManualLabelRes = await runReviewGateCase({
       prAuthor: 'shthed',
       baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
-      labels: ['review:ai-approved', 'review:owner-approved'],
+      labels: ['review:owner-approved'],
+      aiCommentScore: null,
       events: [
         {
           event: 'labeled',
@@ -3344,10 +3482,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualLabelRes.status.state, 'pending');
-    assert.equal(
-      gateManualLabelRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateManualLabelRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateManualLabelRes.calls.createReview.length, 0);
 
     const gateManualCommentRes = await runReviewGateCase({
@@ -3355,6 +3490,8 @@ async function runCodecAndEngineTests() {
       baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       comments: [
         {
           user: { login: 'shthed' },
@@ -3365,10 +3502,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualCommentRes.status.state, 'pending');
-    assert.equal(
-      gateManualCommentRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateManualCommentRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateManualCommentRes.calls.createReview.length, 0);
 
     const gateManualLgtmCommentRes = await runReviewGateCase({
@@ -3376,6 +3510,8 @@ async function runCodecAndEngineTests() {
       baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       comments: [
         {
           user: { login: 'shthed' },
@@ -3386,10 +3522,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualLgtmCommentRes.status.state, 'pending');
-    assert.equal(
-      gateManualLgtmCommentRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateManualLgtmCommentRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateManualLgtmCommentRes.calls.createReview.length, 0);
 
     const gateManualMainNativeNoBotReviewRes = await runReviewGateCase({
@@ -3417,10 +3550,11 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateManualMainNativeNoBotReviewRes.status.state, 'success');
+    assert.equal(gateManualMainNativeNoBotReviewRes.status.description, gateDualPassDesc);
     assert.equal(gateManualMainNativeNoBotReviewRes.calls.createReview.length, 0);
     assert.equal(gateManualMainNativeNoBotReviewRes.calls.dismissReview.length, 1);
 
-    // (g) Draft bot PR -> pending even with native APPROVED
+    // (g) Draft bot PR -> pending even with AI + native APPROVED (and never enables auto-merge)
     const gateBotDraftRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       isDraft: true,
@@ -3437,11 +3571,9 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotDraftRes.status.state, 'pending');
-    assert.equal(
-      gateBotDraftRes.status.description,
-      'Draft PR: complete work, pass AI review, and mark ready'
-    );
+    assert.equal(gateBotDraftRes.status.description, gateDraftDesc);
     assert.equal(gateBotDraftRes.calls.createReview.length, 0);
+    assert.equal(gateBotDraftRes.calls.graphql.length, 0);
 
     // (h) Bot PR + CHANGES_REQUESTED whose body starts with "APPROVED..." -> failure (not legacy approval)
     const gateBotChangesReqApprovedPrefixRes = await runReviewGateCase({
@@ -3494,11 +3626,13 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotRecoverySkewRes.status.description, gateDualPassDesc);
     assert.equal(gateBotRecoverySkewRes.calls.createReview.length, 0);
 
-    // (j) Bot PR + DISMISSED native APPROVED -> ignored (pending)
+    // (j) Bot PR + DISMISSED native APPROVED -> ignored (pending without AI, and cannot clear active HOLD)
     const gateBotDismissedRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       reviews: [
         {
           id: 111,
@@ -3511,11 +3645,34 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotDismissedRes.status.state, 'pending');
-    assert.equal(
-      gateBotDismissedRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateBotDismissedRes.status.description, gateMainAwaitingAiDesc);
     assert.equal(gateBotDismissedRes.calls.createReview.length, 0);
+
+    const gateBotDismissedCannotClearHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      comments: [
+        {
+          id: 1111,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait before merge',
+          created_at: '2026-11-13T01:10:00Z',
+          updated_at: '2026-11-13T01:10:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 111,
+          user: { login: 'shthed' },
+          state: 'DISMISSED',
+          commit_id: gateHeadSha,
+          body: '',
+          submitted_at: '2026-11-13T01:15:00Z',
+        },
+      ],
+    });
+    assert.equal(gateBotDismissedCannotClearHoldRes.status.state, 'failure');
 
     // (k) Bug 1 regression: bot PR CHANGES_REQUESTED + legacy APPROVED/LGTM comment + review:owner-approved label (with and without earlier native APPROVED) -> failure
     const gateBotLegacyAfterRejectCommentRes = await runReviewGateCase({
@@ -3764,6 +3921,8 @@ async function runCodecAndEngineTests() {
       prAuthor: 'github-actions[bot]',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       comments: [
         {
           id: 206,
@@ -3961,6 +4120,8 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBetaAiOnlyPassRes.status.description, gateBetaPassDesc);
     assert.equal(gateBetaAiOnlyPassRes.calls.createReview.length, 0);
     assert.equal(gateBetaAiOnlyPassRes.calls.dismissReview.length, 1);
+    assert.equal(gateBetaAiOnlyPassRes.calls.graphql.length, 1);
+    assert.equal(gateBetaAiOnlyPassRes.calls.graphql[0].variables.mergeMethod, 'SQUASH');
 
     const gateBetaHoldFailRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
@@ -4100,10 +4261,7 @@ async function runCodecAndEngineTests() {
       headSha: gateHeadSha,
     });
     assert.equal(gateBetaMissingAiRes.status.state, 'pending');
-    assert.equal(
-      gateBetaMissingAiRes.status.description,
-      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
-    );
+    assert.equal(gateBetaMissingAiRes.status.description, gateBetaAwaitingAiDesc);
 
     // Untrusted external user cannot spoof AI CHANGES_REQUESTED DoS or forged APPROVED marker
     const gateUntrustedDosIgnoredRes = await runReviewGateCase({
@@ -4179,11 +4337,13 @@ async function runCodecAndEngineTests() {
       true
     );
 
-    const gateDependabotMainCommentOnlyRes = await runReviewGateCase({
+    const gateDependabotMainPendingRes = await runReviewGateCase({
       prAuthor: 'dependabot[bot]',
       baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
+      labels: [],
+      aiCommentScore: null,
       comments: [
         {
           id: 305,
@@ -4194,55 +4354,64 @@ async function runCodecAndEngineTests() {
         },
       ],
     });
-    assert.equal(gateDependabotMainCommentOnlyRes.status.state, 'pending');
-    assert.equal(
-      gateDependabotMainCommentOnlyRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateDependabotMainPendingRes.status.state, 'pending');
+    assert.equal(gateDependabotMainPendingRes.status.description, gateMainAwaitingAiDesc);
 
-    const gateDependabotMainNativeRes = await runReviewGateCase({
+    const gateDependabotMainStrictPassRes = await runReviewGateCase({
       prAuthor: 'dependabot[bot]',
       baseRef: 'main',
       headSha: gateHeadSha,
       commitDate: '2026-11-13T01:00:00Z',
-      reviews: [
-        {
-          id: 306,
-          user: { login: 'shthed' },
-          state: 'APPROVED',
-          commit_id: gateHeadSha,
-          body: '',
-          submitted_at: '2026-11-13T01:05:00Z',
-        },
-      ],
+      body: 'Dependabot bump details without unchecked checkboxes.',
+      eventName: 'issue_comment',
+      action: 'created',
     });
-    assert.equal(gateDependabotMainNativeRes.status.state, 'success');
-    assert.equal(gateDependabotMainNativeRes.calls.createReview.length, 0);
+    assert.equal(gateDependabotMainStrictPassRes.status.state, 'success');
+    assert.equal(gateDependabotMainStrictPassRes.status.description, gateDualPassDesc);
+    assert.equal(gateDependabotMainStrictPassRes.calls.createReview.length, 0);
+    assert.equal(gateDependabotMainStrictPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
-    // sync/beta-from-main PRs follow --base beta rules uniformly (draft -> pending, ready without AI -> pending, ready with AI -> success)
+    const gateDependabotMainUncheckedTaskFailRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      commitDate: '2026-11-13T01:00:00Z',
+      body: '- [ ] Confirm major dependency bump changelog',
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateDependabotMainUncheckedTaskFailRes.status.state, 'pending');
+    assert.equal(gateDependabotMainUncheckedTaskFailRes.status.description, gateStrictNotMetDesc);
+    assert.deepEqual(
+      gateDependabotMainUncheckedTaskFailRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
+
+    // sync/beta-from-main PRs pass verified ancestry syncs on beta and enable MERGE auto-merge (never SQUASH)
     const gateSyncBetaPassRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
       isDraft: false,
       headSha: gateHeadSha,
     });
     assert.equal(gateSyncBetaPassRes.status.state, 'success');
     assert.equal(gateSyncBetaPassRes.calls.createReview.length, 0);
+    assert.equal(gateSyncBetaPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
-    // Retargeting an AI-approved PR from beta to main via pull_request edited immediately requires Owner sign-off
+    // Retargeting an AI-approved PR from beta to main via pull_request edited preserves auto-approval and upgrades mergeMethod SQUASH -> MERGE
     const gateRetargetBetaToMainRes = await runReviewGateCase({
       prAuthor: 'shthed',
       baseRef: 'main',
       isDraft: false,
       headSha: gateHeadSha,
+      autoMerge: { merge_method: 'SQUASH' },
       eventName: 'pull_request',
       action: 'edited',
     });
-    assert.equal(gateRetargetBetaToMainRes.status.state, 'pending');
-    assert.equal(
-      gateRetargetBetaToMainRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
-    );
+    assert.equal(gateRetargetBetaToMainRes.status.state, 'success');
+    assert.equal(gateRetargetBetaToMainRes.status.description, gateDualPassDesc);
+    assert.equal(gateRetargetBetaToMainRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
     // ADVERSARIAL-C regression: DISMISSED and PENDING reviews carrying <!-- capy-review: ... --> markers are ignored for both APPROVED and CHANGES_REQUESTED
     const gateDismissedAiReviewIgnoredRes = await runReviewGateCase({
@@ -4266,10 +4435,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateDismissedAiReviewIgnoredRes.status.state, 'pending');
-    assert.equal(
-      gateDismissedAiReviewIgnoredRes.status.description,
-      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
-    );
+    assert.equal(gateDismissedAiReviewIgnoredRes.status.description, gateBetaAwaitingAiDesc);
     assert.deepEqual(
       gateDismissedAiReviewIgnoredRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved']
@@ -4378,10 +4544,7 @@ async function runCodecAndEngineTests() {
       action: 'synchronize',
     });
     assert.equal(gateSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
-    assert.equal(
-      gateSynchronizeClearsAllReviewLabelsRes.status.description,
-      'Beta gate: awaiting AI review (review:ai-approved) on HEAD'
-    );
+    assert.equal(gateSynchronizeClearsAllReviewLabelsRes.status.description, gateBetaAwaitingAiDesc);
     assert.deepEqual(
       gateSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
@@ -4398,10 +4561,7 @@ async function runCodecAndEngineTests() {
       action: 'synchronize',
     });
     assert.equal(gateDraftSynchronizeClearsAllReviewLabelsRes.status.state, 'pending');
-    assert.equal(
-      gateDraftSynchronizeClearsAllReviewLabelsRes.status.description,
-      'Draft PR: complete work, pass AI review, and mark ready'
-    );
+    assert.equal(gateDraftSynchronizeClearsAllReviewLabelsRes.status.description, gateDraftDesc);
     assert.deepEqual(
       gateDraftSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
@@ -4504,22 +4664,26 @@ async function runCodecAndEngineTests() {
     assert.equal(gateShthedSupersedesCapyboopHoldRes.status.state, 'success');
     assert.equal(gateShthedSupersedesCapyboopHoldRes.status.description, gateDualPassDesc);
 
-    if (gateRequires100) {
-      const gateBeta99PendingRes = await runReviewGateCase({
-        prAuthor: 'github-actions[bot]',
-        baseRef: 'beta',
-        headSha: gateHeadSha,
-        labels: ['review:ai-approved'],
-        aiCommentScore: 99,
-      });
-      assert.equal(gateBeta99PendingRes.status.state, 'pending');
-    }
+    const gateBeta99PendingRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      aiCommentScore: 99,
+    });
+    assert.equal(gateBeta99PendingRes.status.state, 'pending');
+    assert.equal(gateBeta99PendingRes.status.description, gateStrictNotMetDesc);
+    assert.deepEqual(
+      gateBeta99PendingRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
 
     const gateUntrustedMainApprovedRes = await runReviewGateCase({
       prAuthor: 'github-actions[bot]',
       baseRef: 'main',
       headSha: gateHeadSha,
-      labels: ['review:ai-approved'],
+      labels: [],
+      aiCommentScore: null,
       reviews: [
         {
           id: 704,
@@ -4532,10 +4696,820 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateUntrustedMainApprovedRes.status.state, 'pending');
-    assert.equal(
-      gateUntrustedMainApprovedRes.status.description,
-      'AI review passed; awaiting Project Owner sign-off'
+    assert.equal(gateUntrustedMainApprovedRes.status.description, gateMainAwaitingAiDesc);
+
+    const gateUntrustedMainCannotClearHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      comments: [
+        {
+          id: 7041,
+          user: { login: 'shthed' },
+          body: 'HOLD - untrusted reviewer cannot override',
+          created_at: '2026-11-13T01:01:00Z',
+          updated_at: '2026-11-13T01:01:00Z',
+        },
+      ],
+      reviews: [
+        {
+          id: 7042,
+          state: 'APPROVED',
+          body: '',
+          commit_id: gateHeadSha,
+          submitted_at: '2026-11-13T01:03:00Z',
+          user: { login: 'stranger' },
+        },
+      ],
+    });
+    assert.equal(gateUntrustedMainCannotClearHoldRes.status.state, 'failure');
+
+    // Strict 100% PR body / AI review body enforcement & auto-merge GraphQL + clean-status merge fallback (2ae9e78)
+    const validStrictPrBody = [
+      '## Summary',
+      '',
+      'Ships clean async CI checks and strict readiness verification.',
+      '',
+      '### PR Readiness Score: 100%',
+      '',
+      '<details>',
+      '<summary>PR Readiness Checklist</summary>',
+      '',
+      '- **100%** — **Functionality & Edge Cases**: Verified cleanly.',
+      '- **100%** — **Automated Tests**: Passed locally.',
+      '',
+      '</details>',
+    ].join('\n');
+
+    for (const [targetBase, expectedMethod, expectedDesc] of [
+      ['beta', 'SQUASH', gateBetaPassDesc],
+      ['main', 'MERGE', gateDualPassDesc],
+    ]) {
+      const gateStrictBodyValidPassRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        aiCommentBody: [
+          'Independent review passed.',
+          '- **100%** — **All Checks**: Verified.',
+          `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
+        ].join('\n'),
+      });
+      assert.equal(gateStrictBodyValidPassRes.status.state, 'success');
+      assert.equal(gateStrictBodyValidPassRes.status.description, expectedDesc);
+      assert.equal(gateStrictBodyValidPassRes.calls.graphql.length, 1);
+      assert.equal(gateStrictBodyValidPassRes.calls.graphql[0].variables.mergeMethod, expectedMethod);
+    }
+
+    for (const [labelCase, overrides] of [
+      [
+        'empty body',
+        {
+          body: '   ',
+        },
+      ],
+      [
+        'missing ## Summary',
+        {
+          body: '### PR Readiness Score: 100%\n\n- **100%** — **Checks**: Passed.',
+        },
+      ],
+      [
+        'missing PR Readiness Score: 100%',
+        {
+          body: '## Summary\n\nPlain summary.\n\n### PR Readiness Score: 99%\n\n- **100%** — **Checks**: Passed.',
+        },
+      ],
+      [
+        'sub-100% PR checklist item',
+        {
+          body: `${validStrictPrBody}\n- **95%** — **Followup**: Incomplete.`,
+        },
+      ],
+      [
+        'unchecked PR task checkbox',
+        {
+          body: `${validStrictPrBody}\n- [ ] Remaining subtask`,
+        },
+      ],
+      [
+        'unchecked star checkbox',
+        {
+          body: `${validStrictPrBody}\n* [ ] Follow up`,
+        },
+      ],
+      [
+        'sub-100% heading in AI body',
+        {
+          body: validStrictPrBody,
+          aiCommentBody: `### PR Readiness Score: 98%\n<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
+        },
+      ],
+      [
+        'sub-100% AI review checklist item',
+        {
+          body: validStrictPrBody,
+          aiCommentBody: `- **98%** — **Minor gap**\n<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
+        },
+      ],
+      [
+        'unchecked AI review task checkbox',
+        {
+          body: validStrictPrBody,
+          aiCommentBody: `- [ ] Pending follow-up\n<!-- capy-review: actor=ai-agent verdict=APPROVED sha=${gateHeadSha} score=100% -->`,
+        },
+      ],
+    ]) {
+      const strictRejectRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        labels: ['review:ai-approved'],
+        ...overrides,
+      });
+      assert.equal(
+        strictRejectRes.status.state,
+        'pending',
+        `Expected strict 100% gate to reject ${labelCase}`
+      );
+      assert.equal(strictRejectRes.status.description, gateStrictNotMetDesc);
+      assert.deepEqual(
+        strictRejectRes.calls.removeLabel.map((r) => r.name),
+        ['review:ai-approved']
+      );
+      assert.equal(strictRejectRes.calls.graphql.length, 0);
+    }
+
+    for (const [targetBase, expectedMergeMethod] of [
+      ['beta', 'squash'],
+      ['main', 'merge'],
+    ]) {
+      const gateCleanFallbackRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        graphqlImpl: async () => {
+          throw new Error('Pull request is in clean status');
+        },
+      });
+      assert.equal(gateCleanFallbackRes.status.state, 'success');
+      assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
+      assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
+      assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+    }
+
+    // Dependabot PRs omit ## Summary / PR Readiness Score, yet still reject unchecked or sub-100% lines
+    const gateDependabotBetaExemptPassRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: 'Bump vite from 7.0.0 to 7.0.1.',
+      labels: ['review:ai-approved'],
+      aiCommentScore: 100,
+    });
+    assert.equal(gateDependabotBetaExemptPassRes.status.state, 'success');
+    assert.equal(gateDependabotBetaExemptPassRes.status.description, gateBetaPassDesc);
+
+    const gateDependabotBetaBadChecklistRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: 'Bump vite.\n\n- [ ] Check release notes\n',
+      labels: ['review:ai-approved'],
+      aiCommentScore: 100,
+    });
+    assert.equal(gateDependabotBetaBadChecklistRes.status.state, 'pending');
+    assert.equal(gateDependabotBetaBadChecklistRes.status.description, gateStrictNotMetDesc);
+    assert.deepEqual(
+      gateDependabotBetaBadChecklistRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
     );
+
+    // sync/beta-from-main PR body is exempted from ## Summary / PR Readiness Score even under AI review
+    const gateSyncBodyExemptPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: gateHeadSha,
+      body: 'Automated merge of origin/main into beta.',
+      labels: ['review:ai-approved'],
+      aiCommentScore: 100,
+    });
+    assert.equal(gateSyncBodyExemptPassRes.status.state, 'success');
+    assert.equal(gateSyncBodyExemptPassRes.calls.graphql.length, 1);
+    assert.equal(gateSyncBodyExemptPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
+
+    // GraphQL enablePullRequestAutoMerge preserves existing MERGE method on beta, and held PR disables active auto-merge
+    const gateBetaPreservesMergeMethodRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      autoMerge: { merge_method: 'MERGE' },
+    });
+    assert.equal(gateBetaPreservesMergeMethodRes.status.state, 'success');
+    assert.equal(gateBetaPreservesMergeMethodRes.calls.graphql.length, 0);
+
+    const gateHeldDisablesAutoMergeRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      nodeId: 'PR_node_490',
+      autoMerge: { merge_method: 'SQUASH' },
+      comments: [
+        {
+          id: 950,
+          user: { login: 'shthed' },
+          body: 'HOLD - pause auto-merge',
+          created_at: '2026-11-13T01:05:00Z',
+          updated_at: '2026-11-13T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateHeldDisablesAutoMergeRes.status.state, 'failure');
+    assert.equal(gateHeldDisablesAutoMergeRes.calls.graphql.length, 1);
+    assert.equal(
+      gateHeldDisablesAutoMergeRes.calls.graphql[0].query.includes('disablePullRequestAutoMerge'),
+      true
+    );
+    assert.equal(
+      gateHeldDisablesAutoMergeRes.calls.graphql[0].variables.pullRequestId,
+      'PR_node_490'
+    );
+    assert.equal(gateHeldDisablesAutoMergeRes.calls.merge.length, 0);
+
+    // (o) Verified sync/beta-from-main -> beta fast-pass & fail-closed checks
+    const baseSyncSha = 'basesha000000000000000000000000000000000';
+    const mainSyncSha = 'mainsha111111111111111111111111111111111';
+    const betaSyncSha = 'betasha222222222222222222222222222222222';
+    const syncMergeSha = 'syncsha333333333333333333333333333333333';
+    const syncCommitsFixture = {
+      [syncMergeSha]: {
+        sha: syncMergeSha,
+        commit: {
+          committer: { date: '2026-11-15T01:00:00Z' },
+          author: { date: '2026-11-15T01:00:00Z' },
+          tree: { sha: 'tree-main-exact' },
+        },
+      },
+      'heads/main': {
+        sha: mainSyncSha,
+        commit: { tree: { sha: 'tree-main-exact' } },
+      },
+      'heads/beta': {
+        sha: betaSyncSha,
+        commit: { tree: { sha: 'tree-beta-old' } },
+      },
+    };
+    const syncExactCompareFixture = {
+      [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      [`${mainSyncSha}...${syncMergeSha}`]: {
+        ahead_by: 1,
+        total_commits: 1,
+        files: [],
+        commits: [
+          {
+            sha: syncMergeSha,
+            parents: [{ sha: betaSyncSha }, { sha: mainSyncSha }],
+          },
+        ],
+      },
+      [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+    };
+
+    const gateMainSyncExactPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: syncExactCompareFixture,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateMainSyncExactPassRes.status.state, 'success');
+    assert.equal(
+      gateMainSyncExactPassRes.status.description,
+      'Beta gate passed: verified origin/main ancestry sync; no holds'
+    );
+
+    const gateMainSyncFastForwardPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: mainSyncSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: {
+        ...syncCommitsFixture,
+        [mainSyncSha]: {
+          sha: mainSyncSha,
+          commit: {
+            committer: { date: '2026-11-15T01:00:00Z' },
+            author: { date: '2026-11-15T01:00:00Z' },
+            tree: { sha: 'tree-main-exact' },
+          },
+        },
+      },
+      compareMap: {
+        [`${mainSyncSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      },
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateMainSyncFastForwardPassRes.status.state, 'success');
+
+    // Defect 1D regression: unreviewed 1-parent no-op/reverted commit or multi-commit on betaIsAncestorOfMain (even with tree === mainTreeSha) fails closed -> pending
+    const gateMainSyncUnreviewedNoopFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${syncMergeSha}`]: {
+          ahead_by: 1,
+          total_commits: 1,
+          files: [],
+          commits: [
+            {
+              sha: syncMergeSha,
+              parents: [{ sha: betaSyncSha }],
+            },
+          ],
+        },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      },
+    });
+    assert.equal(gateMainSyncUnreviewedNoopFailRes.status.state, 'pending');
+
+    const gateMainSyncMultiCommitFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${syncMergeSha}`]: {
+          ahead_by: 2,
+          total_commits: 2,
+          files: [],
+          commits: [
+            { sha: 'extrasync000000000000000000000000000000', parents: [{ sha: mainSyncSha }] },
+            { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: 'extrasync000000000000000000000000000000' }] },
+          ],
+        },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      },
+    });
+    assert.equal(gateMainSyncMultiCommitFailRes.status.state, 'pending');
+
+    // Diverged beta + main clean merge passes only when commits + files match mergeBase..main without touching beta-modified files
+    const gateMainSyncDivergedPassRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: {
+        ...syncCommitsFixture,
+        [syncMergeSha]: {
+          ...syncCommitsFixture[syncMergeSha],
+          commit: { ...syncCommitsFixture[syncMergeSha].commit, tree: { sha: 'tree-merged-clean' } },
+        },
+      },
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: {
+          ahead_by: 1,
+          merge_base_commit: { sha: baseSyncSha },
+        },
+        [`${betaSyncSha}...${syncMergeSha}`]: {
+          total_commits: 2,
+          commits: [
+            { sha: mainSyncSha, parents: [{ sha: baseSyncSha }] },
+            { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: mainSyncSha }] },
+          ],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+        [`${baseSyncSha}...${betaSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: betaSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'beta-only.md', status: 'modified', sha: 'blob-beta-only' }],
+        },
+        [`${baseSyncSha}...${mainSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: mainSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+      },
+    });
+    assert.equal(gateMainSyncDivergedPassRes.status.state, 'success');
+    assert.equal(
+      gateMainSyncDivergedPassRes.status.description,
+      'Beta gate passed: verified origin/main ancestry sync; no holds'
+    );
+
+    // Defect 1A regression (PR #525 pattern): shared-file 3-way conflict (even clean merge) & evil-merge clobber both fail closed -> pending
+    for (const conflictScenario of [
+      {
+        name: 'shared-file 3-way merge',
+        prBlob: 'blob-merged-clean',
+      },
+      {
+        name: 'evil-merge overwriting beta edits with main blob',
+        prBlob: 'blob-main-clobber',
+      },
+    ]) {
+      const sharedFileFailRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'beta',
+        headRef: 'sync/beta-from-main',
+        headSha: syncMergeSha,
+        labels: [],
+        aiCommentScore: null,
+        commitsByRef: {
+          ...syncCommitsFixture,
+          [syncMergeSha]: {
+            ...syncCommitsFixture[syncMergeSha],
+            commit: { ...syncCommitsFixture[syncMergeSha].commit, tree: { sha: 'tree-merged-shared' } },
+          },
+        },
+        compareMap: {
+          [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+          [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+          [`${mainSyncSha}...${betaSyncSha}`]: {
+            ahead_by: 1,
+            merge_base_commit: { sha: baseSyncSha },
+          },
+          [`${betaSyncSha}...${syncMergeSha}`]: {
+            total_commits: 2,
+            commits: [
+              { sha: mainSyncSha, parents: [{ sha: baseSyncSha }] },
+              { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: mainSyncSha }] },
+            ],
+            files: [{ filename: 'CHANGELOG.md', status: 'modified', sha: conflictScenario.prBlob }],
+          },
+          [`${baseSyncSha}...${betaSyncSha}`]: {
+            total_commits: 1,
+            commits: [{ sha: betaSyncSha, parents: [{ sha: baseSyncSha }] }],
+            files: [{ filename: 'CHANGELOG.md', status: 'modified', sha: 'blob-beta-cl' }],
+          },
+          [`${baseSyncSha}...${mainSyncSha}`]: {
+            total_commits: 1,
+            commits: [{ sha: mainSyncSha, parents: [{ sha: baseSyncSha }] }],
+            files: [{ filename: 'CHANGELOG.md', status: 'modified', sha: 'blob-main-clobber' }],
+          },
+        },
+      });
+      assert.equal(
+        sharedFileFailRes.status.state,
+        'pending',
+        `Expected ${conflictScenario.name} to fail closed to pending`
+      );
+    }
+
+    // Defect 1A renamed previous_filename mismatch + Defect 1B compare truncation (total_commits: 260) fail closed -> pending
+    const gateMainSyncRenameMismatchFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: {
+          ahead_by: 1,
+          merge_base_commit: { sha: baseSyncSha },
+        },
+        [`${betaSyncSha}...${syncMergeSha}`]: {
+          total_commits: 2,
+          commits: [
+            { sha: mainSyncSha, parents: [{ sha: baseSyncSha }] },
+            { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: mainSyncSha }] },
+          ],
+          files: [
+            {
+              filename: 'GUIDE_NEW.md',
+              status: 'renamed',
+              previous_filename: 'OTHER.md',
+              sha: 'blob-guide',
+            },
+          ],
+        },
+        [`${baseSyncSha}...${betaSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: betaSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'beta-only.md', status: 'modified', sha: 'blob-beta-only' }],
+        },
+        [`${baseSyncSha}...${mainSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: mainSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [
+            {
+              filename: 'GUIDE_NEW.md',
+              status: 'renamed',
+              previous_filename: 'GUIDE_OLD.md',
+              sha: 'blob-guide',
+            },
+          ],
+        },
+      },
+    });
+    assert.equal(gateMainSyncRenameMismatchFailRes.status.state, 'pending');
+
+    const gateMainSyncTruncatedCompareFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: {
+          ahead_by: 1,
+          merge_base_commit: { sha: baseSyncSha },
+        },
+        [`${betaSyncSha}...${syncMergeSha}`]: {
+          total_commits: 260,
+          commits: [
+            { sha: mainSyncSha, parents: [{ sha: baseSyncSha }] },
+            { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: mainSyncSha }] },
+          ],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+        [`${baseSyncSha}...${betaSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: betaSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'beta-only.md', status: 'modified', sha: 'blob-beta-only' }],
+        },
+        [`${baseSyncSha}...${mainSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: mainSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+      },
+    });
+    assert.equal(gateMainSyncTruncatedCompareFailRes.status.state, 'pending');
+
+    // Defect 1C regression: future +10m commitDate with skewAnchorMs === 0 cannot drop a live HOLD comment (nor re-evaluation anchored by initial capy/review-gate status)
+    const liveFutureNow = Date.now();
+    const gateBetaFutureCommitHoldFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: [],
+      aiCommentScore: null,
+      commitDate: new Date(liveFutureNow + 10 * 60_000).toISOString(),
+      comments: [
+        {
+          id: 910,
+          user: { login: 'shthed' },
+          body: 'HOLD - do not drop under future commitDate skew',
+          created_at: new Date(liveFutureNow + 2 * 60_000).toISOString(),
+          updated_at: new Date(liveFutureNow + 2 * 60_000).toISOString(),
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBetaFutureCommitHoldFailRes.status.state, 'failure');
+
+    // +45s (+1s..+60s) future commitDate skew with AI approval at T+10s must NEVER drop Owner HOLD at T
+    const nowSkew45 = Date.now();
+    const gateBetaSkew45sHoldFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: [],
+      aiCommentScore: 100,
+      aiCommentTs: new Date(nowSkew45 + 10_000).toISOString(),
+      commitDate: new Date(nowSkew45 + 45_000).toISOString(),
+      comments: [
+        {
+          id: 912,
+          user: { login: 'shthed' },
+          body: 'HOLD - +45s clock skew must still fail closed',
+          created_at: new Date(nowSkew45).toISOString(),
+          updated_at: new Date(nowSkew45).toISOString(),
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBetaSkew45sHoldFailRes.status.state, 'failure');
+
+    const gateBetaPastSkewStatusAnchorHoldFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: [],
+      aiCommentScore: null,
+      commitDate: '2026-11-13T01:10:00Z',
+      commitStatuses: [
+        {
+          context: 'capy/review-gate',
+          state: 'pending',
+          created_at: '2026-11-13T01:00:05Z',
+        },
+      ],
+      comments: [
+        {
+          id: 911,
+          user: { login: 'shthed' },
+          body: 'HOLD - caught via initial status timestamp anchor',
+          created_at: '2026-11-13T01:02:00Z',
+          updated_at: '2026-11-13T01:02:00Z',
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBetaPastSkewStatusAnchorHoldFailRes.status.state, 'failure');
+
+    // Probe 9b regression: +45s skewed commit re-evaluated at t0+120s (after nowMs passes committer.date) must STILL detect skew via earliestHeadStatusMs (t0+15s) and enforce HOLD (t0+10s)
+    const probe9bT0 = Date.now() - 120_000;
+    const gateBetaProbe9bStatusAnchoredSkewHoldRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved'],
+      commitDate: new Date(probe9bT0 + 45_000).toISOString(),
+      commitStatuses: [
+        {
+          context: 'capy/review-gate',
+          state: 'pending',
+          created_at: new Date(probe9bT0 + 15_000).toISOString(),
+        },
+      ],
+      aiCommentScore: 100,
+      aiCommentTs: new Date(probe9bT0 + 30_000).toISOString(),
+      comments: [
+        {
+          id: 913,
+          user: { login: 'shthed' },
+          body: 'HOLD - Probe 9b post-push hold before status anchor must fail closed after t0+120s',
+          created_at: new Date(probe9bT0 + 10_000).toISOString(),
+          updated_at: new Date(probe9bT0 + 10_000).toISOString(),
+        },
+      ],
+      eventName: 'issue_comment',
+      action: 'created',
+    });
+    assert.equal(gateBetaProbe9bStatusAnchoredSkewHoldRes.status.state, 'failure');
+
+    // Evil merge injecting extra file or modified blob SHA fails closed -> pending
+    const gateMainSyncEvilMergeFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: {
+        ...syncCommitsFixture,
+        [syncMergeSha]: {
+          ...syncCommitsFixture[syncMergeSha],
+          commit: { ...syncCommitsFixture[syncMergeSha].commit, tree: { sha: 'tree-evil' } },
+        },
+      },
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: {
+          ahead_by: 1,
+          merge_base_commit: { sha: baseSyncSha },
+        },
+        [`${betaSyncSha}...${syncMergeSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: mainSyncSha }] }],
+          files: [
+            { filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' },
+            { filename: 'web/src/evil.ts', status: 'added', sha: 'blob-evil' },
+          ],
+        },
+        [`${baseSyncSha}...${betaSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: betaSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'beta-only.md', status: 'modified', sha: 'blob-beta-only' }],
+        },
+        [`${baseSyncSha}...${mainSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: mainSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+      },
+    });
+    assert.equal(gateMainSyncEvilMergeFailRes.status.state, 'pending');
+    assert.equal(gateMainSyncEvilMergeFailRes.status.description, gateBetaAwaitingAiDesc);
+
+    // Unreviewed non-main commit or revert of beta-ahead work even with tree === mainTreeSha fails closed -> pending
+    const gateMainSyncBetaRevertFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: {
+          ahead_by: 1,
+          merge_base_commit: { sha: baseSyncSha },
+        },
+        [`${betaSyncSha}...${syncMergeSha}`]: {
+          total_commits: 2,
+          commits: [
+            { sha: 'unreviewed123', parents: [{ sha: mainSyncSha }] },
+            { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: 'unreviewed123' }] },
+          ],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+        [`${baseSyncSha}...${betaSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: betaSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'beta-only.md', status: 'modified', sha: 'blob-beta-only' }],
+        },
+        [`${baseSyncSha}...${mainSyncSha}`]: {
+          total_commits: 1,
+          commits: [{ sha: mainSyncSha, parents: [{ sha: baseSyncSha }] }],
+          files: [{ filename: 'CAPYBOOP.md', status: 'modified', sha: 'blob-capyboop-1' }],
+        },
+        [`${mainSyncSha}...unreviewed123`]: { ahead_by: 1 },
+      },
+    });
+    assert.equal(gateMainSyncBetaRevertFailRes.status.state, 'pending');
+
+    // Fork sync/beta-from-main, draft, HOLD comment, and --base main all fail closed / obey full gate
+    const gateMainSyncForkFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headRepoFullName: 'stranger/capy',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: syncExactCompareFixture,
+    });
+    assert.equal(gateMainSyncForkFailRes.status.state, 'pending');
+
+    const gateMainSyncHoldFailRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: syncExactCompareFixture,
+      comments: [
+        {
+          id: 909,
+          user: { login: 'shthed' },
+          body: 'HOLD - wait for verification',
+          created_at: '2026-11-15T01:05:00Z',
+          updated_at: '2026-11-15T01:05:00Z',
+        },
+      ],
+    });
+    assert.equal(gateMainSyncHoldFailRes.status.state, 'failure');
+
+    const gateMainSyncTargetMainPendingRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headRef: 'sync/beta-from-main',
+      headSha: syncMergeSha,
+      labels: [],
+      aiCommentScore: null,
+      commitsByRef: syncCommitsFixture,
+      compareMap: syncExactCompareFixture,
+    });
+    assert.equal(gateMainSyncTargetMainPendingRes.status.state, 'pending');
 
     // Extract and unit-test real .github/workflows/open-pr.yml script
     const runOpenPrScript = new AsyncFunction(
@@ -4806,6 +5780,8 @@ async function runCodecAndEngineTests() {
       changedFiles = [{ filename: 'web/src/App.tsx' }],
       prDetails = { mergeable: true },
       pullsList = [],
+      commitsByRef = null,
+      compareMap = null,
     } = {}) => {
       const prevBaseUrl = process.env.BASE_PREVIEW_URL;
       process.env.BASE_PREVIEW_URL = 'https://shthed.github.io/capy';
@@ -4831,6 +5807,18 @@ async function runCodecAndEngineTests() {
             listFiles: async () => ({ data: changedFiles }),
             get: async () => ({ data: prDetails }),
           },
+          ...(commitsByRef || compareMap
+            ? {
+                repos: {
+                  getCommit: async ({ ref: commitRef }) => ({
+                    data: commitsByRef?.[commitRef] || {},
+                  }),
+                  compareCommitsWithBasehead: async ({ basehead }) => ({
+                    data: compareMap?.[basehead] || { ahead_by: 1 },
+                  }),
+                },
+              }
+            : {}),
         },
       };
       const contextMock = {
@@ -4861,6 +5849,7 @@ async function runCodecAndEngineTests() {
     });
     assert.equal(deployDocsRes.failed.length, 0);
     assert.equal(deployDocsRes.outputs.is_docs_only, 'true');
+    assert.equal(deployDocsRes.outputs.is_main_sync, 'false');
     assert.equal(deployDocsRes.outputs.skip, 'true');
     assert.equal(deployDocsRes.outputs.checkout_ref, 'mergesha11111111111111111111111111111111');
 
@@ -4874,6 +5863,7 @@ async function runCodecAndEngineTests() {
       },
     });
     assert.equal(deployMergeableRes.outputs.is_docs_only, 'false');
+    assert.equal(deployMergeableRes.outputs.is_main_sync, 'false');
     assert.equal(deployMergeableRes.outputs.skip, 'false');
     assert.equal(deployMergeableRes.outputs.target_dir, 'alpha/499');
     assert.equal(deployMergeableRes.outputs.preview_url, 'https://shthed.github.io/capy/alpha/499/');
@@ -4903,6 +5893,170 @@ async function runCodecAndEngineTests() {
     assert.equal(deployDispatchRes.outputs.checkout_ref, 'feature/ci-dispatch');
     assert.equal(deployDispatchRes.outputs.skip, 'false');
 
+    // Verified sync/beta-from-main -> beta sets is_main_sync='true' only for exact fast-forward or single clean 2-parent --no-ff merge matching origin/main & checkout_ref
+    const deploySyncCommitsFixture = {
+      ...syncCommitsFixture,
+      mergesha11111111111111111111111111111111: {
+        sha: 'mergesha11111111111111111111111111111111',
+        commit: { tree: { sha: 'tree-main-exact' } },
+      },
+      [mainSyncSha]: {
+        sha: mainSyncSha,
+        commit: { tree: { sha: 'tree-main-exact' } },
+      },
+    };
+    const deployMainSyncExactRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 528,
+          base: { ref: 'beta' },
+          head: {
+            ref: 'sync/beta-from-main',
+            sha: syncMergeSha,
+            repo: { full_name: 'shthed/capy' },
+          },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      commitsByRef: deploySyncCommitsFixture,
+      compareMap: syncExactCompareFixture,
+    });
+    assert.equal(deployMainSyncExactRes.outputs.is_main_sync, 'true');
+    assert.equal(deployMainSyncExactRes.outputs.skip, 'false');
+
+    const deployMainSyncFastForwardRes = await runDeployTargetCase({
+      sha: mainSyncSha,
+      payload: {
+        pull_request: {
+          number: 528,
+          base: { ref: 'beta' },
+          head: {
+            ref: 'sync/beta-from-main',
+            sha: mainSyncSha,
+            repo: { full_name: 'shthed/capy' },
+          },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      commitsByRef: deploySyncCommitsFixture,
+      compareMap: {
+        [`${mainSyncSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      },
+    });
+    assert.equal(deployMainSyncFastForwardRes.outputs.is_main_sync, 'true');
+
+    const deployMainSyncCheckoutTreeMismatchFailRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 528,
+          base: { ref: 'beta' },
+          head: {
+            ref: 'sync/beta-from-main',
+            sha: syncMergeSha,
+            repo: { full_name: 'shthed/capy' },
+          },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      commitsByRef: {
+        ...deploySyncCommitsFixture,
+        mergesha11111111111111111111111111111111: {
+          sha: 'mergesha11111111111111111111111111111111',
+          commit: { tree: { sha: 'tree-evil-merge' } },
+        },
+      },
+      compareMap: syncExactCompareFixture,
+    });
+    assert.equal(deployMainSyncCheckoutTreeMismatchFailRes.outputs.is_main_sync, 'false');
+
+    const deployMainSyncNoop1ParentFailRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 528,
+          base: { ref: 'beta' },
+          head: {
+            ref: 'sync/beta-from-main',
+            sha: syncMergeSha,
+            repo: { full_name: 'shthed/capy' },
+          },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      commitsByRef: deploySyncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${syncMergeSha}`]: {
+          ahead_by: 1,
+          total_commits: 1,
+          files: [],
+          commits: [{ sha: syncMergeSha, parents: [{ sha: betaSyncSha }] }],
+        },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      },
+    });
+    assert.equal(deployMainSyncNoop1ParentFailRes.outputs.is_main_sync, 'false');
+
+    const deployMainSyncMultiCommitFailRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 528,
+          base: { ref: 'beta' },
+          head: {
+            ref: 'sync/beta-from-main',
+            sha: syncMergeSha,
+            repo: { full_name: 'shthed/capy' },
+          },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      commitsByRef: deploySyncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${syncMergeSha}`]: {
+          ahead_by: 2,
+          total_commits: 2,
+          files: [],
+          commits: [
+            { sha: 'extrasync000000000000000000000000000000', parents: [{ sha: mainSyncSha }] },
+            { sha: syncMergeSha, parents: [{ sha: betaSyncSha }, { sha: 'extrasync000000000000000000000000000000' }] },
+          ],
+        },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+      },
+    });
+    assert.equal(deployMainSyncMultiCommitFailRes.outputs.is_main_sync, 'false');
+
+    const deployMainSyncDivergedRes = await runDeployTargetCase({
+      payload: {
+        pull_request: {
+          number: 528,
+          base: { ref: 'beta' },
+          head: {
+            ref: 'sync/beta-from-main',
+            sha: syncMergeSha,
+            repo: { full_name: 'shthed/capy' },
+          },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      commitsByRef: deploySyncCommitsFixture,
+      compareMap: {
+        [`${syncMergeSha}...${mainSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${syncMergeSha}...${betaSyncSha}`]: { ahead_by: 0, total_commits: 0 },
+        [`${mainSyncSha}...${betaSyncSha}`]: { ahead_by: 1 },
+      },
+    });
+    assert.equal(deployMainSyncDivergedRes.outputs.is_main_sync, 'false');
+
     const deployYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/deploy-branch.yml'),
       'utf8'
@@ -4912,6 +6066,15 @@ async function runCodecAndEngineTests() {
     assert.equal(deployYaml.includes("github.base_ref == 'main' || github.base_ref == 'beta'"), true);
     assert.equal(deployYaml.includes("github.event.pull_request.user.login != 'dependabot[bot]'"), true);
     assert.equal(deployYaml.includes('steps.target.outputs.is_docs_only'), true);
+    assert.equal(deployYaml.includes('needs.prepare.outputs.is_main_sync'), true);
+    assert.equal(deployYaml.includes('node-modules-cache'), true);
+    assert.equal(deployYaml.includes('android_build:'), true);
+    assert.equal(deployYaml.includes('e2e_release_gate:'), true);
+    assert.equal(deployYaml.includes('web-dist-'), true);
+    assert.equal(deployYaml.includes('node scripts/test.mjs --unit'), true);
+    assert.equal(deployYaml.includes('include-hidden-files: true'), true);
+    assert.equal(deployYaml.includes('cp -a web/dist/. staging/web/'), true);
+    assert.equal(deployYaml.includes('needs: [prepare, build, android_build]'), true);
     assert.equal(deployYaml.includes("--exclude 'alpha/'"), true);
 
     const cleanupClosedPrYaml = fs.readFileSync(
@@ -4938,6 +6101,7 @@ async function runCodecAndEngineTests() {
     assert.equal(syncBetaYaml.includes('github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}'), true);
     assert.equal(syncBetaYaml.includes('pr-review-gate.yml'), true);
     assert.equal(syncBetaYaml.includes('draft: !hasPatToken'), true);
+    assert.equal(syncBetaYaml.includes('WORKFLOW_DIFFS'), true);
 
     const prReviewGateYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/pr-review-gate.yml'),
@@ -4950,6 +6114,16 @@ async function runCodecAndEngineTests() {
       true
     );
     assert.equal(prReviewGateYaml.includes('github.event.changes.base != null'), true);
+    assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
+    assert.equal(prReviewGateYaml.includes('strictAiReady'), true);
+    assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
+    assert.equal(prReviewGateYaml.includes('disablePullRequestAutoMerge'), true);
+    assert.equal(prReviewGateYaml.includes('isStrictPrBodyValid'), true);
+    assert.equal(prReviewGateYaml.includes('hasChecklistSub100OrUnchecked'), true);
+    assert.equal(
+      prReviewGateYaml.includes('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'),
+      true
+    );
 
     const dependabotYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/dependabot.yml'),
@@ -5821,9 +6995,70 @@ async function runBrowserBasicsSuite() {
         (variant) => {
           const overlay = document.querySelector('[data-testid="spotlight-overlay"]');
           if (!overlay || overlay.getAttribute('data-variant') !== variant) return false;
-          const rings = overlay.querySelectorAll('[data-testid="spotlight-ring"]');
+          const rings = Array.from(overlay.querySelectorAll('[data-testid="spotlight-ring"]'));
           const pointer = overlay.querySelector('[data-testid="spotlight-pointer"]');
-          return rings.length > 0 && Boolean(pointer);
+          if (rings.length === 0 || !pointer) return false;
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+          const ringRects = rings.map((r) => r.getBoundingClientRect());
+          for (let i = 0; i < ringRects.length; i++) {
+            for (let j = i + 1; j < ringRects.length; j++) {
+              const a = ringRects[i];
+              const b = ringRects[j];
+              const hx = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+              const vy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+              if (hx > 0.5 && vy > 0.5) return false;
+            }
+          }
+          const hasRunningTransition = (el) => {
+            let node = el;
+            while (node && node !== document.body && node !== document.documentElement) {
+              if (typeof node.getAnimations === 'function') {
+                const anims = node.getAnimations();
+                for (const a of anims) {
+                  if (
+                    typeof CSSTransition !== 'undefined' &&
+                    a instanceof CSSTransition &&
+                    a.playState === 'running'
+                  ) {
+                    return true;
+                  }
+                }
+              }
+              node = node.parentElement;
+            }
+            return false;
+          };
+          let overlapsTarget = false;
+          const allInView = rings.every((ring, idx) => {
+            const rr = ringRects[idx];
+            if (
+              rr.width <= 0 ||
+              rr.height <= 0 ||
+              rr.left < 0 ||
+              rr.top < 0 ||
+              rr.right > vw + 1 ||
+              rr.bottom > vh + 1
+            ) {
+              return false;
+            }
+            const sel = ring.getAttribute('data-target-selector') || '';
+            const targets = sel ? Array.from(document.querySelectorAll(sel)) : [];
+            for (const targetEl of targets) {
+              if (hasRunningTransition(targetEl)) return false;
+              const tr = targetEl.getBoundingClientRect();
+              if (
+                rr.left <= tr.right + 2 &&
+                rr.right >= tr.left - 2 &&
+                rr.top <= tr.bottom + 2 &&
+                rr.bottom >= tr.top - 2
+              ) {
+                overlapsTarget = true;
+              }
+            }
+            return true;
+          });
+          return allInView && overlapsTarget;
         },
         expectedVariant,
         { timeout: 4000 }
@@ -6793,12 +8028,14 @@ async function runBrowserBasicsSuite() {
     assert.equal(progressAfterCtrlY, 3, 'Expected Ctrl+Y to redo step 3');
 
     // Verify ReplayControls "Next" button (onOpenCreate) opens Create tab (index 3)
-    const undoBoxForNext = await (await page.waitForSelector('[data-testid="undo-btn"]')).boundingBox();
+    const undoBtnForNext = page.getByTestId('undo-btn');
+    await undoBtnForNext.waitFor({ state: 'visible', timeout: 3000 });
+    const undoBoxForNext = await getStableBoundingBox(undoBtnForNext);
+    assert.ok(undoBoxForNext, 'Expected stable boundingBox for undo-btn before Next replay test');
     await page.mouse.move(undoBoxForNext.x + undoBoxForNext.width / 2, undoBoxForNext.y + undoBoxForNext.height / 2);
     await page.mouse.down();
-    await page.waitForTimeout(520);
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
     await page.mouse.up();
-    await page.waitForSelector('[data-testid="replay-controls-window"]', { timeout: 3000 });
     await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
     await page.waitForTimeout(120);
     await page.locator('button[title="Pick Next Artwork"]').click();
@@ -7765,7 +9002,11 @@ async function runBrowserBasicsSuite() {
 
     // '+' zooms in above 1.0x (press twice so there is ample horizontal pan headroom)
     await page.keyboard.press('+');
-    await page.waitForTimeout(420);
+    await page.waitForFunction(
+      () => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1) > 1.0,
+      null,
+      { timeout: 3000 }
+    );
     const zoomAfterFirstPlus = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1;
     });
@@ -7774,14 +9015,22 @@ async function runBrowserBasicsSuite() {
       `Expected keyboard "+" to zoom above 1.0x, got '${zoomAfterFirstPlus}'`
     );
     await page.keyboard.press('+');
-    await page.waitForTimeout(420);
+    await page.waitForFunction(
+      (prevZoom) => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1) > prevZoom,
+      zoomAfterFirstPlus,
+      { timeout: 3000 }
+    );
 
     const panBefore = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0;
     });
 
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(420);
+    await page.waitForFunction(
+      (prevPan) => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0) < prevPan,
+      panBefore,
+      { timeout: 3000 }
+    );
     const panAfterRight = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0;
     });
@@ -7791,7 +9040,11 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.keyboard.press('ArrowLeft');
-    await page.waitForTimeout(420);
+    await page.waitForFunction(
+      (prevPan) => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0) > prevPan,
+      panAfterRight,
+      { timeout: 3000 }
+    );
     const panAfterLeft = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').panOffsetX ?? 0;
     });
@@ -7801,7 +9054,11 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.keyboard.press('0');
-    await page.waitForTimeout(420);
+    await page.waitForFunction(
+      () => Math.abs((JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1) - 1) < 0.001,
+      null,
+      { timeout: 3000 }
+    );
     const zoomAfterReset = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale ?? 1;
     });
@@ -9064,26 +10321,40 @@ async function runBrowserBasicsSuite() {
     assert.equal(largeOfferOverflow <= 0, true, `Large Text FeatureOfferBanner at 360x780 must have zero overflow (got ${largeOfferOverflow})`);
 
     // Verify 100% progress pill + ALPHA #520 fits cleanly at 360x780 in both Large Text and Normal modes
-    await mobileTopbarPage.evaluate(async () => {
+    const seededComplete = await mobileTopbarPage.evaluate(async () => {
       const snaps = window.capyStorage.loadSnapshots();
       const active = window.capyStorage.loadActiveState();
       const targetId = active?.activeSnapshotId || snaps[0]?.id;
       const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
-      if (targetId && puz) {
-        const allIds = puz.regions.map((r) => r.id);
-        window.capyStorage.updateSnapshotProgress(targetId, allIds.length, allIds.length, allIds);
-        window.capyStorage.saveActiveState({
-          ...(active || {}),
-          activeSnapshotId: targetId,
-          filledRegionIds: allIds,
-        });
-      }
+      if (!targetId || !puz || !Array.isArray(puz.regions) || puz.regions.length === 0) return null;
+      const allIds = puz.regions.map((r) => r.id);
+      window.capyStorage.updateSnapshotProgress(targetId, allIds.length, allIds.length, allIds);
+      window.capyStorage.saveActiveState({
+        ...(active || {}),
+        activeSnapshotId: targetId,
+        filledRegionIds: allIds,
+      });
+      const verifiedActive = window.capyStorage.loadActiveState();
+      const verifiedSnap = window.capyStorage.loadSnapshots().find((s) => s.id === targetId);
+      return {
+        targetId,
+        expectedCount: allIds.length,
+        activeCount: verifiedActive?.filledRegionIds?.length ?? 0,
+        snapCount: verifiedSnap?.filledCount ?? 0,
+      };
     });
+    assert.ok(seededComplete && seededComplete.expectedCount > 0, 'Expected non-empty puzzle regions for 100% progress test');
+    assert.equal(seededComplete.activeCount, seededComplete.expectedCount, 'Expected activeState filledRegionIds to persist before reload');
+    assert.equal(seededComplete.snapCount, seededComplete.expectedCount, 'Expected snapshot filledCount to persist before reload');
     await mobileTopbarPage.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(mobileTopbarPage);
     if (await mobileTopbarPage.getByTestId('replay-exit-btn').isVisible()) {
       await mobileTopbarPage.getByTestId('replay-exit-btn').click();
     }
+    await mobileTopbarPage.waitForFunction(
+      () => document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('100%'),
+      { timeout: 5000 }
+    );
     assert.equal(
       (await mobileTopbarPage.getByTestId('topbar-saves-btn').innerText()).includes('100%'),
       true,
@@ -9122,6 +10393,473 @@ async function runBrowserBasicsSuite() {
 
     await mobileTopbarPage.close();
     await mobileTopbarContext.close();
+
+    // Regression: pending debounced & beforeunload viewport saves must preserve filledRegionIds written externally before flush/reload
+    const viewportRaceContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    const viewportRacePage = await viewportRaceContext.newPage();
+    attachErrorListeners(viewportRacePage, 'viewportRacePage');
+    await viewportRacePage.goto(`${BASE_URL}/?capy_channel=alpha&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(viewportRacePage);
+    const raceCanvasBox = await viewportRacePage.getByTestId('puzzle-canvas').boundingBox();
+    assert.ok(raceCanvasBox, 'Expected puzzle-canvas boundingBox for viewport race test');
+    await viewportRacePage.mouse.move(
+      raceCanvasBox.x + raceCanvasBox.width / 2,
+      raceCanvasBox.y + raceCanvasBox.height / 2
+    );
+    await viewportRacePage.mouse.wheel(0, -240);
+    const partialRaceState = await viewportRacePage.evaluate(async () => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const active = window.capyStorage.loadActiveState();
+      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
+      if (!targetId || !puz || puz.regions.length < 2) return null;
+      const partialIds = puz.regions.slice(0, 2).map((r) => r.id);
+      window.capyStorage.updateSnapshotProgress(targetId, partialIds.length, puz.regions.length, partialIds);
+      window.capyStorage.saveActiveState({
+        ...(active || {}),
+        activeSnapshotId: targetId,
+        filledRegionIds: partialIds,
+      });
+      return { targetId, partialCount: partialIds.length, totalCount: puz.regions.length };
+    });
+    assert.ok(partialRaceState && partialRaceState.partialCount === 2, 'Expected partial race state setup');
+    await viewportRacePage.waitForTimeout(450);
+    const afterTimerState = await viewportRacePage.evaluate(() => window.capyStorage.loadActiveState());
+    assert.equal(
+      afterTimerState?.filledRegionIds?.length,
+      partialRaceState.partialCount,
+      'Debounced viewportSaveTimer must preserve activeState filledRegionIds'
+    );
+    assert.equal(
+      (afterTimerState?.zoomScale ?? 1) > 1.05,
+      true,
+      `Debounced viewportSaveTimer must persist zoomed scale (got ${afterTimerState?.zoomScale})`
+    );
+
+    // Trigger second zoom, immediately write 100% completion, and reload immediately so beforeunload flush fires while timer is pending
+    await viewportRacePage.mouse.wheel(0, -240);
+    const fullRaceState = await viewportRacePage.evaluate(async () => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const active = window.capyStorage.loadActiveState();
+      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
+      if (!targetId || !puz || puz.regions.length === 0) return null;
+      const allIds = puz.regions.map((r) => r.id);
+      window.capyStorage.updateSnapshotProgress(targetId, allIds.length, allIds.length, allIds);
+      window.capyStorage.saveActiveState({
+        ...(active || {}),
+        activeSnapshotId: targetId,
+        filledRegionIds: allIds,
+      });
+      return { targetId, totalCount: allIds.length, prevZoom: active?.zoomScale ?? 1 };
+    });
+    assert.ok(fullRaceState && fullRaceState.totalCount > 0, 'Expected full race state setup');
+    await viewportRacePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(viewportRacePage);
+    if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
+      await viewportRacePage.getByTestId('replay-exit-btn').click();
+    }
+    const afterReloadState = await viewportRacePage.evaluate(() => window.capyStorage.loadActiveState());
+    assert.equal(
+      afterReloadState?.filledRegionIds?.length,
+      fullRaceState.totalCount,
+      'beforeunload flushPendingViewportSave must preserve 100% filledRegionIds'
+    );
+    assert.equal(
+      (afterReloadState?.zoomScale ?? 1) > fullRaceState.prevZoom,
+      true,
+      `beforeunload flushPendingViewportSave must persist latest zoomScale (got ${afterReloadState?.zoomScale} vs prev ${fullRaceState.prevZoom})`
+    );
+    await viewportRacePage.waitForFunction(
+      () => document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('100%'),
+      { timeout: 5000 }
+    );
+
+    // Defect 3A regression (clearActiveState): zooming & reloading after clearActiveState must NOT resurrect 100% activeState
+    await viewportRacePage.evaluate(() => {
+      window.capyStorage.clearActiveState();
+    });
+    await viewportRacePage.mouse.move(
+      raceCanvasBox.x + raceCanvasBox.width / 2,
+      raceCanvasBox.y + raceCanvasBox.height / 2
+    );
+    await viewportRacePage.mouse.wheel(0, -180);
+    await viewportRacePage.waitForTimeout(450);
+    const activeAfterClearAndZoom = await viewportRacePage.evaluate(() =>
+      window.capyStorage.loadActiveState()
+    );
+    assert.equal(
+      activeAfterClearAndZoom,
+      null,
+      `persistActiveViewportOnly must NOT resurrect cleared activeState after zoom timer (${JSON.stringify(activeAfterClearAndZoom)})`
+    );
+    await viewportRacePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(viewportRacePage);
+    if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
+      await viewportRacePage.getByTestId('replay-exit-btn').click();
+    }
+    const activeAfterClearReload = await viewportRacePage.evaluate(() =>
+      window.capyStorage.loadActiveState()
+    );
+    assert.equal(
+      activeAfterClearReload,
+      null,
+      `Reload after clearActiveState must NOT resurrect 100% activeState (${JSON.stringify(activeAfterClearReload)})`
+    );
+
+    // Defect 3A + 3B regression (deleteSnapshot & rapid puzzle switch): deleting active snapshot while viewport timer is pending must NOT resurrect deleted ID, and switching puzzles must NOT overwrite Puzzle B with Puzzle A viewport/progress
+    const switchSetup = await viewportRacePage.evaluate(() => {
+      const snaps = window.capyStorage.loadSnapshots();
+      if (snaps.length < 2) return null;
+      const snapA = snaps[0];
+      const snapB = snaps[1];
+      window.capyStorage.updateSnapshotProgress(snapB.id, 0, snapB.totalCount || 100, [], 1.0, 0, 0);
+      return { idA: snapA.id, idB: snapB.id };
+    });
+    assert.ok(switchSetup, 'Expected at least 2 prebaked snapshots for switch/delete regression');
+    await viewportRacePage.mouse.move(
+      raceCanvasBox.x + raceCanvasBox.width / 2,
+      raceCanvasBox.y + raceCanvasBox.height / 2
+    );
+    await viewportRacePage.mouse.wheel(0, -180);
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${switchSetup.idA}`).click();
+    await viewportRacePage.getByTestId('save-action-delete').click();
+    await viewportRacePage.getByTestId('save-action-confirm-delete').click();
+    await viewportRacePage.waitForTimeout(450);
+    const stateAfterDeleteActive = await viewportRacePage.evaluate((deletedId) => ({
+      active: window.capyStorage.loadActiveState(),
+      snaps: window.capyStorage.loadSnapshots().map((s) => s.id),
+      deletedId,
+    }), switchSetup.idA);
+    assert.equal(
+      stateAfterDeleteActive.snaps.includes(switchSetup.idA),
+      false,
+      'Deleted snapshot A must stay removed'
+    );
+    assert.notEqual(
+      stateAfterDeleteActive.active?.activeSnapshotId,
+      switchSetup.idA,
+      'Deleted snapshot A must NEVER be resurrected in activeState'
+    );
+
+    // Trigger zoom on currently loaded snapshot, then switch via UI while triggering resize immediately
+    await viewportRacePage.getByTestId('settings-modal-close').click();
+    await waitForPuzzleLoaded(viewportRacePage);
+    if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
+      await viewportRacePage.getByTestId('replay-exit-btn').click();
+    }
+    const currentBeforeSwitchId = await viewportRacePage.evaluate(
+      () => window.capyStorage.loadActiveState()?.activeSnapshotId || null
+    );
+    const remainingTargetId = await viewportRacePage.evaluate((curId) => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const target = snaps.find((s) => s.id !== curId);
+      if (!target) return null;
+      window.capyStorage.updateSnapshotProgress(target.id, 0, target.totalCount || 100, [], 1.0, 0, 0);
+      return target.id;
+    }, currentBeforeSwitchId);
+    assert.ok(remainingTargetId, 'Expected second snapshot for rapid switch regression');
+    await viewportRacePage.mouse.wheel(0, -240);
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${remainingTargetId}`).click();
+    await viewportRacePage.getByTestId('save-action-load').click();
+    await viewportRacePage.evaluate(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    await viewportRacePage.waitForTimeout(450);
+    await waitForPuzzleLoaded(viewportRacePage);
+    const afterSwitchState = await viewportRacePage.evaluate((targetId) => {
+      const active = window.capyStorage.loadActiveState();
+      const targetSnap = window.capyStorage.loadSnapshots().find((s) => s.id === targetId);
+      return { active, targetSnap };
+    }, remainingTargetId);
+    assert.equal(
+      afterSwitchState.active?.activeSnapshotId,
+      remainingTargetId,
+      'Rapid switch + resize must preserve target snapshot ID'
+    );
+    assert.equal(
+      afterSwitchState.active?.filledRegionIds?.length ?? -1,
+      0,
+      'Rapid switch + resize must NOT leak source puzzle filledRegionIds onto target puzzle'
+    );
+    assert.equal(
+      Math.abs((afterSwitchState.targetSnap?.zoomScale ?? 1) - 1.0) < 0.05,
+      true,
+      `Rapid switch + resize must NOT leak source zoomScale onto target puzzle (got ${afterSwitchState.targetSnap?.zoomScale})`
+    );
+
+    // App.tsx regression: rapid custom-blob snapshot switch must revoke stale delayed blob URL cleanly without prematurely revoking winner's blob URL, and async try/finally must unlock snapshotTransitioningRef on loadPuzzleData / deleteSnapshot rejection
+    const blobSetup = await viewportRacePage.evaluate(async (baseSampleId) => {
+      const basePuzzle = await window.capyStorage.loadPuzzleData(baseSampleId);
+      if (!basePuzzle) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(0, 0, 16, 16);
+      const blobA = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(0, 0, 16, 16);
+      const blobB = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const idA = 'blob-race-test-a';
+      const idB = 'blob-race-test-b';
+      await window.capyStorage.savePuzzleData(idA, basePuzzle);
+      await window.capyStorage.savePuzzleData(idB, basePuzzle);
+      await window.capyStorage.saveImageBlob(idA, blobA);
+      await window.capyStorage.saveImageBlob(idB, blobB);
+      const now = Date.now();
+      window.capyStorage.addSnapshot({
+        id: idA,
+        title: 'Blob Race A',
+        timestamp: now - 2000,
+        lastOpened: now - 2000,
+        filledCount: 0,
+        totalCount: basePuzzle.regions.length,
+        filledRegionIds: [],
+        zoomScale: 1,
+        panOffsetX: 0,
+        panOffsetY: 0,
+        sourceRef: { kind: 'blob', uri: idA },
+      });
+      window.capyStorage.addSnapshot({
+        id: idB,
+        title: 'Blob Race B',
+        timestamp: now - 1000,
+        lastOpened: now - 1000,
+        filledCount: 0,
+        totalCount: basePuzzle.regions.length,
+        filledRegionIds: [],
+        zoomScale: 1,
+        panOffsetX: 0,
+        panOffsetY: 0,
+        sourceRef: { kind: 'blob', uri: idB },
+      });
+      return { idA, idB, baseSampleId };
+    }, remainingTargetId);
+    assert.ok(blobSetup, 'Expected blob race setup to succeed');
+
+    await viewportRacePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(viewportRacePage);
+    if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
+      await viewportRacePage.getByTestId('replay-exit-btn').click();
+    }
+
+    await viewportRacePage.evaluate((idA) => {
+      window.__blobRaceStats = { created: [], revoked: [] };
+      const origCreate = URL.createObjectURL.bind(URL);
+      const origRevoke = URL.revokeObjectURL.bind(URL);
+      window.__origCreateObjectURL = origCreate;
+      window.__origRevokeObjectURL = origRevoke;
+      URL.createObjectURL = (obj) => {
+        const u = origCreate(obj);
+        window.__blobRaceStats.created.push(u);
+        return u;
+      };
+      URL.revokeObjectURL = (u) => {
+        window.__blobRaceStats.revoked.push(u);
+        return origRevoke(u);
+      };
+
+      const origLoadBlob = window.capyStorage.loadImageBlob.bind(window.capyStorage);
+      window.__origLoadImageBlob = origLoadBlob;
+      window.capyStorage.loadImageBlob = async (id) => {
+        if (id === idA) {
+          await new Promise((r) => setTimeout(r, 600));
+        }
+        return origLoadBlob(id);
+      };
+    }, blobSetup.idA);
+
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.idA}`).waitFor({ state: 'visible', timeout: 3000 });
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.idA}`).click();
+    await viewportRacePage.getByTestId('save-action-load').click();
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.idB}`).waitFor({ state: 'visible', timeout: 3000 });
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.idB}`).click();
+    await viewportRacePage.getByTestId('save-action-load').click();
+
+    await viewportRacePage.waitForTimeout(750);
+    await waitForPuzzleLoaded(viewportRacePage);
+    const blobRaceCheck1 = await viewportRacePage.evaluate((expectedIdB) => {
+      const active = window.capyStorage.loadActiveState();
+      const stats = window.__blobRaceStats;
+      return {
+        activeId: active?.activeSnapshotId || null,
+        createdCount: stats.created.length,
+        revokedCount: stats.revoked.length,
+        created: stats.created,
+        revoked: stats.revoked,
+        expectedIdB,
+      };
+    }, blobSetup.idB);
+    assert.equal(blobRaceCheck1.activeId, blobSetup.idB, 'Rapid switch must converge on Blob Race B');
+    assert.ok(
+      blobRaceCheck1.createdCount >= 2,
+      `Expected both Blob Race B and delayed Blob Race A object URLs created, got ${blobRaceCheck1.createdCount}`
+    );
+    const activeBlobUrlsRemaining = blobRaceCheck1.created.filter(
+      (u) => !blobRaceCheck1.revoked.includes(u)
+    );
+    assert.equal(
+      activeBlobUrlsRemaining.length,
+      1,
+      `Expected exactly 1 active blob URL kept alive (winner B) while stale delayed blob URL A was revoked, remaining=${JSON.stringify(activeBlobUrlsRemaining)}`
+    );
+
+    // Switch back to sample snapshot -> winner B's blob URL must now be revoked too
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.baseSampleId}`).click();
+    await viewportRacePage.getByTestId('save-action-load').click();
+    await waitForPuzzleLoaded(viewportRacePage);
+    const blobRaceCheck2 = await viewportRacePage.evaluate(() => {
+      const stats = window.__blobRaceStats;
+      return {
+        unrevoked: stats.created.filter((u) => !stats.revoked.includes(u)),
+      };
+    });
+    assert.equal(
+      blobRaceCheck2.unrevoked.length,
+      0,
+      `Switching away from Blob Race B to a sample must revoke all created blob URLs, unrevoked=${JSON.stringify(blobRaceCheck2.unrevoked)}`
+    );
+
+    // Async try/finally recovery: failing loadPuzzleData once must NOT permanently lock snapshotTransitioningRef
+    await viewportRacePage.evaluate(() => {
+      URL.createObjectURL = window.__origCreateObjectURL;
+      URL.revokeObjectURL = window.__origRevokeObjectURL;
+      window.capyStorage.loadImageBlob = window.__origLoadImageBlob;
+      const origLoadPuzzle = window.capyStorage.loadPuzzleData.bind(window.capyStorage);
+      window.__origLoadPuzzleData = origLoadPuzzle;
+      let failOnce = true;
+      window.capyStorage.loadPuzzleData = async (id) => {
+        if (failOnce) {
+          failOnce = false;
+          throw new Error('Injected loadPuzzleData failure');
+        }
+        return origLoadPuzzle(id);
+      };
+    });
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.idA}`).click();
+    await viewportRacePage.getByTestId('save-action-load').click();
+    await viewportRacePage.waitForTimeout(250);
+    await viewportRacePage.evaluate(() => {
+      window.capyStorage.loadPuzzleData = window.__origLoadPuzzleData;
+    });
+    // Now load valid sample & zoom -> viewport persistence must still work (snapshotTransitioningRef unlocked!)
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.baseSampleId}`).click();
+    await viewportRacePage.getByTestId('save-action-load').click();
+    await waitForPuzzleLoaded(viewportRacePage);
+    if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
+      await viewportRacePage.getByTestId('replay-exit-btn').click();
+    }
+    await viewportRacePage.mouse.move(
+      raceCanvasBox.x + raceCanvasBox.width / 2,
+      raceCanvasBox.y + raceCanvasBox.height / 2
+    );
+    await viewportRacePage.mouse.wheel(0, -180);
+    await viewportRacePage.waitForTimeout(450);
+    const zoomAfterLoadRecovery = await viewportRacePage.evaluate(
+      () => window.capyStorage.loadActiveState()?.zoomScale ?? 1
+    );
+    assert.ok(
+      zoomAfterLoadRecovery > 1.0,
+      `Expected snapshotTransitioningRef unlocked after loadPuzzleData rejection so zoom persists (got ${zoomAfterLoadRecovery})`
+    );
+
+    // Async try/finally recovery: failing deleteSnapshot once must NOT permanently lock snapshotTransitioningRef
+    await viewportRacePage.evaluate(() => {
+      const origDelete = window.capyStorage.deleteSnapshot.bind(window.capyStorage);
+      window.__origDeleteSnapshot = origDelete;
+      let failOnce = true;
+      window.capyStorage.deleteSnapshot = async (id) => {
+        if (failOnce) {
+          failOnce = false;
+          throw new Error('Injected deleteSnapshot failure');
+        }
+        return origDelete(id);
+      };
+    });
+    await viewportRacePage.getByTestId('topbar-saves-btn').click();
+    await viewportRacePage.getByTestId(`save-card-${blobSetup.baseSampleId}`).click();
+    await viewportRacePage.getByTestId('save-action-delete').click();
+    await viewportRacePage.getByTestId('save-action-confirm-delete').click();
+    await viewportRacePage.waitForTimeout(200);
+    await viewportRacePage.evaluate(() => {
+      window.capyStorage.deleteSnapshot = window.__origDeleteSnapshot;
+    });
+    await viewportRacePage.getByTestId('settings-modal-close').click();
+    await viewportRacePage.mouse.move(
+      raceCanvasBox.x + raceCanvasBox.width / 2,
+      raceCanvasBox.y + raceCanvasBox.height / 2
+    );
+    await viewportRacePage.mouse.wheel(0, -180);
+    await viewportRacePage.waitForTimeout(450);
+    const zoomAfterDeleteRecovery = await viewportRacePage.evaluate(
+      () => window.capyStorage.loadActiveState()?.zoomScale ?? 1
+    );
+    assert.ok(
+      zoomAfterDeleteRecovery > zoomAfterLoadRecovery,
+      `Expected snapshotTransitioningRef unlocked after deleteSnapshot rejection so zoom persists (${zoomAfterDeleteRecovery} vs ${zoomAfterLoadRecovery})`
+    );
+
+    await viewportRacePage.close();
+    await viewportRaceContext.close();
+
+    // Probe 2g regression: wheel zoom followed by continuous canvas taps (4 taps at 250ms intervals, >1000ms total) must NOT starve viewportSaveTimerRef persistence into capy_active_session_v8
+    const tapStarveContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    const tapStarvePage = await tapStarveContext.newPage();
+    attachErrorListeners(tapStarvePage, 'tapStarvePage');
+    await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(tapStarvePage);
+    const tapStarveBox = await tapStarvePage.getByTestId('puzzle-canvas').boundingBox();
+    assert.ok(tapStarveBox, 'Expected puzzle-canvas boundingBox for tap-starvation regression');
+    const tapX = tapStarveBox.x + tapStarveBox.width / 2;
+    const tapY = tapStarveBox.y + tapStarveBox.height / 2;
+    // Pre-tap center once at zoom=1 so subsequent taps at the same coordinate only trigger tapDot/ResizeObserver without invoking saveActiveState via attemptFillRegion
+    await tapStarvePage.mouse.click(tapX, tapY);
+    await tapStarvePage.waitForTimeout(450);
+    const tapStarveBaseline = await tapStarvePage.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        zoomScale: active.zoomScale ?? 1,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.equal(tapStarveBaseline.zoomScale, 1, 'Expected baseline capy_active_session_v8 zoomScale === 1');
+
+    const tapBurstStartMs = Date.now();
+    await tapStarvePage.mouse.move(tapX, tapY);
+    await tapStarvePage.mouse.wheel(0, -240);
+    for (let i = 0; i < 4; i++) {
+      await tapStarvePage.mouse.click(tapX, tapY);
+      await tapStarvePage.waitForTimeout(250);
+    }
+    const tapBurstElapsedMs = Date.now() - tapBurstStartMs;
+    assert.ok(tapBurstElapsedMs >= 1000, `Expected 4x250ms tap burst >= 1000ms, got ${tapBurstElapsedMs}ms`);
+    const afterTapStarve = await tapStarvePage.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        zoomScale: active.zoomScale ?? 1,
+        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+      };
+    });
+    assert.equal(
+      afterTapStarve.filledCount,
+      tapStarveBaseline.filledCount,
+      'Repeated taps at already-processed coordinate must not write via attemptFillRegion'
+    );
+    assert.ok(
+      afterTapStarve.zoomScale > 1.0,
+      `Wheel zoom followed by 4x250ms canvas taps (>1000ms) must persist zoomScale > 1.0 into capy_active_session_v8 without timer starvation (got ${afterTapStarve.zoomScale})`
+    );
+    await tapStarvePage.close();
+    await tapStarveContext.close();
 
     // Verify BETA (?capy_channel=beta) 360x780 topbar-left-lane fit and badge containment in Normal & Large Text modes
     const mobileBetaContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
@@ -9401,8 +11139,14 @@ async function runBrowserBasicsSuite() {
   }
 }
 
+const UNIT_ONLY = process.argv.includes('--unit');
+
 async function main() {
   await runCodecAndEngineTests();
+  if (UNIT_ONLY) {
+    console.log('\nALL UNIT & WORKFLOW CHECKS PASSED (--unit)!');
+    return;
+  }
   await runBrowserBasicsSuite();
 }
 
