@@ -1,10 +1,11 @@
 ### 3.0.19 - 2026-11-15 (Beta)
 
+- Tag `3.0.18` as `(Production)`, untag `3.0.13`, move beta-only [#544](https://github.com/shthed/capy/pull/544) under `3.0.19 (Beta)`, archive shipped [EPIC-2](https://github.com/shthed/capy/issues/477) PRs ([#535](https://github.com/shthed/capy/pull/535), [#537](https://github.com/shthed/capy/pull/537)--[#540](https://github.com/shthed/capy/pull/540), [#544](https://github.com/shthed/capy/pull/544), [#545](https://github.com/shthed/capy/pull/545)) in `ROADMAP.md` Section 6, and sync `US-3.6` / `US-4.4` in [EPIC-3](https://github.com/shthed/capy/issues/478) and [EPIC-4](https://github.com/shthed/capy/issues/479) [#546](https://github.com/shthed/capy/pull/546)
 - Declare Android TV Leanback launcher support (`LEANBACK_LAUNCHER`, optional `touchscreen`/`leanback` features) and add `320x180` `drawable-xhdpi/tv_banner.png`, update `privacy-policy.html` to reflect 100% ad-free builds, add `AndroidTvManifestAndBridgeTest.kt` and pure-Node TV checks, expand CI review-gate unit tests (`gemini-3.8-flash`/`gemini-4-argon` fallback, `ACTIONS_GITHUB_TOKEN` `403` fallback, Dependabot `403`, `synchronize` label reconciliation), and sync `APP.md`, `DEV.md`, `TESTING.md`, `ROADMAP.md`, and `TODO.md` [#545](https://github.com/shthed/capy/pull/545)
-
-### 3.0.18 - 2026-11-15
-
 - Add repo-scoped `.agents/environment.json` for repeatable root `wrangler` and `web/` dependency setup, reclassify legacy `BUG-4` as clickable environment/ops Issue [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](https://github.com/shthed/capy/issues/543), and update `TODO.md`, `ROADMAP.md`, and `CLOUD.md` with clickable [capypaint.com](https://capypaint.com/), [capyboop.com](https://capyboop.com/), and preview/Pages deployment links [#544](https://github.com/shthed/capy/pull/544)
+
+### 3.0.18 - 2026-11-15 (Production)
+
 - Wait two animation frames after the second wheel zoom in `web/scripts/test.mjs` so React's `useEffect` schedules the `350ms` `viewportSaveTimer` before `reload()` triggers `beforeunload`, eliminating the `1.2 vs 1.2` `flushPendingViewportSave` race [#540](https://github.com/shthed/capy/pull/540)
 
 ### 3.0.17 - 2026-11-15
@@ -23,7 +24,7 @@
 
 - Fail closed on non-string PR bodies, re-evaluate review gate on human body edits and disarm active auto-merge when non-passing, include hidden .well-known/assetlinks.json dotfiles across GitHub Pages uploads and cleanup sweeps, harden clean-room mirror sync auth, ls-remote checks, SIGPIPE-safe log scanning, and tag resets, expand workflow unit tests, and sync CI docs [#534](https://github.com/shthed/capy/pull/534)
 
-### 3.0.13 - 2026-11-15 (Production)
+### 3.0.13 - 2026-11-15
 
 - Preserve active puzzle progress across debounced (`lastSavedViewportRef`) and beforeunload viewport saves, harden async puzzle transition and blob URL cleanup, remove idle polling from `TargetSpotlightOverlay`, speed up CI via async Android/E2E/Pages jobs with headless `--unit` blocking checks and hidden-files artifact preservation, harden PR review gate Probe 9b clock-skew anchoring and strict `100%` AI auto-merge, tighten `AGENTS.md` `100%` sanity check and `stripHtmlComments`, expand Probe 2g/unit/workflow tests, and sync `PROJECT.md` and `TESTING.md` [#530](https://github.com/shthed/capy/pull/530)
 
