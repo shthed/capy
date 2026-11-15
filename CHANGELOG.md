@@ -12,6 +12,7 @@
 
 ### 3.0.8 - 2026-11-13
 
+- Add CapyBoop Games company structure and AI agent handbook (`CAPYBOOP.md`) [#521](https://github.com/shthed/capy/pull/521)
 - Promote v3.0.8 beta release to Production [#501](https://github.com/shthed/capy/pull/501)
 - Remove topbar zoom pill badge, fix 360px mobile SettingsModal tab clipping, and add E2E overflow guard [#497](https://github.com/shthed/capy/pull/497)
 
