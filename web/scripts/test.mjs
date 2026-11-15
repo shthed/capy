@@ -11152,8 +11152,11 @@ async function runBrowserBasicsSuite() {
       `Debounced viewportSaveTimer must persist zoomed scale (got ${afterTimerState?.zoomScale})`
     );
 
-    // Trigger second zoom, immediately write 100% completion, and reload immediately so beforeunload flush fires while timer is pending
+    // Trigger second zoom, wait for React useEffect to arm the 350ms viewportSaveTimer, write 100% completion, and reload immediately so beforeunload flush fires while timer is pending
     await viewportRacePage.mouse.wheel(0, -240);
+    await viewportRacePage.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
     const fullRaceState = await viewportRacePage.evaluate(async () => {
       const snaps = window.capyStorage.loadSnapshots();
       const active = window.capyStorage.loadActiveState();

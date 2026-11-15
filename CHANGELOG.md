@@ -1,4 +1,8 @@
-### 3.0.17 - 2026-11-15 (Beta)
+### 3.0.18 - 2026-11-15 (Beta)
+
+- Wait two animation frames after the second wheel zoom in `web/scripts/test.mjs` so React's `useEffect` schedules the `350ms` `viewportSaveTimer` before `reload()` triggers `beforeunload`, eliminating the `1.2 vs 1.2` `flushPendingViewportSave` race [#540](https://github.com/shthed/capy/pull/540)
+
+### 3.0.17 - 2026-11-15
 
 - Replace brittle fixed UI-transition, long-press, modal, Co-op, resize, shortcut, and breadcrumb sleeps across `web/scripts/test.mjs` with deterministic Playwright locator, attribute, canvas-dimension, IndexedDB, and URL-hash waits while preserving intentional timer, debounce, live-playback, and starvation assertions, and sync `TESTING.md`, `TODO.md`, and `ROADMAP.md` [#539](https://github.com/shthed/capy/pull/539)
 
