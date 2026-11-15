@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FeatureOfferId } from '../services/FeatureOffersService';
 import { TutorialStepKey } from './OnboardingTutorial';
 
@@ -406,6 +406,63 @@ interface ResolvedLayout {
   connector: SpotlightConnector | null;
 }
 
+function areRectsEqual(a: SpotlightRect, b: SpotlightRect): boolean {
+  return (
+    Math.abs(a.left - b.left) < 0.25 &&
+    Math.abs(a.top - b.top) < 0.25 &&
+    Math.abs(a.width - b.width) < 0.25 &&
+    Math.abs(a.height - b.height) < 0.25
+  );
+}
+
+function areLayoutsEqual(a: ResolvedLayout, b: ResolvedLayout): boolean {
+  if (a.rings.length !== b.rings.length) return false;
+  for (let i = 0; i < a.rings.length; i++) {
+    const ra = a.rings[i];
+    const rb = b.rings[i];
+    if (
+      ra.borderRadius !== rb.borderRadius ||
+      ra.targetTestId !== rb.targetTestId ||
+      ra.targetSelector !== rb.targetSelector ||
+      !areRectsEqual(ra.rect, rb.rect)
+    ) {
+      return false;
+    }
+  }
+  if (a.connector === null && b.connector === null) return true;
+  if (a.connector === null || b.connector === null) return false;
+  return (
+    a.connector.d === b.connector.d &&
+    a.connector.arrowPoints === b.connector.arrowPoints
+  );
+}
+
+function isSpotlightOverlayNode(node: Node | null): boolean {
+  return (
+    node instanceof Element &&
+    (node.matches('[data-testid="spotlight-overlay"]') ||
+      Boolean(node.closest('[data-testid="spotlight-overlay"]')))
+  );
+}
+
+function hasRunningRelevantTransition(): boolean {
+  if (typeof document === 'undefined' || typeof document.getAnimations !== 'function') {
+    return false;
+  }
+  const hasCssTransitionCtor = typeof CSSTransition !== 'undefined';
+  if (!hasCssTransitionCtor) return false;
+  const anims = document.getAnimations();
+  for (let i = 0; i < anims.length; i++) {
+    const anim = anims[i];
+    if (!(anim instanceof CSSTransition) || anim.playState !== 'running') continue;
+    const effect = anim.effect;
+    const target = effect && 'target' in effect ? (effect as KeyframeEffect).target : null;
+    if (isSpotlightOverlayNode(target)) continue;
+    return true;
+  }
+  return false;
+}
+
 export interface TargetSpotlightOverlayProps {
   isActive: boolean;
   variant: SpotlightVariant;
@@ -500,15 +557,44 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
   largeText = false,
 }) => {
   const [layout, setLayout] = useState<ResolvedLayout>({ rings: [], connector: null });
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const observedElementsRef = useRef<Set<Element>>(new Set());
+
+  const syncObservedElements = useCallback((nextElements: Element[]) => {
+    const ro = resizeObserverRef.current;
+    if (!ro) return;
+    const nextSet = new Set(nextElements);
+    for (const prevEl of observedElementsRef.current) {
+      if (!nextSet.has(prevEl)) {
+        ro.unobserve(prevEl);
+      }
+    }
+    for (const nextEl of nextSet) {
+      if (!observedElementsRef.current.has(nextEl)) {
+        ro.observe(nextEl);
+      }
+    }
+    observedElementsRef.current = nextSet;
+  }, []);
 
   const measure = useCallback(() => {
     if (!isActive || !targetKey || typeof window === 'undefined') {
-      setLayout({ rings: [], connector: null });
+      syncObservedElements([]);
+      setLayout((prev) =>
+        prev.rings.length === 0 && prev.connector === null ? prev : { rings: [], connector: null }
+      );
       return;
     }
 
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const cardEl = document.querySelector(cardSelector);
+    const headerEl = document.querySelector('header');
+    const dockEl = document.querySelector('[data-testid="palette-dock"]');
+    const observeTargets: Element[] = [];
+    if (cardEl) observeTargets.push(cardEl);
+    if (headerEl) observeTargets.push(headerEl);
+    if (dockEl) observeTargets.push(dockEl);
+
     const cardDomRect = isVisibleElement(cardEl) ? cardEl.getBoundingClientRect() : null;
     const cardRect: SpotlightRect | null = cardDomRect
       ? {
@@ -525,7 +611,10 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
         : FEATURE_OFFER_TARGETS[targetKey as FeatureOfferId];
 
     if (!specs || specs.length === 0) {
-      setLayout({ rings: [], connector: null });
+      syncObservedElements(observeTargets);
+      setLayout((prev) =>
+        prev.rings.length === 0 && prev.connector === null ? prev : { rings: [], connector: null }
+      );
       return;
     }
 
@@ -549,6 +638,11 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
 
       if (!el) {
         continue;
+      }
+
+      observeTargets.push(el);
+      if (el.parentElement) {
+        observeTargets.push(el.parentElement);
       }
 
       const pad = spec.padding ?? 4;
@@ -587,6 +681,8 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
       });
     }
 
+    syncObservedElements(observeTargets);
+
     const separatedRects = preventRingOverlap(rawRings.map((r) => r.rect), 2);
     const resolvedRings = rawRings.map((ring, idx) => ({
       ...ring,
@@ -619,8 +715,9 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
       connector = computeSpotlightConnector(cardRect, anchorRect);
     }
 
-    setLayout({ rings: resolvedRings, connector });
-  }, [isActive, variant, targetKey, cardSelector]);
+    const nextLayout: ResolvedLayout = { rings: resolvedRings, connector };
+    setLayout((prev) => (areLayoutsEqual(prev, nextLayout) ? prev : nextLayout));
+  }, [isActive, variant, targetKey, cardSelector, syncObservedElements]);
 
   useLayoutEffect(() => {
     measure();
@@ -629,39 +726,112 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
   useEffect(() => {
     if (!isActive || !targetKey) return;
 
-    let rafId: number | null = null;
-    const settleDeadline = performance.now() + 450;
+    let transitionRafId: number | null = null;
+    let transitionCapDeadline = 0;
+    let mutationRafId: number | null = null;
 
-    const tickSettle = () => {
-      measure();
-      if (performance.now() < settleDeadline) {
-        rafId = window.requestAnimationFrame(tickSettle);
-      } else {
-        rafId = null;
+    const stopTransitionLoop = () => {
+      if (transitionRafId !== null) {
+        window.cancelAnimationFrame(transitionRafId);
+        transitionRafId = null;
       }
     };
-    rafId = window.requestAnimationFrame(tickSettle);
+
+    const tickTransition = () => {
+      measure();
+      if (performance.now() < transitionCapDeadline && hasRunningRelevantTransition()) {
+        transitionRafId = window.requestAnimationFrame(tickTransition);
+      } else {
+        transitionRafId = null;
+      }
+    };
+
+    const startTransitionLoop = (maxMs: number = 650) => {
+      transitionCapDeadline = Math.max(transitionCapDeadline, performance.now() + maxMs);
+      if (transitionRafId === null) {
+        transitionRafId = window.requestAnimationFrame(tickTransition);
+      }
+    };
 
     const onViewportChange = () => measure();
+    const onTransitionStart = (ev: TransitionEvent) => {
+      if (isSpotlightOverlayNode(ev.target as Node | null)) return;
+      startTransitionLoop(650);
+    };
+    const onTransitionEnd = (ev: TransitionEvent) => {
+      if (isSpotlightOverlayNode(ev.target as Node | null)) return;
+      measure();
+      if (!hasRunningRelevantTransition()) {
+        stopTransitionLoop();
+      }
+    };
+
     window.addEventListener('resize', onViewportChange);
     window.addEventListener('scroll', onViewportChange, true);
+    window.addEventListener('transitionstart', onTransitionStart, true);
+    window.addEventListener('transitionend', onTransitionEnd, true);
+    window.addEventListener('transitioncancel', onTransitionEnd, true);
 
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => measure());
-      const cardEl = document.querySelector(cardSelector);
-      const headerEl = document.querySelector('header');
-      const dockEl = document.querySelector('[data-testid="palette-dock"]');
-      if (cardEl) ro.observe(cardEl);
-      if (headerEl) ro.observe(headerEl);
-      if (dockEl) ro.observe(dockEl);
+      resizeObserverRef.current = ro;
+    }
+
+    measure();
+    if (hasRunningRelevantTransition()) {
+      startTransitionLoop(650);
+    }
+
+    let mo: MutationObserver | null = null;
+    if (typeof MutationObserver !== 'undefined' && document.body) {
+      mo = new MutationObserver((mutations) => {
+        const hasExternalMutation = mutations.some((m) => {
+          if (isSpotlightOverlayNode(m.target)) return false;
+          if (m.type === 'childList') {
+            for (let i = 0; i < m.addedNodes.length; i++) {
+              if (!isSpotlightOverlayNode(m.addedNodes[i])) return true;
+            }
+            for (let i = 0; i < m.removedNodes.length; i++) {
+              if (!isSpotlightOverlayNode(m.removedNodes[i])) return true;
+            }
+            return false;
+          }
+          return true;
+        });
+        if (!hasExternalMutation) return;
+        if (mutationRafId === null) {
+          mutationRafId = window.requestAnimationFrame(() => {
+            mutationRafId = null;
+            measure();
+            if (hasRunningRelevantTransition()) {
+              startTransitionLoop(650);
+            }
+          });
+        }
+      });
+      mo.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['style', 'class', 'hidden', 'data-minimized', 'aria-pressed'],
+      });
     }
 
     return () => {
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      stopTransitionLoop();
+      if (mutationRafId !== null) {
+        window.cancelAnimationFrame(mutationRafId);
+      }
       window.removeEventListener('resize', onViewportChange);
       window.removeEventListener('scroll', onViewportChange, true);
+      window.removeEventListener('transitionstart', onTransitionStart, true);
+      window.removeEventListener('transitionend', onTransitionEnd, true);
+      window.removeEventListener('transitioncancel', onTransitionEnd, true);
+      mo?.disconnect();
       ro?.disconnect();
+      resizeObserverRef.current = null;
+      observedElementsRef.current.clear();
     };
   }, [isActive, targetKey, cardSelector, largeText, measure]);
 

@@ -257,10 +257,22 @@ const DETAILS_BLOCK_RE =
 
 function stripHtmlComments(text) {
   const str = String(text || '');
-  const lastCloseIdx = str.lastIndexOf('-->');
-  if (lastCloseIdx === -1) return str;
-  const end = lastCloseIdx + 3;
-  return `${str.slice(0, end).replace(/<!--[\s\S]*?-->/g, '')}${str.slice(end)}`;
+  let out = '';
+  let idx = 0;
+  while (idx < str.length) {
+    const openIdx = str.indexOf('<!--', idx);
+    if (openIdx === -1) {
+      out += str.slice(idx);
+      break;
+    }
+    out += str.slice(idx, openIdx);
+    const closeIdx = str.indexOf('-->', openIdx + 4);
+    if (closeIdx === -1) {
+      break;
+    }
+    idx = closeIdx + 3;
+  }
+  return out;
 }
 
 function extractNonThresholdPercentages(text) {
