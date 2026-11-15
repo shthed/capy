@@ -10,6 +10,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 
 concurrency:
   group: sync-beta-from-main
@@ -17,7 +18,7 @@ concurrency:
 
 jobs:
   sync:
-    name: Back-merge main into beta PR
+    name: Sync beta with main
     if: github.repository == 'shthed/capy'
     timeout-minutes: 10
     runs-on: ubuntu-latest
