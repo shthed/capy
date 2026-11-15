@@ -26,6 +26,8 @@ Thumbs.db
 *.apk
 *.aab
 *.aar
+*.jks
+*.keystore
 /inspect/
 
 # Cloudflare Workers Local State & Secrets
