@@ -133,6 +133,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **`z-[39]` (`FeatureOfferBanner`)**: Contextual non-blocking feature tip banner.
 - **`z-40` (`LoadingOverlay`, `OnboardingTutorial`)**: Non-blocking bottom-anchored generation HUD, 6-stage inspector drawer, and non-blocking top-anchored 14-step tutorial card.
 - **`z-50` (`SettingsModal`, `ColorPickerPopover`)**: Modal configuration sheet and nested custom color popover.
+- **`z-[60]` (`storage-quota-toast` in `App.tsx`)**: Dismissible `QuotaExceededError` alert surfacing above open modals whenever local or IndexedDB persistence hits browser storage limits.
 
 ### Component Responsibilities & Key Interactions
 
@@ -211,14 +212,14 @@ flowchart TD
 ### Viewport Clamping (`clampCanvasOffset`), Magnetic Detents & `ResizeObserver`
 - **Zoom Range, Sensitivity & Magnetic Detents**: Smoothly clamped between **`0.5x`** and **`12.0x`**. Mouse-wheel, two-finger pinch (`Math.pow(rawRatio, zoomSensitivity)`), and one-finger double-tap drag deltas scale smoothly in log-space by `zoomSensitivity` (`0.5`--`2.0`). When `snapZoomLevels` is enabled, `applyZoomSnapDetent` snaps relative zoom within `+-4%` onto magnetic stops `[1, 2, 4, 8, 12]` while re-anchoring `offset` around the active cursor/pinch/double-tap focal point.
 - **Dynamic Corner Margins**: Scales pan bounds dynamically with `containerWidth * 0.72` and `containerHeight * 0.72` when zoomed in so all four puzzle corners can pan comfortably past screen center above `PaletteDock` and below `GameTopBar`.
-- **Immediate Resize & Rotation Clamping (`BF-2`)**: A `ResizeObserver` on `containerRef` (plus `window` `resize` fallback) immediately re-clamps `offsetRef.current`, updates `containerSize`, resizes the high-DPI `<canvas>`, and repaints synchronously on portrait/landscape rotation or split-screen resize.
+- **Immediate Resize & Rotation Clamping (`BF-2`) & Zero-Alloc Rendering**: A `ResizeObserver` on `containerRef` (plus `window` `resize` fallback) immediately re-clamps `offsetRef.current`, updates `containerSize`, refreshes `canvasRectRef`, resizes the high-DPI `<canvas>`, and repaints synchronously on portrait/landscape rotation or split-screen resize. `PuzzleCanvas` is wrapped in `React.memo` alongside `GameTopBar`, `FloatingActions`, `PaletteDock`, and `ReplayControls`; `drawCompositeFrame` reads `scaleRef.current`/`offsetRef.current` directly without recreating resize/media/ripple effects during pan/zoom, `highlightImageDataRef` reuses its buffer in place, the idle hint pulse loop throttles to `>= 50ms` (`~20fps`), and `App.tsx` maintains an $O(1)$ `regionByIdRef` lookup map plus `Set`-equality viewport filters.
 
 ### 6-Mode Touch, Mouse & Gesture Engine
 `PuzzleCanvas` orchestrates **6 distinct** interaction modes:
 1. **Tap Hit-Testing**: Inverse-transforms client $(x, y)$ to `(puzzleX, puzzleY)` and looks up `regionMap[y * width + x]`. In **Easy Mode** (`difficulty: 'EASY'`, default), tapping any unpainted region auto-selects its color and fills it; in **Normal Mode**, fills matching `activeColorId` regions (or pulses a subtle mismatch indicator); in **Free Colour Mode**, fills or repaints with `activeColorId`.
 2. **Google Maps-Style One-Finger Double-Tap-and-Drag Zoom & Horizontal Pan**: Second tap-and-hold within `350ms` and `40px` zooms focal-point-invariantly on vertical drag (`dy > 0` zooms **in**, `dy < 0` zooms **out** unless `reverseDoubleTapZoom` is `true`, `Math.exp(((dir * dy) / 220) * zoomSensitivity)`), while horizontal drag (`|dx| >= |dy|`) pans cleanly even when Paint Mode is active.
 3. **Background Margin Drag Panning**: Touching outside the artwork bounds (`x < 0 || y < 0 || x >= width || y >= height`) always pans the viewport even when Paint Mode is active.
-4. **Smooth Pan Momentum (Inertial Gliding)**: Samples pointer velocity over a `100ms` sliding window; flicks $\ge 0.18\text{ px/ms}$ glide via `requestAnimationFrame` with $0.92^{\Delta t / 16}$ exponential friction decay and zero-latency cancellation on the next `pointerdown`.
+4. **Smooth Pan Momentum (Inertial Gliding)**: Samples pointer velocity over a `100ms` sliding window via a pre-allocated 16-slot circular `pointerRingRef` buffer (zero per-move allocations); flicks $\ge 0.18\text{ px/ms}$ glide via `requestAnimationFrame` with $0.92^{\Delta t / 16}$ exponential friction decay and zero-latency cancellation on the next `pointerdown`.
 5. **Multi-Touch Pinch-to-Zoom**: Two-finger midpoint focal tracking between `0.5x` and `12.0x` scaled by `Math.pow(rawRatio, zoomSensitivity)`, re-anchoring single-finger pan coordinates seamlessly when one finger lifts.
 6. **Drag-to-Color (Continuous Paint Mode)**: Interpolates stroke segments across pointer moves inside the artwork and batch-fills matching regions via `onBatchRegionsClicked` (disabled automatically during replay).
 
@@ -226,7 +227,7 @@ flowchart TD
 
 ## 6. Background Engine & Worker Protocol
 
-Image quantization and segmentation execute in [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts) via [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts):
+Image quantization and segmentation execute in [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts) via [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts) (code-split so [`PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts) is imported dynamically only when a main-thread fallback is needed):
 
 ```typescript
 // Main -> Worker Requests
@@ -298,9 +299,9 @@ type WorkerResponse =
 
 ### Hybrid Storage Architecture
 1. **IndexedDB (`capy_game_storage_v8` in [`StorageService.ts`](./web/src/services/StorageService.ts))**:
-   - Awaits full `IDBTransaction` completion (`tx.oncomplete` / `tx.onerror` / `tx.onabort`).
+   - Awaits full `IDBTransaction` completion (`tx.oncomplete` / `tx.onerror` / `tx.onabort`) with `onblocked`, `onversionchange`, and `onclose` recovery, requests durable storage via `navigator.storage.persist()` (`requestPersistentStorageOnce`), debounces `NativeBridge.saveBackup` disk writes (`flushPendingBackups()` on `pagehide`/`visibilitychange`), and emits `onQuotaWarning` (`storage-quota-toast`) on `QuotaExceededError`.
    - **`puzzles` store (`STORE_PUZZLES`)**: Stores `CompactPuzzleRecordV2` (`CapyCodec.compressPuzzleRecord` scanline RLE + LEB128 varints, `~20--45 KB` vs `~9.4 MB` raw `Int32Array`, reconstructing in `< 3ms`). If browser storage pressure evicts `puzzles` while `localStorage` survives, `App.tsx` regenerates from `sourceRef` and re-applies `snapshot.customPalette` and `snapshot.isFreeColor` via `mergeCustomPalette` (`BF-6`).
-   - **`images` store (`STORE_IMAGES`)**: Stores custom uploaded/shared photo `Blob`s (`sourceRef = { kind: 'blob', uri: snapId }`), while built-in samples reference `{ kind: 'sample', uri: './assets/samples/...' }` with zero blob duplication.
+   - **`images` store (`STORE_IMAGES`)**: Stores custom uploaded/shared photo `Blob`s (`sourceRef = { kind: 'blob', uri: snapId }`) AND offloaded save thumbnails (`preview_${id}`, attached synchronously from `previewCache` and hydrated asynchronously via `hydrateSnapshotPreviews`), while built-in samples reference `{ kind: 'sample', uri: './assets/samples/...' }` with zero blob duplication.
 2. **Binary `.capy` v2 Archives & CRDT Progress Deltas ([`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
    - `StorageService.exportSnapshotBinary(id)` / `exportAllSnapshotsBinary()` emit `CAPY\x02<flags>` Gzip archives embedding `SavedSnapshot` metadata (including `customPalette` and `parentSnapshotId`), `CompactPuzzleRecordV2` geometry, and custom image blobs.
    - `CapyCodec.encodeProgressDeltaToken` / `mergeProgressDeltas` encode `ProgressDeltaV2` (`sourceRef`, `filledRegionIds`, `paintedRegionColors`, `isFreeColor`, `updatedAt`) into `< 2 KB` `#s=<token>` URL fragments with CRDT Grow-Only Set-Union (`filledRegionIds`) + Last-Writer-Wins (`paintedRegionColors`) merging.
@@ -309,7 +310,7 @@ type WorkerResponse =
    - `StorageService.importSnapshotData` validates and decompresses all puzzle records and blobs in memory before mutating `IndexedDB` or `localStorage`, while `SettingsModal` surfaces inline accessible import notices (`saves-import-notice`, zero blocking `alert()` dialogs) and zero-snapshot starter recovery.
 
 ### Complete Browser Storage Key Inventory (`localStorage` & `sessionStorage`)
-- **`capy_snapshots_v8`** (`localStorage`): Array of `SavedSnapshot` metadata records (mirrored to Android `filesDir/capy_saves/`).
+- **`capy_snapshots_v8`** (`localStorage`): Array of `SavedSnapshot` metadata records with inline `previewDataUrl` thumbnails stripped out and offloaded to IndexedDB (`preview_${id}`), mirrored via debounced backups to Android `filesDir/capy_saves/`.
 - **`capy_active_session_v8`** (`localStorage`): Currently active `SavedSnapshot.id` string.
 - **`capy_user_settings_v8`** (`localStorage`): Persisted `UserSettings` JSON object.
 - **`capy_last_settings_tab`** (`localStorage`): Last active tab index (`'0'`--`'4'`) in `SettingsModal`.
