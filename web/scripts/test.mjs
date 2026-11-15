@@ -37,7 +37,7 @@ async function waitForPuzzleLoaded(page) {
   await page.waitForFunction(
     () =>
       !document.body.innerText.includes('Analyzing artwork') &&
-      !document.body.innerText.includes('Generating puzzle'),
+      !document.body.innerText.toLowerCase().includes('generating puzzle'),
     { timeout: 25000 }
   );
   await page.waitForSelector(
@@ -5510,12 +5510,86 @@ async function runCodecAndEngineTests() {
       assert.equal(mockBackups.has('capy_feature_offers_v1__sandbox_beta'), true);
       offersMod.FeatureOffersService.resetSeenOffers();
       assert.equal(offersMod.FeatureOffersService.hasSeenOffer('free_color'), false);
+
+      // Verify TargetSpotlightOverlay specs and geometry helpers
+      const spotlightMod = await vite.ssrLoadModule('/src/components/TargetSpotlightOverlay.tsx');
+      for (const step of tutorialMod.TUTORIAL_STEPS) {
+        const specs = spotlightMod.TUTORIAL_STEP_TARGETS[step.key];
+        assert.equal(
+          Array.isArray(specs) && specs.length > 0 && Boolean(specs[0]?.selector),
+          true,
+          `TUTORIAL_STEP_TARGETS must define target(s) for ${step.key}`
+        );
+      }
+      assert.equal(
+        spotlightMod.TUTORIAL_STEP_TARGETS.replay[0]?.selector,
+        '[data-testid="replay-controls-window"]',
+        'replay spotlight target must prioritize replay-controls-window when active'
+      );
+      assert.equal(
+        spotlightMod.TUTORIAL_STEP_TARGETS.cloud_coop.some(
+          (s) => s.selector === '[data-testid="topbar-active-coop-pill"]'
+        ),
+        true,
+        'cloud_coop spotlight targets must include topbar-active-coop-pill'
+      );
+      for (const offerId of offersMod.FEATURE_OFFER_IDS) {
+        const specs = spotlightMod.FEATURE_OFFER_TARGETS[offerId];
+        assert.equal(
+          Array.isArray(specs) && specs.length > 0 && Boolean(specs[0]?.selector),
+          true,
+          `FEATURE_OFFER_TARGETS must define target(s) for ${offerId}`
+        );
+      }
+      const clampedRect = spotlightMod.clampRectToBounds(
+        { left: -25, top: 760, width: 140, height: 80 },
+        { width: 360, height: 780 },
+        4
+      );
+      assert.equal(clampedRect.left >= 4, true);
+      assert.equal(clampedRect.top + clampedRect.height <= 776, true);
+
+      const overlappedRings = spotlightMod.preventRingOverlap(
+        [
+          { left: 239, top: 6, width: 30, height: 30 },
+          { left: 265, top: 6, width: 30, height: 30 },
+        ],
+        2
+      );
+      assert.equal(
+        overlappedRings[0].left + overlappedRings[0].width <= overlappedRings[1].left - 1.5,
+        true,
+        `Adjacent rings must separate cleanly without colliding: ${JSON.stringify(overlappedRings)}`
+      );
+
+      const topConn = spotlightMod.computeSpotlightConnector(
+        { left: 400, top: 76, width: 448, height: 140 },
+        { left: 1100, top: 10, width: 36, height: 36 }
+      );
+      assert.ok(topConn, 'Expected valid connector for topbar target');
+      assert.equal(topConn.d.startsWith('M '), true);
+      assert.equal(topConn.arrowPoints.split(' ').length, 3);
+      assert.equal(topConn.endY < topConn.startY, true, 'Connector to topbar must point upward');
+
+      const bottomConn = spotlightMod.computeSpotlightConnector(
+        { left: 400, top: 76, width: 448, height: 140 },
+        { left: 590, top: 720, width: 58, height: 52 }
+      );
+      assert.ok(bottomConn, 'Expected valid connector for bottom dock target');
+      assert.equal(bottomConn.endY > bottomConn.startY, true, 'Connector to dock must point downward');
+
+      const sideConn = spotlightMod.computeSpotlightConnector(
+        { left: 400, top: 76, width: 448, height: 140 },
+        { left: 1200, top: 120, width: 44, height: 44 }
+      );
+      assert.ok(sideConn, 'Expected valid connector for side target');
+      assert.equal(sideConn.endX > sideConn.startX, true, 'Connector to right side must point right');
     } finally {
       globalThis.localStorage = prevLs;
       globalThis.window = prevSsrWin;
     }
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, FeatureOffersService, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
+    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, FeatureOffersService, TargetSpotlightOverlay, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
   } finally {
     await vite.close();
   }
@@ -5735,8 +5809,95 @@ async function runBrowserBasicsSuite() {
     await escTutPage.close();
     await escTutContext.close();
 
-    // Full 14-step OnboardingTutorial auto-advance tour (Steps 0..13), [All Topics] drawer, Back/Jump onto already-tried steps, modal pause, and Step 13 auto-completion
-    const tutContext = await browser.newContext({ viewport: { width: 1280, height: 860 }, hasTouch: true });
+    const v3012ScreenshotDir =
+      process.env.CAPY_V3012_SCREENSHOT_DIR || path.join(os.tmpdir(), 'v3012_screenshots');
+    const captureV3012Screenshot = async (targetPage, filename) => {
+      fs.mkdirSync(v3012ScreenshotDir, { recursive: true });
+      await targetPage.screenshot({ path: path.join(v3012ScreenshotDir, filename) });
+    };
+
+    const assertSpotlightAligned = async (targetPage, expectedVariant) => {
+      await targetPage.waitForFunction(
+        (variant) => {
+          const overlay = document.querySelector('[data-testid="spotlight-overlay"]');
+          if (!overlay || overlay.getAttribute('data-variant') !== variant) return false;
+          const rings = overlay.querySelectorAll('[data-testid="spotlight-ring"]');
+          const pointer = overlay.querySelector('[data-testid="spotlight-pointer"]');
+          return rings.length > 0 && Boolean(pointer);
+        },
+        expectedVariant,
+        { timeout: 4000 }
+      );
+      const metrics = await targetPage.evaluate(() => {
+        const overlay = document.querySelector('[data-testid="spotlight-overlay"]');
+        const pointer = overlay?.querySelector('[data-testid="spotlight-pointer"]');
+        const path = pointer?.querySelector('path');
+        const poly = pointer?.querySelector('polygon');
+        const rings = Array.from(overlay?.querySelectorAll('[data-testid="spotlight-ring"]') || []);
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        let overlapsTarget = false;
+        const ringRects = rings.map((r) => r.getBoundingClientRect());
+        let ringsSeparated = true;
+        for (let i = 0; i < ringRects.length; i++) {
+          for (let j = i + 1; j < ringRects.length; j++) {
+            const a = ringRects[i];
+            const b = ringRects[j];
+            const hx = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+            const vy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+            if (hx > 0.5 && vy > 0.5) {
+              ringsSeparated = false;
+            }
+          }
+        }
+        const ringsInView = rings.every((ring, idx) => {
+          const rr = ringRects[idx];
+          const inView =
+            rr.width > 0 &&
+            rr.height > 0 &&
+            rr.left >= 0 &&
+            rr.top >= 0 &&
+            rr.right <= vw + 1 &&
+            rr.bottom <= vh + 1;
+          const sel = ring.getAttribute('data-target-selector') || '';
+          const targets = sel ? Array.from(document.querySelectorAll(sel)) : [];
+          for (const targetEl of targets) {
+            const tr = targetEl.getBoundingClientRect();
+            const hits =
+              rr.left <= tr.right + 2 &&
+              rr.right >= tr.left - 2 &&
+              rr.top <= tr.bottom + 2 &&
+              rr.bottom >= tr.top - 2;
+            if (hits) overlapsTarget = true;
+          }
+          return inView;
+        });
+        const pointerBox = pointer ? pointer.getBoundingClientRect() : null;
+        const pathBox = path ? path.getBoundingClientRect() : null;
+        return {
+          pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : '',
+          ringCount: rings.length,
+          ringsInView,
+          ringsSeparated,
+          overlapsTarget,
+          hasPath: Boolean(path?.getAttribute('d')),
+          hasArrow: Boolean(poly?.getAttribute('points')),
+          pointerSpan: Math.max(pathBox?.width || 0, pathBox?.height || 0, pointerBox ? 0 : 0),
+          ringAnim: rings[0] ? getComputedStyle(rings[0]).animationName : '',
+          ringTransitionDur: rings[0] ? getComputedStyle(rings[0]).transitionDuration : '',
+        };
+      });
+      assert.equal(metrics.pointerEvents, 'none', 'spotlight-overlay must be non-blocking');
+      assert.equal(metrics.ringCount >= 1, true, 'Expected at least 1 spotlight-ring');
+      assert.equal(metrics.ringsInView, true, `Spotlight rings must fit inside viewport: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.ringsSeparated, true, `Adjacent spotlight rings must not overlap: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.overlapsTarget, true, `Spotlight ring must overlap target element: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.hasPath && metrics.hasArrow, true, 'Expected spotlight-pointer SVG path and arrowhead');
+      return metrics;
+    };
+
+    // Full 14-step OnboardingTutorial auto-advance tour (Steps 0..13), TargetSpotlightOverlay alignment, compact Large Text toggle, Step 6->7 replay & Step 7->8 preview auto-dismiss, [All Topics] drawer, Back/Jump onto already-tried steps, modal pause, and Step 13 auto-completion
+    const tutContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     const tutPage = await tutContext.newPage();
     attachErrorListeners(tutPage, 'tutPage');
     await tutPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
@@ -5752,26 +5913,53 @@ async function runBrowserBasicsSuite() {
       );
     };
     await expectTutStep(1);
-    // Step 0 -> 1 (palette)
-    await tutPage.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
+    const step1LargeBtnBox = await tutPage.getByTestId('tutorial-large-text-btn').boundingBox();
+    assert.ok(step1LargeBtnBox && step1LargeBtnBox.width > 200, 'Step 1 Large Text button must be full-width banner');
+    await assertSpotlightAligned(tutPage, 'tutorial');
+    // Step 0 -> 1 (palette): tapping the ALREADY-active swatch on Step 1 must advance cleanly without triggering hint
+    await tutPage.locator('[data-testid="palette-dock"] button[aria-pressed="true"]').first().click();
     await expectTutStep(2);
-    // Step 1 -> 2 (paint)
+    const step2PromptText = await tutPage.getByTestId('tutorial-try-pill').innerText();
+    assert.equal(
+      step2PromptText.includes('Try it: Tap a matching number on the picture') &&
+        !step2PromptText.includes('Capy Forest'),
+      true,
+      `Step 2 prompt must be generic without hardcoded Capy Forest (got "${step2PromptText}")`
+    );
+    const step2LargeBtnBox = await tutPage.getByTestId('tutorial-large-text-btn').boundingBox();
+    assert.ok(
+      step2LargeBtnBox && step2LargeBtnBox.width < 150 && step2LargeBtnBox.height <= 34,
+      `Step 2+ Large Text toggle must be compact pill (got ${JSON.stringify(step2LargeBtnBox)})`
+    );
+    await assertSpotlightAligned(tutPage, 'tutorial');
+    // Step 1 -> 2 (paint): paint 2 regions so we can verify bootstrap/rapid Ctrl+Z undoStackRef parity
     const tutCanvasBox = await tutPage.locator('canvas').first().boundingBox();
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const xFrac = 0.42 + (attempt % 3) * 0.08;
-      const yFrac = 0.60 + Math.floor(attempt / 3) * 0.08;
+    let paintedOnTut = 0;
+    for (let attempt = 0; attempt < 8 && paintedOnTut < 2; attempt++) {
+      const beforeFilled = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+      const xFrac = 0.42 + (attempt % 4) * 0.06;
+      const yFrac = 0.58 + Math.floor(attempt / 4) * 0.08;
       await tutPage.mouse.click(tutCanvasBox.x + tutCanvasBox.width * xFrac, tutCanvasBox.y + tutCanvasBox.height * yFrac);
       await tutPage.waitForTimeout(80);
-      if ((await tutPage.getByTestId('tutorial-step-tried-badge').count()) > 0) break;
+      const afterFilled = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+      if (afterFilled > beforeFilled) paintedOnTut++;
     }
+    assert.ok(paintedOnTut >= 1, 'Expected at least 1 region painted on tutPage');
     await expectTutStep(3);
+    // Verify topbar-saves-btn exposes data-filled-count >= 1
+    assert.ok(
+      Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')) >= 1,
+      'Expected topbar-saves-btn data-filled-count >= 1 after painting'
+    );
     // Step 2 -> 3 (zoom)
     await tutPage.keyboard.press('+');
     await expectTutStep(4);
     await tutPage.keyboard.press('0');
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 3 -> 4 (hint)
     await tutPage.getByTestId('tutorial-try-hint-btn').click();
     await expectTutStep(5);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
@@ -5786,23 +5974,39 @@ async function runBrowserBasicsSuite() {
     );
     await tutPage.keyboard.press('Control+y');
     await expectTutStep(6);
-    // Step 5 -> 6 (replay via long-press Undo)
-    const tutUndoBox = await tutPage.getByTestId('undo-btn').boundingBox();
+    // Step 5 -> 6 (replay via long-press Undo -> auto-advancing to Step 7 auto-dismisses tutorial-opened ReplayControls!)
+    const tutUndoBox = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(tutUndoBox, 'Expected stable boundingBox for undo-btn at Step 6');
     await tutPage.mouse.move(tutUndoBox.x + tutUndoBox.width / 2, tutUndoBox.y + tutUndoBox.height / 2);
     await tutPage.mouse.down();
-    await tutPage.waitForTimeout(520);
-    await tutPage.mouse.up();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
     await expectTutStep(7);
-    await tutPage.getByTestId('replay-exit-btn').click();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
-    // Step 6 -> 7 (peek_fullscreen)
-    await tutPage.locator('button[title="Show Original Preview"]').click();
+    const step7Metrics = await assertSpotlightAligned(tutPage, 'tutorial');
+    assert.equal(step7Metrics.ringCount, 2, 'Step 7 (peek_fullscreen) must highlight both Eye and Full Screen');
+    assert.equal(step7Metrics.pointerSpan >= 10, true, `Step 7 topbar pointer must have clean arrow stem (${step7Metrics.pointerSpan}px)`);
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes(
+        'Try it: Tap Eye or Expand above'
+      ),
+      true,
+      'Step 7 tryPrompt must cleanly explain Eye or Expand'
+    );
+    await captureV3012Screenshot(tutPage, 'desktop_1280x800_step7_spotlight.png');
+    // Step 6 -> 7 (peek_fullscreen): leaving Step 7 via preview auto-advance must automatically exit tutorial-triggered preview!
+    await tutPage.getByTestId('topbar-preview-btn').click();
     await expectTutStep(8);
-    await tutPage.locator('button[title="Return to Puzzle"]').click();
-    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open)
+    await tutPage.locator('button[title="Show Original Preview"]').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.locator('button[title="Return to Puzzle"]').count(),
+      0,
+      'Leaving Step 7 must automatically reset tutorial-triggered isPreviewMode'
+    );
+    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open and hide spotlight)
     await tutPage.locator('button[title="Settings and Menu"]').click();
     await tutPage.getByTestId('settings-tab-settings').click();
+    assert.equal(await tutPage.getByTestId('spotlight-overlay').count(), 0, 'Spotlight must hide while SettingsModal is open');
     const tutFreeColorLabel = await tutPage.waitForSelector('text=Free Colour Mode');
     await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     await tutPage.waitForTimeout(950);
@@ -5819,6 +6023,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('settings-tab-create').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(10);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 9 -> 10 (custom_photo)
     const tutPngBytes = await tutPage.evaluate(async () => {
       const c = document.createElement('canvas');
@@ -5834,9 +6039,19 @@ async function runBrowserBasicsSuite() {
     });
     const tutPhotoPath = path.join(os.tmpdir(), 'capy_tut_photo.png');
     fs.writeFileSync(tutPhotoPath, Buffer.from(tutPngBytes));
-    await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
-    fs.rmSync(tutPhotoPath, { force: true });
-    await waitForPuzzleLoaded(tutPage);
+    try {
+      await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
+      await tutPage.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_tut_photo') &&
+          !document.body.innerText.toLowerCase().includes('generating puzzle'),
+        undefined,
+        { timeout: 15000 }
+      );
+      await waitForPuzzleLoaded(tutPage);
+    } finally {
+      fs.rmSync(tutPhotoPath, { force: true });
+    }
     await expectTutStep(11);
     // Step 10 -> 11 (infinite_zoom)
     await tutPage.locator('button[title="Settings and Menu"]').click();
@@ -5844,10 +6059,12 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
     await waitForPuzzleLoaded(tutPage);
     await expectTutStep(12);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 11 -> 12 (saves_export)
     await tutPage.getByTestId('topbar-saves-btn').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(13);
+    await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 12 -> 13 (cloud_coop)
     await tutPage.getByTestId('topbar-coop-btn').click();
     await tutPage.getByTestId('host-coop-room-btn').click();
@@ -5879,11 +6096,119 @@ async function runBrowserBasicsSuite() {
       '1',
       'Step 13 auto-completion must persist capy_tutorial_completed_v1="1"'
     );
+
+    // Verify Jump and Skip from Step 6 auto-dismiss tutorial-opened Replay, while pre-existing manual Replay stays open across Step 6->7
+    const tapSampleAndOpenTutorialAtStep6 = async () => {
+      await tutPage.locator('button[title="Settings and Menu"]').click();
+      await tutPage.getByTestId('settings-tab-about').click();
+      await tutPage.getByTestId('about-replay-tutorial-btn').click();
+      await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+      await tutPage.getByTestId('tutorial-topics-btn').click();
+      await tutPage.getByTestId('tutorial-topic-item-5').click();
+      await expectTutStep(6);
+    };
+    // Paint 1 region first so Undo/Replay is available
+    await tutPage.mouse.click(tutCanvasBox.x + tutCanvasBox.width * 0.5, tutCanvasBox.y + tutCanvasBox.height * 0.62);
+    await tutPage.waitForTimeout(100);
+    await tapSampleAndOpenTutorialAtStep6();
+    const undoBtnForJump = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(undoBtnForJump, 'Expected stable boundingBox for undo-btn before Jump');
+    await tutPage.mouse.move(undoBtnForJump.x + undoBtnForJump.width / 2, undoBtnForJump.y + undoBtnForJump.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
+    // Jump via All Topics to Step 8 -> must dismiss tutorial-opened replay
+    await tutPage.getByTestId('tutorial-topics-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-7').click();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    await tutPage.waitForTimeout(250);
+    // Jump back to Step 6, open replay, and click Skip -> must dismiss tutorial-opened replay
+    await tutPage.getByTestId('tutorial-topics-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-5').click();
+    await expectTutStep(6);
+    const undoBtnForSkip = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(undoBtnForSkip, 'Expected stable boundingBox for undo-btn before Skip');
+    await tutPage.mouse.move(undoBtnForSkip.x + undoBtnForSkip.width / 2, undoBtnForSkip.y + undoBtnForSkip.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    await tutPage.waitForTimeout(250);
+
+    // Pre-existing manual Replay opened BEFORE tutorial must survive Step 6 -> Step 7 Next
+    const undoBtnPreManual = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
+    assert.ok(undoBtnPreManual, 'Expected stable boundingBox for undo-btn before manual Replay');
+    await tutPage.mouse.move(undoBtnPreManual.x + undoBtnPreManual.width / 2, undoBtnPreManual.y + undoBtnPreManual.height / 2);
+    await tutPage.mouse.down();
+    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.mouse.up();
+    await tapSampleAndOpenTutorialAtStep6();
+    await tutPage.getByTestId('tutorial-next-btn').click();
+    await expectTutStep(7);
+    assert.equal(
+      await tutPage.getByTestId('replay-controls-window').isVisible(),
+      true,
+      'Pre-existing manual ReplayControls opened outside tutorial must survive Step 6->7'
+    );
+    await tutPage.getByTestId('replay-exit-btn').click();
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+
+    // Verify reducedMotion disables spotlight pulse & dash animations
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-settings').click();
+    const rmToggle = tutPage.getByTestId('setting-reduced-motion');
+    await rmToggle.scrollIntoViewIfNeeded();
+    if ((await rmToggle.getAttribute('aria-checked')) !== 'true') {
+      await rmToggle.click();
+    }
+    await tutPage.getByTestId('settings-tab-about').click();
+    await tutPage.getByTestId('about-replay-tutorial-btn').click();
+    const rmMetrics = await assertSpotlightAligned(tutPage, 'tutorial');
+    assert.equal(rmMetrics.ringAnim, 'none', 'reducedMotion must disable spotlight pulse animation');
+    assert.equal(rmMetrics.ringTransitionDur, '0s', 'reducedMotion must disable spotlight ring transitions');
+    const rmDashAnim = await tutPage.evaluate(
+      () => getComputedStyle(document.querySelector('[data-testid="spotlight-pointer"] path')).animationName
+    );
+    assert.equal(rmDashAnim, 'none', 'reducedMotion must disable spotlight pointer dash animation');
+
+    // Verify rapid Ctrl+Z burst undoes cleanly via synchronous undoStackRef & redoStackRef
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    const burstCanvasBox = await tutPage.locator('canvas').first().boundingBox();
+    let burstPainted = 0;
+    for (let attempt = 0; attempt < 8 && burstPainted < 2; attempt++) {
+      const before = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+      await tutPage.mouse.click(
+        burstCanvasBox.x + burstCanvasBox.width * (0.35 + (attempt % 4) * 0.08),
+        burstCanvasBox.y + burstCanvasBox.height * (0.45 + Math.floor(attempt / 4) * 0.12)
+      );
+      await tutPage.waitForTimeout(80);
+      const after = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+      if (after > before) burstPainted++;
+    }
+    const beforeBurstUndo = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+    assert.ok(
+      beforeBurstUndo >= 2,
+      `Precondition: expected at least 2 filled regions before rapid Ctrl+Z burst, got ${beforeBurstUndo}`
+    );
+    await tutPage.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+    });
+    await tutPage.waitForTimeout(150);
+    const afterBurstUndo = Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count'));
+    assert.equal(
+      afterBurstUndo,
+      beforeBurstUndo - 2,
+      `Rapid synchronous Ctrl+Z burst must pop 2 steps cleanly (${beforeBurstUndo} -> ${afterBurstUndo})`
+    );
+
     await tutPage.close();
     await tutContext.close();
 
     // FeatureOfferBanner E2E: all 9 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
-    const offerContext = await browser.newContext({ viewport: { width: 1280, height: 860 }, hasTouch: true });
+    const offerContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await offerContext.addInitScript(() => {
       const store = {};
       window.__capySavedBackups = store;
@@ -5908,6 +6233,7 @@ async function runBrowserBasicsSuite() {
         offerId,
         { timeout: 8000 }
       );
+      await assertSpotlightAligned(offerPage, 'offer');
     };
     const jumpFromOfferAndAssertStep = async (expectedStepNum) => {
       await offerPage.getByTestId('feature-offer-guide-btn').click();
@@ -5925,10 +6251,72 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('tutorial-skip-btn').click();
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
     };
+    // Unconditional pre-filled snapshot/bootstrap undoStack parity check (isolated context so offerPage queue stays pristine)
+    {
+      const prefilledContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+      const prefilledPage = await prefilledContext.newPage();
+      attachErrorListeners(prefilledPage, 'prefilledPage');
+      await prefilledPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(prefilledPage);
+      const seeded = await prefilledPage.evaluate(async () => {
+        const snaps = window.capyStorage.loadSnapshots();
+        const active = window.capyStorage.loadActiveState();
+        const targetId = active?.activeSnapshotId || snaps[0]?.id;
+        if (!targetId) return null;
+        const puz = await window.capyStorage.loadPuzzleData(targetId);
+        if (!puz || puz.regions.length < 2) return null;
+        const prefilledIds = puz.regions.slice(0, 2).map((r) => r.id);
+        window.capyStorage.updateSnapshotProgress(
+          targetId,
+          prefilledIds.length,
+          puz.regions.length,
+          prefilledIds
+        );
+        window.capyStorage.saveActiveState({
+          ...(active || {}),
+          activeSnapshotId: targetId,
+          activeColorId: active?.activeColorId || puz.palette[0]?.id || 1,
+          filledRegionIds: prefilledIds,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+        return { targetId, count: prefilledIds.length };
+      });
+      assert.ok(seeded && seeded.count === 2, 'Expected to seed 2 pre-filled regions for bootstrap undoStack test');
+      await prefilledPage.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(prefilledPage);
+      const filledBeforeBootstrapUndo = Number(
+        await prefilledPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+      );
+      assert.equal(filledBeforeBootstrapUndo, 2, 'Reloaded pre-filled snapshot must show 2 filled regions');
+      assert.equal(
+        await prefilledPage.getByTestId('undo-btn').isEnabled(),
+        true,
+        'Pre-filled snapshot bootstrap must seed undoStack so undo-btn is enabled'
+      );
+      await prefilledPage.getByTestId('undo-btn').click();
+      await prefilledPage.waitForFunction(
+        () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
+        undefined,
+        { timeout: 3000 }
+      );
+      const filledAfterBootstrapUndo = Number(
+        await prefilledPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+      );
+      assert.equal(
+        filledAfterBootstrapUndo,
+        1,
+        'Clicking undo-btn after pre-filled snapshot bootstrap must decrement data-filled-count from 2 to 1'
+      );
+      await prefilledPage.close();
+      await prefilledContext.close();
+    }
     // 1) paint_mode -> Got it
     const offerPaintBtn = offerPage.locator('button[aria-label="Toggle Paint Mode"]');
     await offerPaintBtn.click();
     await expectOfferBanner('paint_mode');
+    await captureV3012Screenshot(offerPage, 'desktop_1280x800_offer_spotlight.png');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
     await offerPaintBtn.click();
@@ -5966,12 +6354,12 @@ async function runBrowserBasicsSuite() {
     await jumpFromOfferAndAssertStep(5);
     // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
     await offerPage.getByTestId('redo-btn').click();
-    const offerUndoBox = await offerPage.getByTestId('undo-btn').boundingBox();
+    const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
+    assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
     await offerPage.mouse.move(offerUndoBox.x + offerUndoBox.width / 2, offerUndoBox.y + offerUndoBox.height / 2);
     await offerPage.mouse.down();
-    await offerPage.waitForTimeout(520);
-    await offerPage.mouse.up();
     await offerPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
+    await offerPage.mouse.up();
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
@@ -5998,17 +6386,19 @@ async function runBrowserBasicsSuite() {
     });
     const offerPhotoPath = path.join(os.tmpdir(), 'capy_offer_photo.png');
     fs.writeFileSync(offerPhotoPath, Buffer.from(offerPngBytes));
-    await offerPage.locator('input[type="file"][accept="image/*"]').setInputFiles(offerPhotoPath);
-    await offerPage.waitForTimeout(300);
-    fs.rmSync(offerPhotoPath, { force: true });
-    await offerPage.waitForFunction(
-      () =>
-        document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_offer_photo') &&
-        !document.body.innerText.includes('Generating Puzzle'),
-      undefined,
-      { timeout: 15000 }
-    );
-    await waitForPuzzleLoaded(offerPage);
+    try {
+      await offerPage.locator('input[type="file"][accept="image/*"]').setInputFiles(offerPhotoPath);
+      await offerPage.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_offer_photo') &&
+          !document.body.innerText.toLowerCase().includes('generating puzzle'),
+        undefined,
+        { timeout: 15000 }
+      );
+      await waitForPuzzleLoaded(offerPage);
+    } finally {
+      fs.rmSync(offerPhotoPath, { force: true });
+    }
     await expectOfferBanner('photo_upload');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
@@ -6795,13 +7185,30 @@ async function runBrowserBasicsSuite() {
     await pageB.waitForTimeout(200);
     await pageB.getByTestId('join-coop-room-input').fill(roomCode);
     await pageB.getByTestId('join-coop-room-btn').click();
-    await pageB.waitForTimeout(300);
+    await pageB.waitForFunction(
+      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
+      undefined,
+      { timeout: 5000 }
+    );
     assert.equal((await pageB.getByTestId('active-coop-room-code').innerText()).includes('2 online'), true);
     await pageB.keyboard.press('Escape');
-    await pageB.waitForTimeout(200);
+    await pageB.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 
     await tapCanvasGrid(page, 0.56, 8, 40);
-    await pageB.waitForTimeout(350);
+    const filledAfterTapA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    await pageB.waitForFunction(
+      (expectedCount) =>
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) ===
+        expectedCount,
+      filledAfterTapA,
+      { timeout: 5000 }
+    );
+    const filledAfterTapB = Number(
+      await pageB.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(filledAfterTapB, filledAfterTapA, 'Co-op peer data-filled-count must synchronize in real time');
     const extractPct = (s) => Number(s.match(/(\d+)%/)?.[1] ?? -1);
     assert.equal(
       extractPct(await pageB.locator('header').innerText()),
@@ -6832,7 +7239,6 @@ async function runBrowserBasicsSuite() {
     });
     // Tap the same canvas grid points so at least one already-filled region is repainted in Free Colour Mode
     await tapCanvasGrid(page, 0.56, 4, 40);
-    await pageB.waitForTimeout(300);
 
     const afterFreeRepaint = await page.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
@@ -6841,6 +7247,28 @@ async function runBrowserBasicsSuite() {
         paintedRegionColors: active.paintedRegionColors || {},
       };
     });
+    const filledAfterFreeRepaintA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    await pageB.waitForFunction(
+      ({ expectedFilledCount, expectedPaintedJson }) => {
+        const count = Number(
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
+        );
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return count === expectedFilledCount && JSON.stringify(active.paintedRegionColors || {}) === expectedPaintedJson;
+      },
+      {
+        expectedFilledCount: filledAfterFreeRepaintA,
+        expectedPaintedJson: JSON.stringify(afterFreeRepaint.paintedRegionColors),
+      },
+      { timeout: 5000 }
+    );
+    assert.equal(
+      Number(await pageB.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      filledAfterFreeRepaintA,
+      'Co-op peer data-filled-count must match Page A after Free Colour repaint'
+    );
     // Verify original prefix of filledRegionIds preserved its exact chronological sequence
     assert.deepEqual(
       afterFreeRepaint.filledRegionIds.slice(0, orderBeforeFreeRepaint.length),
@@ -6850,12 +7278,34 @@ async function runBrowserBasicsSuite() {
 
     // Undo the last Free Colour repaint on Page A and verify Page B's paintedRegionColors stays synchronized
     await page.keyboard.press('Control+z');
-    await page.waitForTimeout(150);
-    await pageB.waitForTimeout(300);
-    const [paintedAfterUndoA, paintedAfterUndoB] = await Promise.all([
+    await page.waitForTimeout(100);
+    const [paintedAfterUndoA, filledAfterUndoA] = await Promise.all([
       page.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
-      pageB.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
+      page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count').then(Number),
     ]);
+    await pageB.waitForFunction(
+      ({ expectedFilledCount, expectedPaintedJson }) => {
+        const count = Number(
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
+        );
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return count === expectedFilledCount && JSON.stringify(active.paintedRegionColors || {}) === expectedPaintedJson;
+      },
+      {
+        expectedFilledCount: filledAfterUndoA,
+        expectedPaintedJson: JSON.stringify(paintedAfterUndoA),
+      },
+      { timeout: 5000 }
+    );
+    const [paintedAfterUndoB, filledAfterUndoB] = await Promise.all([
+      pageB.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').paintedRegionColors || {}),
+      pageB.getByTestId('topbar-saves-btn').getAttribute('data-filled-count').then(Number),
+    ]);
+    assert.equal(
+      filledAfterUndoB,
+      filledAfterUndoA,
+      'BF-1: Undoing a Free Colour repaint on Page A must keep data-filled-count synchronized on Page B'
+    );
     assert.deepEqual(
       paintedAfterUndoB,
       paintedAfterUndoA,
@@ -6956,10 +7406,13 @@ async function runBrowserBasicsSuite() {
     });
     const tmpUploadPath = path.join(os.tmpdir(), 'capy_test_upload.png');
     fs.writeFileSync(tmpUploadPath, Buffer.from(pngBytes));
-    await page.locator('input[type="file"][accept="image/*"]').setInputFiles(tmpUploadPath);
-    await page.waitForTimeout(300);
-    await waitForPuzzleLoaded(page);
-    fs.rmSync(tmpUploadPath, { force: true });
+    try {
+      await page.locator('input[type="file"][accept="image/*"]').setInputFiles(tmpUploadPath);
+      await page.waitForTimeout(300);
+      await waitForPuzzleLoaded(page);
+    } finally {
+      fs.rmSync(tmpUploadPath, { force: true });
+    }
 
     const uploadCheck = await page.evaluate(async () => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
@@ -7781,10 +8234,22 @@ async function runBrowserBasicsSuite() {
     await peerS2.waitForTimeout(150);
     await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
     await peerS2.getByTestId('join-coop-room-btn').click();
-    await peerS2.waitForTimeout(450);
+    await peerS2.waitForFunction(
+      (expectedCount) =>
+        Boolean(document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online')) &&
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) ===
+          expectedCount,
+      peerAStateBeforeRoom.filledCount,
+      { timeout: 5000 }
+    );
     await peerS2.keyboard.press('Escape');
-    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      'Peer B data-filled-count must match Peer A immediately upon WELCOME_STATE'
+    );
     assert.equal(
       await readTotalRemainingRegions(peerS2),
       remainingPeerABeforeJoin,
@@ -7818,9 +8283,13 @@ async function runBrowserBasicsSuite() {
     await peerS2.waitForTimeout(150);
     await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
     await peerS2.getByTestId('join-coop-room-btn').click();
-    await peerS2.waitForTimeout(350);
+    await peerS2.waitForFunction(
+      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
+      undefined,
+      { timeout: 5000 }
+    );
     await peerS2.keyboard.press('Escape');
-    await peerS2.waitForTimeout(150);
+    await peerS2.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and click Resume Here
     await page.getByTestId('topbar-coop-btn').click();
@@ -7835,11 +8304,24 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('replay-scrubber').fill('1');
     await page.waitForTimeout(120);
     await page.getByTestId('replay-resume-btn').click();
-    await page.waitForTimeout(200);
-    await peerS2.waitForTimeout(400);
+    await page.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
+      undefined,
+      { timeout: 5000 }
+    );
+    await peerS2.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
+      undefined,
+      { timeout: 5000 }
+    );
 
     const remainingAfterRewindA = await readTotalRemainingRegions(page);
     const remainingAfterRewindB = await readTotalRemainingRegions(peerS2);
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      'BUG-1: Replay Scrubber Resume Here data-filled-count must match between Peer A and Peer B'
+    );
     assert.equal(
       remainingAfterRewindA,
       totalPuzzleRegions27 - 1,
@@ -7855,9 +8337,22 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('topbar-coop-btn').click();
     await page.waitForTimeout(150);
     await page.getByTestId('reset-progress-btn').click();
-    await page.waitForTimeout(200);
-    await peerS2.waitForTimeout(400);
+    await page.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 0,
+      undefined,
+      { timeout: 5000 }
+    );
+    await peerS2.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 0,
+      undefined,
+      { timeout: 5000 }
+    );
 
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      'M-08: Reset Progress data-filled-count must match (0) between Peer A and Peer B'
+    );
     assert.equal(
       await readTotalRemainingRegions(page),
       totalPuzzleRegions27,
@@ -8248,13 +8743,18 @@ async function runBrowserBasicsSuite() {
     await page.waitForTimeout(120);
     console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
-    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + SettingsModal tab bar fit + OnboardingTutorial & FeatureOfferBanner overflow
+    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + ALPHA #520 pill fit + SettingsModal tab bar fit + OnboardingTutorial & FeatureOfferBanner & TargetSpotlightOverlay overflow
     const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
-    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
+    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&pr=520`, { waitUntil: 'networkidle' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      (await mobileTopbarPage.getByTestId('topbar-channel-badge').innerText()).trim().toUpperCase(),
+      'ALPHA #520',
+      'Expected ?capy_channel=alpha&pr=520 to render ALPHA #520 badge'
+    );
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
       await mobileTopbarPage.getByTestId('topbar-zoom-badge').count(),
@@ -8267,12 +8767,22 @@ async function runBrowserBasicsSuite() {
     const savesBox = await mobileTopbarPage.getByTestId('topbar-saves-btn').boundingBox();
     const channelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
     const settingsBox = await mobileTopbarPage.locator('button[title="Settings and Menu"]').boundingBox();
+    const leftLaneScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
 
     assert.ok(leftLaneBox && rightLaneBox && savesBox && channelBox && settingsBox);
     assert.equal(
       leftLaneBox.x + leftLaneBox.width <= rightLaneBox.x,
       true,
       `topbar-left-lane (${leftLaneBox.x + leftLaneBox.width}) must not overlap topbar-right-lane (${rightLaneBox.x}) at 360x780`
+    );
+    assert.equal(
+      leftLaneScrollCheck.scrollWidth <= leftLaneScrollCheck.clientWidth &&
+        channelBox.x + channelBox.width <= leftLaneBox.x + leftLaneBox.width + 1,
+      true,
+      `ALPHA #520 pill must fit cleanly inside topbar-left-lane without horizontal clipping at 360x780 (${JSON.stringify({ leftLaneScrollCheck, channelBox, leftLaneBox })})`
     );
     assert.equal(
       rightLaneBox.x + rightLaneBox.width <= 360,
@@ -8284,6 +8794,8 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+    await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
+    await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step1.png');
     const normalDocOverflow = await mobileTopbarPage.evaluate(() => ({
       docOverflow: document.documentElement.scrollWidth - window.innerWidth,
     }));
@@ -8299,6 +8811,11 @@ async function runBrowserBasicsSuite() {
       true,
       `OnboardingTutorial (${mobileTutorialBox.x}..${mobileTutorialBox.x + mobileTutorialBox.width}) must fit within 360px mobile viewport`
     );
+    assert.equal(
+      mobileTutorialBox.height <= 210,
+      true,
+      `Step 1 compact OnboardingTutorial card height (${mobileTutorialBox.height}px) must stay slim <= 210px on 360x780`
+    );
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
     const normalTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
@@ -8312,8 +8829,16 @@ async function runBrowserBasicsSuite() {
       () => document.documentElement.scrollWidth - window.innerWidth
     );
     assert.equal(normalTopicsOverflow <= 0, true, `Normal tutorial-topics-drawer must have zero overflow (got ${normalTopicsOverflow})`);
-    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topic-item-6').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'hidden', timeout: 3000 });
+    const mobileStep7Metrics = await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
+    assert.equal(mobileStep7Metrics.ringCount, 2, 'Mobile Step 7 must highlight both Eye and Full Screen');
+    assert.equal(
+      mobileStep7Metrics.pointerSpan >= 10,
+      true,
+      `Mobile Step 7 topbar pointer must have uncrushed stem (${mobileStep7Metrics.pointerSpan}px)`
+    );
+    await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step7_spotlight.png');
 
     // Open SettingsModal on 360x780 mobile and verify all header tabs fit without horizontal clipping
     await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
@@ -8345,7 +8870,7 @@ async function runBrowserBasicsSuite() {
       );
     }
 
-    // Toggle Large Text (Low-Vision) mode at 360x780 and verify zero clipping in SettingsModal and GameTopBar
+    // Toggle Large Text (Low-Vision) mode at 360x780 and verify zero clipping in SettingsModal and GameTopBar (including ALPHA #520)
     await mobileTopbarPage.getByTestId('settings-tab-settings').click();
     const largeTextSwitch = mobileTopbarPage.getByTestId('setting-large-text');
     await largeTextSwitch.waitFor({ state: 'visible', timeout: 5000 });
@@ -8369,13 +8894,26 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.waitForTimeout(150);
     const largeLeftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
     const largeRightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
-    assert.ok(largeLeftLaneBox && largeRightLaneBox);
+    const largeChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    const largeLeftScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.ok(largeLeftLaneBox && largeRightLaneBox && largeChannelBox);
     assert.equal(
       largeLeftLaneBox.x + largeLeftLaneBox.width <= largeRightLaneBox.x &&
         largeRightLaneBox.x + largeRightLaneBox.width <= 360,
       true,
       'Large Text GameTopBar lanes must not overlap or exceed 360px viewport'
     );
+    assert.equal(
+      largeLeftScrollCheck.scrollWidth <= largeLeftScrollCheck.clientWidth &&
+        largeChannelBox.x + largeChannelBox.width <= largeLeftLaneBox.x + largeLeftLaneBox.width + 1,
+      true,
+      `Large Text ALPHA #520 pill must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ largeLeftScrollCheck, largeChannelBox, largeLeftLaneBox })})`
+    );
+    await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
+    await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step7_largetext.png');
     const largeDocOverflow = await mobileTopbarPage.evaluate(() => ({
       docOverflow: document.documentElement.scrollWidth - window.innerWidth,
     }));
@@ -8490,6 +9028,7 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
     await mobileTopbarPage.locator('button[aria-label="Toggle Paint Mode"]').click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    await assertSpotlightAligned(mobileTopbarPage, 'offer');
     const mobileOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
     assert.ok(mobileOfferBox, 'Expected feature-offer-banner boundingBox at 360x780');
     assert.equal(
@@ -8511,6 +9050,7 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     await closeBtn.click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
+    await assertSpotlightAligned(mobileTopbarPage, 'offer');
     const largeOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
     assert.ok(largeOfferBox, 'Expected Large Text feature-offer-banner boundingBox at 360x780');
     assert.equal(
@@ -8523,9 +9063,110 @@ async function runBrowserBasicsSuite() {
     );
     assert.equal(largeOfferOverflow <= 0, true, `Large Text FeatureOfferBanner at 360x780 must have zero overflow (got ${largeOfferOverflow})`);
 
+    // Verify 100% progress pill + ALPHA #520 fits cleanly at 360x780 in both Large Text and Normal modes
+    await mobileTopbarPage.evaluate(async () => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const active = window.capyStorage.loadActiveState();
+      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
+      if (targetId && puz) {
+        const allIds = puz.regions.map((r) => r.id);
+        window.capyStorage.updateSnapshotProgress(targetId, allIds.length, allIds.length, allIds);
+        window.capyStorage.saveActiveState({
+          ...(active || {}),
+          activeSnapshotId: targetId,
+          filledRegionIds: allIds,
+        });
+      }
+    });
+    await mobileTopbarPage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(mobileTopbarPage);
+    if (await mobileTopbarPage.getByTestId('replay-exit-btn').isVisible()) {
+      await mobileTopbarPage.getByTestId('replay-exit-btn').click();
+    }
+    assert.equal(
+      (await mobileTopbarPage.getByTestId('topbar-saves-btn').innerText()).includes('100%'),
+      true,
+      'Expected topbar-saves-btn to display 100% after completing puzzle'
+    );
+    const large100ScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const large100LaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
+    const large100ChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      large100ScrollCheck.scrollWidth <= large100ScrollCheck.clientWidth &&
+        large100ChannelBox.x + large100ChannelBox.width <= large100LaneBox.x + large100LaneBox.width + 1,
+      true,
+      `Large Text ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ large100ScrollCheck, large100ChannelBox, large100LaneBox })})`
+    );
+    // Toggle Large Text back OFF and verify Normal 100% + ALPHA #520
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-settings').click();
+    await mobileTopbarPage.getByTestId('setting-large-text').click();
+    await mobileTopbarPage.getByTestId('settings-modal-close').click();
+    await mobileTopbarPage.waitForTimeout(100);
+    const normal100ScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const normal100LaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
+    const normal100ChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      normal100ScrollCheck.scrollWidth <= normal100ScrollCheck.clientWidth &&
+        normal100ChannelBox.x + normal100ChannelBox.width <= normal100LaneBox.x + normal100LaneBox.width + 1,
+      true,
+      `Normal ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ normal100ScrollCheck, normal100ChannelBox, normal100LaneBox })})`
+    );
+
     await mobileTopbarPage.close();
     await mobileTopbarContext.close();
-    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
+
+    // Verify BETA (?capy_channel=beta) 360x780 topbar-left-lane fit and badge containment in Normal & Large Text modes
+    const mobileBetaContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    const mobileBetaPage = await mobileBetaContext.newPage();
+    attachErrorListeners(mobileBetaPage, 'mobileBetaPage');
+    await mobileBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(mobileBetaPage);
+    await mobileBetaPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(
+      (await mobileBetaPage.getByTestId('topbar-channel-badge').innerText()).trim().toUpperCase(),
+      'BETA',
+      'Expected ?capy_channel=beta to render BETA badge'
+    );
+    const betaNormalScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const betaNormalLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
+    const betaNormalChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      betaNormalScrollCheck.scrollWidth <= betaNormalScrollCheck.clientWidth &&
+        betaNormalChannelBox.x + betaNormalChannelBox.width <= betaNormalLaneBox.x + betaNormalLaneBox.width + 1,
+      true,
+      `Normal BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaNormalScrollCheck, betaNormalChannelBox, betaNormalLaneBox })})`
+    );
+    await mobileBetaPage.locator('button[title="Settings and Menu"]').click();
+    await mobileBetaPage.getByTestId('settings-tab-settings').click();
+    await mobileBetaPage.getByTestId('setting-large-text').click();
+    await mobileBetaPage.getByTestId('settings-modal-close').click();
+    await mobileBetaPage.waitForTimeout(100);
+    const betaLargeScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    const betaLargeLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
+    const betaLargeChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.equal(
+      betaLargeScrollCheck.scrollWidth <= betaLargeScrollCheck.clientWidth &&
+        betaLargeChannelBox.x + betaLargeChannelBox.width <= betaLargeLaneBox.x + betaLargeLaneBox.width + 1,
+      true,
+      `Large Text BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaLargeScrollCheck, betaLargeChannelBox, betaLargeLaneBox })})`
+    );
+    await mobileBetaPage.close();
+    await mobileBetaContext.close();
+    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, ALPHA #520 & BETA fit, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
 
     // -------------------------------------------------------------------------
     // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
@@ -8575,9 +9216,12 @@ async function runBrowserBasicsSuite() {
       }),
       'utf8'
     );
-    await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
-    fs.rmSync(badJsonPath, { force: true });
-    await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    try {
+      await m3Page.locator('input[type="file"][accept*=".capy"]').setInputFiles(badJsonPath);
+      await m3Page.getByTestId('saves-import-notice').waitFor({ state: 'visible', timeout: 5000 });
+    } finally {
+      fs.rmSync(badJsonPath, { force: true });
+    }
     assert.equal(
       await m3Page.getByTestId('saves-import-notice').getAttribute('role'),
       'alert',

@@ -2431,7 +2431,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = ({
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <canvas ref={canvasRef} className="block w-full h-full" />
+      <canvas ref={canvasRef} data-testid="puzzle-canvas" className="block w-full h-full" />
     </div>
   );
 };

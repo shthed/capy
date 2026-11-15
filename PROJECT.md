@@ -24,7 +24,7 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 ## 1. Roles, Ownership and Multi-Session Coordination
 
 - **Human Project Owner**: Sets product vision and Epic priority in [`ROADMAP.md`](./ROADMAP.md), approves unblocked work entering [`TODO.md`](./TODO.md), resolves architectural and UX trade-offs during `/grill-me` and `/plan`, validates subjective tactile/visual feel on Alpha `/alpha/<number>/` and Beta `/beta/` previews, and holds sole final merge authority into `beta` and `main`.
-- **AI Contributors & Agents**: Execute approved `TODO.md` slices or documentation updates on clean linear branches off `origin/beta`, keep PR titles/bodies/backlog docs synchronized on every push, run full local verification before marking PRs ready, and pause for explicit Owner approval prior to any merge.
+- **AI Contributors & Agents**: Execute approved `TODO.md` slices or non-living-doc changes on clean linear branches off `origin/beta` (while pushing document-owner-approved living-document updates—such as [`AGENTS.md`](./AGENTS.md), [`CAPYBOOP.md`](./CAPYBOOP.md), and studio living guides—directly to `main` without PR noise or `EPIC-*` tags per [`AGENTS.md` Rule 11](./AGENTS.md#1-ai-golden-invariants-non-negotiable-agent-guardrails) and informing the Owner), keep PR titles/bodies/backlog docs synchronized on every push, run full local verification before marking PRs ready, and pause for explicit Owner approval prior to any code merge.
 - **Worktree & Diff Hygiene**: Never share one dirty working tree across concurrent sessions or tasks, never stage untracked local agent/scratch files via blind `git add -A`, and verify `git status` plus `git show --stat HEAD` before every push.
 
 <!-- capy-dev-only:start -->

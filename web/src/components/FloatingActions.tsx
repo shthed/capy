@@ -190,6 +190,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = ({
       {/* Paint Mode (Drag-to-Color) Toggle */}
       <button
         type="button"
+        data-testid="paint-mode-btn"
         onClick={onTogglePaintMode}
         aria-label="Toggle Paint Mode"
         title={isPaintMode ? 'Paint Mode Active (Click to Switch to Tap Mode)' : 'Tap Mode Active (Click to Enable Paint Mode)'}

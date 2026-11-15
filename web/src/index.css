@@ -63,7 +63,11 @@
 
 /* Low-Vision / Large Text Accessibility Mode (scoped to text classes, preserving rem layout) */
 [data-large-text="true"] {
-  --capy-tutorial-top: 4.05rem;
+  --capy-tutorial-top: 5.05rem;
+}
+[data-large-text="true"] .text-\[9\.5px\] {
+  font-size: 11.5px;
+  line-height: 1.3;
 }
 [data-large-text="true"] .text-\[10px\] {
   font-size: 12.5px;
@@ -88,5 +92,36 @@
 [data-large-text="true"] .text-lg {
   font-size: 21px;
   line-height: 1.5;
+}
+
+@keyframes capy-spotlight-pulse {
+  0%, 100% {
+    opacity: 0.68;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes capy-spotlight-dash {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.capy-spotlight-pulse {
+  animation: capy-spotlight-pulse 1.5s ease-in-out infinite;
+}
+
+.capy-spotlight-dash {
+  animation: capy-spotlight-dash 1.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capy-spotlight-pulse,
+  .capy-spotlight-dash {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
