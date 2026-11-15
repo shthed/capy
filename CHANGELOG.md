@@ -1,6 +1,6 @@
 ### 3.0.13 - 2026-11-15 (Beta)
 
-- Preserve active puzzle progress across debounced and beforeunload viewport saves, harden async puzzle transition and blob URL cleanup, remove idle polling from TargetSpotlightOverlay, speed up CI via async Android/E2E/Pages jobs with headless --unit blocking checks, add verified main-to-beta ancestry sync and strict 100% AI auto-merge to the PR review gate, and expand E2E regression coverage [#530](https://github.com/shthed/capy/pull/530)
+- Preserve active puzzle progress across debounced (`lastSavedViewportRef`) and beforeunload viewport saves, harden async puzzle transition and blob URL cleanup, remove idle polling from `TargetSpotlightOverlay`, speed up CI via async Android/E2E/Pages jobs with headless `--unit` blocking checks and hidden-files artifact preservation, harden PR review gate Probe 9b clock-skew anchoring and strict `100%` AI auto-merge, tighten `AGENTS.md` `100%` sanity check and `stripHtmlComments`, expand Probe 2g/unit/workflow tests, and sync `PROJECT.md` and `TESTING.md` [#530](https://github.com/shthed/capy/pull/530)
 
 ### 3.0.12 - 2026-11-14 (Production)
 
