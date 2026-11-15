@@ -5549,32 +5549,40 @@ async function runCodecAndEngineTests() {
       assert.equal(clampedRect.left >= 4, true);
       assert.equal(clampedRect.top + clampedRect.height <= 776, true);
 
-      const focalRect = spotlightMod.computeCanvasFocalRect(
-        { left: 16, top: 60, width: 328, height: 180 },
-        { width: 360, height: 780 }
+      const overlappedRings = spotlightMod.preventRingOverlap(
+        [
+          { left: 239, top: 6, width: 30, height: 30 },
+          { left: 265, top: 6, width: 30, height: 30 },
+        ],
+        2
       );
-      assert.equal(focalRect.top >= 250, true, 'Canvas focal box must sit below tutorial card');
-      assert.equal(focalRect.top + focalRect.height <= 772, true);
-      assert.equal(focalRect.width >= 100 && focalRect.height >= 70, true);
+      assert.equal(
+        overlappedRings[0].left + overlappedRings[0].width <= overlappedRings[1].left - 1.5,
+        true,
+        `Adjacent rings must separate cleanly without colliding: ${JSON.stringify(overlappedRings)}`
+      );
 
       const topConn = spotlightMod.computeSpotlightConnector(
-        { left: 400, top: 60, width: 448, height: 200 },
+        { left: 400, top: 76, width: 448, height: 140 },
         { left: 1100, top: 10, width: 36, height: 36 }
       );
+      assert.ok(topConn, 'Expected valid connector for topbar target');
       assert.equal(topConn.d.startsWith('M '), true);
       assert.equal(topConn.arrowPoints.split(' ').length, 3);
       assert.equal(topConn.endY < topConn.startY, true, 'Connector to topbar must point upward');
 
       const bottomConn = spotlightMod.computeSpotlightConnector(
-        { left: 400, top: 60, width: 448, height: 200 },
+        { left: 400, top: 76, width: 448, height: 140 },
         { left: 590, top: 720, width: 58, height: 52 }
       );
+      assert.ok(bottomConn, 'Expected valid connector for bottom dock target');
       assert.equal(bottomConn.endY > bottomConn.startY, true, 'Connector to dock must point downward');
 
       const sideConn = spotlightMod.computeSpotlightConnector(
-        { left: 400, top: 60, width: 448, height: 200 },
-        { left: 1200, top: 140, width: 44, height: 44 }
+        { left: 400, top: 76, width: 448, height: 140 },
+        { left: 1200, top: 120, width: 44, height: 44 }
       );
+      assert.ok(sideConn, 'Expected valid connector for side target');
       assert.equal(sideConn.endX > sideConn.startX, true, 'Connector to right side must point right');
     } finally {
       globalThis.localStorage = prevLs;
@@ -5829,8 +5837,21 @@ async function runBrowserBasicsSuite() {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
         let overlapsTarget = false;
-        const ringsInView = rings.every((ring) => {
-          const rr = ring.getBoundingClientRect();
+        const ringRects = rings.map((r) => r.getBoundingClientRect());
+        let ringsSeparated = true;
+        for (let i = 0; i < ringRects.length; i++) {
+          for (let j = i + 1; j < ringRects.length; j++) {
+            const a = ringRects[i];
+            const b = ringRects[j];
+            const hx = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+            const vy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+            if (hx > 0.5 && vy > 0.5) {
+              ringsSeparated = false;
+            }
+          }
+        }
+        const ringsInView = rings.every((ring, idx) => {
+          const rr = ringRects[idx];
           const inView =
             rr.width > 0 &&
             rr.height > 0 &&
@@ -5851,13 +5872,17 @@ async function runBrowserBasicsSuite() {
           }
           return inView;
         });
+        const pointerBox = pointer ? pointer.getBoundingClientRect() : null;
+        const pathBox = path ? path.getBoundingClientRect() : null;
         return {
           pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : '',
           ringCount: rings.length,
           ringsInView,
+          ringsSeparated,
           overlapsTarget,
           hasPath: Boolean(path?.getAttribute('d')),
           hasArrow: Boolean(poly?.getAttribute('points')),
+          pointerSpan: Math.max(pathBox?.width || 0, pathBox?.height || 0, pointerBox ? 0 : 0),
           ringAnim: rings[0] ? getComputedStyle(rings[0]).animationName : '',
           ringTransitionDur: rings[0] ? getComputedStyle(rings[0]).transitionDuration : '',
         };
@@ -5865,6 +5890,7 @@ async function runBrowserBasicsSuite() {
       assert.equal(metrics.pointerEvents, 'none', 'spotlight-overlay must be non-blocking');
       assert.equal(metrics.ringCount >= 1, true, 'Expected at least 1 spotlight-ring');
       assert.equal(metrics.ringsInView, true, `Spotlight rings must fit inside viewport: ${JSON.stringify(metrics)}`);
+      assert.equal(metrics.ringsSeparated, true, `Adjacent spotlight rings must not overlap: ${JSON.stringify(metrics)}`);
       assert.equal(metrics.overlapsTarget, true, `Spotlight ring must overlap target element: ${JSON.stringify(metrics)}`);
       assert.equal(metrics.hasPath && metrics.hasArrow, true, 'Expected spotlight-pointer SVG path and arrowhead');
       return metrics;
@@ -5895,7 +5921,7 @@ async function runBrowserBasicsSuite() {
     await expectTutStep(2);
     const step2PromptText = await tutPage.getByTestId('tutorial-try-pill').innerText();
     assert.equal(
-      step2PromptText.includes('Tap any matching shape on the puzzle to color it!') &&
+      step2PromptText.includes('Try it: Tap a matching number on the picture') &&
         !step2PromptText.includes('Capy Forest'),
       true,
       `Step 2 prompt must be generic without hardcoded Capy Forest (got "${step2PromptText}")`
@@ -5959,12 +5985,13 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     const step7Metrics = await assertSpotlightAligned(tutPage, 'tutorial');
     assert.equal(step7Metrics.ringCount, 2, 'Step 7 (peek_fullscreen) must highlight both Eye and Full Screen');
+    assert.equal(step7Metrics.pointerSpan >= 10, true, `Step 7 topbar pointer must have clean arrow stem (${step7Metrics.pointerSpan}px)`);
     assert.equal(
       (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes(
-        'Tap the highlighted Eye icon to preview original art, or Full Screen to expand'
+        'Try it: Tap Eye or Expand above'
       ),
       true,
-      'Step 7 tryPrompt must clearly explain Eye vs Full Screen'
+      'Step 7 tryPrompt must cleanly explain Eye or Expand'
     );
     await captureV3012Screenshot(tutPage, 'desktop_1280x800_step7_spotlight.png');
     // Step 6 -> 7 (peek_fullscreen): leaving Step 7 via preview auto-advance must automatically exit tutorial-triggered preview!
@@ -8784,6 +8811,11 @@ async function runBrowserBasicsSuite() {
       true,
       `OnboardingTutorial (${mobileTutorialBox.x}..${mobileTutorialBox.x + mobileTutorialBox.width}) must fit within 360px mobile viewport`
     );
+    assert.equal(
+      mobileTutorialBox.height <= 210,
+      true,
+      `Step 1 compact OnboardingTutorial card height (${mobileTutorialBox.height}px) must stay slim <= 210px on 360x780`
+    );
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
     const normalTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
@@ -8799,7 +8831,13 @@ async function runBrowserBasicsSuite() {
     assert.equal(normalTopicsOverflow <= 0, true, `Normal tutorial-topics-drawer must have zero overflow (got ${normalTopicsOverflow})`);
     await mobileTopbarPage.getByTestId('tutorial-topic-item-6').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'hidden', timeout: 3000 });
-    await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
+    const mobileStep7Metrics = await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
+    assert.equal(mobileStep7Metrics.ringCount, 2, 'Mobile Step 7 must highlight both Eye and Full Screen');
+    assert.equal(
+      mobileStep7Metrics.pointerSpan >= 10,
+      true,
+      `Mobile Step 7 topbar pointer must have uncrushed stem (${mobileStep7Metrics.pointerSpan}px)`
+    );
     await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step7_spotlight.png');
 
     // Open SettingsModal on 360x780 mobile and verify all header tabs fit without horizontal clipping

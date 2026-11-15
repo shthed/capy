@@ -86,113 +86,112 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
   {
     key: 'palette',
     title: 'Pick a Color',
-    description:
-      'Choose a numbered swatch from the bottom Palette Dock (or press 1–9). Colors stay sorted with your active pick centered; Easy Mode also auto-matches taps.',
-    tryPrompt: 'Tap any color swatch below (or press 1–9)',
+    description: 'Tap any numbered color at the bottom to select it.',
+    tryPrompt: 'Try it: Tap a color below',
     icon: Palette,
   },
   {
     key: 'paint',
-    title: 'Tap or Paint Shapes',
+    title: 'Tap to Color',
     description:
-      'Tap matching regions to color them, or toggle the right-side Paintbrush button to drag-paint continuously across multiple shapes.',
-    tryPrompt: 'Tap any matching shape on the puzzle to color it!',
+      'Tap shapes matching your color, or tap the brush on the right to drag-paint.',
+    tryPrompt: 'Try it: Tap a matching number on the picture',
     icon: Hand,
   },
   {
     key: 'zoom',
-    title: 'Zoom & Pan',
+    title: 'Zoom & Move',
     description:
-      'Pinch with two fingers, double-tap & drag vertically (horizontal drags pan), scroll, or use Arrow / WASD, + / -, and 0 keys.',
-    tryPrompt: 'Zoom or pan the puzzle (pinch, scroll, or + key)',
+      'Pinch with two fingers to zoom in, or drag with one finger to look around.',
+    tryPrompt: 'Try it: Pinch or scroll to zoom in',
     icon: ZoomIn,
   },
   {
     key: 'hint',
-    title: 'Smart Hints & Highlighting',
+    title: 'Find Hard Shapes',
     description:
-      'Tap the active color swatch again (or double-tap any swatch) to center a remaining shape. Customize Hint Styles, patterns, intensity & colors in Settings > Hints.',
-    tryPrompt: 'Tap the highlighted swatch again (or tap Try Hint)',
+      'Can’t spot the last shape? Tap your selected color again to jump right to it.',
+    tryPrompt: 'Try it: Tap your active color again',
     icon: Sparkles,
   },
   {
     key: 'undo_redo',
-    title: 'Undo & Redo Mistakes',
+    title: 'Undo Mistakes',
     description:
-      'Tap Undo (Ctrl+Z / Cmd+Z) to step back a stroke, or Redo (Ctrl+Y) to restore it. Toggle Undo visibility anytime in Settings.',
-    tryPrompt: 'Tap Undo (Ctrl+Z) or Redo to try it (paint a shape first if Undo is disabled)',
+      'Colored the wrong spot? Tap Undo on the right to step back.',
+    tryPrompt: 'Try it: Tap Undo on the right (color a shape first)',
     icon: Undo2,
   },
   {
     key: 'replay',
-    title: 'Animated Replay & Timeline',
+    title: 'Watch a Replay',
     description:
-      'Long-press Undo or tap Play on completed art to open the timeline scrubber: adjust speed (0.5x–20x), Follow Painting, Auto-Loop, or Resume Here.',
-    tryPrompt: 'Long-press Undo or tap Play to scrub your timeline (paint a shape first if Undo is disabled)',
+      'Press and hold Undo anytime to watch your coloring play back like a video.',
+    tryPrompt: 'Try it: Press and hold Undo',
     icon: Film,
   },
   {
     key: 'peek_fullscreen',
-    title: 'Peek Original & Full Screen',
+    title: 'Peek & Full Screen',
     description:
-      'Tap the top Eye button to compare with the original artwork (toggle preview outlines in Settings), or go Full Screen for extra room.',
-    tryPrompt: 'Tap the highlighted Eye icon to preview original art, or Full Screen to expand',
+      'Tap the Eye icon to peek at the finished art, or Expand for extra room.',
+    tryPrompt: 'Try it: Tap Eye or Expand above',
     icon: Eye,
   },
   {
     key: 'free_color',
-    title: 'Free Colour & Custom Palettes',
+    title: 'Paint Any Color',
     description:
-      'Enable Free Colour Mode in Settings to paint any region any shade and unlock + Custom (live HSL/Hex picker and 5 curated Palette Themes).',
-    tryPrompt: 'Turn on Free Colour Mode in Settings or tap + Custom in the palette dock',
+      'Want your own shades? Turn on Free Colour Mode in Settings to paint any color you like.',
+    tryPrompt: 'Try it: Open the gear menu and check Settings',
     icon: Paintbrush,
   },
   {
     key: 'gallery_daily',
-    title: 'Artwork Gallery & Daily Puzzle',
+    title: 'Daily Puzzle & Gallery',
     description:
-      'Open Menu > Create to play today’s rotating UTC Puzzle of the Day, search artworks, filter categories, or vote on Community Puzzle Ideas.',
-    tryPrompt: 'Open Menu > Create to explore the Daily Puzzle and starter gallery',
+      'Open the top-right menu and tap Create for today’s Daily Puzzle and extra pictures.',
+    tryPrompt: 'Try it: Tap Menu > Create',
     icon: Compass,
   },
   {
     key: 'custom_photo',
-    title: 'Create Puzzles from Photos',
+    title: 'Turn Photos Into Art',
     description:
-      'Tap the top Photo icon (or Choose Photo in Create) to convert any image using Auto, Line Art, Painterly, Posterized, or Mosaic styles and detail sliders.',
-    tryPrompt: 'Tap the top Photo icon (or Choose Photo in Create) and select an image',
+      'Tap the Photo button at the top to turn your own photo or drawing into a puzzle.',
+    tryPrompt: 'Try it: Tap the Photo icon above',
     icon: Camera,
   },
   {
     key: 'infinite_zoom',
-    title: 'Infinite Zoom 2x Detail Tiles',
+    title: 'Zoom Into Tiny Details',
     description:
-      'Need finer detail? Open Menu > Create and tap Infinite Zoom 2x Detail Tile to carve a zoomed sub-puzzle, with a top Parent Puzzle pill to return.',
-    tryPrompt: 'Open Menu > Create and tap Infinite Zoom 2x Detail Tile',
+      'In Menu > Create, pick Detail Tile to zoom way into small parts of your picture.',
+    tryPrompt: 'Try it: Open Menu > Create > Detail Tile',
     icon: ZoomOut,
   },
   {
     key: 'saves_export',
-    title: 'Saves, .capy Backups & SVG',
+    title: 'Your Saved Art',
     description:
-      'Tap the top progress pill for Saves: switch Thumbnails or Detail list, Pin, Rename, set Replay on Load, import/export .capy files, or print .svg sheets.',
-    tryPrompt: 'Tap the top progress pill for Saves, or export a .capy / .svg file',
+      'Tap the top-left title pill anytime to switch pictures, save backups, or print pages.',
+    tryPrompt: 'Try it: Tap the title pill top-left',
     icon: Save,
   },
   {
     key: 'cloud_coop',
-    title: 'Cloud Sync, Share & Live Co-op',
+    title: 'Play With Friends',
     description:
-      'Inside Saves, sign in with Google or Play Games for CRDT Cloud Sync, copy <2 KB Share Progress links, or Host / Join a 6-char Live Co-op room.',
-    tryPrompt: 'Tap the top Co-op icon or share/sync progress inside Saves',
+      'Tap the Friends icon at the top to color together live or share your progress link.',
+    tryPrompt: 'Try it: Tap the Friends icon above',
     icon: Users,
   },
   {
     key: 'settings_a11y',
-    title: 'Settings & Accessibility',
+    title: 'Settings & Text Size',
     description:
-      'Tune Easy vs Normal, Auto-Advance, Canvas Background, Large Text, Reduced Motion, Sound & Haptics, Zoom Sensitivity, Zoom Stops, or Reset Progress.',
-    tryPrompt: 'Open Menu > Settings (or adjust any option / Large Text) to finish',
+      'Tap the gear icon anytime for Large Text, sounds, easy tapping, and more.',
+    tryPrompt: 'Try it: Tap the gear icon above (or Large Text)',
     icon: Sliders,
   },
 ];
@@ -281,17 +280,18 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   if (!isOpen) return null;
 
   const Icon = currentStep.icon;
+  const progressPercent = Math.round(((clampedStep + 1) / TUTORIAL_STEPS.length) * 100);
 
   return (
     <div
       className="fixed inset-x-0 z-40 pointer-events-none flex justify-center px-3"
       style={{
-        top: 'calc(var(--capy-tutorial-top, 3.55rem) + var(--sat, 0px))',
+        top: 'calc(var(--capy-tutorial-top, 4.75rem) + var(--sat, 0px))',
       }}
     >
       <div
         data-testid="onboarding-tutorial"
-        className="pointer-events-auto w-full max-w-md max-h-[calc(100dvh-5.75rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl p-3 sm:p-3.5 text-slate-100 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200"
+        className="pointer-events-auto w-full max-w-md max-h-[calc(100dvh-6.5rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 sm:px-3.5 text-slate-100 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200"
       >
         {onToggleLargeText && clampedStep === 0 && (
           <button
@@ -299,16 +299,14 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
             data-testid="tutorial-large-text-btn"
             aria-pressed={largeText}
             onClick={onToggleLargeText}
-            className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl border text-left text-xs font-extrabold transition-colors cursor-pointer ${
+            className={`w-full flex items-center justify-between gap-2 px-3 py-1 rounded-xl border text-left text-xs font-extrabold transition-colors cursor-pointer ${
               largeText
                 ? 'bg-amber-400 text-slate-950 border-amber-300 hover:bg-amber-300'
-                : 'bg-slate-950/90 text-amber-200 border-amber-400/60 hover:bg-slate-800'
+                : 'bg-amber-400/10 text-amber-200 border-amber-400/45 hover:bg-amber-400/20'
             }`}
           >
-            <span className="leading-snug">
-              {largeText
-                ? 'Large Text On (Tap to Switch Back)'
-                : "Is this too small? Can't read this? Switch to Large Text"}
+            <span className="truncate">
+              {largeText ? 'Large Text: On (tap to switch back)' : 'Too small? Switch to Large Text'}
             </span>
           </button>
         )}
@@ -316,8 +314,8 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-xl bg-amber-400/20 border border-amber-400/40 text-amber-300 flex-shrink-0 mt-0.5">
-              <Icon size={15} />
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-amber-400/20 border border-amber-400/40 text-amber-300 flex-shrink-0 mt-0.5">
+              <Icon size={14} />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -410,17 +408,15 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
         )}
 
         {/* Description */}
-        <p className="text-[11px] sm:text-xs leading-relaxed text-slate-300">
+        <p className="text-[11px] sm:text-xs leading-snug text-slate-200">
           {currentStep.description}
         </p>
 
-        {/* Interactive Try Prompt */}
+        {/* Lightweight Action Cue */}
         <div
           data-testid="tutorial-try-pill"
-          className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold ${
-            isCurrentTried
-              ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-200'
-              : 'bg-slate-950/75 border-slate-800 text-amber-200'
+          className={`flex items-center justify-between gap-2 text-[11px] font-bold ${
+            isCurrentTried ? 'text-emerald-300' : 'text-amber-300'
           }`}
         >
           <span className="min-w-0 leading-snug">{currentStep.tryPrompt}</span>
@@ -429,37 +425,23 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
               type="button"
               data-testid="tutorial-try-hint-btn"
               onClick={onTriggerHint}
-              className="px-2 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0"
+              className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0"
             >
               Try Hint
             </button>
           )}
         </div>
 
-        {/* Step Dots Strip (Wraps cleanly without horizontal overflow) */}
-        <div className="flex flex-wrap items-center gap-1 pt-0.5">
-          {TUTORIAL_STEPS.map((step, idx) => (
-            <button
-              key={step.key}
-              type="button"
-              aria-label={`Go to tutorial step ${idx + 1}: ${step.title}`}
-              onClick={() => {
-                setShowTopics(false);
-                onStepChange(idx);
-              }}
-              className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                idx === clampedStep
-                  ? 'w-5 bg-amber-400'
-                  : triedActions[step.key]
-                  ? 'w-2 bg-emerald-400/80'
-                  : 'w-2 bg-slate-700 hover:bg-slate-600'
-              }`}
-            />
-          ))}
+        {/* Sleek Progress Bar */}
+        <div className="h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-amber-400 transition-all duration-200"
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
 
         {/* Topics Jump + Navigation */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <button
             type="button"
             data-testid="tutorial-topics-btn"
