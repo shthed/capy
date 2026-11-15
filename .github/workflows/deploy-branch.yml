@@ -408,6 +408,7 @@ jobs:
         with:
           name: web-dist-${{ github.run_attempt }}
           path: web/dist
+          include-hidden-files: true
           retention-days: 1
 
   android_build:
@@ -451,7 +452,7 @@ jobs:
       - name: Stage build artifacts
         run: |
           mkdir -p staging/web
-          cp -r web/dist/* staging/web/
+          cp -a web/dist/. staging/web/
           mkdir -p staging/apk
           cp app/build/outputs/apk/debug/app-debug.apk staging/apk/capy.apk
 
@@ -460,6 +461,7 @@ jobs:
         with:
           name: build-artifacts-${{ github.run_attempt }}
           path: staging
+          include-hidden-files: true
           retention-days: 1
 
   e2e_release_gate:
