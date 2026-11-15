@@ -50,7 +50,7 @@ jobs:
             (github.event_name == 'pull_request' && contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'), github.event.action)) ||
             (github.event_name == 'pull_request_review' && contains(github.event.review.body || '', '<!-- capy-review:')) ||
             (github.event_name == 'issue_comment' && contains(github.event.comment.body || '', '<!-- capy-review:') && !contains(github.event.comment.body || '', '<!-- capy-pages-preview -->'))))) &&
-      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
+      (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && !contains(github.event.comment.body || '', '<!-- capy-gate-status -->'))) &&
       (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -645,7 +645,10 @@ jobs:
               }
             }
 
-            const strictAiReady = !isDraft && !changesRequested && (aiApproved || (isBetaTarget && isVerifiedMainSync));
+            const ownerApproved = effectiveOwnerApprovals.length > 0;
+            const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
+            const strictAiReady = !isDraft && !changesRequested && aiOrSyncReady;
+            const gatePassed = strictAiReady && (isBetaTarget || ownerApproved);
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
             const botReviews = reviews.filter(
@@ -668,31 +671,38 @@ jobs:
               }
             }
 
-            // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars)
+            // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars) & upsert gate status comment
+            const blockers = [];
+            if (changesRequested) blockers.push('Changes requested / hold');
+            if (isDraft) blockers.push('Draft PR');
+            if (!isBetaTarget && !ownerApproved) blockers.push('Owner Approve');
+            if (!aiOrSyncReady) {
+              if (latestAiSignal !== null && !hasValidAiMarker) {
+                blockers.push('PR readiness/100% score');
+              } else {
+                blockers.push('AI review');
+              }
+            }
+
+            const targetScope = isBetaTarget
+              ? 'Beta (no Owner approval needed)'
+              : 'Main (Owner Approve required)';
+
             let state = 'pending';
-            let description = 'Awaiting strict AI review (100% + review:ai-approved) on HEAD';
+            let description = `${targetScope}: Blocked by ${blockers.join(', ') || 'Pending checks'}`;
             if (changesRequested) {
               state = 'failure';
-              description = 'Changes requested or hold active; address feedback before merge';
-            } else if (isDraft) {
-              state = 'pending';
-              description = 'Draft PR: complete work, pass strict 100% AI review, and mark ready';
-            } else if (strictAiReady) {
+            } else if (gatePassed) {
               state = 'success';
               if (isBetaTarget) {
                 description =
                   isVerifiedMainSync && !aiApproved
-                    ? 'Beta gate passed: verified origin/main ancestry sync; no holds'
-                    : 'Beta gate passed: AI review (100%) verified; no holds';
+                    ? 'Beta gate passed (no Owner approval needed): verified origin/main sync'
+                    : 'Beta gate passed (no Owner approval needed): AI review (100%) verified';
               } else {
-                description = 'Auto-approved: strict AI review (100%) verified; no holds';
+                description =
+                  'Main gate passed (Owner Approve verified): AI review (100%) + Owner Approve';
               }
-            } else if (latestAiSignal !== null && !hasValidAiMarker) {
-              state = 'pending';
-              description = 'Strict 100% AI gate not met (requires 100% score, zero unchecked tasks, valid body)';
-            } else if (isBetaTarget) {
-              state = 'pending';
-              description = 'Beta gate: awaiting strict AI review (100% + review:ai-approved) on HEAD';
             }
 
             const clippedDesc = description.slice(0, 140);
@@ -727,6 +737,65 @@ jobs:
                 } else {
                   throw err;
                 }
+              }
+            }
+
+            const gateStatusHeading = isBetaTarget
+              ? '**Target**: `beta` (**Owner approval NOT required**)'
+              : '**Target**: `main` (**Owner Approve REQUIRED**)';
+            const gateStatusSummary = gatePassed
+              ? '**Status**: All gate requirements satisfied — ready to merge'
+              : `**Blocked by**: ${blockers.join(', ')}`;
+            const readinessValid =
+              isStrictPrBodyValid && (!latestAiSignal || isStrictAiBodyValid);
+            const gateChecklistLines = [
+              `- [${aiOrSyncReady ? 'x' : ' '}] **AI Review (100% + \`review:ai-approved\`)**${isBetaTarget && isVerifiedMainSync && !aiApproved ? ' (verified `origin/main` ancestry sync)' : ''}`,
+              ...(!isBetaTarget
+                ? [
+                    `- [${ownerApproved ? 'x' : ' '}] **Owner Approve** (native \`APPROVED\` review on HEAD by \`shthed\` or \`capyboop\`)`,
+                  ]
+                : []),
+              `- [${readinessValid ? 'x' : ' '}] **PR Description & Readiness** (\`## Summary\`, \`PR Readiness Score: 100%\`, zero unchecked tasks)`,
+              `- [${!changesRequested ? 'x' : ' '}] **No Active Holds / Changes Requested**`,
+              ...(isDraft ? ['- [ ] **Ready for Review** (PR is currently a Draft)'] : []),
+            ];
+            const gateCommentBody = [
+              '<!-- capy-gate-status -->',
+              '### Review Gate Status',
+              '',
+              `- ${gateStatusHeading}`,
+              `- ${gateStatusSummary}`,
+              `- **HEAD**: \`${headSha.slice(0, 7)}\``,
+              '',
+              ...gateChecklistLines,
+            ].join('\n');
+
+            if (!isReadOnlyDependabotEvent) {
+              try {
+                const existingGateComment = comments.find((c) =>
+                  (c.body || '').includes('<!-- capy-gate-status -->')
+                );
+                if (existingGateComment) {
+                  if ((existingGateComment.body || '') !== gateCommentBody) {
+                    await github.rest.issues.updateComment({
+                      owner,
+                      repo,
+                      comment_id: existingGateComment.id,
+                      body: gateCommentBody,
+                    });
+                  }
+                } else {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: prNumber,
+                    body: gateCommentBody,
+                  });
+                }
+              } catch (err) {
+                core.warning(
+                  `Failed to upsert capy-gate-status comment on PR #${prNumber}: ${err.message}`
+                );
               }
             }
 
