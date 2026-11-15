@@ -30,8 +30,9 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers, bi
 1. **Single Unified Runner ([`web/scripts/test.mjs`](./web/scripts/test.mjs)) + Sub-2s Sanity Gate ([`web/scripts/sanity.mjs`](./web/scripts/sanity.mjs))**:
    - `npm run test:sanity` verifies SemVer/`versionCode` parity, `CHANGELOG.md` SemVer/date ordering, clickable PR links, channel-marker invariants, root `.md` guide indexing, and `.md` formatting/links across the entire repo in `< 2s` with zero browser startup.
    - `npm test` consolidates all Vite SSR engine/codec/worker unit checks and headless Chromium E2E stages into one deterministic script, binding an ephemeral preview port automatically when `CAPY_TEST_URL` is unset so concurrent runs never collide on `:3000`.
-2. **Deterministic Pre-Baked + Live Worker Coverage**:
+2. **Deterministic Pre-Baked + Live Worker & Event-Driven E2E Coverage**:
    - Verifies both instant zero-worker startup via `./assets/sample_saves.capy` and live `puzzle.worker.ts` custom photo segmentation, IndexedDB (`capy_game_storage_v8`) persistence, and 100% offline PWA reload.
+   - Replaces arbitrary UI-transition, modal, long-press, Co-op, resize, keyboard-shortcut, and breadcrumb sleeps in [`web/scripts/test.mjs`](./web/scripts/test.mjs) with deterministic locator visibility, DOM attribute, canvas backing-dimension, IndexedDB eviction, and URL-hash waits, reserving explicit `waitForTimeout(...)` calls strictly for real debounce (`350ms`), animation, timer-starvation, and negative-absence guards.
 
 ---
 

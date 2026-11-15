@@ -1,4 +1,8 @@
-### 3.0.16 - 2026-11-15 (Beta)
+### 3.0.17 - 2026-11-15 (Beta)
+
+- Replace brittle fixed UI-transition, long-press, modal, Co-op, resize, shortcut, and breadcrumb sleeps across `web/scripts/test.mjs` with deterministic Playwright locator, attribute, canvas-dimension, IndexedDB, and URL-hash waits while preserving intentional timer, debounce, live-playback, and starvation assertions, and sync `TESTING.md`, `TODO.md`, and `ROADMAP.md` [#539](https://github.com/shthed/capy/pull/539)
+
+### 3.0.16 - 2026-11-15
 
 - Target Android API 36 with modern `enableEdgeToEdge()`, IME window insets, `onSaveInstanceState` restoration, WebView navigation classification (`shouldOverrideUrlLoading`, Safe Browsing, `allowContentAccess = false`, `canGoBack()`), `cacheDir/shared/` FileProvider isolation with 24h cleanup and MIME-preserving `shareImage`, RFC-8259 bridge JSON escaping, `HapticSpec` value equality, and strict `web/package.json` SemVer parsing, add `backup_rules.xml`, `data_extraction_rules.xml`, `*.jks`/`*.keystore` gitignore entries, Gradle catalog pruning, and `NativeBridge.ts` cold-start queue buffering with Android OAuth/APK card gating, enforce required release signing secrets in `release.yml`, add `@JavascriptInterface` parity enforcement in `sanity.mjs`, and expand Kotlin JUnit, JS unit, and Android docs [#537](https://github.com/shthed/capy/pull/537)
 
