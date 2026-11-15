@@ -1,0 +1,3 @@
+{
+  "install": "npm ci --prefer-offline --no-audit --no-fund && npm --prefix web ci --prefer-offline --no-audit --no-fund"
+}

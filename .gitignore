@@ -37,4 +37,5 @@ Thumbs.db
 !.env.example
 
 # AI Agent Coordination & Scratch Directories
-.agents/
+.agents/*
+!.agents/environment.json
