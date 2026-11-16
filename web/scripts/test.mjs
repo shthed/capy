@@ -7853,7 +7853,7 @@ async function runCodecAndEngineTests() {
       const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
       assert.equal(offersMod.FEATURE_OFFER_IDS.length, 8);
-      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 13);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
       for (const id of offersMod.FEATURE_OFFER_IDS) {
         const offer = offersMod.FEATURE_OFFERS[id];
         assert.equal(
@@ -8188,7 +8188,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 13');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -8208,7 +8208,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8223,7 +8223,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8237,7 +8237,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8246,7 +8246,7 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8454,7 +8454,7 @@ async function runBrowserBasicsSuite() {
       await tutPage.waitForFunction(
         (expected) =>
           document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
-          `STEP ${expected} OF 13`,
+          `STEP ${expected} OF 14`,
         stepNum,
         { timeout: 5000 }
       );
@@ -8510,13 +8510,13 @@ async function runBrowserBasicsSuite() {
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
-    // Back onto already-tried Step 4 (STEP 5 OF 13) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 5 OF 13',
+      'STEP 5 OF 14',
       'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
     );
     await tutPage.keyboard.press('Control+y');
@@ -8559,7 +8559,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 8 OF 13',
+      'STEP 8 OF 14',
       'Auto-advance timer must stay paused while SettingsModal is open'
     );
     await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
@@ -8600,34 +8600,43 @@ async function runBrowserBasicsSuite() {
       fs.rmSync(tutPhotoPath, { force: true });
     }
     await expectTutStep(11);
-    // Step 10 -> 11 (infinite_zoom)
+    // Step 11 -> 12 (puzzle_presets via Preset Style Gallery)
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-create').click();
+    await tutPage.getByTestId('preset-gallery-toggle').click();
+    await tutPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.getByTestId('preset-apply-algo-mosaic').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(12);
+    await assertSpotlightAligned(tutPage, 'tutorial');
+    // Step 12 -> 13 (infinite_zoom)
     await tutPage.locator('button[title="Settings and Menu"]').click();
     await tutPage.getByTestId('settings-tab-create').click();
     await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
     await waitForPuzzleLoaded(tutPage);
-    await expectTutStep(12);
-    await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 11 -> 12 (saves_export)
-    await tutPage.getByTestId('topbar-saves-btn').click();
-    await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(13);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // [All Topics] drawer lists all 13 topics; jumping onto already-tried Step 1 waits for a fresh action
+    // Step 13 -> 14 (saves_export)
+    await tutPage.getByTestId('topbar-saves-btn').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(14);
+    await assertSpotlightAligned(tutPage, 'tutorial');
+    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 13);
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
     await tutPage.getByTestId('tutorial-topic-item-0').click();
     await expectTutStep(1);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 1 OF 13',
+      'STEP 1 OF 14',
       'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
     );
     await tutPage.getByTestId('tutorial-topics-btn').click();
-    await tutPage.getByTestId('tutorial-topic-item-12').click();
-    await expectTutStep(13);
-    // Step 13 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
+    await tutPage.getByTestId('tutorial-topic-item-13').click();
+    await expectTutStep(14);
+    // Step 14 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
     await tutPage.getByTestId('tutorial-large-text-btn').click();
     await tutPage.getByTestId('tutorial-large-text-btn').click();
     await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 4000 });
@@ -8749,7 +8758,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.close();
     await tutContext.close();
 
-    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 13, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
+    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
     const offerContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await offerContext.addInitScript(() => {
       const store = {};
@@ -8782,12 +8791,12 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 13`
+        `STEP ${expectedStepNum} OF 14`
       );
       await offerPage.waitForTimeout(950);
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 13`,
+        `STEP ${expectedStepNum} OF 14`,
         `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
       );
       await offerPage.getByTestId('tutorial-skip-btn').click();
@@ -8878,8 +8887,8 @@ async function runBrowserBasicsSuite() {
     await expectOfferBanner('create_gallery');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await expectOfferBanner('saves_export');
-    await jumpFromOfferAndAssertStep(12);
-    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 13
+    await jumpFromOfferAndAssertStep(13);
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
     const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
       const xFrac = 0.42 + (attempt % 3) * 0.08;
@@ -8894,7 +8903,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('undo-btn').click();
     await expectOfferBanner('undo_replay');
     await jumpFromOfferAndAssertStep(5);
-    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 13
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
     await offerPage.getByTestId('redo-btn').click();
     const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
     assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
@@ -8905,7 +8914,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
-    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 13
+    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
     await offerPage.locator('button[title="Settings and Menu"]').click();
     await offerPage.getByTestId('settings-tab-settings').click();
     const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
