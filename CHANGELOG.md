@@ -1,4 +1,8 @@
-### 3.0.19 - 2026-11-15 (Beta)
+### 3.0.20 - 2026-11-16 (Beta)
+
+- Hide unfinished Cloud/Co-op hub (`cloud-coop-hub`), top-bar Friends button (`topbar-coop-btn`), and `cloud_coop` tutorial/feature offer behind opt-in dev flags until `EPIC-3`/`EPIC-5` while keeping `Share Progress Link` and `Printable SVG` visible in `Saves`, add Google Play Store graphics/screenshots and `PLAY_STORE_LISTING.md` under `docs/play-store/`, and defer Android TV D-pad/TV Party UI until post-Play-Store launch [#547](https://github.com/shthed/capy/pull/547)
+
+### 3.0.19 - 2026-11-15
 
 - Tag `3.0.18` as `(Production)`, untag `3.0.13`, move beta-only [#544](https://github.com/shthed/capy/pull/544) under `3.0.19 (Beta)`, archive shipped [EPIC-2](https://github.com/shthed/capy/issues/477) PRs ([#535](https://github.com/shthed/capy/pull/535), [#537](https://github.com/shthed/capy/pull/537)--[#540](https://github.com/shthed/capy/pull/540), [#544](https://github.com/shthed/capy/pull/544), [#545](https://github.com/shthed/capy/pull/545)) in `ROADMAP.md` Section 6, and sync `US-3.6` / `US-4.4` in [EPIC-3](https://github.com/shthed/capy/issues/478) and [EPIC-4](https://github.com/shthed/capy/issues/479) [#546](https://github.com/shthed/capy/pull/546)
 - Declare Android TV Leanback launcher support (`LEANBACK_LAUNCHER`, optional `touchscreen`/`leanback` features) and add `320x180` `drawable-xhdpi/tv_banner.png`, update `privacy-policy.html` to reflect 100% ad-free builds, add `AndroidTvManifestAndBridgeTest.kt` and pure-Node TV checks, expand CI review-gate unit tests (`gemini-3.8-flash`/`gemini-4-argon` fallback, `ACTIONS_GITHUB_TOKEN` `403` fallback, Dependabot `403`, `synchronize` label reconciliation), and sync `APP.md`, `DEV.md`, `TESTING.md`, `ROADMAP.md`, and `TODO.md` [#545](https://github.com/shthed/capy/pull/545)
