@@ -148,19 +148,6 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       borderRadius: 9999,
     },
   ],
-  cloud_coop: [
-    {
-      selector: '[data-testid="topbar-coop-btn"]',
-      padding: 3,
-      borderRadius: 9999,
-    },
-    {
-      selector: '[data-testid="topbar-active-coop-pill"]',
-      optional: true,
-      padding: 3,
-      borderRadius: 9999,
-    },
-  ],
   settings_a11y: [
     {
       selector: '[data-testid="topbar-settings-btn"]',
@@ -237,13 +224,6 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
   saves_export: [
     {
       selector: '[data-testid="topbar-saves-btn"]',
-      padding: 3,
-      borderRadius: 9999,
-    },
-  ],
-  cloud_coop: [
-    {
-      selector: '[data-testid="topbar-coop-btn"]',
       padding: 3,
       borderRadius: 9999,
     },
