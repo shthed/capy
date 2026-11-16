@@ -1,4 +1,8 @@
-### 3.0.29 - 2026-11-16 (Production, Beta)
+### 3.0.30 - 2026-11-16 (Beta)
+
+- Fix intermittent `[E2E 12]` Play Daily failure by waiting for the prebaked `daily-*` snapshot to become the active save before asserting, since `waitForPuzzleLoaded` could resolve against the previously mounted puzzle while `daily_saves.capy` was still being fetched and imported [#569](https://github.com/shthed/capy/pull/569)
+
+### 3.0.29 - 2026-11-16 (Production)
 
 - Fix signed Android release builds failing `lintVitalRelease` (`InvalidFragmentVersionForActivityResult` on `registerForActivityResult` in `MainActivity.kt`) by pinning `androidx.fragment:fragment-ktx` `1.8.9` over the stale transitive Fragment from `play-services-games-v2`, run `app:lintVitalRelease` in the per-PR `Android Build & JUnit Tests` job so release-only lint blockers surface before tagging, and realign `CHANGELOG.md` channel markers to `v3.0.26` Production [#566](https://github.com/shthed/capy/pull/566)
 - Retag `CHANGELOG.md` channel markers for the `v3.0.29` Production promotion (`3.0.29` to `(Production, Beta)`, untag `3.0.26`) per the `PROJECT.md` Pre-Promotion checklist [#568](https://github.com/shthed/capy/pull/568)
