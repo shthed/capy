@@ -5844,6 +5844,9 @@ export const App: React.FC = () => {
               triggerFeatureOffer('saves_export');
             }
           }}
+          onExplorePresetGallery={() => {
+            markTutorialActionTried('puzzle_presets');
+          }}
         />
       </Suspense>
 
