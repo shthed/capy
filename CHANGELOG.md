@@ -1,6 +1,6 @@
 ### 3.0.29 - 2026-11-16 (Beta)
 
-- Fix signed Android release builds failing `lintVitalRelease` (`InvalidFragmentVersionForActivityResult` on `registerForActivityResult` in `MainActivity.kt`) by pinning `androidx.fragment:fragment-ktx` `1.8.9` over the stale transitive Fragment from `play-services-games-v2`, run `app:lintVitalRelease` in the per-PR `Android Build & JUnit Tests` job so release-only lint blockers surface before tagging, and realign `CHANGELOG.md` channel markers to `v3.0.26` Production [#PRNUM](https://github.com/shthed/capy/pull/PRNUM)
+- Fix signed Android release builds failing `lintVitalRelease` (`InvalidFragmentVersionForActivityResult` on `registerForActivityResult` in `MainActivity.kt`) by pinning `androidx.fragment:fragment-ktx` `1.8.9` over the stale transitive Fragment from `play-services-games-v2`, run `app:lintVitalRelease` in the per-PR `Android Build & JUnit Tests` job so release-only lint blockers surface before tagging, and realign `CHANGELOG.md` channel markers to `v3.0.26` Production [#566](https://github.com/shthed/capy/pull/566)
 
 ### 3.0.28 - 2026-11-16
 
