@@ -7830,6 +7830,8 @@ async function runCodecAndEngineTests() {
     };
     globalThis.window = { location: { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' } };
     try {
+      assert.equal(storageMod.DEFAULT_SETTINGS.regionColorMode, 'DETAIL');
+      assert.equal(storageMod.DEFAULT_SETTINGS.paletteSort, 'HUE');
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
         difficulty: 'NORMAL',
