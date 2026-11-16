@@ -1,17 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  ChevronDown,
-  ChevronUp,
   Crosshair,
-  Download,
   FastForward,
-  ImagePlus,
   Pause,
   Play,
   Repeat,
   RotateCcw,
   SkipForward,
-  Sparkles,
   X,
 } from 'lucide-react';
 
@@ -35,11 +30,7 @@ interface ReplayControlsProps {
   onToggleLoop?: () => void;
   onToggleFollow?: () => void;
   onExitReplay: () => void;
-  onExportImage: () => void;
-  onOpenCreate: () => void;
-  onResumeFromStep?: (step: number) => void;
   onUserInteract?: () => void;
-  onMinimizedChange?: (minimized: boolean) => void;
 }
 
 export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
@@ -60,30 +51,18 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
   onToggleLoop,
   onToggleFollow,
   onExitReplay,
-  onExportImage,
-  onOpenCreate,
-  onResumeFromStep,
   onUserInteract,
-  onMinimizedChange,
 }) => {
-  const [isMinimized, setIsMinimized] = useState<boolean>(true);
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
   const [hoverStep, setHoverStep] = useState<number | null>(null);
   const [hoverRatio, setHoverRatio] = useState<number>(0);
-  const onMinimizedChangeRef = useRef(onMinimizedChange);
-  onMinimizedChangeRef.current = onMinimizedChange;
 
   useEffect(() => {
     if (isOpen) {
-      setIsMinimized(true);
       setIsScrubbing(false);
       setHoverStep(null);
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    onMinimizedChangeRef.current?.(isOpen ? isMinimized : true);
-  }, [isOpen, isMinimized]);
 
   if (!isOpen || totalSteps <= 0) return null;
 
@@ -231,158 +210,6 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
     );
   };
 
-  if (isMinimized) {
-    return (
-      <div
-        className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
-        style={{
-          bottom: `calc(${bottomOffset} + var(--sab, 0px))`,
-        }}
-      >
-        <div
-          data-testid="replay-controls-window"
-          data-minimized="true"
-          className="pointer-events-auto w-full max-w-2xl flex items-center gap-1 sm:gap-2.5 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2 sm:px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
-        >
-          {/* Play / Pause / Replay */}
-          <button
-            type="button"
-            onClick={isFinished ? onRestart : onTogglePlay}
-            aria-label={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
-            title={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
-            data-testid="replay-play-pause-btn"
-            className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer flex-shrink-0"
-          >
-            {isFinished ? (
-              <RotateCcw size={13} />
-            ) : isPlaying ? (
-              <Pause size={13} />
-            ) : (
-              <Play size={13} className="ml-0.5" />
-            )}
-          </button>
-
-          {/* Dominant Interactive YouTube-Style Progress Slider (takes up most of the bar width) */}
-          {renderYouTubeScrubber()}
-
-          {/* Speed Selector */}
-          <button
-            type="button"
-            onClick={handleCycleSpeed}
-            aria-label="Change Replay Speed"
-            title="Change Replay Speed"
-            data-testid="replay-speed-btn"
-            className="inline-flex items-center gap-0.5 px-1.5 sm:px-2 py-1 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
-          >
-            <FastForward size={11} />
-            <span>{replaySpeed}x</span>
-          </button>
-
-          {/* Follow Painting Toggle */}
-          {onToggleFollow && (
-            <button
-              type="button"
-              onClick={() => {
-                onUserInteract?.();
-                onToggleFollow();
-              }}
-              aria-pressed={isFollowing}
-              aria-label={
-                isFollowing
-                  ? 'Follow Painting Active (Smooth Camera Pan)'
-                  : 'Follow Painting Process (Smooth Camera Pan)'
-              }
-              title={
-                isFollowing
-                  ? 'Follow Painting Active (Smooth Camera Pan)'
-                  : 'Follow Painting Process (Smooth Camera Pan)'
-              }
-              data-testid="replay-follow-btn"
-              className={`p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
-                isFollowing
-                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
-              }`}
-            >
-              <Crosshair size={12} />
-            </button>
-          )}
-
-          {/* Auto-Loop Toggle */}
-          {onToggleLoop && (
-            <button
-              type="button"
-              onClick={() => {
-                onUserInteract?.();
-                onToggleLoop();
-              }}
-              aria-pressed={isLooping}
-              aria-label={
-                isLooping
-                  ? 'Auto-Loop Replay Enabled (Click to Disable)'
-                  : 'Auto-Loop Replay When Finished'
-              }
-              title={
-                isLooping
-                  ? 'Auto-Loop Replay Enabled (Click to Disable)'
-                  : 'Auto-Loop Replay When Finished'
-              }
-              data-testid="replay-loop-btn"
-              className={`p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
-                isLooping
-                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
-              }`}
-            >
-              <Repeat size={12} />
-            </button>
-          )}
-
-          {/* Skip to End */}
-          {!isFinished && (
-            <button
-              type="button"
-              onClick={onSkipToEnd}
-              aria-label="Skip to Completed Artwork"
-              title="Skip to Completed Artwork"
-              data-testid="replay-skip-btn"
-              className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
-            >
-              <SkipForward size={12} />
-            </button>
-          )}
-
-          {/* Expand Controls Button */}
-          <button
-            type="button"
-            onClick={() => {
-              onUserInteract?.();
-              setIsMinimized(false);
-            }}
-            aria-label="Expand Replay Controls"
-            title="Expand Replay Controls"
-            data-testid="replay-toggle-minimize-btn"
-            className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
-          >
-            <ChevronUp size={13} />
-          </button>
-
-          {/* Exit Replay */}
-          <button
-            type="button"
-            onClick={onExitReplay}
-            aria-label="Exit Replay"
-            title="Exit Replay"
-            data-testid="replay-exit-btn"
-            className="w-6 h-6 sm:w-7 sm:h-7 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       className="fixed inset-x-0 z-30 pointer-events-none flex justify-center px-3 transition-all"
@@ -392,212 +219,127 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
     >
       <div
         data-testid="replay-controls-window"
-        data-minimized="false"
-        className="pointer-events-auto w-full max-w-2xl bg-slate-900/94 border border-amber-400/40 rounded-2xl shadow-2xl backdrop-blur-xl p-3 text-slate-100 space-y-2 animate-in fade-in slide-in-from-bottom-3 duration-200"
+        className="pointer-events-auto w-full max-w-2xl flex items-center gap-1 sm:gap-2.5 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2 sm:px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
       >
-        {/* Top Row: Full-Width YouTube-Style Progress Scrubber */}
-        <div className="flex items-center">
-          {renderYouTubeScrubber()}
-        </div>
+        {/* Play / Pause / Replay */}
+        <button
+          type="button"
+          onClick={isFinished ? onRestart : onTogglePlay}
+          aria-label={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
+          title={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
+          data-testid="replay-play-pause-btn"
+          className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer flex-shrink-0"
+        >
+          {isFinished ? (
+            <RotateCcw size={13} />
+          ) : isPlaying ? (
+            <Pause size={13} />
+          ) : (
+            <Play size={13} className="ml-0.5" />
+          )}
+        </button>
 
-        {/* Bottom Row: YouTube-Style Transport Controls (Left) + Actions & Window Controls (Right) */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            {/* Play / Pause / Restart */}
-            <button
-              type="button"
-              onClick={isFinished ? onRestart : onTogglePlay}
-              aria-label={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
-              title={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
-              data-testid="replay-play-pause-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer"
-            >
-              {isFinished ? (
-                <>
-                  <RotateCcw size={14} />
-                  <span>Replay</span>
-                </>
-              ) : isPlaying ? (
-                <>
-                  <Pause size={14} />
-                  <span>Pause</span>
-                </>
-              ) : (
-                <>
-                  <Play size={14} />
-                  <span>Play</span>
-                </>
-              )}
-            </button>
+        {/* Dominant Interactive YouTube-Style Progress Slider (takes up most of the bar width) */}
+        {renderYouTubeScrubber()}
 
-            {/* Restart from 0 */}
-            {!isFinished && (
-              <button
-                type="button"
-                onClick={onRestart}
-                aria-label="Restart Replay from Beginning"
-                title="Restart Replay from Beginning"
-                data-testid="replay-restart-btn"
-                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-              >
-                <RotateCcw size={14} />
-              </button>
-            )}
+        {/* Speed Selector */}
+        <button
+          type="button"
+          onClick={handleCycleSpeed}
+          aria-label="Change Replay Speed"
+          title="Change Replay Speed"
+          data-testid="replay-speed-btn"
+          className="inline-flex items-center gap-0.5 px-1.5 sm:px-2 py-1 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
+        >
+          <FastForward size={11} />
+          <span>{replaySpeed}x</span>
+        </button>
 
-            {/* Skip to End */}
-            {!isFinished && (
-              <button
-                type="button"
-                onClick={onSkipToEnd}
-                aria-label="Skip to Completed Artwork"
-                title="Skip to Completed Artwork"
-                data-testid="replay-skip-btn"
-                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-              >
-                <SkipForward size={14} />
-              </button>
-            )}
+        {/* Follow Painting Toggle */}
+        {onToggleFollow && (
+          <button
+            type="button"
+            onClick={() => {
+              onUserInteract?.();
+              onToggleFollow();
+            }}
+            aria-pressed={isFollowing}
+            aria-label={
+              isFollowing
+                ? 'Follow Painting Active (Smooth Camera Pan)'
+                : 'Follow Painting Process (Smooth Camera Pan)'
+            }
+            title={
+              isFollowing
+                ? 'Follow Painting Active (Smooth Camera Pan)'
+                : 'Follow Painting Process (Smooth Camera Pan)'
+            }
+            data-testid="replay-follow-btn"
+            className={`p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
+              isFollowing
+                ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+            }`}
+          >
+            <Crosshair size={12} />
+          </button>
+        )}
 
-            {/* Speed Selector */}
-            <button
-              type="button"
-              onClick={handleCycleSpeed}
-              aria-label="Change Replay Speed"
-              title="Change Replay Speed"
-              data-testid="replay-speed-btn"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer"
-            >
-              <FastForward size={13} />
-              <span>{replaySpeed}x</span>
-            </button>
+        {/* Auto-Loop Toggle */}
+        {onToggleLoop && (
+          <button
+            type="button"
+            onClick={() => {
+              onUserInteract?.();
+              onToggleLoop();
+            }}
+            aria-pressed={isLooping}
+            aria-label={
+              isLooping
+                ? 'Auto-Loop Replay Enabled (Click to Disable)'
+                : 'Auto-Loop Replay When Finished'
+            }
+            title={
+              isLooping
+                ? 'Auto-Loop Replay Enabled (Click to Disable)'
+                : 'Auto-Loop Replay When Finished'
+            }
+            data-testid="replay-loop-btn"
+            className={`p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
+              isLooping
+                ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
+            }`}
+          >
+            <Repeat size={12} />
+          </button>
+        )}
 
-            {/* Follow Painting Toggle */}
-            {onToggleFollow && (
-              <button
-                type="button"
-                onClick={() => {
-                  onUserInteract?.();
-                  onToggleFollow();
-                }}
-                aria-pressed={isFollowing}
-                aria-label={
-                  isFollowing
-                    ? 'Follow Painting Active (Smooth Camera Pan)'
-                    : 'Follow Painting Process (Smooth Camera Pan)'
-                }
-                title={
-                  isFollowing
-                    ? 'Follow Painting Active (Smooth Camera Pan)'
-                    : 'Follow Painting Process (Smooth Camera Pan)'
-                }
-                data-testid="replay-follow-btn"
-                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
-                  isFollowing
-                    ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
-                }`}
-              >
-                <Crosshair size={14} />
-              </button>
-            )}
+        {/* Skip to End */}
+        {!isFinished && (
+          <button
+            type="button"
+            onClick={onSkipToEnd}
+            aria-label="Skip to Completed Artwork"
+            title="Skip to Completed Artwork"
+            data-testid="replay-skip-btn"
+            className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
+          >
+            <SkipForward size={12} />
+          </button>
+        )}
 
-            {/* Auto-Loop Toggle */}
-            {onToggleLoop && (
-              <button
-                type="button"
-                onClick={() => {
-                  onUserInteract?.();
-                  onToggleLoop();
-                }}
-                aria-pressed={isLooping}
-                aria-label={
-                  isLooping
-                    ? 'Auto-Loop Replay Enabled (Click to Disable)'
-                    : 'Auto-Loop Replay When Finished'
-                }
-                title={
-                  isLooping
-                    ? 'Auto-Loop Replay Enabled (Click to Disable)'
-                    : 'Auto-Loop Replay When Finished'
-                }
-                data-testid="replay-loop-btn"
-                className={`p-1.5 rounded-xl border transition-colors cursor-pointer ${
-                  isLooping
-                    ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
-                }`}
-              >
-                <Repeat size={14} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/20 text-amber-300 border border-amber-400/40">
-              <Sparkles size={10} />
-              {isFinished ? 'Completed' : 'Replay'}
-            </span>
-
-            {onResumeFromStep && (
-              <button
-                type="button"
-                onClick={() => onResumeFromStep(currentStep)}
-                aria-label="Resume Play From Here"
-                title={`Resume active gameplay from region step ${currentStep}`}
-                data-testid="replay-resume-btn"
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                <Play size={12} className="fill-slate-950" />
-                <span>Resume Here</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onExportImage}
-              title="Download PNG Artwork"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-            >
-              <Download size={13} />
-              <span className="hidden sm:inline">Save PNG</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onOpenCreate}
-              title="Pick Next Artwork"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer"
-            >
-              <ImagePlus size={13} />
-              <span className="hidden sm:inline">Next</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                onUserInteract?.();
-                setIsMinimized(true);
-              }}
-              aria-label="Minimise Replay Controls"
-              title="Minimise Replay Controls"
-              data-testid="replay-toggle-minimize-btn"
-              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <ChevronDown size={16} />
-            </button>
-
-            <button
-              type="button"
-              onClick={onExitReplay}
-              aria-label="Exit Replay"
-              title="Exit Replay"
-              data-testid="replay-exit-btn"
-              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </div>
+        {/* Exit Replay */}
+        <button
+          type="button"
+          onClick={onExitReplay}
+          aria-label="Exit Replay"
+          title="Exit Replay"
+          data-testid="replay-exit-btn"
+          className="w-6 h-6 sm:w-7 sm:h-7 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
+        >
+          <X size={14} />
+        </button>
       </div>
     </div>
   );
