@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import {
   GenerationProgressPayload,
   GeneratorConfig,
+  MAX_GENERATOR_CONFIG,
   PaletteColor,
   PalettePreset,
   PuzzleData,
@@ -71,19 +72,26 @@ const ColorPickerPopover = React.lazy(() =>
   import('./components/ColorPickerPopover').then((m) => ({ default: m.ColorPickerPopover }))
 );
 
-function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
-  const def = DEFAULT_SETTINGS.generatorConfig;
+function matchesGeneratorConfig(cfg: GeneratorConfig, ref: GeneratorConfig): boolean {
   return (
-    (cfg.algorithm || 'AUTO') === (def.algorithm || 'AUTO') &&
-    (cfg.lineHandling || 'ABSORB_LINES') === (def.lineHandling || 'ABSORB_LINES') &&
-    cfg.paletteDetail === def.paletteDetail &&
-    cfg.imageType === def.imageType &&
-    cfg.colorCount === def.colorCount &&
-    cfg.minRegionArea === def.minRegionArea &&
-    cfg.maxRegions === def.maxRegions &&
-    cfg.resolution === def.resolution &&
-    cfg.smoothingPasses === def.smoothingPasses
+    (cfg.algorithm || 'AUTO') === (ref.algorithm || 'AUTO') &&
+    (cfg.lineHandling || 'ABSORB_LINES') === (ref.lineHandling || 'ABSORB_LINES') &&
+    cfg.paletteDetail === ref.paletteDetail &&
+    cfg.imageType === ref.imageType &&
+    cfg.colorCount === ref.colorCount &&
+    cfg.minRegionArea === ref.minRegionArea &&
+    cfg.maxRegions === ref.maxRegions &&
+    cfg.resolution === ref.resolution &&
+    cfg.smoothingPasses === ref.smoothingPasses
   );
+}
+
+function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
+  return matchesGeneratorConfig(cfg, DEFAULT_SETTINGS.generatorConfig);
+}
+
+function isMaxGeneratorConfig(cfg: GeneratorConfig): boolean {
+  return matchesGeneratorConfig(cfg, MAX_GENERATOR_CONFIG);
 }
 
 export function mergeCustomPalette(
@@ -3737,7 +3745,8 @@ export const App: React.FC = () => {
       deltaPaintedColors?: Record<number, number>,
       deltaIsFreeColor?: boolean,
       forceGeneratorConfig?: GeneratorConfig,
-      deltaResetEpoch?: number
+      deltaResetEpoch?: number,
+      prebakedSnapshotId?: string
     ) => {
       const sampleSeq = ++snapshotTransitionSeqRef.current;
       clearPendingViewportSave();
@@ -3752,28 +3761,41 @@ export const App: React.FC = () => {
         new URLSearchParams(window.location.search).get('skipSampleBootstrap') === '1';
       const cleanSamplePath = sample.assetPath.replace(/^\.\//, '');
       const usePrebaked =
-        !skipBootstrap && (!forceGeneratorConfig || isDefaultGeneratorConfig(forceGeneratorConfig));
+        !skipBootstrap &&
+        (Boolean(prebakedSnapshotId) ||
+          !forceGeneratorConfig ||
+          isDefaultGeneratorConfig(forceGeneratorConfig) ||
+          isMaxGeneratorConfig(forceGeneratorConfig));
 
       let handedOffToAsync = false;
       try {
         if (usePrebaked) {
           let snaps = StorageService.loadSnapshots();
-          let prebakedSnap = snaps.find(
-            (s) => s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
-          );
+          let prebakedSnap = prebakedSnapshotId
+            ? snaps.find((s) => s.id === prebakedSnapshotId)
+            : snaps.find(
+                (s) => s.isAutoSample && s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
+              );
           if (!prebakedSnap) {
             try {
-              const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
+              const archiveUrl = prebakedSnapshotId
+                ? './assets/daily_saves.capy'
+                : './assets/sample_saves.capy';
+              const bundleResp = await fetch(archiveUrl).catch(() => null);
               if (sampleSeq !== snapshotTransitionSeqRef.current) return;
               if (bundleResp && bundleResp.ok) {
                 await StorageService.importSnapshotData(await bundleResp.arrayBuffer(), {
                   refreshTimestamps: true,
+                  ...(prebakedSnapshotId ? { filterSnapshotId: prebakedSnapshotId } : {}),
                 });
                 if (sampleSeq !== snapshotTransitionSeqRef.current) return;
                 snaps = StorageService.loadSnapshots();
-                prebakedSnap = snaps.find(
-                  (s) => s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
-                );
+                prebakedSnap = prebakedSnapshotId
+                  ? snaps.find((s) => s.id === prebakedSnapshotId)
+                  : snaps.find(
+                      (s) =>
+                        s.isAutoSample && s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
+                    );
               }
             } catch {
               // Fall back to worker generation if archive unavailable
@@ -5811,14 +5833,20 @@ export const App: React.FC = () => {
               }
             }
           }}
-          onSelectSample={(sample: SampleArtwork, cfg?: GeneratorConfig) => {
+          onSelectSample={(
+            sample: SampleArtwork,
+            cfg?: GeneratorConfig,
+            prebakedSnapshotId?: string
+          ) => {
             markTutorialActionTried('gallery_daily');
             void loadSampleFromPrebakedOrGenerate(
               sample,
               undefined,
               undefined,
               sample.isFreeColor,
-              cfg || settings.generatorConfig
+              cfg || settings.generatorConfig,
+              undefined,
+              prebakedSnapshotId
             );
           }}
           onUploadImage={() => fileInputRef.current?.click()}

@@ -1099,7 +1099,7 @@ export class StorageService {
    */
   static async importSnapshotData(
     input: ArrayBuffer | Uint8Array | string,
-    options?: { refreshTimestamps?: boolean }
+    options?: { refreshTimestamps?: boolean; filterSnapshotId?: string }
   ): Promise<{
     importedCount: number;
     firstSnapshot?: SavedSnapshot;
@@ -1152,7 +1152,11 @@ export class StorageService {
           }
 
           if (decoded.format === 'capy-archive-save-v2' && Array.isArray(decoded.snapshots)) {
-            const validSnapshots = decoded.snapshots.filter((s) => Boolean(s && s.id && s.title));
+            const validSnapshots = decoded.snapshots.filter(
+              (s) =>
+                Boolean(s && s.id && s.title) &&
+                (!options?.filterSnapshotId || s.id === options.filterSnapshotId)
+            );
             if (validSnapshots.length === 0) {
               return { importedCount: 0, error: 'No valid snapshots in binary archive' };
             }

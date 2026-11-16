@@ -24,6 +24,10 @@
   ! Cache-Control
   Cache-Control: public, max-age=0, must-revalidate
 
+/assets/daily_saves.capy
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
 /assets/*.webp
   ! Cache-Control
   Cache-Control: public, max-age=0, must-revalidate

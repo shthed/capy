@@ -1,3 +1,7 @@
+### 3.0.28 - 2026-11-16 (Alpha)
+
+- Pre-generate all 4 built-in sample puzzles (`web/public/assets/sample_saves.capy`) and a rolling UTC window of daily puzzles (`web/public/assets/daily_saves.capy`) on Max settings (`2048p`, `2000` max regions, `64` colours, `24 px²` min region area) with zero-wait selective `filterSnapshotId` loading in `StorageService.ts` and `App.tsx`, add self-contained in-process Vite generation in `web/scripts/generate-sample-saves.mjs` plus scheduled `.github/workflows/regenerate-puzzles.yml`, surface an above-the-fold `create-style-hint-bar` + reorder **Preset Style Gallery & Visual Guide** above **Community Puzzle Ideas** + add tap-friendly `(i)` option hint tooltips in `SettingsModal.tsx`, and sync `WEB.md`, `TESTING.md`, and `web/scripts/test.mjs` [#565](https://github.com/shthed/capy/pull/565)
+
 ### 3.0.27 - 2026-11-16 (Beta)
 
 - Standardize `web/scripts/test.mjs` into sequential `[Unit 01/15]`--`[Unit 15/15]` (`[Unit 01/10]`--`[Unit 10/10]` clean-room) and `[E2E 01/21]`--`[E2E 21/21]` stages with execution-count assertions, gate optional `v3012_screenshots` writes behind `CAPY_V3012_SCREENSHOT_DIR`, isolate `bash --norc --noprofile` subprocess environments, add `{ quiet, logger }` options to `.github/scripts/cleanup-gh-pages-previews.mjs` and `.github/scripts/cleanup-branches.mjs`, and sync `TESTING.md` [#563](https://github.com/shthed/capy/pull/563)
