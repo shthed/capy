@@ -84,3 +84,38 @@ export function resolveScopedDbName(
 ): string {
   return resolveStorageNamespace(pathname, origin, search).dbName;
 }
+
+export const DEV_CLOUD_COOP_UI_STORAGE_KEY = 'capy_dev_cloud_coop_ui';
+
+export function isCloudCoopUiEnabled(
+  search?: string,
+  storageValue?: string | null
+): boolean {
+  const effectiveSearch =
+    search !== undefined
+      ? search
+      : typeof window !== 'undefined'
+        ? (window.location?.search ?? '')
+        : '';
+  if (effectiveSearch) {
+    const params = new URLSearchParams(
+      effectiveSearch.startsWith('?') ? effectiveSearch : `?${effectiveSearch}`
+    );
+    const rawCoop = (params.get('coop') || '').trim().toLowerCase();
+    if (rawCoop === '0' || rawCoop === 'false') {
+      return false;
+    }
+    if (rawCoop === '1' || rawCoop === 'true' || Boolean((params.get('room') || '').trim())) {
+      return true;
+    }
+  }
+  let stored = storageValue;
+  if (stored === undefined && typeof window !== 'undefined') {
+    try {
+      stored = window.localStorage?.getItem(DEV_CLOUD_COOP_UI_STORAGE_KEY) ?? null;
+    } catch {
+      stored = null;
+    }
+  }
+  return stored === '1' || stored === 'true';
+}

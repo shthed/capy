@@ -11,8 +11,7 @@ export type FeatureOfferId =
   | 'create_gallery'
   | 'photo_upload'
   | 'infinite_zoom'
-  | 'saves_export'
-  | 'cloud_coop';
+  | 'saves_export';
 
 export interface FeatureOfferDef {
   id: FeatureOfferId;
@@ -77,13 +76,6 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     message:
       'Pin favorites, rename pictures, save backups, or print coloring pages here.',
     tutorialStepIndex: 11,
-  },
-  cloud_coop: {
-    id: 'cloud_coop',
-    title: 'Color Together',
-    message:
-      'Back up online, share a progress link, or join a live Co-op room with friends.',
-    tutorialStepIndex: 12,
   },
 };
 

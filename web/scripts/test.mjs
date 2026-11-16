@@ -3175,23 +3175,23 @@ async function runCodecAndEngineTests() {
 
     const prReviewGateSource = extractWorkflowScript('.github/workflows/pr-review-gate.yml');
     const gateDualPassDesc =
-      'Main gate passed (Owner Approve verified): AI review (100%) + Owner Approve';
+      'Main gate passed (no Owner approval needed): AI review (100%) verified';
     const gateBetaPassDesc =
       'Beta gate passed (no Owner approval needed): AI review (100%) verified';
     const gateMainAwaitingAiDesc =
-      'Main (Owner Approve required): Blocked by AI review';
+      'Main (no Owner approval needed): Blocked by AI review';
     const gateMainAwaitingAiAndOwnerDesc =
-      'Main (Owner Approve required): Blocked by Owner Approve, AI review';
+      'Main (no Owner approval needed): Blocked by AI review';
     const gateMainAwaitingOwnerDesc =
-      'Main (Owner Approve required): Blocked by Owner Approve';
+      'Main gate passed (no Owner approval needed): AI review (100%) verified';
     const gateBetaAwaitingAiDesc =
       'Beta (no Owner approval needed): Blocked by AI review';
     const gateDraftDesc =
-      'Main (Owner Approve required): Blocked by Draft PR, AI review';
+      'Main (no Owner approval needed): Blocked by Draft PR, AI review';
     const gateStrictNotMetDesc =
       'Beta (no Owner approval needed): Blocked by PR readiness/100% score';
     const gateMainStrictNotMetNoOwnerDesc =
-      'Main (Owner Approve required): Blocked by Owner Approve, PR readiness/100% score';
+      'Main (no Owner approval needed): Blocked by PR readiness/100% score';
 
     const runReviewGateScript = new AsyncFunction(
       'context',
@@ -3240,6 +3240,8 @@ async function runCodecAndEngineTests() {
         aiCommentTs = '2026-11-13T01:01:00Z',
         eventName = 'pull_request_review',
         action = 'submitted',
+        actionsGithubToken = undefined,
+        fetchImpl = null,
         createCommitStatusImpl = null,
         graphqlImpl = null,
         mergeImpl = null,
@@ -3249,8 +3251,10 @@ async function runCodecAndEngineTests() {
       const calls = {
         createReview: [],
         dismissReview: [],
+        addLabels: [],
         removeLabel: [],
         createCommitStatus: [],
+        fetch: [],
         graphql: [],
         merge: [],
       };
@@ -3364,6 +3368,10 @@ async function runCodecAndEngineTests() {
               calls.updateComment.push(payload);
               return { data: { id: payload.comment_id, body: payload.body } };
             },
+            addLabels: async (payload) => {
+              calls.addLabels.push(payload);
+              return { data: {} };
+            },
             removeLabel: async (payload) => {
               calls.removeLabel.push(payload);
               return { data: {} };
@@ -3376,7 +3384,30 @@ async function runCodecAndEngineTests() {
         eventName,
         payload: { pull_request: { number: 490 }, action },
       };
-      await runReviewGateScript(contextMock, githubMock, coreMock);
+      const prevActionsGithubToken = process.env.ACTIONS_GITHUB_TOKEN;
+      const prevFetch = globalThis.fetch;
+      if (actionsGithubToken) {
+        process.env.ACTIONS_GITHUB_TOKEN = actionsGithubToken;
+      } else {
+        delete process.env.ACTIONS_GITHUB_TOKEN;
+      }
+      globalThis.fetch = async (url, init) => {
+        calls.fetch.push({ url, init });
+        if (fetchImpl) {
+          return fetchImpl(url, init);
+        }
+        throw new Error(`Unexpected fetch call in runReviewGateCase: ${url}`);
+      };
+      try {
+        await runReviewGateScript(contextMock, githubMock, coreMock);
+      } finally {
+        if (prevActionsGithubToken === undefined) {
+          delete process.env.ACTIONS_GITHUB_TOKEN;
+        } else {
+          process.env.ACTIONS_GITHUB_TOKEN = prevActionsGithubToken;
+        }
+        globalThis.fetch = prevFetch;
+      }
       assert.equal(coreMock.failed.length, 0);
       if (expectCommitStatus) {
         assert.equal(calls.createCommitStatus.length, 1);
@@ -3597,7 +3628,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotChangesReqRes.status.state, 'failure');
     assert.equal(
       gateBotChangesReqRes.status.description.startsWith(
-        'Main (Owner Approve required): Blocked by Changes requested / hold'
+        'Main (no Owner approval needed): Blocked by Changes requested / hold'
       ),
       true
     );
@@ -3736,7 +3767,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotChangesReqApprovedPrefixRes.status.state, 'failure');
-    assert.equal(gateBotChangesReqApprovedPrefixRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotChangesReqApprovedPrefixRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotChangesReqApprovedPrefixRes.calls.createReview.length, 0);
 
     // (i) Bot PR + CHANGES_REQUESTED recovered by newer native APPROVED on headSha under commitMs skew -> success
@@ -3841,7 +3872,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLegacyAfterRejectCommentRes.status.state, 'failure');
-    assert.equal(gateBotLegacyAfterRejectCommentRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotLegacyAfterRejectCommentRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotLegacyAfterRejectCommentRes.calls.createReview.length, 0);
 
     const gateBotChangesReqLegacyLgtmAndLabelRes = await runReviewGateCase({
@@ -3879,7 +3910,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.state, 'failure');
-    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.calls.createReview.length, 0);
 
     const gateBotLegacyAfterPriorNativeAndRejectRes = await runReviewGateCase({
@@ -3925,7 +3956,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.state, 'failure');
-    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.calls.createReview.length, 0);
 
     // (l) Bug 2 regression: +120s commitMs skew catches post-approval HOLD comment, reverse-ordered COMMENTED DO NOT MERGE review (non-head & head), and DISMISSED+HOLD; stale pre-push HOLD stays ignored
@@ -3956,7 +3987,7 @@ async function runCodecAndEngineTests() {
       action: 'created',
     });
     assert.equal(gateBotSkewHoldCommentRes.status.state, 'failure');
-    assert.equal(gateBotSkewHoldCommentRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotSkewHoldCommentRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewHoldCommentRes.calls.createReview.length, 0);
 
     const gateBotSkewNonHeadCommentedReviewRes = await runReviewGateCase({
@@ -3983,7 +4014,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.state, 'failure');
-    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewNonHeadCommentedReviewRes.calls.createReview.length, 0);
 
     const gateBotSkewHeadCommentedReviewRes = await runReviewGateCase({
@@ -4010,7 +4041,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewHeadCommentedReviewRes.status.state, 'failure');
-    assert.equal(gateBotSkewHeadCommentedReviewRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotSkewHeadCommentedReviewRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewHeadCommentedReviewRes.calls.createReview.length, 0);
 
     const gateBotSkewDismissedHoldRes = await runReviewGateCase({
@@ -4112,7 +4143,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateSameSecRejectWinsByIdRes.status.state, 'failure');
-    assert.equal(gateSameSecRejectWinsByIdRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateSameSecRejectWinsByIdRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateSameSecRejectWinsByIdRes.calls.createReview.length, 0);
 
     const gateSameSecApproveSupersedesByIdRes = await runReviewGateCase({
@@ -4457,6 +4488,52 @@ async function runCodecAndEngineTests() {
       true
     );
 
+    const gateDependabotPr403SkipsFallbackRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'pull_request',
+      action: 'synchronize',
+      actionsGithubToken: 'ghs_ro_dependabot',
+      fetchImpl: async () => ({ ok: true, status: 201 }),
+      createCommitStatusImpl: async () => {
+        const err = new Error('Resource not accessible by integration');
+        err.status = 403;
+        throw err;
+      },
+    });
+    assert.equal(gateDependabotPr403SkipsFallbackRes.calls.fetch.length, 0);
+    assert.equal(
+      gateDependabotPr403SkipsFallbackRes.core.warnings.some((w) => w.includes('Read-only GITHUB_TOKEN')),
+      true
+    );
+    assert.equal(gateDependabotPr403SkipsFallbackRes.calls.graphql.length, 0);
+
+    const gateDependabotIssueComment403UsesFallbackRes = await runReviewGateCase({
+      prAuthor: 'dependabot[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      eventName: 'issue_comment',
+      action: 'created',
+      actionsGithubToken: 'ghs_test_tok',
+      fetchImpl: async () => ({ ok: true, status: 201 }),
+      createCommitStatusImpl: async () => {
+        const err = new Error('Resource not accessible by personal access token');
+        err.status = 403;
+        throw err;
+      },
+    });
+    assert.equal(gateDependabotIssueComment403UsesFallbackRes.calls.fetch.length, 1);
+    assert.equal(
+      gateDependabotIssueComment403UsesFallbackRes.calls.fetch[0].url,
+      `https://api.github.com/repos/shthed/capy/statuses/${gateHeadSha}`
+    );
+    assert.equal(
+      JSON.parse(gateDependabotIssueComment403UsesFallbackRes.calls.fetch[0].init.body).state,
+      'success'
+    );
+    assert.equal(gateDependabotIssueComment403UsesFallbackRes.calls.graphql[0].variables.mergeMethod, 'SQUASH');
+
     const gateDependabotMainPendingRes = await runReviewGateCase({
       prAuthor: 'dependabot[bot]',
       baseRef: 'main',
@@ -4529,7 +4606,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateSyncBetaPassRes.calls.createReview.length, 0);
     assert.equal(gateSyncBetaPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
-    // Retargeting an AI-approved PR from beta to main via pull_request edited requires Owner Approve, and with Owner Approve upgrades SQUASH -> MERGE
+    // Retargeting an AI-approved PR from beta to main via pull_request edited passes immediately without Owner Approve and upgrades SQUASH -> MERGE
     const gateRetargetBetaToMainAwaitingOwnerRes = await runReviewGateCase({
       prAuthor: 'shthed',
       baseRef: 'main',
@@ -4539,8 +4616,9 @@ async function runCodecAndEngineTests() {
       eventName: 'pull_request',
       action: 'edited',
     });
-    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.state, 'pending');
+    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.state, 'success');
     assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.description, gateMainAwaitingOwnerDesc);
+    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
     const gateRetargetBetaToMainRes = await runReviewGateCase({
       prAuthor: 'shthed',
@@ -4720,6 +4798,112 @@ async function runCodecAndEngineTests() {
       gateDraftSynchronizeClearsAllReviewLabelsRes.calls.removeLabel.map((r) => r.name),
       ['review:ai-approved', 'review:owner-approved', 'review:changes-requested']
     );
+
+    // edc70ed regression: synchronize preserves review:ai-approved when hasValidAiMarker holds while stripping owner/changes-requested labels
+    const gateSynchronizePreservesAiApprovedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      labels: ['review:ai-approved', 'review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: 100,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateSynchronizePreservesAiApprovedRes.status.state, 'success');
+    assert.deepEqual(
+      gateSynchronizePreservesAiApprovedRes.calls.removeLabel.map((r) => r.name),
+      ['review:owner-approved', 'review:changes-requested']
+    );
+    assert.equal(gateSynchronizePreservesAiApprovedRes.calls.addLabels.length, 0);
+
+    const gateSynchronizeReaddsAiApprovedRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      labels: ['review:owner-approved', 'review:changes-requested'],
+      aiCommentScore: 100,
+      eventName: 'pull_request',
+      action: 'synchronize',
+    });
+    assert.equal(gateSynchronizeReaddsAiApprovedRes.status.state, 'success');
+    assert.deepEqual(
+      gateSynchronizeReaddsAiApprovedRes.calls.addLabels.flatMap((a) => a.labels),
+      ['review:ai-approved']
+    );
+    assert.deepEqual(
+      gateSynchronizeReaddsAiApprovedRes.calls.removeLabel.map((r) => r.name),
+      ['review:owner-approved', 'review:changes-requested']
+    );
+
+    // ACTIONS_GITHUB_TOKEN 403 commit status REST fallback across success, pending, and failure states
+    const gatePrimaryStatusNoFallbackRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      actionsGithubToken: 'ghs_actions_token',
+    });
+    assert.equal(gatePrimaryStatusNoFallbackRes.status.state, 'success');
+    assert.equal(gatePrimaryStatusNoFallbackRes.calls.fetch.length, 0);
+
+    for (const fallbackCase of [
+      {
+        expectedState: 'success',
+        aiCommentScore: 100,
+        labels: ['review:ai-approved'],
+        comments: [],
+      },
+      {
+        expectedState: 'pending',
+        aiCommentScore: null,
+        labels: [],
+        comments: [],
+      },
+      {
+        expectedState: 'failure',
+        aiCommentScore: 100,
+        labels: ['review:ai-approved'],
+        comments: [
+          {
+            user: { login: 'shthed' },
+            body: 'HOLD pending fix',
+            created_at: '2026-11-13T01:02:00Z',
+            updated_at: '2026-11-13T01:02:00Z',
+          },
+        ],
+      },
+    ]) {
+      const fallbackRes = await runReviewGateCase({
+        prAuthor: 'shthed',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        aiCommentScore: fallbackCase.aiCommentScore,
+        labels: fallbackCase.labels,
+        comments: fallbackCase.comments,
+        actionsGithubToken: 'ghs_test_tok',
+        fetchImpl: async () => ({ ok: true, status: 201 }),
+        createCommitStatusImpl: async () => {
+          const err = new Error('Resource not accessible by personal access token');
+          err.status = 403;
+          throw err;
+        },
+      });
+      assert.equal(fallbackRes.calls.fetch.length, 1);
+      const { url: fetchUrl, init: fetchInit } = fallbackRes.calls.fetch[0];
+      assert.equal(fetchUrl, `https://api.github.com/repos/shthed/capy/statuses/${gateHeadSha}`);
+      assert.equal(fetchInit.method, 'POST');
+      assert.equal(fetchInit.headers.Authorization, 'Bearer ghs_test_tok');
+      assert.equal(fetchInit.headers.Accept, 'application/vnd.github+json');
+      const fallbackBody = JSON.parse(fetchInit.body);
+      assert.equal(fallbackBody.state, fallbackCase.expectedState);
+      assert.equal(fallbackBody.context, 'capy/review-gate');
+      assert.equal(fallbackBody.description.length <= 140, true);
+      assert.equal(fallbackBody.target_url, 'https://github.com/shthed/capy/pull/490');
+      if (fallbackCase.expectedState === 'success') {
+        assert.equal(fallbackRes.calls.graphql[0].variables.mergeMethod, 'SQUASH');
+      }
+    }
 
     // capyboop co-owner approval, AI review marker, HOLD, cross-owner supersession & untrusted rejection
     const gateCapyboopMainApprovedRes = await runReviewGateCase({
@@ -5067,32 +5251,25 @@ async function runCodecAndEngineTests() {
       ['beta', 'squash'],
       ['main', 'merge'],
     ]) {
-      const gateCleanFallbackRes = await runReviewGateCase({
-        prAuthor: 'github-actions[bot]',
-        baseRef: targetBase,
-        headSha: gateHeadSha,
-        body: validStrictPrBody,
-        reviews:
-          targetBase === 'main'
-            ? [
-                {
-                  id: 8102,
-                  user: { login: 'shthed' },
-                  state: 'APPROVED',
-                  commit_id: gateHeadSha,
-                  body: '',
-                  submitted_at: '2026-11-13T01:06:00Z',
-                },
-              ]
-            : [],
-        graphqlImpl: async () => {
-          throw new Error('Pull request is in clean status');
-        },
-      });
-      assert.equal(gateCleanFallbackRes.status.state, 'success');
-      assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
-      assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
-      assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+      for (const fallbackError of [
+        'Pull request is in clean status',
+        'Auto-merge is not supported for stacked pull requests.',
+      ]) {
+        const gateCleanFallbackRes = await runReviewGateCase({
+          prAuthor: 'github-actions[bot]',
+          baseRef: targetBase,
+          headSha: gateHeadSha,
+          body: validStrictPrBody,
+          reviews: [],
+          graphqlImpl: async () => {
+            throw new Error(fallbackError);
+          },
+        });
+        assert.equal(gateCleanFallbackRes.status.state, 'success');
+        assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
+        assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
+        assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+      }
     }
 
     // Dependabot PRs omit ## Summary / PR Readiness Score, yet still reject unchecked or sub-100% lines
@@ -6360,7 +6537,10 @@ async function runCodecAndEngineTests() {
     assert.equal(prReviewGateYaml.includes('needs: [ai-review]'), true);
     assert.equal(prReviewGateYaml.includes('always()'), true);
     assert.equal(prReviewGateYaml.includes('GEMINI_API_KEY'), true);
-    assert.equal(prReviewGateYaml.includes('gemini-2.5-flash'), true);
+    assert.equal(prReviewGateYaml.includes('gemini-3.8-flash'), true);
+    assert.equal(prReviewGateYaml.includes('gemini-4-argon'), true);
+    assert.equal(prReviewGateYaml.includes('ACTIONS_GITHUB_TOKEN'), true);
+    assert.equal(prReviewGateYaml.includes('safeAddLabel'), true);
     assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
     assert.equal(prReviewGateYaml.includes('strictAiReady'), true);
     assert.equal(prReviewGateYaml.includes('enablePullRequestAutoMerge'), true);
@@ -6383,6 +6563,10 @@ async function runCodecAndEngineTests() {
         ],
         { encoding: 'utf8' }
       )
+    );
+    assert.equal(
+      parsedPrReviewGate?.jobs?.['review-gate']?.steps?.[0]?.env?.ACTIONS_GITHUB_TOKEN,
+      '${{ secrets.GITHUB_TOKEN }}'
     );
     const reviewGateIfExpr = parsedPrReviewGate?.jobs?.['review-gate']?.if;
     assert.equal(typeof reviewGateIfExpr, 'string');
@@ -6634,22 +6818,32 @@ async function runCodecAndEngineTests() {
       headRepo = 'shthed/capy',
       existingComments = [],
       fetchResponse = null,
+      fetchImpl = null,
     } = {}) => {
       const warnings = [];
       const infos = [];
       const createdReviews = [];
       const addedLabels = [];
+      const fetchCalls = [];
       const prevKey = process.env.GEMINI_API_KEY;
       const prevFetch = globalThis.fetch;
       if (geminiApiKey) process.env.GEMINI_API_KEY = geminiApiKey;
       else delete process.env.GEMINI_API_KEY;
-      if (fetchResponse) {
-        globalThis.fetch = async () => ({
-          ok: true,
-          status: 200,
-          json: async () => fetchResponse,
-          text: async () => JSON.stringify(fetchResponse),
-        });
+      if (fetchImpl) {
+        globalThis.fetch = async (url, init) => {
+          fetchCalls.push({ url, init });
+          return fetchImpl(url, init);
+        };
+      } else if (fetchResponse) {
+        globalThis.fetch = async (url, init) => {
+          fetchCalls.push({ url, init });
+          return {
+            ok: true,
+            status: 200,
+            json: async () => fetchResponse,
+            text: async () => JSON.stringify(fetchResponse),
+          };
+        };
       }
       try {
         const mockGithub = {
@@ -6693,7 +6887,7 @@ async function runCodecAndEngineTests() {
           payload: { pull_request: { number: 999 } },
         };
         await runAiReviewScript(mockContext, mockGithub, mockCore);
-        return { warnings, infos, createdReviews, addedLabels };
+        return { warnings, infos, createdReviews, addedLabels, fetchCalls };
       } finally {
         if (prevKey === undefined) delete process.env.GEMINI_API_KEY;
         else process.env.GEMINI_API_KEY = prevKey;
@@ -6709,8 +6903,8 @@ async function runCodecAndEngineTests() {
     const skipDraftRes = await runAiReviewCase({ geminiApiKey: 'test-key', isDraft: true });
     assert.equal(skipDraftRes.createdReviews.length, 0);
 
-    const skipMainRes = await runAiReviewCase({ geminiApiKey: 'test-key', baseRef: 'main' });
-    assert.equal(skipMainRes.createdReviews.length, 0);
+    const skipOtherBaseRes = await runAiReviewCase({ geminiApiKey: 'test-key', baseRef: 'feature/other' });
+    assert.equal(skipOtherBaseRes.createdReviews.length, 0);
 
     const skipSyncRes = await runAiReviewCase({ geminiApiKey: 'test-key', headRef: 'sync/beta-from-main' });
     assert.equal(skipSyncRes.createdReviews.length, 0);
@@ -6738,6 +6932,17 @@ async function runCodecAndEngineTests() {
         ],
       },
     });
+    assert.equal(approveRes.fetchCalls.length, 1);
+    assert.equal(
+      approveRes.fetchCalls[0].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'
+    );
+    assert.equal(approveRes.fetchCalls[0].init.method, 'POST');
+    assert.equal(approveRes.fetchCalls[0].init.headers['x-goog-api-key'], 'test-key');
+    assert.equal(
+      JSON.parse(approveRes.fetchCalls[0].init.body).generationConfig.responseMimeType,
+      'application/json'
+    );
     assert.equal(approveRes.createdReviews.length, 1);
     assert.equal(approveRes.createdReviews[0].event, 'COMMENT');
     assert.equal(
@@ -6769,7 +6974,81 @@ async function runCodecAndEngineTests() {
       },
     });
     assert.equal(rejectRes.createdReviews.length, 1);
+    assert.equal(
+      rejectRes.createdReviews[0].body.includes(
+        '<!-- capy-review: actor=ai-agent verdict=CHANGES_REQUESTED sha=1111222233334444555566667777888899990000 score=70% -->'
+      ),
+      true
+    );
     assert.deepEqual(rejectRes.addedLabels, ['review:changes-requested']);
+    assert.equal(rejectRes.addedLabels.includes('review:ai-approved'), false);
+
+    // 404 fallback from gemini-3.8-flash to gemini-4-argon returns APPROVED 100%
+    const gemini404FallbackRes = await runAiReviewCase({
+      geminiApiKey: 'test-key',
+      fetchImpl: async (url) => {
+        if (url.includes('/gemini-3.8-flash:generateContent')) {
+          return {
+            ok: false,
+            status: 404,
+            text: async () => 'models/gemini-3.8-flash is not found',
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        verdict: 'APPROVED',
+                        score: 100,
+                        summary: 'Fallback argon ok.',
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        };
+      },
+    });
+    assert.equal(gemini404FallbackRes.fetchCalls.length, 2);
+    assert.equal(
+      gemini404FallbackRes.fetchCalls[0].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent'
+    );
+    assert.equal(
+      gemini404FallbackRes.fetchCalls[1].url,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent'
+    );
+    assert.equal(
+      gemini404FallbackRes.warnings.some((w) => w.includes('gemini-3.8-flash') && w.includes('404')),
+      true
+    );
+    assert.equal(gemini404FallbackRes.createdReviews.length, 1);
+    assert.deepEqual(gemini404FallbackRes.addedLabels, ['review:ai-approved']);
+
+    // Non-404 errors (401/500) fail fast without trying fallback models
+    for (const errStatus of [401, 500]) {
+      const fastFailUrls = [];
+      await assert.rejects(
+        () =>
+          runAiReviewCase({
+            geminiApiKey: 'test-key',
+            fetchImpl: async (url) => {
+              fastFailUrls.push(url);
+              return { ok: false, status: errStatus, text: async () => `HTTP ${errStatus} error` };
+            },
+          }),
+        new RegExp(`Gemini API HTTP ${errStatus} \\(gemini-3\\.8-flash\\)`)
+      );
+      assert.equal(fastFailUrls.length, 1);
+    }
 
     const dependabotYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/dependabot.yml'),
@@ -6888,6 +7167,121 @@ async function runCodecAndEngineTests() {
     const syncRes4 = await runSyncAgileCase({ merged: false, labels: ['epic:2'] });
     assert.equal(syncRes4.length, 0);
     /* capy-dev-only:end */
+
+    // Verify Android TV Leanback manifest declarations and 320x180 tv_banner.png asset (TC-B1-T1-01..06, TC-B1-T2-01..06)
+    console.log('-> Testing Android TV Leanback AndroidManifest.xml and 320x180 tv_banner.png...');
+    const androidManifestPath = path.resolve(projectRoot, '../app/src/main/AndroidManifest.xml');
+    const tvManifestInfo = JSON.parse(
+      execFileSync(
+        'python3',
+        [
+          '-c',
+          [
+            'import json, sys, xml.etree.ElementTree as ET',
+            'ns = "{http://schemas.android.com/apk/res/android}"',
+            'root = ET.parse(sys.argv[1]).getroot()',
+            'features = {el.attrib.get(ns + "name"): el.attrib.get(ns + "required") for el in root.findall("uses-feature")}',
+            'app = root.find("application")',
+            'main_act = next(a for a in app.findall("activity") if a.attrib.get(ns + "name") == "com.capypaint.capy.MainActivity")',
+            'filters = []',
+            'for flt in main_act.findall("intent-filter"):',
+            '    filters.append({',
+            '        "actions": [e.attrib.get(ns + "name") for e in flt.findall("action")],',
+            '        "categories": [e.attrib.get(ns + "name") for e in flt.findall("category")],',
+            '        "data": [{"scheme": d.attrib.get(ns + "scheme"), "host": d.attrib.get(ns + "host"), "mimeType": d.attrib.get(ns + "mimeType"), "pathPrefix": d.attrib.get(ns + "pathPrefix")} for d in flt.findall("data")],',
+            '    })',
+            'print(json.dumps({',
+            '    "features": features,',
+            '    "banner": app.attrib.get(ns + "banner"),',
+            '    "exported": main_act.attrib.get(ns + "exported"),',
+            '    "launchMode": main_act.attrib.get(ns + "launchMode"),',
+            '    "configChanges": main_act.attrib.get(ns + "configChanges"),',
+            '    "filters": filters,',
+            '}))',
+          ].join('\n'),
+          androidManifestPath,
+        ],
+        { encoding: 'utf8' }
+      )
+    );
+    assert.equal(tvManifestInfo.features['android.hardware.touchscreen'], 'false');
+    assert.equal(tvManifestInfo.features['android.software.leanback'], 'false');
+    assert.equal(tvManifestInfo.banner, '@drawable/tv_banner');
+    assert.equal(tvManifestInfo.exported, 'true');
+    assert.equal(tvManifestInfo.launchMode, 'singleTask');
+    for (const cfgFlag of ['uiMode', 'navigation', 'keyboard', 'keyboardHidden', 'screenSize']) {
+      assert.equal(
+        String(tvManifestInfo.configChanges || '').split('|').includes(cfgFlag),
+        true,
+        `AndroidManifest configChanges must include ${cfgFlag}`
+      );
+    }
+    const mainIntentFilter = tvManifestInfo.filters.find((f) =>
+      f.actions.includes('android.intent.action.MAIN')
+    );
+    assert.ok(mainIntentFilter, 'MainActivity must declare MAIN intent-filter');
+    assert.equal(mainIntentFilter.categories.includes('android.intent.category.LAUNCHER'), true);
+    assert.equal(
+      mainIntentFilter.categories.includes('android.intent.category.LEANBACK_LAUNCHER'),
+      true
+    );
+    const sendIntentFilter = tvManifestInfo.filters.find((f) =>
+      f.actions.includes('android.intent.action.SEND')
+    );
+    assert.ok(sendIntentFilter, 'MainActivity must preserve ACTION_SEND intent-filter');
+    assert.equal(
+      sendIntentFilter.data.some((d) => d.mimeType === 'image/*'),
+      true
+    );
+    const viewIntentFilter = tvManifestInfo.filters.find((f) =>
+      f.actions.includes('android.intent.action.VIEW')
+    );
+    assert.ok(viewIntentFilter, 'MainActivity must preserve ACTION_VIEW App Links intent-filter');
+    assert.equal(
+      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'capypaint.com'),
+      true
+    );
+    assert.equal(
+      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'www.capypaint.com'),
+      true
+    );
+    assert.equal(
+      viewIntentFilter.data.some(
+        (d) => d.scheme === 'https' && String(d.host || '').endsWith('.github.io') && d.pathPrefix === '/capy'
+      ),
+      true
+    );
+
+    const parseTvBannerPng = (buf) => {
+      const pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      if (!Buffer.isBuffer(buf) || buf.length < 26) return null;
+      if (!buf.subarray(0, 8).equals(pngMagic)) return null;
+      if (buf.subarray(12, 16).toString('ascii') !== 'IHDR') return null;
+      return {
+        width: buf.readUInt32BE(16),
+        height: buf.readUInt32BE(20),
+        bitDepth: buf[24],
+        colorType: buf[25],
+      };
+    };
+
+    const tvBannerPath = path.resolve(projectRoot, '../app/src/main/res/drawable-xhdpi/tv_banner.png');
+    assert.equal(fs.existsSync(tvBannerPath), true, 'drawable-xhdpi/tv_banner.png must exist');
+    const tvBannerBuf = fs.readFileSync(tvBannerPath);
+    assert.equal(tvBannerBuf.length > 100 && tvBannerBuf.length <= 1024 * 1024, true);
+    const tvBannerHeader = parseTvBannerPng(tvBannerBuf);
+    assert.ok(tvBannerHeader, 'tv_banner.png must have valid PNG magic and IHDR chunk');
+    assert.equal(tvBannerHeader.width, 320);
+    assert.equal(tvBannerHeader.height, 180);
+    assert.equal(tvBannerHeader.bitDepth, 8);
+    assert.equal(tvBannerHeader.colorType === 6 || tvBannerHeader.colorType === 2, true);
+
+    assert.equal(parseTvBannerPng(Buffer.alloc(16)), null);
+    const badBannerBuf = Buffer.from(tvBannerBuf);
+    badBannerBuf.writeUInt32BE(512, 16);
+    badBannerBuf.writeUInt32BE(512, 20);
+    const badBannerHeader = parseTvBannerPng(badBannerBuf);
+    assert.equal(badBannerHeader.width === 320 && badBannerHeader.height === 180, false);
 
     // Verify web/public/404.html redirect logic, .github/scripts/pr-index.html, & generate-pr-manifest.mjs
     console.log('-> Testing 404.html redirect VM behavior, pr-index.html, generate-pr-manifest.mjs & workflow wiring...');
@@ -7321,8 +7715,8 @@ async function runCodecAndEngineTests() {
       // Verify FeatureOffersService persistence, NativeBridge backup fallback, channel sandboxing, and OnboardingTutorial step mapping
       const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
-      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 9);
-      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
+      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 8);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 13);
       for (const id of offersMod.FEATURE_OFFER_IDS) {
         const offer = offersMod.FEATURE_OFFERS[id];
         assert.equal(
@@ -7354,11 +7748,19 @@ async function runCodecAndEngineTests() {
       assert.equal(offersMod.FeatureOffersService.hasSeenOffer('paint_mode'), true);
       assert.equal(mockStorage.has('capy_feature_offers_v1'), true);
 
-      // Ignore unknown/malformed entries in localStorage
-      mockStorage.set('capy_feature_offers_v1', JSON.stringify(['unknown_offer', 42, 'cloud_coop']));
+      // Ignore unknown/legacy/malformed entries in localStorage
+      mockStorage.set('capy_feature_offers_v1', JSON.stringify(['unknown_offer', 42, 'cloud_coop', 'saves_export']));
       const filteredOffers = offersMod.FeatureOffersService.loadSeenOffers();
       assert.equal(filteredOffers.size, 1);
-      assert.equal(filteredOffers.has('cloud_coop'), true);
+      assert.equal(filteredOffers.has('saves_export'), true);
+
+      // Verify Play Store Cloud/Co-op UI gating (hidden by default; opt-in via ?coop=1, ?room=, or capy_dev_cloud_coop_ui)
+      const nsMod = await vite.ssrLoadModule('/src/services/StorageNamespace.ts');
+      assert.equal(nsMod.isCloudCoopUiEnabled('', null), false);
+      assert.equal(nsMod.isCloudCoopUiEnabled('?coop=1', null), true);
+      assert.equal(nsMod.isCloudCoopUiEnabled('?room=ABC123', null), true);
+      assert.equal(nsMod.isCloudCoopUiEnabled('', '1'), true);
+      assert.equal(nsMod.isCloudCoopUiEnabled('?coop=0', '1'), false);
 
       // Verify /capy/beta/ sandbox key isolation
       globalThis.window.location = { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' };
@@ -7383,13 +7785,6 @@ async function runCodecAndEngineTests() {
         spotlightMod.TUTORIAL_STEP_TARGETS.replay[0]?.selector,
         '[data-testid="replay-controls-window"]',
         'replay spotlight target must prioritize replay-controls-window when active'
-      );
-      assert.equal(
-        spotlightMod.TUTORIAL_STEP_TARGETS.cloud_coop.some(
-          (s) => s.selector === '[data-testid="topbar-active-coop-pill"]'
-        ),
-        true,
-        'cloud_coop spotlight targets must include topbar-active-coop-pill'
       );
       for (const offerId of offersMod.FEATURE_OFFER_IDS) {
         const specs = spotlightMod.FEATURE_OFFER_TARGETS[offerId];
@@ -7656,7 +8051,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 13');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -7676,7 +8071,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -7691,7 +8086,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -7705,7 +8100,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -7714,7 +8109,7 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -7922,7 +8317,7 @@ async function runBrowserBasicsSuite() {
       await tutPage.waitForFunction(
         (expected) =>
           document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
-          `STEP ${expected} OF 14`,
+          `STEP ${expected} OF 13`,
         stepNum,
         { timeout: 5000 }
       );
@@ -7978,13 +8373,13 @@ async function runBrowserBasicsSuite() {
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
-    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    // Back onto already-tried Step 4 (STEP 5 OF 13) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 5 OF 14',
+      'STEP 5 OF 13',
       'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
     );
     await tutPage.keyboard.press('Control+y');
@@ -8027,7 +8422,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 8 OF 14',
+      'STEP 8 OF 13',
       'Auto-advance timer must stay paused while SettingsModal is open'
     );
     await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
@@ -8080,28 +8475,21 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(13);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 12 -> 13 (cloud_coop)
-    await tutPage.getByTestId('topbar-coop-btn').click();
-    await tutPage.getByTestId('host-coop-room-btn').click();
-    await tutPage.getByTestId('leave-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.getByTestId('leave-coop-room-btn').click();
-    await tutPage.getByTestId('settings-modal-close').click();
-    await expectTutStep(14);
-    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
+    // [All Topics] drawer lists all 13 topics; jumping onto already-tried Step 1 waits for a fresh action
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 13);
     await tutPage.getByTestId('tutorial-topic-item-0').click();
     await expectTutStep(1);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 1 OF 14',
+      'STEP 1 OF 13',
       'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
     );
     await tutPage.getByTestId('tutorial-topics-btn').click();
-    await tutPage.getByTestId('tutorial-topic-item-13').click();
-    await expectTutStep(14);
+    await tutPage.getByTestId('tutorial-topic-item-12').click();
+    await expectTutStep(13);
     // Step 13 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
     await tutPage.getByTestId('tutorial-large-text-btn').click();
     await tutPage.getByTestId('tutorial-large-text-btn').click();
@@ -8224,7 +8612,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.close();
     await tutContext.close();
 
-    // FeatureOfferBanner E2E: all 9 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
+    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 13, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
     const offerContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await offerContext.addInitScript(() => {
       const store = {};
@@ -8257,12 +8645,12 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`
+        `STEP ${expectedStepNum} OF 13`
       );
       await offerPage.waitForTimeout(950);
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`,
+        `STEP ${expectedStepNum} OF 13`,
         `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
       );
       await offerPage.getByTestId('tutorial-skip-btn').click();
@@ -8354,7 +8742,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await expectOfferBanner('saves_export');
     await jumpFromOfferAndAssertStep(12);
-    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 13
     const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
       const xFrac = 0.42 + (attempt % 3) * 0.08;
@@ -8369,7 +8757,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('undo-btn').click();
     await expectOfferBanner('undo_replay');
     await jumpFromOfferAndAssertStep(5);
-    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 13
     await offerPage.getByTestId('redo-btn').click();
     const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
     assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
@@ -8380,7 +8768,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
-    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
+    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 13
     await offerPage.locator('button[title="Settings and Menu"]').click();
     await offerPage.getByTestId('settings-tab-settings').click();
     const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
@@ -8434,13 +8822,8 @@ async function runBrowserBasicsSuite() {
     await expectOfferBanner('infinite_zoom');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
-    // 9) cloud_coop -> Jump to Guide STEP 13 OF 14
-    await offerPage.getByTestId('topbar-coop-btn').click();
-    await offerPage.getByTestId('settings-modal-close').click();
-    await expectOfferBanner('cloud_coop');
-    await jumpFromOfferAndAssertStep(13);
 
-    // Verify all 9 offers persisted in both localStorage and NativeBridge.saveBackup spy
+    // Verify all 8 offers persisted in both localStorage and NativeBridge.saveBackup spy
     const persistedOfferState = await offerPage.evaluate(() => ({
       ls: JSON.parse(localStorage.getItem('capy_feature_offers_v1') || '[]'),
       backup: JSON.parse(window.__capySavedBackups?.capy_feature_offers_v1 || '[]'),
@@ -8454,7 +8837,6 @@ async function runBrowserBasicsSuite() {
       'photo_upload',
       'infinite_zoom',
       'saves_export',
-      'cloud_coop',
     ]) {
       assert.equal(
         persistedOfferState.ls.includes(expectedOffer),
@@ -8500,19 +8882,20 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(dosSharePage);
     await dosSharePage.close();
 
-    // Verify Google Login button auto-hides on Web when VITE_GOOGLE_CLIENT_ID is unconfigured
-    const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
+    // Verify Play Store Q1 Saves cleanup hides unfinished Cloud/Co-op hub and topbar Friends button by default
+    assert.equal(await page.getByTestId('topbar-coop-btn').count(), 0, 'topbar-coop-btn must stay hidden by default');
     await page.locator('button[title="Settings and Menu"]').click();
     await page.getByTestId('settings-tab-saves').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('settings-tab-saves').click();
-    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(
-      await page.getByTestId('play-games-signin-btn').count(),
-      hasBakedClientId ? 1 : 0,
-      'Web Google Login button must auto-hide when VITE_GOOGLE_CLIENT_ID is empty'
-    );
+    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await page.getByTestId('cloud-coop-hub').count(), 0, 'cloud-coop-hub must stay hidden by default');
+    assert.equal(await page.getByTestId('play-games-signin-btn').count(), 0, 'play-games-signin-btn must stay hidden by default');
+    assert.equal(await page.getByTestId('cloud-sync-btn').count(), 0, 'cloud-sync-btn must stay hidden by default');
+    assert.equal(await page.getByTestId('cloud-providers-bar').count(), 0, 'cloud-providers-bar must stay hidden by default');
+    assert.equal(await page.getByTestId('share-progress-link-btn').isVisible(), true);
+    assert.equal(await page.getByTestId('export-printable-svg-btn').isVisible(), true);
     await page.keyboard.press('Escape');
-    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'hidden', timeout: 3000 });
+    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
     await page.evaluate(() => {
@@ -8692,21 +9075,21 @@ async function runBrowserBasicsSuite() {
       'false',
       'Detail toggle button must report aria-pressed="false" by default'
     );
-    const [savesListBoxInit, savesActionBarBoxInit, savesHubBoxInit] = await Promise.all([
+    const [savesListBoxInit, savesActionBarBoxInit, savesShareBarBoxInit] = await Promise.all([
       page.getByTestId('saves-list-section').boundingBox(),
       page.getByTestId('selected-save-action-bar').boundingBox(),
-      page.getByTestId('cloud-coop-hub').boundingBox(),
+      page.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(savesListBoxInit && savesActionBarBoxInit && savesHubBoxInit);
+    assert.ok(savesListBoxInit && savesActionBarBoxInit && savesShareBarBoxInit);
     assert.equal(
       savesListBoxInit.y + savesListBoxInit.height <= savesActionBarBoxInit.y + 1,
       true,
       `Saves list (${savesListBoxInit.y + savesListBoxInit.height}) must appear above selected-save-action-bar (${savesActionBarBoxInit.y})`
     );
     assert.equal(
-      savesActionBarBoxInit.y + savesActionBarBoxInit.height <= savesHubBoxInit.y + 1,
+      savesActionBarBoxInit.y + savesActionBarBoxInit.height <= savesShareBarBoxInit.y + 1,
       true,
-      `selected-save-action-bar (${savesActionBarBoxInit.y + savesActionBarBoxInit.height}) must appear above cloud-coop-hub (${savesHubBoxInit.y})`
+      `selected-save-action-bar (${savesActionBarBoxInit.y + savesActionBarBoxInit.height}) must appear above saves-share-print-bar (${savesShareBarBoxInit.y})`
     );
     await page.keyboard.press('Escape');
     await page.getByTestId('saves-list-section').waitFor({ state: 'hidden', timeout: 3000 });
@@ -8715,9 +9098,9 @@ async function runBrowserBasicsSuite() {
     await page.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(page);
     await settingsBtn.click();
-    await page.getByTestId('cloud-coop-hub').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
-      await page.getByTestId('cloud-coop-hub').isVisible(),
+      await page.getByTestId('saves-share-print-bar').isVisible(),
       true,
       'Saves tab (index 4) must restore after page reload via capy_last_settings_tab'
     );
@@ -9198,6 +9581,21 @@ async function runBrowserBasicsSuite() {
     // 5. Shareable Link (#s=<token>), Simultaneous Co-op & Google Drive CRDT Sync
     // -------------------------------------------------------------------------
     console.log('5. Verifying <2 KB Share Link, 2-peer BroadcastChannel Co-op & Google Drive CRDT sync...');
+    await page.evaluate(() => localStorage.setItem('capy_dev_cloud_coop_ui', '1'));
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    {
+      const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
+      await page.getByTestId('topbar-coop-btn').click();
+      await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        await page.getByTestId('play-games-signin-btn').count(),
+        hasBakedClientId ? 1 : 0,
+        'Opt-in Web Google Login button must auto-hide when VITE_GOOGLE_CLIENT_ID is empty'
+      );
+      await page.keyboard.press('Escape');
+      await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'hidden', timeout: 3000 });
+    }
     await tapCanvasGrid(page, 0.45, 8, 40);
     const paintedIdsOnA = await page.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
@@ -9246,7 +9644,7 @@ async function runBrowserBasicsSuite() {
 
     const pageB = await context.newPage();
     attachErrorListeners(pageB, 'pageB');
-    await pageB.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await pageB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(pageB);
     await pageB.getByTestId('topbar-coop-btn').click();
     await pageB.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
@@ -10179,7 +10577,7 @@ async function runBrowserBasicsSuite() {
 
     const peerB = await context.newPage();
     attachErrorListeners(peerB, 'peerB-unfill');
-    await peerB.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await peerB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerB);
     if (await peerB.$('[data-testid="replay-exit-btn"]')) {
       await peerB.locator('[data-testid="replay-exit-btn"]').click();
@@ -10360,7 +10758,7 @@ async function runBrowserBasicsSuite() {
     // Boot Peer B while localStorage has 0 filled regions (100% deterministic, zero debounce race)
     const peerS2 = await context.newPage();
     attachErrorListeners(peerS2, 'peerS2-stage2');
-    await peerS2.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await peerS2.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerS2);
     assert.equal(
       await readTotalRemainingRegions(peerS2),
@@ -11173,21 +11571,23 @@ async function runBrowserBasicsSuite() {
       await mobileTopbarPage.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'),
       'true'
     );
-    const [mSavesListBox, mSavesActionBox, mSavesHubBox] = await Promise.all([
+    assert.equal(await mobileTopbarPage.getByTestId('cloud-coop-hub').count(), 0);
+    assert.equal(await mobileTopbarPage.getByTestId('topbar-coop-btn').count(), 0);
+    const [mSavesListBox, mSavesActionBox, mSavesShareBox] = await Promise.all([
       mobileTopbarPage.getByTestId('saves-list-section').boundingBox(),
       mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
-      mobileTopbarPage.getByTestId('cloud-coop-hub').boundingBox(),
+      mobileTopbarPage.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(mSavesListBox && mSavesActionBox && mSavesHubBox);
+    assert.ok(mSavesListBox && mSavesActionBox && mSavesShareBox);
     assert.equal(
       mSavesListBox.y + mSavesListBox.height <= mSavesActionBox.y + 1,
       true,
       `360x780 Saves list (${mSavesListBox.y + mSavesListBox.height}) must appear above selected-save-action-bar (${mSavesActionBox.y})`
     );
     assert.equal(
-      mSavesActionBox.y + mSavesActionBox.height <= mSavesHubBox.y + 1,
+      mSavesActionBox.y + mSavesActionBox.height <= mSavesShareBox.y + 1,
       true,
-      `360x780 selected-save-action-bar (${mSavesActionBox.y + mSavesActionBox.height}) must appear above cloud-coop-hub (${mSavesHubBox.y})`
+      `360x780 selected-save-action-bar (${mSavesActionBox.y + mSavesActionBox.height}) must appear above saves-share-print-bar (${mSavesShareBox.y})`
     );
     const firstTwoSaveCards = mobileTopbarPage.locator('[data-testid="saves-list-thumbnails"] [data-testid^="save-card-"]');
     if ((await firstTwoSaveCards.count()) >= 2) {
@@ -11221,17 +11621,17 @@ async function runBrowserBasicsSuite() {
       true,
       `selected-save-action-bar must not be sticky (${JSON.stringify(actionBarPosition)})`
     );
-    await mobileTopbarPage.getByTestId('cloud-coop-hub').scrollIntoViewIfNeeded();
+    await mobileTopbarPage.getByTestId('saves-share-print-bar').scrollIntoViewIfNeeded();
     await mobileTopbarPage.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-    const [mActionAfterScroll, mHubAfterScroll] = await Promise.all([
+    const [mActionAfterScroll, mShareAfterScroll] = await Promise.all([
       mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
-      mobileTopbarPage.getByTestId('cloud-coop-hub').boundingBox(),
+      mobileTopbarPage.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(mActionAfterScroll && mHubAfterScroll);
+    assert.ok(mActionAfterScroll && mShareAfterScroll);
     assert.equal(
-      mActionAfterScroll.y + mActionAfterScroll.height <= mHubAfterScroll.y + 1,
+      mActionAfterScroll.y + mActionAfterScroll.height <= mShareAfterScroll.y + 1,
       true,
-      `After scrolling to cloud-coop-hub, non-sticky selected-save-action-bar (${mActionAfterScroll.y + mActionAfterScroll.height}) must remain above hub (${mHubAfterScroll.y})`
+      `After scrolling to saves-share-print-bar, non-sticky selected-save-action-bar (${mActionAfterScroll.y + mActionAfterScroll.height}) must remain above bar (${mShareAfterScroll.y})`
     );
 
     // Close SettingsModal, skip OnboardingTutorial, and verify FeatureOfferBanner fits within 360x780 with zero overflow in both normal & Large Text mode
@@ -11880,6 +12280,7 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(m3Page, 'm3Page');
     // Force a fractional devicePixelRatio (1.25) to verify PuzzleCanvas backing store rounds cleanly without drift
     await m3Page.addInitScript(() => {
+      localStorage.removeItem('capy_dev_cloud_coop_ui');
       Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.25, configurable: true });
       window.__capyAlertCalls = 0;
       window.alert = () => {
@@ -11931,17 +12332,17 @@ async function runBrowserBasicsSuite() {
       'alert',
       'Malformed save import must display inline role="alert" banner'
     );
-    const [m3ActionBox, m3NoticeBox, m3HubBox] = await Promise.all([
+    const [m3ActionBox, m3NoticeBox, m3ShareBox] = await Promise.all([
       m3Page.getByTestId('selected-save-action-bar').boundingBox(),
       m3Page.getByTestId('saves-import-notice').boundingBox(),
-      m3Page.getByTestId('cloud-coop-hub').boundingBox(),
+      m3Page.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(m3ActionBox && m3NoticeBox && m3HubBox);
+    assert.ok(m3ActionBox && m3NoticeBox && m3ShareBox);
     assert.equal(
       m3ActionBox.y + m3ActionBox.height <= m3NoticeBox.y + 1 &&
-        m3NoticeBox.y + m3NoticeBox.height <= m3HubBox.y + 1,
+        m3NoticeBox.y + m3NoticeBox.height <= m3ShareBox.y + 1,
       true,
-      `saves-import-notice (${m3NoticeBox.y}..${m3NoticeBox.y + m3NoticeBox.height}) must appear between selected-save-action-bar (${m3ActionBox.y + m3ActionBox.height}) and cloud-coop-hub (${m3HubBox.y})`
+      `saves-import-notice (${m3NoticeBox.y}..${m3NoticeBox.y + m3NoticeBox.height}) must appear between selected-save-action-bar (${m3ActionBox.y + m3ActionBox.height}) and saves-share-print-bar (${m3ShareBox.y})`
     );
     assert.equal(
       await m3Page.evaluate(() => window.__capyAlertCalls),
@@ -12190,7 +12591,7 @@ async function runBrowserBasicsSuite() {
       });
     });
 
-    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(syncRacePage);
     await syncRacePage.evaluate(() => {
       localStorage.setItem(

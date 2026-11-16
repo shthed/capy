@@ -14,7 +14,11 @@ import {
   computeProgressPercentage,
 } from './types';
 import { DEFAULT_SETTINGS, QuotaWarning, StorageService } from './services/StorageService';
-import { resolveScopedBackupKey, resolveScopedStorageKey } from './services/StorageNamespace';
+import {
+  isCloudCoopUiEnabled,
+  resolveScopedBackupKey,
+  resolveScopedStorageKey,
+} from './services/StorageNamespace';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
 import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
@@ -376,7 +380,7 @@ export const App: React.FC = () => {
     isLoading || showTutorial || showSettings || showPaletteOptions;
   const isFeatureOfferSuppressedRef = useRef<boolean>(isFeatureOfferSuppressed);
   isFeatureOfferSuppressedRef.current = isFeatureOfferSuppressed;
-  const coopOfferPendingRef = useRef<boolean>(false);
+  const showCloudCoopUi = isCloudCoopUiEnabled() || Boolean(coopRoomCode);
   const releaseChannelInfo = useMemo(() => resolveReleaseChannel(), []);
 
   const advanceFeatureOffer = useCallback(() => {
@@ -4561,8 +4565,7 @@ export const App: React.FC = () => {
     if (!url) return null;
     await NativeBridge.shareTextLink(`${activeTitle} — Capy Progress`, url);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
-    markTutorialActionTried('cloud_coop');
-    triggerFeatureOffer('cloud_coop');
+    markTutorialActionTried('saves_export');
     return url;
   }, [
     canShareActiveLink,
@@ -4570,7 +4573,6 @@ export const App: React.FC = () => {
     activeTitle,
     settings.hapticsEnabled,
     markTutorialActionTried,
-    triggerFeatureOffer,
   ]);
 
   const handleHostCoopRoom = useCallback(async (): Promise<string | null> => {
@@ -4602,8 +4604,6 @@ export const App: React.FC = () => {
     setCoopRoomCode(activeCode);
     setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
     NativeBridge.haptic('success', settings.hapticsEnabled);
-    markTutorialActionTried('cloud_coop');
-    triggerFeatureOffer('cloud_coop');
     return activeCode;
   }, [
     activeSampleUri,
@@ -4612,8 +4612,6 @@ export const App: React.FC = () => {
     paintedRegionColors,
     isFreeColorMode,
     settings.hapticsEnabled,
-    markTutorialActionTried,
-    triggerFeatureOffer,
   ]);
 
   const handleJoinCoopRoom = useCallback(
@@ -4638,16 +4636,12 @@ export const App: React.FC = () => {
         setCoopRoomCode(activeCode);
         setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
         NativeBridge.haptic('success', settings.hapticsEnabled);
-        if (activeCode) {
-          markTutorialActionTried('cloud_coop');
-          triggerFeatureOffer('cloud_coop');
-        }
         return Boolean(activeCode);
       } catch {
         return false;
       }
     },
-    [settings.hapticsEnabled, markTutorialActionTried, triggerFeatureOffer]
+    [settings.hapticsEnabled]
   );
 
   const handleLeaveCoopRoom = useCallback(() => {
@@ -4664,10 +4658,8 @@ export const App: React.FC = () => {
     if (!url) return null;
     await NativeBridge.shareTextLink(`Join my Capy Co-op Room (${coopRoomCode})`, url);
     NativeBridge.haptic('tick', settings.hapticsEnabled);
-    markTutorialActionTried('cloud_coop');
-    triggerFeatureOffer('cloud_coop');
     return url;
-  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled, markTutorialActionTried, triggerFeatureOffer]);
+  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled]);
 
   const handleSyncCloudProgress = useCallback(async (): Promise<{
     addedFromCloud: number;
@@ -5167,13 +5159,16 @@ export const App: React.FC = () => {
           setSettingsInitialTab(4);
           setShowSettings(true);
         }}
-        onOpenCoop={() => {
-          coopOfferPendingRef.current = true;
-          markTutorialActionTried('cloud_coop');
-          triggerFeatureOffer('cloud_coop');
-          setSettingsInitialTab(4);
-          setShowSettings(true);
-        }}
+        onOpenCoop={
+          showCloudCoopUi
+            ? () => {
+                markTutorialActionTried('saves_export');
+                triggerFeatureOffer('saves_export');
+                setSettingsInitialTab(4);
+                setShowSettings(true);
+              }
+            : undefined
+        }
         onStepZoom={() => {
           if (!puzzle || isLoading) return;
           dismissPostLoadReplayIfAwaiting();
@@ -5592,6 +5587,7 @@ export const App: React.FC = () => {
           coopRoomCode={coopRoomCode}
           coopParticipants={coopParticipants}
           canShareActiveLink={canShareActiveLink}
+          showCloudCoopUi={showCloudCoopUi}
           onClose={() => setShowSettings(false)}
           onUpdateSettings={(nextSettings) => {
             const prev = settingsRef.current;
@@ -5949,14 +5945,7 @@ export const App: React.FC = () => {
           onLeaveCoopRoom={handleLeaveCoopRoom}
           onShareProgressLink={handleShareProgressLink}
           onCopyCoopInviteLink={handleCopyCoopInviteLink}
-          onSyncCloudProgress={async () => {
-            const res = await handleSyncCloudProgress();
-            if (res) {
-              markTutorialActionTried('cloud_coop');
-              triggerFeatureOffer('cloud_coop');
-            }
-            return res;
-          }}
+          onSyncCloudProgress={handleSyncCloudProgress}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
           onTabOpened={(tabId) => {
@@ -5965,12 +5954,7 @@ export const App: React.FC = () => {
               triggerFeatureOffer('create_gallery');
             } else if (tabId === 4) {
               markTutorialActionTried('saves_export');
-              if (coopOfferPendingRef.current) {
-                coopOfferPendingRef.current = false;
-                triggerFeatureOffer('cloud_coop');
-              } else {
-                triggerFeatureOffer('saves_export');
-              }
+              triggerFeatureOffer('saves_export');
             }
           }}
         />
@@ -5986,7 +5970,7 @@ export const App: React.FC = () => {
         largeText={Boolean(settings.largeText)}
         onToggleLargeText={() => {
           handleUpdateSettings((prev) => ({ ...prev, largeText: !prev.largeText }));
-          if (tutorialStepRef.current === 13) {
+          if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings_a11y') {
             markTutorialActionTried('settings_a11y');
           }
         }}
