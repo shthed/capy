@@ -1,4 +1,8 @@
-### 3.0.21 - 2026-11-16 (Beta)
+### 3.0.22 - 2026-11-16 (Beta)
+
+- Remove the expandable two-row deck and expand/minimize toggle from `ReplayControls.tsx` so replay always stays in the compact single-row scrubber bar, and sync `FloatingActions.tsx`, `App.tsx`, `WEB.md`, `TESTING.md`, and `web/scripts/test.mjs` [#554](https://github.com/shthed/capy/pull/554)
+
+### 3.0.21 - 2026-11-16
 
 - Add GitHub asynchronous stacked-PR merge (`PUT /pulls/{pull_number}/merge-async`) fallback and enforce mandatory outstanding-work (`- [ ]`) checklists on Draft PRs in the PR review gate workflow, `AGENTS.md`, `PROJECT.md`, and `web/scripts/test.mjs` [#553](https://github.com/shthed/capy/pull/553)
 
