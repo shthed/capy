@@ -121,10 +121,169 @@ interface SettingsModalProps {
   onZoomIntoDetailTile?: () => void;
   onStartTutorial?: () => void;
   onTabOpened?: (tabId: number) => void;
+  onExplorePresetGallery?: () => void;
 }
 
 const LAST_SETTINGS_TAB_KEY = 'capy_last_settings_tab';
 const GALLERY_FILTER_TAGS = ['All', 'Animals', 'Coloring', 'Nature', 'Line Art', 'Detailed', 'Music'];
+
+interface PresetGalleryEntry {
+  id: string;
+  category: 'ALGORITHM' | 'BORDER' | 'DETAIL';
+  title: string;
+  badge: string;
+  image: string;
+  howItWorks: string;
+  bestFor: string;
+  stats: string;
+  isMatch: (cfg: GeneratorConfig) => boolean;
+  apply: (prev: GeneratorConfig) => GeneratorConfig;
+}
+
+const PRESET_GALLERY_ITEMS: PresetGalleryEntry[] = [
+  {
+    id: 'algo-auto',
+    category: 'ALGORITHM',
+    title: 'Auto Detect',
+    badge: 'Default',
+    image: './assets/presets/algo-auto.png',
+    howItWorks: 'Scans ink strokes and gradients, then picks Line Art, Painterly, or Posterized automatically.',
+    bestFor: 'Any photo or drawing when you want instant balanced results',
+    stats: 'Adaptive strategy',
+    isMatch: (c) => (c.algorithm || 'AUTO') === 'AUTO',
+    apply: (prev) => ({ ...prev, algorithm: 'AUTO', imageType: 'AUTO' }),
+  },
+  {
+    id: 'algo-line-art',
+    category: 'ALGORITHM',
+    title: 'Line Art Tracer',
+    badge: 'Ink & Outlines',
+    image: './assets/presets/algo-line-art.png',
+    howItWorks: 'Detects dark drawn outlines and snaps region boundaries tightly along ink strokes.',
+    bestFor: 'Cartoons, comics, manga, and coloring pages',
+    stats: 'Crisp ink edges',
+    isMatch: (c) => c.algorithm === 'LINE_ART',
+    apply: (prev) => ({ ...prev, algorithm: 'LINE_ART', imageType: 'DRAWING' }),
+  },
+  {
+    id: 'algo-painterly',
+    category: 'ALGORITHM',
+    title: 'Painterly (Photo)',
+    badge: 'Photos',
+    image: './assets/presets/algo-painterly.png',
+    howItWorks: 'Smooths photographic textures with a Kuwahara cel filter into organic paintable shapes.',
+    bestFor: 'Photos, portraits, pets, and natural scenery',
+    stats: 'Smooth cel-shading',
+    isMatch: (c) => c.algorithm === 'PAINTERLY',
+    apply: (prev) => ({ ...prev, algorithm: 'PAINTERLY', imageType: 'PHOTO' }),
+  },
+  {
+    id: 'algo-posterized',
+    category: 'ALGORITHM',
+    title: 'Posterized',
+    badge: 'Flat Graphic',
+    image: './assets/presets/algo-posterized.png',
+    howItWorks: 'Applies median sharpening without smoothing for crisp, angular color boundaries.',
+    bestFor: 'Logos, posters, and flat vector illustrations',
+    stats: 'Sharp geometric edges',
+    isMatch: (c) => c.algorithm === 'POSTERIZED',
+    apply: (prev) => ({ ...prev, algorithm: 'POSTERIZED', imageType: 'AUTO' }),
+  },
+  {
+    id: 'algo-mosaic',
+    category: 'ALGORITHM',
+    title: 'Mosaic Cells',
+    badge: 'Stained Glass',
+    image: './assets/presets/algo-mosaic.png',
+    howItWorks: 'Tessellates the canvas into evenly sized spatial-color superpixel tiles.',
+    bestFor: 'Turning any image into a stained-glass mosaic puzzle',
+    stats: 'Even convex tiles',
+    isMatch: (c) => c.algorithm === 'MOSAIC_CEL',
+    apply: (prev) => ({ ...prev, algorithm: 'MOSAIC_CEL', imageType: 'AUTO' }),
+  },
+  {
+    id: 'border-absorb',
+    category: 'BORDER',
+    title: 'Boundaries Follow Artwork Lines',
+    badge: 'Default Border',
+    image: './assets/presets/border-absorb.png',
+    howItWorks: 'Expands neighboring color regions symmetrically into ink lines so seams meet at stroke centers.',
+    bestFor: 'Clean color-by-number shapes without painting black outlines',
+    stats: 'Stroke-center seams',
+    isMatch: (c) => (c.lineHandling || 'ABSORB_LINES') === 'ABSORB_LINES',
+    apply: (prev) => ({ ...prev, lineHandling: 'ABSORB_LINES' }),
+  },
+  {
+    id: 'border-unified',
+    category: 'BORDER',
+    title: 'Continuous Black Line Region',
+    badge: 'Playable Ink',
+    image: './assets/presets/border-unified.png',
+    howItWorks: 'Groups all dark ink outlines into a single dedicated playable region with its own swatch.',
+    bestFor: 'Comic/ink styles where you want to color the outlines too',
+    stats: 'Unified outline swatch',
+    isMatch: (c) => c.lineHandling === 'UNIFIED_BLACK_REGION',
+    apply: (prev) => ({
+      ...prev,
+      algorithm: prev.algorithm === 'PAINTERLY' || prev.algorithm === 'POSTERIZED' || prev.algorithm === 'MOSAIC_CEL' ? 'LINE_ART' : prev.algorithm,
+      lineHandling: 'UNIFIED_BLACK_REGION',
+    }),
+  },
+  {
+    id: 'detail-low',
+    category: 'DETAIL',
+    title: 'Low Detail / Simple',
+    badge: 'Quick & Relaxing',
+    image: './assets/presets/detail-low.png',
+    howItWorks: 'Caps palette to ~8-12 colors with larger, simpler shapes and fewer small pieces.',
+    bestFor: 'Fast 5-minute sessions and larger easy-to-tap shapes',
+    stats: '~10 colors • ~100 pieces',
+    isMatch: (c) => c.paletteDetail === 'LOW',
+    apply: (prev) => ({
+      ...prev,
+      paletteDetail: 'LOW',
+      colorCount: 10,
+      maxRegions: 100,
+      minRegionArea: 96,
+    }),
+  },
+  {
+    id: 'detail-medium',
+    category: 'DETAIL',
+    title: 'Medium Detail / Standard',
+    badge: 'Balanced',
+    image: './assets/presets/detail-medium.png',
+    howItWorks: 'Balances ~14-24 colors and ~250 pieces for clear artwork detail without tiny speckles.',
+    bestFor: 'Everyday puzzles with a comfortable pace',
+    stats: '~18 colors • ~250 pieces',
+    isMatch: (c) => c.paletteDetail === 'MEDIUM',
+    apply: (prev) => ({
+      ...prev,
+      paletteDetail: 'MEDIUM',
+      colorCount: 18,
+      maxRegions: 250,
+      minRegionArea: 48,
+    }),
+  },
+  {
+    id: 'detail-high',
+    category: 'DETAIL',
+    title: 'High Detail / Detailed',
+    badge: 'Intricate',
+    image: './assets/presets/detail-high.png',
+    howItWorks: 'Expands palette to ~30-50 colors and allows finer 24 px² regions up to ~500 pieces.',
+    bestFor: 'Rich shading, zoom-in detail, and longer relaxing sessions',
+    stats: '~38 colors • ~500 pieces',
+    isMatch: (c) => c.paletteDetail === 'HIGH',
+    apply: (prev) => ({
+      ...prev,
+      paletteDetail: 'HIGH',
+      colorCount: 38,
+      maxRegions: 500,
+      minRegionArea: 24,
+    }),
+  },
+];
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -167,6 +326,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onZoomIntoDetailTile,
   onStartTutorial,
   onTabOpened,
+  onExplorePresetGallery,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dailyPuzzle = useMemo(() => getDailyFeaturedPuzzle(), [isOpen]);
@@ -206,6 +366,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Gallery Search, Tag Filter Chips & Community Puzzle Ideas state
   const [gallerySearch, setGallerySearch] = useState('');
   const [activeGalleryTag, setActiveGalleryTag] = useState('All');
+  const [showPresetGallery, setShowPresetGallery] = useState(false);
+  const [presetGalleryFilter, setPresetGalleryFilter] = useState<'ALL' | 'ALGORITHM' | 'BORDER' | 'DETAIL'>('ALL');
   const [communityIdeas, setCommunityIdeas] = useState(() =>
     ProviderRegistry.catalog.getCommunityIdeas()
   );
@@ -2083,6 +2245,135 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Preset Style Gallery & Visual Guide */}
+              <div className="rounded-xl border border-amber-400/30 bg-slate-950/65 overflow-hidden">
+                <button
+                  type="button"
+                  data-testid="preset-gallery-toggle"
+                  aria-expanded={showPresetGallery}
+                  onClick={() => {
+                    const next = !showPresetGallery;
+                    setShowPresetGallery(next);
+                    if (next) {
+                      onExplorePresetGallery?.();
+                    }
+                  }}
+                  className="w-full flex items-center justify-between gap-2 p-2.5 sm:p-3 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-extrabold text-amber-300">
+                        Preset Style Gallery &amp; Visual Guide
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-[10px] font-bold text-amber-200">
+                        10 Presets
+                      </span>
+                    </div>
+                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                      Compare real segmented previews of every algorithm, border mode, and detail preset
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-bold text-slate-200 flex-shrink-0">
+                    {showPresetGallery ? 'Hide Guide' : 'Show Guide'}
+                  </span>
+                </button>
+
+                {showPresetGallery && (
+                  <div
+                    data-testid="preset-gallery-panel"
+                    className="border-t border-slate-800/80 p-2.5 sm:p-3 space-y-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Preset gallery categories">
+                        {(
+                          [
+                            { key: 'ALL', label: 'All (10)' },
+                            { key: 'ALGORITHM', label: 'Algorithms (5)' },
+                            { key: 'BORDER', label: 'Black Borders (2)' },
+                            { key: 'DETAIL', label: 'Detail & Size (3)' },
+                          ] as const
+                        ).map((cat) => (
+                          <button
+                            key={cat.key}
+                            type="button"
+                            data-testid={`preset-gallery-filter-${cat.key.toLowerCase()}`}
+                            onClick={() => setPresetGalleryFilter(cat.key)}
+                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+                              presetGalleryFilter === cat.key
+                                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      data-testid="preset-gallery-grid"
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+                    >
+                      {PRESET_GALLERY_ITEMS.filter(
+                        (item) => presetGalleryFilter === 'ALL' || item.category === presetGalleryFilter
+                      ).map((item) => {
+                        const active = item.isMatch(localConfig);
+                        return (
+                          <div
+                            key={item.id}
+                            data-testid={`preset-card-${item.id}`}
+                            className={`flex flex-col rounded-xl overflow-hidden border transition-all ${
+                              active
+                                ? 'border-amber-400 bg-slate-800/80 ring-1 ring-amber-400/70'
+                                : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="relative h-32 w-full bg-slate-950 overflow-hidden">
+                              <img
+                                src={item.image}
+                                alt={`${item.title} preset preview`}
+                                loading="lazy"
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-slate-950/85 border border-slate-700/80 text-[9px] font-extrabold uppercase tracking-wider text-amber-300">
+                                {item.badge}
+                              </span>
+                              <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/85 text-[9px] font-mono font-bold text-slate-200">
+                                {item.stats}
+                              </span>
+                            </div>
+                            <div className="p-2.5 flex-1 flex flex-col justify-between gap-2">
+                              <div className="space-y-1">
+                                <div className="text-xs font-extrabold text-slate-100">{item.title}</div>
+                                <p className="text-[10px] text-slate-300 leading-snug">{item.howItWorks}</p>
+                                <p className="text-[10px] text-slate-400 leading-snug">
+                                  <span className="font-bold text-amber-300/90">Best for:</span> {item.bestFor}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                data-testid={`preset-apply-${item.id}`}
+                                onClick={() => {
+                                  setLocalConfig((prev) => item.apply(prev));
+                                  onExplorePresetGallery?.();
+                                }}
+                                className={`w-full py-1.5 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer ${
+                                  active
+                                    ? 'bg-amber-400 text-slate-950'
+                                    : 'bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-amber-300 border border-slate-700'
+                                }`}
+                              >
+                                {active ? 'Active Preset' : 'Apply Preset'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Generation Algorithm Strategy */}
               <div className="space-y-1.5">
                 <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -2173,17 +2464,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {(
                     [
-                      { key: 'AUTO', label: 'Auto' },
-                      { key: 'LOW', label: 'Low (~8-12)' },
-                      { key: 'MEDIUM', label: 'Medium (~14-24)' },
-                      { key: 'HIGH', label: 'High (~30-50)' },
-                      { key: 'CUSTOM', label: 'Custom' },
+                      { key: 'AUTO', label: 'Auto', colorCount: 16 },
+                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10 },
+                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18 },
+                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38 },
+                      { key: 'CUSTOM', label: 'Custom', colorCount: null },
                     ] as const
                   ).map((det) => (
                     <button
                       key={det.key}
                       type="button"
-                      onClick={() => setLocalConfig((prev) => ({ ...prev, paletteDetail: det.key as PaletteDetail }))}
+                      onClick={() =>
+                        setLocalConfig((prev) => ({
+                          ...prev,
+                          paletteDetail: det.key as PaletteDetail,
+                          ...(det.colorCount !== null ? { colorCount: det.colorCount } : {}),
+                        }))
+                      }
                       className={`py-1.5 px-1 rounded-lg border text-xs font-bold text-center transition-all ${
                         localConfig.paletteDetail === det.key
                           ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
@@ -2199,14 +2496,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Manual Fine-Tuning Sliders */}
               <div className="space-y-3.5 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
                 <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Manual Fine-Tuning & Constraints
+                  Manual Fine-Tuning &amp; Constraints
                 </div>
 
                 {/* Colors Count */}
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
+                  <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
                     <span className="text-slate-300">Target Palette Colours</span>
-                    <span className="text-amber-400 font-mono font-bold">{localConfig.colorCount} colours</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {localConfig.paletteDetail === 'CUSTOM'
+                        ? `${localConfig.colorCount} colours (Custom)`
+                        : `Auto-tuned (${localConfig.paletteDetail.toLowerCase()})`}
+                    </span>
                   </div>
                   <input
                     type="range"
@@ -2215,10 +2516,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     step="1"
                     value={localConfig.colorCount}
                     onChange={(e) =>
-                      setLocalConfig((prev) => ({ ...prev, colorCount: parseInt(e.target.value) }))
+                      setLocalConfig((prev) => ({
+                        ...prev,
+                        paletteDetail: 'CUSTOM',
+                        colorCount: parseInt(e.target.value),
+                      }))
                     }
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
+                  {localConfig.paletteDetail !== 'CUSTOM' && (
+                    <p className="text-[10px] text-slate-400">
+                      Preset picks the best colour count for your artwork; drag slider to switch to Custom ({localConfig.colorCount}).
+                    </p>
+                  )}
                 </div>
 
                 {/* Max Regions (Piece Count) */}
