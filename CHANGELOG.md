@@ -1,6 +1,6 @@
 ### 3.0.30 - 2026-11-16 (Beta)
 
-- Fix intermittent `[E2E 12]` Play Daily failure by waiting for the prebaked `daily-*` snapshot to become the active save before asserting, since `waitForPuzzleLoaded` could resolve against the previously mounted puzzle while `daily_saves.capy` was still being fetched and imported [#PRNUM](https://github.com/shthed/capy/pull/PRNUM)
+- Fix intermittent `[E2E 12]` Play Daily failure by waiting for the prebaked `daily-*` snapshot to become the active save before asserting, since `waitForPuzzleLoaded` could resolve against the previously mounted puzzle while `daily_saves.capy` was still being fetched and imported [#569](https://github.com/shthed/capy/pull/569)
 
 ### 3.0.29 - 2026-11-16 (Production)
 
