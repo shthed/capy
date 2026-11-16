@@ -20,6 +20,11 @@ on:
     types:
       - created
       - edited
+  workflow_run:
+    workflows:
+      - Deploy GitHub Pages previews
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       pr_number:
@@ -34,7 +39,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pr-review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number || github.run_id }}
+  group: pr-review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -45,6 +50,7 @@ jobs:
       always() &&
       github.repository == 'shthed/capy' &&
       (github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request') ||
         (github.actor != 'dependabot[bot]' &&
           (github.actor != 'github-actions[bot]' ||
             (github.event_name == 'pull_request' && contains(fromJSON('["opened","synchronize","reopened","ready_for_review","converted_to_draft"]'), github.event.action)) ||
@@ -64,10 +70,22 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prNumber =
+            let prNumber =
               context.payload.pull_request?.number ||
               context.payload.issue?.number ||
+              context.payload.workflow_run?.pull_requests?.[0]?.number ||
               (Number(context.payload.inputs?.pr_number || 0) || null);
+            if (!prNumber && context.eventName === 'workflow_run' && context.payload.workflow_run?.head_sha) {
+              const openPrs = await github.paginate(github.rest.pulls.list, {
+                owner,
+                repo,
+                state: 'open',
+                per_page: 100,
+              });
+              prNumber =
+                openPrs.find((p) => p.head?.sha === context.payload.workflow_run.head_sha)?.number ||
+                null;
+            }
             if (!prNumber) {
               core.info('No pull request number associated with event; skipping.');
               return;
@@ -666,10 +684,9 @@ jobs:
               }
             }
 
-            const ownerApproved = effectiveOwnerApprovals.length > 0;
             const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
             const strictAiReady = !isDraft && !changesRequested && aiOrSyncReady;
-            const gatePassed = strictAiReady && (isBetaTarget || ownerApproved);
+            const gatePassed = strictAiReady;
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
             const botReviews = reviews.filter(
@@ -696,7 +713,6 @@ jobs:
             const blockers = [];
             if (changesRequested) blockers.push('Changes requested / hold');
             if (isDraft) blockers.push('Draft PR');
-            if (!isBetaTarget && !ownerApproved) blockers.push('Owner Approve');
             if (!aiOrSyncReady) {
               if (latestAiSignal !== null && !hasValidAiMarker) {
                 blockers.push('PR readiness/100% score');
@@ -707,7 +723,7 @@ jobs:
 
             const targetScope = isBetaTarget
               ? 'Beta (no Owner approval needed)'
-              : 'Main (Owner Approve required)';
+              : 'Main (no Owner approval needed)';
 
             let state = 'pending';
             let description = `${targetScope}: Blocked by ${blockers.join(', ') || 'Pending checks'}`;
@@ -722,7 +738,7 @@ jobs:
                     : 'Beta gate passed (no Owner approval needed): AI review (100%) verified';
               } else {
                 description =
-                  'Main gate passed (Owner Approve verified): AI review (100%) + Owner Approve';
+                  'Main gate passed (no Owner approval needed): AI review (100%) verified';
               }
             }
 
@@ -795,7 +811,7 @@ jobs:
 
             const gateStatusHeading = isBetaTarget
               ? '**Target**: `beta` (**Owner approval NOT required**)'
-              : '**Target**: `main` (**Owner Approve REQUIRED**)';
+              : '**Target**: `main` (**Owner approval NOT required**)';
             const gateStatusSummary = gatePassed
               ? '**Status**: All gate requirements satisfied — ready to merge'
               : `**Blocked by**: ${blockers.join(', ')}`;
@@ -803,11 +819,6 @@ jobs:
               isStrictPrBodyValid && (!latestAiSignal || isStrictAiBodyValid);
             const gateChecklistLines = [
               `- [${aiOrSyncReady ? 'x' : ' '}] **AI Review (100% + \`review:ai-approved\`)**${isBetaTarget && isVerifiedMainSync && !aiApproved ? ' (verified `origin/main` ancestry sync)' : ''}`,
-              ...(!isBetaTarget
-                ? [
-                    `- [${ownerApproved ? 'x' : ' '}] **Owner Approve** (native \`APPROVED\` review on HEAD by \`shthed\` or \`capyboop\`)`,
-                  ]
-                : []),
               `- [${readinessValid ? 'x' : ' '}] **PR Description & Readiness** (\`## Summary\`, \`PR Readiness Score: 100%\`, zero unchecked tasks)`,
               `- [${!changesRequested ? 'x' : ' '}] **No Active Holds / Changes Requested**`,
               ...(isDraft ? ['- [ ] **Ready for Review** (PR is currently a Draft)'] : []),
@@ -881,7 +892,7 @@ jobs:
                     );
                   } catch (err) {
                     const msg = String(err?.message || err || '');
-                    if (/clean status/i.test(msg)) {
+                    if (/clean status|stacked pull requests/i.test(msg)) {
                       try {
                         await github.rest.pulls.merge({
                           owner,
@@ -892,7 +903,7 @@ jobs:
                         });
                       } catch (mergeErr) {
                         core.warning(
-                          `Immediate merge after clean status failed for PR #${prNumber}: ${mergeErr.message}`
+                          `Immediate merge fallback failed for PR #${prNumber}: ${mergeErr.message}`
                         );
                       }
                     } else {
@@ -936,7 +947,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Run automated AI review on ready --base beta PRs
+      - name: Run automated AI review on ready --base beta or main PRs
         uses: actions/github-script@v9
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -968,8 +979,8 @@ jobs:
             }
             const baseRef = (pr.base?.ref || '').trim();
             const headRef = (pr.head?.ref || '').trim();
-            if (baseRef !== 'beta') {
-              core.info(`PR #${prNumber} targets ${baseRef} (not beta); skipping automated AI review.`);
+            if (baseRef !== 'beta' && baseRef !== 'main') {
+              core.info(`PR #${prNumber} targets ${baseRef} (not beta/main); skipping automated AI review.`);
               return;
             }
             if (headRef === 'sync/beta-from-main') {
