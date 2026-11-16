@@ -59,6 +59,19 @@ export interface GeneratorConfig {
   isFreeColor?: boolean;
 }
 
+export const MAX_GENERATOR_CONFIG: GeneratorConfig = {
+  algorithm: 'AUTO',
+  lineHandling: 'ABSORB_LINES',
+  preset: 'HIGH',
+  paletteDetail: 'CUSTOM',
+  imageType: 'AUTO',
+  colorCount: 64,
+  minRegionArea: 24,
+  maxRegions: 2000,
+  resolution: 2048,
+  smoothingPasses: 2,
+};
+
 export interface UserSettings {
   autoAdvance: boolean;
   difficulty: Difficulty;

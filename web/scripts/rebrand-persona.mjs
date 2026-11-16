@@ -27,6 +27,7 @@ export const DEV_ONLY_RELATIVE_PATHS = new Set([
   '.github/workflows/open-pr.yml',
   '.github/workflows/sync-beta-from-main.yml',
   '.github/workflows/sync-agile-tracker.yml',
+  '.github/workflows/regenerate-puzzles.yml',
   '.github/dependabot.yml',
 ]);
 

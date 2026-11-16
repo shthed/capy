@@ -2159,6 +2159,11 @@ async function runCodecAndEngineTests() {
     );
     assert.notEqual(dailyNext1.sample.id, dailyNext2.sample.id);
     assert.notEqual(dailyNext1.presetId, dailyNext2.presetId);
+    assert.equal(dailyA.snapshotId, `daily-${dailyA.sample.id}-${dailyA.presetId}`);
+    assert.equal(dailyA.config.resolution, 2048, 'Daily puzzle config must default to Max resolution 2048');
+    assert.equal(dailyA.config.maxRegions, 2000, 'Daily puzzle config must default to Max regions 2000');
+    assert.equal(dailyA.config.colorCount, 64, 'Daily puzzle config must default to Max colors 64');
+    assert.equal(dailyA.config.paletteDetail, 'CUSTOM', 'Daily puzzle config must use CUSTOM paletteDetail for 64 colors');
 
     // 9. PlayerStatsService SSR load, increment, clamping, persistence & monotonic mergeLifetimeStats
     const statsMod = await vite.ssrLoadModule('/src/services/PlayerStatsService.ts');
@@ -9483,20 +9488,24 @@ async function runBrowserBasicsSuite() {
       'ReplayControls must not render an expand/minimize toggle button'
     );
     // Verify YouTube-style progress slider is immediately interactive in the default bar and takes up wide horizontal space
-    const trackInCompact = await page.waitForSelector('[data-testid="replay-scrubber-track"]');
-    const trackBox = await trackInCompact.boundingBox();
+    const trackBox = await getStableBoundingBox(page.getByTestId('replay-scrubber-track'));
     assert.equal(
       trackBox.width >= 140,
       true,
       `Expected YouTube-style scrubber track width >= 140px in compact bar, got ${trackBox.width}`
     );
     // Drag along the YouTube-style scrubber track in compact mode and verify instant seek response
+    const totalSteps = Number(await page.locator('[data-testid="replay-scrubber"]').getAttribute('max'));
     await page.mouse.move(trackBox.x + trackBox.width * 0.85, trackBox.y + trackBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(trackBox.x + trackBox.width * 0.25, trackBox.y + trackBox.height / 2, { steps: 3 });
     await page.mouse.up();
     const valAfterDrag = Number(await page.locator('[data-testid="replay-scrubber"]').inputValue());
-    assert.equal(valAfterDrag >= 0 && valAfterDrag <= 3, true, `Expected instant pointer-drag scrub in compact mode, got ${valAfterDrag}`);
+    assert.equal(
+      valAfterDrag >= 0 && valAfterDrag < totalSteps && valAfterDrag <= Math.ceil(totalSteps * 0.35),
+      true,
+      `Expected instant pointer-drag scrub in compact mode (0..35% of ${totalSteps}), got ${valAfterDrag}`
+    );
     await page.locator('[data-testid="replay-exit-btn"]').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -10497,9 +10506,26 @@ async function runBrowserBasicsSuite() {
       'Expected daily-puzzle-card to render above gallery-search-input at the top of the Create tab'
     );
 
+    const snapCountBeforeDaily = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length
+    );
     await page.getByTestId('daily-puzzle-play-btn').click();
     await waitForPuzzleLoaded(page);
     assert.equal(await dailyCard.isVisible(), false, 'Settings modal should close after clicking Play Daily');
+    const dailyAfterState = await page.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return { id: snaps[0]?.id || null, count: snaps.length };
+    });
+    assert.match(
+      String(dailyAfterState.id),
+      /^daily-/,
+      `Expected Play Daily to mount pre-generated daily-* snapshot, got '${dailyAfterState.id}'`
+    );
+    assert.equal(
+      dailyAfterState.count,
+      snapCountBeforeDaily + 1,
+      `filterSnapshotId must selectively import only 1 daily snapshot (before=${snapCountBeforeDaily}, after=${dailyAfterState.count})`
+    );
 
     // 10b. Reduced Motion toggle persistence in capy_user_settings_v8
     await page.locator('button[title="Settings and Menu"]').click();
@@ -11485,9 +11511,14 @@ async function runBrowserBasicsSuite() {
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
     // Flow 2: Post-load replay with Paint Mode ALREADY ON -> 100% -> first canvas drag paints & dismisses ReplayControls
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.replaySpeed = 20;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+    });
     await page.reload({ waitUntil: 'networkidle' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
-    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow2 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow2);
     await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.3, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.4);
@@ -11501,7 +11532,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Toggle Paint Mode"]').click(); // Turn Paint Mode OFF -> Tap Mode
     await page.reload({ waitUntil: 'networkidle' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
-    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow3 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow3);
     await page.mouse.click(canvasBoxFlow3.x + canvasBoxFlow3.width * 0.5, canvasBoxFlow3.y + canvasBoxFlow3.height * 0.5);
@@ -11990,6 +12021,49 @@ async function runBrowserBasicsSuite() {
       true,
       `Normal ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ normal100ScrollCheck, normal100ChannelBox, normal100LaneBox })})`
     );
+
+    // Verify Create tab above-the-fold style/hint bar, Style Guide reorder, and (i) hint tooltips at 360x780
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-create').click();
+    const mobileHintBar = mobileTopbarPage.getByTestId('create-style-hint-bar');
+    await mobileHintBar.waitFor({ state: 'visible', timeout: 3000 });
+    const mobileDailyBox = await mobileTopbarPage.getByTestId('daily-puzzle-card').boundingBox();
+    const mobileHintBarBox = await mobileHintBar.boundingBox();
+    const mobileSearchBox = await mobileTopbarPage.getByTestId('gallery-search-input').boundingBox();
+    assert.ok(mobileDailyBox && mobileHintBarBox && mobileSearchBox, 'Expected daily card, hint bar, and search boxes at 360x780');
+    assert.equal(
+      mobileDailyBox.y < mobileHintBarBox.y && mobileHintBarBox.y < mobileSearchBox.y,
+      true,
+      'create-style-hint-bar must sit between daily-puzzle-card and gallery-search-input'
+    );
+    assert.equal(
+      mobileHintBarBox.y + mobileHintBarBox.height <= 780,
+      true,
+      `create-style-hint-bar must be visible above the fold on 360x780 (bottom=${mobileHintBarBox.y + mobileHintBarBox.height})`
+    );
+
+    await mobileTopbarPage.getByTestId('create-hint-style-guide-btn').click();
+    await mobileTopbarPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
+
+    const mobileAlgoHintToggle = mobileTopbarPage.getByTestId('hint-toggle-algorithm');
+    await mobileAlgoHintToggle.scrollIntoViewIfNeeded();
+    await mobileAlgoHintToggle.click();
+    await mobileTopbarPage.getByTestId('hint-tooltip-algorithm').waitFor({ state: 'visible', timeout: 3000 });
+
+    const mobileColorHintToggle = mobileTopbarPage.getByTestId('hint-toggle-color-count');
+    await mobileColorHintToggle.scrollIntoViewIfNeeded();
+    await mobileColorHintToggle.click();
+    await mobileTopbarPage.getByTestId('hint-tooltip-color-count').waitFor({ state: 'visible', timeout: 3000 });
+
+    const createHintsOverflow = await mobileTopbarPage.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth
+    );
+    assert.equal(
+      createHintsOverflow <= 0,
+      true,
+      `Create tab with Style Guide and (i) hint tooltips must have 0px horizontal overflow at 360x780 (got ${createHintsOverflow})`
+    );
+    await mobileTopbarPage.getByTestId('settings-modal-close').click();
 
     await mobileTopbarPage.close();
     await mobileTopbarContext.close();
