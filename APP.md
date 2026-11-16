@@ -27,6 +27,7 @@ Instead of maintaining a duplicate Kotlin implementation of vector quantization,
 - **OS Share Sheet & Background-Downsampled Incoming Share Intents** (`Intent.ACTION_SEND` with `image/*` and binary `.capy` exports via `FileProvider`)
 - **Google Play Games Services v2 Sign-In & Saved Games Sync** (`GamesSignInClient`, `PlayersClient`, and `SnapshotsClient`)
 - **Persistent Internal Disk Backups** (`filesDir/capy_saves/` and `filesDir/capy_cloud/`)
+- **Android TV Leanback Launcher & Banner Support** (`android.intent.category.LEANBACK_LAUNCHER`, optional `android.hardware.touchscreen` & `android.software.leanback` `required="false"` declarations, and `320x180` [`tv_banner.png`](./app/src/main/res/drawable-xhdpi/tv_banner.png) referenced via `android:banner="@drawable/tv_banner"` in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml) so phones, tablets, and Android TVs share one APK)
 - **Network Capability** (`android.permission.INTERNET` declared in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml) for cloud sync, co-op rooms, and remote URLs)
 
 ---
@@ -118,7 +119,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
   ```
   - Release builds enable `isMinifyEnabled = true` and `isShrinkResources = true`.
   - [`.github/workflows/release.yml`](./.github/workflows/release.yml) requires `CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` for tagged release builds and runs `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleRelease app:bundleRelease` (failing loudly rather than substituting unsigned/debug binaries).
-  - Privacy Policy and Data Safety disclosures live at `https://capypaint.com/privacy-policy.html` ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)).
+  - Privacy Policy and Data Safety disclosures live at `https://capypaint.com/privacy-policy.html` ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)). Play Store icon, feature graphic, phone/tablet screenshots, and copy live in [`docs/play-store/`](./docs/play-store/) ([`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md))—upload Phone and Tablet form factors only and keep Android TV unchecked in Play Console until TV D-pad navigation (`US-3.6`) ships post-launch.
 
 ---
 
@@ -130,7 +131,7 @@ cd web && npm ci && npm run build
 # OR directly via Gradle:
 ./gradlew app:buildWeb
 
-# Run JUnit4 unit tests for the Android launcher
+# Run JUnit4 unit tests for the Android launcher (`CapyAndroidBridgeTest.kt` + `AndroidTvManifestAndBridgeTest.kt`)
 ./gradlew app:testDebugUnitTest
 
 # Build Debug APK (outputs to app/build/outputs/apk/debug/app-debug.apk)

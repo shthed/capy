@@ -16,7 +16,6 @@ import {
   Sliders,
   Sparkles,
   Undo2,
-  Users,
   X,
   ZoomIn,
   ZoomOut,
@@ -35,7 +34,6 @@ export type TutorialStepKey =
   | 'custom_photo'
   | 'infinite_zoom'
   | 'saves_export'
-  | 'cloud_coop'
   | 'settings_a11y';
 
 export type TutorialTriedActions = Record<TutorialStepKey, boolean>;
@@ -54,7 +52,6 @@ export function createInitialTutorialTried(): TutorialTriedActions {
     custom_photo: false,
     infinite_zoom: false,
     saves_export: false,
-    cloud_coop: false,
     settings_a11y: false,
   };
 }
@@ -177,14 +174,6 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Tap the top-left title pill anytime to switch pictures, save backups, or print pages.',
     tryPrompt: 'Try it: Tap the title pill top-left',
     icon: Save,
-  },
-  {
-    key: 'cloud_coop',
-    title: 'Play With Friends',
-    description:
-      'Tap the Friends icon at the top to color together live or share your progress link.',
-    tryPrompt: 'Try it: Tap the Friends icon above',
-    icon: Users,
   },
   {
     key: 'settings_a11y',

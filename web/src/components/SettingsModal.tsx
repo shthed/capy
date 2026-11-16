@@ -84,6 +84,7 @@ interface SettingsModalProps {
   coopRoomCode?: string | null;
   coopParticipants?: CoopParticipant[];
   canShareActiveLink?: boolean;
+  showCloudCoopUi?: boolean;
   onClose: () => void;
   onUpdateSettings: (newSettings: UserSettings) => void;
   onToggleFullscreen?: () => void;
@@ -137,6 +138,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   coopRoomCode,
   coopParticipants = [],
   canShareActiveLink = false,
+  showCloudCoopUi = false,
   onClose,
   onUpdateSettings,
   onToggleFullscreen,
@@ -3006,7 +3008,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Cloud Sync, Shareable Link & Live Simultaneous Co-op Hub */}
+              {/* Cloud Sync, Shareable Link & Live Simultaneous Co-op Hub (opt-in until EPIC-3/EPIC-5) */}
+              {showCloudCoopUi ? (
               <div
                 data-testid="cloud-coop-hub"
                 className="p-3 rounded-xl bg-slate-950/75 border border-slate-800 space-y-3"
@@ -3430,6 +3433,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
               </div>
+              ) : (
+              <div
+                data-testid="saves-share-print-bar"
+                className="p-3 rounded-xl bg-slate-950/75 border border-slate-800 space-y-2"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {onShareProgressLink && (
+                      <button
+                        type="button"
+                        data-testid="share-progress-link-btn"
+                        disabled={!canShareActiveLink}
+                        onClick={async () => {
+                          const url = await onShareProgressLink();
+                          if (url) {
+                            setHubNotice('Shareable progress link copied (<2 KB URL token)!');
+                          }
+                        }}
+                        title={
+                          canShareActiveLink
+                            ? 'Copy or share a compact URL link with your current puzzle progress'
+                            : 'Shareable URL links work with Gallery/Sample puzzles (use Export .capy for private custom photos)'
+                        }
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          canShareActiveLink
+                            ? 'bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border-amber-400/40 cursor-pointer'
+                            : 'bg-slate-900 text-slate-500 border-slate-800 cursor-not-allowed'
+                        }`}
+                      >
+                        <Share2 size={13} />
+                        <span>Share Progress Link</span>
+                      </button>
+                    )}
+
+                    {onExportPrintableSvg && (
+                      <button
+                        type="button"
+                        data-testid="export-printable-svg-btn"
+                        onClick={async () => {
+                          const ok = await onExportPrintableSvg();
+                          if (ok) {
+                            setHubNotice('Printable vector coloring sheet (.svg) exported!');
+                          }
+                        }}
+                        title="Export active puzzle as a print-ready monochrome vector SVG coloring sheet"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        <Printer size={13} className="text-amber-400" />
+                        <span>Printable SVG</span>
+                      </button>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    Saves stored locally on this device
+                  </span>
+                </div>
+
+                {hubNotice && (
+                  <div
+                    data-testid="cloud-coop-notice"
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-[11px] font-semibold text-amber-300"
+                  >
+                    {hubNotice}
+                  </div>
+                )}
+              </div>
+              )}
 
               {/* Hidden file input for Import */}
               <input
