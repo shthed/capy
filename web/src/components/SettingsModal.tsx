@@ -96,7 +96,7 @@ interface SettingsModalProps {
   onClearAllSnapshots: () => void;
   onResetProgress?: () => void;
   onRegenerate: (config: GeneratorConfig) => void;
-  onSelectSample: (sample: SampleArtwork, config?: GeneratorConfig) => void;
+  onSelectSample: (sample: SampleArtwork, config?: GeneratorConfig, prebakedSnapshotId?: string) => void;
   onUploadImage: () => void;
   onExportSnapshot?: (id: string, title: string) => void;
   onExportPrintableSvg?: () => Promise<boolean> | void;
@@ -368,6 +368,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeGalleryTag, setActiveGalleryTag] = useState('All');
   const [showPresetGallery, setShowPresetGallery] = useState(false);
   const [presetGalleryFilter, setPresetGalleryFilter] = useState<'ALL' | 'ALGORITHM' | 'BORDER' | 'DETAIL'>('ALL');
+  const [openHintId, setOpenHintId] = useState<string | null>(null);
+  const presetGallerySectionRef = useRef<HTMLDivElement | null>(null);
+  const createOptionsSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const renderHintButton = (id: string, title: string) => {
+    const isExpanded = openHintId === id;
+    return (
+      <button
+        type="button"
+        data-testid={`hint-toggle-${id}`}
+        aria-expanded={isExpanded}
+        aria-label={`Toggle hint for ${title}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpenHintId((prev) => (prev === id ? null : id));
+        }}
+        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold transition-colors cursor-pointer flex-shrink-0 ${
+          isExpanded
+            ? 'bg-amber-400 text-slate-950 border-amber-300'
+            : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-400/60 hover:text-amber-300'
+        }`}
+      >
+        <Info size={11} />
+      </button>
+    );
+  };
+
+  const renderHintCallout = (id: string, text: string) => {
+    if (openHintId !== id) return null;
+    return (
+      <div
+        data-testid={`hint-tooltip-${id}`}
+        role="note"
+        className="px-2.5 py-1.5 rounded-lg bg-slate-900/95 border border-amber-400/40 text-[11px] text-slate-200 leading-snug"
+      >
+        {text}
+      </div>
+    );
+  };
   const [communityIdeas, setCommunityIdeas] = useState(() =>
     ProviderRegistry.catalog.getCommunityIdeas()
   );
@@ -1909,13 +1948,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => {
                       setLocalConfig(dailyPuzzle.config);
                       updateSetting('generatorConfig', dailyPuzzle.config);
-                      onSelectSample(dailyPuzzle.sample, dailyPuzzle.config);
+                      onSelectSample(dailyPuzzle.sample, dailyPuzzle.config, dailyPuzzle.snapshotId);
                       onClose();
                     }}
                     className="w-full sm:w-auto flex-shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs sm:text-sm font-extrabold shadow-md transition-colors cursor-pointer"
                   >
                     <Play size={14} className="fill-current" />
                     <span>Play Daily</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Above-the-Fold Style Guide & Hint Quick-Jump Bar */}
+              <div
+                data-testid="create-style-hint-bar"
+                className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-2 rounded-xl border border-slate-800 bg-slate-950/75"
+              >
+                <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-slate-300">
+                  <Info size={13} className="text-amber-400 flex-shrink-0" />
+                  <span className="truncate">
+                    <span className="font-bold text-slate-100">Style:</span>{' '}
+                    {localConfig.algorithm || 'AUTO'} • {localConfig.paletteDetail} ({localConfig.colorCount}c, {localConfig.resolution}p)
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="create-hint-style-guide-btn"
+                    onClick={() => {
+                      setShowPresetGallery(true);
+                      onExplorePresetGallery?.();
+                      requestAnimationFrame(() => {
+                        presetGallerySectionRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'start',
+                        });
+                      });
+                    }}
+                    className="px-2 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold transition-colors cursor-pointer"
+                  >
+                    Style Guide (10)
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="create-hint-options-btn"
+                    onClick={() => {
+                      requestAnimationFrame(() => {
+                        createOptionsSectionRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'start',
+                        });
+                      });
+                    }}
+                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
+                  >
+                    Hint &amp; Options
                   </button>
                 </div>
               </div>
@@ -2056,35 +2143,577 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Action Row: Upload Photo & Infinite Zoom Detail Sub-Puzzle */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onUploadImage();
-                    onClose();
-                  }}
-                  className="w-full flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-                >
-                  <ImageIcon size={16} />
-                  <span>Choose Photo from Device</span>
-                </button>
-
-                {onZoomIntoDetailTile && sourceImage && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
-                    data-testid="infinite-zoom-subtile-btn"
                     onClick={() => {
-                      onZoomIntoDetailTile();
+                      onUploadImage();
                       onClose();
                     }}
-                    title="Generate a higher-detail 2x zoomed sub-puzzle from the center of your current view"
-                    className="w-full flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
                   >
-                    <ZoomIn size={16} />
-                    <span>Infinite Zoom 2x Detail Tile</span>
+                    <ImageIcon size={16} />
+                    <span>Choose Photo from Device</span>
                   </button>
+
+                  {onZoomIntoDetailTile && sourceImage && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        data-testid="infinite-zoom-subtile-btn"
+                        onClick={() => {
+                          onZoomIntoDetailTile();
+                          onClose();
+                        }}
+                        title="Generate a higher-detail 2x zoomed sub-puzzle from the center of your current view"
+                        className="flex-1 min-w-0 flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+                      >
+                        <ZoomIn size={16} className="flex-shrink-0" />
+                        <span className="truncate">Infinite Zoom 2x Detail Tile</span>
+                      </button>
+                      {renderHintButton('infinite-zoom', 'Infinite Zoom 2x Detail Tile')}
+                    </div>
+                  )}
+                </div>
+                {onZoomIntoDetailTile &&
+                  sourceImage &&
+                  renderHintCallout(
+                    'infinite-zoom',
+                    'Crops a 2x zoomed region around the center of your current canvas view and generates a fresh, higher-detail sub-puzzle from it.'
+                  )}
+              </div>
+
+              {/* Preset Style Gallery & Visual Guide */}
+              <div
+                ref={presetGallerySectionRef}
+                className="rounded-xl border border-amber-400/30 bg-slate-950/65 overflow-hidden"
+              >
+                <button
+                  type="button"
+                  data-testid="preset-gallery-toggle"
+                  aria-expanded={showPresetGallery}
+                  onClick={() => {
+                    const next = !showPresetGallery;
+                    setShowPresetGallery(next);
+                    if (next) {
+                      onExplorePresetGallery?.();
+                    }
+                  }}
+                  className="w-full flex items-center justify-between gap-2 p-2.5 sm:p-3 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-extrabold text-amber-300">
+                        Preset Style Gallery &amp; Visual Guide
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-[10px] font-bold text-amber-200">
+                        10 Presets
+                      </span>
+                    </div>
+                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                      Compare real segmented previews of every algorithm, border mode, and detail preset
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-bold text-slate-200 flex-shrink-0">
+                    {showPresetGallery ? 'Hide Guide' : 'Show Guide'}
+                  </span>
+                </button>
+
+                {showPresetGallery && (
+                  <div
+                    data-testid="preset-gallery-panel"
+                    className="border-t border-slate-800/80 p-2.5 sm:p-3 space-y-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Preset gallery categories">
+                        {(
+                          [
+                            { key: 'ALL', label: 'All (10)' },
+                            { key: 'ALGORITHM', label: 'Algorithms (5)' },
+                            { key: 'BORDER', label: 'Black Borders (2)' },
+                            { key: 'DETAIL', label: 'Detail & Size (3)' },
+                          ] as const
+                        ).map((cat) => (
+                          <button
+                            key={cat.key}
+                            type="button"
+                            data-testid={`preset-gallery-filter-${cat.key.toLowerCase()}`}
+                            onClick={() => setPresetGalleryFilter(cat.key)}
+                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
+                              presetGalleryFilter === cat.key
+                                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      data-testid="preset-gallery-grid"
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+                    >
+                      {PRESET_GALLERY_ITEMS.filter(
+                        (item) => presetGalleryFilter === 'ALL' || item.category === presetGalleryFilter
+                      ).map((item) => {
+                        const active = item.isMatch(localConfig);
+                        return (
+                          <div
+                            key={item.id}
+                            data-testid={`preset-card-${item.id}`}
+                            className={`flex flex-col rounded-xl overflow-hidden border transition-all ${
+                              active
+                                ? 'border-amber-400 bg-slate-800/80 ring-1 ring-amber-400/70'
+                                : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="relative h-32 w-full bg-slate-950 overflow-hidden">
+                              <img
+                                src={item.image}
+                                alt={`${item.title} preset preview`}
+                                loading="lazy"
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-slate-950/85 border border-slate-700/80 text-[9px] font-extrabold uppercase tracking-wider text-amber-300">
+                                {item.badge}
+                              </span>
+                              <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/85 text-[9px] font-mono font-bold text-slate-200">
+                                {item.stats}
+                              </span>
+                            </div>
+                            <div className="p-2.5 flex-1 flex flex-col justify-between gap-2">
+                              <div className="space-y-1">
+                                <div className="text-xs font-extrabold text-slate-100">{item.title}</div>
+                                <p className="text-[10px] text-slate-300 leading-snug">{item.howItWorks}</p>
+                                <p className="text-[10px] text-slate-400 leading-snug">
+                                  <span className="font-bold text-amber-300/90">Best for:</span> {item.bestFor}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                data-testid={`preset-apply-${item.id}`}
+                                onClick={() => {
+                                  setLocalConfig((prev) => item.apply(prev));
+                                  onExplorePresetGallery?.();
+                                }}
+                                className={`w-full py-1.5 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer ${
+                                  active
+                                    ? 'bg-amber-400 text-slate-950'
+                                    : 'bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-amber-300 border border-slate-700'
+                                }`}
+                              >
+                                {active ? 'Active Preset' : 'Apply Preset'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
+
+              {/* Generation Algorithm Strategy */}
+              <div ref={createOptionsSectionRef} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Segmentation Algorithm
+                  </label>
+                  {renderHintButton('algorithm', 'Segmentation Algorithm')}
+                </div>
+                {renderHintCallout(
+                  'algorithm',
+                  'Controls how the puzzle engine divides the image into paintable regions: Auto Detect adapts to photos or line art, Line Art Tracer follows dark ink strokes, Painterly smooths photos, Posterized snaps crisp color edges, and Mosaic Cells creates even stained-glass tiles.'
+                )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
+                  {(
+                    [
+                      { key: 'AUTO', label: 'Auto Detect', desc: 'Analyzes lines & photos' },
+                      { key: 'LINE_ART', label: 'Line Art Tracer', desc: 'Traces black outlines accurately' },
+                      { key: 'PAINTERLY', label: 'Painterly (Photo)', desc: 'Smooth Kuwahara cel-shading' },
+                      { key: 'POSTERIZED', label: 'Posterized', desc: 'Crisp geometric color edges' },
+                      { key: 'MOSAIC_CEL', label: 'Mosaic Cells', desc: 'Even stained-glass superpixels' },
+                    ] as const
+                  ).map((alg) => (
+                    <button
+                      key={alg.key}
+                      type="button"
+                      onClick={() =>
+                        setLocalConfig((prev) => ({
+                          ...prev,
+                          algorithm: alg.key as GeneratorAlgorithm,
+                          imageType: alg.key === 'PAINTERLY' ? 'PHOTO' : alg.key === 'LINE_ART' ? 'DRAWING' : 'AUTO',
+                        }))
+                      }
+                      className={`p-2 sm:p-2.5 rounded-lg border text-left transition-all ${
+                        (localConfig.algorithm || 'AUTO') === alg.key
+                          ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
+                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <div className="text-xs font-bold text-slate-100">{alg.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{alg.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Black Border & Outline Handling */}
+              {((localConfig.algorithm || 'AUTO') === 'AUTO' || localConfig.algorithm === 'LINE_ART') && (
+                <div className="space-y-1.5 p-2.5 sm:p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-400">
+                      Artwork Black Border Handling
+                    </label>
+                    {renderHintButton('border-handling', 'Artwork Black Border Handling')}
+                  </div>
+                  {renderHintCallout(
+                    'border-handling',
+                    'Boundaries Follow Artwork Lines keeps dark outlines as crisp dividers between regions; Continuous Black Line Region turns all black ink strokes into one paintable region.'
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {(
+                      [
+                        {
+                          key: 'ABSORB_LINES',
+                          label: 'Boundaries Follow Artwork Lines',
+                          desc: 'Symmetrically absorbs lines so region borders run along stroke centers',
+                        },
+                        {
+                          key: 'UNIFIED_BLACK_REGION',
+                          label: 'Continuous Black Line Region',
+                          desc: 'Unifies black ink lines into a single playable line-art region with swatch',
+                        },
+                      ] as const
+                    ).map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        onClick={() =>
+                          setLocalConfig((prev) => ({
+                            ...prev,
+                            lineHandling: mode.key as LineHandlingMode,
+                          }))
+                        }
+                        className={`p-2 sm:p-2.5 rounded-lg border text-left transition-all ${
+                          (localConfig.lineHandling || 'ABSORB_LINES') === mode.key
+                            ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-slate-100">{mode.label}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{mode.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Palette Detail Level */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Detail Level Preset
+                  </label>
+                  {renderHintButton('detail-preset', 'Detail Level Preset')}
+                </div>
+                {renderHintCallout(
+                  'detail-preset',
+                  'Picks how many palette colours are extracted. Auto, Low, Medium, and High auto-tune the palette for your image; Custom locks in your exact Target Palette Colours slider.'
+                )}
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  {(
+                    [
+                      { key: 'AUTO', label: 'Auto', colorCount: 16 },
+                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10 },
+                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18 },
+                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38 },
+                      { key: 'CUSTOM', label: 'Custom', colorCount: null },
+                    ] as const
+                  ).map((det) => (
+                    <button
+                      key={det.key}
+                      type="button"
+                      onClick={() =>
+                        setLocalConfig((prev) => ({
+                          ...prev,
+                          paletteDetail: det.key as PaletteDetail,
+                          ...(det.colorCount !== null ? { colorCount: det.colorCount } : {}),
+                        }))
+                      }
+                      className={`py-1.5 px-1 rounded-lg border text-xs font-bold text-center transition-all ${
+                        localConfig.paletteDetail === det.key
+                          ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                      }`}
+                    >
+                      {det.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Manual Fine-Tuning Sliders */}
+              <div className="space-y-3.5 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
+                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Manual Fine-Tuning &amp; Constraints
+                </div>
+
+                {/* Colors Count */}
+                <div className="space-y-1">
+                  <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1.5 text-slate-300">
+                      <span>Target Palette Colours</span>
+                      {renderHintButton('color-count', 'Target Palette Colours')}
+                    </span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {localConfig.paletteDetail === 'CUSTOM'
+                        ? `${localConfig.colorCount} colours (Custom)`
+                        : `Auto-tuned (${localConfig.paletteDetail.toLowerCase()})`}
+                    </span>
+                  </div>
+                  {renderHintCallout(
+                    'color-count',
+                    'Sets the exact number of colour swatches (4 to 64). Moving this slider automatically switches Detail Level Preset to Custom.'
+                  )}
+                  <input
+                    type="range"
+                    min="4"
+                    max="64"
+                    step="1"
+                    value={localConfig.colorCount}
+                    onChange={(e) =>
+                      setLocalConfig((prev) => ({
+                        ...prev,
+                        paletteDetail: 'CUSTOM',
+                        colorCount: parseInt(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                  {localConfig.paletteDetail !== 'CUSTOM' && (
+                    <p className="text-[10px] text-slate-400">
+                      Preset picks the best colour count for your artwork; drag slider to switch to Custom ({localConfig.colorCount}).
+                    </p>
+                  )}
+                </div>
+
+                {/* Max Regions (Piece Count) */}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1.5 text-slate-300">
+                      <span>Max Regions (Puzzle Pieces)</span>
+                      {renderHintButton('max-regions', 'Max Regions (Puzzle Pieces)')}
+                    </span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {localConfig.maxRegions || 200} max pieces
+                    </span>
+                  </div>
+                  {renderHintCallout(
+                    'max-regions',
+                    'Caps the maximum number of playable puzzle pieces (40 to 2000). Higher values preserve intricate details; lower values create faster, relaxing puzzles.'
+                  )}
+                  <input
+                    type="range"
+                    min="40"
+                    max="2000"
+                    step="20"
+                    value={localConfig.maxRegions || 200}
+                    onChange={(e) =>
+                      setLocalConfig((prev) => ({
+                        ...prev,
+                        maxRegions: parseInt(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
+                    {[
+                      { label: 'Simple (~100)', val: 100 },
+                      { label: 'Standard (~250)', val: 250 },
+                      { label: 'Detailed (~500)', val: 500 },
+                      { label: 'Expert (~1000)', val: 1000 },
+                      { label: 'Ultra (~2000)', val: 2000 },
+                    ].map((rPreset) => (
+                      <button
+                        key={rPreset.val}
+                        type="button"
+                        onClick={() =>
+                          setLocalConfig((prev) => ({ ...prev, maxRegions: rPreset.val }))
+                        }
+                        className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
+                          (localConfig.maxRegions || 200) === rPreset.val
+                            ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        {rPreset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Minimum Region Area */}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1.5 text-slate-300">
+                      <span>Minimum Region Area</span>
+                      {renderHintButton('min-region-area', 'Minimum Region Area')}
+                    </span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {localConfig.minRegionArea} px²
+                    </span>
+                  </div>
+                  {renderHintCallout(
+                    'min-region-area',
+                    'Merges tiny speckles smaller than this pixel area into neighboring regions. Lower values (15-24 px²) keep tiny details; higher values make larger, easier-to-tap pieces.'
+                  )}
+                  <input
+                    type="range"
+                    min="15"
+                    max="300"
+                    step="5"
+                    value={localConfig.minRegionArea}
+                    onChange={(e) =>
+                      setLocalConfig((prev) => ({
+                        ...prev,
+                        minRegionArea: parseInt(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
+                    {[
+                      { label: 'Fine (24 px²)', val: 24 },
+                      { label: 'Balanced (48 px²)', val: 48 },
+                      { label: 'Chunky (96 px²)', val: 96 },
+                      { label: 'Relaxed (180 px²)', val: 180 },
+                    ].map((aPreset) => (
+                      <button
+                        key={aPreset.val}
+                        type="button"
+                        onClick={() =>
+                          setLocalConfig((prev) => ({ ...prev, minRegionArea: aPreset.val }))
+                        }
+                        className={`px-1.5 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
+                          localConfig.minRegionArea === aPreset.val
+                            ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        {aPreset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Resolution with Snapping */}
+                <div className="space-y-2">
+                  <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
+                    <span className="inline-flex items-center gap-1.5 text-slate-300">
+                      <span>Max Canvas Resolution</span>
+                      {renderHintButton('max-resolution', 'Max Canvas Resolution')}
+                    </span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {localConfig.resolution} px
+                    </span>
+                  </div>
+                  {renderHintCallout(
+                    'max-resolution',
+                    'Sets the longest edge (480p to 2048p) used when segmenting the artwork. Higher resolutions produce sharper curves and crisp numbers at deep zoom.'
+                  )}
+
+                  {nativeMax > 0 && (
+                    <div className="text-[11px] text-slate-400 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <span>Source Artwork Resolution:</span>
+                      <span className="font-mono text-amber-300 font-bold">
+                        {nativeW} × {nativeH} px
+                      </span>
+                    </div>
+                  )}
+
+                  <input
+                    type="range"
+                    min="480"
+                    max="2048"
+                    step="16"
+                    value={localConfig.resolution}
+                    onChange={(e) => {
+                      const snapped = snapResolution(parseInt(e.target.value));
+                      setLocalConfig((prev) => ({ ...prev, resolution: snapped }));
+                    }}
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+
+                  {/* Artwork percentage snaps */}
+                  {PERCENTAGE_SNAPS.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Snap to Artwork Scale
+                      </div>
+                      <div className="grid grid-cols-5 gap-1">
+                        {PERCENTAGE_SNAPS.map((snap) => (
+                          <button
+                            key={snap.label}
+                            type="button"
+                            onClick={() =>
+                              setLocalConfig((prev) => ({ ...prev, resolution: snap.val }))
+                            }
+                            className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
+                              localConfig.resolution === snap.val
+                                ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                                : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
+                            }`}
+                          >
+                            {snap.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Common standard resolutions */}
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Snap to Standard Resolutions
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+                      {STANDARD_RESOLUTIONS.map((res) => (
+                        <button
+                          key={res.val}
+                          type="button"
+                          onClick={() =>
+                            setLocalConfig((prev) => ({ ...prev, resolution: res.val }))
+                          }
+                          className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
+                            localConfig.resolution === res.val
+                              ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                              : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
+                          }`}
+                        >
+                          {res.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Apply & Regenerate */}
+              <button
+                type="button"
+                onClick={() => {
+                  updateSetting('generatorConfig', localConfig);
+                  onRegenerate(localConfig);
+                  onClose();
+                }}
+                className="w-full py-2.5 sm:py-3 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs sm:text-sm hover:bg-amber-300 transition-colors shadow-lg active:scale-98"
+              >
+                Regenerate Artwork with Settings
+              </button>
 
               {/* Community Puzzle Ideas & Opt-In AI Generation Credits */}
               <div
@@ -2244,485 +2873,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   ))}
                 </div>
               </div>
-
-              {/* Preset Style Gallery & Visual Guide */}
-              <div className="rounded-xl border border-amber-400/30 bg-slate-950/65 overflow-hidden">
-                <button
-                  type="button"
-                  data-testid="preset-gallery-toggle"
-                  aria-expanded={showPresetGallery}
-                  onClick={() => {
-                    const next = !showPresetGallery;
-                    setShowPresetGallery(next);
-                    if (next) {
-                      onExplorePresetGallery?.();
-                    }
-                  }}
-                  className="w-full flex items-center justify-between gap-2 p-2.5 sm:p-3 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-extrabold text-amber-300">
-                        Preset Style Gallery &amp; Visual Guide
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-[10px] font-bold text-amber-200">
-                        10 Presets
-                      </span>
-                    </div>
-                    <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
-                      Compare real segmented previews of every algorithm, border mode, and detail preset
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-[11px] font-bold text-slate-200 flex-shrink-0">
-                    {showPresetGallery ? 'Hide Guide' : 'Show Guide'}
-                  </span>
-                </button>
-
-                {showPresetGallery && (
-                  <div
-                    data-testid="preset-gallery-panel"
-                    className="border-t border-slate-800/80 p-2.5 sm:p-3 space-y-2.5"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Preset gallery categories">
-                        {(
-                          [
-                            { key: 'ALL', label: 'All (10)' },
-                            { key: 'ALGORITHM', label: 'Algorithms (5)' },
-                            { key: 'BORDER', label: 'Black Borders (2)' },
-                            { key: 'DETAIL', label: 'Detail & Size (3)' },
-                          ] as const
-                        ).map((cat) => (
-                          <button
-                            key={cat.key}
-                            type="button"
-                            data-testid={`preset-gallery-filter-${cat.key.toLowerCase()}`}
-                            onClick={() => setPresetGalleryFilter(cat.key)}
-                            className={`px-2 py-1 rounded-full text-[10px] font-bold border transition-colors cursor-pointer ${
-                              presetGalleryFilter === cat.key
-                                ? 'bg-amber-400 text-slate-950 border-amber-300'
-                                : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-slate-600'
-                            }`}
-                          >
-                            {cat.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div
-                      data-testid="preset-gallery-grid"
-                      className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
-                    >
-                      {PRESET_GALLERY_ITEMS.filter(
-                        (item) => presetGalleryFilter === 'ALL' || item.category === presetGalleryFilter
-                      ).map((item) => {
-                        const active = item.isMatch(localConfig);
-                        return (
-                          <div
-                            key={item.id}
-                            data-testid={`preset-card-${item.id}`}
-                            className={`flex flex-col rounded-xl overflow-hidden border transition-all ${
-                              active
-                                ? 'border-amber-400 bg-slate-800/80 ring-1 ring-amber-400/70'
-                                : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
-                            }`}
-                          >
-                            <div className="relative h-32 w-full bg-slate-950 overflow-hidden">
-                              <img
-                                src={item.image}
-                                alt={`${item.title} preset preview`}
-                                loading="lazy"
-                                className="w-full h-full object-cover"
-                              />
-                              <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-slate-950/85 border border-slate-700/80 text-[9px] font-extrabold uppercase tracking-wider text-amber-300">
-                                {item.badge}
-                              </span>
-                              <span className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 rounded bg-slate-950/85 text-[9px] font-mono font-bold text-slate-200">
-                                {item.stats}
-                              </span>
-                            </div>
-                            <div className="p-2.5 flex-1 flex flex-col justify-between gap-2">
-                              <div className="space-y-1">
-                                <div className="text-xs font-extrabold text-slate-100">{item.title}</div>
-                                <p className="text-[10px] text-slate-300 leading-snug">{item.howItWorks}</p>
-                                <p className="text-[10px] text-slate-400 leading-snug">
-                                  <span className="font-bold text-amber-300/90">Best for:</span> {item.bestFor}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                data-testid={`preset-apply-${item.id}`}
-                                onClick={() => {
-                                  setLocalConfig((prev) => item.apply(prev));
-                                  onExplorePresetGallery?.();
-                                }}
-                                className={`w-full py-1.5 rounded-lg text-[11px] font-extrabold transition-colors cursor-pointer ${
-                                  active
-                                    ? 'bg-amber-400 text-slate-950'
-                                    : 'bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-amber-300 border border-slate-700'
-                                }`}
-                              >
-                                {active ? 'Active Preset' : 'Apply Preset'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Generation Algorithm Strategy */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Segmentation Algorithm
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
-                  {(
-                    [
-                      { key: 'AUTO', label: 'Auto Detect', desc: 'Analyzes lines & photos' },
-                      { key: 'LINE_ART', label: 'Line Art Tracer', desc: 'Traces black outlines accurately' },
-                      { key: 'PAINTERLY', label: 'Painterly (Photo)', desc: 'Smooth Kuwahara cel-shading' },
-                      { key: 'POSTERIZED', label: 'Posterized', desc: 'Crisp geometric color edges' },
-                      { key: 'MOSAIC_CEL', label: 'Mosaic Cells', desc: 'Even stained-glass superpixels' },
-                    ] as const
-                  ).map((alg) => (
-                    <button
-                      key={alg.key}
-                      type="button"
-                      onClick={() =>
-                        setLocalConfig((prev) => ({
-                          ...prev,
-                          algorithm: alg.key as GeneratorAlgorithm,
-                          imageType: alg.key === 'PAINTERLY' ? 'PHOTO' : alg.key === 'LINE_ART' ? 'DRAWING' : 'AUTO',
-                        }))
-                      }
-                      className={`p-2 sm:p-2.5 rounded-lg border text-left transition-all ${
-                        (localConfig.algorithm || 'AUTO') === alg.key
-                          ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-slate-100">{alg.label}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{alg.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Black Border & Outline Handling */}
-              {((localConfig.algorithm || 'AUTO') === 'AUTO' || localConfig.algorithm === 'LINE_ART') && (
-                <div className="space-y-1.5 p-2.5 sm:p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-amber-400">
-                    Artwork Black Border Handling
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {(
-                      [
-                        {
-                          key: 'ABSORB_LINES',
-                          label: 'Boundaries Follow Artwork Lines',
-                          desc: 'Symmetrically absorbs lines so region borders run along stroke centers',
-                        },
-                        {
-                          key: 'UNIFIED_BLACK_REGION',
-                          label: 'Continuous Black Line Region',
-                          desc: 'Unifies black ink lines into a single playable line-art region with swatch',
-                        },
-                      ] as const
-                    ).map((mode) => (
-                      <button
-                        key={mode.key}
-                        type="button"
-                        onClick={() =>
-                          setLocalConfig((prev) => ({
-                            ...prev,
-                            lineHandling: mode.key as LineHandlingMode,
-                          }))
-                        }
-                        className={`p-2 sm:p-2.5 rounded-lg border text-left transition-all ${
-                          (localConfig.lineHandling || 'ABSORB_LINES') === mode.key
-                            ? 'border-amber-400 bg-slate-800 text-white ring-1 ring-amber-400'
-                            : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                        }`}
-                      >
-                        <div className="text-xs font-bold text-slate-100">{mode.label}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5 leading-snug">{mode.desc}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Palette Detail Level */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Detail Level Preset
-                </label>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
-                  {(
-                    [
-                      { key: 'AUTO', label: 'Auto', colorCount: 16 },
-                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10 },
-                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18 },
-                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38 },
-                      { key: 'CUSTOM', label: 'Custom', colorCount: null },
-                    ] as const
-                  ).map((det) => (
-                    <button
-                      key={det.key}
-                      type="button"
-                      onClick={() =>
-                        setLocalConfig((prev) => ({
-                          ...prev,
-                          paletteDetail: det.key as PaletteDetail,
-                          ...(det.colorCount !== null ? { colorCount: det.colorCount } : {}),
-                        }))
-                      }
-                      className={`py-1.5 px-1 rounded-lg border text-xs font-bold text-center transition-all ${
-                        localConfig.paletteDetail === det.key
-                          ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      {det.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Manual Fine-Tuning Sliders */}
-              <div className="space-y-3.5 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
-                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Manual Fine-Tuning &amp; Constraints
-                </div>
-
-                {/* Colors Count */}
-                <div className="space-y-1">
-                  <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
-                    <span className="text-slate-300">Target Palette Colours</span>
-                    <span className="text-amber-400 font-mono font-bold">
-                      {localConfig.paletteDetail === 'CUSTOM'
-                        ? `${localConfig.colorCount} colours (Custom)`
-                        : `Auto-tuned (${localConfig.paletteDetail.toLowerCase()})`}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="4"
-                    max="64"
-                    step="1"
-                    value={localConfig.colorCount}
-                    onChange={(e) =>
-                      setLocalConfig((prev) => ({
-                        ...prev,
-                        paletteDetail: 'CUSTOM',
-                        colorCount: parseInt(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                  />
-                  {localConfig.paletteDetail !== 'CUSTOM' && (
-                    <p className="text-[10px] text-slate-400">
-                      Preset picks the best colour count for your artwork; drag slider to switch to Custom ({localConfig.colorCount}).
-                    </p>
-                  )}
-                </div>
-
-                {/* Max Regions (Piece Count) */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-300">Max Regions (Puzzle Pieces)</span>
-                    <span className="text-amber-400 font-mono font-bold">
-                      {localConfig.maxRegions || 200} max pieces
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="40"
-                    max="2000"
-                    step="20"
-                    value={localConfig.maxRegions || 200}
-                    onChange={(e) =>
-                      setLocalConfig((prev) => ({
-                        ...prev,
-                        maxRegions: parseInt(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                  />
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1">
-                    {[
-                      { label: 'Simple (~100)', val: 100 },
-                      { label: 'Standard (~250)', val: 250 },
-                      { label: 'Detailed (~500)', val: 500 },
-                      { label: 'Expert (~1000)', val: 1000 },
-                      { label: 'Ultra (~2000)', val: 2000 },
-                    ].map((rPreset) => (
-                      <button
-                        key={rPreset.val}
-                        type="button"
-                        onClick={() =>
-                          setLocalConfig((prev) => ({ ...prev, maxRegions: rPreset.val }))
-                        }
-                        className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
-                          (localConfig.maxRegions || 200) === rPreset.val
-                            ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                            : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
-                        }`}
-                      >
-                        {rPreset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Minimum Region Area */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-300">Minimum Region Area</span>
-                    <span className="text-amber-400 font-mono font-bold">
-                      {localConfig.minRegionArea} px²
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="15"
-                    max="300"
-                    step="5"
-                    value={localConfig.minRegionArea}
-                    onChange={(e) =>
-                      setLocalConfig((prev) => ({
-                        ...prev,
-                        minRegionArea: parseInt(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                  />
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-                    {[
-                      { label: 'Fine (24 px²)', val: 24 },
-                      { label: 'Balanced (48 px²)', val: 48 },
-                      { label: 'Chunky (96 px²)', val: 96 },
-                      { label: 'Relaxed (180 px²)', val: 180 },
-                    ].map((aPreset) => (
-                      <button
-                        key={aPreset.val}
-                        type="button"
-                        onClick={() =>
-                          setLocalConfig((prev) => ({ ...prev, minRegionArea: aPreset.val }))
-                        }
-                        className={`px-1.5 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
-                          localConfig.minRegionArea === aPreset.val
-                            ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                            : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
-                        }`}
-                      >
-                        {aPreset.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Resolution with Snapping */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs font-semibold">
-                    <span className="text-slate-300">Max Canvas Resolution</span>
-                    <span className="text-amber-400 font-mono font-bold">
-                      {localConfig.resolution} px
-                    </span>
-                  </div>
-
-                  {nativeMax > 0 && (
-                    <div className="text-[11px] text-slate-400 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-900/60 border border-slate-800/80">
-                      <span>Source Artwork Resolution:</span>
-                      <span className="font-mono text-amber-300 font-bold">
-                        {nativeW} × {nativeH} px
-                      </span>
-                    </div>
-                  )}
-
-                  <input
-                    type="range"
-                    min="480"
-                    max="2048"
-                    step="16"
-                    value={localConfig.resolution}
-                    onChange={(e) => {
-                      const snapped = snapResolution(parseInt(e.target.value));
-                      setLocalConfig((prev) => ({ ...prev, resolution: snapped }));
-                    }}
-                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                  />
-
-                  {/* Artwork percentage snaps */}
-                  {PERCENTAGE_SNAPS.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Snap to Artwork Scale
-                      </div>
-                      <div className="grid grid-cols-5 gap-1">
-                        {PERCENTAGE_SNAPS.map((snap) => (
-                          <button
-                            key={snap.label}
-                            type="button"
-                            onClick={() =>
-                              setLocalConfig((prev) => ({ ...prev, resolution: snap.val }))
-                            }
-                            className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
-                              localConfig.resolution === snap.val
-                                ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                                : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
-                            }`}
-                          >
-                            {snap.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Common standard resolutions */}
-                  <div className="space-y-1">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Snap to Standard Resolutions
-                    </div>
-                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
-                      {STANDARD_RESOLUTIONS.map((res) => (
-                        <button
-                          key={res.val}
-                          type="button"
-                          onClick={() =>
-                            setLocalConfig((prev) => ({ ...prev, resolution: res.val }))
-                          }
-                          className={`px-1 py-1 rounded-md border text-[10px] font-bold text-center transition-all ${
-                            localConfig.resolution === res.val
-                              ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                              : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:bg-slate-800/50'
-                          }`}
-                        >
-                          {res.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Apply & Regenerate */}
-              <button
-                type="button"
-                onClick={() => {
-                  updateSetting('generatorConfig', localConfig);
-                  onRegenerate(localConfig);
-                  onClose();
-                }}
-                className="w-full py-2.5 sm:py-3 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs sm:text-sm hover:bg-amber-300 transition-colors shadow-lg active:scale-98"
-              >
-                Regenerate Artwork with Settings
-              </button>
             </div>
           )}
 
