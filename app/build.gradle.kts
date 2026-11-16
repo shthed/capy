@@ -138,6 +138,9 @@ tasks.named("preBuild") {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.ktx)
+    // Pin Fragment >= 1.3.0: play-services-games-v2 pulls an old transitive androidx.fragment,
+    // which fails lintVitalRelease (InvalidFragmentVersionForActivityResult) on registerForActivityResult.
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.webkit)
     implementation(libs.play.services.games.v2)
 
