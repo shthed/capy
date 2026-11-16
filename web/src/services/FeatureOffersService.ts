@@ -61,21 +61,21 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     title: 'Photo Styles',
     message:
       'Adjust puzzle style and detail level anytime under Create in the menu.',
-    tutorialStepIndex: 9,
+    tutorialStepIndex: 10,
   },
   infinite_zoom: {
     id: 'infinite_zoom',
     title: 'Detail View Created',
     message:
       'Tap the Parent button in the top-left corner anytime to go back to your full picture.',
-    tutorialStepIndex: 10,
+    tutorialStepIndex: 11,
   },
   saves_export: {
     id: 'saves_export',
     title: 'Saved Pictures',
     message:
       'Pin favorites, rename pictures, save backups, or print coloring pages here.',
-    tutorialStepIndex: 11,
+    tutorialStepIndex: 12,
   },
 };
 

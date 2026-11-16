@@ -32,6 +32,7 @@ export type TutorialStepKey =
   | 'free_color'
   | 'gallery_daily'
   | 'custom_photo'
+  | 'puzzle_presets'
   | 'infinite_zoom'
   | 'saves_export'
   | 'settings_a11y';
@@ -50,6 +51,7 @@ export function createInitialTutorialTried(): TutorialTriedActions {
     free_color: false,
     gallery_daily: false,
     custom_photo: false,
+    puzzle_presets: false,
     infinite_zoom: false,
     saves_export: false,
     settings_a11y: false,
@@ -158,6 +160,14 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Tap the Photo button at the top to turn your own photo or drawing into a puzzle.',
     tryPrompt: 'Try it: Tap the Photo icon above',
     icon: Camera,
+  },
+  {
+    key: 'puzzle_presets',
+    title: 'Puzzle Styles & Presets',
+    description:
+      'In Menu > Create, pick a style like Line Art, Painterly, or Mosaic, or open the Preset Gallery to compare how each looks.',
+    tryPrompt: 'Try it: Open Menu > Create and explore Preset Gallery',
+    icon: Sparkles,
   },
   {
     key: 'infinite_zoom',
