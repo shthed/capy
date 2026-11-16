@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Crosshair,
   FastForward,
@@ -54,11 +54,13 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
   onUserInteract,
 }) => {
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const isScrubbingRef = useRef<boolean>(false);
   const [hoverStep, setHoverStep] = useState<number | null>(null);
   const [hoverRatio, setHoverRatio] = useState<number>(0);
 
   useEffect(() => {
     if (isOpen) {
+      isScrubbingRef.current = false;
       setIsScrubbing(false);
       setHoverStep(null);
     }
@@ -94,6 +96,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
 
   const handleTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     onUserInteract?.();
+    isScrubbingRef.current = true;
     setIsScrubbing(true);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -104,9 +107,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
     const { step, ratio } = computeStepFromPointer(e.clientX, rect);
     setHoverStep(step);
     setHoverRatio(ratio);
-    if (step !== currentStep) {
-      onSeek(step);
-    }
+    onSeek(step);
   };
 
   const handleTrackPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -114,13 +115,14 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
     const { step, ratio } = computeStepFromPointer(e.clientX, rect);
     setHoverStep(step);
     setHoverRatio(ratio);
-    if (isScrubbing && step !== currentStep) {
+    if (isScrubbingRef.current) {
       onSeek(step);
     }
   };
 
   const handleTrackPointerUpOrCancel = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isScrubbing) {
+    if (isScrubbingRef.current || isScrubbing) {
+      isScrubbingRef.current = false;
       setIsScrubbing(false);
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -204,7 +206,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
             onUserInteract?.();
             onSeek(Number(e.target.value));
           }}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer m-0"
+          className="absolute inset-0 w-full h-full opacity-0 pointer-events-none m-0"
         />
       </div>
     );
