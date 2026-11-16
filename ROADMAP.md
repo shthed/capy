@@ -485,10 +485,10 @@ Parked native desktop/mobile store wrappers awaiting completion of [EPIC-2](http
 Completed Epics and User Stories archived upon merge to `main` (full granular PR history lives in [`CHANGELOG.md`](./CHANGELOG.md)):
 
 <details>
-<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#558)</summary>
+<summary>Expand Shipped Epics & Stories (EPIC-1 & Shipped Slices -- PRs #431--#559)</summary>
 
 - **Sprint 1 `v3.0.0`--`v3.0.24` Bugfix, Onboarding, Mobile UI & Play Store Launch Prep Slices (`BUG-1`--`BUG-3`, `BUG-5`, `TASK-2.6`, PR Workflows & Governance)**:
-  - **`v3.0.24` Production Promotion (`v3.0.21`--`v3.0.24` Preset Gallery, Colour Defaults, Replay Scrubber & Review-Gate Bundle)** -- [#556 — Beta](https://github.com/shthed/capy/pull/556), [#558 — Prepare v3.0.24 release changelog and roadmap for main promotion](https://github.com/shthed/capy/pull/558)
+  - **`v3.0.24` Production Promotion (`v3.0.21`--`v3.0.24` Preset Gallery, Colour Defaults, Replay Scrubber & Review-Gate Bundle)** -- [#556 — Beta](https://github.com/shthed/capy/pull/556), [#559 — Prepare v3.0.24 release changelog and roadmap for main promotion](https://github.com/shthed/capy/pull/559)
   - **`v3.0.24` Visual Preset Style Gallery & Puzzle Styles Tutorial Step** -- [#557 — Add visual Preset Style Gallery, sync Detail/Colour controls, and add Puzzle Styles tutorial step](https://github.com/shthed/capy/pull/557)
   - **`v3.0.23` Original Detail Colour Mode & Hue Sort Defaults** -- [#555 — Set default colour mode to detail and colour sort order to hue](https://github.com/shthed/capy/pull/555)
   - **`v3.0.22` Compact Replay Scrubber** -- [#554 — Remove expandable replay window and keep compact scrubber bar](https://github.com/shthed/capy/pull/554)
