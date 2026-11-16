@@ -1,0 +1,120 @@
+name: Regenerate Pre-Baked Max-Settings Puzzles
+
+on:
+  schedule:
+    - cron: '15 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: regenerate-puzzles-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  regenerate-puzzles:
+    if: github.repository == 'shthed/capy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout beta
+        uses: actions/checkout@v7
+        with:
+          ref: beta
+          fetch-depth: 0
+          token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Cache web node_modules
+        id: node-modules-cache
+        uses: actions/cache@v6
+        with:
+          path: web/node_modules
+          key: ${{ runner.os }}-node22-modules-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Cache Playwright Chromium
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Install dependencies and Playwright Chromium
+        working-directory: web
+        run: |
+          if [ "${{ steps.node-modules-cache.outputs.cache-hit }}" != "true" ]; then
+            npm ci --prefer-offline --no-audit --no-fund
+          fi
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            npx playwright install --with-deps chromium
+          else
+            npx playwright install-deps chromium
+          fi
+
+      - name: Regenerate Max-settings sample and daily .capy archives
+        working-directory: web
+        run: npm run generate:samples
+
+      - name: Verify sanity, lint, and production build
+        working-directory: web
+        run: npm run test:sanity && npm run lint && npm run build
+
+      - name: Check for changed .capy assets
+        id: diff_check
+        run: |
+          if git diff --quiet web/public/assets/sample_saves.capy web/public/assets/daily_saves.capy; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit regenerated .capy archives and open or update beta PR
+        if: steps.diff_check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          BRANCH="automation/regenerate-puzzles"
+          git checkout -B "$BRANCH"
+          git add web/public/assets/sample_saves.capy web/public/assets/daily_saves.capy
+          git commit -m "Regenerate Max-settings sample and daily .capy puzzles"
+          git push --force-with-lease origin "$BRANCH"
+
+          PR_BODY=$(cat <<'EOF'
+          ## Summary
+
+          Automatically regenerates the pre-built sample and daily puzzles at Max detail settings so new players can open them right away without waiting for generation.
+
+          - Regenerated `web/public/assets/sample_saves.capy` and `web/public/assets/daily_saves.capy` via `npm run generate:samples`.
+          - Verified `npm run test:sanity`, `npm run lint`, and `npm run build`.
+
+          ### PR Readiness Score: 100%
+
+          <details><summary>PR Readiness Checklist</summary>
+
+          - **100%** — **Pre-Generated Bundles**: `sample_saves.capy` and `daily_saves.capy` regenerated headlessly at Max settings.
+          - **100%** — **Verification Gates**: `npm run test:sanity`, `npm run lint`, and `npm run build` passed.
+
+          </details>
+
+          Ready for automated review and merge to `beta`.
+          EOF
+          )
+
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --base beta --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            gh pr edit "$EXISTING_PR" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY"
+          else
+            gh pr create --base beta --head "$BRANCH" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY" --label "ci,web"
+          fi

@@ -1,4 +1,4 @@
-import { GeneratorConfig, SAMPLE_GALLERY, SampleArtwork } from '../types';
+import { GeneratorConfig, MAX_GENERATOR_CONFIG, SAMPLE_GALLERY, SampleArtwork } from '../types';
 
 export interface DailyPresetVariation {
   id: string;
@@ -10,6 +10,7 @@ export interface DailyPresetVariation {
 export interface DailyFeaturedPuzzle {
   utcDate: string;
   epochDay: number;
+  snapshotId: string;
   sample: SampleArtwork;
   presetId: string;
   presetLabel: string;
@@ -139,6 +140,10 @@ function positiveMod(value: number, modulus: number): number {
   return ((value % modulus) + modulus) % modulus;
 }
 
+export function getDailyPrebakedSnapshotId(sampleId: string, presetId: string): string {
+  return `daily-${sampleId}-${presetId}`;
+}
+
 /**
  * Pure, 100% offline deterministic selector mapping a YYYY-MM-DD UTC date
  * to an identical curated SAMPLE_GALLERY artwork and preset variation across all devices.
@@ -153,7 +158,9 @@ export function getDailyFeaturedPuzzle(utcDateStr?: string): DailyFeaturedPuzzle
   const isFreeColor = Boolean(sample.isFreeColor);
 
   const config: GeneratorConfig = {
-    ...preset.config,
+    ...MAX_GENERATOR_CONFIG,
+    algorithm: preset.config.algorithm || MAX_GENERATOR_CONFIG.algorithm,
+    lineHandling: preset.config.lineHandling || MAX_GENERATOR_CONFIG.lineHandling,
     ...(isFreeColor
       ? {
           algorithm: 'LINE_ART',
@@ -166,10 +173,13 @@ export function getDailyFeaturedPuzzle(utcDateStr?: string): DailyFeaturedPuzzle
   return {
     utcDate,
     epochDay,
+    snapshotId: getDailyPrebakedSnapshotId(sample.id, preset.id),
     sample,
     presetId: preset.id,
     presetLabel: isFreeColor ? `${preset.label} • Free Colour` : preset.label,
-    presetDescription: preset.description,
+    presetDescription: isFreeColor
+      ? 'Free Colour • Max Detail'
+      : 'Max Detail (64 colours • 2000 pieces)',
     config,
   };
 }
