@@ -10518,6 +10518,20 @@ async function runBrowserBasicsSuite() {
     });
     const snapCountBeforeDaily = dailyBeforeState.count;
     await page.getByTestId('daily-puzzle-play-btn').click();
+    // The previous puzzle's canvas and PaletteDock stay mounted while Play Daily fetches and
+    // imports daily_saves.capy asynchronously, so waitForPuzzleLoaded alone can resolve against
+    // the old puzzle. Wait for the prebaked daily-* snapshot to become the active save first; a
+    // genuine fallback to worker generation still fails the descriptive assertion below.
+    await page
+      .waitForFunction(
+        () => {
+          const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+          return typeof snaps[0]?.id === 'string' && snaps[0].id.startsWith('daily-');
+        },
+        null,
+        { timeout: 20000 }
+      )
+      .catch(() => {});
     await waitForPuzzleLoaded(page);
     assert.equal(await dailyCard.isVisible(), false, 'Settings modal should close after clicking Play Daily');
     const dailyAfterState = await page.evaluate(() => {
