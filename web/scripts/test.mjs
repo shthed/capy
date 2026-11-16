@@ -3246,6 +3246,8 @@ async function runCodecAndEngineTests() {
         graphqlImpl = null,
         mergeImpl = null,
         requestImpl = null,
+        mergeableState = undefined,
+        checkRuns = null,
         expectCommitStatus = true,
       } = options;
       const body = 'body' in options ? options.body : validStrictPrBody;
@@ -3260,6 +3262,7 @@ async function runCodecAndEngineTests() {
         fetch: [],
         graphql: [],
         merge: [],
+        listForRef: [],
         request: [],
       };
       const allComments = [...comments];
@@ -3318,6 +3321,9 @@ async function runCodecAndEngineTests() {
                 node_id: nodeId,
                 auto_merge: autoMerge,
                 labels: labels.map((name) => ({ name })),
+                ...(mergeableState !== undefined
+                  ? { mergeable: true, mergeable_state: mergeableState }
+                  : {}),
               },
             }),
             listReviews: async () => ({ data: reviews }),
@@ -3335,6 +3341,12 @@ async function runCodecAndEngineTests() {
                 return mergeImpl(payload);
               }
               return { data: { merged: true, sha: headSha } };
+            },
+          },
+          checks: {
+            listForRef: async () => {
+              calls.listForRef.push(true);
+              return { data: { check_runs: checkRuns || [] } };
             },
           },
           repos: {
@@ -5343,6 +5355,79 @@ async function runCodecAndEngineTests() {
         false
       );
     }
+
+    // Auto-merge stuck `blocked` by non-check ruleset requirements must merge directly once
+    // `Build & Test` is green on the exact head SHA (no Owner approval required per Owner directive)
+    const greenHeadRuns = [
+      { name: 'Build & Test', status: 'completed', conclusion: 'cancelled', started_at: '2026-11-13T01:00:00Z' },
+      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Playwright E2E Release Gate', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' },
+    ];
+    for (const [targetBase, expectedMergeMethod] of [
+      ['beta', 'squash'],
+      ['main', 'merge'],
+    ]) {
+      const gateBlockedDirectMergeRes = await runReviewGateCase({
+        prAuthor: 'shthed',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        mergeableState: 'blocked',
+        checkRuns: greenHeadRuns,
+      });
+      assert.equal(gateBlockedDirectMergeRes.status.state, 'success');
+      assert.equal(gateBlockedDirectMergeRes.calls.graphql.length, 1);
+      assert.equal(gateBlockedDirectMergeRes.calls.merge.length, 1);
+      assert.equal(gateBlockedDirectMergeRes.calls.merge[0].merge_method, expectedMergeMethod);
+      assert.equal(gateBlockedDirectMergeRes.calls.merge[0].sha, gateHeadSha);
+    }
+
+    for (const blockingRuns of [
+      [],
+      [{ name: 'Build & Test', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' }],
+      [
+        { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Android Build & JUnit Tests', status: 'completed', conclusion: 'failure', started_at: '2026-11-13T01:01:00Z' },
+      ],
+    ]) {
+      const gateBlockedNotGreenRes = await runReviewGateCase({
+        prAuthor: 'shthed',
+        baseRef: 'beta',
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        mergeableState: 'blocked',
+        checkRuns: blockingRuns,
+      });
+      assert.equal(gateBlockedNotGreenRes.status.state, 'success');
+      assert.equal(gateBlockedNotGreenRes.calls.merge.length, 0);
+    }
+
+    const gateBlockedHeldRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      labels: ['review:ai-approved', 'review:changes-requested'],
+      mergeableState: 'blocked',
+      checkRuns: greenHeadRuns,
+    });
+    assert.notEqual(gateBlockedHeldRes.status.state, 'success');
+    assert.equal(gateBlockedHeldRes.calls.merge.length, 0);
+
+    const gateCleanStateNoDirectMergeRes = await runReviewGateCase({
+      prAuthor: 'shthed',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      mergeableState: 'unstable',
+      checkRuns: greenHeadRuns,
+    });
+    assert.equal(gateCleanStateNoDirectMergeRes.status.state, 'success');
+    assert.equal(gateCleanStateNoDirectMergeRes.calls.merge.length, 0);
 
     // Draft PRs must include a `- [ ]` outstanding-work checklist before being marked Ready for Review
     const gateDraftMissingChecklistRes = await runReviewGateCase({
