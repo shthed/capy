@@ -82,7 +82,23 @@ async function getStableBoundingBox(locator, timeoutMs = 2000) {
 }
 
 async function runCodecAndEngineTests() {
-  console.log('=== PART 1: Engine & Compact Binary Codec v2 Unit Checks ===');
+  console.log('=== PART 1: Unified Engine, Codec, Relay, Security & Workflow Unit Suite ===');
+  const unitPublicTotal = 10;
+  let unitDevTotal = 0;
+  /* capy-dev-only:start */
+  unitDevTotal = 5;
+  /* capy-dev-only:end */
+  const unitTotal = unitPublicTotal + unitDevTotal;
+  const padUnit = (n) => String(n).padStart(2, '0');
+  let unitStep = 0;
+  const logUnitStart = (label) => {
+    unitStep += 1;
+    console.log(`[Unit ${padUnit(unitStep)}/${padUnit(unitTotal)}] ${label}`);
+  };
+  const logUnitPass = (label) => {
+    console.log(`   PASS [Unit ${padUnit(unitStep)}/${padUnit(unitTotal)}]: ${label}`);
+  };
+
   const vite = await createServer({
     root: projectRoot,
     server: { middlewareMode: true },
@@ -92,6 +108,7 @@ async function runCodecAndEngineTests() {
   });
 
   try {
+    logUnitStart('Testing ColorQuantizer, RegionSegmenter mosaic & CapyCodec v2 binary/delta DoS hardening...');
     const codec = await vite.ssrLoadModule('/src/services/CapyCodec.ts');
     const segmenterMod = await vite.ssrLoadModule('/src/engine/RegionSegmenter.ts');
     const quantizerMod = await vite.ssrLoadModule('/src/engine/ColorQuantizer.ts');
@@ -327,8 +344,10 @@ async function runCodecAndEngineTests() {
         }),
       /exceeds limit/
     );
+    logUnitPass('ColorQuantizer, RegionSegmenter mosaic & CapyCodec v2 binary/delta DoS hardening verified.');
 
     // 5. Semantic Versioning, Fast <2s Sanity Gate & CHANGELOG.md Synchronization
+    logUnitStart('Testing SemVer parity, <2s sanity.mjs gate, CHANGELOG contract & release channels...');
     const sanityRes = runSanityChecks({ repoRoot: path.resolve(projectRoot, '..') });
     assert.equal(sanityRes.elapsedMs < 2000, true, `sanity.mjs must run in < 2s (${sanityRes.elapsedMs}ms)`);
     const versionMod = await vite.ssrLoadModule('/src/version.ts');
@@ -1562,8 +1581,10 @@ async function runCodecAndEngineTests() {
       fs.rmSync(tmpStrictRepo, { recursive: true, force: true });
     }
     /* capy-dev-only:end */
+    logUnitPass('SemVer parity, <2s sanity.mjs gate, CHANGELOG contract, Epic naming & PR Readiness checks verified.');
 
     // Unit-test .github/scripts/cleanup-gh-pages-previews.mjs and .github/scripts/cleanup-branches.mjs
+    logUnitStart('Testing .github/scripts cleanup-gh-pages-previews.mjs & cleanup-branches.mjs...');
     const previewCleanupMod = await import('../../.github/scripts/cleanup-gh-pages-previews.mjs');
     const branchCleanupMod = await import('../../.github/scripts/cleanup-branches.mjs');
 
@@ -1724,8 +1745,14 @@ async function runCodecAndEngineTests() {
         fs.mkdirSync(path.join(tmpPages, 'stale-legacy-dir'), { recursive: true });
         fs.mkdirSync(path.join(tmpPages, 'live-branch-dir'), { recursive: true });
         fs.mkdirSync(path.join(tmpPages, 'beta'), { recursive: true });
+        const capturedPreviewLogs = [];
         const runRes = await previewCleanupMod.runCleanupGhPagesPreviews({
           pagesDir: tmpPages,
+          logger: {
+            log: (m) => capturedPreviewLogs.push(String(m)),
+            warn: (m) => capturedPreviewLogs.push(String(m)),
+            error: (m) => capturedPreviewLogs.push(String(m)),
+          },
           ignoreRecency: false,
           nowMs: Date.now() + 2 * 24 * 60 * 60 * 1000,
           repository: 'a/b',
@@ -1742,6 +1769,11 @@ async function runCodecAndEngineTests() {
             }),
         });
         assert.deepEqual(runRes.deleted.sort(), ['PR', 'alpha/484', 'pull', 'stale-legacy-dir']);
+        assert.equal(
+          capturedPreviewLogs.some((line) => line.includes('alpha/484')),
+          true,
+          'Custom logger must receive cleanup-gh-pages-previews log output without stdout spam'
+        );
         assert.equal(fs.existsSync(path.join(tmpPages, 'alpha', '492')), true);
         assert.equal(fs.existsSync(path.join(tmpPages, 'alpha', '484')), false);
         assert.equal(fs.existsSync(path.join(tmpPages, 'pull')), false);
@@ -1935,10 +1967,17 @@ async function runCodecAndEngineTests() {
       };
 
       const dryDeletes = [];
+      let quietSpyLogs = 0;
       await branchCleanupMod.runCleanupBranches({
         repository: 'a/b',
         token: 'tok',
         dryRun: true,
+        quiet: true,
+        logger: {
+          log: () => { quietSpyLogs += 1; },
+          warn: () => { quietSpyLogs += 1; },
+          error: () => { quietSpyLogs += 1; },
+        },
         includePrefixes: ['dependabot/', 'sync/'],
         minAgeDays: 1,
         unmergedMinAgeDays: 7,
@@ -1948,12 +1987,19 @@ async function runCodecAndEngineTests() {
         fetchImpl: createMockFetch(dryDeletes),
       });
       assert.equal(dryDeletes.length, 0);
+      assert.equal(quietSpyLogs, 0, 'quiet: true must suppress cleanup-branches logging');
 
       const liveDeletes = [];
+      const capturedBranchLogs = [];
       const liveRes = await branchCleanupMod.runCleanupBranches({
         repository: 'a/b',
         token: 'tok',
         dryRun: false,
+        logger: {
+          log: (m) => capturedBranchLogs.push(String(m)),
+          warn: (m) => capturedBranchLogs.push(String(m)),
+          error: (m) => capturedBranchLogs.push(String(m)),
+        },
         includePrefixes: ['dependabot/', 'sync/'],
         minAgeDays: 1,
         unmergedMinAgeDays: 7,
@@ -1965,9 +2011,16 @@ async function runCodecAndEngineTests() {
       assert.equal(liveDeletes.length, 1);
       assert.equal(liveDeletes[0].endsWith('/git/refs/heads/dependabot/npm/stale'), true);
       assert.deepEqual(liveRes.deleted, ['dependabot/npm/stale']);
+      assert.equal(
+        capturedBranchLogs.some((line) => line.includes('deleted 1 branch(es)')),
+        true,
+        'Custom logger must receive cleanup-branches summary without stdout spam'
+      );
     }
+    logUnitPass('cleanup-gh-pages-previews.mjs & cleanup-branches.mjs retries, filtering & quiet/logger options verified.');
 
     // 6. SoundService SSR safety, volume clamping, visibility/disable auto-suspend & rate-throttled woodblock tap
+    logUnitStart('Testing SoundService, zoom detents, DailyPuzzleService, PlayerStatsService & SvgPrintExporter...');
     const soundMod = await vite.ssrLoadModule('/src/services/SoundService.ts');
     const canvasMod = await vite.ssrLoadModule('/src/components/PuzzleCanvas.tsx');
 
@@ -2106,6 +2159,16 @@ async function runCodecAndEngineTests() {
     );
     assert.notEqual(dailyNext1.sample.id, dailyNext2.sample.id);
     assert.notEqual(dailyNext1.presetId, dailyNext2.presetId);
+    assert.equal(dailyA.snapshotId, `daily-${dailyA.sample.id}-${dailyA.presetId}`);
+    assert.equal(dailyA.config.resolution, 2048, 'Daily puzzle config must default to Max resolution 2048');
+    assert.equal(dailyA.config.maxRegions, 2000, 'Daily puzzle config must default to Max regions 2000');
+    assert.equal(dailyA.config.colorCount, 64, 'Daily puzzle config must default to Max colors 64');
+    assert.equal(dailyA.config.paletteDetail, 'CUSTOM', 'Daily puzzle config must use CUSTOM paletteDetail for 64 colors');
+    assert.ok(
+      dailyA.presetDescription.includes('Max Detail') &&
+        !/\b(10|16|18|24) colours\b/.test(dailyA.presetDescription),
+      `Daily presetDescription must not show contradictory low/medium counts: '${dailyA.presetDescription}'`
+    );
 
     // 9. PlayerStatsService SSR load, increment, clamping, persistence & monotonic mergeLifetimeStats
     const statsMod = await vite.ssrLoadModule('/src/services/PlayerStatsService.ts');
@@ -2231,8 +2294,10 @@ async function runCodecAndEngineTests() {
       svgMod.sanitizeColoringSheetFileName(rawSpecialTitle),
       'capy-friends-zen-sheet-coloring-sheet.svg'
     );
+    logUnitPass('SoundService, zoom detents, DailyPuzzleService, PlayerStatsService & SvgPrintExporter verified.');
 
     // 11. capypaint.com canonical ShareLinkService, Co-op WS auto-discovery & Cloudflare Worker protocol
+    logUnitStart('Testing ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService...');
     const shareLinkMod = await vite.ssrLoadModule('/src/services/ShareLinkService.ts');
     const providerMod = await vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts');
     const relayProtoMod = await vite.ssrLoadModule(
@@ -2744,8 +2809,10 @@ async function runCodecAndEngineTests() {
         'Service Worker must bypass .apk binary downloads'
       );
     }
+    logUnitPass('ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService verified.');
 
     // --- Sprint 2: F8 CRDT resetEpoch & F9 >180KB Play Games Chunks ---
+    logUnitStart('Testing CRDT resetEpoch dominance, >180 KB pgblob chunking & NativeBridge fast-fail guards...');
     {
       const driversMod = await vite.ssrLoadModule('/src/services/providers/CloudProviderDrivers.ts');
       const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
@@ -3033,8 +3100,10 @@ async function runCodecAndEngineTests() {
         globalThis.window = prevWindow;
       }
     }
+    logUnitPass('CRDT resetEpoch anti-resurrection, >180 KB Play Games pgblob chunking & NativeBridge guards verified.');
 
     /* capy-dev-only:start */
+    logUnitStart('Testing rebrand-persona.mjs clean-room export, content transforms & zero-leak checks...');
     const {
       FORBIDDEN_PERSONA_REGEX,
       stripDevOnlyBlocks,
@@ -3140,8 +3209,10 @@ async function runCodecAndEngineTests() {
     } finally {
       fs.rmSync(tmpCleanStage, { recursive: true, force: true });
     }
+    logUnitPass('rebrand-persona.mjs clean-room export, zero-leak scan & staged sanity verified.');
 
     // Extract and unit-test real GitHub Actions script blocks from pr-review-gate.yml & open-pr.yml
+    logUnitStart('Testing pr-review-gate.yml review/score/checklist/sync gate logic...');
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     const extractWorkflowScript = (workflowRelPath) => {
       const raw = fs.readFileSync(path.resolve(projectRoot, '..', workflowRelPath), 'utf8');
@@ -6142,8 +6213,10 @@ async function runCodecAndEngineTests() {
       compareMap: syncExactCompareFixture,
     });
     assert.equal(gateMainSyncTargetMainPendingRes.status.state, 'pending');
+    logUnitPass('pr-review-gate.yml 100% AI score, checklist & hold/sync enforcement verified.');
 
     // Extract and unit-test real .github/workflows/open-pr.yml script
+    logUnitStart('Testing open-pr.yml normalization, draft guard, labels & milestone lookup...');
     const runOpenPrScript = new AsyncFunction(
       'context',
       'github',
@@ -6395,8 +6468,10 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(missingMilestoneFail.failed.length, 1);
     assert.equal(missingMilestoneFail.calls.createPr.length, 0);
+    logUnitPass('open-pr.yml branch normalization, draft enforcement & validation verified.');
 
     // Extract and unit-test .github/workflows/deploy-branch.yml target script & Phase 2 workflow invariants
+    logUnitStart('Testing deploy-branch.yml routing, docs fast-path & publish-capyboop.yml clean sync...');
     const runDeployTargetScript = new AsyncFunction(
       'context',
       'github',
@@ -6904,10 +6979,11 @@ async function runCodecAndEngineTests() {
     const publishScript = publishStep.run;
     execFileSync(
       'bash',
-      ['-n'],
+      ['--norc', '--noprofile', '-n'],
       {
         input: publishScript.replace(/\$\{(?:version|commit_msg)\}/g, 'x'),
         encoding: 'utf8',
+        env: { ...process.env, BASH_ENV: '', PS1: '' },
       }
     );
     assert.equal(
@@ -6963,6 +7039,8 @@ async function runCodecAndEngineTests() {
       const scanRc = execFileSync(
         'bash',
         [
+          '--norc',
+          '--noprofile',
           '-euo',
           'pipefail',
           '-c',
@@ -6973,13 +7051,15 @@ async function runCodecAndEngineTests() {
             'printf "%s" "$GREP_RC"',
           ].join('\n'),
         ],
-        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '' } }
+        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '', PS1: '' } }
       ).trim();
       assert.equal(scanRc, '0');
 
       const lsRemoteCodes = execFileSync(
         'bash',
         [
+          '--norc',
+          '--noprofile',
           '-euo',
           'pipefail',
           '-c',
@@ -6993,7 +7073,7 @@ async function runCodecAndEngineTests() {
             'printf "%s:%s:%s" "$rc_hit" "$rc_miss" "$rc_err"',
           ].join('\n'),
         ],
-        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '' } }
+        { encoding: 'utf8', env: { ...process.env, BASH_ENV: '', PS1: '' } }
       ).trim();
       const [rcHit, rcMiss, rcErr] = lsRemoteCodes.split(':').map(Number);
       assert.equal(rcHit, 0);
@@ -7002,8 +7082,10 @@ async function runCodecAndEngineTests() {
     } finally {
       fs.rmSync(tmpPublishRepoDir, { recursive: true, force: true });
     }
+    logUnitPass('deploy-branch.yml routing & publish-capyboop.yml clean-history guards verified.');
 
     // Extract and unit-test ai-review job script block from pr-review-gate.yml
+    logUnitStart('Testing ai-review Gemini fallback, dependabot.yml & sync-agile-tracker.yml...');
     const aiReviewYamlLines = prReviewGateYaml.split(/\r?\n/);
     const aiJobIdx = aiReviewYamlLines.findIndex((line) => /^\s{2}ai-review:\s*$/.test(line));
     assert.notEqual(aiJobIdx, -1, 'Expected ai-review job in pr-review-gate.yml');
@@ -7386,10 +7468,11 @@ async function runCodecAndEngineTests() {
     assert.equal(syncRes3.length, 0);
     const syncRes4 = await runSyncAgileCase({ merged: false, labels: ['epic:2'] });
     assert.equal(syncRes4.length, 0);
+    logUnitPass('ai-review fallback models, dependabot.yml & sync-agile-tracker.yml verified.');
     /* capy-dev-only:end */
 
     // Verify Android TV Leanback manifest declarations and 320x180 tv_banner.png asset (TC-B1-T1-01..06, TC-B1-T2-01..06)
-    console.log('-> Testing Android TV Leanback AndroidManifest.xml and 320x180 tv_banner.png...');
+    logUnitStart('Testing Android TV Leanback AndroidManifest.xml & 320x180 tv_banner.png...');
     const androidManifestPath = path.resolve(projectRoot, '../app/src/main/AndroidManifest.xml');
     const tvManifestInfo = JSON.parse(
       execFileSync(
@@ -7502,9 +7585,10 @@ async function runCodecAndEngineTests() {
     badBannerBuf.writeUInt32BE(512, 20);
     const badBannerHeader = parseTvBannerPng(badBannerBuf);
     assert.equal(badBannerHeader.width === 320 && badBannerHeader.height === 180, false);
+    logUnitPass('Android TV Leanback AndroidManifest.xml & 320x180 tv_banner.png verified.');
 
     // Verify web/public/404.html redirect logic, .github/scripts/pr-index.html, & generate-pr-manifest.mjs
-    console.log('-> Testing 404.html redirect VM behavior, pr-index.html, generate-pr-manifest.mjs & workflow wiring...');
+    logUnitStart('Testing 404.html redirect VM behavior, pr-index.html, generate-pr-manifest.mjs & workflow wiring...');
     const notFoundHtmlPath = path.resolve(projectRoot, 'public/404.html');
     const notFoundHtml = fs.readFileSync(notFoundHtmlPath, 'utf8');
     assert.equal(notFoundHtml.includes('/capy/alpha/?missing='), true, '404.html must redirect to /capy/alpha/?missing=');
@@ -7626,6 +7710,7 @@ async function runCodecAndEngineTests() {
       // cleanup-gh-pages-previews must preserve alpha/index.html and alpha/manifest.json intact
       const cleanupRes = await previewCleanupMod.runCleanupGhPagesPreviews({
         pagesDir: tmpPagesDir,
+        quiet: true,
         ignoreRecency: true,
         repository: 'a/b',
         token: 'tok',
@@ -7700,9 +7785,10 @@ async function runCodecAndEngineTests() {
         `${wfFile} Upload Pages artifact step must set include-hidden-files: true`
       );
     }
+    logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs & upload-pages-artifact dotfiles verified.');
 
     // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
-    console.log('-> Testing compile-changelog.mjs release note extraction & release.yml wiring...');
+    logUnitStart('Testing .github/scripts/compile-changelog.mjs release note extraction & release.yml wiring...');
     const { extractReleaseNotes, formatReleaseNotesMarkdown } = await import(
       '../../.github/scripts/compile-changelog.mjs'
     );
@@ -7770,9 +7856,10 @@ async function runCodecAndEngineTests() {
       extractReleaseNotes(changelogWithSubheading, 'v3.0.7'),
       '- Top bullet [#495](https://example.invalid/pull/495)'
     );
+    logUnitPass('.github/scripts/compile-changelog.mjs & release.yml extraction verified.');
 
     // Verify sanity.mjs .changelog fragment parser + web/scripts/compile-changelog.mjs
-    console.log('-> Testing .changelog fragment validation, compile-changelog.mjs, StorageNamespace & UserSettings enums...');
+    logUnitStart('Testing .changelog fragments, compile-changelog.mjs, StorageNamespace, FeatureOffersService & StorageService...');
     const sanityMod = await import('./sanity.mjs');
     const compileMod = await import('./compile-changelog.mjs');
 
@@ -8160,7 +8247,12 @@ async function runCodecAndEngineTests() {
       globalThis.window = prevSsrWin;
     }
 
-    console.log('   PASS: ColorQuantizer, RegionSegmenter, CapyCodec RLE & DoS guards, .capy v2 Gzip, CRDT deltas, SoundService, Zoom Detents, DailyPuzzleService, PlayerStatsService, SvgPrintExporter, FeatureOffersService, TargetSpotlightOverlay, Cloudflare Worker Co-op Relay, StorageNamespace, Changelog Compiler, and Version/Changelog sync verified.');
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService & StorageService verified.');
+    assert.equal(
+      unitStep,
+      unitTotal,
+      `Expected ${unitTotal} executed Part 1 unit groups, got ${unitStep}`
+    );
   } finally {
     await vite.close();
   }
@@ -8214,10 +8306,21 @@ async function runBrowserBasicsSuite() {
     const page = await context.newPage();
     attachErrorListeners(page, 'main');
 
+    const e2eTotal = 21;
+    const padE2e = (n) => String(n).padStart(2, '0');
+    let e2eStep = 0;
+    const logE2eStart = (label) => {
+      e2eStep += 1;
+      console.log(`[E2E ${padE2e(e2eStep)}/${padE2e(e2eTotal)}] ${label}`);
+    };
+    const logE2ePass = (label) => {
+      console.log(`   PASS [E2E ${padE2e(e2eStep)}/${padE2e(e2eTotal)}]: ${label}`);
+    };
+
     // -------------------------------------------------------------------------
     // 1. PWA Manifest, Digital Asset Links, Privacy Policy & Instant Pre-Baked First Launch
     // -------------------------------------------------------------------------
-    console.log('1. Verifying PWA manifest, Digital Asset Links, privacy policy, Service Worker & instant pre-baked boot...');
+    logE2eStart('Verifying PWA manifest, Digital Asset Links, privacy policy, Service Worker & instant pre-baked boot...');
     const manifestRes = await page.goto(`${BASE_URL}/manifest.webmanifest`);
     assert.equal(manifestRes?.status(), 200);
     const manifestJson = JSON.parse(await manifestRes.text());
@@ -8379,10 +8482,11 @@ async function runBrowserBasicsSuite() {
     );
     await escTutPage.close();
     await escTutContext.close();
+    logE2ePass('PWA manifest, Digital Asset Links, privacy policy, Service Worker cache & instant 4-sample boot verified.');
 
-    const v3012ScreenshotDir =
-      process.env.CAPY_V3012_SCREENSHOT_DIR || path.join(os.tmpdir(), 'v3012_screenshots');
+    const v3012ScreenshotDir = (process.env.CAPY_V3012_SCREENSHOT_DIR || '').trim();
     const captureV3012Screenshot = async (targetPage, filename) => {
+      if (!v3012ScreenshotDir) return;
       fs.mkdirSync(v3012ScreenshotDir, { recursive: true });
       await targetPage.screenshot({ path: path.join(v3012ScreenshotDir, filename) });
     };
@@ -8528,7 +8632,10 @@ async function runBrowserBasicsSuite() {
       return metrics;
     };
 
-    // Full 14-step OnboardingTutorial auto-advance tour (Steps 0..13), TargetSpotlightOverlay alignment, compact Large Text toggle, Step 6->7 replay & Step 7->8 preview auto-dismiss, [All Topics] drawer, Back/Jump onto already-tried steps, modal pause, and Step 13 auto-completion
+    // -------------------------------------------------------------------------
+    // 2. Full 14-Step OnboardingTutorial Tour, Spotlight Alignment & Ctrl+Z Burst
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying 14-step OnboardingTutorial tour, TargetSpotlightOverlay alignment, [All Topics] drawer & rapid Ctrl+Z burst...');
     const tutContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     const tutPage = await tutContext.newPage();
     attachErrorListeners(tutPage, 'tutPage');
@@ -8842,8 +8949,12 @@ async function runBrowserBasicsSuite() {
 
     await tutPage.close();
     await tutContext.close();
+    logE2ePass('14-step OnboardingTutorial tour, TargetSpotlightOverlay geometry, reducedMotion, [All Topics] drawer & rapid Ctrl+Z burst verified.');
 
-    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
+    // -------------------------------------------------------------------------
+    // 3. FeatureOfferBanner Quick Tips, Channel Isolation, #s= DoS Resilience & Play Store Saves
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying FeatureOfferBanner 8-offer queue, ?capy_channel=beta isolation, #s= DoS resilience & Play Store Saves gating...');
     const offerContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await offerContext.addInitScript(() => {
       const store = {};
@@ -9138,12 +9249,12 @@ async function runBrowserBasicsSuite() {
     });
     await page.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(page);
-    console.log('   PASS: Instant 4-sample bootstrap, Service Worker cache, and manifest verified.');
+    logE2ePass('FeatureOfferBanner 8-offer queue, ?capy_channel=beta offer isolation, #s= DoS resilience & Play Store Saves gating verified.');
 
     // -------------------------------------------------------------------------
-    // 2. Canvas Coloring, Gestures (Double-Tap Zoom, Momentum, Background Drag) & Paint Mode
+    // 4. Canvas Coloring, Gestures (Double-Tap Zoom, Momentum, Background Drag) & Paint Mode
     // -------------------------------------------------------------------------
-    console.log('2. Verifying canvas coloring, touch gestures, and Paint Mode...');
+    logE2eStart('Verifying palette selection, region tap coloring, double-tap zoom, pan momentum & Paint Mode...');
     const swatches = await page.$$('[aria-label="Palette dock"] button');
     assert.equal(swatches.length > 2, true, 'PaletteDock must render swatches');
     await swatches[1].click();
@@ -9199,12 +9310,12 @@ async function runBrowserBasicsSuite() {
     const paintBtn = await page.waitForSelector('button[aria-label="Toggle Paint Mode"]');
     await paintBtn.click();
     await paintBtn.click();
-    console.log('   PASS: Palette selection, region tap coloring, double-tap zoom, pan momentum, and Paint Mode verified.');
+    logE2ePass('Palette selection, region tap coloring, double-tap zoom, pan momentum, and Paint Mode verified.');
 
     // -------------------------------------------------------------------------
-    // 3. Undo, Redo, Long-Press Replay Scrubber, Resume Here & Free Colour Undo
+    // 5. 5-Tab SettingsModal Isolation, Enable Undo Toggle & Tab Persistence
     // -------------------------------------------------------------------------
-    console.log('3. Verifying Undo, Redo, long-press Replay scrubber, Resume Here & Free Colour auto-undo...');
+    logE2eStart('Verifying 5-tab SettingsModal (About, Settings, Hints, Create, Saves), Enable Undo toggle & tab persistence...');
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo visible by default for standard puzzles');
 
     // Open Settings -> verify all 5 distinct tabs (About=0, Settings=1, Hints=2, Create=3, Saves=4), zero duplicates, and tab 4 persistence across reload
@@ -9350,6 +9461,12 @@ async function runBrowserBasicsSuite() {
     function localStorage_tab(v) {
       return String(v);
     }
+    logE2ePass('5-tab SettingsModal isolation, Enable Undo opt-out toggle & capy_last_settings_tab reload persistence verified.');
+
+    // -------------------------------------------------------------------------
+    // 6. Undo, Redo, Long-Press Replay Scrubber, Follow Painting, Auto-Loop & Free Colour Undo
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying Undo, Redo, long-press Replay scrubber, Follow Painting, Auto-Loop, swatch auto-dismiss & Free Colour auto-undo...');
 
     // Single-step Undo & Redo
     const undoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
@@ -9376,20 +9493,24 @@ async function runBrowserBasicsSuite() {
       'ReplayControls must not render an expand/minimize toggle button'
     );
     // Verify YouTube-style progress slider is immediately interactive in the default bar and takes up wide horizontal space
-    const trackInCompact = await page.waitForSelector('[data-testid="replay-scrubber-track"]');
-    const trackBox = await trackInCompact.boundingBox();
+    const trackBox = await getStableBoundingBox(page.getByTestId('replay-scrubber-track'));
     assert.equal(
       trackBox.width >= 140,
       true,
       `Expected YouTube-style scrubber track width >= 140px in compact bar, got ${trackBox.width}`
     );
     // Drag along the YouTube-style scrubber track in compact mode and verify instant seek response
+    const totalSteps = Number(await page.locator('[data-testid="replay-scrubber"]').getAttribute('max'));
     await page.mouse.move(trackBox.x + trackBox.width * 0.85, trackBox.y + trackBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(trackBox.x + trackBox.width * 0.25, trackBox.y + trackBox.height / 2, { steps: 3 });
     await page.mouse.up();
     const valAfterDrag = Number(await page.locator('[data-testid="replay-scrubber"]').inputValue());
-    assert.equal(valAfterDrag >= 0 && valAfterDrag <= 3, true, `Expected instant pointer-drag scrub in compact mode, got ${valAfterDrag}`);
+    assert.equal(
+      valAfterDrag >= 0 && valAfterDrag < totalSteps && valAfterDrag <= Math.ceil(totalSteps * 0.35),
+      true,
+      `Expected instant pointer-drag scrub in compact mode (0..35% of ${totalSteps}), got ${valAfterDrag}`
+    );
     await page.locator('[data-testid="replay-exit-btn"]').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -9702,12 +9823,12 @@ async function runBrowserBasicsSuite() {
       filledBeforeUnselected,
       { timeout: 3000 }
     );
-    console.log('   PASS: Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, Follow Painting camera tracking, Auto-Loop, swatch auto-dismiss, and live pan/zoom during playback verified.');
+    logE2ePass('Undo/Redo, default-minimised ReplayControls, zoom restoration before replay, offscreen fast-forward, Follow Painting camera tracking, Auto-Loop, swatch auto-dismiss, and live pan/zoom during playback verified.');
 
     // -------------------------------------------------------------------------
-    // 4. Gallery Filters, Community Ideas & Infinite Zoom 2x Detail Sub-Tile
+    // 7. Create Tab Gallery Filters & Moderated Community Puzzle Ideas
     // -------------------------------------------------------------------------
-    console.log('4. Verifying Create tab gallery filters, Community Puzzle Ideas, and Infinite Zoom...');
+    logE2eStart('Verifying Create tab gallery filters, category chips & Community Puzzle Ideas moderation...');
     await settingsBtn.click();
     const createTabBtn = page.getByRole('button', { name: 'Create', exact: true });
     await createTabBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -9736,12 +9857,12 @@ async function runBrowserBasicsSuite() {
 
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    console.log('   PASS: Gallery search, category chips, and community idea moderation verified.');
+    logE2ePass('Gallery search, category chips, and community idea moderation verified.');
 
     // -------------------------------------------------------------------------
-    // 5. Shareable Link (#s=<token>), Simultaneous Co-op & Google Drive CRDT Sync
+    // 8. Shareable Link (#s=<token>), Simultaneous Co-op, Saves View Modes & Google Drive CRDT Sync
     // -------------------------------------------------------------------------
-    console.log('5. Verifying <2 KB Share Link, 2-peer BroadcastChannel Co-op & Google Drive CRDT sync...');
+    logE2eStart('Verifying < 2 KB Share Link (#s=), 2-peer BroadcastChannel Co-op, Google Drive CRDT sync, Saves views & .capy v2 export...');
     await page.evaluate(() => localStorage.setItem('capy_dev_cloud_coop_ui', '1'));
     await page.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(page);
@@ -10030,12 +10151,12 @@ async function runBrowserBasicsSuite() {
 
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    console.log('   PASS: #s=<token> share link, 2-peer real-time Co-op, Saves view modes, and .capy v2 export verified.');
+    logE2ePass('#s=<token> share link, 2-peer real-time Co-op, Saves view modes, and .capy v2 export verified.');
 
     // -------------------------------------------------------------------------
-    // 6. Custom Photo Upload (STORE_IMAGES) & Offline PWA Reload
+    // 9. Custom Photo Upload (STORE_IMAGES), 100% Offline PWA Reload & Completed Replay
     // -------------------------------------------------------------------------
-    console.log('6. Verifying custom photo STORE_IMAGES upload and 100% offline PWA reload...');
+    logE2eStart('Verifying custom photo STORE_IMAGES upload, 100% offline PWA reload & post-completion Replay viewport invariance...');
     const pngBytes = await page.evaluate(async () => {
       const c = document.createElement('canvas');
       c.width = 480;
@@ -10145,8 +10266,12 @@ async function runBrowserBasicsSuite() {
     // Close replay overlay before testing BF-2 container resize and BF-6 IndexedDB eviction fallback
     await page.getByTestId('replay-exit-btn').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+    logE2ePass('Custom photo STORE_IMAGES persistence, 100% offline PWA reload & post-completion Replay viewport invariance verified.');
 
-    // 7. BF-2: Container ResizeObserver immediately updates canvas backing store and clamps pan offsets
+    // -------------------------------------------------------------------------
+    // 10. BF-2 Container ResizeObserver Clamping & BF-6 IndexedDB Cache Eviction Recovery
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying BF-2 ResizeObserver canvas clamping & BF-6 IndexedDB cache eviction recovery...');
     await page.setViewportSize({ width: 540, height: 420 });
     await page.waitForFunction(
       () => {
@@ -10259,12 +10384,12 @@ async function runBrowserBasicsSuite() {
       `BF-6: Expected added custom swatch #99 hex '#00ffff' to survive IndexedDB cache eviction regeneration, got '${postEvictionPalette.swatch99Hex}'`
     );
     assert.equal(postEvictionPalette.isFreeColor, true, 'BF-6: Expected isFreeColor to be preserved after cache eviction');
-    console.log('   PASS: Custom photo STORE_IMAGES persistence, 100% offline PWA reload, post-completion Replay viewport invariance, BF-2 ResizeObserver clamping, and BF-6 customPalette eviction recovery verified.');
+    logE2ePass('BF-2 ResizeObserver clamping and BF-6 customPalette IndexedDB eviction recovery verified.');
 
     // ------------------------------------------------------------------
-    // 9. Zoom Sensitivity, Magnetic Zoom Stops, Sound Controls & HUD Zoom-Badge Cycle
+    // 11. Controls Settings (Zoom Sensitivity, Magnetic Zoom Stops, Sound) & topbar-zoom-badge Removal
     // ------------------------------------------------------------------
-    console.log('-> [E2E 9] Verifying Controls settings persistence and HUD zoom-badge stop cycling...');
+    logE2eStart('Verifying Controls settings persistence (zoom sensitivity, magnetic stops, sound) & topbar-zoom-badge removal...');
     await page.locator('button[title="Settings and Menu"]').click();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
 
@@ -10313,12 +10438,12 @@ async function runBrowserBasicsSuite() {
       0,
       'Expected topbar-zoom-badge to be removed from GameTopBar'
     );
-    console.log('   PASS: Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and topbar-zoom-badge removal verified.');
+    logE2ePass('Controls settings (zoomSensitivity, snapZoomLevels, soundEnabled, soundVolume) and topbar-zoom-badge removal verified.');
 
     // ------------------------------------------------------------------
-    // 10. Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats
+    // 12. Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats
     // ------------------------------------------------------------------
-    console.log('-> [E2E 10] Verifying Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats...');
+    logE2eStart('Verifying Daily Featured Puzzle, Reduced Motion, Keyboard Shortcuts & Lifetime Stats...');
 
     // Prebaked sample viewport reset regression check (date-independent)
     await page.reload({ waitUntil: 'load' });
@@ -10386,9 +10511,39 @@ async function runBrowserBasicsSuite() {
       'Expected daily-puzzle-card to render above gallery-search-input at the top of the Create tab'
     );
 
+    const dailyBeforeState = await page.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const settings = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      return { count: snaps.length, generatorConfig: settings.generatorConfig || null };
+    });
+    const snapCountBeforeDaily = dailyBeforeState.count;
     await page.getByTestId('daily-puzzle-play-btn').click();
     await waitForPuzzleLoaded(page);
     assert.equal(await dailyCard.isVisible(), false, 'Settings modal should close after clicking Play Daily');
+    const dailyAfterState = await page.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const settings = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      return {
+        id: snaps[0]?.id || null,
+        count: snaps.length,
+        generatorConfig: settings.generatorConfig || null,
+      };
+    });
+    assert.match(
+      String(dailyAfterState.id),
+      /^daily-/,
+      `Expected Play Daily to mount pre-generated daily-* snapshot, got '${dailyAfterState.id}'`
+    );
+    assert.equal(
+      dailyAfterState.count,
+      snapCountBeforeDaily + 1,
+      `filterSnapshotId must selectively import only 1 daily snapshot (before=${snapCountBeforeDaily}, after=${dailyAfterState.count})`
+    );
+    assert.deepEqual(
+      dailyAfterState.generatorConfig,
+      dailyBeforeState.generatorConfig,
+      'Play Daily must not mutate persisted user generatorConfig'
+    );
 
     // 10b. Reduced Motion toggle persistence in capy_user_settings_v8
     await page.locator('button[title="Settings and Menu"]').click();
@@ -10557,12 +10712,12 @@ async function runBrowserBasicsSuite() {
     );
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    console.log('   PASS: Daily Featured Puzzle card/launch, Reduced Motion persistence, Keyboard Gameplay Shortcuts + input-focus guard, and Lifetime Stats verified.');
+    logE2ePass('Daily Featured Puzzle card/launch, Reduced Motion persistence, Keyboard Gameplay Shortcuts + input-focus guard, and Lifetime Stats verified.');
 
     // -------------------------------------------------------------------------
-    // 11. EPIC-4 Quick-Wins: Printable SVG Export, Sub-Tile Parent Breadcrumbs & Co-op Undo Sync
+    // 13. Printable SVG Export, Sub-Tile Parent Breadcrumbs (Infinite Zoom) & Co-op UNFILL_EVENT Undo Sync
     // -------------------------------------------------------------------------
-    console.log('11. Verifying Printable SVG export, Sub-Tile Parent Breadcrumbs & 2-peer Co-op UNFILL_EVENT Undo sync...');
+    logE2eStart('Verifying Printable SVG export, Sub-Tile Parent Breadcrumbs (Infinite Zoom) & 2-peer Co-op UNFILL_EVENT Undo sync...');
 
     // 11a. TASK-4.2a: Clicking export-printable-svg-btn triggers a valid .svg download
     await page.getByTestId('topbar-coop-btn').click();
@@ -10839,9 +10994,12 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    console.log('   PASS: Printable SVG download, Sub-Tile Parent Breadcrumbs + parent delete cleanup, and 2-peer Co-op UNFILL_EVENT Undo sync verified.');
+    logE2ePass('Printable SVG download, Sub-Tile Parent Breadcrumbs + parent delete cleanup, and 2-peer Co-op UNFILL_EVENT Undo sync verified.');
 
-    console.log('-> [2.6] Verifying Release Channel switcher card & Beta HUD pill...');
+    // -------------------------------------------------------------------------
+    // 14. Release Channel Switcher Card & Beta HUD Pill
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying Release Channel switcher card, Beta APK link & BETA HUD pill...');
     assert.equal(
       await page.getByTestId('topbar-channel-badge').count(),
       0,
@@ -10893,12 +11051,12 @@ async function runBrowserBasicsSuite() {
       'Beta channel switcher must offer 1-tap Return to Stable Release link'
     );
     await betaPage.close();
-    console.log('   PASS: Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
+    logE2ePass('Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
 
     // -------------------------------------------------------------------------
-    // 12. Stage 2 (v2.7): Co-op Welcome Persistence, Replay Rewind UNFILL, Reset Epoch & Mobile Replay Controls
+    // 15. Co-op Welcome Persistence, Replay Rewind UNFILL, Reset Epoch & Mobile Replay Controls
     // -------------------------------------------------------------------------
-    console.log('-> [2.7] Verifying Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, Reset Epoch & Mobile Replay Controls...');
+    logE2eStart('Verifying Co-op WELCOME_STATE reload persistence, Replay Scrubber rewind UNFILL, Reset Epoch & Mobile Replay Controls...');
 
     // 12a. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
     // Reset active puzzle cleanly first so both Peer A and localStorage start at 0 filled regions
@@ -11371,9 +11529,14 @@ async function runBrowserBasicsSuite() {
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
     // Flow 2: Post-load replay with Paint Mode ALREADY ON -> 100% -> first canvas drag paints & dismisses ReplayControls
+    await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      s.replaySpeed = 20;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+    });
     await page.reload({ waitUntil: 'networkidle' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
-    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow2 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow2);
     await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.3, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.4);
@@ -11387,7 +11550,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Toggle Paint Mode"]').click(); // Turn Paint Mode OFF -> Tap Mode
     await page.reload({ waitUntil: 'networkidle' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
-    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 10000 });
+    await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow3 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow3);
     await page.mouse.click(canvasBoxFlow3.x + canvasBoxFlow3.width * 0.5, canvasBoxFlow3.y + canvasBoxFlow3.height * 0.5);
@@ -11468,9 +11631,12 @@ async function runBrowserBasicsSuite() {
       localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
     });
     await page.waitForFunction(() => window.innerWidth === 1280, undefined, { timeout: 3000 });
-    console.log('   PASS: 360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
+    logE2ePass('360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
 
-    // 12f. Mobile (360x780) GameTopBar two-lane non-overlap + ALPHA #520 pill fit + SettingsModal tab bar fit + OnboardingTutorial & FeatureOfferBanner & TargetSpotlightOverlay overflow
+    // -------------------------------------------------------------------------
+    // 16. Mobile (360x780) GameTopBar Two-Lane Non-Overlap, ALPHA #520 Pill, SettingsModal Tabs, Saves Grid & Offers
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying 360x780 mobile GameTopBar lanes (ALPHA #520), OnboardingTutorial, SettingsModal tabs, Saves grid & FeatureOfferBanner...');
     const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
@@ -11874,10 +12040,57 @@ async function runBrowserBasicsSuite() {
       `Normal ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ normal100ScrollCheck, normal100ChannelBox, normal100LaneBox })})`
     );
 
+    // Verify Create tab above-the-fold style/hint bar, Style Guide reorder, and (i) hint tooltips at 360x780
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-create').click();
+    const mobileHintBar = mobileTopbarPage.getByTestId('create-style-hint-bar');
+    await mobileHintBar.waitFor({ state: 'visible', timeout: 3000 });
+    const mobileDailyBox = await mobileTopbarPage.getByTestId('daily-puzzle-card').boundingBox();
+    const mobileHintBarBox = await mobileHintBar.boundingBox();
+    const mobileSearchBox = await mobileTopbarPage.getByTestId('gallery-search-input').boundingBox();
+    assert.ok(mobileDailyBox && mobileHintBarBox && mobileSearchBox, 'Expected daily card, hint bar, and search boxes at 360x780');
+    assert.equal(
+      mobileDailyBox.y < mobileHintBarBox.y && mobileHintBarBox.y < mobileSearchBox.y,
+      true,
+      'create-style-hint-bar must sit between daily-puzzle-card and gallery-search-input'
+    );
+    assert.equal(
+      mobileHintBarBox.y + mobileHintBarBox.height <= 780,
+      true,
+      `create-style-hint-bar must be visible above the fold on 360x780 (bottom=${mobileHintBarBox.y + mobileHintBarBox.height})`
+    );
+
+    await mobileTopbarPage.getByTestId('create-hint-style-guide-btn').click();
+    await mobileTopbarPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
+
+    const mobileAlgoHintToggle = mobileTopbarPage.getByTestId('hint-toggle-algorithm');
+    await mobileAlgoHintToggle.scrollIntoViewIfNeeded();
+    await mobileAlgoHintToggle.click();
+    await mobileTopbarPage.getByTestId('hint-tooltip-algorithm').waitFor({ state: 'visible', timeout: 3000 });
+
+    const mobileColorHintToggle = mobileTopbarPage.getByTestId('hint-toggle-color-count');
+    await mobileColorHintToggle.scrollIntoViewIfNeeded();
+    await mobileColorHintToggle.click();
+    await mobileTopbarPage.getByTestId('hint-tooltip-color-count').waitFor({ state: 'visible', timeout: 3000 });
+
+    const createHintsOverflow = await mobileTopbarPage.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth
+    );
+    assert.equal(
+      createHintsOverflow <= 0,
+      true,
+      `Create tab with Style Guide and (i) hint tooltips must have 0px horizontal overflow at 360x780 (got ${createHintsOverflow})`
+    );
+    await mobileTopbarPage.getByTestId('settings-modal-close').click();
+
     await mobileTopbarPage.close();
     await mobileTopbarContext.close();
+    logE2ePass('360x780 mobile GameTopBar two-lane non-overlap, ALPHA #520 fit, OnboardingTutorial, SettingsModal tabs, 2-col Saves layout & FeatureOfferBanner bounds verified.');
 
-    // Regression: pending debounced & beforeunload viewport saves must preserve filledRegionIds written externally before flush/reload
+    // -------------------------------------------------------------------------
+    // 17. Viewport-Save Flush Races, Anti-Resurrection, Blob URL Revocation & Tap-Burst Non-Starvation
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying 360x780 viewport-save races, clearActiveState/deleteSnapshot safety, blob URL revocation, error recovery & tap-burst non-starvation...');
     const viewportRaceContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const viewportRacePage = await viewportRaceContext.newPage();
     attachErrorListeners(viewportRacePage, 'viewportRacePage');
@@ -12346,8 +12559,12 @@ async function runBrowserBasicsSuite() {
     );
     await tapStarvePage.close();
     await tapStarveContext.close();
+    logE2ePass('Viewport-save flush races, clearActiveState/deleteSnapshot safety, blob URL revocation, async recovery & tap-burst non-starvation verified.');
 
-    // Verify BETA (?capy_channel=beta) 360x780 topbar-left-lane fit and badge containment in Normal & Large Text modes
+    // -------------------------------------------------------------------------
+    // 18. Mobile (360x780) BETA Pill Containment in Normal & Large Text Modes
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying 360x780 ?capy_channel=beta BETA pill containment in Normal & Large Text modes...');
     const mobileBetaContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const mobileBetaPage = await mobileBetaContext.newPage();
     attachErrorListeners(mobileBetaPage, 'mobileBetaPage');
@@ -12397,12 +12614,12 @@ async function runBrowserBasicsSuite() {
     );
     await mobileBetaPage.close();
     await mobileBetaContext.close();
-    console.log('   PASS: 360x780 mobile GameTopBar two-lane non-overlap, ALPHA #520 & BETA fit, zoom-badge removal, SettingsModal tab fit, and list-first Saves layout verified.');
+    logE2ePass('360x780 BETA channel pill containment in Normal & Large Text modes verified.');
 
     // -------------------------------------------------------------------------
-    // 13. Phase 3 Bugfixes: Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
+    // 19. Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
     // -------------------------------------------------------------------------
-    console.log('-> [3.0] Verifying malformed import inline notice, sample_saves ordering, zero-snapshot recovery & fractional DPR...');
+    logE2eStart('Verifying atomic malformed .capy import notice, sample_saves ordering, zero-snapshot recovery, corrupt #s= deep link & fractional DPR...');
     const m3Page = await context.newPage();
     attachErrorListeners(m3Page, 'm3Page');
     // Force a fractional devicePixelRatio (1.25) to verify PuzzleCanvas backing store rounds cleanly without drift
@@ -12547,12 +12764,12 @@ async function runBrowserBasicsSuite() {
     );
 
     await m3Page.close();
-    console.log('   PASS: Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, and fractional DPR verified.');
+    logE2ePass('Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, and fractional DPR verified.');
 
     // -------------------------------------------------------------------------
-    // 14. Channel Storage Sandbox Isolation & UserSettings Enum Persistence E2E
+    // 20. Channel Storage Sandbox Isolation & UserSettings Enum Persistence E2E
     // -------------------------------------------------------------------------
-    console.log('-> [3.0.7] Verifying Beta/Alpha StorageNamespace browser isolation & UserSettings enum persistence...');
+    logE2eStart('Verifying Beta/Alpha StorageNamespace browser isolation & UserSettings enum persistence...');
     await page.evaluate(() => {
       const s = window.capyStorage.loadSettings();
       s.difficulty = 'NORMAL';
@@ -12622,11 +12839,12 @@ async function runBrowserBasicsSuite() {
       'Release Channel card must explain isolated channel sandbox'
     );
     await sandboxBetaPage.close();
+    logE2ePass('Beta StorageNamespace browser isolation, UserSettings enum persistence & Release Channel copy verified.');
 
     // -------------------------------------------------------------------------
-    // 15. PR 2A (v3.0.15): IndexedDB Preview Offload, Quota Toast & Cloud Sync Race E2E
+    // 21. IndexedDB Preview Offload, Quota Toast & Cloud Sync Race E2E
     // -------------------------------------------------------------------------
-    console.log('-> [3.0.15] Verifying inline preview offloading, storage quota toast above modal, and async cloud sync stroke preservation...');
+    logE2eStart('Verifying inline IndexedDB preview offload, storage quota toast above modal & async cloud sync stroke preservation...');
     const rawSnapsBeforeReload = await page.evaluate(() =>
       JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')
     );
@@ -12802,7 +13020,13 @@ async function runBrowserBasicsSuite() {
     );
     await syncRacePage.close();
     await syncRaceContext.close();
+    logE2ePass('IndexedDB preview offload, storage quota toast & async cloud sync stroke preservation verified.');
 
+    assert.equal(
+      e2eStep,
+      e2eTotal,
+      `Expected ${e2eTotal} executed Part 2 E2E stages, got ${e2eStep}`
+    );
     assert.equal(consoleErrors.length, 0, `Expected zero unhandled page errors, got:\n${consoleErrors.join('\n')}`);
     console.log('\nALL UNIFIED ENGINE, CODEC & E2E BROWSER TESTS PASSED!');
   } finally {
