@@ -7721,8 +7721,8 @@ async function runCodecAndEngineTests() {
       // Verify FeatureOffersService persistence, NativeBridge backup fallback, channel sandboxing, and OnboardingTutorial step mapping
       const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
-      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 9);
-      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
+      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 8);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 13);
       for (const id of offersMod.FEATURE_OFFER_IDS) {
         const offer = offersMod.FEATURE_OFFERS[id];
         assert.equal(
@@ -7754,11 +7754,19 @@ async function runCodecAndEngineTests() {
       assert.equal(offersMod.FeatureOffersService.hasSeenOffer('paint_mode'), true);
       assert.equal(mockStorage.has('capy_feature_offers_v1'), true);
 
-      // Ignore unknown/malformed entries in localStorage
-      mockStorage.set('capy_feature_offers_v1', JSON.stringify(['unknown_offer', 42, 'cloud_coop']));
+      // Ignore unknown/legacy/malformed entries in localStorage
+      mockStorage.set('capy_feature_offers_v1', JSON.stringify(['unknown_offer', 42, 'cloud_coop', 'saves_export']));
       const filteredOffers = offersMod.FeatureOffersService.loadSeenOffers();
       assert.equal(filteredOffers.size, 1);
-      assert.equal(filteredOffers.has('cloud_coop'), true);
+      assert.equal(filteredOffers.has('saves_export'), true);
+
+      // Verify Play Store Cloud/Co-op UI gating (hidden by default; opt-in via ?coop=1, ?room=, or capy_dev_cloud_coop_ui)
+      const nsMod = await vite.ssrLoadModule('/src/services/StorageNamespace.ts');
+      assert.equal(nsMod.isCloudCoopUiEnabled('', null), false);
+      assert.equal(nsMod.isCloudCoopUiEnabled('?coop=1', null), true);
+      assert.equal(nsMod.isCloudCoopUiEnabled('?room=ABC123', null), true);
+      assert.equal(nsMod.isCloudCoopUiEnabled('', '1'), true);
+      assert.equal(nsMod.isCloudCoopUiEnabled('?coop=0', '1'), false);
 
       // Verify /capy/beta/ sandbox key isolation
       globalThis.window.location = { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' };
@@ -7783,13 +7791,6 @@ async function runCodecAndEngineTests() {
         spotlightMod.TUTORIAL_STEP_TARGETS.replay[0]?.selector,
         '[data-testid="replay-controls-window"]',
         'replay spotlight target must prioritize replay-controls-window when active'
-      );
-      assert.equal(
-        spotlightMod.TUTORIAL_STEP_TARGETS.cloud_coop.some(
-          (s) => s.selector === '[data-testid="topbar-active-coop-pill"]'
-        ),
-        true,
-        'cloud_coop spotlight targets must include topbar-active-coop-pill'
       );
       for (const offerId of offersMod.FEATURE_OFFER_IDS) {
         const specs = spotlightMod.FEATURE_OFFER_TARGETS[offerId];
@@ -8056,7 +8057,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 13');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -8076,7 +8077,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -8091,7 +8092,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -8105,7 +8106,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -8114,7 +8115,7 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 13',
       undefined,
       { timeout: 3000 }
     );
@@ -8322,7 +8323,7 @@ async function runBrowserBasicsSuite() {
       await tutPage.waitForFunction(
         (expected) =>
           document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
-          `STEP ${expected} OF 14`,
+          `STEP ${expected} OF 13`,
         stepNum,
         { timeout: 5000 }
       );
@@ -8378,13 +8379,13 @@ async function runBrowserBasicsSuite() {
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
-    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    // Back onto already-tried Step 4 (STEP 5 OF 13) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 5 OF 14',
+      'STEP 5 OF 13',
       'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
     );
     await tutPage.keyboard.press('Control+y');
@@ -8427,7 +8428,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 8 OF 14',
+      'STEP 8 OF 13',
       'Auto-advance timer must stay paused while SettingsModal is open'
     );
     await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
@@ -8480,28 +8481,21 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(13);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 12 -> 13 (cloud_coop)
-    await tutPage.getByTestId('topbar-coop-btn').click();
-    await tutPage.getByTestId('host-coop-room-btn').click();
-    await tutPage.getByTestId('leave-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.getByTestId('leave-coop-room-btn').click();
-    await tutPage.getByTestId('settings-modal-close').click();
-    await expectTutStep(14);
-    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
+    // [All Topics] drawer lists all 13 topics; jumping onto already-tried Step 1 waits for a fresh action
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 13);
     await tutPage.getByTestId('tutorial-topic-item-0').click();
     await expectTutStep(1);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 1 OF 14',
+      'STEP 1 OF 13',
       'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
     );
     await tutPage.getByTestId('tutorial-topics-btn').click();
-    await tutPage.getByTestId('tutorial-topic-item-13').click();
-    await expectTutStep(14);
+    await tutPage.getByTestId('tutorial-topic-item-12').click();
+    await expectTutStep(13);
     // Step 13 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
     await tutPage.getByTestId('tutorial-large-text-btn').click();
     await tutPage.getByTestId('tutorial-large-text-btn').click();
@@ -8624,7 +8618,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.close();
     await tutContext.close();
 
-    // FeatureOfferBanner E2E: all 9 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
+    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 13, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
     const offerContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await offerContext.addInitScript(() => {
       const store = {};
@@ -8657,12 +8651,12 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`
+        `STEP ${expectedStepNum} OF 13`
       );
       await offerPage.waitForTimeout(950);
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`,
+        `STEP ${expectedStepNum} OF 13`,
         `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
       );
       await offerPage.getByTestId('tutorial-skip-btn').click();
@@ -8754,7 +8748,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await expectOfferBanner('saves_export');
     await jumpFromOfferAndAssertStep(12);
-    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 13
     const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
       const xFrac = 0.42 + (attempt % 3) * 0.08;
@@ -8769,7 +8763,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('undo-btn').click();
     await expectOfferBanner('undo_replay');
     await jumpFromOfferAndAssertStep(5);
-    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 13
     await offerPage.getByTestId('redo-btn').click();
     const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
     assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
@@ -8780,7 +8774,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
-    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
+    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 13
     await offerPage.locator('button[title="Settings and Menu"]').click();
     await offerPage.getByTestId('settings-tab-settings').click();
     const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
@@ -8834,13 +8828,8 @@ async function runBrowserBasicsSuite() {
     await expectOfferBanner('infinite_zoom');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
-    // 9) cloud_coop -> Jump to Guide STEP 13 OF 14
-    await offerPage.getByTestId('topbar-coop-btn').click();
-    await offerPage.getByTestId('settings-modal-close').click();
-    await expectOfferBanner('cloud_coop');
-    await jumpFromOfferAndAssertStep(13);
 
-    // Verify all 9 offers persisted in both localStorage and NativeBridge.saveBackup spy
+    // Verify all 8 offers persisted in both localStorage and NativeBridge.saveBackup spy
     const persistedOfferState = await offerPage.evaluate(() => ({
       ls: JSON.parse(localStorage.getItem('capy_feature_offers_v1') || '[]'),
       backup: JSON.parse(window.__capySavedBackups?.capy_feature_offers_v1 || '[]'),
@@ -8854,7 +8843,6 @@ async function runBrowserBasicsSuite() {
       'photo_upload',
       'infinite_zoom',
       'saves_export',
-      'cloud_coop',
     ]) {
       assert.equal(
         persistedOfferState.ls.includes(expectedOffer),
@@ -8900,19 +8888,20 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(dosSharePage);
     await dosSharePage.close();
 
-    // Verify Google Login button auto-hides on Web when VITE_GOOGLE_CLIENT_ID is unconfigured
-    const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
+    // Verify Play Store Q1 Saves cleanup hides unfinished Cloud/Co-op hub and topbar Friends button by default
+    assert.equal(await page.getByTestId('topbar-coop-btn').count(), 0, 'topbar-coop-btn must stay hidden by default');
     await page.locator('button[title="Settings and Menu"]').click();
     await page.getByTestId('settings-tab-saves').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('settings-tab-saves').click();
-    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(
-      await page.getByTestId('play-games-signin-btn').count(),
-      hasBakedClientId ? 1 : 0,
-      'Web Google Login button must auto-hide when VITE_GOOGLE_CLIENT_ID is empty'
-    );
+    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await page.getByTestId('cloud-coop-hub').count(), 0, 'cloud-coop-hub must stay hidden by default');
+    assert.equal(await page.getByTestId('play-games-signin-btn').count(), 0, 'play-games-signin-btn must stay hidden by default');
+    assert.equal(await page.getByTestId('cloud-sync-btn').count(), 0, 'cloud-sync-btn must stay hidden by default');
+    assert.equal(await page.getByTestId('cloud-providers-bar').count(), 0, 'cloud-providers-bar must stay hidden by default');
+    assert.equal(await page.getByTestId('share-progress-link-btn').isVisible(), true);
+    assert.equal(await page.getByTestId('export-printable-svg-btn').isVisible(), true);
     await page.keyboard.press('Escape');
-    await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'hidden', timeout: 3000 });
+    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
     await page.evaluate(() => {
@@ -9092,21 +9081,21 @@ async function runBrowserBasicsSuite() {
       'false',
       'Detail toggle button must report aria-pressed="false" by default'
     );
-    const [savesListBoxInit, savesActionBarBoxInit, savesHubBoxInit] = await Promise.all([
+    const [savesListBoxInit, savesActionBarBoxInit, savesShareBarBoxInit] = await Promise.all([
       page.getByTestId('saves-list-section').boundingBox(),
       page.getByTestId('selected-save-action-bar').boundingBox(),
-      page.getByTestId('cloud-coop-hub').boundingBox(),
+      page.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(savesListBoxInit && savesActionBarBoxInit && savesHubBoxInit);
+    assert.ok(savesListBoxInit && savesActionBarBoxInit && savesShareBarBoxInit);
     assert.equal(
       savesListBoxInit.y + savesListBoxInit.height <= savesActionBarBoxInit.y + 1,
       true,
       `Saves list (${savesListBoxInit.y + savesListBoxInit.height}) must appear above selected-save-action-bar (${savesActionBarBoxInit.y})`
     );
     assert.equal(
-      savesActionBarBoxInit.y + savesActionBarBoxInit.height <= savesHubBoxInit.y + 1,
+      savesActionBarBoxInit.y + savesActionBarBoxInit.height <= savesShareBarBoxInit.y + 1,
       true,
-      `selected-save-action-bar (${savesActionBarBoxInit.y + savesActionBarBoxInit.height}) must appear above cloud-coop-hub (${savesHubBoxInit.y})`
+      `selected-save-action-bar (${savesActionBarBoxInit.y + savesActionBarBoxInit.height}) must appear above saves-share-print-bar (${savesShareBarBoxInit.y})`
     );
     await page.keyboard.press('Escape');
     await page.getByTestId('saves-list-section').waitFor({ state: 'hidden', timeout: 3000 });
@@ -9115,9 +9104,9 @@ async function runBrowserBasicsSuite() {
     await page.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(page);
     await settingsBtn.click();
-    await page.getByTestId('cloud-coop-hub').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
-      await page.getByTestId('cloud-coop-hub').isVisible(),
+      await page.getByTestId('saves-share-print-bar').isVisible(),
       true,
       'Saves tab (index 4) must restore after page reload via capy_last_settings_tab'
     );
@@ -9598,6 +9587,21 @@ async function runBrowserBasicsSuite() {
     // 5. Shareable Link (#s=<token>), Simultaneous Co-op & Google Drive CRDT Sync
     // -------------------------------------------------------------------------
     console.log('5. Verifying <2 KB Share Link, 2-peer BroadcastChannel Co-op & Google Drive CRDT sync...');
+    await page.evaluate(() => localStorage.setItem('capy_dev_cloud_coop_ui', '1'));
+    await page.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(page);
+    {
+      const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
+      await page.getByTestId('topbar-coop-btn').click();
+      await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        await page.getByTestId('play-games-signin-btn').count(),
+        hasBakedClientId ? 1 : 0,
+        'Opt-in Web Google Login button must auto-hide when VITE_GOOGLE_CLIENT_ID is empty'
+      );
+      await page.keyboard.press('Escape');
+      await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'hidden', timeout: 3000 });
+    }
     await tapCanvasGrid(page, 0.45, 8, 40);
     const paintedIdsOnA = await page.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
@@ -9646,7 +9650,7 @@ async function runBrowserBasicsSuite() {
 
     const pageB = await context.newPage();
     attachErrorListeners(pageB, 'pageB');
-    await pageB.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await pageB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(pageB);
     await pageB.getByTestId('topbar-coop-btn').click();
     await pageB.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
@@ -10579,7 +10583,7 @@ async function runBrowserBasicsSuite() {
 
     const peerB = await context.newPage();
     attachErrorListeners(peerB, 'peerB-unfill');
-    await peerB.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await peerB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerB);
     if (await peerB.$('[data-testid="replay-exit-btn"]')) {
       await peerB.locator('[data-testid="replay-exit-btn"]').click();
@@ -10760,7 +10764,7 @@ async function runBrowserBasicsSuite() {
     // Boot Peer B while localStorage has 0 filled regions (100% deterministic, zero debounce race)
     const peerS2 = await context.newPage();
     attachErrorListeners(peerS2, 'peerS2-stage2');
-    await peerS2.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await peerS2.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(peerS2);
     assert.equal(
       await readTotalRemainingRegions(peerS2),
@@ -11573,21 +11577,23 @@ async function runBrowserBasicsSuite() {
       await mobileTopbarPage.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'),
       'true'
     );
-    const [mSavesListBox, mSavesActionBox, mSavesHubBox] = await Promise.all([
+    assert.equal(await mobileTopbarPage.getByTestId('cloud-coop-hub').count(), 0);
+    assert.equal(await mobileTopbarPage.getByTestId('topbar-coop-btn').count(), 0);
+    const [mSavesListBox, mSavesActionBox, mSavesShareBox] = await Promise.all([
       mobileTopbarPage.getByTestId('saves-list-section').boundingBox(),
       mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
-      mobileTopbarPage.getByTestId('cloud-coop-hub').boundingBox(),
+      mobileTopbarPage.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(mSavesListBox && mSavesActionBox && mSavesHubBox);
+    assert.ok(mSavesListBox && mSavesActionBox && mSavesShareBox);
     assert.equal(
       mSavesListBox.y + mSavesListBox.height <= mSavesActionBox.y + 1,
       true,
       `360x780 Saves list (${mSavesListBox.y + mSavesListBox.height}) must appear above selected-save-action-bar (${mSavesActionBox.y})`
     );
     assert.equal(
-      mSavesActionBox.y + mSavesActionBox.height <= mSavesHubBox.y + 1,
+      mSavesActionBox.y + mSavesActionBox.height <= mSavesShareBox.y + 1,
       true,
-      `360x780 selected-save-action-bar (${mSavesActionBox.y + mSavesActionBox.height}) must appear above cloud-coop-hub (${mSavesHubBox.y})`
+      `360x780 selected-save-action-bar (${mSavesActionBox.y + mSavesActionBox.height}) must appear above saves-share-print-bar (${mSavesShareBox.y})`
     );
     const firstTwoSaveCards = mobileTopbarPage.locator('[data-testid="saves-list-thumbnails"] [data-testid^="save-card-"]');
     if ((await firstTwoSaveCards.count()) >= 2) {
@@ -11621,17 +11627,17 @@ async function runBrowserBasicsSuite() {
       true,
       `selected-save-action-bar must not be sticky (${JSON.stringify(actionBarPosition)})`
     );
-    await mobileTopbarPage.getByTestId('cloud-coop-hub').scrollIntoViewIfNeeded();
+    await mobileTopbarPage.getByTestId('saves-share-print-bar').scrollIntoViewIfNeeded();
     await mobileTopbarPage.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-    const [mActionAfterScroll, mHubAfterScroll] = await Promise.all([
+    const [mActionAfterScroll, mShareAfterScroll] = await Promise.all([
       mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
-      mobileTopbarPage.getByTestId('cloud-coop-hub').boundingBox(),
+      mobileTopbarPage.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(mActionAfterScroll && mHubAfterScroll);
+    assert.ok(mActionAfterScroll && mShareAfterScroll);
     assert.equal(
-      mActionAfterScroll.y + mActionAfterScroll.height <= mHubAfterScroll.y + 1,
+      mActionAfterScroll.y + mActionAfterScroll.height <= mShareAfterScroll.y + 1,
       true,
-      `After scrolling to cloud-coop-hub, non-sticky selected-save-action-bar (${mActionAfterScroll.y + mActionAfterScroll.height}) must remain above hub (${mHubAfterScroll.y})`
+      `After scrolling to saves-share-print-bar, non-sticky selected-save-action-bar (${mActionAfterScroll.y + mActionAfterScroll.height}) must remain above bar (${mShareAfterScroll.y})`
     );
 
     // Close SettingsModal, skip OnboardingTutorial, and verify FeatureOfferBanner fits within 360x780 with zero overflow in both normal & Large Text mode
@@ -12280,6 +12286,7 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(m3Page, 'm3Page');
     // Force a fractional devicePixelRatio (1.25) to verify PuzzleCanvas backing store rounds cleanly without drift
     await m3Page.addInitScript(() => {
+      localStorage.removeItem('capy_dev_cloud_coop_ui');
       Object.defineProperty(window, 'devicePixelRatio', { get: () => 1.25, configurable: true });
       window.__capyAlertCalls = 0;
       window.alert = () => {
@@ -12331,17 +12338,17 @@ async function runBrowserBasicsSuite() {
       'alert',
       'Malformed save import must display inline role="alert" banner'
     );
-    const [m3ActionBox, m3NoticeBox, m3HubBox] = await Promise.all([
+    const [m3ActionBox, m3NoticeBox, m3ShareBox] = await Promise.all([
       m3Page.getByTestId('selected-save-action-bar').boundingBox(),
       m3Page.getByTestId('saves-import-notice').boundingBox(),
-      m3Page.getByTestId('cloud-coop-hub').boundingBox(),
+      m3Page.getByTestId('saves-share-print-bar').boundingBox(),
     ]);
-    assert.ok(m3ActionBox && m3NoticeBox && m3HubBox);
+    assert.ok(m3ActionBox && m3NoticeBox && m3ShareBox);
     assert.equal(
       m3ActionBox.y + m3ActionBox.height <= m3NoticeBox.y + 1 &&
-        m3NoticeBox.y + m3NoticeBox.height <= m3HubBox.y + 1,
+        m3NoticeBox.y + m3NoticeBox.height <= m3ShareBox.y + 1,
       true,
-      `saves-import-notice (${m3NoticeBox.y}..${m3NoticeBox.y + m3NoticeBox.height}) must appear between selected-save-action-bar (${m3ActionBox.y + m3ActionBox.height}) and cloud-coop-hub (${m3HubBox.y})`
+      `saves-import-notice (${m3NoticeBox.y}..${m3NoticeBox.y + m3NoticeBox.height}) must appear between selected-save-action-bar (${m3ActionBox.y + m3ActionBox.height}) and saves-share-print-bar (${m3ShareBox.y})`
     );
     assert.equal(
       await m3Page.evaluate(() => window.__capyAlertCalls),
@@ -12590,7 +12597,7 @@ async function runBrowserBasicsSuite() {
       });
     });
 
-    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(syncRacePage);
     await syncRacePage.evaluate(() => {
       localStorage.setItem(

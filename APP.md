@@ -119,7 +119,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
   ```
   - Release builds enable `isMinifyEnabled = true` and `isShrinkResources = true`.
   - [`.github/workflows/release.yml`](./.github/workflows/release.yml) requires `CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` for tagged release builds and runs `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleRelease app:bundleRelease` (failing loudly rather than substituting unsigned/debug binaries).
-  - Privacy Policy and Data Safety disclosures live at `https://capypaint.com/privacy-policy.html` ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)).
+  - Privacy Policy and Data Safety disclosures live at `https://capypaint.com/privacy-policy.html` ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)). Play Store icon, feature graphic, phone/tablet screenshots, and copy live in [`docs/play-store/`](./docs/play-store/) ([`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md))—upload Phone and Tablet form factors only and keep Android TV unchecked in Play Console until TV D-pad navigation (`US-3.6`) ships post-launch.
 
 ---
 
