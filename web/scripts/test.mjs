@@ -3187,7 +3187,7 @@ async function runCodecAndEngineTests() {
     const gateBetaAwaitingAiDesc =
       'Beta (no Owner approval needed): Blocked by AI review';
     const gateDraftDesc =
-      'Main (no Owner approval needed): Blocked by Draft PR, AI review';
+      'Main (no Owner approval needed): Blocked by Draft PR, PR readiness/100% score';
     const gateStrictNotMetDesc =
       'Beta (no Owner approval needed): Blocked by PR readiness/100% score';
     const gateMainStrictNotMetNoOwnerDesc =
@@ -3245,10 +3245,13 @@ async function runCodecAndEngineTests() {
         createCommitStatusImpl = null,
         graphqlImpl = null,
         mergeImpl = null,
+        requestImpl = null,
         expectCommitStatus = true,
       } = options;
       const body = 'body' in options ? options.body : validStrictPrBody;
       const calls = {
+        createComment: [],
+        updateComment: [],
         createReview: [],
         dismissReview: [],
         addLabels: [],
@@ -3257,6 +3260,7 @@ async function runCodecAndEngineTests() {
         fetch: [],
         graphql: [],
         merge: [],
+        request: [],
       };
       const allComments = [...comments];
       if (aiCommentScore !== null) {
@@ -3288,6 +3292,13 @@ async function runCodecAndEngineTests() {
             return graphqlImpl(query, variables);
           }
           return {};
+        },
+        request: async (route, payload) => {
+          calls.request.push({ route, payload });
+          if (requestImpl) {
+            return requestImpl(route, payload);
+          }
+          return { status: 202, data: { status: 'pending', details: { uuid: 'uuid-async-1' } } };
         },
         rest: {
           pulls: {
@@ -3734,6 +3745,7 @@ async function runCodecAndEngineTests() {
       prAuthor: 'github-actions[bot]',
       isDraft: true,
       headSha: gateHeadSha,
+      body: `${validStrictPrBody}\n\n## Outstanding Work Before Marking Ready\n- [ ] Finalize WIP verification`,
       reviews: [
         {
           id: 107,
@@ -5269,8 +5281,131 @@ async function runCodecAndEngineTests() {
         assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
         assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
         assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+        assert.equal(gateCleanFallbackRes.calls.request.length, 0);
       }
+
+      // Stacked PRs that reject REST pulls.merge must fall back cleanly to PUT /merge-async
+      const gateStackedAsyncFallbackRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        graphqlImpl: async () => {
+          throw new Error('Auto-merge is not supported for stacked pull requests.');
+        },
+        mergeImpl: async () => {
+          throw new Error(
+            'Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead.'
+          );
+        },
+      });
+      assert.equal(gateStackedAsyncFallbackRes.status.state, 'success');
+      assert.equal(gateStackedAsyncFallbackRes.calls.merge.length, 1);
+      assert.equal(gateStackedAsyncFallbackRes.calls.request.length, 1);
+      assert.equal(
+        gateStackedAsyncFallbackRes.calls.request[0].route,
+        'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async'
+      );
+      assert.deepEqual(gateStackedAsyncFallbackRes.calls.request[0].payload, {
+        owner: 'shthed',
+        repo: 'capy',
+        pull_number: 490,
+        sha: gateHeadSha,
+        merge_method: expectedMergeMethod,
+        merge_action: 'direct_merge',
+      });
+
+      const gateStackedAsync409Res = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        graphqlImpl: async () => {
+          throw new Error('Auto-merge is not supported for stacked pull requests.');
+        },
+        mergeImpl: async () => {
+          throw new Error(
+            'Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead.'
+          );
+        },
+        requestImpl: async () => {
+          const err = new Error('Merge already queued');
+          err.status = 409;
+          throw err;
+        },
+      });
+      assert.equal(gateStackedAsync409Res.status.state, 'success');
+      assert.equal(gateStackedAsync409Res.calls.request.length, 1);
+      assert.equal(
+        gateStackedAsync409Res.core.warnings.some((w) => w.includes('Async stacked merge fallback failed')),
+        false
+      );
     }
+
+    // Draft PRs must include a `- [ ]` outstanding-work checklist before being marked Ready for Review
+    const gateDraftMissingChecklistRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+    });
+    assert.equal(gateDraftMissingChecklistRes.status.state, 'pending');
+    assert.equal(
+      gateDraftMissingChecklistRes.status.description.includes('Draft outstanding-work checklist'),
+      true
+    );
+    assert.equal(
+      gateDraftMissingChecklistRes.calls.createComment[0].body.includes(
+        '- [ ] **Draft Outstanding Work Checklist**'
+      ),
+      true
+    );
+
+    const draftWithOutstandingBody = [
+      '## Summary',
+      '',
+      'WIP Draft feature slice.',
+      '',
+      '## Outstanding Work Before Marking Ready',
+      '- [ ] Finish Playwright E2E regression tests',
+      '',
+      '### PR Readiness Score: 80%',
+    ].join('\n');
+    const gateDraftWithChecklistRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      body: draftWithOutstandingBody,
+    });
+    assert.equal(gateDraftWithChecklistRes.status.state, 'pending');
+    assert.equal(
+      gateDraftWithChecklistRes.status.description.includes('Draft outstanding-work checklist'),
+      false
+    );
+    assert.equal(
+      gateDraftWithChecklistRes.calls.createComment[0].body.includes(
+        '- [x] **Draft Outstanding Work Checklist**'
+      ),
+      true
+    );
+
+    const gateReadyStillUncheckedBlockedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      body: draftWithOutstandingBody,
+      labels: ['review:ai-approved'],
+    });
+    assert.equal(gateReadyStillUncheckedBlockedRes.status.state, 'pending');
+    assert.deepEqual(
+      gateReadyStillUncheckedBlockedRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
 
     // Dependabot PRs omit ## Summary / PR Readiness Score, yet still reject unchecked or sub-100% lines
     const gateDependabotBetaExemptPassRes = await runReviewGateCase({
@@ -7695,6 +7830,8 @@ async function runCodecAndEngineTests() {
     };
     globalThis.window = { location: { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' } };
     try {
+      assert.equal(storageMod.DEFAULT_SETTINGS.regionColorMode, 'DETAIL');
+      assert.equal(storageMod.DEFAULT_SETTINGS.paletteSort, 'HUE');
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
         difficulty: 'NORMAL',
@@ -7716,7 +7853,7 @@ async function runCodecAndEngineTests() {
       const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
       assert.equal(offersMod.FEATURE_OFFER_IDS.length, 8);
-      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 13);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
       for (const id of offersMod.FEATURE_OFFER_IDS) {
         const offer = offersMod.FEATURE_OFFERS[id];
         assert.equal(
@@ -8051,7 +8188,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 13');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -8071,7 +8208,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8086,7 +8223,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8100,7 +8237,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8109,7 +8246,7 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 13',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
       undefined,
       { timeout: 3000 }
     );
@@ -8317,7 +8454,7 @@ async function runBrowserBasicsSuite() {
       await tutPage.waitForFunction(
         (expected) =>
           document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
-          `STEP ${expected} OF 13`,
+          `STEP ${expected} OF 14`,
         stepNum,
         { timeout: 5000 }
       );
@@ -8373,13 +8510,13 @@ async function runBrowserBasicsSuite() {
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
-    // Back onto already-tried Step 4 (STEP 5 OF 13) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 5 OF 13',
+      'STEP 5 OF 14',
       'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
     );
     await tutPage.keyboard.press('Control+y');
@@ -8422,7 +8559,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 8 OF 13',
+      'STEP 8 OF 14',
       'Auto-advance timer must stay paused while SettingsModal is open'
     );
     await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
@@ -8463,34 +8600,43 @@ async function runBrowserBasicsSuite() {
       fs.rmSync(tutPhotoPath, { force: true });
     }
     await expectTutStep(11);
-    // Step 10 -> 11 (infinite_zoom)
+    // Step 11 -> 12 (puzzle_presets via Preset Style Gallery)
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-create').click();
+    await tutPage.getByTestId('preset-gallery-toggle').click();
+    await tutPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.getByTestId('preset-apply-algo-mosaic').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(12);
+    await assertSpotlightAligned(tutPage, 'tutorial');
+    // Step 12 -> 13 (infinite_zoom)
     await tutPage.locator('button[title="Settings and Menu"]').click();
     await tutPage.getByTestId('settings-tab-create').click();
     await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
     await waitForPuzzleLoaded(tutPage);
-    await expectTutStep(12);
-    await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 11 -> 12 (saves_export)
-    await tutPage.getByTestId('topbar-saves-btn').click();
-    await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(13);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // [All Topics] drawer lists all 13 topics; jumping onto already-tried Step 1 waits for a fresh action
+    // Step 13 -> 14 (saves_export)
+    await tutPage.getByTestId('topbar-saves-btn').click();
+    await tutPage.getByTestId('settings-modal-close').click();
+    await expectTutStep(14);
+    await assertSpotlightAligned(tutPage, 'tutorial');
+    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 13);
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
     await tutPage.getByTestId('tutorial-topic-item-0').click();
     await expectTutStep(1);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 1 OF 13',
+      'STEP 1 OF 14',
       'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
     );
     await tutPage.getByTestId('tutorial-topics-btn').click();
-    await tutPage.getByTestId('tutorial-topic-item-12').click();
-    await expectTutStep(13);
-    // Step 13 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
+    await tutPage.getByTestId('tutorial-topic-item-13').click();
+    await expectTutStep(14);
+    // Step 14 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
     await tutPage.getByTestId('tutorial-large-text-btn').click();
     await tutPage.getByTestId('tutorial-large-text-btn').click();
     await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 4000 });
@@ -8612,7 +8758,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.close();
     await tutContext.close();
 
-    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 13, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
+    // FeatureOfferBanner E2E: all 8 first-time offers, FIFO suppression queue (Create -> Saves), deferred markOfferSeen, Jump to Guide -> STEP N OF 14, Got it, NativeBridge.saveBackup spy, and ?capy_channel=beta scoped storage isolation
     const offerContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     await offerContext.addInitScript(() => {
       const store = {};
@@ -8645,12 +8791,12 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 13`
+        `STEP ${expectedStepNum} OF 14`
       );
       await offerPage.waitForTimeout(950);
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 13`,
+        `STEP ${expectedStepNum} OF 14`,
         `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
       );
       await offerPage.getByTestId('tutorial-skip-btn').click();
@@ -8741,8 +8887,8 @@ async function runBrowserBasicsSuite() {
     await expectOfferBanner('create_gallery');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await expectOfferBanner('saves_export');
-    await jumpFromOfferAndAssertStep(12);
-    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 13
+    await jumpFromOfferAndAssertStep(13);
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
     const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
       const xFrac = 0.42 + (attempt % 3) * 0.08;
@@ -8757,7 +8903,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('undo-btn').click();
     await expectOfferBanner('undo_replay');
     await jumpFromOfferAndAssertStep(5);
-    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 13
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
     await offerPage.getByTestId('redo-btn').click();
     const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
     assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
@@ -8768,7 +8914,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
-    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 13
+    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
     await offerPage.locator('button[title="Settings and Menu"]').click();
     await offerPage.getByTestId('settings-tab-settings').click();
     const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
@@ -9138,10 +9284,11 @@ async function runBrowserBasicsSuite() {
     await page.mouse.up();
 
     const replayWin = await page.waitForSelector('[data-testid="replay-controls-window"]');
+    assert.equal(await replayWin.isVisible(), true, 'ReplayControls window must be visible');
     assert.equal(
-      await replayWin.getAttribute('data-minimized'),
-      'true',
-      'ReplayControls window must be minimised by default'
+      await page.locator('[data-testid="replay-toggle-minimize-btn"]').count(),
+      0,
+      'ReplayControls must not render an expand/minimize toggle button'
     );
     // Verify YouTube-style progress slider is immediately interactive in the default bar and takes up wide horizontal space
     const trackInCompact = await page.waitForSelector('[data-testid="replay-scrubber-track"]');
@@ -9158,72 +9305,8 @@ async function runBrowserBasicsSuite() {
     await page.mouse.up();
     const valAfterDrag = Number(await page.locator('[data-testid="replay-scrubber"]').inputValue());
     assert.equal(valAfterDrag >= 0 && valAfterDrag <= 3, true, `Expected instant pointer-drag scrub in compact mode, got ${valAfterDrag}`);
-
-    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="replay-controls-window"]')?.getAttribute('data-minimized') === 'false',
-      undefined,
-      { timeout: 3000 }
-    );
-    assert.equal(
-      await page.locator('[data-testid="replay-controls-window"]').getAttribute('data-minimized'),
-      'false',
-      'ReplayControls window must expand when toggle button is clicked'
-    );
-
-    const scrubber = await page.waitForSelector('[data-testid="replay-scrubber"]');
-    await scrubber.fill('2');
-    await scrubber.dispatchEvent('change');
-    await page.locator('[data-testid="replay-resume-btn"]').click();
+    await page.locator('[data-testid="replay-exit-btn"]').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
-    await page.waitForFunction(
-      () => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0) === 2,
-      undefined,
-      { timeout: 3000 }
-    );
-
-    const progressAfterResume = await page.evaluate(() => {
-      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
-      return list[0]?.filledCount || 0;
-    });
-    assert.equal(progressAfterResume, 2, 'Expected filledCount rewound to 2 after Resume Here');
-
-    await page.keyboard.press('Control+y');
-    await page.waitForFunction(
-      () => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0) === 3,
-      undefined,
-      { timeout: 3000 }
-    );
-    const progressAfterCtrlY = await page.evaluate(() => {
-      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
-      return list[0]?.filledCount || 0;
-    });
-    assert.equal(progressAfterCtrlY, 3, 'Expected Ctrl+Y to redo step 3');
-
-    // Verify ReplayControls "Next" button (onOpenCreate) opens Create tab (index 3)
-    const undoBtnForNext = page.getByTestId('undo-btn');
-    await undoBtnForNext.waitFor({ state: 'visible', timeout: 3000 });
-    const undoBoxForNext = await getStableBoundingBox(undoBtnForNext);
-    assert.ok(undoBoxForNext, 'Expected stable boundingBox for undo-btn before Next replay test');
-    await page.mouse.move(undoBoxForNext.x + undoBoxForNext.width / 2, undoBoxForNext.y + undoBoxForNext.height / 2);
-    await page.mouse.down();
-    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await page.mouse.up();
-    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="replay-controls-window"]')?.getAttribute('data-minimized') === 'false',
-      undefined,
-      { timeout: 3000 }
-    );
-    await page.locator('button[title="Pick Next Artwork"]').click();
-    await page.getByTestId('daily-puzzle-card').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(
-      await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')),
-      '3',
-      'ReplayControls Next button must open SettingsModal Create tab (index 3)'
-    );
-    await page.keyboard.press('Escape');
-    await page.getByTestId('daily-puzzle-card').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Verify save-load zoom restoration before replay, offscreen step fast-forward, and pan/zoom during playback
     const zoomInBtn = await page.waitForSelector('[data-testid="zoom-in-btn"]');
@@ -9289,6 +9372,11 @@ async function runBrowserBasicsSuite() {
       `Desktop minimized ReplayControls bottom (${deskReplayMinBox.y + deskReplayMinBox.height}) must stack cleanly above PaletteDock top (${deskPaletteBeforeBox.y})`
     );
     // First Ctrl+Z while awaiting post-load replay dismisses ReplayControls AND immediately performs Undo on the same tick
+    const filledBeforeCtrlZ = await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return list[0]?.filledCount || 0;
+    });
+    assert.ok(filledBeforeCtrlZ >= 1, `Expected >= 1 filled regions before Ctrl+Z, got ${filledBeforeCtrlZ}`);
     await page.keyboard.press('Control+z');
     await page.locator('[data-testid="replay-controls-window"]').waitFor({ state: 'hidden', timeout: 3000 });
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
@@ -9305,22 +9393,22 @@ async function runBrowserBasicsSuite() {
     });
     assert.equal(
       progressAfterFirstCtrlZ,
-      2,
-      'First Ctrl+Z while awaiting post-load ReplayControls must dismiss replay AND undo immediately (3 -> 2)'
+      filledBeforeCtrlZ - 1,
+      `First Ctrl+Z while awaiting post-load ReplayControls must dismiss replay AND undo immediately (${filledBeforeCtrlZ} -> ${filledBeforeCtrlZ - 1})`
     );
     await page.keyboard.press('Control+y');
     await page.waitForFunction(
-      () => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0) === 3,
-      undefined,
+      (expected) => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0) === expected,
+      filledBeforeCtrlZ,
       { timeout: 3000 }
     );
     assert.equal(
       await page.evaluate(() => (JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0)),
-      3,
-      'Ctrl+Y after post-load replay dismiss must redo back to 3'
+      filledBeforeCtrlZ,
+      `Ctrl+Y after post-load replay dismiss must redo back to ${filledBeforeCtrlZ}`
     );
 
-    // Verify expanded ReplayControls non-overlap on desktop AND auto-dismiss when clicking the already-selected active swatch
+    // Verify ReplayControls non-overlap on desktop AND auto-dismiss when clicking the already-selected active swatch
     const undoBtnForSwatchTest = page.getByTestId('undo-btn');
     await undoBtnForSwatchTest.waitFor({ state: 'visible', timeout: 3000 });
     const uBoxSwatch = await getStableBoundingBox(undoBtnForSwatchTest);
@@ -9329,17 +9417,6 @@ async function runBrowserBasicsSuite() {
     await page.mouse.down();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
     await page.mouse.up();
-    await page.getByTestId('replay-toggle-minimize-btn').click();
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="replay-controls-window"]')?.getAttribute('data-minimized') === 'false',
-      undefined,
-      { timeout: 3000 }
-    );
-    assert.equal(
-      await page.getByTestId('replay-controls-window').getAttribute('data-minimized'),
-      'false',
-      'ReplayControls must expand cleanly while PaletteDock stays visible'
-    );
     const [deskZoomOutExpBox, deskReplayExpBox, deskPaletteExpBox] = await Promise.all([
       getStableBoundingBox(page.getByTestId('zoom-out-btn')),
       getStableBoundingBox(page.getByTestId('replay-controls-window')),
@@ -9349,12 +9426,12 @@ async function runBrowserBasicsSuite() {
     assert.equal(
       deskZoomOutExpBox.y + deskZoomOutExpBox.height <= deskReplayExpBox.y + 1,
       true,
-      `Desktop FloatingActions bottom (${deskZoomOutExpBox.y + deskZoomOutExpBox.height}) must clear expanded ReplayControls top (${deskReplayExpBox.y})`
+      `Desktop FloatingActions bottom (${deskZoomOutExpBox.y + deskZoomOutExpBox.height}) must clear ReplayControls top (${deskReplayExpBox.y})`
     );
     assert.equal(
       deskReplayExpBox.y + deskReplayExpBox.height <= deskPaletteExpBox.y + 1,
       true,
-      `Desktop expanded ReplayControls bottom (${deskReplayExpBox.y + deskReplayExpBox.height}) must stack cleanly above PaletteDock top (${deskPaletteExpBox.y})`
+      `Desktop ReplayControls bottom (${deskReplayExpBox.y + deskReplayExpBox.height}) must stack cleanly above PaletteDock top (${deskPaletteExpBox.y})`
     );
     const activeSwatchDuringReplay = page
       .locator('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="true"]')
@@ -9380,7 +9457,7 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
     await page.mouse.up();
 
-    // Minimised by default: enable Follow Painting and Auto-Loop, then start playback and verify camera follows offscreen regions and loops
+    // Enable Follow Painting and Auto-Loop, then start playback and verify camera follows offscreen regions and loops
     const followBtn = await page.waitForSelector('[data-testid="replay-follow-btn"]');
     const loopBtn = await page.waitForSelector('[data-testid="replay-loop-btn"]');
     assert.equal(await followBtn.getAttribute('aria-pressed'), 'false', 'Follow button initially off');
@@ -9407,8 +9484,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[data-testid="replay-play-pause-btn"]').click();
     await page.waitForTimeout(950);
 
-    // Expand HUD briefly to verify scrubber is actively looping/playing and did not stop at the end
-    await page.locator('[data-testid="replay-toggle-minimize-btn"]').click();
+    // Verify scrubber is actively looping/playing and did not stop at the end
     await page.waitForTimeout(450);
     const isStillLooping = await page.evaluate(() => {
       const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
@@ -10882,7 +10958,11 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('save-action-replay').click();
 
     await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 5000 });
-    await page.getByTestId('replay-toggle-minimize-btn').click();
+    assert.equal(
+      await page.locator('[data-testid="replay-toggle-minimize-btn"]').count(),
+      0,
+      'Co-op ReplayControls must not render an expand/minimize toggle button'
+    );
     await page.getByTestId('replay-scrubber').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('replay-scrubber').fill('1');
     await page.waitForFunction(
@@ -10890,35 +10970,8 @@ async function runBrowserBasicsSuite() {
       undefined,
       { timeout: 3000 }
     );
-    await page.getByTestId('replay-resume-btn').click();
-    await page.waitForFunction(
-      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
-      undefined,
-      { timeout: 5000 }
-    );
-    await peerS2.waitForFunction(
-      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) === 1,
-      undefined,
-      { timeout: 5000 }
-    );
-
-    const remainingAfterRewindA = await readTotalRemainingRegions(page);
-    const remainingAfterRewindB = await readTotalRemainingRegions(peerS2);
-    assert.equal(
-      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
-      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
-      'BUG-1: Replay Scrubber Resume Here data-filled-count must match between Peer A and Peer B'
-    );
-    assert.equal(
-      remainingAfterRewindA,
-      totalPuzzleRegions27 - 1,
-      `Expected Replay Resume Here at step 1 to leave exactly 1 filled region on Peer A (${totalPuzzleRegions27 - 1} remaining), got ${remainingAfterRewindA}`
-    );
-    assert.equal(
-      remainingAfterRewindB,
-      remainingAfterRewindA,
-      'BUG-1: Replay Scrubber Resume Here must broadcast UNFILL_EVENT so Peer B rewinds in lockstep'
-    );
+    await page.getByTestId('replay-exit-btn').click();
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Trigger Reset Progress on Peer A and verify Peer B clears to 0 filled regions + resetEpoch increments
     await page.getByTestId('topbar-coop-btn').click();
@@ -11065,9 +11118,9 @@ async function runBrowserBasicsSuite() {
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 8000 });
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
-      await mobileReplayWin.getAttribute('data-minimized'),
-      'true',
-      'Loaded save replay HUD must open minimized on mobile'
+      await page.locator('[data-testid="replay-toggle-minimize-btn"]').count(),
+      0,
+      'Mobile ReplayControls must not render an expand/minimize toggle button'
     );
     assert.equal(
       await page.getByTestId('replay-loop-btn').getAttribute('aria-pressed'),
@@ -11269,7 +11322,7 @@ async function runBrowserBasicsSuite() {
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
 
-    // Re-open ReplayControls on 360x800 mobile, expand it, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
+    // Re-open ReplayControls on 360x800 mobile, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
     const mobileUndoLocator = page.getByTestId('undo-btn');
     await mobileUndoLocator.waitFor({ state: 'visible', timeout: 5000 });
     const mobileUndoBox = await getStableBoundingBox(mobileUndoLocator);
@@ -11280,17 +11333,6 @@ async function runBrowserBasicsSuite() {
     await page.mouse.down();
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.mouse.up();
-    await page.getByTestId('replay-toggle-minimize-btn').click();
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="replay-controls-window"]')?.getAttribute('data-minimized') === 'false',
-      undefined,
-      { timeout: 3000 }
-    );
-    assert.equal(
-      await mobileReplayWin.getAttribute('data-minimized'),
-      'false',
-      'Mobile ReplayControls must expand when toggle button is clicked'
-    );
     const [zoomOutExp360, windowExp360, paletteExp360] = await Promise.all([
       getStableBoundingBox(page.getByTestId('zoom-out-btn')),
       getStableBoundingBox(mobileReplayWin),
@@ -11300,22 +11342,22 @@ async function runBrowserBasicsSuite() {
     assert.equal(
       headerBox360.y + headerBox360.height <= zoomOutExp360.y + 1,
       true,
-      `360x800 expanded TopBar bottom (${headerBox360.y + headerBox360.height}) must clear FloatingActions (${zoomOutExp360.y})`
+      `360x800 TopBar bottom (${headerBox360.y + headerBox360.height}) must clear FloatingActions (${zoomOutExp360.y})`
     );
     assert.equal(
       zoomOutExp360.y + zoomOutExp360.height <= windowExp360.y + 1,
       true,
-      `360x800 FloatingActions bottom (${zoomOutExp360.y + zoomOutExp360.height}) must clear expanded ReplayControls top (${windowExp360.y})`
+      `360x800 FloatingActions bottom (${zoomOutExp360.y + zoomOutExp360.height}) must clear ReplayControls top (${windowExp360.y})`
     );
     assert.equal(
       windowExp360.y + windowExp360.height <= paletteExp360.y + 1,
       true,
-      `360x800 expanded ReplayControls bottom (${windowExp360.y + windowExp360.height}) must stack above PaletteDock top (${paletteExp360.y})`
+      `360x800 ReplayControls bottom (${windowExp360.y + windowExp360.height}) must stack above PaletteDock top (${paletteExp360.y})`
     );
     assert.equal(
       paletteExp360.y + paletteExp360.height <= 800,
       true,
-      `360x800 expanded PaletteDock bottom (${paletteExp360.y + paletteExp360.height}) must fit inside 800px height`
+      `360x800 PaletteDock bottom (${paletteExp360.y + paletteExp360.height}) must fit inside 800px height`
     );
     const mobileUnselectedSwatch = page
       .locator('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]')

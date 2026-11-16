@@ -277,7 +277,6 @@ export const App: React.FC = () => {
   const isPostLoadReplayRef = useRef<boolean>(false);
   isPostLoadReplayRef.current = isPostLoadReplay;
   const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
-  const [isReplayMinimized, setIsReplayMinimized] = useState<boolean>(true);
   const [replayStep, setReplayStep] = useState<number>(0);
   const [replaySequence, setReplaySequence] = useState<number[]>([]);
 
@@ -2240,109 +2239,6 @@ export const App: React.FC = () => {
     markTutorialActionTried,
     triggerFeatureOffer,
   ]);
-
-  // Resume active gameplay from scrubbed replay step
-  const handleResumeFromReplayStep = useCallback(
-    (step: number) => {
-      if (!puzzle) return;
-      const clampedStep = Math.max(0, Math.min(step, replaySequence.length));
-      const keptRegionIds = replaySequence.slice(0, clampedStep);
-      const undoneRegionIds = replaySequence.slice(clampedStep);
-
-      const nextFilled = new Set(keptRegionIds);
-      const nextPainted = new Map(paintedRegionColors);
-
-      for (const rId of undoneRegionIds) {
-        nextPainted.delete(rId);
-      }
-
-      if (undoneRegionIds.length > 0) {
-        emitCoopUnfill(undoneRegionIds);
-      }
-
-      const newUndoStack: UndoHistoryEntry[] = keptRegionIds.map((rId) => {
-        const existing = undoStack.find((u) => u.regionId === rId);
-        return existing || { regionId: rId, wasPreviouslyFilled: false };
-      });
-
-      const newRedoStack: UndoHistoryEntry[] = undoneRegionIds
-        .map((rId) => {
-          const existing = undoStack.find((u) => u.regionId === rId);
-          return existing || { regionId: rId, wasPreviouslyFilled: false };
-        })
-        .reverse();
-
-      let resolvedActiveColorId = activeColorId;
-      if (!isFreeColorMode && undoneRegionIds.length > 0) {
-        const nextRegion = regionByIdRef.current.get(undoneRegionIds[0]);
-        if (nextRegion) {
-          resolvedActiveColorId = nextRegion.colorId;
-          setActiveColorId(nextRegion.colorId);
-        }
-      }
-
-      liveCoopRef.current = {
-        ...liveCoopRef.current,
-        filledRegionIds: nextFilled,
-        paintedRegionColors: nextPainted,
-        activeColorId: resolvedActiveColorId,
-      };
-      setFilledRegionIds(nextFilled);
-      setPaintedRegionColors(nextPainted);
-      syncUndoStack(newUndoStack);
-      syncRedoStack(newRedoStack);
-      cancelAutoResume();
-      tutorialOpenedReplayRef.current = false;
-      isReplayingRef.current = false;
-      isPostLoadReplayRef.current = false;
-      setIsPostLoadReplay(false);
-      setIsReplaying(false);
-      setIsReplayPlaying(false);
-      setHintRegionId(null);
-      NativeBridge.haptic('success', settings.hapticsEnabled);
-
-      if (activeSnapshotId) {
-        const paintedObj = Object.fromEntries(nextPainted);
-        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-        const updated = StorageService.updateSnapshotProgress(
-          activeSnapshotId,
-          nextFilled.size,
-          puzzle.regions.length,
-          keptRegionIds,
-          zoomScale,
-          panOffsetX,
-          panOffsetY,
-          undefined,
-          paintedObj,
-          puzzle.palette,
-          puzzle.isFreeColor
-        );
-        setSnapshots(updated);
-        StorageService.saveActiveState({
-          activeSnapshotId,
-          activeColorId: resolvedActiveColorId,
-          filledRegionIds: keptRegionIds,
-          paintedRegionColors: paintedObj,
-          isFreeColorMode,
-          zoomScale,
-          panOffsetX,
-          panOffsetY,
-        });
-      }
-    },
-    [
-      puzzle,
-      replaySequence,
-      paintedRegionColors,
-      undoStack,
-      settings.hapticsEnabled,
-      isFreeColorMode,
-      activeSnapshotId,
-      activeColorId,
-      cancelAutoResume,
-      emitCoopUnfill,
-    ]
-  );
 
   // Keyboard shortcuts:
   // - Ctrl+Z / Cmd+Z (Undo), Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (Redo)
@@ -5354,7 +5250,6 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
-          isReplayExpanded={isReplaying && !isReplayMinimized}
           onUndo={() => {
             if (isReplayingRef.current) {
               exitReplay();
@@ -5478,19 +5373,11 @@ export const App: React.FC = () => {
             handleUpdateSettings((prev) => ({ ...prev, replaySpeed: spd }));
           }}
           onExitReplay={exitReplay}
-          onExportImage={handleExportArtwork}
-          onOpenCreate={() => {
-            exitReplay();
-            setSettingsInitialTab(3);
-            setShowSettings(true);
-          }}
-          onResumeFromStep={handleResumeFromReplayStep}
           onUserInteract={() => {
             cancelAutoResume();
             markTutorialActionTried('replay');
             triggerFeatureOffer('replay_scrubber');
           }}
-          onMinimizedChange={setIsReplayMinimized}
         />
       )}
 
@@ -5956,6 +5843,9 @@ export const App: React.FC = () => {
               markTutorialActionTried('saves_export');
               triggerFeatureOffer('saves_export');
             }
+          }}
+          onExplorePresetGallery={() => {
+            markTutorialActionTried('puzzle_presets');
           }}
         />
       </Suspense>

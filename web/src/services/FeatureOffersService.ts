@@ -39,7 +39,7 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     id: 'replay_scrubber',
     title: 'Replay Controls',
     message:
-      'Open this bar to change speed or keep coloring from any point in your replay.',
+      'Use this bar to scrub your progress, change speed, or toggle Follow and Loop.',
     tutorialStepIndex: 5,
   },
   free_color: {
@@ -61,21 +61,21 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     title: 'Photo Styles',
     message:
       'Adjust puzzle style and detail level anytime under Create in the menu.',
-    tutorialStepIndex: 9,
+    tutorialStepIndex: 10,
   },
   infinite_zoom: {
     id: 'infinite_zoom',
     title: 'Detail View Created',
     message:
       'Tap the Parent button in the top-left corner anytime to go back to your full picture.',
-    tutorialStepIndex: 10,
+    tutorialStepIndex: 11,
   },
   saves_export: {
     id: 'saves_export',
     title: 'Saved Pictures',
     message:
       'Pin favorites, rename pictures, save backups, or print coloring pages here.',
-    tutorialStepIndex: 11,
+    tutorialStepIndex: 12,
   },
 };
 

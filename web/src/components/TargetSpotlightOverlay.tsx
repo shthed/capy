@@ -133,6 +133,13 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       borderRadius: 9999,
     },
   ],
+  puzzle_presets: [
+    {
+      selector: '[data-testid="topbar-settings-btn"]',
+      padding: 3,
+      borderRadius: 9999,
+    },
+  ],
   infinite_zoom: [
     {
       selector: '[data-testid="topbar-parent-puzzle-btn"]',
@@ -794,7 +801,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['style', 'class', 'hidden', 'data-minimized', 'aria-pressed'],
+        attributeFilter: ['style', 'class', 'hidden', 'aria-pressed'],
       });
     }
 
