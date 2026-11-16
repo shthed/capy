@@ -285,6 +285,13 @@ jobs:
               return false;
             };
 
+            const isDraftChecklistExempt =
+              isDependabotPr || pr.head?.ref === 'sync/beta-from-main';
+            const hasDraftOutstandingChecklist =
+              !isDraft ||
+              isDraftChecklistExempt ||
+              /^\s*[-*]\s+\[\s\]\s+\S/m.test(pr.body || '');
+
             const isStrictPrBodyValid = (() => {
               if (typeof pr.body !== 'string') return false;
               if (isDependabotPr) return !hasChecklistSub100OrUnchecked(pr.body);
@@ -712,7 +719,12 @@ jobs:
             // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars) & upsert gate status comment
             const blockers = [];
             if (changesRequested) blockers.push('Changes requested / hold');
-            if (isDraft) blockers.push('Draft PR');
+            if (isDraft) {
+              blockers.push('Draft PR');
+              if (!hasDraftOutstandingChecklist) {
+                blockers.push('Draft outstanding-work checklist');
+              }
+            }
             if (!aiOrSyncReady) {
               if (latestAiSignal !== null && !hasValidAiMarker) {
                 blockers.push('PR readiness/100% score');
@@ -822,6 +834,11 @@ jobs:
               `- [${readinessValid ? 'x' : ' '}] **PR Description & Readiness** (\`## Summary\`, \`PR Readiness Score: 100%\`, zero unchecked tasks)`,
               `- [${!changesRequested ? 'x' : ' '}] **No Active Holds / Changes Requested**`,
               ...(isDraft ? ['- [ ] **Ready for Review** (PR is currently a Draft)'] : []),
+              ...(isDraft && !isDraftChecklistExempt
+                ? [
+                    `- [${hasDraftOutstandingChecklist ? 'x' : ' '}] **Draft Outstanding Work Checklist** (required \`- [ ]\` checklist before marking Ready)`,
+                  ]
+                : []),
             ];
             const gateCommentBody = [
               '<!-- capy-gate-status -->',
@@ -902,9 +919,35 @@ jobs:
                           merge_method: desiredMergeMethod.toLowerCase(),
                         });
                       } catch (mergeErr) {
-                        core.warning(
-                          `Immediate merge fallback failed for PR #${prNumber}: ${mergeErr.message}`
-                        );
+                        const mergeMsg = String(mergeErr?.message || mergeErr || '');
+                        if (
+                          /stacked PRs|asynchronous merge endpoint/i.test(mergeMsg) &&
+                          typeof github.request === 'function'
+                        ) {
+                          try {
+                            await github.request(
+                              'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async',
+                              {
+                                owner,
+                                repo,
+                                pull_number: prNumber,
+                                sha: headSha,
+                                merge_method: desiredMergeMethod.toLowerCase(),
+                                merge_action: 'direct_merge',
+                              }
+                            );
+                          } catch (asyncMergeErr) {
+                            if (Number(asyncMergeErr?.status) !== 409) {
+                              core.warning(
+                                `Async stacked merge fallback failed for PR #${prNumber}: ${asyncMergeErr.message}`
+                              );
+                            }
+                          }
+                        } else {
+                          core.warning(
+                            `Immediate merge fallback failed for PR #${prNumber}: ${mergeMsg}`
+                          );
+                        }
                       }
                     } else {
                       core.warning(
