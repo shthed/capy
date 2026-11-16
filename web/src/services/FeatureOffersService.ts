@@ -39,7 +39,7 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     id: 'replay_scrubber',
     title: 'Replay Controls',
     message:
-      'Open this bar to change speed or keep coloring from any point in your replay.',
+      'Use this bar to scrub your progress, change speed, or toggle Follow and Loop.',
     tutorialStepIndex: 5,
   },
   free_color: {

@@ -794,7 +794,7 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['style', 'class', 'hidden', 'data-minimized', 'aria-pressed'],
+        attributeFilter: ['style', 'class', 'hidden', 'aria-pressed'],
       });
     }
 
