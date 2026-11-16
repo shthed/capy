@@ -3175,23 +3175,23 @@ async function runCodecAndEngineTests() {
 
     const prReviewGateSource = extractWorkflowScript('.github/workflows/pr-review-gate.yml');
     const gateDualPassDesc =
-      'Main gate passed (Owner Approve verified): AI review (100%) + Owner Approve';
+      'Main gate passed (no Owner approval needed): AI review (100%) verified';
     const gateBetaPassDesc =
       'Beta gate passed (no Owner approval needed): AI review (100%) verified';
     const gateMainAwaitingAiDesc =
-      'Main (Owner Approve required): Blocked by AI review';
+      'Main (no Owner approval needed): Blocked by AI review';
     const gateMainAwaitingAiAndOwnerDesc =
-      'Main (Owner Approve required): Blocked by Owner Approve, AI review';
+      'Main (no Owner approval needed): Blocked by AI review';
     const gateMainAwaitingOwnerDesc =
-      'Main (Owner Approve required): Blocked by Owner Approve';
+      'Main gate passed (no Owner approval needed): AI review (100%) verified';
     const gateBetaAwaitingAiDesc =
       'Beta (no Owner approval needed): Blocked by AI review';
     const gateDraftDesc =
-      'Main (Owner Approve required): Blocked by Draft PR, AI review';
+      'Main (no Owner approval needed): Blocked by Draft PR, AI review';
     const gateStrictNotMetDesc =
       'Beta (no Owner approval needed): Blocked by PR readiness/100% score';
     const gateMainStrictNotMetNoOwnerDesc =
-      'Main (Owner Approve required): Blocked by Owner Approve, PR readiness/100% score';
+      'Main (no Owner approval needed): Blocked by PR readiness/100% score';
 
     const runReviewGateScript = new AsyncFunction(
       'context',
@@ -3628,7 +3628,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateBotChangesReqRes.status.state, 'failure');
     assert.equal(
       gateBotChangesReqRes.status.description.startsWith(
-        'Main (Owner Approve required): Blocked by Changes requested / hold'
+        'Main (no Owner approval needed): Blocked by Changes requested / hold'
       ),
       true
     );
@@ -3767,7 +3767,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotChangesReqApprovedPrefixRes.status.state, 'failure');
-    assert.equal(gateBotChangesReqApprovedPrefixRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotChangesReqApprovedPrefixRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotChangesReqApprovedPrefixRes.calls.createReview.length, 0);
 
     // (i) Bot PR + CHANGES_REQUESTED recovered by newer native APPROVED on headSha under commitMs skew -> success
@@ -3872,7 +3872,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLegacyAfterRejectCommentRes.status.state, 'failure');
-    assert.equal(gateBotLegacyAfterRejectCommentRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotLegacyAfterRejectCommentRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotLegacyAfterRejectCommentRes.calls.createReview.length, 0);
 
     const gateBotChangesReqLegacyLgtmAndLabelRes = await runReviewGateCase({
@@ -3910,7 +3910,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.state, 'failure');
-    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotChangesReqLegacyLgtmAndLabelRes.calls.createReview.length, 0);
 
     const gateBotLegacyAfterPriorNativeAndRejectRes = await runReviewGateCase({
@@ -3956,7 +3956,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.state, 'failure');
-    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotLegacyAfterPriorNativeAndRejectRes.calls.createReview.length, 0);
 
     // (l) Bug 2 regression: +120s commitMs skew catches post-approval HOLD comment, reverse-ordered COMMENTED DO NOT MERGE review (non-head & head), and DISMISSED+HOLD; stale pre-push HOLD stays ignored
@@ -3987,7 +3987,7 @@ async function runCodecAndEngineTests() {
       action: 'created',
     });
     assert.equal(gateBotSkewHoldCommentRes.status.state, 'failure');
-    assert.equal(gateBotSkewHoldCommentRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotSkewHoldCommentRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewHoldCommentRes.calls.createReview.length, 0);
 
     const gateBotSkewNonHeadCommentedReviewRes = await runReviewGateCase({
@@ -4014,7 +4014,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.state, 'failure');
-    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotSkewNonHeadCommentedReviewRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewNonHeadCommentedReviewRes.calls.createReview.length, 0);
 
     const gateBotSkewHeadCommentedReviewRes = await runReviewGateCase({
@@ -4041,7 +4041,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateBotSkewHeadCommentedReviewRes.status.state, 'failure');
-    assert.equal(gateBotSkewHeadCommentedReviewRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateBotSkewHeadCommentedReviewRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateBotSkewHeadCommentedReviewRes.calls.createReview.length, 0);
 
     const gateBotSkewDismissedHoldRes = await runReviewGateCase({
@@ -4143,7 +4143,7 @@ async function runCodecAndEngineTests() {
       ],
     });
     assert.equal(gateSameSecRejectWinsByIdRes.status.state, 'failure');
-    assert.equal(gateSameSecRejectWinsByIdRes.status.description.startsWith('Main (Owner Approve required): Blocked by Changes requested / hold'), true);
+    assert.equal(gateSameSecRejectWinsByIdRes.status.description.startsWith('Main (no Owner approval needed): Blocked by Changes requested / hold'), true);
     assert.equal(gateSameSecRejectWinsByIdRes.calls.createReview.length, 0);
 
     const gateSameSecApproveSupersedesByIdRes = await runReviewGateCase({
@@ -4606,7 +4606,7 @@ async function runCodecAndEngineTests() {
     assert.equal(gateSyncBetaPassRes.calls.createReview.length, 0);
     assert.equal(gateSyncBetaPassRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
-    // Retargeting an AI-approved PR from beta to main via pull_request edited requires Owner Approve, and with Owner Approve upgrades SQUASH -> MERGE
+    // Retargeting an AI-approved PR from beta to main via pull_request edited passes immediately without Owner Approve and upgrades SQUASH -> MERGE
     const gateRetargetBetaToMainAwaitingOwnerRes = await runReviewGateCase({
       prAuthor: 'shthed',
       baseRef: 'main',
@@ -4616,8 +4616,9 @@ async function runCodecAndEngineTests() {
       eventName: 'pull_request',
       action: 'edited',
     });
-    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.state, 'pending');
+    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.state, 'success');
     assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.status.description, gateMainAwaitingOwnerDesc);
+    assert.equal(gateRetargetBetaToMainAwaitingOwnerRes.calls.graphql[0].variables.mergeMethod, 'MERGE');
 
     const gateRetargetBetaToMainRes = await runReviewGateCase({
       prAuthor: 'shthed',
@@ -5250,32 +5251,25 @@ async function runCodecAndEngineTests() {
       ['beta', 'squash'],
       ['main', 'merge'],
     ]) {
-      const gateCleanFallbackRes = await runReviewGateCase({
-        prAuthor: 'github-actions[bot]',
-        baseRef: targetBase,
-        headSha: gateHeadSha,
-        body: validStrictPrBody,
-        reviews:
-          targetBase === 'main'
-            ? [
-                {
-                  id: 8102,
-                  user: { login: 'shthed' },
-                  state: 'APPROVED',
-                  commit_id: gateHeadSha,
-                  body: '',
-                  submitted_at: '2026-11-13T01:06:00Z',
-                },
-              ]
-            : [],
-        graphqlImpl: async () => {
-          throw new Error('Pull request is in clean status');
-        },
-      });
-      assert.equal(gateCleanFallbackRes.status.state, 'success');
-      assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
-      assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
-      assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+      for (const fallbackError of [
+        'Pull request is in clean status',
+        'Auto-merge is not supported for stacked pull requests.',
+      ]) {
+        const gateCleanFallbackRes = await runReviewGateCase({
+          prAuthor: 'github-actions[bot]',
+          baseRef: targetBase,
+          headSha: gateHeadSha,
+          body: validStrictPrBody,
+          reviews: [],
+          graphqlImpl: async () => {
+            throw new Error(fallbackError);
+          },
+        });
+        assert.equal(gateCleanFallbackRes.status.state, 'success');
+        assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
+        assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
+        assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+      }
     }
 
     // Dependabot PRs omit ## Summary / PR Readiness Score, yet still reject unchecked or sub-100% lines
@@ -6909,8 +6903,8 @@ async function runCodecAndEngineTests() {
     const skipDraftRes = await runAiReviewCase({ geminiApiKey: 'test-key', isDraft: true });
     assert.equal(skipDraftRes.createdReviews.length, 0);
 
-    const skipMainRes = await runAiReviewCase({ geminiApiKey: 'test-key', baseRef: 'main' });
-    assert.equal(skipMainRes.createdReviews.length, 0);
+    const skipOtherBaseRes = await runAiReviewCase({ geminiApiKey: 'test-key', baseRef: 'feature/other' });
+    assert.equal(skipOtherBaseRes.createdReviews.length, 0);
 
     const skipSyncRes = await runAiReviewCase({ geminiApiKey: 'test-key', headRef: 'sync/beta-from-main' });
     assert.equal(skipSyncRes.createdReviews.length, 0);
