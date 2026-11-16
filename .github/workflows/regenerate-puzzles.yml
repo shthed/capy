@@ -116,5 +116,5 @@ jobs:
           if [ -n "$EXISTING_PR" ]; then
             gh pr edit "$EXISTING_PR" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY"
           else
-            gh pr create --base beta --head "$BRANCH" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY" --label "automation,web"
+            gh pr create --base beta --head "$BRANCH" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY" --label "ci,web"
           fi

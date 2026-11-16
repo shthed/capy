@@ -1946,8 +1946,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="button"
                     data-testid="daily-puzzle-play-btn"
                     onClick={() => {
-                      setLocalConfig(dailyPuzzle.config);
-                      updateSetting('generatorConfig', dailyPuzzle.config);
                       onSelectSample(dailyPuzzle.sample, dailyPuzzle.config, dailyPuzzle.snapshotId);
                       onClose();
                     }}

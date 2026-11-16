@@ -2164,6 +2164,11 @@ async function runCodecAndEngineTests() {
     assert.equal(dailyA.config.maxRegions, 2000, 'Daily puzzle config must default to Max regions 2000');
     assert.equal(dailyA.config.colorCount, 64, 'Daily puzzle config must default to Max colors 64');
     assert.equal(dailyA.config.paletteDetail, 'CUSTOM', 'Daily puzzle config must use CUSTOM paletteDetail for 64 colors');
+    assert.ok(
+      dailyA.presetDescription.includes('Max Detail') &&
+        !/\b(10|16|18|24) colours\b/.test(dailyA.presetDescription),
+      `Daily presetDescription must not show contradictory low/medium counts: '${dailyA.presetDescription}'`
+    );
 
     // 9. PlayerStatsService SSR load, increment, clamping, persistence & monotonic mergeLifetimeStats
     const statsMod = await vite.ssrLoadModule('/src/services/PlayerStatsService.ts');
@@ -10506,15 +10511,23 @@ async function runBrowserBasicsSuite() {
       'Expected daily-puzzle-card to render above gallery-search-input at the top of the Create tab'
     );
 
-    const snapCountBeforeDaily = await page.evaluate(
-      () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length
-    );
+    const dailyBeforeState = await page.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const settings = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      return { count: snaps.length, generatorConfig: settings.generatorConfig || null };
+    });
+    const snapCountBeforeDaily = dailyBeforeState.count;
     await page.getByTestId('daily-puzzle-play-btn').click();
     await waitForPuzzleLoaded(page);
     assert.equal(await dailyCard.isVisible(), false, 'Settings modal should close after clicking Play Daily');
     const dailyAfterState = await page.evaluate(() => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
-      return { id: snaps[0]?.id || null, count: snaps.length };
+      const settings = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
+      return {
+        id: snaps[0]?.id || null,
+        count: snaps.length,
+        generatorConfig: settings.generatorConfig || null,
+      };
     });
     assert.match(
       String(dailyAfterState.id),
@@ -10525,6 +10538,11 @@ async function runBrowserBasicsSuite() {
       dailyAfterState.count,
       snapCountBeforeDaily + 1,
       `filterSnapshotId must selectively import only 1 daily snapshot (before=${snapCountBeforeDaily}, after=${dailyAfterState.count})`
+    );
+    assert.deepEqual(
+      dailyAfterState.generatorConfig,
+      dailyBeforeState.generatorConfig,
+      'Play Daily must not mutate persisted user generatorConfig'
     );
 
     // 10b. Reduced Motion toggle persistence in capy_user_settings_v8

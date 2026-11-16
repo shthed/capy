@@ -177,7 +177,9 @@ export function getDailyFeaturedPuzzle(utcDateStr?: string): DailyFeaturedPuzzle
     sample,
     presetId: preset.id,
     presetLabel: isFreeColor ? `${preset.label} • Free Colour` : preset.label,
-    presetDescription: `${preset.description} • Max Detail`,
+    presetDescription: isFreeColor
+      ? 'Free Colour • Max Detail'
+      : 'Max Detail (64 colours • 2000 pieces)',
     config,
   };
 }
