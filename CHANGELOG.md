@@ -1,6 +1,7 @@
-### 3.0.29 - 2026-11-16 (Beta)
+### 3.0.29 - 2026-11-16 (Production, Beta)
 
 - Fix signed Android release builds failing `lintVitalRelease` (`InvalidFragmentVersionForActivityResult` on `registerForActivityResult` in `MainActivity.kt`) by pinning `androidx.fragment:fragment-ktx` `1.8.9` over the stale transitive Fragment from `play-services-games-v2`, run `app:lintVitalRelease` in the per-PR `Android Build & JUnit Tests` job so release-only lint blockers surface before tagging, and realign `CHANGELOG.md` channel markers to `v3.0.26` Production [#566](https://github.com/shthed/capy/pull/566)
+- Retag `CHANGELOG.md` channel markers for the `v3.0.29` Production promotion (`3.0.29` to `(Production, Beta)`, untag `3.0.26`) per the `PROJECT.md` Pre-Promotion checklist [#568](https://github.com/shthed/capy/pull/568)
 
 ### 3.0.28 - 2026-11-16
 
@@ -10,7 +11,7 @@
 
 - Standardize `web/scripts/test.mjs` into sequential `[Unit 01/15]`--`[Unit 15/15]` (`[Unit 01/10]`--`[Unit 10/10]` clean-room) and `[E2E 01/21]`--`[E2E 21/21]` stages with execution-count assertions, gate optional `v3012_screenshots` writes behind `CAPY_V3012_SCREENSHOT_DIR`, isolate `bash --norc --noprofile` subprocess environments, add `{ quiet, logger }` options to `.github/scripts/cleanup-gh-pages-previews.mjs` and `.github/scripts/cleanup-branches.mjs`, and sync `TESTING.md` [#563](https://github.com/shthed/capy/pull/563)
 
-### 3.0.26 - 2026-11-16 (Production)
+### 3.0.26 - 2026-11-16
 
 - Enable `.github/workflows/deploy-cloudflare.yml` builds directly from `shthed/capy` (`10 x 5s` `/api/health` retries; clean-room exported back to `capyboop/capy`), remove the redundant `/* /index.html 200` rule from `web/public/_redirects`, document Cloudflare Workers Builds (`Option 1` zero-token) vs. Actions (`Option 2` `CLOUDFLARE_API_TOKEN` scopes) and direct `capyboop.com` (`shthed/capygame`) setup across `CLOUD.md`, `WEB.md`, and `TODO.md` [#550](https://github.com/shthed/capy/pull/550)
 
