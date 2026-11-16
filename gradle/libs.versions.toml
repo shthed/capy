@@ -3,6 +3,7 @@ agp = "9.5.1"
 coreKtx = "1.19.1"
 activityCompose = "1.9.3"
 webkit = "1.12.1"
+fragmentKtx = "1.8.9"
 playServicesGamesV2 = "22.1.0"
 junit = "4.13.2"
 
@@ -10,6 +11,7 @@ junit = "4.13.2"
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityCompose" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragmentKtx" }
 play-services-games-v2 = { group = "com.google.android.gms", name = "play-services-games-v2", version.ref = "playServicesGamesV2" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

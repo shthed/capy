@@ -442,12 +442,12 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
 
-      - name: Run unit tests and build Debug APK (app/)
+      - name: Run unit tests, release lint, and build Debug APK (app/)
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
           CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
-        run: ./gradlew app:testDebugUnitTest app:assembleDebug --build-cache
+        run: ./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleDebug --build-cache
 
       - name: Stage build artifacts
         run: |

@@ -297,7 +297,7 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
   - Runs concurrently across open PRs (`main` and `beta` bases) with `cancel-in-progress: true` per PR/ref.
   - Injects `vars.VITE_GOOGLE_CLIENT_ID` and `vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`, restores cached `web/node_modules`, runs `npm run test:sanity && npm run lint && npm run build` plus `node scripts/test.mjs --unit`, and uploads `web-dist` (`web/dist/`).
 - **Job 2 -- `android_build` (`Android Build & JUnit Tests`, `contents: read`, async)**:
-  - Downloads `web-dist`, sets up JDK 17 + Gradle, executes `./gradlew app:testDebugUnitTest app:assembleDebug --build-cache`, and uploads `build-artifacts` (`staging/web/` + `staging/apk/capy.apk`) for Pages without slowing down `Build & Test`.
+  - Downloads `web-dist`, sets up JDK 17 + Gradle, executes `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleDebug --build-cache` (release-variant `lintVitalRelease` catches release-only lint blockers before tagging), and uploads `build-artifacts` (`staging/web/` + `staging/apk/capy.apk`) for Pages without slowing down `Build & Test`.
 - **Job 3 -- `e2e_release_gate` (`Playwright E2E Release Gate`, `contents: read`, async)**:
   - Runs asynchronously on ready non-docs/non-main-sync PRs targeting `beta` or `main` **and** on `push` to `beta`/`main`, downloading `web-dist` + cached `~/.cache/ms-playwright` and running `npm test` without blocking `deploy` or PR merge.
 - **Job 4 -- `deploy` (`Deploy to GitHub Pages`, `contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`, async)**:
