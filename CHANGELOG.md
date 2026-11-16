@@ -1,4 +1,8 @@
-### 3.0.22 - 2026-11-16 (Beta)
+### 3.0.23 - 2026-11-16 (Beta)
+
+- Set default colour mode (`regionColorMode`) to Original Detail (`DETAIL`) and default colour sort order (`paletteSort`) to Rainbow / Hue (`HUE`) in `StorageService.ts` and `PaletteDock.tsx`, and sync `WEB.md` and `web/scripts/test.mjs` [#555](https://github.com/shthed/capy/pull/555)
+
+### 3.0.22 - 2026-11-16
 
 - Remove the expandable two-row deck and expand/minimize toggle from `ReplayControls.tsx` so replay always stays in the compact single-row scrubber bar, and sync `FloatingActions.tsx`, `App.tsx`, `WEB.md`, `TESTING.md`, and `web/scripts/test.mjs` [#554](https://github.com/shthed/capy/pull/554)
 
