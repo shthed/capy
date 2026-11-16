@@ -57,7 +57,7 @@ export function getHue(hex: string): number {
 export function getDisplayNumberMap(
   palette: PaletteColor[],
   regions: Region[],
-  sortOrder: PaletteSortOrder = 'NUMBER'
+  sortOrder: PaletteSortOrder = 'HUE'
 ): Map<number, string> {
   let sorted = [...palette];
   switch (sortOrder) {
@@ -90,7 +90,7 @@ export function getVisiblePalette(
   palette: PaletteColor[],
   regions: Region[],
   filledRegionIds: Set<number>,
-  sortOrder: PaletteSortOrder = 'NUMBER',
+  sortOrder: PaletteSortOrder = 'HUE',
   isFreeColorMode: boolean = false
 ): PaletteColor[] {
   if (isFreeColorMode) {

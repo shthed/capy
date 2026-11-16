@@ -340,7 +340,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`isPaintMode`**: `boolean` (default `false`) -- Enables continuous drag-to-color brush painting.
 - **`isFreeColorMode`**: `boolean` (default `false`) -- Enables Free Colour / Coloring Page mode allowing arbitrary swatch assignment and repainting.
 - **`raisePaletteDock`**: `boolean` (default `true`) -- Floats `PaletteDock` comfortably above mobile gesture bars.
-- **`regionColorMode`**: `'SOLID' | 'DETAIL'` (default `'SOLID'`) -- Renders filled regions in flat quantized swatch color (`SOLID`) or original photographic texture (`DETAIL`).
+- **`regionColorMode`**: `'SOLID' | 'DETAIL'` (default `'DETAIL'`) -- Renders filled regions in flat quantized swatch color (`SOLID`) or original photographic texture (`DETAIL`).
 - **`canvasBgColor`**: `'BLACK' | 'DARK_SLATE' | 'CHARCOAL' | 'LIGHT_GRAY' | 'PURE_WHITE' | 'CUSTOM'` (default `'CHARCOAL'`) -- Viewport background preset around the artwork.
 - **`canvasBgArgb`**: `number` (default `0xff18181b` / `#18181B`) -- 32-bit ARGB color used when `canvasBgColor === 'CUSTOM'`.
 - **`saveSortOrder`**: `'LAST_ACTIVE' | 'DATE' | 'PERCENT_COMPLETE'` (default `'LAST_ACTIVE'`) -- Sort order in the Saves tab (pinned saves stay grouped at top).
@@ -360,7 +360,7 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) (`DEFAULT_SETTIN
 - **`labelScale`**: `number` (default `1.0`, range `0.5`--`2.0`) -- Global multiplier applied to region number font sizes.
 - **`showZoomButtons`**: `boolean` (default `false`) -- Shows onscreen `+` / `-` zoom buttons in `FloatingActions`.
 - **`showResetViewButton`**: `boolean` (default `false`) -- Shows onscreen fit-to-screen reset button in `FloatingActions`.
-- **`paletteSort`**: `'NUMBER' | 'REMAINING' | 'HUE' | 'LIGHTNESS'` (default `'NUMBER'`) -- Swatch ordering in `PaletteDock`.
+- **`paletteSort`**: `'NUMBER' | 'REMAINING' | 'HUE' | 'LIGHTNESS'` (default `'HUE'`) -- Swatch ordering in `PaletteDock`.
 - **`prioritizeOnScreen`**: `boolean` (default `false`) -- Legacy compatibility flag; `PaletteDock` strictly preserves sorted order and centers active swatches at `50%` on scrollable docks.
 - **`hapticsEnabled`**: `boolean` (default `true`) -- Enables native Android / `navigator.vibrate` tactile feedback.
 - **`panMomentum`**: `boolean` (default `true`) -- Enables Google Maps-style inertial gliding on canvas pan flicks (skipped when `reducedMotion` is `true`).
