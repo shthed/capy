@@ -1,4 +1,8 @@
-### 3.0.26 - 2026-11-16 (Beta)
+### 3.0.27 - 2026-11-16 (Beta)
+
+- Standardize `web/scripts/test.mjs` into sequential `[Unit 01/15]`--`[Unit 15/15]` (`[Unit 01/10]`--`[Unit 10/10]` clean-room) and `[E2E 01/21]`--`[E2E 21/21]` stages with execution-count assertions, gate optional `v3012_screenshots` writes behind `CAPY_V3012_SCREENSHOT_DIR`, isolate `bash --norc --noprofile` subprocess environments, add `{ quiet, logger }` options to `.github/scripts/cleanup-gh-pages-previews.mjs` and `.github/scripts/cleanup-branches.mjs`, and sync `TESTING.md` [#563](https://github.com/shthed/capy/pull/563)
+
+### 3.0.26 - 2026-11-16
 
 - Enable `.github/workflows/deploy-cloudflare.yml` builds directly from `shthed/capy` (`10 x 5s` `/api/health` retries; clean-room exported back to `capyboop/capy`), remove the redundant `/* /index.html 200` rule from `web/public/_redirects`, document Cloudflare Workers Builds (`Option 1` zero-token) vs. Actions (`Option 2` `CLOUDFLARE_API_TOKEN` scopes) and direct `capyboop.com` (`shthed/capygame`) setup across `CLOUD.md`, `WEB.md`, and `TODO.md` [#550](https://github.com/shthed/capy/pull/550)
 
