@@ -3187,7 +3187,7 @@ async function runCodecAndEngineTests() {
     const gateBetaAwaitingAiDesc =
       'Beta (no Owner approval needed): Blocked by AI review';
     const gateDraftDesc =
-      'Main (no Owner approval needed): Blocked by Draft PR, AI review';
+      'Main (no Owner approval needed): Blocked by Draft PR, PR readiness/100% score';
     const gateStrictNotMetDesc =
       'Beta (no Owner approval needed): Blocked by PR readiness/100% score';
     const gateMainStrictNotMetNoOwnerDesc =
@@ -3245,10 +3245,13 @@ async function runCodecAndEngineTests() {
         createCommitStatusImpl = null,
         graphqlImpl = null,
         mergeImpl = null,
+        requestImpl = null,
         expectCommitStatus = true,
       } = options;
       const body = 'body' in options ? options.body : validStrictPrBody;
       const calls = {
+        createComment: [],
+        updateComment: [],
         createReview: [],
         dismissReview: [],
         addLabels: [],
@@ -3257,6 +3260,7 @@ async function runCodecAndEngineTests() {
         fetch: [],
         graphql: [],
         merge: [],
+        request: [],
       };
       const allComments = [...comments];
       if (aiCommentScore !== null) {
@@ -3288,6 +3292,13 @@ async function runCodecAndEngineTests() {
             return graphqlImpl(query, variables);
           }
           return {};
+        },
+        request: async (route, payload) => {
+          calls.request.push({ route, payload });
+          if (requestImpl) {
+            return requestImpl(route, payload);
+          }
+          return { status: 202, data: { status: 'pending', details: { uuid: 'uuid-async-1' } } };
         },
         rest: {
           pulls: {
@@ -3734,6 +3745,7 @@ async function runCodecAndEngineTests() {
       prAuthor: 'github-actions[bot]',
       isDraft: true,
       headSha: gateHeadSha,
+      body: `${validStrictPrBody}\n\n## Outstanding Work Before Marking Ready\n- [ ] Finalize WIP verification`,
       reviews: [
         {
           id: 107,
@@ -5269,8 +5281,131 @@ async function runCodecAndEngineTests() {
         assert.equal(gateCleanFallbackRes.calls.merge.length, 1);
         assert.equal(gateCleanFallbackRes.calls.merge[0].merge_method, expectedMergeMethod);
         assert.equal(gateCleanFallbackRes.calls.merge[0].sha, gateHeadSha);
+        assert.equal(gateCleanFallbackRes.calls.request.length, 0);
       }
+
+      // Stacked PRs that reject REST pulls.merge must fall back cleanly to PUT /merge-async
+      const gateStackedAsyncFallbackRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        graphqlImpl: async () => {
+          throw new Error('Auto-merge is not supported for stacked pull requests.');
+        },
+        mergeImpl: async () => {
+          throw new Error(
+            'Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead.'
+          );
+        },
+      });
+      assert.equal(gateStackedAsyncFallbackRes.status.state, 'success');
+      assert.equal(gateStackedAsyncFallbackRes.calls.merge.length, 1);
+      assert.equal(gateStackedAsyncFallbackRes.calls.request.length, 1);
+      assert.equal(
+        gateStackedAsyncFallbackRes.calls.request[0].route,
+        'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async'
+      );
+      assert.deepEqual(gateStackedAsyncFallbackRes.calls.request[0].payload, {
+        owner: 'shthed',
+        repo: 'capy',
+        pull_number: 490,
+        sha: gateHeadSha,
+        merge_method: expectedMergeMethod,
+        merge_action: 'direct_merge',
+      });
+
+      const gateStackedAsync409Res = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: targetBase,
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        graphqlImpl: async () => {
+          throw new Error('Auto-merge is not supported for stacked pull requests.');
+        },
+        mergeImpl: async () => {
+          throw new Error(
+            'Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead.'
+          );
+        },
+        requestImpl: async () => {
+          const err = new Error('Merge already queued');
+          err.status = 409;
+          throw err;
+        },
+      });
+      assert.equal(gateStackedAsync409Res.status.state, 'success');
+      assert.equal(gateStackedAsync409Res.calls.request.length, 1);
+      assert.equal(
+        gateStackedAsync409Res.core.warnings.some((w) => w.includes('Async stacked merge fallback failed')),
+        false
+      );
     }
+
+    // Draft PRs must include a `- [ ]` outstanding-work checklist before being marked Ready for Review
+    const gateDraftMissingChecklistRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+    });
+    assert.equal(gateDraftMissingChecklistRes.status.state, 'pending');
+    assert.equal(
+      gateDraftMissingChecklistRes.status.description.includes('Draft outstanding-work checklist'),
+      true
+    );
+    assert.equal(
+      gateDraftMissingChecklistRes.calls.createComment[0].body.includes(
+        '- [ ] **Draft Outstanding Work Checklist**'
+      ),
+      true
+    );
+
+    const draftWithOutstandingBody = [
+      '## Summary',
+      '',
+      'WIP Draft feature slice.',
+      '',
+      '## Outstanding Work Before Marking Ready',
+      '- [ ] Finish Playwright E2E regression tests',
+      '',
+      '### PR Readiness Score: 80%',
+    ].join('\n');
+    const gateDraftWithChecklistRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: true,
+      headSha: gateHeadSha,
+      body: draftWithOutstandingBody,
+    });
+    assert.equal(gateDraftWithChecklistRes.status.state, 'pending');
+    assert.equal(
+      gateDraftWithChecklistRes.status.description.includes('Draft outstanding-work checklist'),
+      false
+    );
+    assert.equal(
+      gateDraftWithChecklistRes.calls.createComment[0].body.includes(
+        '- [x] **Draft Outstanding Work Checklist**'
+      ),
+      true
+    );
+
+    const gateReadyStillUncheckedBlockedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      isDraft: false,
+      headSha: gateHeadSha,
+      body: draftWithOutstandingBody,
+      labels: ['review:ai-approved'],
+    });
+    assert.equal(gateReadyStillUncheckedBlockedRes.status.state, 'pending');
+    assert.deepEqual(
+      gateReadyStillUncheckedBlockedRes.calls.removeLabel.map((r) => r.name),
+      ['review:ai-approved']
+    );
 
     // Dependabot PRs omit ## Summary / PR Readiness Score, yet still reject unchecked or sub-100% lines
     const gateDependabotBetaExemptPassRes = await runReviewGateCase({

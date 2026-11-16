@@ -1,4 +1,8 @@
-### 3.0.20 - 2026-11-16 (Production, Beta)
+### 3.0.21 - 2026-11-16 (Beta)
+
+- Add GitHub asynchronous stacked-PR merge (`PUT /pulls/{pull_number}/merge-async`) fallback and enforce mandatory outstanding-work (`- [ ]`) checklists on Draft PRs in the PR review gate workflow, `AGENTS.md`, `PROJECT.md`, and `web/scripts/test.mjs` [#553](https://github.com/shthed/capy/pull/553)
+
+### 3.0.20 - 2026-11-16 (Production)
 
 - Tag `3.0.20` as `(Production, Beta)`, untag `3.0.18`, and sync `ROADMAP.md` and `TODO.md` for `v3.0.20` `beta -> main` release promotion [#548](https://github.com/shthed/capy/pull/548)
 - Hide unfinished Cloud/Co-op hub (`cloud-coop-hub`), top-bar Friends button (`topbar-coop-btn`), and `cloud_coop` tutorial/feature offer behind opt-in dev flags until `EPIC-3`/`EPIC-5` while keeping `Share Progress Link` and `Printable SVG` visible in `Saves`, add Google Play Store graphics/screenshots and `PLAY_STORE_LISTING.md` under `docs/play-store/`, and defer Android TV D-pad/TV Party UI until post-Play-Store launch [#547](https://github.com/shthed/capy/pull/547)
