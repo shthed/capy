@@ -80,8 +80,26 @@ jobs:
         run: |
           set -euo pipefail
           CF_API="https://api.cloudflare.com/client/v4"
-          api() { curl -fsS -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' "$@"; }
-          ZONE_ID="$(api "${CF_API}/zones?name=capypaint.com&account.id=${CF_ACCOUNT}" | jq -r '.result[0].id // empty')"
+          # Trim stray whitespace/newlines that often sneak in when pasting secrets.
+          case "${CF_TOKEN}${CF_ACCOUNT}" in *[[:space:]]*) echo "::warning::Cloudflare secrets contain whitespace; trimming it.";; esac
+          CF_TOKEN="$(printf '%s' "${CF_TOKEN}" | tr -d '[:space:]')"
+          CF_ACCOUNT="$(printf '%s' "${CF_ACCOUNT}" | tr -d '[:space:]')"
+          if ! printf '%s' "${CF_ACCOUNT}" | grep -Eq '^[0-9a-f]{32}$'; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is not a 32-character hex Account ID (copy it from the dashboard URL or Workers & Pages -> Account details)."
+            exit 1
+          fi
+          # Print Cloudflare's error codes/messages (never secret values) on any API failure.
+          api() {
+            local body
+            body="$(curl -sS -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' "$@")"
+            if [ "$(printf '%s' "${body}" | jq -r '.success // false')" != "true" ]; then
+              echo "::error::Cloudflare API call failed: $(printf '%s' "${body}" | jq -c '.errors // .' 2>/dev/null || echo 'non-JSON response')" >&2
+              return 1
+            fi
+            printf '%s' "${body}"
+          }
+          ZONES_JSON="$(api "${CF_API}/zones?name=capypaint.com&account.id=${CF_ACCOUNT}")"
+          ZONE_ID="$(printf '%s' "${ZONES_JSON}" | jq -r '.result[0].id // empty')"
           if [ -z "${ZONE_ID}" ]; then
             echo "::error::Zone capypaint.com not found in this account (token needs Zone: Read and the zone must be Active)."
             exit 1
