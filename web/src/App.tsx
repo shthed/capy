@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import {
   GenerationProgressPayload,
   GeneratorConfig,
+  MAX_GENERATOR_CONFIG,
   PaletteColor,
   PalettePreset,
   PuzzleData,
@@ -71,19 +72,26 @@ const ColorPickerPopover = React.lazy(() =>
   import('./components/ColorPickerPopover').then((m) => ({ default: m.ColorPickerPopover }))
 );
 
-function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
-  const def = DEFAULT_SETTINGS.generatorConfig;
+function matchesGeneratorConfig(cfg: GeneratorConfig, ref: GeneratorConfig): boolean {
   return (
-    (cfg.algorithm || 'AUTO') === (def.algorithm || 'AUTO') &&
-    (cfg.lineHandling || 'ABSORB_LINES') === (def.lineHandling || 'ABSORB_LINES') &&
-    cfg.paletteDetail === def.paletteDetail &&
-    cfg.imageType === def.imageType &&
-    cfg.colorCount === def.colorCount &&
-    cfg.minRegionArea === def.minRegionArea &&
-    cfg.maxRegions === def.maxRegions &&
-    cfg.resolution === def.resolution &&
-    cfg.smoothingPasses === def.smoothingPasses
+    (cfg.algorithm || 'AUTO') === (ref.algorithm || 'AUTO') &&
+    (cfg.lineHandling || 'ABSORB_LINES') === (ref.lineHandling || 'ABSORB_LINES') &&
+    cfg.paletteDetail === ref.paletteDetail &&
+    cfg.imageType === ref.imageType &&
+    cfg.colorCount === ref.colorCount &&
+    cfg.minRegionArea === ref.minRegionArea &&
+    cfg.maxRegions === ref.maxRegions &&
+    cfg.resolution === ref.resolution &&
+    cfg.smoothingPasses === ref.smoothingPasses
   );
+}
+
+function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
+  return matchesGeneratorConfig(cfg, DEFAULT_SETTINGS.generatorConfig);
+}
+
+function isMaxGeneratorConfig(cfg: GeneratorConfig): boolean {
+  return matchesGeneratorConfig(cfg, MAX_GENERATOR_CONFIG);
 }
 
 export function mergeCustomPalette(
@@ -3756,7 +3764,8 @@ export const App: React.FC = () => {
         !skipBootstrap &&
         (Boolean(prebakedSnapshotId) ||
           !forceGeneratorConfig ||
-          isDefaultGeneratorConfig(forceGeneratorConfig));
+          isDefaultGeneratorConfig(forceGeneratorConfig) ||
+          isMaxGeneratorConfig(forceGeneratorConfig));
 
       let handedOffToAsync = false;
       try {
@@ -3764,7 +3773,9 @@ export const App: React.FC = () => {
           let snaps = StorageService.loadSnapshots();
           let prebakedSnap = prebakedSnapshotId
             ? snaps.find((s) => s.id === prebakedSnapshotId)
-            : snaps.find((s) => s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath);
+            : snaps.find(
+                (s) => s.isAutoSample && s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
+              );
           if (!prebakedSnap) {
             try {
               const archiveUrl = prebakedSnapshotId
@@ -3781,7 +3792,10 @@ export const App: React.FC = () => {
                 snaps = StorageService.loadSnapshots();
                 prebakedSnap = prebakedSnapshotId
                   ? snaps.find((s) => s.id === prebakedSnapshotId)
-                  : snaps.find((s) => s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath);
+                  : snaps.find(
+                      (s) =>
+                        s.isAutoSample && s.sampleAssetPath?.replace(/^\.\//, '') === cleanSamplePath
+                    );
               }
             } catch {
               // Fall back to worker generation if archive unavailable
