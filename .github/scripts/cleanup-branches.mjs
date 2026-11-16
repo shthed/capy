@@ -346,7 +346,22 @@ export const evaluateBranchesForCleanup = async ({
   return { deletions, diagnostics };
 };
 
+const createScriptLogger = ({ quiet = false, logger = console } = {}) => {
+  if (quiet) {
+    return { log: () => {}, warn: () => {}, error: () => {} };
+  }
+  return {
+    log: typeof logger?.log === 'function' ? logger.log.bind(logger) : console.log.bind(console),
+    warn: typeof logger?.warn === 'function' ? logger.warn.bind(logger) : console.warn.bind(console),
+    error: typeof logger?.error === 'function' ? logger.error.bind(logger) : console.error.bind(console),
+  };
+};
+
 export const runCleanupBranches = async (rawOptions = {}) => {
+  const log = createScriptLogger({
+    quiet: Boolean(rawOptions.quiet),
+    logger: rawOptions.logger,
+  });
   const repository = rawOptions.repository ?? process.env.GITHUB_REPOSITORY ?? '';
   const [owner, repo] = repository.split('/');
 
@@ -391,12 +406,12 @@ export const runCleanupBranches = async (rawOptions = {}) => {
   const { data: repoInfo } = await requestWithRetry(`${baseUrl}`, reqOpts);
   const defaultBranch = repoInfo?.default_branch ?? 'main';
 
-  console.log('cleanup-branches: starting cleanup with configuration:');
-  console.log(`- repository: ${owner}/${repo}`);
-  console.log(`- dry run: ${dryRun}`);
-  console.log(`- allowed prefixes: ${includePrefixes.length > 0 ? includePrefixes.join(', ') : 'none configured (safe mode: skipping all)'}`);
-  console.log(`- minimum age (merged/closed PR): ${minAgeDays} day(s)`);
-  console.log(`- minimum age (stale unmerged): ${unmergedMinAgeDays} day(s)`);
+  log.log('cleanup-branches: starting cleanup with configuration:');
+  log.log(`- repository: ${owner}/${repo}`);
+  log.log(`- dry run: ${dryRun}`);
+  log.log(`- allowed prefixes: ${includePrefixes.length > 0 ? includePrefixes.join(', ') : 'none configured (safe mode: skipping all)'}`);
+  log.log(`- minimum age (merged/closed PR): ${minAgeDays} day(s)`);
+  log.log(`- minimum age (stale unmerged): ${unmergedMinAgeDays} day(s)`);
 
   const pulls = await paginate(baseUrl, 'pulls', { state: 'open', sort: 'updated', direction: 'desc' }, reqOpts);
   const activeBranches = new Set();
@@ -456,17 +471,17 @@ export const runCleanupBranches = async (rawOptions = {}) => {
     nowMs: rawOptions.nowMs ?? Date.now(),
   });
 
-  console.log(`cleanup-branches: evaluated ${branches.length} branch(es); ${deletions.length} eligible for deletion.`);
+  log.log(`cleanup-branches: evaluated ${branches.length} branch(es); ${deletions.length} eligible for deletion.`);
 
   if (diagnostics.length > 0) {
-    console.log('cleanup-branches: branch diagnostics:');
+    log.log('cleanup-branches: branch diagnostics:');
     for (const entry of diagnostics) {
-      console.log(`- ${entry.name}: ${entry.detail}`);
+      log.log(`- ${entry.name}: ${entry.detail}`);
     }
   }
 
   if (deletions.length === 0) {
-    console.log('cleanup-branches: no branches matched cleanup criteria.');
+    log.log('cleanup-branches: no branches matched cleanup criteria.');
     return { deleted: [], evaluated: branches.length, diagnostics };
   }
 
@@ -478,11 +493,11 @@ export const runCleanupBranches = async (rawOptions = {}) => {
   for (const entry of deletions) {
     const branchName = entry.name;
     if (dryRun) {
-      console.log(`cleanup-branches: dry run - would delete ${branchName}.`);
+      log.log(`cleanup-branches: dry run - would delete ${branchName}.`);
       continue;
     }
 
-    console.log(`cleanup-branches: deleting ${branchName}.`);
+    log.log(`cleanup-branches: deleting ${branchName}.`);
     await requestWithRetry(`${baseUrl}/git/refs/heads/${encodeRefPath(branchName)}`, {
       ...reqOpts,
       method: 'DELETE',
@@ -493,9 +508,9 @@ export const runCleanupBranches = async (rawOptions = {}) => {
   }
 
   if (dryRun) {
-    console.log(`cleanup-branches: dry run completed for ${deletions.length} branch(es).`);
+    log.log(`cleanup-branches: dry run completed for ${deletions.length} branch(es).`);
   } else {
-    console.log(`cleanup-branches: deleted ${deletedCount} branch(es).`);
+    log.log(`cleanup-branches: deleted ${deletedCount} branch(es).`);
   }
 
   return { deleted, evaluated: branches.length, diagnostics };

@@ -219,13 +219,24 @@ const runCommand = (command) => {
   return output.trim();
 };
 
-const resolveDefaultBranch = () => {
+const createScriptLogger = ({ quiet = false, logger = console } = {}) => {
+  if (quiet) {
+    return { log: () => {}, warn: () => {}, error: () => {} };
+  }
+  return {
+    log: typeof logger?.log === 'function' ? logger.log.bind(logger) : console.log.bind(console),
+    warn: typeof logger?.warn === 'function' ? logger.warn.bind(logger) : console.warn.bind(console),
+    error: typeof logger?.error === 'function' ? logger.error.bind(logger) : console.error.bind(console),
+  };
+};
+
+const resolveDefaultBranch = (log = console) => {
   try {
     const headRef = runCommand('git symbolic-ref refs/remotes/origin/HEAD');
     const match = headRef.match(/refs\/remotes\/origin\/(.+)$/);
     return match?.[1] ?? 'main';
-  } catch (error) {
-    console.warn('cleanup-gh-pages: unable to resolve origin/HEAD; defaulting to main.');
+  } catch {
+    log.warn('cleanup-gh-pages: unable to resolve origin/HEAD; defaulting to main.');
     return 'main';
   }
 };
@@ -358,6 +369,10 @@ const formatPrSummary = (prs) => {
 };
 
 export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
+  const log = createScriptLogger({
+    quiet: Boolean(rawOptions.quiet),
+    logger: rawOptions.logger,
+  });
   const repository = rawOptions.repository ?? process.env.GITHUB_REPOSITORY ?? '';
   const [owner, repo] = repository.split('/');
   if (!owner || !repo) {
@@ -379,18 +394,18 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
   const resolvedPagesDir = path.resolve(rawOptions.cwd ?? process.cwd(), pagesDir);
 
   if (!fs.existsSync(resolvedPagesDir) || !fs.statSync(resolvedPagesDir).isDirectory()) {
-    console.error(`cleanup-gh-pages: pages directory not found at ${resolvedPagesDir}`);
+    log.error(`cleanup-gh-pages: pages directory not found at ${resolvedPagesDir}`);
     process.exitCode = 1;
     return { deleted: [], evaluated: 0 };
   }
 
   const legacyReadme = path.join(resolvedPagesDir, 'README');
   if (fs.existsSync(legacyReadme)) {
-    console.log('cleanup-gh-pages: removing legacy README/ directory.');
+    log.log('cleanup-gh-pages: removing legacy README/ directory.');
     deleteDirectory(legacyReadme);
   }
 
-  const defaultBranch = rawOptions.defaultBranch ?? resolveDefaultBranch();
+  const defaultBranch = rawOptions.defaultBranch ?? resolveDefaultBranch(log);
   const remoteBranches = rawOptions.remoteBranches ?? fetchRemoteBranches();
 
   const liveBranchSlugs = new Set();
@@ -436,7 +451,7 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
   const previewDirectories = [...pullPreviewDirectories, ...legacyPreviewDirectories];
 
   if (previewDirectories.length === 0) {
-    console.log('cleanup-gh-pages: no preview directories detected.');
+    log.log('cleanup-gh-pages: no preview directories detected.');
     return { deleted: [], evaluated: 0 };
   }
 
@@ -469,7 +484,7 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
     };
   });
 
-  console.log('::debug::cleanup-gh-pages: currently deployed previews:');
+  log.log('::debug::cleanup-gh-pages: currently deployed previews:');
   for (const entry of inventory) {
     const prSummary = (() => {
       if (entry.pull) {
@@ -484,16 +499,16 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
     const updatedLabel = entry.lastUpdated instanceof Date ? entry.lastUpdated.toISOString() : new Date(entry.lastUpdated).toISOString();
     const label = entry.kind === 'pull' ? `alpha/${entry.name}` : entry.name;
 
-    console.log(`::debug::- ${label}: ${branchState}; last updated ${updatedLabel}; ${freshness}; PRs: ${prSummary}`);
+    log.log(`::debug::- ${label}: ${branchState}; last updated ${updatedLabel}; ${freshness}; PRs: ${prSummary}`);
   }
 
   const deletions = selectPreviewDeletions(inventory, options);
 
   if (deletions.length === 0) {
     if (options.targetPr !== null) {
-      console.log(`cleanup-gh-pages: no preview directories matched PR #${options.targetPr} for removal.`);
+      log.log(`cleanup-gh-pages: no preview directories matched PR #${options.targetPr} for removal.`);
     } else {
-      console.log('cleanup-gh-pages: no preview directories met cleanup criteria.');
+      log.log('cleanup-gh-pages: no preview directories met cleanup criteria.');
     }
     return { deleted: [], evaluated: inventory.length };
   }
@@ -502,11 +517,11 @@ export const runCleanupGhPagesPreviews = async (rawOptions = {}) => {
     ? `targeted removal for PR #${options.targetPr}`
     : 'closed or non-open pull request preview directories';
 
-  console.log(`cleanup-gh-pages: removing ${removalReason}:`);
+  log.log(`cleanup-gh-pages: removing ${removalReason}:`);
   const deleted = [];
   for (const entry of deletions) {
     const label = entry.kind === 'pull' ? `alpha/${entry.name}` : entry.name;
-    console.log(`- ${label}`);
+    log.log(`- ${label}`);
     deleteDirectory(entry.absolutePath);
     deleted.push(label);
   }
