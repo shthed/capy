@@ -894,6 +894,93 @@ jobs:
                   ? 'MERGE'
                   : existingMethod || 'SQUASH';
 
+                // Immediate merge with stacked-PR merge-async fallback (409 = already queued/merged).
+                const directMergeWithFallback = async () => {
+                  try {
+                    await github.rest.pulls.merge({
+                      owner,
+                      repo,
+                      pull_number: prNumber,
+                      sha: headSha,
+                      merge_method: desiredMergeMethod.toLowerCase(),
+                    });
+                    return true;
+                  } catch (mergeErr) {
+                    const mergeMsg = String(mergeErr?.message || mergeErr || '');
+                    if (
+                      /stacked PRs|asynchronous merge endpoint/i.test(mergeMsg) &&
+                      typeof github.request === 'function'
+                    ) {
+                      try {
+                        await github.request(
+                          'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async',
+                          {
+                            owner,
+                            repo,
+                            pull_number: prNumber,
+                            sha: headSha,
+                            merge_method: desiredMergeMethod.toLowerCase(),
+                            merge_action: 'direct_merge',
+                          }
+                        );
+                        return true;
+                      } catch (asyncMergeErr) {
+                        if (Number(asyncMergeErr?.status) !== 409) {
+                          core.warning(
+                            `Async stacked merge fallback failed for PR #${prNumber}: ${asyncMergeErr.message}`
+                          );
+                        }
+                      }
+                    } else {
+                      core.warning(
+                        `Immediate merge fallback failed for PR #${prNumber}: ${mergeMsg}`
+                      );
+                    }
+                  }
+                  return false;
+                };
+
+                // Blocking CI evidence on the exact head SHA: latest `Build & Test` must be green and
+                // no latest check run may be failing. Async E2E/Android/Pages stay non-blocking.
+                const headChecksGreen = async () => {
+                  if (typeof github.rest.checks?.listForRef !== 'function') return false;
+                  try {
+                    const { data } = await github.rest.checks.listForRef({
+                      owner,
+                      repo,
+                      ref: headSha,
+                      per_page: 100,
+                    });
+                    const latestByName = new Map();
+                    for (const run of data?.check_runs || []) {
+                      const prev = latestByName.get(run.name);
+                      if (!prev || new Date(run.started_at) > new Date(prev.started_at)) {
+                        latestByName.set(run.name, run);
+                      }
+                    }
+                    const buildAndTest = latestByName.get('Build & Test');
+                    if (
+                      !buildAndTest ||
+                      buildAndTest.status !== 'completed' ||
+                      buildAndTest.conclusion !== 'success'
+                    ) {
+                      return false;
+                    }
+                    for (const run of latestByName.values()) {
+                      if (
+                        run.status === 'completed' &&
+                        ['failure', 'timed_out', 'action_required'].includes(run.conclusion)
+                      ) {
+                        return false;
+                      }
+                    }
+                    return true;
+                  } catch (err) {
+                    core.warning(`Failed to read head check runs for PR #${prNumber}: ${err.message}`);
+                    return false;
+                  }
+                };
+
                 if (!pr.auto_merge || existingMethod !== desiredMergeMethod) {
                   try {
                     await github.graphql(
@@ -910,51 +997,37 @@ jobs:
                   } catch (err) {
                     const msg = String(err?.message || err || '');
                     if (/clean status|stacked pull requests/i.test(msg)) {
-                      try {
-                        await github.rest.pulls.merge({
-                          owner,
-                          repo,
-                          pull_number: prNumber,
-                          sha: headSha,
-                          merge_method: desiredMergeMethod.toLowerCase(),
-                        });
-                      } catch (mergeErr) {
-                        const mergeMsg = String(mergeErr?.message || mergeErr || '');
-                        if (
-                          /stacked PRs|asynchronous merge endpoint/i.test(mergeMsg) &&
-                          typeof github.request === 'function'
-                        ) {
-                          try {
-                            await github.request(
-                              'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async',
-                              {
-                                owner,
-                                repo,
-                                pull_number: prNumber,
-                                sha: headSha,
-                                merge_method: desiredMergeMethod.toLowerCase(),
-                                merge_action: 'direct_merge',
-                              }
-                            );
-                          } catch (asyncMergeErr) {
-                            if (Number(asyncMergeErr?.status) !== 409) {
-                              core.warning(
-                                `Async stacked merge fallback failed for PR #${prNumber}: ${asyncMergeErr.message}`
-                              );
-                            }
-                          }
-                        } else {
-                          core.warning(
-                            `Immediate merge fallback failed for PR #${prNumber}: ${mergeMsg}`
-                          );
-                        }
-                      }
+                      await directMergeWithFallback();
                     } else {
                       core.warning(
                         `Auto-merge enablement warning for PR #${prNumber}: ${msg}`
                       );
                     }
                   }
+                }
+
+                // Auto-merge can sit forever when GitHub reports `blocked` for non-check ruleset
+                // requirements (for example extra approval for unattributed changes) even though the
+                // strict 100% AI gate passed. Per Owner directive, merge directly once blocking CI is green.
+                try {
+                  const { data: livePr } = await github.rest.pulls.get({
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                  });
+                  if (
+                    livePr?.state === 'open' &&
+                    !livePr.merged &&
+                    !livePr.draft &&
+                    livePr.head?.sha === headSha &&
+                    livePr.mergeable !== false &&
+                    livePr.mergeable_state === 'blocked' &&
+                    (await headChecksGreen())
+                  ) {
+                    await directMergeWithFallback();
+                  }
+                } catch (err) {
+                  core.warning(`Blocked-PR direct merge check failed for PR #${prNumber}: ${err.message}`);
                 }
               } else if (
                 pr.auto_merge &&
