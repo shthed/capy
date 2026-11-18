@@ -92,11 +92,30 @@ export interface QuotaWarning {
   message: string;
 }
 
+type BackupDataKind = 'snapshots' | 'settings' | 'activeState' | 'generic';
+
+interface BackupCandidateMetrics {
+  parseOk: boolean;
+  nonEmpty: boolean;
+  maxTs: number;
+  knownFieldCount: number;
+  fieldCount: number;
+  totalResetEpoch: number;
+  totalFilled: number;
+  count: number;
+  completeness: number;
+  hasSnapshotId: boolean;
+  snapshotId: string;
+  resetEpoch: number;
+  paintedPlusFilled: number;
+}
+
 export class StorageService {
   private static dbPromises = new Map<string, Promise<IDBDatabase>>();
   private static quotaListeners = new Set<(warning: QuotaWarning) => void>();
   private static persistentStorageRequested = false;
   private static pendingBackupWrites = new Map<string, string>();
+  private static quotaFailedLocalKeys = new Set<string>();
   private static backupFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private static lifecycleFlushRegistered = false;
   private static previewCache = new Map<string, string>();
@@ -194,6 +213,9 @@ export class StorageService {
     const entries = Array.from(this.pendingBackupWrites.entries());
     this.pendingBackupWrites.clear();
     for (const [backupKey, serialized] of entries) {
+      if (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized)) {
+        continue;
+      }
       try {
         NativeBridge.saveBackup(backupKey, serialized);
       } catch {
@@ -207,6 +229,9 @@ export class StorageService {
     serialized: string,
     immediate: boolean = false
   ): void {
+    if (!immediate && this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized)) {
+      return;
+    }
     this.ensureLifecycleFlushRegistered();
     if (immediate) {
       this.pendingBackupWrites.delete(backupKey);
@@ -233,27 +258,330 @@ export class StorageService {
     }
   }
 
-  private static loadRawWithBackupFallback(storageKey: string, backupKey: string): string | null {
-    const localVal = localStorage.getItem(storageKey);
-    if (localVal) return localVal;
-    if (this.pendingBackupWrites.has(backupKey)) {
-      return this.pendingBackupWrites.get(backupKey) || null;
+  private static safeLocalGet(storageKey: string): string | null {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return null;
+      return localStorage.getItem(storageKey);
+    } catch {
+      return null;
     }
-    return NativeBridge.loadBackup(backupKey);
+  }
+
+  private static safeLocalHeal(storageKey: string, value: string): void {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return;
+      localStorage.setItem(storageKey, value);
+      this.quotaFailedLocalKeys.delete(storageKey);
+    } catch {
+      // Best-effort heal without triggering user-facing quota warning
+    }
+  }
+
+  private static safeNativeLoadBackup(backupKey: string): string | null {
+    try {
+      const val = NativeBridge.loadBackup(backupKey);
+      return val && val.length > 0 ? val : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private static matchesScopedKey(candidateKey: string, baseKey: string): boolean {
+    return candidateKey === baseKey || candidateKey.startsWith(`${baseKey}__`);
+  }
+
+  private static isSnapshotsBackupKey(backupKey: string): boolean {
+    return this.matchesScopedKey(backupKey, SNAPSHOTS_KEY);
+  }
+
+  private static isEmptySnapshotsPayload(serialized: string): boolean {
+    const trimmed = serialized.trim();
+    if (trimmed.length === 0 || trimmed === '[]') return true;
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) && parsed.length === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private static resolveBackupKind(storageKey: string, backupKey: string): BackupDataKind {
+    if (this.matchesScopedKey(storageKey, SNAPSHOTS_KEY) || this.matchesScopedKey(backupKey, SNAPSHOTS_KEY)) {
+      return 'snapshots';
+    }
+    if (this.matchesScopedKey(storageKey, SETTINGS_KEY) || this.matchesScopedKey(backupKey, SETTINGS_KEY)) {
+      return 'settings';
+    }
+    if (this.matchesScopedKey(storageKey, ACTIVE_STATE_KEY) || this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY)) {
+      return 'activeState';
+    }
+    return 'generic';
+  }
+
+  private static parseTimestampMs(val: unknown): number {
+    return typeof val === 'number' && Number.isFinite(val) && val > 0 ? val : 0;
+  }
+
+  private static nonNegFinite(val: unknown): number {
+    return typeof val === 'number' && Number.isFinite(val) && val >= 0 ? val : 0;
+  }
+
+  private static extractObjectTimestamp(obj: Record<string, unknown>): number {
+    return Math.max(
+      this.parseTimestampMs(obj.savedAt),
+      this.parseTimestampMs(obj.updatedAt),
+      this.parseTimestampMs(obj.timestamp),
+      this.parseTimestampMs(obj.lastModified)
+    );
+  }
+
+  private static inspectCandidate(raw: string, kind: BackupDataKind): BackupCandidateMetrics {
+    const base: BackupCandidateMetrics = {
+      parseOk: false,
+      nonEmpty: false,
+      maxTs: 0,
+      knownFieldCount: 0,
+      fieldCount: 0,
+      totalResetEpoch: 0,
+      totalFilled: 0,
+      count: 0,
+      completeness: 0,
+      hasSnapshotId: false,
+      snapshotId: '',
+      resetEpoch: 0,
+      paintedPlusFilled: 0,
+    };
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return base;
+
+    if (kind === 'generic') {
+      return { ...base, parseOk: true, nonEmpty: true };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      return base;
+    }
+
+    if (kind === 'snapshots') {
+      if (!Array.isArray(parsed)) return base;
+      const valid = parsed.filter((s): s is Record<string, unknown> =>
+        Boolean(
+          s &&
+            typeof s === 'object' &&
+            !Array.isArray(s) &&
+            typeof (s as Record<string, unknown>).id === 'string' &&
+            ((s as Record<string, unknown>).id as string).length > 0 &&
+            typeof (s as Record<string, unknown>).title === 'string'
+        )
+      );
+      let maxTs = 0;
+      let totalResetEpoch = 0;
+      let totalFilled = 0;
+      let completeness = 0;
+      for (const s of valid) {
+        const ts = Math.max(this.parseTimestampMs(s.lastOpened), this.parseTimestampMs(s.timestamp));
+        if (ts > maxTs) maxTs = ts;
+        totalResetEpoch += this.nonNegFinite(s.resetEpoch);
+        const filledIdsCount = Array.isArray(s.filledRegionIds) ? s.filledRegionIds.length : 0;
+        totalFilled += Math.max(this.nonNegFinite(s.filledCount), filledIdsCount);
+        const totalCountBonus =
+          typeof s.totalCount === 'number' && Number.isFinite(s.totalCount) && s.totalCount > 0 ? 1 : 0;
+        const paletteBonus = Array.isArray(s.customPalette) ? 1 : 0;
+        const sourceBonus = s.sourceRef ? 1 : 0;
+        const paintedBonus =
+          s.paintedRegionColors && typeof s.paintedRegionColors === 'object' && !Array.isArray(s.paintedRegionColors)
+            ? Object.keys(s.paintedRegionColors as Record<string, unknown>).length
+            : 0;
+        completeness += totalCountBonus + paletteBonus + sourceBonus + paintedBonus;
+      }
+      return {
+        ...base,
+        parseOk: true,
+        nonEmpty: valid.length > 0,
+        maxTs,
+        totalResetEpoch,
+        totalFilled,
+        count: valid.length,
+        completeness,
+      };
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return base;
+    }
+
+    const rec = parsed as Record<string, unknown>;
+    const keys = Object.keys(rec);
+    const nonEmpty = keys.length > 0;
+    const maxTs = this.extractObjectTimestamp(rec);
+
+    if (kind === 'settings') {
+      const knownFieldCount = keys.filter(
+        (k) => (k in DEFAULT_SETTINGS || k === 'undoDefaultMigrated') && rec[k] !== undefined
+      ).length;
+      return {
+        ...base,
+        parseOk: true,
+        nonEmpty,
+        maxTs,
+        knownFieldCount,
+        fieldCount: keys.length,
+      };
+    }
+
+    const snapshotId = typeof rec.activeSnapshotId === 'string' ? rec.activeSnapshotId.trim() : '';
+    const hasSnapshotId = snapshotId.length > 0;
+    const resetEpoch = this.nonNegFinite(rec.resetEpoch);
+    const filledCount = Array.isArray(rec.filledRegionIds)
+      ? rec.filledRegionIds.filter((id) => typeof id === 'number' && Number.isFinite(id)).length
+      : 0;
+    const paintedCount =
+      rec.paintedRegionColors && typeof rec.paintedRegionColors === 'object' && !Array.isArray(rec.paintedRegionColors)
+        ? Object.keys(rec.paintedRegionColors as Record<string, unknown>).length
+        : 0;
+    return {
+      ...base,
+      parseOk: true,
+      nonEmpty,
+      maxTs,
+      hasSnapshotId,
+      snapshotId,
+      resetEpoch,
+      paintedPlusFilled: filledCount + paintedCount,
+      fieldCount: keys.length,
+    };
+  }
+
+  private static isValidNonEmptyPayload(raw: string, kind: BackupDataKind): boolean {
+    const metrics = this.inspectCandidate(raw, kind);
+    return metrics.parseOk && metrics.nonEmpty;
+  }
+
+  private static pickWinner(
+    localRaw: string,
+    backupRaw: string,
+    kind: BackupDataKind,
+    preferBackupOnTie: boolean
+  ): string {
+    const a = this.inspectCandidate(localRaw, kind);
+    const b = this.inspectCandidate(backupRaw, kind);
+
+    if (a.parseOk !== b.parseOk) return a.parseOk ? localRaw : backupRaw;
+    if (a.nonEmpty !== b.nonEmpty) return a.nonEmpty ? localRaw : backupRaw;
+
+    if (kind === 'generic') {
+      return preferBackupOnTie ? backupRaw : localRaw;
+    }
+
+    if (a.maxTs !== b.maxTs) return a.maxTs > b.maxTs ? localRaw : backupRaw;
+
+    if (kind === 'snapshots') {
+      if (a.count === b.count && a.totalResetEpoch !== b.totalResetEpoch) {
+        return a.totalResetEpoch > b.totalResetEpoch ? localRaw : backupRaw;
+      }
+      if (a.totalFilled !== b.totalFilled) return a.totalFilled > b.totalFilled ? localRaw : backupRaw;
+      if (a.count !== b.count) return a.count > b.count ? localRaw : backupRaw;
+      if (a.completeness !== b.completeness) return a.completeness > b.completeness ? localRaw : backupRaw;
+      return preferBackupOnTie ? backupRaw : localRaw;
+    }
+
+    if (kind === 'settings') {
+      if (a.knownFieldCount !== b.knownFieldCount) {
+        return a.knownFieldCount > b.knownFieldCount ? localRaw : backupRaw;
+      }
+      if (a.fieldCount !== b.fieldCount) return a.fieldCount > b.fieldCount ? localRaw : backupRaw;
+      return preferBackupOnTie ? backupRaw : localRaw;
+    }
+
+    if (a.hasSnapshotId !== b.hasSnapshotId) return a.hasSnapshotId ? localRaw : backupRaw;
+    if (a.snapshotId === b.snapshotId && a.resetEpoch !== b.resetEpoch) {
+      return a.resetEpoch > b.resetEpoch ? localRaw : backupRaw;
+    }
+    if (a.paintedPlusFilled !== b.paintedPlusFilled) {
+      return a.paintedPlusFilled > b.paintedPlusFilled ? localRaw : backupRaw;
+    }
+    if (a.fieldCount !== b.fieldCount) return a.fieldCount > b.fieldCount ? localRaw : backupRaw;
+    return preferBackupOnTie ? backupRaw : localRaw;
+  }
+
+  private static selectPreferredBackupRaw(
+    pendingRaw: string | null,
+    nativeRaw: string | null,
+    kind: BackupDataKind
+  ): string | null {
+    const hasPending = Boolean(pendingRaw && pendingRaw.length > 0);
+    const hasNative = Boolean(nativeRaw && nativeRaw.length > 0);
+    if (hasPending && hasNative) {
+      if (this.isValidNonEmptyPayload(pendingRaw!, kind)) return pendingRaw!;
+      if (this.isValidNonEmptyPayload(nativeRaw!, kind)) return nativeRaw!;
+      return pendingRaw!;
+    }
+    if (hasPending) return pendingRaw!;
+    if (hasNative) return nativeRaw!;
+    return null;
+  }
+
+  private static loadRawWithBackupFallback(
+    storageKey: string,
+    backupKey: string,
+    kind?: BackupDataKind
+  ): string | null {
+    const effectiveKind = kind ?? this.resolveBackupKind(storageKey, backupKey);
+    const localVal = this.safeLocalGet(storageKey);
+    const pendingRaw = this.pendingBackupWrites.has(backupKey)
+      ? (this.pendingBackupWrites.get(backupKey) ?? null)
+      : null;
+    const nativeRaw = this.safeNativeLoadBackup(backupKey);
+    const backupVal = this.selectPreferredBackupRaw(pendingRaw, nativeRaw, effectiveKind);
+
+    if (!backupVal) {
+      return localVal && localVal.length > 0 ? localVal : null;
+    }
+    if (!localVal || localVal.length === 0) {
+      if (this.isValidNonEmptyPayload(backupVal, effectiveKind)) {
+        this.safeLocalHeal(storageKey, backupVal);
+      }
+      return backupVal;
+    }
+    if (localVal === backupVal) {
+      this.quotaFailedLocalKeys.delete(storageKey);
+      return localVal;
+    }
+    const selected = this.pickWinner(
+      localVal,
+      backupVal,
+      effectiveKind,
+      this.quotaFailedLocalKeys.has(storageKey)
+    );
+    if (selected !== localVal && this.isValidNonEmptyPayload(selected, effectiveKind)) {
+      this.safeLocalHeal(storageKey, selected);
+    }
+    return selected;
   }
 
   private static writeLocalAndScheduleBackup(
     storageKey: string,
     backupKey: string,
     serialized: string,
-    immediateBackup: boolean = false
+    immediateBackup: boolean = false,
+    skipBackup: boolean = false
   ): void {
     try {
-      localStorage.setItem(storageKey, serialized);
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        localStorage.setItem(storageKey, serialized);
+        this.quotaFailedLocalKeys.delete(storageKey);
+      }
     } catch (err) {
+      this.quotaFailedLocalKeys.add(storageKey);
       if (this.isQuotaError(err)) {
         this.notifyQuotaWarning(storageKey);
       }
+    }
+    if (skipBackup) {
+      return;
     }
     try {
       this.scheduleBackupWrite(backupKey, serialized, immediateBackup);
@@ -333,7 +661,7 @@ export class StorageService {
     try {
       const storageKey = resolveScopedStorageKey(SETTINGS_KEY);
       const backupKey = resolveScopedBackupKey(SETTINGS_KEY);
-      const raw = this.loadRawWithBackupFallback(storageKey, backupKey);
+      const raw = this.loadRawWithBackupFallback(storageKey, backupKey, 'settings');
       if (!raw) {
         return {
           ...DEFAULT_SETTINGS,
@@ -370,7 +698,7 @@ export class StorageService {
       const undoMigrationKey = resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY);
       const hasUndoMigration =
         Boolean((parsed as Record<string, unknown>).undoDefaultMigrated) ||
-        localStorage.getItem(undoMigrationKey) === '1';
+        this.safeLocalGet(undoMigrationKey) === '1';
       const enableUndo = hasUndoMigration
         ? typeof parsed.enableUndo === 'boolean'
           ? parsed.enableUndo
@@ -441,6 +769,7 @@ export class StorageService {
           ...genCfg,
         },
       };
+      delete (resolved as unknown as Record<string, unknown>).savedAt;
       if (!hasUndoMigration) {
         StorageService.saveSettings(resolved);
       }
@@ -455,7 +784,7 @@ export class StorageService {
 
   static saveSettings(settings: UserSettings): void {
     try {
-      const payload = { ...settings, undoDefaultMigrated: true };
+      const payload = { ...settings, undoDefaultMigrated: true, savedAt: Date.now() };
       const serialized = JSON.stringify(payload);
       this.writeLocalAndScheduleBackup(
         resolveScopedStorageKey(SETTINGS_KEY),
@@ -463,7 +792,9 @@ export class StorageService {
         serialized
       );
       try {
-        localStorage.setItem(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY), '1');
+        if (typeof localStorage !== 'undefined' && localStorage !== null) {
+          localStorage.setItem(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY), '1');
+        }
       } catch (err) {
         if (this.isQuotaError(err)) {
           this.notifyQuotaWarning(resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY));
@@ -552,7 +883,7 @@ export class StorageService {
     try {
       const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
       const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
-      const raw = this.loadRawWithBackupFallback(storageKey, backupKey);
+      const raw = this.loadRawWithBackupFallback(storageKey, backupKey, 'snapshots');
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
@@ -597,15 +928,23 @@ export class StorageService {
     }
   }
 
-  static saveSnapshots(snapshots: SavedSnapshot[]): void {
+  static saveSnapshots(
+    snapshots: SavedSnapshot[],
+    options?: { allowEmptyBackup?: boolean; immediateBackup?: boolean }
+  ): void {
     try {
       const stripped = this.stripInlinePreviews(snapshots);
       const serialized = JSON.stringify(stripped);
+      const allowEmptyBackup = Boolean(options?.allowEmptyBackup);
+      const isEmpty = stripped.length === 0;
+      const skipBackup = isEmpty && !allowEmptyBackup;
+      const immediateBackup = (isEmpty && allowEmptyBackup) || (Boolean(options?.immediateBackup) && !skipBackup);
       this.writeLocalAndScheduleBackup(
         resolveScopedStorageKey(SNAPSHOTS_KEY),
         resolveScopedBackupKey(SNAPSHOTS_KEY),
         serialized,
-        stripped.length === 0
+        immediateBackup,
+        skipBackup
       );
     } catch {
       // ignore
@@ -710,7 +1049,14 @@ export class StorageService {
     this.previewCache.delete(this.previewCacheKey(id));
     const list = this.loadSnapshots();
     const updated = list.filter((s) => s.id !== id);
-    this.saveSnapshots(updated);
+    if (updated.length < list.length) {
+      this.saveSnapshots(updated, {
+        immediateBackup: true,
+        allowEmptyBackup: updated.length === 0,
+      });
+    } else {
+      this.saveSnapshots(updated);
+    }
     const active = this.loadActiveState();
     if (active?.activeSnapshotId === id) {
       this.clearActiveState();
@@ -739,7 +1085,7 @@ export class StorageService {
         this.previewCache.delete(key);
       }
     }
-    this.saveSnapshots([]);
+    this.saveSnapshots([], { allowEmptyBackup: true, immediateBackup: true });
     this.clearActiveState();
     if (typeof indexedDB !== 'undefined') {
       try {
@@ -859,10 +1205,11 @@ export class StorageService {
           : existing?.activeSnapshotId === state.activeSnapshotId
             ? existing.resetEpoch
             : undefined;
-      const payload =
+      const basePayload =
         effectiveEpoch !== undefined && effectiveEpoch > 0
           ? { ...state, resetEpoch: effectiveEpoch }
-          : state;
+          : { ...state };
+      const payload = { ...basePayload, savedAt: Date.now() };
       const serialized = JSON.stringify(payload);
       this.writeLocalAndScheduleBackup(
         resolveScopedStorageKey(ACTIVE_STATE_KEY),
@@ -879,7 +1226,10 @@ export class StorageService {
       const storageKey = resolveScopedStorageKey(ACTIVE_STATE_KEY);
       const backupKey = resolveScopedBackupKey(ACTIVE_STATE_KEY);
       this.pendingBackupWrites.delete(backupKey);
-      localStorage.removeItem(storageKey);
+      this.quotaFailedLocalKeys.delete(storageKey);
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        localStorage.removeItem(storageKey);
+      }
       this.scheduleBackupWrite(backupKey, '', true);
     } catch {
       // ignore
@@ -900,12 +1250,13 @@ export class StorageService {
     try {
       const raw = this.loadRawWithBackupFallback(
         resolveScopedStorageKey(ACTIVE_STATE_KEY),
-        resolveScopedBackupKey(ACTIVE_STATE_KEY)
+        resolveScopedBackupKey(ACTIVE_STATE_KEY),
+        'activeState'
       );
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-      return {
+      const normalized = {
         ...parsed,
         activeSnapshotId: typeof parsed.activeSnapshotId === 'string' ? parsed.activeSnapshotId : null,
         activeColorId: typeof parsed.activeColorId === 'number' && Number.isFinite(parsed.activeColorId) ? parsed.activeColorId : 1,
@@ -916,6 +1267,8 @@ export class StorageService {
         panOffsetX: typeof parsed.panOffsetX === 'number' && Number.isFinite(parsed.panOffsetX) ? parsed.panOffsetX : 0,
         panOffsetY: typeof parsed.panOffsetY === 'number' && Number.isFinite(parsed.panOffsetY) ? parsed.panOffsetY : 0,
       };
+      delete (normalized as Record<string, unknown>).savedAt;
+      return normalized;
     } catch {
       return null;
     }
