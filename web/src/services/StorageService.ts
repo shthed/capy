@@ -115,6 +115,7 @@ export class StorageService {
   private static quotaListeners = new Set<(warning: QuotaWarning) => void>();
   private static persistentStorageRequested = false;
   private static pendingBackupWrites = new Map<string, string>();
+  private static pendingBackupStorageKeys = new Map<string, string>();
   private static pendingForcedBackupKeys = new Set<string>();
   private static staleNativeBackupKeys = new Set<string>();
   private static quotaFailedLocalKeys = new Set<string>();
@@ -219,12 +220,30 @@ export class StorageService {
     }
     if (this.pendingBackupWrites.size === 0) return;
     const entries = Array.from(this.pendingBackupWrites.entries());
+    const storageKeyMap = new Map(this.pendingBackupStorageKeys);
     this.pendingBackupWrites.clear();
+    this.pendingBackupStorageKeys.clear();
     for (const [backupKey, serialized] of entries) {
+      const storageKey = storageKeyMap.get(backupKey) ?? backupKey;
       const isForced = this.pendingForcedBackupKeys.has(backupKey);
       if (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized) && !isForced) {
         this.pendingForcedBackupKeys.delete(backupKey);
         continue;
+      }
+      if (!this.hasReadableNativeBackup() && this.quotaFailedLocalKeys.has(storageKey)) {
+        if (this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0) {
+          if (this.quotaFailedDeleteKeys.has(storageKey) && typeof localStorage !== 'undefined' && localStorage !== null) {
+            try {
+              localStorage.removeItem(storageKey);
+              this.quotaFailedLocalKeys.delete(storageKey);
+              this.quotaFailedDeleteKeys.delete(storageKey);
+            } catch {
+              // Ignore removeItem failure when storage is restricted/full
+            }
+          }
+        } else if (!this.isSnapshotsBackupKey(backupKey) || !this.isEmptySnapshotsPayload(serialized) || isForced) {
+          this.safeLocalHeal(storageKey, serialized);
+        }
       }
       let ok = false;
       try {
@@ -235,9 +254,13 @@ export class StorageService {
       if (!isNative || ok) {
         this.staleNativeBackupKeys.delete(backupKey);
         this.pendingForcedBackupKeys.delete(backupKey);
+        if (!this.hasReadableNativeBackup()) {
+          this.quotaFailedLocalKeys.delete(storageKey);
+        }
       } else {
         this.staleNativeBackupKeys.add(backupKey);
         this.pendingBackupWrites.set(backupKey, serialized);
+        this.pendingBackupStorageKeys.set(backupKey, storageKey);
         if (isForced) {
           this.pendingForcedBackupKeys.add(backupKey);
         }
@@ -248,7 +271,8 @@ export class StorageService {
   private static scheduleBackupWrite(
     backupKey: string,
     serialized: string,
-    immediate: boolean = false
+    immediate: boolean = false,
+    storageKey: string = backupKey
   ): void {
     const isEmptySnapshot = this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized);
     if (!immediate && isEmptySnapshot) {
@@ -259,6 +283,7 @@ export class StorageService {
     this.ensureLifecycleFlushRegistered();
     if (immediate) {
       this.pendingBackupWrites.delete(backupKey);
+      this.pendingBackupStorageKeys.delete(backupKey);
       this.pendingForcedBackupKeys.delete(backupKey);
       const isNative = NativeBridge.isNative;
       let ok = false;
@@ -269,10 +294,10 @@ export class StorageService {
       }
       if (!isNative || ok) {
         this.staleNativeBackupKeys.delete(backupKey);
-        this.pendingForcedBackupKeys.delete(backupKey);
       } else {
         this.staleNativeBackupKeys.add(backupKey);
         this.pendingBackupWrites.set(backupKey, serialized);
+        this.pendingBackupStorageKeys.set(backupKey, storageKey);
         if (isEmptySnapshot || isEmptyActive) {
           this.pendingForcedBackupKeys.add(backupKey);
         }
@@ -281,6 +306,7 @@ export class StorageService {
     }
     this.pendingForcedBackupKeys.delete(backupKey);
     this.pendingBackupWrites.set(backupKey, serialized);
+    this.pendingBackupStorageKeys.set(backupKey, storageKey);
     if (this.backupFlushTimer === null) {
       this.backupFlushTimer = setTimeout(() => {
         this.backupFlushTimer = null;
@@ -314,6 +340,10 @@ export class StorageService {
     } catch {
       // Best-effort heal without triggering user-facing quota warning
     }
+  }
+
+  private static hasReadableNativeBackup(): boolean {
+    return typeof window !== 'undefined' && typeof window.CapyAndroid?.loadBackup === 'function';
   }
 
   private static safeNativeLoadBackup(backupKey: string): string | null {
@@ -498,7 +528,7 @@ export class StorageService {
     const b = this.inspectCandidate(backupRaw, kind);
 
     if (a.parseOk !== b.parseOk) return a.parseOk ? localRaw : backupRaw;
-    if (preferBackupOnTie && b.parseOk && (forceBackupWins || b.maxTs >= a.maxTs)) {
+    if (preferBackupOnTie && b.parseOk && (forceBackupWins || b.nonEmpty)) {
       return backupRaw;
     }
     if (a.nonEmpty !== b.nonEmpty) return a.nonEmpty ? localRaw : backupRaw;
@@ -576,13 +606,23 @@ export class StorageService {
       ((this.pendingForcedBackupKeys.has(backupKey) && pendingRaw !== null && pendingRaw.trim().length === 0) ||
         (this.quotaFailedDeleteKeys.has(storageKey) && (!hasPending || (pendingRaw !== null && pendingRaw.trim().length === 0))));
     if (isForcedEmptyActive) {
+      if (this.quotaFailedDeleteKeys.has(storageKey) && typeof localStorage !== 'undefined' && localStorage !== null) {
+        try {
+          localStorage.removeItem(storageKey);
+          this.quotaFailedLocalKeys.delete(storageKey);
+          this.quotaFailedDeleteKeys.delete(storageKey);
+        } catch {
+          // Ignore removeItem failure when storage is restricted/full
+        }
+      }
       return null;
     }
 
     const backupVal = this.selectPreferredBackupRaw(pendingRaw, nativeRaw, kind);
 
     if (!backupVal) {
-      if (kind === 'snapshots' && this.quotaFailedDeleteKeys.has(storageKey) && !NativeBridge.isNative) {
+      if (kind === 'snapshots' && this.quotaFailedDeleteKeys.has(storageKey) && !this.hasReadableNativeBackup()) {
+        this.safeLocalHeal(storageKey, '[]');
         return '[]';
       }
       return localVal && localVal.length > 0 ? localVal : null;
@@ -620,6 +660,7 @@ export class StorageService {
     skipBackup: boolean = false,
     clearLocalOnFailure: boolean = false
   ): void {
+    let localWriteFailed = false;
     try {
       if (typeof localStorage !== 'undefined' && localStorage !== null) {
         localStorage.setItem(storageKey, serialized);
@@ -627,11 +668,12 @@ export class StorageService {
         this.quotaFailedDeleteKeys.delete(storageKey);
       }
     } catch (err) {
+      localWriteFailed = true;
       if (!skipBackup) {
         this.quotaFailedLocalKeys.add(storageKey);
         if (clearLocalOnFailure) {
           this.quotaFailedDeleteKeys.add(storageKey);
-        } else {
+        } else if (!this.matchesScopedKey(storageKey, SNAPSHOTS_KEY)) {
           this.quotaFailedDeleteKeys.delete(storageKey);
         }
       }
@@ -639,6 +681,7 @@ export class StorageService {
         try {
           if (typeof localStorage !== 'undefined' && localStorage !== null) {
             localStorage.removeItem(storageKey);
+            this.quotaFailedDeleteKeys.delete(storageKey);
           }
         } catch {
           // Ignore removeItem failure when storage is restricted/full
@@ -652,7 +695,12 @@ export class StorageService {
       return;
     }
     try {
-      this.scheduleBackupWrite(backupKey, serialized, immediateBackup);
+      const isEmptyPayload =
+        (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized)) ||
+        (this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0);
+      const effectiveImmediate =
+        immediateBackup && (isEmptyPayload || !localWriteFailed || this.hasReadableNativeBackup());
+      this.scheduleBackupWrite(backupKey, serialized, effectiveImmediate, storageKey);
     } catch {
       // Ignore native backup failure
     }
@@ -1007,7 +1055,7 @@ export class StorageService {
       const isEmpty = stripped.length === 0;
       const skipBackup = isEmpty && !allowEmptyBackup;
       const immediateBackup = (isEmpty && allowEmptyBackup) || (Boolean(options?.immediateBackup) && !skipBackup);
-      const clearLocalOnFailure = Boolean(options?.clearLocalOnFailure) && (isEmpty || NativeBridge.isNative);
+      const clearLocalOnFailure = Boolean(options?.clearLocalOnFailure) && (isEmpty || this.hasReadableNativeBackup());
       this.writeLocalAndScheduleBackup(
         resolveScopedStorageKey(SNAPSHOTS_KEY),
         resolveScopedBackupKey(SNAPSHOTS_KEY),
@@ -1298,6 +1346,7 @@ export class StorageService {
     const storageKey = resolveScopedStorageKey(ACTIVE_STATE_KEY);
     const backupKey = resolveScopedBackupKey(ACTIVE_STATE_KEY);
     this.pendingBackupWrites.delete(backupKey);
+    this.pendingBackupStorageKeys.delete(backupKey);
     this.pendingForcedBackupKeys.delete(backupKey);
     try {
       if (typeof localStorage !== 'undefined' && localStorage !== null) {
@@ -1310,7 +1359,7 @@ export class StorageService {
       this.quotaFailedDeleteKeys.add(storageKey);
     }
     try {
-      this.scheduleBackupWrite(backupKey, '', true);
+      this.scheduleBackupWrite(backupKey, '', true, storageKey);
     } catch {
       // ignore
     }

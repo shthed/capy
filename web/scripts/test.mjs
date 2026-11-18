@@ -8524,6 +8524,7 @@ async function runCodecAndEngineTests() {
     const mockStorage = new Map();
     const mockBackups = new Map();
     const resetDurabilityState = () => {
+      delete globalThis.window.webkit;
       globalThis.localStorage = {
         getItem: (k) => (mockStorage.has(k) ? mockStorage.get(k) : null),
         setItem: (k, v) => mockStorage.set(k, String(v)),
@@ -9879,6 +9880,309 @@ async function runCodecAndEngineTests() {
       const clampedSnap = storageMod.StorageService.loadSnapshots()[0];
       assert.equal(clampedSnap?.timestamp, 0);
       assert.equal(clampedSnap?.lastOpened, 0);
+
+      // Group L: CapyIOS capability detection, Desktop Web partial delete under QuotaExceededError + 460ms drain/heal,
+      // SNAPSHOTS_KEY quotaFailedDeleteKeys preservation, preferBackupOnTie without b.maxTs >= a.maxTs, & forced-empty recovery heal
+      // L1: CapyIOS (webkit.messageHandlers.CapyIOS, no CapyAndroid.loadBackup)
+      resetDurabilityState();
+      const iosPosted = [];
+      delete globalThis.window.CapyAndroid;
+      globalThis.window.webkit = {
+        messageHandlers: {
+          CapyIOS: {
+            postMessage: (msg) => iosPosted.push(msg),
+          },
+        },
+      };
+      const iosOne = makeSnap('ios-1', { timestamp: 1000, lastOpened: 1000, filledCount: 1 });
+      const iosTwo = makeSnap('ios-2', { timestamp: 5000, lastOpened: 5000, filledCount: 5 });
+      storageMod.StorageService.saveSnapshots([iosOne, iosTwo]);
+      storageMod.StorageService.saveActiveState({
+        activeSnapshotId: 'ios-2',
+        activeColorId: 2,
+        filledRegionIds: [1, 2],
+        zoomScale: 1,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      });
+      storageMod.StorageService.flushPendingBackups();
+
+      const origIosSet = globalThis.localStorage.setItem;
+      const origIosRem = globalThis.localStorage.removeItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return origIosSet(k, v);
+      };
+      try {
+        const afterIosPartial = await storageMod.StorageService.deleteSnapshot('ios-2');
+        assert.deepEqual(afterIosPartial.map((s) => s.id), ['ios-1']);
+        assert.deepEqual(
+          storageMod.StorageService.loadSnapshots().map((s) => s.id),
+          ['ios-1'],
+          'CapyIOS partial delete under QuotaExceededError must preserve ios-1 without wiping or resurrecting ios-2'
+        );
+      } finally {
+        globalThis.localStorage.setItem = origIosSet;
+      }
+      assert.deepEqual(
+        storageMod.StorageService.loadSnapshots().map((s) => s.id),
+        ['ios-1']
+      );
+      assert.deepEqual(
+        JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]').map((s) => s.id),
+        ['ios-1'],
+        'CapyIOS loadSnapshots after quota relief must heal localStorage cleanly'
+      );
+
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return origIosSet(k, v);
+      };
+      globalThis.localStorage.removeItem = () => {
+        throw new Error('Blocked removeItem');
+      };
+      try {
+        await storageMod.StorageService.clearAllSnapshots();
+        assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+        assert.equal(storageMod.StorageService.loadActiveState(), null);
+      } finally {
+        globalThis.localStorage.setItem = origIosSet;
+        globalThis.localStorage.removeItem = origIosRem;
+      }
+      assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+      assert.equal(storageMod.StorageService.loadActiveState(), null);
+      assert.equal(mockStorage.get('capy_snapshots_v8'), '[]');
+      assert.equal(mockStorage.has('capy_active_session_v8'), false);
+      assert.equal(iosPosted.length > 0, true);
+
+      // L2: Desktop Web partial delete under QuotaExceededError (0ms safety + 460ms timer heal/drain + normal 0ms clear)
+      resetDurabilityState();
+      delete globalThis.window.CapyAndroid;
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('web-norm-1', { timestamp: 1000, lastOpened: 1000 }),
+        makeSnap('web-norm-2', { timestamp: 2000, lastOpened: 2000 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      await storageMod.StorageService.deleteSnapshot('web-norm-2');
+      let webNormSpy = 0;
+      globalThis.window.CapyAndroid = {
+        saveBackup: () => {
+          webNormSpy += 1;
+          return true;
+        },
+        loadBackup: () => null,
+      };
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(webNormSpy, 0, 'Normal Desktop Web partial delete must drain pendingBackupWrites immediately');
+
+      for (const failRemove of [false, true]) {
+        resetDurabilityState();
+        delete globalThis.window.CapyAndroid;
+        const keepOld = makeSnap('web-keep-1', { timestamp: 1000, lastOpened: 1000, filledCount: 1 });
+        const delNew = makeSnap('web-del-2', { timestamp: 5000, lastOpened: 5000, filledCount: 5 });
+        storageMod.StorageService.saveSnapshots([keepOld, delNew]);
+        storageMod.StorageService.flushPendingBackups();
+
+        const savedWebSet = globalThis.localStorage.setItem;
+        const savedWebRem = globalThis.localStorage.removeItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedWebSet(k, v);
+        };
+        if (failRemove) {
+          globalThis.localStorage.removeItem = () => {
+            throw new Error('Blocked removeItem');
+          };
+        }
+        try {
+          const partialRes = await storageMod.StorageService.deleteSnapshot('web-del-2');
+          assert.deepEqual(partialRes.map((s) => s.id), ['web-keep-1']);
+          assert.deepEqual(
+            storageMod.StorageService.loadSnapshots().map((s) => s.id),
+            ['web-keep-1'],
+            `Desktop Web partial delete (failRemove=${failRemove}) must not resurrect web-del-2 at 0ms`
+          );
+        } finally {
+          globalThis.localStorage.setItem = savedWebSet;
+          globalThis.localStorage.removeItem = savedWebRem;
+        }
+        // Wait past 400ms debounce timer WITHOUT calling loadSnapshots first to verify auto-heal & drain
+        await new Promise((resolve) => setTimeout(resolve, 460));
+        let webTimerSpy = 0;
+        globalThis.window.CapyAndroid = {
+          saveBackup: () => {
+            webTimerSpy += 1;
+            return true;
+          },
+          loadBackup: () => null,
+        };
+        storageMod.StorageService.flushPendingBackups();
+        assert.equal(webTimerSpy, 0, 'Desktop Web 400ms timer must drain pendingBackupWrites cleanly');
+        assert.deepEqual(
+          JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]').map((s) => s.id),
+          ['web-keep-1'],
+          'Desktop Web 400ms timer must heal localStorage after transient quota relief'
+        );
+        assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => s.id), ['web-keep-1']);
+      }
+
+      // L3: quotaFailedDeleteKeys preservation across post-delete edits + preferBackupOnTie when b.maxTs < a.maxTs
+      resetDurabilityState();
+      const postDelKeep = makeSnap('pd-keep', {
+        timestamp: 1000,
+        lastOpened: 1000,
+        title: 'Old Title',
+        isPinned: false,
+        zoomScale: 1,
+      });
+      const postDelDrop = makeSnap('pd-drop', { timestamp: 5000, lastOpened: 5000, filledCount: 8 });
+      storageMod.StorageService.saveSnapshots([postDelKeep, postDelDrop]);
+      storageMod.StorageService.flushPendingBackups();
+
+      const savedPdSet = globalThis.localStorage.setItem;
+      const savedPdRem = globalThis.localStorage.removeItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8' || k === 'capy_active_session_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedPdSet(k, v);
+      };
+      globalThis.localStorage.removeItem = () => {
+        throw new Error('Blocked removeItem');
+      };
+      try {
+        await storageMod.StorageService.deleteSnapshot('pd-drop');
+        storageMod.StorageService.renameSnapshot('pd-keep', 'Renamed Title');
+        storageMod.StorageService.togglePinSnapshot('pd-keep');
+        storageMod.StorageService.updateSnapshotViewport('pd-keep', 2.5, 12, -8);
+        await storageMod.StorageService.importSnapshotData(
+          JSON.stringify([
+            makeSnap('pd-imp', { timestamp: 2000, lastOpened: 2000, filledCount: 2 }),
+          ]),
+          { refreshTimestamps: false }
+        );
+
+        const preFlushPostDel = storageMod.StorageService.loadSnapshots();
+        assert.deepEqual(preFlushPostDel.map((s) => s.id), ['pd-imp', 'pd-keep']);
+        const preKeep = preFlushPostDel.find((s) => s.id === 'pd-keep');
+        assert.equal(preKeep?.title, 'Renamed Title');
+        assert.equal(preKeep?.isPinned, true);
+        assert.equal(preKeep?.zoomScale, 2.5);
+
+        storageMod.StorageService.flushPendingBackups();
+        const postFlushPostDel = storageMod.StorageService.loadSnapshots();
+        assert.deepEqual(postFlushPostDel.map((s) => s.id), ['pd-imp', 'pd-keep']);
+        assert.equal(postFlushPostDel.find((s) => s.id === 'pd-keep')?.title, 'Renamed Title');
+
+        // Verify ACTIVE_STATE_KEY clears quotaFailedDeleteKeys on subsequent saveActiveState under QuotaExceededError
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'pd-old-act',
+          activeColorId: 1,
+          filledRegionIds: [1],
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+        storageMod.StorageService.clearActiveState();
+        withMockedNow(1000, () => {
+          storageMod.StorageService.saveActiveState({
+            activeSnapshotId: 'pd-new-act',
+            activeColorId: 3,
+            filledRegionIds: [1, 2],
+            zoomScale: 1.5,
+            panOffsetX: 0,
+            panOffsetY: 0,
+          });
+        });
+        assert.equal(storageMod.StorageService.loadActiveState()?.activeSnapshotId, 'pd-new-act');
+        storageMod.StorageService.flushPendingBackups();
+        assert.equal(storageMod.StorageService.loadActiveState()?.activeSnapshotId, 'pd-new-act');
+      } finally {
+        globalThis.localStorage.setItem = savedPdSet;
+        globalThis.localStorage.removeItem = savedPdRem;
+      }
+      assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => s.id), ['pd-imp', 'pd-keep']);
+
+      // Desktop Web partial delete + rename under QuotaExceededError
+      resetDurabilityState();
+      delete globalThis.window.CapyAndroid;
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('web-pd-keep', { timestamp: 1000, lastOpened: 1000, title: 'Before' }),
+        makeSnap('web-pd-drop', { timestamp: 5000, lastOpened: 5000 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      const savedWebPdSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedWebPdSet(k, v);
+      };
+      try {
+        await storageMod.StorageService.deleteSnapshot('web-pd-drop');
+        storageMod.StorageService.renameSnapshot('web-pd-keep', 'Web Renamed');
+        const webPostDel = storageMod.StorageService.loadSnapshots();
+        assert.deepEqual(webPostDel.map((s) => s.id), ['web-pd-keep']);
+        assert.equal(webPostDel[0]?.title, 'Web Renamed');
+      } finally {
+        globalThis.localStorage.setItem = savedWebPdSet;
+      }
+
+      // L4: Desktop Web forced-empty clearAllSnapshots recovery heals localStorage cleanly upon quota relief
+      resetDurabilityState();
+      delete globalThis.window.CapyAndroid;
+      storageMod.StorageService.saveSnapshots([makeSnap('ghost-1', { timestamp: 5000, lastOpened: 5000 })]);
+      storageMod.StorageService.saveActiveState({
+        activeSnapshotId: 'ghost-1',
+        activeColorId: 4,
+        filledRegionIds: [1, 2, 3],
+        zoomScale: 1,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      });
+      storageMod.StorageService.flushPendingBackups();
+
+      const savedGhostSet = globalThis.localStorage.setItem;
+      const savedGhostRem = globalThis.localStorage.removeItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedGhostSet(k, v);
+      };
+      globalThis.localStorage.removeItem = () => {
+        throw new Error('Blocked removeItem');
+      };
+      try {
+        await storageMod.StorageService.clearAllSnapshots();
+        assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+        assert.equal(storageMod.StorageService.loadActiveState(), null);
+      } finally {
+        globalThis.localStorage.setItem = savedGhostSet;
+        globalThis.localStorage.removeItem = savedGhostRem;
+      }
+      assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+      assert.equal(storageMod.StorageService.loadActiveState(), null);
+      assert.equal(mockStorage.get('capy_snapshots_v8'), '[]');
+      assert.equal(mockStorage.has('capy_active_session_v8'), false);
 
       resetDurabilityState();
 
