@@ -1,4 +1,8 @@
-### 3.0.34 - 2026-11-18 (Beta)
+### 3.0.35 - 2026-11-18 (Beta)
+
+- Harden `StorageService.ts` local/backup durability (`loadRawWithBackupFallback` recency, validity, `resetEpoch`, and richness comparison across snapshots, settings, and active state with stale/corrupt `localStorage` self-healing; `saveSnapshots` `allowEmptyBackup` / `immediateBackup` empty-overwrite guard preserving native backups on accidental empty saves while flushing synchronous native backup updates on `deleteSnapshot` and `clearAllSnapshots`) and add `[Unit 15/15]` durability tests in `web/scripts/test.mjs` [#577](https://github.com/shthed/capy/pull/577)
+
+### 3.0.34 - 2026-11-18
 
 - Skip `.github/workflows/release.yml` gracefully on tag pushes when Android signing secrets are absent (keeping `workflow_dispatch` fail-closed), exclude internal Beta channel links in `README.md`, `TODO.md`, and `ROADMAP.md` and sync-token ops notes from clean-room public exports, harden public persona export matching (case preservation, symlinked CLI detection, sync-token parity, and preserving public `capyboop/capy#2`--`#5` issue links), allow both primary and mirror GitHub Pages origins in `worker/coopRoomProtocol.ts`, add `validatePublicTrackerPolicy` in `web/scripts/sanity.mjs`, and expand unit and clean-room staged verification in `web/scripts/test.mjs` [#576](https://github.com/shthed/capy/pull/576)
 
