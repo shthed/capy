@@ -1,5 +1,14 @@
-import { DEFAULT_GENERATOR_CONFIG, PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
 import {
+  DEFAULT_GENERATOR_CONFIG,
+  GeneratorConfig,
+  PaletteColor,
+  PuzzleData,
+  SavedSnapshot,
+  UserSettings,
+} from '../types';
+import {
+  assertValidPalette,
+  assertValidSavedSnapshot,
   base64ToUint8,
   buildBorderMapFromRegionMap,
   CompactPuzzleRecordV2,
@@ -11,6 +20,8 @@ import {
   estimateCompactPuzzleBytes,
   hasBinaryMagicHeader,
   isCompactPuzzleRecordV2,
+  MAX_DELTA_REGION_ENTRIES,
+  MAX_PUZZLE_PIXELS,
   serializableToRecord,
   uint8ToBase64,
 } from './CapyCodec';
@@ -75,6 +86,74 @@ export const DEFAULT_SETTINGS: UserSettings = {
   detailedLoadingProgress: false,
   generatorConfig: { ...DEFAULT_GENERATOR_CONFIG },
 };
+
+const SETTINGS_BOOLEAN_KEYS = [
+  'autoAdvance',
+  'isPaintMode',
+  'isFreeColorMode',
+  'raisePaletteDock',
+  'showSavePreviews',
+  'showRegionLabels',
+  'showPreviewLabels',
+  'showPreviewBorders',
+  'highlightMatching',
+  'animateHint',
+  'showNextRegionHint',
+  'showZoomButtons',
+  'showResetViewButton',
+  'prioritizeOnScreen',
+  'hapticsEnabled',
+  'panMomentum',
+  'enableCustomColorForAllPuzzles',
+  'enableUndo',
+  'autoReplayOnLoad',
+  'replayLoop',
+  'replayFollow',
+  'reverseDoubleTapZoom',
+  'snapZoomLevels',
+  'soundEnabled',
+  'reducedMotion',
+  'largeText',
+  'detailedLoadingProgress',
+] as const;
+
+const SETTINGS_NUMBER_KEYS = [
+  'canvasBgArgb',
+  'hintColorArgb',
+  'hintIntensity',
+  'labelScale',
+  'minLabelSize',
+  'maxLabelSize',
+  'replaySpeed',
+  'zoomSensitivity',
+  'soundVolume',
+] as const;
+
+const SETTINGS_ENUM_VALUES: Record<string, readonly string[]> = {
+  difficulty: ['EASY', 'NORMAL'],
+  regionColorMode: ['DETAIL', 'SOLID'],
+  canvasBgColor: ['BLACK', 'DARK_SLATE', 'CHARCOAL', 'LIGHT_GRAY', 'PURE_WHITE', 'CUSTOM'],
+  saveSortOrder: ['LAST_ACTIVE', 'DATE', 'PERCENT_COMPLETE'],
+  highlightStyle: ['CENTROID_GLOW', 'NUMBER_ONLY', 'FULL_REGION', 'BOUNDARY_ONLY'],
+  hintFillStyle: ['CHECKER', 'STRIPES', 'SOLID'],
+  paletteSort: ['NUMBER', 'REMAINING', 'HUE', 'LIGHTNESS'],
+};
+
+const GEN_CONFIG_ENUM_VALUES: Record<string, readonly string[]> = {
+  algorithm: ['AUTO', 'LINE_ART', 'PAINTERLY', 'POSTERIZED', 'MOSAIC_CEL'],
+  lineHandling: ['ABSORB_LINES', 'UNIFIED_BLACK_REGION'],
+  preset: ['LOW', 'MEDIUM', 'HIGH', 'CUSTOM'],
+  paletteDetail: ['AUTO', 'LOW', 'MEDIUM', 'HIGH', 'CUSTOM'],
+  imageType: ['AUTO', 'DRAWING', 'PHOTO'],
+};
+
+const GEN_CONFIG_NUMBER_KEYS = [
+  'colorCount',
+  'minRegionArea',
+  'maxRegions',
+  'resolution',
+  'smoothingPasses',
+] as const;
 
 function detectSystemReducedMotion(): boolean {
   try {
@@ -589,6 +668,9 @@ export class StorageService {
             typeof (s as Record<string, unknown>).title === 'string'
         )
       );
+      if (parsed.length > 0 && valid.length === 0) {
+        return base;
+      }
       let maxTs = 0;
       let totalFilled = 0;
       let completeness = 0;
@@ -640,6 +722,9 @@ export class StorageService {
     const maxTs = this.extractObjectTimestamp(rec);
 
     if (kind === 'settings') {
+      if (!this.hasRecognizedSettingsField(rec)) {
+        return base;
+      }
       const knownFieldCount = keys.filter(
         (k) =>
           (Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, k) || k === 'undoDefaultMigrated') &&
@@ -653,6 +738,11 @@ export class StorageService {
         knownFieldCount,
         fieldCount: keys.length,
       };
+    }
+
+    const activeCheck = this.tryParseActiveState(trimmed);
+    if (activeCheck.status !== 'ok') {
+      return base;
     }
 
     const snapshotId = typeof rec.activeSnapshotId === 'string' ? rec.activeSnapshotId.trim() : '';
@@ -676,6 +766,17 @@ export class StorageService {
       paintedPlusFilled: filledCount + paintedCount,
       fieldCount: keys.length,
     };
+  }
+
+  private static quarantineCorruptLocalPayload(storageKey: string, raw: string | null): void {
+    if (!raw) return;
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return;
+      localStorage.setItem(`${storageKey}__corrupt_quarantine`, raw);
+    } catch {
+      // Ignore quota errors while quarantining corrupt payload
+    }
+    console.warn(`[StorageService] Quarantined corrupt local payload for ${storageKey}`);
   }
 
   private static isValidNonEmptyPayload(raw: string, kind: BackupDataKind): boolean {
@@ -759,11 +860,11 @@ export class StorageService {
     return null;
   }
 
-  private static loadRawWithBackupFallback(
+  private static loadRawWithBackupFallbackWithMeta(
     storageKey: string,
     backupKey: string,
     kind: BackupDataKind
-  ): string | null {
+  ): { raw: string | null; recoveredFromBackup: boolean } {
     const localVal = this.safeLocalGet(storageKey);
     const hasPendingBackup = this.pendingBackupWrites.has(backupKey);
     const pendingBackupVal = hasPendingBackup ? (this.pendingBackupWrites.get(backupKey) ?? null) : null;
@@ -783,7 +884,12 @@ export class StorageService {
       if (this.quotaFailedDeleteKeys.has(storageKey)) {
         this.tryClearLocalStorageKey(storageKey);
       }
-      return null;
+      return { raw: null, recoveredFromBackup: false };
+    }
+
+    const localMetrics = localVal && localVal.length > 0 ? this.inspectCandidate(localVal, kind) : null;
+    if (localVal && localVal.length > 0 && localMetrics && !localMetrics.parseOk) {
+      this.quarantineCorruptLocalPayload(storageKey, localVal);
     }
 
     const forceEmptyPending =
@@ -793,11 +899,19 @@ export class StorageService {
     if (!backupVal) {
       if (kind === 'snapshots' && this.quotaFailedDeleteKeys.has(storageKey) && !this.hasReadableNativeBackup()) {
         this.safeLocalHeal(storageKey, '[]');
-        return '[]';
+        return { raw: '[]', recoveredFromBackup: false };
       }
-      return localVal && localVal.length > 0 ? localVal : null;
+      if (!localVal || localVal.length === 0 || !localMetrics?.parseOk) {
+        return { raw: null, recoveredFromBackup: false };
+      }
+      return { raw: localVal, recoveredFromBackup: false };
     }
-    if (!localVal || localVal.length === 0) {
+
+    const backupMetrics = this.inspectCandidate(backupVal, kind);
+    if (!localVal || localVal.length === 0 || !localMetrics?.parseOk) {
+      if (!backupMetrics.parseOk) {
+        return { raw: null, recoveredFromBackup: false };
+      }
       if (
         this.isValidNonEmptyPayload(backupVal, kind) ||
         (kind === 'snapshots' &&
@@ -806,14 +920,16 @@ export class StorageService {
       ) {
         this.safeLocalHeal(storageKey, backupVal);
       }
-      return backupVal;
+      return { raw: backupVal, recoveredFromBackup: backupMetrics.nonEmpty };
     }
+
     if (localVal === backupVal) {
       this.quotaFailedLocalKeys.delete(storageKey);
       this.quotaFailedDeleteKeys.delete(storageKey);
       this.pendingLocalHealWrites.delete(storageKey);
-      return localVal;
+      return { raw: localVal, recoveredFromBackup: false };
     }
+
     const preferBackupOnTie = this.quotaFailedLocalKeys.has(storageKey);
     const forceBackupWins =
       preferBackupOnTie &&
@@ -827,11 +943,20 @@ export class StorageService {
       ) {
         this.safeLocalHeal(storageKey, selected);
       }
+      return { raw: selected, recoveredFromBackup: true };
     } else if (!this.quotaFailedDeleteKeys.has(storageKey) && this.pendingLocalHealWrites.has(storageKey)) {
       this.quotaFailedLocalKeys.delete(storageKey);
       this.pendingLocalHealWrites.delete(storageKey);
     }
-    return selected;
+    return { raw: selected, recoveredFromBackup: false };
+  }
+
+  private static loadRawWithBackupFallback(
+    storageKey: string,
+    backupKey: string,
+    kind: BackupDataKind
+  ): string | null {
+    return this.loadRawWithBackupFallbackWithMeta(storageKey, backupKey, kind).raw;
   }
 
   private static writeLocalAndScheduleBackup(
@@ -961,58 +1086,149 @@ export class StorageService {
     });
   }
 
+  private static hasRecognizedSettingsField(rec: Record<string, unknown>): boolean {
+    const hasOwn = (obj: Record<string, unknown>, key: string) =>
+      Object.prototype.hasOwnProperty.call(obj, key);
+    for (const key of SETTINGS_BOOLEAN_KEYS) {
+      if (hasOwn(rec, key) && typeof rec[key] === 'boolean') return true;
+    }
+    for (const key of SETTINGS_NUMBER_KEYS) {
+      if (hasOwn(rec, key) && typeof rec[key] === 'number' && Number.isFinite(rec[key])) return true;
+    }
+    for (const [key, allowed] of Object.entries(SETTINGS_ENUM_VALUES)) {
+      if (!hasOwn(rec, key)) continue;
+      const val = rec[key];
+      if (typeof val === 'string' && allowed.includes(val)) return true;
+    }
+    if (
+      hasOwn(rec, 'generatorConfig') &&
+      rec.generatorConfig &&
+      typeof rec.generatorConfig === 'object' &&
+      !Array.isArray(rec.generatorConfig)
+    ) {
+      const cfg = rec.generatorConfig as Record<string, unknown>;
+      for (const [key, allowed] of Object.entries(GEN_CONFIG_ENUM_VALUES)) {
+        if (!hasOwn(cfg, key)) continue;
+        const val = cfg[key];
+        if (typeof val === 'string' && allowed.includes(val)) return true;
+      }
+      for (const key of GEN_CONFIG_NUMBER_KEYS) {
+        if (hasOwn(cfg, key) && typeof cfg[key] === 'number' && Number.isFinite(cfg[key])) return true;
+      }
+      if (hasOwn(cfg, 'isFreeColor') && typeof cfg.isFreeColor === 'boolean') return true;
+    }
+    return false;
+  }
+
+  private static sanitizeGeneratorConfig(rawCfg: unknown): GeneratorConfig {
+    const defaults = DEFAULT_SETTINGS.generatorConfig;
+    if (!rawCfg || typeof rawCfg !== 'object' || Array.isArray(rawCfg)) {
+      return { ...defaults };
+    }
+    const cfg = rawCfg as Record<string, unknown>;
+    const pickEnum = <T extends string>(key: string, fallback: T): T => {
+      const val = cfg[key];
+      const allowed = GEN_CONFIG_ENUM_VALUES[key];
+      return typeof val === 'string' && allowed?.includes(val) ? (val as T) : fallback;
+    };
+    const pickFinite = (key: (typeof GEN_CONFIG_NUMBER_KEYS)[number], fallback: number): number => {
+      const val = cfg[key];
+      return typeof val === 'number' && Number.isFinite(val) ? val : fallback;
+    };
+    return {
+      algorithm: pickEnum('algorithm', defaults.algorithm ?? 'AUTO'),
+      lineHandling: pickEnum('lineHandling', defaults.lineHandling ?? 'ABSORB_LINES'),
+      preset: pickEnum('preset', defaults.preset ?? 'MEDIUM'),
+      paletteDetail: pickEnum('paletteDetail', defaults.paletteDetail),
+      imageType: pickEnum('imageType', defaults.imageType),
+      colorCount: pickFinite('colorCount', defaults.colorCount),
+      minRegionArea: pickFinite('minRegionArea', defaults.minRegionArea),
+      maxRegions: pickFinite('maxRegions', defaults.maxRegions),
+      resolution: pickFinite('resolution', defaults.resolution),
+      smoothingPasses: pickFinite('smoothingPasses', defaults.smoothingPasses),
+      ...(typeof cfg.isFreeColor === 'boolean' ? { isFreeColor: cfg.isFreeColor } : {}),
+    };
+  }
+
+  private static tryParseSettingsObject(
+    raw: string | null
+  ): { status: 'empty' | 'ok' | 'corrupt'; parsed: Record<string, unknown> | null } {
+    if (!raw) return { status: 'empty', parsed: null };
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { status: 'corrupt', parsed: null };
+      }
+      const record = parsed as Record<string, unknown>;
+      if (!this.hasRecognizedSettingsField(record)) {
+        return { status: 'corrupt', parsed: null };
+      }
+      return { status: 'ok', parsed: record };
+    } catch {
+      return { status: 'corrupt', parsed: null };
+    }
+  }
+
   static loadSettings(): UserSettings {
     const systemReducedMotion = detectSystemReducedMotion();
     try {
       const storageKey = resolveScopedStorageKey(SETTINGS_KEY);
       const backupKey = resolveScopedBackupKey(SETTINGS_KEY);
-      const raw = this.loadRawWithBackupFallback(storageKey, backupKey, 'settings');
+      const { raw, recoveredFromBackup } = this.loadRawWithBackupFallbackWithMeta(
+        storageKey,
+        backupKey,
+        'settings'
+      );
       if (!raw) {
         return {
           ...DEFAULT_SETTINGS,
           reducedMotion: systemReducedMotion,
         };
       }
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      const parsedRes = this.tryParseSettingsObject(raw);
+      if (parsedRes.status !== 'ok' || !parsedRes.parsed) {
         return {
           ...DEFAULT_SETTINGS,
           reducedMotion: systemReducedMotion,
         };
       }
-      const rawZoomSensitivity = Number(parsed.zoomSensitivity);
-      const zoomSensitivity = Number.isFinite(rawZoomSensitivity)
-        ? Math.min(2.0, Math.max(0.5, rawZoomSensitivity))
-        : DEFAULT_SETTINGS.zoomSensitivity;
-      const snapZoomLevels =
-        typeof parsed.snapZoomLevels === 'boolean'
-          ? parsed.snapZoomLevels
-          : DEFAULT_SETTINGS.snapZoomLevels;
-      const soundEnabled =
-        typeof parsed.soundEnabled === 'boolean'
-          ? parsed.soundEnabled
-          : DEFAULT_SETTINGS.soundEnabled;
-      const rawSoundVolume = Number(parsed.soundVolume);
-      const soundVolume = Number.isFinite(rawSoundVolume)
-        ? Math.min(1.0, Math.max(0.0, rawSoundVolume))
-        : DEFAULT_SETTINGS.soundVolume;
-      const reducedMotion =
-        typeof parsed.reducedMotion === 'boolean' ? parsed.reducedMotion : systemReducedMotion;
-      const largeText =
-        typeof parsed.largeText === 'boolean' ? parsed.largeText : DEFAULT_SETTINGS.largeText;
+      const parsed = parsedRes.parsed;
+
+      const pickBool = (key: keyof UserSettings, fallback: boolean): boolean =>
+        typeof parsed[key] === 'boolean' ? (parsed[key] as boolean) : fallback;
+      const pickFinite = (key: keyof UserSettings, fallback: number): number => {
+        const val = parsed[key];
+        return typeof val === 'number' && Number.isFinite(val) ? val : fallback;
+      };
+
+      const zoomSensitivity = Math.min(
+        2.0,
+        Math.max(0.5, pickFinite('zoomSensitivity', DEFAULT_SETTINGS.zoomSensitivity))
+      );
+      const snapZoomLevels = pickBool('snapZoomLevels', DEFAULT_SETTINGS.snapZoomLevels);
+      const soundEnabled = pickBool('soundEnabled', DEFAULT_SETTINGS.soundEnabled);
+      const soundVolume = Math.min(
+        1.0,
+        Math.max(0.0, pickFinite('soundVolume', DEFAULT_SETTINGS.soundVolume))
+      );
+      const reducedMotion = pickBool('reducedMotion', systemReducedMotion);
+      const largeText = pickBool('largeText', DEFAULT_SETTINGS.largeText);
       const undoMigrationKey = resolveScopedStorageKey(UNDO_DEFAULT_MIGRATED_KEY);
       const hasUndoMigration =
-        Boolean((parsed as Record<string, unknown>).undoDefaultMigrated) ||
+        Boolean(parsed.undoDefaultMigrated) ||
         this.safeLocalGet(undoMigrationKey) === '1';
       const enableUndo = hasUndoMigration
-        ? typeof parsed.enableUndo === 'boolean'
-          ? parsed.enableUndo
-          : DEFAULT_SETTINGS.enableUndo
+        ? pickBool('enableUndo', DEFAULT_SETTINGS.enableUndo)
         : true;
       const difficulty =
         parsed.difficulty === 'EASY' || parsed.difficulty === 'NORMAL'
           ? parsed.difficulty
           : DEFAULT_SETTINGS.difficulty;
+      const canvasBgColor =
+        typeof parsed.canvasBgColor === 'string' &&
+        SETTINGS_ENUM_VALUES.canvasBgColor.includes(parsed.canvasBgColor)
+          ? (parsed.canvasBgColor as UserSettings['canvasBgColor'])
+          : DEFAULT_SETTINGS.canvasBgColor;
       const saveSortOrder =
         parsed.saveSortOrder === 'LAST_ACTIVE' ||
         parsed.saveSortOrder === 'DATE' ||
@@ -1043,39 +1259,71 @@ export class StorageService {
         parsed.regionColorMode === 'SOLID' || parsed.regionColorMode === 'DETAIL'
           ? parsed.regionColorMode
           : DEFAULT_SETTINGS.regionColorMode;
-      const rawReplaySpeed = Number(parsed.replaySpeed);
+      const rawReplaySpeed = parsed.replaySpeed;
       const replaySpeed =
-        Number.isFinite(rawReplaySpeed) && rawReplaySpeed > 0 && rawReplaySpeed <= 20
+        typeof rawReplaySpeed === 'number' &&
+        Number.isFinite(rawReplaySpeed) &&
+        rawReplaySpeed > 0 &&
+        rawReplaySpeed <= 20
           ? rawReplaySpeed
           : DEFAULT_SETTINGS.replaySpeed;
-      const genCfg =
-        parsed.generatorConfig && typeof parsed.generatorConfig === 'object' && !Array.isArray(parsed.generatorConfig)
-          ? parsed.generatorConfig
-          : {};
+
       const resolved: UserSettings = {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
+        autoAdvance: pickBool('autoAdvance', DEFAULT_SETTINGS.autoAdvance),
         difficulty,
+        isPaintMode: pickBool('isPaintMode', DEFAULT_SETTINGS.isPaintMode),
+        isFreeColorMode: pickBool('isFreeColorMode', DEFAULT_SETTINGS.isFreeColorMode),
+        raisePaletteDock: pickBool('raisePaletteDock', DEFAULT_SETTINGS.raisePaletteDock),
+        regionColorMode,
+        canvasBgColor,
+        canvasBgArgb: pickFinite('canvasBgArgb', DEFAULT_SETTINGS.canvasBgArgb),
         saveSortOrder,
-        paletteSort,
+        showSavePreviews: pickBool('showSavePreviews', DEFAULT_SETTINGS.showSavePreviews),
         highlightStyle,
         hintFillStyle,
-        regionColorMode,
+        hintColorArgb: pickFinite('hintColorArgb', DEFAULT_SETTINGS.hintColorArgb),
+        showRegionLabels: pickBool('showRegionLabels', DEFAULT_SETTINGS.showRegionLabels),
+        showPreviewLabels: pickBool('showPreviewLabels', DEFAULT_SETTINGS.showPreviewLabels),
+        showPreviewBorders: pickBool('showPreviewBorders', DEFAULT_SETTINGS.showPreviewBorders),
+        highlightMatching: pickBool('highlightMatching', DEFAULT_SETTINGS.highlightMatching),
+        animateHint: pickBool('animateHint', DEFAULT_SETTINGS.animateHint),
+        showNextRegionHint: pickBool('showNextRegionHint', DEFAULT_SETTINGS.showNextRegionHint),
+        hintIntensity: pickFinite('hintIntensity', DEFAULT_SETTINGS.hintIntensity),
+        labelScale: pickFinite('labelScale', DEFAULT_SETTINGS.labelScale),
+        minLabelSize: pickFinite('minLabelSize', DEFAULT_SETTINGS.minLabelSize),
+        maxLabelSize: pickFinite('maxLabelSize', DEFAULT_SETTINGS.maxLabelSize),
+        showZoomButtons: pickBool('showZoomButtons', DEFAULT_SETTINGS.showZoomButtons),
+        showResetViewButton: pickBool('showResetViewButton', DEFAULT_SETTINGS.showResetViewButton),
+        paletteSort,
+        prioritizeOnScreen: pickBool('prioritizeOnScreen', DEFAULT_SETTINGS.prioritizeOnScreen),
+        hapticsEnabled: pickBool('hapticsEnabled', DEFAULT_SETTINGS.hapticsEnabled),
+        panMomentum: pickBool('panMomentum', DEFAULT_SETTINGS.panMomentum),
+        enableCustomColorForAllPuzzles: pickBool(
+          'enableCustomColorForAllPuzzles',
+          DEFAULT_SETTINGS.enableCustomColorForAllPuzzles
+        ),
+        enableUndo,
         replaySpeed,
+        autoReplayOnLoad: pickBool('autoReplayOnLoad', DEFAULT_SETTINGS.autoReplayOnLoad),
+        replayLoop: pickBool('replayLoop', DEFAULT_SETTINGS.replayLoop),
+        replayFollow: pickBool('replayFollow', DEFAULT_SETTINGS.replayFollow),
+        reverseDoubleTapZoom: pickBool(
+          'reverseDoubleTapZoom',
+          DEFAULT_SETTINGS.reverseDoubleTapZoom
+        ),
         zoomSensitivity,
         snapZoomLevels,
         soundEnabled,
         soundVolume,
         reducedMotion,
         largeText,
-        enableUndo,
-        generatorConfig: {
-          ...DEFAULT_SETTINGS.generatorConfig,
-          ...genCfg,
-        },
+        detailedLoadingProgress: pickBool(
+          'detailedLoadingProgress',
+          DEFAULT_SETTINGS.detailedLoadingProgress
+        ),
+        generatorConfig: this.sanitizeGeneratorConfig(parsed.generatorConfig),
       };
-      delete (resolved as unknown as Record<string, unknown>).savedAt;
-      if (!hasUndoMigration) {
+      if (!hasUndoMigration && !recoveredFromBackup) {
         StorageService.saveSettings(resolved);
       }
       return resolved;
@@ -1344,8 +1592,14 @@ export class StorageService {
 
   static saveSnapshots(
     snapshots: SavedSnapshot[],
-    options?: { allowEmptyBackup?: boolean; immediateBackup?: boolean; clearLocalOnFailure?: boolean }
+    optionsOrImmediate?:
+      | boolean
+      | { allowEmptyBackup?: boolean; immediateBackup?: boolean; clearLocalOnFailure?: boolean }
   ): void {
+    const options =
+      typeof optionsOrImmediate === 'boolean'
+        ? { immediateBackup: optionsOrImmediate }
+        : optionsOrImmediate;
     this.saveSnapshotsInternal(snapshots, options);
   }
 
@@ -1698,6 +1952,7 @@ export class StorageService {
     zoomScale: number;
     panOffsetX: number;
     panOffsetY: number;
+    updatedAt?: number;
   }): void {
     try {
       const storageKey = resolveScopedStorageKey(ACTIVE_STATE_KEY);
@@ -1753,6 +2008,166 @@ export class StorageService {
     }
   }
 
+  private static tryParseActiveState(raw: string | null): {
+    status: 'empty' | 'ok' | 'corrupt';
+    state: {
+      activeSnapshotId: string | null;
+      activeColorId: number;
+      filledRegionIds: number[];
+      paintedRegionColors?: Record<number, number>;
+      isFreeColorMode?: boolean;
+      resetEpoch?: number;
+      zoomScale: number;
+      panOffsetX: number;
+      panOffsetY: number;
+      updatedAt?: number;
+    } | null;
+  } {
+    if (!raw) return { status: 'empty', state: null };
+    try {
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { status: 'corrupt', state: null };
+      }
+      const rec = parsed as Record<string, unknown>;
+      const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(rec, key);
+
+      let recognizedCount = 0;
+      if (hasOwn('activeSnapshotId')) {
+        if (rec.activeSnapshotId !== null && typeof rec.activeSnapshotId !== 'string') {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('activeColorId')) {
+        if (typeof rec.activeColorId !== 'number' || !Number.isFinite(rec.activeColorId)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('filledRegionIds')) {
+        if (!Array.isArray(rec.filledRegionIds)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('zoomScale')) {
+        if (typeof rec.zoomScale !== 'number' || !Number.isFinite(rec.zoomScale)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('panOffsetX')) {
+        if (typeof rec.panOffsetX !== 'number' || !Number.isFinite(rec.panOffsetX)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('panOffsetY')) {
+        if (typeof rec.panOffsetY !== 'number' || !Number.isFinite(rec.panOffsetY)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('updatedAt')) {
+        if (typeof rec.updatedAt !== 'number' || !Number.isFinite(rec.updatedAt)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('savedAt')) {
+        if (typeof rec.savedAt !== 'number' || !Number.isFinite(rec.savedAt)) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('resetEpoch')) {
+        if (typeof rec.resetEpoch !== 'number' || !Number.isFinite(rec.resetEpoch) || rec.resetEpoch < 0) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('isFreeColorMode')) {
+        if (typeof rec.isFreeColorMode !== 'boolean') {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (hasOwn('paintedRegionColors')) {
+        if (
+          !rec.paintedRegionColors ||
+          typeof rec.paintedRegionColors !== 'object' ||
+          Array.isArray(rec.paintedRegionColors)
+        ) {
+          return { status: 'corrupt', state: null };
+        }
+        recognizedCount++;
+      }
+      if (recognizedCount === 0) {
+        return { status: 'corrupt', state: null };
+      }
+
+      let paintedRegionColors: Record<number, number> | undefined;
+      if (
+        hasOwn('paintedRegionColors') &&
+        rec.paintedRegionColors &&
+        typeof rec.paintedRegionColors === 'object' &&
+        !Array.isArray(rec.paintedRegionColors)
+      ) {
+        const cleanColors: Record<number, number> = {};
+        for (const [k, v] of Object.entries(rec.paintedRegionColors as Record<string, unknown>)) {
+          if (/^\d+$/.test(k) && typeof v === 'number' && Number.isFinite(v)) {
+            cleanColors[Number(k)] = v;
+          }
+        }
+        paintedRegionColors = cleanColors;
+      }
+
+      const normalized = {
+        activeSnapshotId:
+          typeof rec.activeSnapshotId === 'string' ? rec.activeSnapshotId : null,
+        activeColorId:
+          typeof rec.activeColorId === 'number' && Number.isFinite(rec.activeColorId)
+            ? rec.activeColorId
+            : 1,
+        filledRegionIds: Array.isArray(rec.filledRegionIds)
+          ? rec.filledRegionIds.filter(
+              (id: unknown) => typeof id === 'number' && Number.isFinite(id)
+            )
+          : [],
+        ...(paintedRegionColors !== undefined ? { paintedRegionColors } : {}),
+        ...(typeof rec.isFreeColorMode === 'boolean'
+          ? { isFreeColorMode: rec.isFreeColorMode }
+          : {}),
+        ...(typeof rec.resetEpoch === 'number' &&
+        Number.isFinite(rec.resetEpoch) &&
+        rec.resetEpoch >= 0
+          ? { resetEpoch: rec.resetEpoch }
+          : {}),
+        zoomScale:
+          typeof rec.zoomScale === 'number' &&
+          Number.isFinite(rec.zoomScale) &&
+          rec.zoomScale > 0
+            ? rec.zoomScale
+            : 1,
+        panOffsetX:
+          typeof rec.panOffsetX === 'number' && Number.isFinite(rec.panOffsetX)
+            ? rec.panOffsetX
+            : 0,
+        panOffsetY:
+          typeof rec.panOffsetY === 'number' && Number.isFinite(rec.panOffsetY)
+            ? rec.panOffsetY
+            : 0,
+        ...(typeof rec.updatedAt === 'number' && Number.isFinite(rec.updatedAt)
+          ? { updatedAt: rec.updatedAt }
+          : {}),
+      };
+      return { status: 'ok', state: normalized };
+    } catch {
+      return { status: 'corrupt', state: null };
+    }
+  }
+
   static loadActiveState(): {
     activeSnapshotId: string | null;
     activeColorId: number;
@@ -1763,6 +2178,7 @@ export class StorageService {
     zoomScale: number;
     panOffsetX: number;
     panOffsetY: number;
+    updatedAt?: number;
   } | null {
     try {
       const raw = this.loadRawWithBackupFallback(
@@ -1771,21 +2187,9 @@ export class StorageService {
         'activeState'
       );
       if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-      const normalized = {
-        ...parsed,
-        activeSnapshotId: typeof parsed.activeSnapshotId === 'string' ? parsed.activeSnapshotId : null,
-        activeColorId: typeof parsed.activeColorId === 'number' && Number.isFinite(parsed.activeColorId) ? parsed.activeColorId : 1,
-        filledRegionIds: Array.isArray(parsed.filledRegionIds)
-          ? parsed.filledRegionIds.filter((id: unknown) => typeof id === 'number' && Number.isFinite(id))
-          : [],
-        zoomScale: typeof parsed.zoomScale === 'number' && Number.isFinite(parsed.zoomScale) && parsed.zoomScale > 0 ? parsed.zoomScale : 1,
-        panOffsetX: typeof parsed.panOffsetX === 'number' && Number.isFinite(parsed.panOffsetX) ? parsed.panOffsetX : 0,
-        panOffsetY: typeof parsed.panOffsetY === 'number' && Number.isFinite(parsed.panOffsetY) ? parsed.panOffsetY : 0,
-      };
-      delete (normalized as Record<string, unknown>).savedAt;
-      return normalized;
+      const parsedRes = this.tryParseActiveState(raw);
+      if (parsedRes.status !== 'ok' || !parsedRes.state) return null;
+      return parsedRes.state;
     } catch {
       return null;
     }
@@ -2020,10 +2424,8 @@ export class StorageService {
           const now = Date.now();
 
           if (decoded.format === 'capy-single-save-v2' && decoded.snapshot) {
+            assertValidSavedSnapshot(decoded.snapshot, { strictV2: true });
             const rawSnap = this.stripInternalSnapshotMeta(decoded.snapshot);
-            if (!rawSnap.id || !rawSnap.title) {
-              return { importedCount: 0, error: 'Invalid binary snapshot structure' };
-            }
             const snap: SavedSnapshot = options?.refreshTimestamps
               ? { ...rawSnap, timestamp: now, lastOpened: now }
               : rawSnap;
@@ -2055,10 +2457,11 @@ export class StorageService {
           }
 
           if (decoded.format === 'capy-archive-save-v2' && Array.isArray(decoded.snapshots)) {
+            for (const s of decoded.snapshots) {
+              assertValidSavedSnapshot(s, { strictV2: true });
+            }
             const validSnapshots = decoded.snapshots.filter(
-              (s) =>
-                Boolean(s && s.id && s.title) &&
-                (!options?.filterSnapshotId || s.id === options.filterSnapshotId)
+              (s) => !options?.filterSnapshotId || s.id === options.filterSnapshotId
             );
             if (validSnapshots.length === 0) {
               return { importedCount: 0, error: 'No valid snapshots in binary archive' };
@@ -2148,16 +2551,19 @@ export class StorageService {
       const now = Date.now();
 
       // Single snapshot format (v1 JSON)
-      if (data.format === 'capy-single-save' && data.snapshot) {
+      if (
+        typeof data === 'object' &&
+        !Array.isArray(data) &&
+        data.format === 'capy-single-save' &&
+        data.snapshot !== undefined
+      ) {
+        assertValidSavedSnapshot(data.snapshot, { strictV2: false });
         const rawSnap = this.stripInternalSnapshotMeta(data.snapshot as SavedSnapshot);
-        if (!rawSnap.id || !rawSnap.title) {
-          return { importedCount: 0, error: 'Invalid snapshot data structure' };
-        }
         const snap: SavedSnapshot = options?.refreshTimestamps
           ? { ...rawSnap, timestamp: now, lastOpened: now }
           : rawSnap;
         let firstPuzzle: PuzzleData | undefined;
-        if (data.puzzle) {
+        if (data.puzzle !== undefined && data.puzzle !== null) {
           firstPuzzle = deserializePuzzle(data.puzzle);
         }
         if (firstPuzzle) {
@@ -2171,12 +2577,26 @@ export class StorageService {
       }
 
       // Archive format (v1 JSON)
-      if (data.format === 'capy-archive-save' && Array.isArray(data.snapshots)) {
-        const validSnapshots = (data.snapshots as SavedSnapshot[]).filter((s) =>
-          Boolean(s && s.id && s.title)
-        );
-        if (validSnapshots.length === 0) {
+      if (
+        typeof data === 'object' &&
+        !Array.isArray(data) &&
+        data.format === 'capy-archive-save' &&
+        Array.isArray(data.snapshots)
+      ) {
+        if (data.snapshots.length === 0) {
           return { importedCount: 0, error: 'No valid snapshots in archive' };
+        }
+        for (const s of data.snapshots) {
+          assertValidSavedSnapshot(s, { strictV2: false });
+        }
+        const validSnapshots = data.snapshots as SavedSnapshot[];
+
+        if (
+          data.puzzles !== undefined &&
+          data.puzzles !== null &&
+          (typeof data.puzzles !== 'object' || Array.isArray(data.puzzles))
+        ) {
+          return { importedCount: 0, error: 'Invalid puzzles map in archive' };
         }
 
         const { snapshots: existing, metaTsById } = this.loadSnapshotsWithMeta();
@@ -2192,7 +2612,7 @@ export class StorageService {
           for (let i = 0; i < toPersist.length; i++) {
             const snap = toPersist[i];
             const serialized = data.puzzles[snap.id];
-            if (serialized) {
+            if (serialized !== undefined && serialized !== null) {
               const puzzle = deserializePuzzle(serialized);
               if (i === 0) {
                 firstPuzzle = puzzle;
@@ -2224,10 +2644,13 @@ export class StorageService {
 
       // Fallback: array of snapshots
       if (Array.isArray(data)) {
-        const validSnapshots = (data as SavedSnapshot[]).filter((s) => Boolean(s && s.id && s.title));
-        if (validSnapshots.length === 0) {
+        if (data.length === 0) {
           return { importedCount: 0, error: 'No valid snapshots in array' };
         }
+        for (const s of data) {
+          assertValidSavedSnapshot(s, { strictV2: false });
+        }
+        const validSnapshots = data as SavedSnapshot[];
         const { snapshots: existing, metaTsById } = this.loadSnapshotsWithMeta();
         const { mergedList, toPersist } = this.mergeImportedSnapshots(
           existing,
@@ -2258,7 +2681,48 @@ export class StorageService {
   }
 }
 
-if (typeof window !== 'undefined') {
+export const DEV_DEBUG_STORAGE_KEY = 'capy_dev_debug';
+
+export function isDebugStorageExposed(
+  search?: string,
+  storageValue?: string | null,
+  isDevOverride?: boolean
+): boolean {
+  const isDev =
+    isDevOverride !== undefined ? isDevOverride : Boolean(import.meta.env?.DEV);
+  if (isDev) return true;
+
+  const effectiveSearch =
+    search !== undefined
+      ? search
+      : typeof window !== 'undefined'
+        ? (window.location?.search ?? '')
+        : '';
+  if (effectiveSearch) {
+    const params = new URLSearchParams(
+      effectiveSearch.startsWith('?') ? effectiveSearch : `?${effectiveSearch}`
+    );
+    const rawDebug = (params.get('capy_debug') || '').trim().toLowerCase();
+    if (rawDebug === '0' || rawDebug === 'false') {
+      return false;
+    }
+    if (rawDebug === '1' || rawDebug === 'true') {
+      return true;
+    }
+  }
+
+  let stored = storageValue;
+  if (stored === undefined && typeof window !== 'undefined') {
+    try {
+      stored = window.localStorage?.getItem(DEV_DEBUG_STORAGE_KEY) ?? null;
+    } catch {
+      stored = null;
+    }
+  }
+  return stored === '1' || stored === 'true';
+}
+
+if (typeof window !== 'undefined' && isDebugStorageExposed()) {
   (window as unknown as { capyStorage?: typeof StorageService }).capyStorage = StorageService;
 }
 
@@ -2296,6 +2760,9 @@ function bufferToBase64(buffer: ArrayBufferView): string {
 
 function base64ToInt32Array(b64: string): Int32Array {
   const bytes = base64ToUint8(b64);
+  if (bytes.byteLength % 4 !== 0) {
+    throw new Error('Invalid Int32Array byte length in puzzle payload');
+  }
   return new Int32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4);
 }
 
@@ -2334,16 +2801,35 @@ function encodeRegionMapRle16(regionMap: Int32Array): Uint8Array {
 }
 
 function decodeRegionMapRle16(b64: string, total: number): Int32Array {
+  if (!Number.isInteger(total) || total <= 0 || total > MAX_PUZZLE_PIXELS) {
+    throw new Error('Invalid regionMap pixel count');
+  }
+  if (typeof b64 !== 'string' || b64.length === 0) {
+    throw new Error('Invalid or empty RLE regionMap');
+  }
   const bytes = base64ToUint8(b64);
+  const byteLen = bytes.byteLength;
+  if (byteLen === 0 || byteLen % 4 !== 0) {
+    throw new Error('Invalid RLE regionMap byte length');
+  }
   const regionMap = new Int32Array(total);
   let writePos = 0;
-  const byteLen = bytes.length;
-  for (let i = 0; i + 3 < byteLen && writePos < total; i += 4) {
+  let i = 0;
+  for (; i < byteLen; i += 4) {
     const rid = bytes[i] | (bytes[i + 1] << 8);
     const len = bytes[i + 2] | (bytes[i + 3] << 8);
-    const end = Math.min(total, writePos + len);
+    if (len === 0) {
+      throw new Error('Invalid zero-length run in RLE regionMap');
+    }
+    if (writePos + len > total) {
+      throw new Error('RLE regionMap run exceeds expected puzzle pixel count');
+    }
+    const end = writePos + len;
     regionMap.fill(rid, writePos, end);
     writePos = end;
+  }
+  if (writePos !== total || i !== byteLen) {
+    throw new Error('Decoded RLE regionMap length mismatch');
   }
   return regionMap;
 }
@@ -2415,21 +2901,88 @@ export function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
     s.width <= 0 ||
     s.height <= 0 ||
     s.width * s.height > 16_777_216 ||
-    !Array.isArray(s.palette) ||
     !Array.isArray(s.regions)
   ) {
     throw new Error('Invalid puzzle payload dimensions or structure');
   }
+  assertValidPalette(s.palette);
+  if (s.isFreeColor !== undefined && typeof s.isFreeColor !== 'boolean') {
+    throw new Error('Invalid isFreeColor flag in puzzle payload');
+  }
   const total = s.width * s.height;
-  const regionMap = s.regionMapRleB64
-    ? decodeRegionMapRle16(s.regionMapRleB64, total)
-    : s.regionMapB64
-      ? base64ToInt32Array(s.regionMapB64)
-      : new Int32Array(total);
+  if (!Number.isSafeInteger(total) || total <= 0 || total > MAX_PUZZLE_PIXELS) {
+    throw new Error('Invalid puzzle payload dimensions or structure');
+  }
+  let regionMap: Int32Array;
+  if (s.regionMapRleB64 !== undefined) {
+    if (typeof s.regionMapRleB64 !== 'string' || s.regionMapRleB64.length === 0) {
+      throw new Error('Invalid or empty regionMapRleB64 in puzzle payload');
+    }
+    regionMap = decodeRegionMapRle16(s.regionMapRleB64, total);
+  } else if (s.regionMapB64 !== undefined) {
+    if (typeof s.regionMapB64 !== 'string' || s.regionMapB64.length === 0) {
+      throw new Error('Invalid or empty regionMapB64 in puzzle payload');
+    }
+    regionMap = base64ToInt32Array(s.regionMapB64);
+  } else {
+    throw new Error('Missing regionMap in puzzle payload');
+  }
+  if (regionMap.length !== total) {
+    throw new Error('Decoded regionMap length mismatch');
+  }
 
-  const borderMap = s.borderMapB64
-    ? base64ToUint8(s.borderMapB64)
-    : buildBorderMapFromRegionMap(regionMap, s.width, s.height);
+  let borderMap: Uint8Array;
+  if (s.borderMapB64 !== undefined) {
+    if (typeof s.borderMapB64 !== 'string' || s.borderMapB64.length === 0) {
+      throw new Error('Invalid or empty borderMapB64 in puzzle payload');
+    }
+    borderMap = base64ToUint8(s.borderMapB64);
+  } else {
+    borderMap = buildBorderMapFromRegionMap(regionMap, s.width, s.height);
+  }
+  if (borderMap.length !== total) {
+    throw new Error('Decoded borderMap length mismatch');
+  }
+
+  const maxAllowedRegionId = Math.max(total, MAX_DELTA_REGION_ENTRIES);
+  if (s.regions.length > maxAllowedRegionId) {
+    throw new Error('Puzzle region count exceeds safety limit');
+  }
+
+  let maxRegionId = 0;
+  for (let i = 0; i < s.regions.length; i++) {
+    const r = s.regions[i];
+    if (
+      !r ||
+      typeof r !== 'object' ||
+      typeof r.id !== 'number' ||
+      !Number.isInteger(r.id) ||
+      r.id < 0 ||
+      r.id > maxAllowedRegionId ||
+      typeof r.colorId !== 'number' ||
+      !Number.isInteger(r.colorId) ||
+      r.colorId < 0 ||
+      typeof r.centroidX !== 'number' ||
+      !Number.isFinite(r.centroidX) ||
+      typeof r.centroidY !== 'number' ||
+      !Number.isFinite(r.centroidY) ||
+      typeof r.area !== 'number' ||
+      !Number.isFinite(r.area) ||
+      r.area < 0 ||
+      typeof r.maxRadius !== 'number' ||
+      !Number.isFinite(r.maxRadius) ||
+      r.maxRadius < 0 ||
+      (r.minX !== undefined && (typeof r.minX !== 'number' || !Number.isFinite(r.minX))) ||
+      (r.maxX !== undefined && (typeof r.maxX !== 'number' || !Number.isFinite(r.maxX))) ||
+      (r.minY !== undefined && (typeof r.minY !== 'number' || !Number.isFinite(r.minY))) ||
+      (r.maxY !== undefined && (typeof r.maxY !== 'number' || !Number.isFinite(r.maxY)))
+    ) {
+      throw new Error('Invalid puzzle region metadata or ID out of bounds');
+    }
+    if (r.id > maxRegionId) {
+      maxRegionId = r.id;
+    }
+  }
 
   const hasLegacyPixels = s.regions.length > 0 && s.regions.every((r) => typeof r.pixelsB64 === 'string');
   if (hasLegacyPixels) {
@@ -2440,27 +2993,26 @@ export function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
       regionMap,
       borderMap,
       isFreeColor: s.isFreeColor,
-      regions: s.regions.map((r) => ({
-        id: r.id,
-        colorId: r.colorId,
-        centroidX: r.centroidX,
-        centroidY: r.centroidY,
-        area: r.area,
-        minX: r.minX,
-        maxX: r.maxX,
-        minY: r.minY,
-        maxY: r.maxY,
-        maxRadius: r.maxRadius,
-        pixels: base64ToInt32Array(r.pixelsB64!),
-      })),
+      regions: s.regions.map((r) => {
+        const pixels = base64ToInt32Array(r.pixelsB64!);
+        if (pixels.length > total) {
+          throw new Error('Decoded region pixel array exceeds puzzle pixel count');
+        }
+        return {
+          id: r.id,
+          colorId: r.colorId,
+          centroidX: r.centroidX,
+          centroidY: r.centroidY,
+          area: r.area,
+          minX: r.minX,
+          maxX: r.maxX,
+          minY: r.minY,
+          maxY: r.maxY,
+          maxRadius: r.maxRadius,
+          pixels,
+        };
+      }),
     };
-  }
-
-  let maxRegionId = 0;
-  for (let i = 0; i < s.regions.length; i++) {
-    if (s.regions[i].id > maxRegionId) {
-      maxRegionId = s.regions[i].id;
-    }
   }
 
   const idToIndex = new Int32Array(maxRegionId + 1);

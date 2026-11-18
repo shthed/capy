@@ -70,8 +70,18 @@ interface ExportedHandler<E = unknown> {
   fetch?(request: Request, env: E, ctx: ExecutionContext): Response | Promise<Response>;
 }
 
-interface Headers {
+declare class Headers {
+  constructor(init?: Headers | Record<string, string>);
   get(name: string): string | null;
+  set(name: string, value: string): void;
+  has(name: string): boolean;
+  delete(name: string): void;
+  entries(): IterableIterator<[string, string]>;
+}
+
+interface ReadableStream<R = unknown> {
+  readonly locked: boolean;
+  cancel(reason?: unknown): Promise<void>;
 }
 
 interface RequestInit {
@@ -89,15 +99,20 @@ declare class Request {
 interface ResponseInit {
   status?: number;
   statusText?: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | Headers;
   webSocket?: WebSocket;
 }
 
 declare class Response {
   readonly status: number;
+  readonly statusText: string;
   readonly ok: boolean;
   readonly headers: Headers;
-  constructor(body?: string | ArrayBuffer | Uint8Array | null, init?: ResponseInit);
+  readonly body: ReadableStream<Uint8Array> | null;
+  constructor(
+    body?: ReadableStream<Uint8Array> | string | ArrayBuffer | Uint8Array | null,
+    init?: ResponseInit
+  );
   static json(data: unknown, init?: ResponseInit): Response;
   static redirect(url: string, status?: number): Response;
 }
@@ -113,6 +128,8 @@ declare class URL {
   href: string;
   readonly origin: string;
   protocol: string;
+  username: string;
+  password: string;
   host: string;
   hostname: string;
   port: string;
@@ -156,8 +173,14 @@ declare module 'cloudflare:workers' {
   }
 }
 
+interface RateLimitBinding {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 interface Env {
   ASSETS: Fetcher;
   COOP_ROOMS: DurableObjectNamespace<import('./index').CoopRoomDurableObject>;
   ALLOWED_EXTRA_ORIGINS?: string;
+  ALLOW_LOCALHOST_ORIGINS?: string;
+  API_RATE_LIMITER?: RateLimitBinding;
 }

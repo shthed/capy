@@ -19,12 +19,72 @@ interface SocketAttachment {
   boundPlayerId?: string | null;
   participant: RelayParticipant | null;
   joinedAt?: number;
-  frameTimestamps?: number[];
 }
 
 interface RoomSeedRecord {
   seedToken: string;
   updatedAt: number;
+}
+
+const API_SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
+  ['X-Content-Type-Options', 'nosniff'],
+  ['Cache-Control', 'no-store'],
+  ['Strict-Transport-Security', 'max-age=31536000; includeSubDomains'],
+  ['Referrer-Policy', 'strict-origin-when-cross-origin'],
+  ['X-Frame-Options', 'DENY'],
+];
+
+function mergeApiSecurityHeaders(extraHeaders?: Record<string, string>): Headers {
+  const headers = new Headers(extraHeaders);
+  for (const [name, value] of API_SECURITY_HEADERS) {
+    headers.set(name, value);
+  }
+  return headers;
+}
+
+function withApiSecurityHeaders(res: Response): Response {
+  if (res.status === 101) return res;
+  const headers = new Headers(res.headers);
+  for (const [name, value] of API_SECURITY_HEADERS) {
+    headers.set(name, value);
+  }
+  return new Response(res.body ?? null, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
+function apiJsonResponse(
+  body: unknown,
+  status: number,
+  extraHeaders?: Record<string, string>
+): Response {
+  return Response.json(body, {
+    status,
+    headers: mergeApiSecurityHeaders(extraHeaders),
+  });
+}
+
+async function checkApiRateLimit(
+  request: Request,
+  env: Env,
+  bucket: string
+): Promise<Response | null> {
+  if (!env.API_RATE_LIMITER) return null;
+  const clientIp =
+    (
+      request.headers.get('CF-Connecting-IP') ||
+      request.headers.get('X-Forwarded-For')?.split(',')[0] ||
+      ''
+    ).trim() || 'unknown';
+  const rl = await env.API_RATE_LIMITER.limit({ key: `${bucket}:${clientIp}` });
+  if (!rl.success) {
+    return apiJsonResponse({ error: 'Too many requests' }, 429, {
+      'Retry-After': '60',
+    });
+  }
+  return null;
 }
 
 /**
@@ -35,7 +95,15 @@ interface RoomSeedRecord {
 export class CoopRoomDurableObject extends DurableObject<Env> {
   private lastSeedWriteAt = 0;
   private lastSavedSeedToken: string | null = null;
-  private pendingCheckpoint: { roomCode: string; seedToken: string } | null = null;
+  private hostPlayerId: string | null = null;
+  private hostPlayerIdUpdatedAt = 0;
+  private pendingCheckpoint: {
+    roomCode: string;
+    seedToken: string;
+    hostPlayerId?: string;
+    updatedAt: number;
+  } | null = null;
+  private readonly rateLimitWindows = new WeakMap<WebSocket, number[]>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -48,104 +116,156 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
           updated_at INTEGER NOT NULL
         )
       `);
-      this.restorePendingCheckpointFromSql(Date.now());
+      const now = Date.now();
+      const hostRecord = this.loadHostPlayerIdFromSql(now);
+      this.hostPlayerId = hostRecord?.hostPlayerId ?? null;
+      this.hostPlayerIdUpdatedAt = hostRecord?.updatedAt ?? 0;
+      this.restorePendingCheckpointFromSql(now);
     });
   }
 
   async fetch(request: Request): Promise<Response> {
-    const upgradeHeader = request.headers.get('Upgrade');
-    if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
-      return Response.json({ error: 'Expected WebSocket Upgrade' }, { status: 426 });
+    try {
+      if (request.method !== 'GET') {
+        return apiJsonResponse({ error: 'Method not allowed' }, 405, {
+          Allow: 'GET',
+        });
+      }
+
+      const origin = request.headers.get('Origin');
+      if (
+        !isAllowedRelayOrigin(
+          origin,
+          this.env.ALLOWED_EXTRA_ORIGINS,
+          this.env.ALLOW_LOCALHOST_ORIGINS === 'true'
+        )
+      ) {
+        return apiJsonResponse({ error: 'Forbidden origin' }, 403);
+      }
+
+      const upgradeHeader = request.headers.get('Upgrade');
+      if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+        return apiJsonResponse({ error: 'Expected WebSocket Upgrade' }, 426);
+      }
+
+      const url = new URL(request.url);
+      const roomCode = normalizeRoomCode(url.searchParams.get('room'));
+      if (!roomCode) {
+        return apiJsonResponse({ error: 'Invalid room code' }, 400);
+      }
+
+      const activeSockets = this.ctx.getWebSockets();
+      if (activeSockets.length >= MAX_ROOM_PARTICIPANTS) {
+        return apiJsonResponse({ error: 'Co-op room is full' }, 429, {
+          'Retry-After': '60',
+        });
+      }
+
+      const pair = new WebSocketPair();
+      const client = pair[0];
+      const server = pair[1];
+
+      const now = Date.now();
+      const initialAttachment: SocketAttachment = {
+        roomCode,
+        boundPlayerId: null,
+        participant: null,
+      };
+      this.ctx.acceptWebSocket(server);
+      server.serializeAttachment(initialAttachment);
+
+      if (!this.getPendingCheckpoint(now)) {
+        await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
+      }
+
+      return new Response(null, {
+        status: 101,
+        webSocket: client,
+      });
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: 'coop_do_fetch_error',
+          message: err instanceof Error ? err.message : 'unknown',
+        })
+      );
+      return apiJsonResponse({ error: 'Internal relay error' }, 500);
     }
-
-    const url = new URL(request.url);
-    const roomCode = normalizeRoomCode(url.searchParams.get('room'));
-    if (!roomCode) {
-      return Response.json({ error: 'Invalid room code' }, { status: 400 });
-    }
-
-    const activeSockets = this.ctx.getWebSockets();
-    if (activeSockets.length >= MAX_ROOM_PARTICIPANTS) {
-      return Response.json({ error: 'Co-op room is full' }, { status: 429 });
-    }
-
-    const pair = new WebSocketPair();
-    const client = pair[0];
-    const server = pair[1];
-
-    const initialAttachment: SocketAttachment = {
-      roomCode,
-      boundPlayerId: null,
-      participant: null,
-      frameTimestamps: [],
-    };
-    this.ctx.acceptWebSocket(server);
-    server.serializeAttachment(initialAttachment);
-
-    if (!this.pendingCheckpoint) {
-      await this.ctx.storage.setAlarm(Date.now() + ROOM_STATE_TTL_MS);
-    }
-
-    return new Response(null, {
-      status: 101,
-      webSocket: client,
-    });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (message === 'PING') {
-      try {
-        ws.send('PONG');
-      } catch {
-        // Ignore closed socket
+    try {
+      if (message === 'PING') {
+        try {
+          ws.send('PONG');
+        } catch {
+          // Ignore closed socket
+        }
+        return;
       }
-      return;
-    }
 
-    const attachment = (ws.deserializeAttachment() as SocketAttachment | null) ?? null;
-    if (!attachment?.roomCode) {
-      ws.close(1008, 'Missing room attachment');
-      return;
-    }
-
-    const now = Date.now();
-    const rate = checkSocketRateLimit(attachment.frameTimestamps, now);
-    if (!rate.allowed) {
-      ws.close(1008, 'Rate limit exceeded');
-      return;
-    }
-    attachment.frameTimestamps = rate.timestamps;
-
-    const validation = validateCoopFrame(message, attachment.roomCode);
-    if (!validation.ok || !validation.message || !validation.serialized) {
-      ws.serializeAttachment(attachment);
-      if (validation.reason === 'frame_size_exceeded') {
+      if (message instanceof ArrayBuffer && message.byteLength > MAX_COOP_FRAME_BYTES) {
         ws.close(1009, `Frame exceeds ${MAX_COOP_FRAME_BYTES} byte limit`);
-      } else if (validation.reason === 'reserved_sender_id') {
-        ws.close(1008, 'Reserved sender ID');
+        return;
       }
-      return;
-    }
 
-    const parsed = validation.message;
-    const senderCheck = resolveBoundSocketSender(
-      attachment.boundPlayerId ?? attachment.participant?.playerId ?? null,
-      parsed.sender
-    );
-    if (!senderCheck.ok) {
-      ws.serializeAttachment(attachment);
-      ws.close(1008, 'Sender identity mismatch');
-      return;
-    }
+      const attachment = (ws.deserializeAttachment() as SocketAttachment | null) ?? null;
+      if (!attachment?.roomCode) {
+        ws.close(1008, 'Missing room attachment');
+        return;
+      }
 
-    attachment.boundPlayerId = senderCheck.boundPlayerId;
-    attachment.participant = parsed.sender;
-    if (parsed.type === 'HELLO' && !attachment.joinedAt) {
-      attachment.joinedAt = now;
-    }
-    ws.serializeAttachment(attachment);
+      const now = Date.now();
+      const rate = checkSocketRateLimit(this.rateLimitWindows.get(ws), now);
+      this.rateLimitWindows.set(ws, rate.timestamps);
+      if (!rate.allowed) {
+        ws.close(1008, 'Rate limit exceeded');
+        return;
+      }
 
-    if (parsed.seedToken && (parsed.type === 'HELLO' || parsed.type === 'WELCOME_STATE')) {
+      const validation = validateCoopFrame(message, attachment.roomCode);
+      if (!validation.ok || !validation.message || !validation.serialized) {
+        if (validation.reason === 'frame_size_exceeded') {
+          ws.close(1009, `Frame exceeds ${MAX_COOP_FRAME_BYTES} byte limit`);
+        } else if (validation.reason === 'reserved_sender_id') {
+          ws.close(1008, 'Reserved sender ID');
+        }
+        return;
+      }
+
+      const parsed = validation.message;
+      const senderCheck = resolveBoundSocketSender(
+        attachment.boundPlayerId ?? attachment.participant?.playerId ?? null,
+        parsed.sender
+      );
+      if (!senderCheck.ok) {
+        ws.close(1008, 'Sender identity mismatch');
+        return;
+      }
+
+      const prevAttachment = attachment;
+      const wasJoined = Boolean(prevAttachment.joinedAt);
+      if (!wasJoined && parsed.type !== 'HELLO') {
+        return;
+      }
+
+      const nextJoinedAt =
+        parsed.type === 'HELLO' && !prevAttachment.joinedAt ? now : prevAttachment.joinedAt;
+      const participantChanged =
+        prevAttachment.boundPlayerId !== senderCheck.boundPlayerId ||
+        prevAttachment.joinedAt !== nextJoinedAt ||
+        prevAttachment.participant?.playerId !== parsed.sender.playerId ||
+        prevAttachment.participant?.displayName !== parsed.sender.displayName ||
+        prevAttachment.participant?.avatarColorHex !== parsed.sender.avatarColorHex;
+
+      attachment.boundPlayerId = senderCheck.boundPlayerId;
+      attachment.participant = parsed.sender;
+      attachment.joinedAt = nextJoinedAt;
+      if (participantChanged) {
+        ws.serializeAttachment(attachment);
+      }
+
+      this.expireStaleRoomState(now);
       const currentRecord = this.loadRoomSeedRecord(now);
       if (this.lastSeedWriteAt === 0 && currentRecord) {
         this.lastSeedWriteAt = currentRecord.updatedAt;
@@ -154,60 +274,119 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       const pending = this.getPendingCheckpoint(now);
       const effectiveSeed =
         pending?.seedToken ?? currentRecord?.seedToken ?? this.lastSavedSeedToken;
-      const seedAction = evaluateRoomSeedAction({
-        messageType: parsed.type,
-        incomingSeedToken: parsed.seedToken,
-        hasSocketJoined: Boolean(attachment.joinedAt),
-        existingSeedToken: effectiveSeed,
-        lastSavedSeedToken: effectiveSeed,
-        lastWriteAtMs: this.lastSeedWriteAt,
-        nowMs: now,
-      });
-
-      if (seedAction === 'write_now') {
-        this.saveRoomSeedToken(attachment.roomCode, parsed.seedToken, now);
-      } else if (seedAction === 'debounce') {
-        this.savePendingCheckpoint(attachment.roomCode, parsed.seedToken, now);
-        await this.ctx.storage.setAlarm(this.lastSeedWriteAt + SEED_CHECKPOINT_DEBOUNCE_MS);
+      const sqlHost = this.hostPlayerId ? null : this.loadHostPlayerIdFromSql(now);
+      if (!this.hostPlayerId && sqlHost) {
+        this.hostPlayerId = sqlHost.hostPlayerId;
+        this.hostPlayerIdUpdatedAt = sqlHost.updatedAt;
+      } else if (!this.hostPlayerId && pending?.hostPlayerId) {
+        this.hostPlayerId = pending.hostPlayerId;
+        this.hostPlayerIdUpdatedAt = pending.updatedAt;
       }
-    }
+      let effectiveHostId = this.hostPlayerId;
 
-    const sockets = this.ctx.getWebSockets();
-    let deliveredCount = 0;
-    for (const peer of sockets) {
-      if (peer === ws) continue;
-      try {
-        peer.send(validation.serialized);
-        deliveredCount++;
-      } catch {
-        // Closed or broken peer socket is cleaned up in webSocketClose/webSocketError
+      if (parsed.type === 'HELLO' && !effectiveHostId) {
+        this.lockHostPlayerId(attachment.roomCode, senderCheck.boundPlayerId, now);
+        effectiveHostId = this.hostPlayerId;
       }
-    }
 
-    // If a player joins or reconnects when no active peer replied yet, hydrate from SQLite seedToken
-    if (parsed.type === 'HELLO' && deliveredCount === 0) {
-      const storedSeed =
-        this.getPendingCheckpoint(now)?.seedToken ?? this.loadRoomSeedRecord(now)?.seedToken ?? null;
-      if (storedSeed && storedSeed !== parsed.seedToken) {
-        try {
-          ws.send(
-            JSON.stringify({
-              type: 'WELCOME_STATE',
-              roomCode: attachment.roomCode,
-              sender: {
-                playerId: RESERVED_RELAY_PLAYER_ID,
-                displayName: 'Room Relay',
-                avatarColorHex: '#38bdf8',
-                lastActiveAt: now,
-              },
-              seedToken: storedSeed,
-              sentAt: now,
-            })
+      const isSeedAuthority = Boolean(
+        effectiveHostId && senderCheck.boundPlayerId === effectiveHostId
+      );
+
+      let outboundSerialized = validation.serialized;
+
+      if (parsed.type === 'WELCOME_STATE' && !isSeedAuthority) {
+        return;
+      }
+
+      if (parsed.seedToken && (parsed.type === 'HELLO' || parsed.type === 'WELCOME_STATE')) {
+        if (
+          parsed.type === 'HELLO' &&
+          ((effectiveSeed !== null && parsed.seedToken !== effectiveSeed) ||
+            (!isSeedAuthority && parsed.seedToken !== effectiveSeed))
+        ) {
+          const sanitizedHello = { ...parsed };
+          delete sanitizedHello.seedToken;
+          outboundSerialized = JSON.stringify(sanitizedHello);
+        }
+
+        const seedAction = evaluateRoomSeedAction({
+          messageType: parsed.type,
+          incomingSeedToken: parsed.seedToken,
+          hasSocketJoined: Boolean(attachment.joinedAt),
+          existingSeedToken: effectiveSeed,
+          lastSavedSeedToken: effectiveSeed,
+          lastWriteAtMs: this.lastSeedWriteAt,
+          nowMs: now,
+          isSeedAuthority,
+        });
+
+        if (seedAction === 'write_now') {
+          this.saveRoomSeedToken(
+            attachment.roomCode,
+            parsed.seedToken,
+            now,
+            effectiveHostId ?? undefined
           );
-        } catch {
-          // Ignore send failure on closing socket
+        } else if (seedAction === 'debounce') {
+          this.savePendingCheckpoint(
+            attachment.roomCode,
+            parsed.seedToken,
+            now,
+            effectiveHostId ?? undefined
+          );
+          const nextAlarmAt = Math.max(
+            now + 250,
+            this.lastSeedWriteAt + SEED_CHECKPOINT_DEBOUNCE_MS
+          );
+          await this.ctx.storage.setAlarm(nextAlarmAt);
         }
       }
+
+      const sockets = this.ctx.getWebSockets();
+      for (const peer of sockets) {
+        if (peer === ws) continue;
+        try {
+          peer.send(outboundSerialized);
+        } catch {
+          // Closed or broken peer socket is cleaned up in webSocketClose/webSocketError
+        }
+      }
+
+      // Hydrate joining/reconnecting socket from authoritative SQLite seedToken whenever it lacks or differs
+      if (parsed.type === 'HELLO') {
+        const storedSeed =
+          this.getPendingCheckpoint(now)?.seedToken ??
+          this.loadRoomSeedRecord(now)?.seedToken ??
+          null;
+        if (storedSeed && storedSeed !== parsed.seedToken) {
+          try {
+            ws.send(
+              JSON.stringify({
+                type: 'WELCOME_STATE',
+                roomCode: attachment.roomCode,
+                sender: {
+                  playerId: RESERVED_RELAY_PLAYER_ID,
+                  displayName: 'Room Relay',
+                  avatarColorHex: '#38bdf8',
+                  lastActiveAt: now,
+                },
+                seedToken: storedSeed,
+                sentAt: now,
+              })
+            );
+          } catch {
+            // Ignore send failure on closing socket
+          }
+        }
+      }
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: 'coop_ws_message_error',
+          message: err instanceof Error ? err.message : 'unknown',
+        })
+      );
     }
   }
 
@@ -217,8 +396,26 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     reason: string,
     _wasClean: boolean
   ): Promise<void> {
-    this.flushPendingCheckpoint(Date.now());
-    this.broadcastDeparture(ws);
+    try {
+      this.rateLimitWindows.delete(ws);
+      const now = Date.now();
+      this.expireStaleRoomState(now);
+      this.flushPendingCheckpoint(now);
+      this.broadcastDeparture(ws);
+      if (
+        this.ctx.getWebSockets().length <= 1 &&
+        (this.loadRoomSeedRecord(now) || this.hostPlayerId || this.loadHostPlayerIdFromSql(now))
+      ) {
+        await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
+      }
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: 'coop_ws_close_error',
+          message: err instanceof Error ? err.message : 'unknown',
+        })
+      );
+    }
     try {
       ws.close(code, reason.slice(0, 100));
     } catch {
@@ -227,8 +424,26 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
   }
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
-    this.flushPendingCheckpoint(Date.now());
-    this.broadcastDeparture(ws);
+    try {
+      this.rateLimitWindows.delete(ws);
+      const now = Date.now();
+      this.expireStaleRoomState(now);
+      this.flushPendingCheckpoint(now);
+      this.broadcastDeparture(ws);
+      if (
+        this.ctx.getWebSockets().length <= 1 &&
+        (this.loadRoomSeedRecord(now) || this.hostPlayerId || this.loadHostPlayerIdFromSql(now))
+      ) {
+        await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
+      }
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: 'coop_ws_error_cleanup',
+          message: err instanceof Error ? err.message : 'unknown',
+        })
+      );
+    }
     try {
       ws.close(1011, 'WebSocket error');
     } catch {
@@ -238,40 +453,175 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     const now = Date.now();
+    this.expireStaleRoomState(now);
     this.flushPendingCheckpoint(now);
     const record = this.loadRoomSeedRecord(now);
     if (this.ctx.getWebSockets().length === 0) {
       if (record) {
         const expiresAt = record.updatedAt + ROOM_STATE_TTL_MS;
         if (now >= expiresAt) {
-          this.ctx.storage.sql.exec('DELETE FROM room_state');
-          this.pendingCheckpoint = null;
+          this.clearRoomState();
         } else {
           await this.ctx.storage.setAlarm(expiresAt);
         }
       } else {
-        this.ctx.storage.sql.exec('DELETE FROM room_state');
-        this.pendingCheckpoint = null;
+        this.clearRoomState();
       }
-    } else {
-      await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
+      return;
     }
+
+    if (this.isHostPlayerIdExpired(now)) {
+      this.clearRoomState();
+    } else {
+      const hostRecord = this.loadHostPlayerIdFromSql(now);
+      if (hostRecord && now >= hostRecord.updatedAt + ROOM_STATE_TTL_MS) {
+        this.clearRoomState();
+      } else {
+        this.ctx.storage.sql.exec(
+          'DELETE FROM room_state WHERE updated_at <= ?',
+          now - ROOM_STATE_TTL_MS
+        );
+      }
+    }
+    await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
   }
 
-  private getPendingCheckpoint(now: number): { roomCode: string; seedToken: string } | null {
-    if (!this.pendingCheckpoint) {
-      this.restorePendingCheckpointFromSql(now);
+  private clearRoomState(): void {
+    this.ctx.storage.sql.exec('DELETE FROM room_state');
+    this.pendingCheckpoint = null;
+    this.hostPlayerId = null;
+    this.hostPlayerIdUpdatedAt = 0;
+    this.lastSavedSeedToken = null;
+    this.lastSeedWriteAt = 0;
+  }
+
+  private isHostPlayerIdExpired(now: number): boolean {
+    return (
+      this.hostPlayerId !== null &&
+      (this.hostPlayerIdUpdatedAt <= 0 || now - this.hostPlayerIdUpdatedAt >= ROOM_STATE_TTL_MS)
+    );
+  }
+
+  private expireStaleRoomState(now: number): boolean {
+    if (this.isHostPlayerIdExpired(now)) {
+      this.clearRoomState();
+      return true;
     }
+    const hostRows = this.ctx.storage.sql
+      .exec<{ updated_at: number }>(
+        `SELECT updated_at FROM room_state WHERE key = 'host_player_id' LIMIT 1`
+      )
+      .toArray();
+    if (hostRows.length > 0 && now - hostRows[0].updated_at >= ROOM_STATE_TTL_MS) {
+      this.clearRoomState();
+      return true;
+    }
+    const seedRows = this.ctx.storage.sql
+      .exec<{ updated_at: number }>(
+        `SELECT updated_at FROM room_state WHERE key = 'seed_token' LIMIT 1`
+      )
+      .toArray();
+    if (seedRows.length > 0 && now - seedRows[0].updated_at >= ROOM_STATE_TTL_MS) {
+      this.clearRoomState();
+      return true;
+    }
+    if (
+      this.pendingCheckpoint &&
+      now - this.pendingCheckpoint.updatedAt >= ROOM_STATE_TTL_MS
+    ) {
+      this.clearRoomState();
+      return true;
+    }
+    const pendingRows = this.ctx.storage.sql
+      .exec<{ updated_at: number }>(
+        `SELECT updated_at FROM room_state WHERE key = 'pending_seed' LIMIT 1`
+      )
+      .toArray();
+    if (pendingRows.length > 0 && now - pendingRows[0].updated_at >= ROOM_STATE_TTL_MS) {
+      this.clearRoomState();
+      return true;
+    }
+    return false;
+  }
+
+  private loadHostPlayerIdFromSql(
+    now: number = Date.now()
+  ): { hostPlayerId: string; updatedAt: number } | null {
+    const rows = this.ctx.storage.sql
+      .exec<{ value: string; updated_at: number }>(
+        `SELECT value, updated_at FROM room_state WHERE key = 'host_player_id' LIMIT 1`
+      )
+      .toArray();
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    if (now - row.updated_at >= ROOM_STATE_TTL_MS) {
+      this.clearRoomState();
+      return null;
+    }
+    const raw = row.value?.trim();
+    return raw ? { hostPlayerId: raw, updatedAt: row.updated_at } : null;
+  }
+
+  private lockHostPlayerId(
+    roomCode: string,
+    hostPlayerId: string,
+    now: number = Date.now()
+  ): void {
+    if (this.isHostPlayerIdExpired(now)) {
+      this.clearRoomState();
+    }
+    if (this.hostPlayerId) return;
+    const existing = this.loadHostPlayerIdFromSql(now);
+    if (existing) {
+      this.hostPlayerId = existing.hostPlayerId;
+      this.hostPlayerIdUpdatedAt = existing.updatedAt;
+      return;
+    }
+    this.hostPlayerId = hostPlayerId;
+    this.hostPlayerIdUpdatedAt = now;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_state (key, value, updated_at)
+       VALUES ('host_player_id', ?, ?)
+       ON CONFLICT(key) DO NOTHING`,
+      hostPlayerId,
+      now
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_state (key, value, updated_at)
+       VALUES ('room_code', ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      roomCode,
+      now
+    );
+  }
+
+  private getPendingCheckpoint(
+    now: number
+  ): { roomCode: string; seedToken: string; hostPlayerId?: string; updatedAt: number } | null {
+    if (this.pendingCheckpoint) {
+      if (now - this.pendingCheckpoint.updatedAt >= ROOM_STATE_TTL_MS) {
+        this.pendingCheckpoint = null;
+        this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
+        return null;
+      }
+      return this.pendingCheckpoint;
+    }
+    this.restorePendingCheckpointFromSql(now);
     return this.pendingCheckpoint;
   }
 
-  private savePendingCheckpoint(roomCode: string, seedToken: string, now: number): void {
-    this.pendingCheckpoint = { roomCode, seedToken };
+  private savePendingCheckpoint(
+    roomCode: string,
+    seedToken: string,
+    now: number,
+    hostPlayerId?: string
+  ): void {
+    this.pendingCheckpoint = { roomCode, seedToken, hostPlayerId, updatedAt: now };
     this.ctx.storage.sql.exec(
       `INSERT INTO room_state (key, value, updated_at)
        VALUES ('pending_seed', ?, ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-      JSON.stringify({ roomCode, seedToken }),
+      JSON.stringify({ roomCode, seedToken, ...(hostPlayerId ? { hostPlayerId } : {}) }),
       now
     );
   }
@@ -284,15 +634,24 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       .toArray();
     if (rows.length === 0) return;
     const row = rows[0];
-    if (now - row.updated_at > ROOM_STATE_TTL_MS) {
+    if (now - row.updated_at >= ROOM_STATE_TTL_MS) {
       this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
       this.pendingCheckpoint = null;
       return;
     }
     try {
-      const parsed = JSON.parse(row.value) as { roomCode?: string; seedToken?: string };
+      const parsed = JSON.parse(row.value) as {
+        roomCode?: string;
+        seedToken?: string;
+        hostPlayerId?: string;
+      };
       if (typeof parsed.roomCode === 'string' && typeof parsed.seedToken === 'string') {
-        this.pendingCheckpoint = { roomCode: parsed.roomCode, seedToken: parsed.seedToken };
+        this.pendingCheckpoint = {
+          roomCode: parsed.roomCode,
+          seedToken: parsed.seedToken,
+          ...(typeof parsed.hostPlayerId === 'string' ? { hostPlayerId: parsed.hostPlayerId } : {}),
+          updatedAt: row.updated_at,
+        };
       }
     } catch {
       this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
@@ -300,14 +659,19 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
   }
 
   private flushPendingCheckpoint(now: number): void {
+    if (this.expireStaleRoomState(now)) return;
     const pending = this.getPendingCheckpoint(now);
     if (!pending) return;
-    this.saveRoomSeedToken(pending.roomCode, pending.seedToken, now);
+    if (now - pending.updatedAt >= ROOM_STATE_TTL_MS) {
+      this.clearRoomState();
+      return;
+    }
+    this.saveRoomSeedToken(pending.roomCode, pending.seedToken, now, pending.hostPlayerId);
   }
 
   private broadcastDeparture(closedWs: WebSocket): void {
     const attachment = (closedWs.deserializeAttachment() as SocketAttachment | null) ?? null;
-    if (!attachment?.roomCode || !attachment.participant) return;
+    if (!attachment?.roomCode || !attachment.joinedAt || !attachment.participant) return;
 
     const leavePayload = JSON.stringify({
       type: 'LEAVE',
@@ -326,7 +690,12 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     }
   }
 
-  private saveRoomSeedToken(roomCode: string, seedToken: string, now: number = Date.now()): void {
+  private saveRoomSeedToken(
+    roomCode: string,
+    seedToken: string,
+    now: number = Date.now(),
+    hostPlayerId?: string
+  ): void {
     this.ctx.storage.sql.exec(
       `INSERT INTO room_state (key, value, updated_at)
        VALUES ('seed_token', ?, ?), ('room_code', ?, ?)
@@ -336,6 +705,19 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       roomCode,
       now
     );
+    if (hostPlayerId) {
+      if (!this.hostPlayerId) {
+        this.hostPlayerId = hostPlayerId;
+      }
+      this.hostPlayerIdUpdatedAt = now;
+      this.ctx.storage.sql.exec(
+        `INSERT INTO room_state (key, value, updated_at)
+         VALUES ('host_player_id', ?, ?)
+         ON CONFLICT(key) DO UPDATE SET updated_at = excluded.updated_at`,
+        this.hostPlayerId,
+        now
+      );
+    }
     this.ctx.storage.sql.exec(`DELETE FROM room_state WHERE key = 'pending_seed'`);
     this.lastSeedWriteAt = now;
     this.lastSavedSeedToken = seedToken;
@@ -350,11 +732,8 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       .toArray();
     if (rows.length === 0) return null;
     const row = rows[0];
-    if (now - row.updated_at > ROOM_STATE_TTL_MS) {
-      this.ctx.storage.sql.exec('DELETE FROM room_state');
-      this.lastSavedSeedToken = null;
-      this.lastSeedWriteAt = 0;
-      this.pendingCheckpoint = null;
+    if (now - row.updated_at >= ROOM_STATE_TTL_MS) {
+      this.clearRoomState();
       return null;
     }
     return {
@@ -366,56 +745,105 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
-    // Redirect www.capypaint.com -> capypaint.com so localStorage/IndexedDB origin stays canonical
-    if (url.hostname.toLowerCase() === 'www.capypaint.com') {
-      url.hostname = 'capypaint.com';
-      return Response.redirect(url.toString(), 301);
-    }
+      // Redirect www.capypaint.com -> capypaint.com so localStorage/IndexedDB origin stays canonical
+      if (url.hostname.toLowerCase() === 'www.capypaint.com') {
+        url.hostname = 'capypaint.com';
+        return Response.redirect(url.toString(), 301);
+      }
 
-    if (url.pathname === '/api/health') {
-      return Response.json(
-        {
-          ok: true,
-          service: 'capy-paint',
-          domain: 'capypaint.com',
-          coopRelay: 'durable-objects-sqlite',
-        },
-        {
-          headers: {
-            'Cache-Control': 'no-store',
-          },
+      if (url.pathname === '/api/health') {
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+          return apiJsonResponse({ error: 'Method not allowed' }, 405, {
+            Allow: 'GET, HEAD',
+          });
         }
-      );
-    }
 
-    if (url.pathname === '/api/room') {
-      const origin = request.headers.get('Origin');
-      if (!isAllowedRelayOrigin(origin, env.ALLOWED_EXTRA_ORIGINS)) {
-        console.error(
-          JSON.stringify({
-            event: 'coop_origin_rejected',
-            origin,
-          })
+        const rateLimited = await checkApiRateLimit(request, env, 'health');
+        if (rateLimited) return rateLimited;
+
+        if (request.method === 'HEAD') {
+          return withApiSecurityHeaders(
+            new Response(null, {
+              status: 200,
+              headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+              },
+            })
+          );
+        }
+
+        return apiJsonResponse(
+          {
+            ok: true,
+            service: 'capy-paint',
+            domain: 'capypaint.com',
+            coopRelay: 'durable-objects-sqlite',
+          },
+          200
         );
-        return Response.json({ error: 'Forbidden origin' }, { status: 403 });
       }
 
-      const roomCode = normalizeRoomCode(url.searchParams.get('room'));
-      if (!roomCode) {
-        return Response.json({ error: 'Missing or invalid ?room= parameter' }, { status: 400 });
+      if (url.pathname === '/api/room') {
+        if (request.method !== 'GET') {
+          return apiJsonResponse({ error: 'Method not allowed' }, 405, {
+            Allow: 'GET',
+          });
+        }
+
+        const origin = request.headers.get('Origin');
+        if (
+          !isAllowedRelayOrigin(
+            origin,
+            env.ALLOWED_EXTRA_ORIGINS,
+            env.ALLOW_LOCALHOST_ORIGINS === 'true'
+          )
+        ) {
+          console.error(
+            JSON.stringify({
+              event: 'coop_origin_rejected',
+              origin,
+            })
+          );
+          return apiJsonResponse({ error: 'Forbidden origin' }, 403);
+        }
+
+        const upgradeHeader = request.headers.get('Upgrade');
+        if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+          return apiJsonResponse({ error: 'Expected WebSocket Upgrade' }, 426);
+        }
+
+        const roomCode = normalizeRoomCode(url.searchParams.get('room'));
+        if (!roomCode) {
+          return apiJsonResponse({ error: 'Missing or invalid ?room= parameter' }, 400);
+        }
+
+        const rateLimited = await checkApiRateLimit(request, env, 'room');
+        if (rateLimited) return rateLimited;
+
+        const roomId = env.COOP_ROOMS.idFromName(roomCode);
+        const roomStub = env.COOP_ROOMS.get(roomId);
+        const roomRes = await roomStub.fetch(request);
+        return roomRes.status === 101 ? roomRes : withApiSecurityHeaders(roomRes);
       }
 
-      const roomId = env.COOP_ROOMS.idFromName(roomCode);
-      const roomStub = env.COOP_ROOMS.get(roomId);
-      return roomStub.fetch(request);
-    }
+      if (url.pathname.startsWith('/api/')) {
+        const rateLimited = await checkApiRateLimit(request, env, 'api');
+        if (rateLimited) return rateLimited;
+        return apiJsonResponse({ error: 'Not found' }, 404);
+      }
 
-    if (url.pathname.startsWith('/api/')) {
-      return Response.json({ error: 'Not found' }, { status: 404 });
+      return env.ASSETS.fetch(request);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          event: 'worker_fetch_error',
+          message: err instanceof Error ? err.message : 'unknown',
+        })
+      );
+      return apiJsonResponse({ error: 'Internal relay error' }, 500);
     }
-
-    return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
