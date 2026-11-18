@@ -116,6 +116,7 @@ export class StorageService {
   private static persistentStorageRequested = false;
   private static pendingBackupWrites = new Map<string, string>();
   private static pendingBackupStorageKeys = new Map<string, string>();
+  private static pendingLocalHealWrites = new Map<string, string>();
   private static pendingForcedBackupKeys = new Set<string>();
   private static staleNativeBackupKeys = new Set<string>();
   private static quotaFailedLocalKeys = new Set<string>();
@@ -208,6 +209,29 @@ export class StorageService {
     }
   }
 
+  private static hasPendingFlushWork(): boolean {
+    return (
+      this.pendingBackupWrites.size > 0 ||
+      this.pendingLocalHealWrites.size > 0 ||
+      this.quotaFailedDeleteKeys.size > 0
+    );
+  }
+
+  private static scheduleBackupFlushTimer(): void {
+    if (this.backupFlushTimer !== null) return;
+    this.backupFlushTimer = setTimeout(() => {
+      this.backupFlushTimer = null;
+      this.flushPendingBackups();
+    }, 400);
+    if (
+      typeof this.backupFlushTimer === 'object' &&
+      this.backupFlushTimer !== null &&
+      typeof (this.backupFlushTimer as { unref?: () => void }).unref === 'function'
+    ) {
+      (this.backupFlushTimer as { unref: () => void }).unref();
+    }
+  }
+
   static flushPendingBackups(): void {
     if (this.backupFlushTimer !== null) {
       clearTimeout(this.backupFlushTimer);
@@ -215,54 +239,89 @@ export class StorageService {
     }
     const isNative = NativeBridge.isNative;
     if (!isNative) {
+      this.pendingBackupWrites.clear();
+      this.pendingBackupStorageKeys.clear();
       this.staleNativeBackupKeys.clear();
       this.pendingForcedBackupKeys.clear();
     }
-    if (this.pendingBackupWrites.size === 0) return;
-    const entries = Array.from(this.pendingBackupWrites.entries());
-    const storageKeyMap = new Map(this.pendingBackupStorageKeys);
-    this.pendingBackupWrites.clear();
-    this.pendingBackupStorageKeys.clear();
-    for (const [backupKey, serialized] of entries) {
-      const storageKey = storageKeyMap.get(backupKey) ?? backupKey;
-      const isForced = this.pendingForcedBackupKeys.has(backupKey);
-      if (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized) && !isForced) {
-        this.pendingForcedBackupKeys.delete(backupKey);
-        continue;
-      }
-      if (!this.hasReadableNativeBackup() && this.quotaFailedLocalKeys.has(storageKey)) {
-        if (this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0) {
-          if (this.quotaFailedDeleteKeys.has(storageKey) && typeof localStorage !== 'undefined' && localStorage !== null) {
-            try {
-              localStorage.removeItem(storageKey);
-              this.quotaFailedLocalKeys.delete(storageKey);
-              this.quotaFailedDeleteKeys.delete(storageKey);
-            } catch {
-              // Ignore removeItem failure when storage is restricted/full
-            }
+    if (!this.hasPendingFlushWork()) return;
+
+    // Phase 1: Native Backup Queue (pendingBackupWrites strictly when NativeBridge.isNative)
+    if (isNative && this.pendingBackupWrites.size > 0) {
+      const entries = Array.from(this.pendingBackupWrites.entries());
+      const storageKeyMap = new Map(this.pendingBackupStorageKeys);
+      this.pendingBackupWrites.clear();
+      this.pendingBackupStorageKeys.clear();
+      for (const [backupKey, serialized] of entries) {
+        const storageKey = storageKeyMap.get(backupKey) ?? backupKey;
+        const isForced = this.pendingForcedBackupKeys.has(backupKey);
+        if (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized) && !isForced) {
+          this.pendingForcedBackupKeys.delete(backupKey);
+          continue;
+        }
+        let ok = false;
+        try {
+          ok = NativeBridge.saveBackup(backupKey, serialized);
+        } catch {
+          ok = false;
+        }
+        if (ok) {
+          this.staleNativeBackupKeys.delete(backupKey);
+          this.pendingForcedBackupKeys.delete(backupKey);
+        } else {
+          this.staleNativeBackupKeys.add(backupKey);
+          this.pendingBackupWrites.set(backupKey, serialized);
+          this.pendingBackupStorageKeys.set(backupKey, storageKey);
+          if (isForced) {
+            this.pendingForcedBackupKeys.add(backupKey);
           }
-        } else if (!this.isSnapshotsBackupKey(backupKey) || !this.isEmptySnapshotsPayload(serialized) || isForced) {
+        }
+      }
+    }
+
+    // Phase 2: Local Heal Queue (pendingLocalHealWrites across all 3 platforms)
+    if (this.pendingLocalHealWrites.size > 0) {
+      for (const [storageKey, serialized] of Array.from(this.pendingLocalHealWrites.entries())) {
+        if (this.matchesScopedKey(storageKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0) {
+          this.tryClearLocalStorageKey(storageKey);
+        } else {
           this.safeLocalHeal(storageKey, serialized);
         }
       }
-      let ok = false;
-      try {
-        ok = NativeBridge.saveBackup(backupKey, serialized);
-      } catch {
-        ok = false;
-      }
-      if (!isNative || ok) {
-        this.staleNativeBackupKeys.delete(backupKey);
-        this.pendingForcedBackupKeys.delete(backupKey);
-        if (!this.hasReadableNativeBackup()) {
-          this.quotaFailedLocalKeys.delete(storageKey);
+    }
+
+    // Phase 3: Residual quotaFailedDeleteKeys (all 3 platforms)
+    if (this.quotaFailedDeleteKeys.size > 0) {
+      for (const storageKey of Array.from(this.quotaFailedDeleteKeys)) {
+        const healVal = this.pendingLocalHealWrites.get(storageKey);
+        const isEmptyHeal =
+          healVal === undefined ||
+          healVal.trim().length === 0 ||
+          (this.matchesScopedKey(storageKey, SNAPSHOTS_KEY) && this.isEmptySnapshotsPayload(healVal));
+        if (!isEmptyHeal) {
+          continue;
         }
-      } else {
-        this.staleNativeBackupKeys.add(backupKey);
-        this.pendingBackupWrites.set(backupKey, serialized);
-        this.pendingBackupStorageKeys.set(backupKey, storageKey);
-        if (isForced) {
-          this.pendingForcedBackupKeys.add(backupKey);
+        let hasNonEmptyPendingBackup = false;
+        for (const [bKey, bVal] of this.pendingBackupWrites.entries()) {
+          const mappedStorageKey = this.pendingBackupStorageKeys.get(bKey) ?? bKey;
+          if (mappedStorageKey !== storageKey) continue;
+          const isEmptyBak =
+            bVal.trim().length === 0 ||
+            (this.isSnapshotsBackupKey(bKey) && this.isEmptySnapshotsPayload(bVal));
+          if (!isEmptyBak) {
+            hasNonEmptyPendingBackup = true;
+            break;
+          }
+        }
+        if (hasNonEmptyPendingBackup) {
+          continue;
+        }
+        if (this.matchesScopedKey(storageKey, ACTIVE_STATE_KEY)) {
+          this.tryClearLocalStorageKey(storageKey);
+        } else if (this.matchesScopedKey(storageKey, SNAPSHOTS_KEY)) {
+          if (!this.safeLocalHeal(storageKey, '[]')) {
+            this.tryClearLocalStorageKey(storageKey);
+          }
         }
       }
     }
@@ -281,18 +340,27 @@ export class StorageService {
     const isEmptyActive =
       this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0;
     this.ensureLifecycleFlushRegistered();
+    if (!NativeBridge.isNative) {
+      this.pendingBackupWrites.delete(backupKey);
+      this.pendingBackupStorageKeys.delete(backupKey);
+      this.pendingForcedBackupKeys.delete(backupKey);
+      this.staleNativeBackupKeys.delete(backupKey);
+      if (this.hasPendingFlushWork()) {
+        this.scheduleBackupFlushTimer();
+      }
+      return;
+    }
     if (immediate) {
       this.pendingBackupWrites.delete(backupKey);
       this.pendingBackupStorageKeys.delete(backupKey);
       this.pendingForcedBackupKeys.delete(backupKey);
-      const isNative = NativeBridge.isNative;
       let ok = false;
       try {
         ok = NativeBridge.saveBackup(backupKey, serialized);
       } catch {
         ok = false;
       }
-      if (!isNative || ok) {
+      if (ok) {
         this.staleNativeBackupKeys.delete(backupKey);
       } else {
         this.staleNativeBackupKeys.add(backupKey);
@@ -302,24 +370,15 @@ export class StorageService {
           this.pendingForcedBackupKeys.add(backupKey);
         }
       }
+      if (this.hasPendingFlushWork()) {
+        this.scheduleBackupFlushTimer();
+      }
       return;
     }
     this.pendingForcedBackupKeys.delete(backupKey);
     this.pendingBackupWrites.set(backupKey, serialized);
     this.pendingBackupStorageKeys.set(backupKey, storageKey);
-    if (this.backupFlushTimer === null) {
-      this.backupFlushTimer = setTimeout(() => {
-        this.backupFlushTimer = null;
-        this.flushPendingBackups();
-      }, 400);
-      if (
-        typeof this.backupFlushTimer === 'object' &&
-        this.backupFlushTimer !== null &&
-        typeof (this.backupFlushTimer as { unref?: () => void }).unref === 'function'
-      ) {
-        (this.backupFlushTimer as { unref: () => void }).unref();
-      }
-    }
+    this.scheduleBackupFlushTimer();
   }
 
   private static safeLocalGet(storageKey: string): string | null {
@@ -331,14 +390,29 @@ export class StorageService {
     }
   }
 
-  private static safeLocalHeal(storageKey: string, value: string): void {
+  private static safeLocalHeal(storageKey: string, value: string): boolean {
     try {
-      if (typeof localStorage === 'undefined' || localStorage === null) return;
+      if (typeof localStorage === 'undefined' || localStorage === null) return false;
       localStorage.setItem(storageKey, value);
       this.quotaFailedLocalKeys.delete(storageKey);
       this.quotaFailedDeleteKeys.delete(storageKey);
+      this.pendingLocalHealWrites.delete(storageKey);
+      return true;
     } catch {
-      // Best-effort heal without triggering user-facing quota warning
+      return false;
+    }
+  }
+
+  private static tryClearLocalStorageKey(storageKey: string): boolean {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return false;
+      localStorage.removeItem(storageKey);
+      this.quotaFailedLocalKeys.delete(storageKey);
+      this.quotaFailedDeleteKeys.delete(storageKey);
+      this.pendingLocalHealWrites.delete(storageKey);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -435,7 +509,14 @@ export class StorageService {
       let completeness = 0;
       for (const s of valid) {
         const sid = s.id as string;
-        const ts = Math.max(this.parseTimestampMs(s.lastOpened), this.parseTimestampMs(s.timestamp));
+        const metaTs = Object.prototype.hasOwnProperty.call(s, 'metaUpdatedAt')
+          ? this.parseTimestampMs(s.metaUpdatedAt)
+          : 0;
+        const ts = Math.max(
+          this.parseTimestampMs(s.lastOpened),
+          this.parseTimestampMs(s.timestamp),
+          metaTs
+        );
         if (ts > maxTs) maxTs = ts;
         const epoch = this.nonNegFinite(s.resetEpoch);
         snapshotEpochs.set(sid, Math.max(snapshotEpochs.get(sid) ?? 0, epoch));
@@ -575,11 +656,15 @@ export class StorageService {
   private static selectPreferredBackupRaw(
     pendingRaw: string | null,
     nativeRaw: string | null,
-    kind: BackupDataKind
+    kind: BackupDataKind,
+    forceEmptyPending: boolean = false
   ): string | null {
     const hasPending = Boolean(pendingRaw && pendingRaw.length > 0);
     const hasNative = Boolean(nativeRaw && nativeRaw.length > 0);
     if (hasPending && hasNative) {
+      if (forceEmptyPending && kind === 'snapshots' && this.isEmptySnapshotsPayload(pendingRaw!)) {
+        return pendingRaw!;
+      }
       if (this.isValidNonEmptyPayload(pendingRaw!, kind)) return pendingRaw!;
       if (this.isValidNonEmptyPayload(nativeRaw!, kind)) return nativeRaw!;
       return pendingRaw!;
@@ -595,8 +680,12 @@ export class StorageService {
     kind: BackupDataKind
   ): string | null {
     const localVal = this.safeLocalGet(storageKey);
-    const hasPending = this.pendingBackupWrites.has(backupKey);
-    const pendingRaw = hasPending ? (this.pendingBackupWrites.get(backupKey) ?? null) : null;
+    const hasPendingBackup = this.pendingBackupWrites.has(backupKey);
+    const pendingBackupVal = hasPendingBackup ? (this.pendingBackupWrites.get(backupKey) ?? null) : null;
+    const hasPendingHeal = this.pendingLocalHealWrites.has(storageKey);
+    const pendingHealVal = hasPendingHeal ? (this.pendingLocalHealWrites.get(storageKey) ?? null) : null;
+    const pendingRaw = pendingBackupVal ?? pendingHealVal;
+    const hasPending = pendingRaw !== null;
     const nativeRaw = this.staleNativeBackupKeys.has(backupKey)
       ? null
       : this.safeNativeLoadBackup(backupKey);
@@ -606,19 +695,15 @@ export class StorageService {
       ((this.pendingForcedBackupKeys.has(backupKey) && pendingRaw !== null && pendingRaw.trim().length === 0) ||
         (this.quotaFailedDeleteKeys.has(storageKey) && (!hasPending || (pendingRaw !== null && pendingRaw.trim().length === 0))));
     if (isForcedEmptyActive) {
-      if (this.quotaFailedDeleteKeys.has(storageKey) && typeof localStorage !== 'undefined' && localStorage !== null) {
-        try {
-          localStorage.removeItem(storageKey);
-          this.quotaFailedLocalKeys.delete(storageKey);
-          this.quotaFailedDeleteKeys.delete(storageKey);
-        } catch {
-          // Ignore removeItem failure when storage is restricted/full
-        }
+      if (this.quotaFailedDeleteKeys.has(storageKey)) {
+        this.tryClearLocalStorageKey(storageKey);
       }
       return null;
     }
 
-    const backupVal = this.selectPreferredBackupRaw(pendingRaw, nativeRaw, kind);
+    const forceEmptyPending =
+      this.pendingForcedBackupKeys.has(backupKey) || this.quotaFailedDeleteKeys.has(storageKey);
+    const backupVal = this.selectPreferredBackupRaw(pendingRaw, nativeRaw, kind, forceEmptyPending);
 
     if (!backupVal) {
       if (kind === 'snapshots' && this.quotaFailedDeleteKeys.has(storageKey) && !this.hasReadableNativeBackup()) {
@@ -628,7 +713,12 @@ export class StorageService {
       return localVal && localVal.length > 0 ? localVal : null;
     }
     if (!localVal || localVal.length === 0) {
-      if (this.isValidNonEmptyPayload(backupVal, kind)) {
+      if (
+        this.isValidNonEmptyPayload(backupVal, kind) ||
+        (kind === 'snapshots' &&
+          this.isEmptySnapshotsPayload(backupVal) &&
+          (this.quotaFailedLocalKeys.has(storageKey) || this.quotaFailedDeleteKeys.has(storageKey)))
+      ) {
         this.safeLocalHeal(storageKey, backupVal);
       }
       return backupVal;
@@ -636,6 +726,7 @@ export class StorageService {
     if (localVal === backupVal) {
       this.quotaFailedLocalKeys.delete(storageKey);
       this.quotaFailedDeleteKeys.delete(storageKey);
+      this.pendingLocalHealWrites.delete(storageKey);
       return localVal;
     }
     const preferBackupOnTie = this.quotaFailedLocalKeys.has(storageKey);
@@ -643,11 +734,17 @@ export class StorageService {
       preferBackupOnTie &&
       (this.quotaFailedDeleteKeys.has(storageKey) || this.pendingForcedBackupKeys.has(backupKey));
     const selected = this.pickWinner(localVal, backupVal, kind, preferBackupOnTie, forceBackupWins);
-    if (
-      selected !== localVal &&
-      (this.isValidNonEmptyPayload(selected, kind) || this.quotaFailedDeleteKeys.has(storageKey))
-    ) {
-      this.safeLocalHeal(storageKey, selected);
+    if (selected !== localVal) {
+      if (
+        this.isValidNonEmptyPayload(selected, kind) ||
+        this.quotaFailedDeleteKeys.has(storageKey) ||
+        (kind === 'snapshots' && this.isEmptySnapshotsPayload(selected) && this.quotaFailedLocalKeys.has(storageKey))
+      ) {
+        this.safeLocalHeal(storageKey, selected);
+      }
+    } else if (!this.quotaFailedDeleteKeys.has(storageKey) && this.pendingLocalHealWrites.has(storageKey)) {
+      this.quotaFailedLocalKeys.delete(storageKey);
+      this.pendingLocalHealWrites.delete(storageKey);
     }
     return selected;
   }
@@ -660,15 +757,19 @@ export class StorageService {
     skipBackup: boolean = false,
     clearLocalOnFailure: boolean = false
   ): void {
-    let localWriteFailed = false;
+    const isEmptyPayload =
+      (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized)) ||
+      (this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0);
     try {
       if (typeof localStorage !== 'undefined' && localStorage !== null) {
         localStorage.setItem(storageKey, serialized);
-        this.quotaFailedLocalKeys.delete(storageKey);
-        this.quotaFailedDeleteKeys.delete(storageKey);
+        if (!skipBackup) {
+          this.quotaFailedLocalKeys.delete(storageKey);
+          this.quotaFailedDeleteKeys.delete(storageKey);
+          this.pendingLocalHealWrites.delete(storageKey);
+        }
       }
     } catch (err) {
-      localWriteFailed = true;
       if (!skipBackup) {
         this.quotaFailedLocalKeys.add(storageKey);
         if (clearLocalOnFailure) {
@@ -676,15 +777,23 @@ export class StorageService {
         } else if (!this.matchesScopedKey(storageKey, SNAPSHOTS_KEY)) {
           this.quotaFailedDeleteKeys.delete(storageKey);
         }
-      }
-      if (clearLocalOnFailure) {
-        try {
-          if (typeof localStorage !== 'undefined' && localStorage !== null) {
-            localStorage.removeItem(storageKey);
-            this.quotaFailedDeleteKeys.delete(storageKey);
+        let deletedLocal = false;
+        if (clearLocalOnFailure) {
+          try {
+            if (typeof localStorage !== 'undefined' && localStorage !== null) {
+              localStorage.removeItem(storageKey);
+              this.quotaFailedDeleteKeys.delete(storageKey);
+              deletedLocal = true;
+            }
+          } catch {
+            // Ignore removeItem failure when storage is restricted/full
           }
-        } catch {
-          // Ignore removeItem failure when storage is restricted/full
+        }
+        if (isEmptyPayload && deletedLocal) {
+          this.quotaFailedLocalKeys.delete(storageKey);
+          this.pendingLocalHealWrites.delete(storageKey);
+        } else {
+          this.pendingLocalHealWrites.set(storageKey, serialized);
         }
       }
       if (this.isQuotaError(err)) {
@@ -695,12 +804,7 @@ export class StorageService {
       return;
     }
     try {
-      const isEmptyPayload =
-        (this.isSnapshotsBackupKey(backupKey) && this.isEmptySnapshotsPayload(serialized)) ||
-        (this.matchesScopedKey(backupKey, ACTIVE_STATE_KEY) && serialized.trim().length === 0);
-      const effectiveImmediate =
-        immediateBackup && (isEmptyPayload || !localWriteFailed || this.hasReadableNativeBackup());
-      this.scheduleBackupWrite(backupKey, serialized, effectiveImmediate, storageKey);
+      this.scheduleBackupWrite(backupKey, serialized, immediateBackup, storageKey);
     } catch {
       // Ignore native backup failure
     }
@@ -980,35 +1084,94 @@ export class StorageService {
     return hydrated;
   }
 
-  private static stripInlinePreviews(snapshots: SavedSnapshot[]): SavedSnapshot[] {
+  private static stripInternalSnapshotMeta(snapshot: SavedSnapshot): SavedSnapshot {
+    if (!Object.prototype.hasOwnProperty.call(snapshot, 'metaUpdatedAt')) {
+      return snapshot;
+    }
+    const copy = { ...snapshot } as SavedSnapshot & { metaUpdatedAt?: unknown };
+    delete copy.metaUpdatedAt;
+    return copy;
+  }
+
+  private static computeNextSnapshotMetaTs(
+    snapshots: SavedSnapshot[],
+    metaTsById: Map<string, number>
+  ): number {
+    let maxSeen = 0;
+    for (const s of snapshots) {
+      const candidate = Math.max(
+        this.parseTimestampMs(s.lastOpened),
+        this.parseTimestampMs(s.timestamp),
+        metaTsById.get(s.id) ?? 0
+      );
+      if (candidate > maxSeen) {
+        maxSeen = candidate;
+      }
+    }
+    return Math.max(maxSeen + 1, Date.now());
+  }
+
+  private static stripInlinePreviews(
+    snapshots: SavedSnapshot[],
+    metaTsById?: Map<string, number>
+  ): SavedSnapshot[] {
     return snapshots.map((s) => {
       if (typeof s.previewDataUrl === 'string' && s.previewDataUrl.length > 0) {
         this.previewCache.set(this.previewCacheKey(s.id), s.previewDataUrl);
         void this.savePreviewDataUrl(s.id, s.previewDataUrl);
       }
-      if ('previewDataUrl' in s) {
-        const copy = { ...s };
+      const rawMetaTs = metaTsById?.get(s.id);
+      const metaTs =
+        typeof rawMetaTs === 'number' && Number.isFinite(rawMetaTs) && rawMetaTs > 0
+          ? rawMetaTs
+          : 0;
+      const hasMetaProp = Object.prototype.hasOwnProperty.call(s, 'metaUpdatedAt');
+      if ('previewDataUrl' in s || metaTs > 0 || hasMetaProp) {
+        const copy = { ...s } as SavedSnapshot & { metaUpdatedAt?: number };
         delete copy.previewDataUrl;
+        if (metaTs > 0) {
+          copy.metaUpdatedAt = metaTs;
+        } else {
+          delete copy.metaUpdatedAt;
+        }
         return copy;
       }
       return s;
     });
   }
 
-  static loadSnapshots(): SavedSnapshot[] {
+  private static loadSnapshotsWithMeta(): {
+    snapshots: SavedSnapshot[];
+    metaTsById: Map<string, number>;
+  } {
+    const metaTsById = new Map<string, number>();
     try {
       const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
       const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
       const raw = this.loadRawWithBackupFallback(storageKey, backupKey, 'snapshots');
-      if (!raw) return [];
+      if (!raw) return { snapshots: [], metaTsById };
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
+      if (!Array.isArray(parsed)) return { snapshots: [], metaTsById };
       let hadLegacyInlinePreview = false;
       const valid = parsed.filter(
         (s): s is SavedSnapshot =>
-          Boolean(s && typeof s === 'object' && typeof s.id === 'string' && s.id.length > 0 && typeof s.title === 'string')
+          Boolean(
+            s &&
+              typeof s === 'object' &&
+              !Array.isArray(s) &&
+              typeof s.id === 'string' &&
+              s.id.length > 0 &&
+              typeof s.title === 'string'
+          )
       );
       const normalized = valid.map((s) => {
+        const rawRec = s as unknown as Record<string, unknown>;
+        const metaTs = Object.prototype.hasOwnProperty.call(rawRec, 'metaUpdatedAt')
+          ? this.parseTimestampMs(rawRec.metaUpdatedAt)
+          : 0;
+        if (metaTs > 0) {
+          metaTsById.set(s.id, Math.max(metaTsById.get(s.id) ?? 0, metaTs));
+        }
         const inlinePreview =
           typeof s.previewDataUrl === 'string' && s.previewDataUrl.length > 0 ? s.previewDataUrl : undefined;
         if (inlinePreview) {
@@ -1027,6 +1190,7 @@ export class StorageService {
           timestamp: typeof s.timestamp === 'number' && Number.isFinite(s.timestamp) ? Math.max(0, s.timestamp) : 0,
           lastOpened: typeof s.lastOpened === 'number' && Number.isFinite(s.lastOpened) ? Math.max(0, s.lastOpened) : 0,
         };
+        delete (base as unknown as Record<string, unknown>).metaUpdatedAt;
         if (cachedPreview) {
           base.previewDataUrl = cachedPreview;
         } else {
@@ -1035,27 +1199,37 @@ export class StorageService {
         return base;
       });
       if (hadLegacyInlinePreview) {
-        const stripped = this.stripInlinePreviews(normalized);
+        const stripped = this.stripInlinePreviews(normalized, metaTsById);
         this.writeLocalAndScheduleBackup(storageKey, backupKey, JSON.stringify(stripped), false);
       }
-      return normalized;
+      return { snapshots: normalized, metaTsById };
     } catch {
-      return [];
+      return { snapshots: [], metaTsById };
     }
   }
 
-  static saveSnapshots(
+  static loadSnapshots(): SavedSnapshot[] {
+    return this.loadSnapshotsWithMeta().snapshots;
+  }
+
+  private static saveSnapshotsInternal(
     snapshots: SavedSnapshot[],
-    options?: { allowEmptyBackup?: boolean; immediateBackup?: boolean; clearLocalOnFailure?: boolean }
+    options?: {
+      allowEmptyBackup?: boolean;
+      immediateBackup?: boolean;
+      clearLocalOnFailure?: boolean;
+      metaTsById?: Map<string, number>;
+    }
   ): void {
     try {
-      const stripped = this.stripInlinePreviews(snapshots);
+      const stripped = this.stripInlinePreviews(snapshots, options?.metaTsById);
       const serialized = JSON.stringify(stripped);
       const allowEmptyBackup = Boolean(options?.allowEmptyBackup);
       const isEmpty = stripped.length === 0;
       const skipBackup = isEmpty && !allowEmptyBackup;
       const immediateBackup = (isEmpty && allowEmptyBackup) || (Boolean(options?.immediateBackup) && !skipBackup);
-      const clearLocalOnFailure = Boolean(options?.clearLocalOnFailure) && (isEmpty || this.hasReadableNativeBackup());
+      const clearLocalOnFailure =
+        Boolean(options?.clearLocalOnFailure) && !skipBackup && (isEmpty || this.hasReadableNativeBackup());
       this.writeLocalAndScheduleBackup(
         resolveScopedStorageKey(SNAPSHOTS_KEY),
         resolveScopedBackupKey(SNAPSHOTS_KEY),
@@ -1069,17 +1243,33 @@ export class StorageService {
     }
   }
 
+  static saveSnapshots(
+    snapshots: SavedSnapshot[],
+    options?: { allowEmptyBackup?: boolean; immediateBackup?: boolean; clearLocalOnFailure?: boolean }
+  ): void {
+    this.saveSnapshotsInternal(snapshots, options);
+  }
+
   static addSnapshot(snapshot: SavedSnapshot): SavedSnapshot[] {
-    const list = this.loadSnapshots();
-    const existingIndex = list.findIndex((s) => s.id === snapshot.id);
+    const cleanSnapshot = this.stripInternalSnapshotMeta(snapshot);
+    const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    const existingIndex = list.findIndex((s) => s.id === cleanSnapshot.id);
     let updated: SavedSnapshot[];
     if (existingIndex >= 0) {
       updated = [...list];
-      updated[existingIndex] = snapshot;
+      updated[existingIndex] = cleanSnapshot;
+      const existingMetaTs = metaTsById.get(cleanSnapshot.id) ?? 0;
+      const incomingTs = Math.max(
+        this.parseTimestampMs(cleanSnapshot.lastOpened),
+        this.parseTimestampMs(cleanSnapshot.timestamp)
+      );
+      if (existingMetaTs > 0 && existingMetaTs >= incomingTs) {
+        metaTsById.set(cleanSnapshot.id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      }
     } else {
-      updated = [snapshot, ...list];
+      updated = [cleanSnapshot, ...list];
     }
-    this.saveSnapshots(updated);
+    this.saveSnapshotsInternal(updated, { metaTsById });
     return updated;
   }
 
@@ -1102,12 +1292,15 @@ export class StorageService {
     fileSizeBytes?: number,
     resetEpoch?: number
   ): SavedSnapshot[] {
-    const list = this.loadSnapshots();
+    const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    const now = Date.now();
+    let matched = false;
     const updated = list.map((item) => {
       if (item.id === id) {
+        matched = true;
         return {
           ...item,
-          lastOpened: Date.now(),
+          lastOpened: now,
           filledCount,
           totalCount,
           filledRegionIds,
@@ -1124,7 +1317,10 @@ export class StorageService {
       }
       return item;
     });
-    this.saveSnapshots(updated);
+    if (matched && (metaTsById.get(id) ?? 0) >= now) {
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+    }
+    this.saveSnapshotsInternal(updated, { metaTsById });
     return updated;
   }
 
@@ -1134,44 +1330,76 @@ export class StorageService {
     panOffsetX: number,
     panOffsetY: number
   ): SavedSnapshot[] {
-    const list = this.loadSnapshots();
-    const updated = list.map((item) =>
-      item.id === id
-        ? {
-            ...item,
-            zoomScale,
-            panOffsetX,
-            panOffsetY,
-          }
-        : item
-    );
-    this.saveSnapshots(updated);
+    const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    let matched = false;
+    const updated = list.map((item) => {
+      if (item.id === id) {
+        matched = true;
+        return {
+          ...item,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+        };
+      }
+      return item;
+    });
+    if (matched) {
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      this.saveSnapshotsInternal(updated, { metaTsById });
+    }
     return updated;
   }
 
   static renameSnapshot(id: string, newTitle: string): SavedSnapshot[] {
-    const list = this.loadSnapshots();
-    const updated = list.map((s) => (s.id === id ? { ...s, title: newTitle } : s));
-    this.saveSnapshots(updated);
+    const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    let matched = false;
+    const updated = list.map((s) => {
+      if (s.id === id) {
+        matched = true;
+        return { ...s, title: newTitle };
+      }
+      return s;
+    });
+    if (matched) {
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      this.saveSnapshotsInternal(updated, { metaTsById });
+    }
     return updated;
   }
 
   static togglePinSnapshot(id: string): SavedSnapshot[] {
-    const list = this.loadSnapshots();
-    const updated = list.map((s) => (s.id === id ? { ...s, isPinned: !s.isPinned } : s));
-    this.saveSnapshots(updated);
+    const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    let matched = false;
+    const updated = list.map((s) => {
+      if (s.id === id) {
+        matched = true;
+        return { ...s, isPinned: !s.isPinned };
+      }
+      return s;
+    });
+    if (matched) {
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      this.saveSnapshotsInternal(updated, { metaTsById });
+    }
     return updated;
   }
 
   static async deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
     this.previewCache.delete(this.previewCacheKey(id));
-    const list = this.loadSnapshots();
+    const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
     const updated = list.filter((s) => s.id !== id);
     if (updated.length < list.length) {
-      this.saveSnapshots(updated, {
+      if (updated.length > 0) {
+        const nextMetaTs = this.computeNextSnapshotMetaTs(list, metaTsById);
+        metaTsById.delete(id);
+        metaTsById.set(updated[0].id, nextMetaTs);
+      }
+      this.saveSnapshotsInternal(updated, {
         immediateBackup: true,
         allowEmptyBackup: updated.length === 0,
         clearLocalOnFailure: true,
+        metaTsById: updated.length > 0 ? metaTsById : undefined,
       });
     }
     const active = this.loadActiveState();
@@ -1348,6 +1576,7 @@ export class StorageService {
     this.pendingBackupWrites.delete(backupKey);
     this.pendingBackupStorageKeys.delete(backupKey);
     this.pendingForcedBackupKeys.delete(backupKey);
+    this.pendingLocalHealWrites.delete(storageKey);
     try {
       if (typeof localStorage !== 'undefined' && localStorage !== null) {
         localStorage.removeItem(storageKey);
@@ -1357,6 +1586,7 @@ export class StorageService {
     } catch {
       this.quotaFailedLocalKeys.add(storageKey);
       this.quotaFailedDeleteKeys.add(storageKey);
+      this.pendingLocalHealWrites.delete(storageKey);
     }
     try {
       this.scheduleBackupWrite(backupKey, '', true, storageKey);
@@ -1528,7 +1758,9 @@ export class StorageService {
     refreshTimestamps?: boolean
   ): { mergedList: SavedSnapshot[]; toPersist: SavedSnapshot[] } {
     const now = Date.now();
-    const isBootstrapBatch = Boolean(refreshTimestamps) && existing.length > 0 && imported.every((s) => Boolean(s.isAutoSample));
+    const sanitizedImported = imported.map((s) => this.stripInternalSnapshotMeta(s));
+    const isBootstrapBatch =
+      Boolean(refreshTimestamps) && existing.length > 0 && sanitizedImported.every((s) => Boolean(s.isAutoSample));
 
     if (isBootstrapBatch) {
       const existingIds = new Set(existing.map((s) => s.id));
@@ -1537,7 +1769,7 @@ export class StorageService {
         return candidate > 0 && candidate < minTs ? candidate : minTs;
       }, now);
       const sampleBaseTs = Math.min(now, minExistingTs - 1000);
-      const newSamples = imported
+      const newSamples = sanitizedImported
         .filter((s) => !existingIds.has(s.id))
         .map((s, idx) => ({
           ...s,
@@ -1550,7 +1782,7 @@ export class StorageService {
       };
     }
 
-    const normalized = imported.map((s, idx) =>
+    const normalized = sanitizedImported.map((s, idx) =>
       refreshTimestamps
         ? { ...s, timestamp: now - idx * 1000, lastOpened: now - idx * 1000 }
         : {
@@ -1565,6 +1797,22 @@ export class StorageService {
       mergedList: [...normalized, ...remaining],
       toPersist: normalized,
     };
+  }
+
+  private static syncImportedMetaTimestamps(
+    existing: SavedSnapshot[],
+    toPersist: SavedSnapshot[],
+    metaTsById: Map<string, number>
+  ): void {
+    const existingIds = new Set(existing.map((s) => s.id));
+    for (const s of toPersist) {
+      if (!existingIds.has(s.id)) continue;
+      const existingMetaTs = metaTsById.get(s.id) ?? 0;
+      const incomingTs = Math.max(this.parseTimestampMs(s.lastOpened), this.parseTimestampMs(s.timestamp));
+      if (existingMetaTs > 0 && existingMetaTs >= incomingTs) {
+        metaTsById.set(s.id, this.computeNextSnapshotMetaTs(existing, metaTsById));
+      }
+    }
   }
 
   /**
@@ -1591,7 +1839,7 @@ export class StorageService {
           const now = Date.now();
 
           if (decoded.format === 'capy-single-save-v2' && decoded.snapshot) {
-            const rawSnap = decoded.snapshot;
+            const rawSnap = this.stripInternalSnapshotMeta(decoded.snapshot);
             if (!rawSnap.id || !rawSnap.title) {
               return { importedCount: 0, error: 'Invalid binary snapshot structure' };
             }
@@ -1635,7 +1883,7 @@ export class StorageService {
               return { importedCount: 0, error: 'No valid snapshots in binary archive' };
             }
 
-            const existing = this.loadSnapshots();
+            const { snapshots: existing, metaTsById } = this.loadSnapshotsWithMeta();
             const { mergedList, toPersist } = this.mergeImportedSnapshots(
               existing,
               validSnapshots,
@@ -1677,7 +1925,8 @@ export class StorageService {
                 await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
               }
             }
-            this.saveSnapshots(mergedList);
+            this.syncImportedMetaTimestamps(existing, toPersist, metaTsById);
+            this.saveSnapshotsInternal(mergedList, { metaTsById });
             return {
               importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
               firstSnapshot: toPersist[0] || validSnapshots[0],
@@ -1715,7 +1964,7 @@ export class StorageService {
 
       // Single snapshot format (v1 JSON)
       if (data.format === 'capy-single-save' && data.snapshot) {
-        const rawSnap = data.snapshot as SavedSnapshot;
+        const rawSnap = this.stripInternalSnapshotMeta(data.snapshot as SavedSnapshot);
         if (!rawSnap.id || !rawSnap.title) {
           return { importedCount: 0, error: 'Invalid snapshot data structure' };
         }
@@ -1745,7 +1994,7 @@ export class StorageService {
           return { importedCount: 0, error: 'No valid snapshots in archive' };
         }
 
-        const existing = this.loadSnapshots();
+        const { snapshots: existing, metaTsById } = this.loadSnapshotsWithMeta();
         const { mergedList, toPersist } = this.mergeImportedSnapshots(
           existing,
           validSnapshots,
@@ -1774,7 +2023,8 @@ export class StorageService {
             await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
           }
         }
-        this.saveSnapshots(mergedList);
+        this.syncImportedMetaTimestamps(existing, toPersist, metaTsById);
+        this.saveSnapshotsInternal(mergedList, { metaTsById });
 
         return {
           importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
@@ -1789,7 +2039,7 @@ export class StorageService {
         if (validSnapshots.length === 0) {
           return { importedCount: 0, error: 'No valid snapshots in array' };
         }
-        const existing = this.loadSnapshots();
+        const { snapshots: existing, metaTsById } = this.loadSnapshotsWithMeta();
         const { mergedList, toPersist } = this.mergeImportedSnapshots(
           existing,
           validSnapshots,
@@ -1800,7 +2050,8 @@ export class StorageService {
             await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
           }
         }
-        this.saveSnapshots(mergedList);
+        this.syncImportedMetaTimestamps(existing, toPersist, metaTsById);
+        this.saveSnapshotsInternal(mergedList, { metaTsById });
         return {
           importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
           firstSnapshot: toPersist[0] || validSnapshots[0],
