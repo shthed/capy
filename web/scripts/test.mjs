@@ -5955,7 +5955,7 @@ async function runCodecAndEngineTests() {
     const greenHeadRuns = [
       { name: 'Build & Test', status: 'completed', conclusion: 'cancelled', started_at: '2026-11-13T01:00:00Z' },
       { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
-      { name: 'Playwright E2E Release Gate', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Playwright E2E', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' },
     ];
     for (const [targetBase, expectedMergeMethod] of [
       ['beta', 'squash'],
@@ -5982,7 +5982,7 @@ async function runCodecAndEngineTests() {
       [{ name: 'Build & Test', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' }],
       [
         { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
-        { name: 'Android Build & JUnit Tests', status: 'completed', conclusion: 'failure', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Android APK', status: 'completed', conclusion: 'failure', started_at: '2026-11-13T01:01:00Z' },
       ],
     ]) {
       const gateBlockedNotGreenRes = await runReviewGateCase({
