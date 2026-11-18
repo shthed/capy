@@ -3555,6 +3555,22 @@ async function runCodecAndEngineTests() {
         stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
         true
       );
+      for (const tplFile of ['config.yml', 'bug_report.yml', 'feature_request.yml', 'puzzle_idea.yml']) {
+        assert.equal(
+          fs.existsSync(path.join(tmpCleanStage, `.github/ISSUE_TEMPLATE/${tplFile}`)),
+          true,
+          `Clean export must retain .github/ISSUE_TEMPLATE/${tplFile}`
+        );
+      }
+      const stagedPrivacy = fs.readFileSync(
+        path.join(tmpCleanStage, 'web/public/privacy-policy.html'),
+        'utf8'
+      );
+      assert.equal(
+        stagedPrivacy.includes('https://github.com/capyboop/capy/issues'),
+        true,
+        'privacy-policy.html must link to capyboop/capy/issues'
+      );
       const stagedSanityMod = await import(
         pathToFileURL(path.join(tmpCleanStage, 'web/scripts/sanity.mjs')).href
       );
@@ -8703,6 +8719,11 @@ async function runBrowserBasicsSuite() {
     const privacyRes = await page.goto(`${BASE_URL}/privacy-policy.html`);
     assert.equal(privacyRes?.status(), 200);
     assert.equal((await page.evaluate(() => document.body.innerText)).includes('Google Play Data Safety'), true);
+    assert.equal(
+      await page.locator('a[href="https://github.com/capyboop/capy/issues"]').count(),
+      1,
+      'privacy-policy.html must link to https://github.com/capyboop/capy/issues'
+    );
 
     let workerRequestedOnBoot = false;
     const onReq = (req) => {
@@ -9752,6 +9773,13 @@ async function runBrowserBasicsSuite() {
     assert.equal(await page.getByTestId('app-version-badge').count(), 1, 'Expected single app-version-badge in About tab');
     assert.equal(await page.getByTestId('about-screen-card').isVisible(), true, 'About tab must render about-screen-card');
     assert.equal(await page.getByTestId('about-replay-tutorial-btn').isVisible(), true, 'About tab must render about-replay-tutorial-btn');
+    assert.equal(await page.getByTestId('about-privacy-policy-link').isVisible(), true, 'About tab must render about-privacy-policy-link');
+    assert.equal(await page.getByTestId('about-report-issue-link').isVisible(), true, 'About tab must render about-report-issue-link');
+    assert.equal(
+      await page.getByTestId('about-report-issue-link').getAttribute('href'),
+      'https://github.com/capyboop/capy/issues/new/choose',
+      'about-report-issue-link must point to public capyboop/capy issue chooser'
+    );
     assert.equal(await page.getByTestId('lifetime-stats-card').isVisible(), true, 'About tab must render lifetime-stats-card');
     assert.equal(await page.getByTestId('release-channel-card').isVisible(), true, 'About tab must render release-channel-card');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'About tab must not render Hints content');
