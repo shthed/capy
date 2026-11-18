@@ -64,9 +64,9 @@ jobs:
         working-directory: web
         run: npm run generate:samples
 
-      - name: Verify sanity, lint, and production build
+      - name: Verify sanity, lint, build, and unit suite
         working-directory: web
-        run: npm run test:sanity && npm run lint && npm run build
+        run: npm run test:sanity && npm run lint && npm run build && npm run test:unit
 
       - name: Check for changed .capy assets
         id: diff_check
@@ -97,14 +97,14 @@ jobs:
           Automatically regenerates the pre-built sample and daily puzzles at Max detail settings so new players can open them right away without waiting for generation.
 
           - Regenerated `web/public/assets/sample_saves.capy` and `web/public/assets/daily_saves.capy` via `npm run generate:samples`.
-          - Verified `npm run test:sanity`, `npm run lint`, and `npm run build`.
+          - Verified `npm run test:sanity`, `npm run lint`, `npm run build`, and `npm run test:unit`.
 
           ### PR Readiness Score: 100%
 
           <details><summary>PR Readiness Checklist</summary>
 
-          - **100%** — **Pre-Generated Bundles**: `sample_saves.capy` and `daily_saves.capy` regenerated headlessly at Max settings.
-          - **100%** — **Verification Gates**: `npm run test:sanity`, `npm run lint`, and `npm run build` passed.
+          - **100%** — **Pre-Generated Bundles**: `sample_saves.capy` and `daily_saves.capy` regenerated headlessly at Max settings (`<= 2000` regions).
+          - **100%** — **Verification Gates**: `npm run test:sanity`, `npm run lint`, `npm run build`, and `npm run test:unit` passed.
 
           </details>
 

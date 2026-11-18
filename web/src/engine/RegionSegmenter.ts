@@ -288,39 +288,107 @@ export class RegionSegmenter {
     onProgress?.(0.82, 'Balancing puzzle region count...');
     const effectiveMaxRegions = Math.max(20, Math.min(2000, maxRegions || 200));
 
-    // Gather active unique roots
-    const activeRoots = new Set<number>();
+    // Collect active unique roots deterministically and seed an O(R log R) binary min-heap
+    const seenRoots = new Uint8Array(regionCounter);
+    const activeRootIds: number[] = [];
     for (let i = 0; i < regionCounter; i++) {
-      activeRoots.add(findRoot(i));
+      const root = findRoot(i);
+      if (seenRoots[root] === 0) {
+        seenRoots[root] = 1;
+        activeRootIds.push(root);
+      }
     }
 
-    // If active region count exceeds maxRegions, merge the smallest regions into their closest neighbor
-    let mergeSafetyCounter = 0;
-    while (activeRoots.size > effectiveMaxRegions && mergeSafetyCounter < 8000) {
-      mergeSafetyCounter++;
+    if (activeRootIds.length > effectiveMaxRegions) {
+      const maxHeapCap = Math.max(16, regionCounter * 2 + 4);
+      const heapAreas = new Int32Array(maxHeapCap);
+      const heapRoots = new Int32Array(maxHeapCap);
+      let heapSize = 0;
 
-      let smallestRoot = -1;
-      let minAreaVal = Number.MAX_VALUE;
-      for (const root of activeRoots) {
-        if (regionArea[root] < minAreaVal) {
-          minAreaVal = regionArea[root];
-          smallestRoot = root;
+      const heapSwap = (a: number, b: number): void => {
+        const ta = heapAreas[a];
+        heapAreas[a] = heapAreas[b];
+        heapAreas[b] = ta;
+        const tr = heapRoots[a];
+        heapRoots[a] = heapRoots[b];
+        heapRoots[b] = tr;
+      };
+
+      const heapLess = (a: number, b: number): boolean => {
+        const diff = heapAreas[a] - heapAreas[b];
+        return diff !== 0 ? diff < 0 : heapRoots[a] < heapRoots[b];
+      };
+
+      const heapPush = (area: number, rootId: number): void => {
+        if (heapSize >= maxHeapCap) return;
+        let idx = heapSize++;
+        heapAreas[idx] = area;
+        heapRoots[idx] = rootId;
+        while (idx > 0) {
+          const parentIdx = (idx - 1) >> 1;
+          if (!heapLess(idx, parentIdx)) break;
+          heapSwap(idx, parentIdx);
+          idx = parentIdx;
         }
+      };
+
+      const heapPop = (): void => {
+        const last = --heapSize;
+        if (last > 0) {
+          heapAreas[0] = heapAreas[last];
+          heapRoots[0] = heapRoots[last];
+          let idx = 0;
+          while (true) {
+            const left = idx * 2 + 1;
+            const right = left + 1;
+            let smallest = idx;
+            if (left < heapSize && heapLess(left, smallest)) smallest = left;
+            if (right < heapSize && heapLess(right, smallest)) smallest = right;
+            if (smallest === idx) break;
+            heapSwap(idx, smallest);
+            idx = smallest;
+          }
+        }
+      };
+
+      for (let i = 0; i < activeRootIds.length; i++) {
+        const root = activeRootIds[i];
+        heapPush(regionArea[root], root);
       }
 
-      if (smallestRoot === -1) break;
+      const isolatedRoots = new Uint8Array(regionCounter);
+      let mergeableCount = activeRootIds.length;
 
-      const { touches } = collectNeighborTouches(smallestRoot);
-      if (touches.size === 0) {
-        break;
-      }
+      while (mergeableCount > effectiveMaxRegions && heapSize > 0) {
+        const topArea = heapAreas[0];
+        const smallestRoot = heapRoots[0];
+        heapPop();
 
-      const bestNeighbor = pickBestMergeNeighbor(smallestRoot, touches);
-      if (bestNeighbor >= 0) {
-        mergeRootInto(smallestRoot, bestNeighbor);
-        activeRoots.delete(smallestRoot);
-      } else {
-        break;
+        if (findRoot(smallestRoot) !== smallestRoot) continue;
+        if (isolatedRoots[smallestRoot] !== 0) continue;
+
+        const currentArea = regionArea[smallestRoot];
+        if (topArea !== currentArea) {
+          // Stale entry: smallestRoot grew via an earlier merge; re-insert at updated area
+          heapPush(currentArea, smallestRoot);
+          continue;
+        }
+
+        const { touches } = collectNeighborTouches(smallestRoot);
+        if (touches.size === 0) {
+          isolatedRoots[smallestRoot] = 1;
+          mergeableCount--;
+          continue;
+        }
+
+        const bestNeighbor = pickBestMergeNeighbor(smallestRoot, touches);
+        if (bestNeighbor >= 0) {
+          mergeRootInto(smallestRoot, bestNeighbor);
+          mergeableCount--;
+        } else {
+          isolatedRoots[smallestRoot] = 1;
+          mergeableCount--;
+        }
       }
     }
 

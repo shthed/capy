@@ -59,6 +59,19 @@ export interface GeneratorConfig {
   isFreeColor?: boolean;
 }
 
+export const DEFAULT_GENERATOR_CONFIG: GeneratorConfig = {
+  algorithm: 'AUTO',
+  lineHandling: 'ABSORB_LINES',
+  preset: 'MEDIUM',
+  paletteDetail: 'AUTO',
+  imageType: 'AUTO',
+  colorCount: 16,
+  minRegionArea: 48,
+  maxRegions: 200,
+  resolution: 1024,
+  smoothingPasses: 2,
+};
+
 export const MAX_GENERATOR_CONFIG: GeneratorConfig = {
   algorithm: 'AUTO',
   lineHandling: 'ABSORB_LINES',
@@ -71,6 +84,20 @@ export const MAX_GENERATOR_CONFIG: GeneratorConfig = {
   resolution: 2048,
   smoothingPasses: 2,
 };
+
+export function matchesGeneratorConfig(cfg: GeneratorConfig, ref: GeneratorConfig): boolean {
+  return (
+    (cfg.algorithm || 'AUTO') === (ref.algorithm || 'AUTO') &&
+    (cfg.lineHandling || 'ABSORB_LINES') === (ref.lineHandling || 'ABSORB_LINES') &&
+    cfg.paletteDetail === ref.paletteDetail &&
+    cfg.imageType === ref.imageType &&
+    cfg.colorCount === ref.colorCount &&
+    cfg.minRegionArea === ref.minRegionArea &&
+    cfg.maxRegions === ref.maxRegions &&
+    cfg.resolution === ref.resolution &&
+    cfg.smoothingPasses === ref.smoothingPasses
+  );
+}
 
 export interface UserSettings {
   autoAdvance: boolean;
