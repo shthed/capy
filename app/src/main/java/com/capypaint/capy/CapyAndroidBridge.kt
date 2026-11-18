@@ -358,6 +358,32 @@ class CapyAndroidBridge(
         }
     }
 
+    internal object Api26FileMover {
+        @TargetApi(Build.VERSION_CODES.O)
+        fun moveReplacing(source: File, target: File): Boolean {
+            return try {
+                Files.move(
+                    source.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+                true
+            } catch (_: Exception) {
+                try {
+                    Files.move(
+                        source.toPath(),
+                        target.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                    )
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        }
+    }
+
     companion object {
         const val TAG = "CapyBridge"
         const val BACKUP_FOLDER_NAME = "capy_saves"
@@ -476,32 +502,6 @@ class CapyAndroidBridge(
                 targetPath.startsWith("$basePath${File.separator}")
             } catch (_: Exception) {
                 false
-            }
-        }
-
-        internal object Api26FileMover {
-            @TargetApi(Build.VERSION_CODES.O)
-            fun moveReplacing(source: File, target: File): Boolean {
-                return try {
-                    Files.move(
-                        source.toPath(),
-                        target.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE,
-                    )
-                    true
-                } catch (_: Exception) {
-                    try {
-                        Files.move(
-                            source.toPath(),
-                            target.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING,
-                        )
-                        true
-                    } catch (_: Exception) {
-                        false
-                    }
-                }
             }
         }
 
