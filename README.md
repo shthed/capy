@@ -9,6 +9,7 @@
 - **[Play Capy in Your Browser (`capypaint.com`)](https://capypaint.com/)**
 - **[Download the Android APK (Stable)](https://capypaint.com/capy.apk)**
 - **[Try Upcoming Features on the Beta Channel](https://shthed.github.io/capy/beta/)** ([Beta Android APK](https://shthed.github.io/capy/beta/capy.apk) | [Official GitHub Releases](https://github.com/shthed/capy/releases))
+- **[Public Issue Tracker & Feedback](https://github.com/capyboop/capy/issues)** ([Report a Bug, Request a Feature, or Share a Puzzle Idea](https://github.com/capyboop/capy/issues/new/choose))
 - **[Read the Privacy Policy](https://capypaint.com/privacy-policy.html)**
 
 ---

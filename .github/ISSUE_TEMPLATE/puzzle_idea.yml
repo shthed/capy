@@ -1,0 +1,23 @@
+name: Puzzle or Daily Artwork Idea
+description: Suggest a new built-in artwork or Daily Puzzle theme for Capy Paint
+title: "[Puzzle Idea]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Artwork / Theme Idea
+      description: Describe the subject, mood, or scene you would love to color.
+    validations:
+      required: true
+  - type: dropdown
+    id: style
+    attributes:
+      label: Preferred Puzzle Style
+      options:
+        - Auto (Smart Recommended)
+        - Painterly
+        - Line Art
+        - Mosaic
+        - Posterized
+        - Any
