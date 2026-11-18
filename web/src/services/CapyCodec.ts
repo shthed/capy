@@ -562,7 +562,8 @@ export function hasBinaryMagicHeader(bytes: Uint8Array): boolean {
 export async function encodeSingleSaveBinaryV2(
   snapshot: SavedSnapshot,
   compactRecord: CompactPuzzleRecordV2 | null,
-  imageBlob?: Blob | null
+  imageBlob?: Blob | null,
+  options?: { exportDate?: number }
 ): Promise<Uint8Array> {
   let imageBytes: Uint8Array | undefined;
   let imageMimeType: string | undefined;
@@ -571,10 +572,15 @@ export async function encodeSingleSaveBinaryV2(
     imageMimeType = imageBlob.type || 'image/webp';
   }
 
+  const resolvedExportDate =
+    typeof options?.exportDate === 'number' && Number.isFinite(options.exportDate)
+      ? options.exportDate
+      : Date.now();
+
   const payload: SingleSavePayloadV2 = {
     format: 'capy-single-save-v2',
     version: 2,
-    exportDate: Date.now(),
+    exportDate: resolvedExportDate,
     snapshot,
     compactPuzzle: compactRecord ? recordToSerializable(compactRecord) : null,
     ...(imageBytes ? { imageBytes, imageMimeType } : {}),
@@ -598,7 +604,8 @@ export async function encodeSingleSaveBinaryV2(
 export async function encodeArchiveSaveBinaryV2(
   snapshots: SavedSnapshot[],
   compactRecords: Record<string, CompactPuzzleRecordV2>,
-  imageBlobs?: Record<string, Blob>
+  imageBlobs?: Record<string, Blob>,
+  options?: { exportDate?: number }
 ): Promise<Uint8Array> {
   const compactPuzzles: Record<string, SerializedCompactPuzzleV2> = {};
   for (const [id, rec] of Object.entries(compactRecords)) {
@@ -615,10 +622,15 @@ export async function encodeArchiveSaveBinaryV2(
     }
   }
 
+  const resolvedExportDate =
+    typeof options?.exportDate === 'number' && Number.isFinite(options.exportDate)
+      ? options.exportDate
+      : Date.now();
+
   const payload: ArchiveSavePayloadV2 = {
     format: 'capy-archive-save-v2',
     version: 2,
-    exportDate: Date.now(),
+    exportDate: resolvedExportDate,
     snapshots,
     compactPuzzles,
     ...(Object.keys(images).length > 0 ? { images } : {}),

@@ -2,6 +2,7 @@
 // Isolates caches by both semantic version and normalized deployment scope path.
 
 const SW_BUILD_VERSION = '__CAPY_SW_VERSION__';
+const SW_ASSETS_DIGEST = '__CAPY_SW_ASSETS_DIGEST__';
 const EFFECTIVE_VERSION = SW_BUILD_VERSION.startsWith('__CAPY_') ? 'dev' : SW_BUILD_VERSION;
 const BUILD_ASSET_RELATIVE_URLS = /* __CAPY_SW_BUILD_ASSETS__ */ [];
 
@@ -168,6 +169,38 @@ self.addEventListener('fetch', (event) => {
           if (cachedResponse) {
             return cachedResponse;
           }
+          throw networkError;
+        }
+      })()
+    );
+    return;
+  }
+
+  // 1.5. Pre-baked .capy bundles: Network-first (no-cache revalidation) with offline cache fallback
+  if (url.pathname.toLowerCase().endsWith('.capy')) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        try {
+          const networkResponse = await fetch(request, { cache: 'no-cache' });
+          if (networkResponse && networkResponse.status === 200) {
+            try {
+              await cache.put(request, networkResponse.clone());
+            } catch (cacheErr) {
+              console.warn('[ServiceWorker] Failed to cache .capy response:', request.url, cacheErr);
+            }
+            return networkResponse;
+          }
+          const cachedFallback =
+            (await cache.match(request, { ignoreSearch: true })) ||
+            (await cache.match(request.url, { ignoreSearch: true }));
+          if (cachedFallback) return cachedFallback;
+          return networkResponse;
+        } catch (networkError) {
+          const cachedFallback =
+            (await cache.match(request, { ignoreSearch: true })) ||
+            (await cache.match(request.url, { ignoreSearch: true }));
+          if (cachedFallback) return cachedFallback;
           throw networkError;
         }
       })()

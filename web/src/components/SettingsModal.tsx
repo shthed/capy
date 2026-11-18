@@ -46,6 +46,7 @@ import {
   PresetCanvasBgColor,
   argbToHex,
   computeProgressPercentage,
+  DEFAULT_GENERATOR_CONFIG,
   hexToArgb,
   Difficulty,
   GeneratorAlgorithm,
@@ -53,6 +54,8 @@ import {
   HintFillStyle,
   ImageType,
   LineHandlingMode,
+  MAX_GENERATOR_CONFIG,
+  matchesGeneratorConfig,
   PaletteDetail,
   PaletteSortOrder,
   RegionColorMode,
@@ -347,6 +350,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return 0;
   });
   const [localConfig, setLocalConfig] = useState<GeneratorConfig>(settings.generatorConfig);
+  const prevIsOpenRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (isOpen && !prevIsOpenRef.current) {
+      setLocalConfig(settings.generatorConfig);
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, settings.generatorConfig]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState<string>('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -1910,7 +1920,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Deterministic Offline UTC Puzzle of the Day Hero Card */}
               <div
                 data-testid="daily-puzzle-card"
-                className="relative overflow-hidden rounded-xl border border-amber-400/40 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/25 p-3 sm:p-3.5 shadow-lg"
+                className="relative overflow-hidden rounded-xl border border-amber-400/40 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/25 p-3 sm:p-3.5 shadow-lg space-y-2"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="relative h-24 sm:h-20 sm:w-28 w-full flex-shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
@@ -1932,6 +1942,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         {dailyPuzzle.utcDate} UTC
                       </span>
+                      {renderHintButton('daily-puzzle', 'Puzzle of the Day')}
                     </div>
                     <div className="text-sm sm:text-base font-extrabold text-slate-100 truncate">
                       {dailyPuzzle.sample.title}
@@ -1960,55 +1971,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Play Daily</span>
                   </button>
                 </div>
+                {renderHintCallout(
+                  'daily-puzzle',
+                  'Deterministic daily challenge paired cleanly across every device by UTC date. All 20 daily combinations are pre-baked at Max Detail (2048p • up to 2000 pieces • 64 colours, or 20 colours in Free Colour mode) for instant zero-wait play.'
+                )}
               </div>
 
               {/* Above-the-Fold Style Guide & Hint Quick-Jump Bar */}
-              <div
-                data-testid="create-style-hint-bar"
-                className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-2 rounded-xl border border-slate-800 bg-slate-950/75"
-              >
-                <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-slate-300">
-                  <Info size={13} className="text-amber-400 flex-shrink-0" />
-                  <span className="truncate">
-                    <span className="font-bold text-slate-100">Style:</span>{' '}
-                    {localConfig.algorithm || 'AUTO'} • {localConfig.paletteDetail} ({localConfig.colorCount}c, {localConfig.resolution}p)
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    data-testid="create-hint-style-guide-btn"
-                    onClick={() => {
-                      setShowPresetGallery(true);
-                      onExplorePresetGallery?.();
-                      requestAnimationFrame(() => {
-                        presetGallerySectionRef.current?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        });
-                      });
-                    }}
-                    className="px-2 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold transition-colors cursor-pointer"
+              {(() => {
+                const isDefaultCfg = matchesGeneratorConfig(localConfig, DEFAULT_GENERATOR_CONFIG);
+                const isMaxCfg = matchesGeneratorConfig(localConfig, MAX_GENERATOR_CONFIG);
+                return (
+                  <div
+                    data-testid="create-style-hint-bar"
+                    className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-2 rounded-xl border border-slate-800 bg-slate-950/75"
                   >
-                    Style Guide (10)
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="create-hint-options-btn"
-                    onClick={() => {
-                      requestAnimationFrame(() => {
-                        createOptionsSectionRef.current?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        });
-                      });
-                    }}
-                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
-                  >
-                    Hint &amp; Options
-                  </button>
-                </div>
-              </div>
+                    <div className="flex items-start gap-1.5 flex-1 min-w-0 text-[11px] text-slate-300 leading-snug">
+                      <Info size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                      <span className="min-w-0 break-words">
+                        <span className="font-bold text-slate-100">Active Mode:</span>{' '}
+                        {isDefaultCfg
+                          ? 'Gallery: Max (2048p) • Uploads: Auto (16c, 1024p)'
+                          : isMaxCfg
+                            ? `Max Detail • ${localConfig.algorithm || 'AUTO'} (64c • 2000 pcs • 2048p)`
+                            : `Custom: ${localConfig.algorithm || 'AUTO'} • ${localConfig.paletteDetail} (${localConfig.colorCount}c • ${localConfig.maxRegions || 200} pcs • ${localConfig.resolution}p)`}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        data-testid="create-hint-style-guide-btn"
+                        onClick={() => {
+                          setShowPresetGallery(true);
+                          onExplorePresetGallery?.();
+                          requestAnimationFrame(() => {
+                            presetGallerySectionRef.current?.scrollIntoView({
+                              behavior: 'smooth',
+                              block: 'start',
+                            });
+                          });
+                        }}
+                        className="px-2 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        Style Guide (10)
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="create-hint-options-btn"
+                        onClick={() => {
+                          setOpenHintId('algorithm');
+                          requestAnimationFrame(() => {
+                            createOptionsSectionRef.current?.scrollIntoView({
+                              behavior: 'smooth',
+                              block: 'start',
+                            });
+                          });
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        Hint &amp; Options
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Built-in Sample Artwork Gallery with Search & Tag Filter Chips */}
               <div className="space-y-2">
@@ -2148,17 +2174,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Action Row: Upload Photo & Infinite Zoom Detail Sub-Puzzle */}
               <div className="space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onUploadImage();
-                      onClose();
-                    }}
-                    className="w-full flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-                  >
-                    <ImageIcon size={16} />
-                    <span>Choose Photo from Device</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <button
+                      type="button"
+                      data-testid="create-upload-photo-btn"
+                      onClick={() => {
+                        onUploadImage();
+                        onClose();
+                      }}
+                      className="flex-1 min-w-0 flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+                    >
+                      <ImageIcon size={16} className="flex-shrink-0" />
+                      <span className="truncate">Choose Photo from Device</span>
+                    </button>
+                    {renderHintButton('upload-photo', 'Choose Photo from Device')}
+                  </div>
 
                   {onZoomIntoDetailTile && sourceImage && (
                     <div className="flex items-center gap-1.5">
@@ -2179,6 +2209,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   )}
                 </div>
+                {renderHintCallout(
+                  'upload-photo',
+                  'Pick any JPG, PNG, or WebP artwork or photo from your device and segment it locally using your chosen algorithm, colours, piece count, and resolution below.'
+                )}
                 {onZoomIntoDetailTile &&
                   sourceImage &&
                   renderHintCallout(
@@ -2425,26 +2459,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 {renderHintCallout(
                   'detail-preset',
-                  'Picks how many palette colours are extracted. Auto, Low, Medium, and High auto-tune the palette for your image; Custom locks in your exact Target Palette Colours slider.'
+                  'Picks how many palette colours, max puzzle pieces, and minimum speckle sizes are extracted. Auto, Low, Medium, and High sync all three knobs; Custom keeps your manual slider adjustments.'
                 )}
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {(
                     [
-                      { key: 'AUTO', label: 'Auto', colorCount: 16 },
-                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10 },
-                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18 },
-                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38 },
-                      { key: 'CUSTOM', label: 'Custom', colorCount: null },
+                      { key: 'AUTO', label: 'Auto', colorCount: 16, maxRegions: 200, minRegionArea: 48 },
+                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10, maxRegions: 100, minRegionArea: 96 },
+                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18, maxRegions: 250, minRegionArea: 48 },
+                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38, maxRegions: 500, minRegionArea: 24 },
+                      { key: 'CUSTOM', label: 'Custom', colorCount: null, maxRegions: null, minRegionArea: null },
                     ] as const
                   ).map((det) => (
                     <button
                       key={det.key}
                       type="button"
+                      data-testid={`detail-preset-${det.key.toLowerCase()}`}
                       onClick={() =>
                         setLocalConfig((prev) => ({
                           ...prev,
                           paletteDetail: det.key as PaletteDetail,
                           ...(det.colorCount !== null ? { colorCount: det.colorCount } : {}),
+                          ...(det.maxRegions !== null ? { maxRegions: det.maxRegions } : {}),
+                          ...(det.minRegionArea !== null ? { minRegionArea: det.minRegionArea } : {}),
                         }))
                       }
                       className={`py-1.5 px-1 rounded-lg border text-xs font-bold text-center transition-all ${
@@ -2461,8 +2498,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Manual Fine-Tuning Sliders */}
               <div className="space-y-3.5 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
-                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Manual Fine-Tuning &amp; Constraints
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Manual Fine-Tuning &amp; Constraints
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="create-max-detail-preset-btn"
+                    onClick={() =>
+                      setLocalConfig((prev) => ({
+                        ...MAX_GENERATOR_CONFIG,
+                        algorithm: prev.algorithm || MAX_GENERATOR_CONFIG.algorithm,
+                        lineHandling: prev.lineHandling || MAX_GENERATOR_CONFIG.lineHandling,
+                        imageType: prev.imageType || MAX_GENERATOR_CONFIG.imageType,
+                        ...(prev.isFreeColor !== undefined ? { isFreeColor: prev.isFreeColor } : {}),
+                      }))
+                    }
+                    className={`px-2 py-1 rounded-md border text-[10px] font-extrabold transition-all cursor-pointer ${
+                      localConfig.paletteDetail === 'CUSTOM' &&
+                      localConfig.colorCount === MAX_GENERATOR_CONFIG.colorCount &&
+                      localConfig.maxRegions === MAX_GENERATOR_CONFIG.maxRegions &&
+                      localConfig.minRegionArea === MAX_GENERATOR_CONFIG.minRegionArea &&
+                      localConfig.resolution === MAX_GENERATOR_CONFIG.resolution
+                        ? 'border-amber-400 bg-amber-400 text-slate-950 shadow-xs'
+                        : 'border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20'
+                    }`}
+                  >
+                    Max Detail (64c • 2000 • 2048p)
+                  </button>
                 </div>
 
                 {/* Colors Count */}
