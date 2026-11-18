@@ -10412,7 +10412,7 @@ async function runCodecAndEngineTests() {
       assert.equal(JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]').length, 2);
       const coldVite = await createServer({
         root: projectRoot,
-        server: { middlewareMode: true, hmr: false },
+        server: { middlewareMode: true, hmr: false, ws: false },
         optimizeDeps: { noDiscovery: true },
         appType: 'custom',
         logLevel: 'error',
@@ -10478,6 +10478,696 @@ async function runCodecAndEngineTests() {
       assert.equal(mockStorage.get('capy_snapshots_v8'), '[]');
       assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => s.id), ['guard-heal']);
       assert.equal(JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]')[0]?.id, 'guard-heal');
+
+      // Group N: Commit 6 edge-bug regression suite (unconditional monotonic metaUpdatedAt, storage-backed savedAt, bounded flush retries, sanitized bootstrap fallback)
+      const withMockedNowAsync = async (nowMs, fn) => {
+        const realNow = Date.now;
+        Date.now = () => nowMs;
+        try {
+          return await fn();
+        } finally {
+          Date.now = realNow;
+        }
+      };
+      const coldGroupVite = await createServer({
+        root: projectRoot,
+        server: { middlewareMode: true, hmr: false, ws: false },
+        optimizeDeps: { noDiscovery: true },
+        appType: 'custom',
+        logLevel: 'error',
+      });
+      let coldReloadSeq = 0;
+      const withColdStorage = async (fn) => {
+        coldReloadSeq += 1;
+        const mod = await coldGroupVite.ssrLoadModule(`/src/services/StorageService.ts?cold=${coldReloadSeq}`);
+        return await fn(mod);
+      };
+      try {
+
+      // N1 & N2: Unconditional monotonic metaUpdatedAt in updateSnapshotProgress (same-ms undo, sibling future lastOpened, backward clock skew, reverse saveBackup failure, & zero forward overhead)
+      for (const platform of ['web', 'ios', 'android']) {
+        resetDurabilityState();
+        if (platform !== 'android') delete globalThis.window.CapyAndroid;
+        if (platform === 'ios') {
+          globalThis.window.webkit = { messageHandlers: { CapyIOS: { postMessage: () => {} } } };
+        }
+        withMockedNow(5000, () => {
+          storageMod.StorageService.addSnapshot(
+            makeSnap('n1-a', { timestamp: 5000, lastOpened: 5000, filledCount: 5, filledRegionIds: [1, 2, 3, 4, 5] })
+          );
+          storageMod.StorageService.addSnapshot(
+            makeSnap('n1-sib', { timestamp: 9000, lastOpened: 9000, filledCount: 1, filledRegionIds: [1] })
+          );
+        });
+        storageMod.StorageService.flushPendingBackups();
+
+        // Normal forward clock (now > prevListMaxTs) must add zero metaUpdatedAt overhead
+        withMockedNow(12000, () => {
+          storageMod.StorageService.updateSnapshotProgress('n1-a', 6, 10, [1, 2, 3, 4, 5, 6]);
+        });
+        assert.equal(
+          JSON.stringify(JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]')).includes('metaUpdatedAt'),
+          false,
+          `${platform} normal forward updateSnapshotProgress must add zero metaUpdatedAt overhead`
+        );
+        storageMod.StorageService.flushPendingBackups();
+
+        const savedN1Set = globalThis.localStorage.setItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedN1Set(k, v);
+        };
+        try {
+          // Same-ms undo relative to n1-sib (9000) and n1-a (12000): clock at 5000 (<= prevListMaxTs 12000)
+          withMockedNow(5000, () => {
+            storageMod.StorageService.updateSnapshotProgress('n1-a', 2, 10, [1, 2]);
+          });
+        } finally {
+          globalThis.localStorage.setItem = savedN1Set;
+        }
+        storageMod.StorageService.flushPendingBackups();
+        await withColdStorage(async (coldMod) => {
+          const cold = coldMod.StorageService.loadSnapshots();
+          const a = cold.find((s) => s.id === 'n1-a');
+          assert.equal(a?.filledCount, 2, `${platform} cold reload must preserve undone filledCount over higher sibling lastOpened`);
+          assert.deepEqual(a?.filledRegionIds, [1, 2]);
+          assert.equal('metaUpdatedAt' in (a || {}), false);
+        });
+      }
+
+      // Same-ms undo with zero prior metaUpdatedAt + exact same-ms sibling tie (s1=5000, s2=9000, now=5000) and reverse saveBackup=false on Android
+      resetDurabilityState();
+      withMockedNow(5000, () => {
+        storageMod.StorageService.saveSnapshots([
+          makeSnap('n1-exact', { timestamp: 5000, lastOpened: 5000, filledCount: 5, filledRegionIds: [1, 2, 3, 4, 5] }),
+          makeSnap('n1-future', { timestamp: 9000, lastOpened: 9000, filledCount: 1, filledRegionIds: [1] }),
+        ]);
+      });
+      storageMod.StorageService.flushPendingBackups();
+      const savedExactSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedExactSet(k, v);
+      };
+      try {
+        withMockedNow(5000, () => {
+          storageMod.StorageService.updateSnapshotProgress('n1-exact', 4, 10, [1, 2, 3, 4]);
+        });
+      } finally {
+        globalThis.localStorage.setItem = savedExactSet;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n1-exact');
+        assert.equal(snap?.filledCount, 4);
+        assert.equal('metaUpdatedAt' in (snap || {}), false);
+      });
+
+      // N2b: Android backward clock skew 10000 -> 3000 (both quota-on-local and saveBackup() === false reverse path)
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('n2-skew', { timestamp: 1000, lastOpened: 10000, filledCount: 1, filledRegionIds: [1] }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      globalThis.window.CapyAndroid = {
+        saveBackup: () => false,
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      withMockedNow(3000, () => {
+        storageMod.StorageService.updateSnapshotProgress('n2-skew', 8, 10, [1, 2, 3, 4, 5, 6, 7, 8]);
+      });
+      // Cold reload BEFORE any flush recovery: localStorage (filledCount=8, lastOpened=3000) must beat stale backup (10000)
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n2-skew');
+        assert.equal(snap?.filledCount, 8);
+        assert.equal(snap?.lastOpened, 3000);
+        assert.equal('metaUpdatedAt' in (snap || {}), false);
+      });
+
+      // N3 & N4: addSnapshot overwrite + syncImportedMetaTimestamps (both refreshTimestamps:true clock skew and refreshTimestamps:false older restore + single-save)
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('n3-add', { timestamp: 1000, lastOpened: 10000, title: 'Orig Add', filledCount: 9 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      const savedN3Set = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedN3Set(k, v);
+      };
+      try {
+        withMockedNow(4000, () => {
+          storageMod.StorageService.addSnapshot(
+            makeSnap('n3-add', { timestamp: 1000, lastOpened: 4000, title: 'Readded Skew', filledCount: 2 })
+          );
+        });
+      } finally {
+        globalThis.localStorage.setItem = savedN3Set;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n3-add');
+        assert.equal(snap?.title, 'Readded Skew');
+        assert.equal(snap?.filledCount, 2);
+        assert.equal('metaUpdatedAt' in (snap || {}), false);
+      });
+
+      // N4a: importSnapshotBundle ({ refreshTimestamps: true }) under clock skew 10000 -> 3000
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('n4-imp', { timestamp: 1000, lastOpened: 10000, title: 'Pre-Import', filledCount: 7 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      const savedN4Set = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedN4Set(k, v);
+      };
+      try {
+        const n4aRes = await withMockedNowAsync(3000, () =>
+          storageMod.StorageService.importSnapshotBundle(
+            JSON.stringify({
+              version: 2,
+              format: 'capy-archive-save',
+              snapshots: [makeSnap('n4-imp', { timestamp: 1000, lastOpened: 1000, title: 'Fresh Skew Import', filledCount: 1 })],
+              puzzles: {},
+            }),
+            { refreshTimestamps: true }
+          )
+        );
+        assert.equal(n4aRes.importedCount, 1);
+      } finally {
+        globalThis.localStorage.setItem = savedN4Set;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n4-imp');
+        assert.equal(snap?.title, 'Fresh Skew Import');
+        assert.equal(snap?.filledCount, 1);
+      });
+
+      // N4b: importSnapshotData ({ refreshTimestamps: false }) restoring older save (2000 over 5000) via array & capy-single-save & binary v2 archive
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('n4-old', { timestamp: 5000, lastOpened: 5000, title: 'Newer Corrupt', filledCount: 8 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedN4Set(k, v);
+      };
+      try {
+        const n4OldRes = await withMockedNowAsync(2000, () =>
+          storageMod.StorageService.importSnapshotData(
+            JSON.stringify([makeSnap('n4-old', { timestamp: 2000, lastOpened: 2000, title: 'Restored Older', filledCount: 3 })]),
+            { refreshTimestamps: false }
+          )
+        );
+        assert.equal(n4OldRes.importedCount, 1);
+      } finally {
+        globalThis.localStorage.setItem = savedN4Set;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n4-old');
+        assert.equal(snap?.title, 'Restored Older');
+        assert.equal(snap?.filledCount, 3);
+      });
+
+      // Binary v2 archive overwrite with refreshTimestamps:false under clock skew/older timestamp
+      const codecMod = await vite.ssrLoadModule('/src/services/CapyCodec.ts');
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('n4-bin', { timestamp: 8000, lastOpened: 8000, title: 'Pre-Bin', filledCount: 9 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      const binArchiveBytes = await codecMod.encodeArchiveSaveBinaryV2(
+        [makeSnap('n4-bin', { timestamp: 2000, lastOpened: 2000, title: 'Restored Bin Archive', filledCount: 2 })],
+        {},
+        {},
+        { exportDate: 2000 }
+      );
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedN4Set(k, v);
+      };
+      try {
+        const binRes = await withMockedNowAsync(2000, () =>
+          storageMod.StorageService.importSnapshotData(binArchiveBytes, { refreshTimestamps: false })
+        );
+        assert.equal(binRes.importedCount, 1);
+      } finally {
+        globalThis.localStorage.setItem = savedN4Set;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n4-bin');
+        assert.equal(snap?.title, 'Restored Bin Archive');
+        assert.equal(snap?.filledCount, 2);
+      });
+
+      // Single-save JSON & binary older restore (via addSnapshot inside importSnapshotBundle / importSnapshotData)
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([
+        makeSnap('n4-single', { timestamp: 8000, lastOpened: 8000, title: 'Pre-Single', filledCount: 9 }),
+      ]);
+      storageMod.StorageService.flushPendingBackups();
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedN4Set(k, v);
+      };
+      try {
+        const singleRes = await withMockedNowAsync(2000, () =>
+          storageMod.StorageService.importSnapshotBundle(
+            JSON.stringify({
+              version: 2,
+              format: 'capy-single-save',
+              snapshot: makeSnap('n4-single', { timestamp: 2000, lastOpened: 2000, title: 'Restored Single', filledCount: 1 }),
+              puzzle: null,
+            }),
+            { refreshTimestamps: false }
+          )
+        );
+        assert.equal(singleRes.importedCount, 1);
+      } finally {
+        globalThis.localStorage.setItem = savedN4Set;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const snap = coldMod.StorageService.loadSnapshots().find((s) => s.id === 'n4-single');
+        assert.equal(snap?.title, 'Restored Single');
+        assert.equal(snap?.filledCount, 1);
+      });
+
+      // N5: Storage-backed monotonic savedAt in saveSettings and saveActiveState (backward clock skew + same-ms shrink + reverse saveBackup failure)
+      resetDurabilityState();
+      withMockedNow(10000, () => {
+        storageMod.StorageService.saveSettings({
+          ...storageMod.DEFAULT_SETTINGS,
+          difficulty: 'EASY',
+          zoomSensitivity: 1.1,
+        });
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'n5-snap',
+          activeColorId: 5,
+          filledRegionIds: [1, 2, 3, 4, 5],
+          resetEpoch: 1,
+          zoomScale: 1.5,
+          panOffsetX: 10,
+          panOffsetY: 10,
+        });
+      });
+      storageMod.StorageService.flushPendingBackups();
+      const savedN5Set = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_user_settings_v8' || k === 'capy_active_session_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedN5Set(k, v);
+      };
+      try {
+        withMockedNow(3000, () => {
+          storageMod.StorageService.saveSettings({
+            ...storageMod.DEFAULT_SETTINGS,
+            difficulty: 'NORMAL',
+            zoomSensitivity: 1.9,
+          });
+          storageMod.StorageService.saveActiveState({
+            activeSnapshotId: 'n5-snap',
+            activeColorId: 2,
+            filledRegionIds: [1],
+            resetEpoch: 1,
+            zoomScale: 1.0,
+            panOffsetX: 0,
+            panOffsetY: 0,
+          });
+        });
+      } finally {
+        globalThis.localStorage.setItem = savedN5Set;
+      }
+      storageMod.StorageService.flushPendingBackups();
+      await withColdStorage(async (coldMod) => {
+        const s = coldMod.StorageService.loadSettings();
+        const a = coldMod.StorageService.loadActiveState();
+        assert.equal(s.difficulty, 'NORMAL');
+        assert.equal(s.zoomSensitivity, 1.9);
+        assert.equal('savedAt' in s, false);
+        assert.equal(a?.activeColorId, 2);
+        assert.deepEqual(a?.filledRegionIds, [1]);
+        assert.equal('savedAt' in (a || {}), false);
+      });
+
+      // Same-ms shrink (10000 -> 10000) and reverse Android saveBackup=false path for settings & activeState
+      resetDurabilityState();
+      withMockedNow(10000, () => {
+        storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, difficulty: 'EASY' });
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'n5-same',
+          activeColorId: 4,
+          filledRegionIds: [1, 2, 3, 4],
+          resetEpoch: 1,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+      });
+      storageMod.StorageService.flushPendingBackups();
+      globalThis.window.CapyAndroid = {
+        saveBackup: () => false,
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      withMockedNow(10000, () => {
+        storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, difficulty: 'NORMAL' });
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'n5-same',
+          activeColorId: 1,
+          filledRegionIds: [1],
+          resetEpoch: 1,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+      });
+      await withColdStorage(async (coldMod) => {
+        assert.equal(coldMod.StorageService.loadSettings().difficulty, 'NORMAL');
+        assert.deepEqual(coldMod.StorageService.loadActiveState()?.filledRegionIds, [1]);
+      });
+
+      // N6: Bounded backoff retry scheduling in flushPendingBackups (B1b, P5, N8b, E1-E6, 0 Desktop Web normal timers)
+      // N6a (B1b): clearAllSnapshots under 550ms quota > 400ms first tick heals by 1100ms across web, ios, android with zero CapyIOS spam
+      for (const platform of ['web', 'ios', 'android']) {
+        resetDurabilityState();
+        const iosN6a = [];
+        if (platform !== 'android') delete globalThis.window.CapyAndroid;
+        if (platform === 'ios') {
+          globalThis.window.webkit = { messageHandlers: { CapyIOS: { postMessage: (m) => iosN6a.push(m) } } };
+        }
+        storageMod.StorageService.saveSnapshots([makeSnap('n6a-ghost', { timestamp: 5000, lastOpened: 5000 })]);
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'n6a-ghost',
+          activeColorId: 1,
+          filledRegionIds: [1, 2],
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+        storageMod.StorageService.flushPendingBackups();
+        const baseIosN6a = iosN6a.length;
+
+        const savedN6aSet = globalThis.localStorage.setItem;
+        const savedN6aRem = globalThis.localStorage.removeItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8' || k === 'capy_active_session_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedN6aSet(k, v);
+        };
+        globalThis.localStorage.removeItem = () => {
+          throw new Error('Blocked removeItem');
+        };
+        try {
+          await storageMod.StorageService.clearAllSnapshots();
+          await new Promise((resolve) => setTimeout(resolve, 550));
+        } finally {
+          globalThis.localStorage.setItem = savedN6aSet;
+          globalThis.localStorage.removeItem = savedN6aRem;
+        }
+        // Wait 550ms post-relief (total 1100ms > 400ms+400ms=800ms) WITHOUT calling load*/flushPendingBackups
+        await new Promise((resolve) => setTimeout(resolve, 550));
+        assert.equal(mockStorage.get('capy_snapshots_v8'), '[]', `${platform} B1b must auto-heal snapshots after transient quota`);
+        assert.equal(mockStorage.has('capy_active_session_v8'), false, `${platform} B1b must auto-clear active state after transient quota`);
+        if (platform === 'ios') {
+          assert.equal(iosN6a.length, baseIosN6a + 2, 'CapyIOS B1b retry must emit zero duplicate postMessage spam');
+        }
+        await withColdStorage(async (coldMod) => {
+          assert.deepEqual(coldMod.StorageService.loadSnapshots(), []);
+          assert.equal(coldMod.StorageService.loadActiveState(), null);
+        });
+      }
+
+      // N6b (P5): Manual flushPendingBackups() while quota still active reschedules 400ms retry and heals after relief
+      for (const platform of ['web', 'ios', 'android']) {
+        resetDurabilityState();
+        if (platform !== 'android') delete globalThis.window.CapyAndroid;
+        if (platform === 'ios') {
+          globalThis.window.webkit = { messageHandlers: { CapyIOS: { postMessage: () => {} } } };
+        }
+        storageMod.StorageService.saveSnapshots([
+          makeSnap('n6b-keep', { timestamp: 1000, lastOpened: 1000, title: 'Orig P5' }),
+          makeSnap('n6b-drop', { timestamp: 5000, lastOpened: 5000, filledCount: 7 }),
+        ]);
+        storageMod.StorageService.flushPendingBackups();
+
+        const savedN6bSet = globalThis.localStorage.setItem;
+        const savedN6bRem = globalThis.localStorage.removeItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedN6bSet(k, v);
+        };
+        globalThis.localStorage.removeItem = () => {
+          throw new Error('Blocked removeItem');
+        };
+        try {
+          await storageMod.StorageService.deleteSnapshot('n6b-drop');
+          storageMod.StorageService.renameSnapshot('n6b-keep', 'Renamed P5');
+          storageMod.StorageService.flushPendingBackups();
+        } finally {
+          globalThis.localStorage.setItem = savedN6bSet;
+          globalThis.localStorage.removeItem = savedN6bRem;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 480));
+        await withColdStorage(async (coldMod) => {
+          const snaps = coldMod.StorageService.loadSnapshots();
+          assert.deepEqual(snaps.map((s) => s.id), ['n6b-keep'], `${platform} P5 must heal partial delete via scheduled retry`);
+          assert.equal(snaps[0]?.title, 'Renamed P5');
+        });
+      }
+
+      // N6c (E5): Android saveBackup() === false transient failure lasting 550ms heals automatically by 1100ms
+      resetDurabilityState();
+      let n6cBackupOk = true;
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          if (!n6cBackupOk) return false;
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      storageMod.StorageService.saveSnapshots([makeSnap('n6c-1', { lastOpened: 1000, filledCount: 1 })]);
+      storageMod.StorageService.flushPendingBackups();
+      n6cBackupOk = false;
+      storageMod.StorageService.saveSnapshots([makeSnap('n6c-1', { lastOpened: 5000, filledCount: 6 })]);
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      assert.equal(JSON.parse(mockBackups.get('capy_snapshots_v8') || '[]')[0]?.filledCount, 1);
+      n6cBackupOk = true;
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      assert.equal(
+        JSON.parse(mockBackups.get('capy_snapshots_v8') || '[]')[0]?.filledCount,
+        6,
+        'Android transient saveBackup failure must self-heal via retry timer'
+      );
+
+      // N6d: Normal Desktop Web 0 timers + bounded [400, 400, 800, 1600, 3200] retry schedule + !isRetry reset + 0 post-heal timer leaks
+      resetDurabilityState();
+      delete globalThis.window.CapyAndroid;
+      const origSetTimeout = globalThis.setTimeout;
+      const origClearTimeout = globalThis.clearTimeout;
+      const fakeTimers = [];
+      let nextTimerId = 1;
+      const installFakeTimers = () => {
+        fakeTimers.length = 0;
+        globalThis.setTimeout = (fn, delay) => {
+          const handle = {
+            id: nextTimerId++,
+            fn,
+            delay,
+            cleared: false,
+            unrefCalled: false,
+            unref() {
+              this.unrefCalled = true;
+              return this;
+            },
+          };
+          fakeTimers.push(handle);
+          return handle;
+        };
+        globalThis.clearTimeout = (handle) => {
+          if (handle && typeof handle === 'object') {
+            handle.cleared = true;
+          }
+        };
+      };
+      try {
+        installFakeTimers();
+        // Normal Desktop Web writes must arm ZERO timers
+        storageMod.StorageService.saveSnapshots([makeSnap('n6d-norm', { lastOpened: 2000 })]);
+        storageMod.StorageService.saveSettings(storageMod.DEFAULT_SETTINGS);
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'n6d-norm',
+          activeColorId: 1,
+          filledRegionIds: [1],
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+        await storageMod.StorageService.deleteSnapshot('n6d-norm');
+        assert.equal(fakeTimers.length, 0, 'Normal non-fault Desktop Web writes must schedule ZERO timers');
+
+        // Bounded backoff retries under persistent quota
+        const savedN6dSet = globalThis.localStorage.setItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedN6dSet(k, v);
+        };
+        try {
+          storageMod.StorageService.saveSnapshots([makeSnap('n6d-q1', { lastOpened: 3000 })]);
+          assert.deepEqual(fakeTimers.map((t) => t.delay), [400]);
+          assert.equal(fakeTimers[0]?.unrefCalled, true, 'Backup flush timer must call unref()');
+          for (let step = 0; step < 6; step++) {
+            const active = fakeTimers.filter((t) => !t.cleared).pop();
+            if (!active) break;
+            active.cleared = true;
+            active.fn();
+          }
+          assert.deepEqual(
+            fakeTimers.map((t) => t.delay),
+            [400, 400, 800, 1600, 3200, 3200],
+            'Retry backoff must execute bounded [400, 400, 800, 1600, 3200] schedule and halt after 5 retries'
+          );
+          assert.equal(fakeTimers.filter((t) => !t.cleared).length, 0);
+
+          // New user mutation (!isRetry) cancels active slow retry timer and resets delay to 400ms
+          fakeTimers.length = 0;
+          storageMod.StorageService.saveSnapshots([makeSnap('n6d-q2', { lastOpened: 4000 })]);
+          fakeTimers[0].cleared = true;
+          fakeTimers[0].fn();
+          fakeTimers[1].cleared = true;
+          fakeTimers[1].fn();
+          assert.equal(fakeTimers[2]?.delay, 800);
+          assert.equal(fakeTimers[2]?.cleared, false);
+          storageMod.StorageService.saveSnapshots([makeSnap('n6d-q3', { lastOpened: 5000 })]);
+          assert.equal(fakeTimers[2]?.cleared, true, 'New mutation must clear pending slow retry timer');
+          assert.equal(fakeTimers[3]?.delay, 400, 'New mutation must reset debounce delay to 400ms');
+        } finally {
+          globalThis.localStorage.setItem = savedN6dSet;
+        }
+        const preHealTimerCount = fakeTimers.length;
+        const pendingHealHandle = fakeTimers.filter((t) => !t.cleared).pop();
+        assert.ok(pendingHealHandle);
+        pendingHealHandle.cleared = true;
+        pendingHealHandle.fn();
+        assert.equal(fakeTimers.length, preHealTimerCount, 'Post-heal flush must schedule ZERO timers');
+        assert.equal(fakeTimers.filter((t) => !t.cleared).length, 0);
+        assert.equal(JSON.parse(mockStorage.get('capy_snapshots_v8') || '[]')[0]?.id, 'n6d-q3');
+
+        // CapyIOS 5-retry sequence under persistent quota must emit zero duplicate postMessage spam
+        resetDurabilityState();
+        delete globalThis.window.CapyAndroid;
+        const iosN6d = [];
+        globalThis.window.webkit = {
+          messageHandlers: { CapyIOS: { postMessage: (m) => iosN6d.push(m) } },
+        };
+        fakeTimers.length = 0;
+        const savedN6dIosSet = globalThis.localStorage.setItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedN6dIosSet(k, v);
+        };
+        try {
+          storageMod.StorageService.saveSnapshots([makeSnap('n6d-ios', { lastOpened: 6000 })]);
+          assert.equal(iosN6d.length, 0);
+          for (let step = 0; step < 6; step++) {
+            const active = fakeTimers.filter((t) => !t.cleared).pop();
+            if (!active) break;
+            active.cleared = true;
+            active.fn();
+          }
+          assert.equal(iosN6d.length, 1, 'CapyIOS retry ticks must emit zero duplicate postMessage calls');
+          assert.deepEqual(fakeTimers.map((t) => t.delay), [400, 400, 800, 1600, 3200, 3200]);
+        } finally {
+          globalThis.localStorage.setItem = savedN6dIosSet;
+        }
+        storageMod.StorageService.flushPendingBackups();
+        assert.equal(iosN6d.length, 1, 'Post-heal CapyIOS flush must not re-post already backed-up payload');
+      } finally {
+        globalThis.setTimeout = origSetTimeout;
+        globalThis.clearTimeout = origClearTimeout;
+      }
+
+      // N7 (BUG4 / B4e): isBootstrapBatch firstSnapshot fallback must strip forged metaUpdatedAt across all archive/array paths
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([makeSnap('n7-existing', { lastOpened: 5000 })]);
+      const forgedSample = {
+        ...makeSnap('n7-existing', { lastOpened: 2000 }),
+        isAutoSample: true,
+        metaUpdatedAt: 9999999999999,
+      };
+      const bootArrayRes = await storageMod.StorageService.importSnapshotBundle(
+        JSON.stringify([forgedSample]),
+        { refreshTimestamps: true }
+      );
+      assert.equal(bootArrayRes.importedCount, 1);
+      assert.equal('metaUpdatedAt' in (bootArrayRes.firstSnapshot || {}), false, 'Bootstrap array firstSnapshot must strip metaUpdatedAt');
+
+      const bootArchiveRes = await storageMod.StorageService.importSnapshotBundle(
+        JSON.stringify({ version: 2, format: 'capy-archive-save', snapshots: [forgedSample], puzzles: {} }),
+        { refreshTimestamps: true }
+      );
+      assert.equal(bootArchiveRes.importedCount, 1);
+      assert.equal('metaUpdatedAt' in (bootArchiveRes.firstSnapshot || {}), false, 'Bootstrap archive firstSnapshot must strip metaUpdatedAt');
+
+      const bootBinBytes = await codecMod.encodeArchiveSaveBinaryV2([forgedSample], {}, {});
+      const bootBinRes = await storageMod.StorageService.importSnapshotData(bootBinBytes, { refreshTimestamps: true });
+      assert.equal(bootBinRes.importedCount, 1);
+      assert.equal('metaUpdatedAt' in (bootBinRes.firstSnapshot || {}), false, 'Bootstrap binary archive firstSnapshot must strip metaUpdatedAt');
+      } finally {
+        await coldGroupVite.close();
+      }
 
       resetDurabilityState();
 

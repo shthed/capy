@@ -111,6 +111,8 @@ interface BackupCandidateMetrics {
 }
 
 export class StorageService {
+  private static readonly BACKUP_DEBOUNCE_MS = 400;
+  private static readonly BACKUP_FLUSH_BACKOFF_MS = [400, 400, 800, 1600, 3200];
   private static dbPromises = new Map<string, Promise<IDBDatabase>>();
   private static quotaListeners = new Set<(warning: QuotaWarning) => void>();
   private static persistentStorageRequested = false;
@@ -122,6 +124,7 @@ export class StorageService {
   private static quotaFailedLocalKeys = new Set<string>();
   private static quotaFailedDeleteKeys = new Set<string>();
   private static backupFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static backupFlushRetryAttempt = 0;
   private static lifecycleFlushRegistered = false;
   private static previewCache = new Map<string, string>();
 
@@ -217,12 +220,30 @@ export class StorageService {
     );
   }
 
-  private static scheduleBackupFlushTimer(): void {
+  private static clearBackupFlushTimer(): void {
+    if (this.backupFlushTimer !== null) {
+      clearTimeout(this.backupFlushTimer);
+      this.backupFlushTimer = null;
+    }
+  }
+
+  private static scheduleBackupFlushTimer(isRetry: boolean = false): void {
+    if (!isRetry) {
+      if (this.backupFlushRetryAttempt > 0) {
+        this.clearBackupFlushTimer();
+      }
+      this.backupFlushRetryAttempt = 0;
+    }
     if (this.backupFlushTimer !== null) return;
+    const delayMs = isRetry
+      ? StorageService.BACKUP_FLUSH_BACKOFF_MS[
+          Math.min(this.backupFlushRetryAttempt, StorageService.BACKUP_FLUSH_BACKOFF_MS.length - 1)
+        ]
+      : StorageService.BACKUP_DEBOUNCE_MS;
     this.backupFlushTimer = setTimeout(() => {
       this.backupFlushTimer = null;
       this.flushPendingBackups();
-    }, 400);
+    }, delayMs);
     if (
       typeof this.backupFlushTimer === 'object' &&
       this.backupFlushTimer !== null &&
@@ -233,10 +254,7 @@ export class StorageService {
   }
 
   static flushPendingBackups(): void {
-    if (this.backupFlushTimer !== null) {
-      clearTimeout(this.backupFlushTimer);
-      this.backupFlushTimer = null;
-    }
+    this.clearBackupFlushTimer();
     const isNative = NativeBridge.isNative;
     if (!isNative) {
       this.pendingBackupWrites.clear();
@@ -244,7 +262,10 @@ export class StorageService {
       this.staleNativeBackupKeys.clear();
       this.pendingForcedBackupKeys.clear();
     }
-    if (!this.hasPendingFlushWork()) return;
+    if (!this.hasPendingFlushWork()) {
+      this.backupFlushRetryAttempt = 0;
+      return;
+    }
 
     // Phase 1: Native Backup Queue (pendingBackupWrites strictly when NativeBridge.isNative)
     if (isNative && this.pendingBackupWrites.size > 0) {
@@ -325,6 +346,13 @@ export class StorageService {
         }
       }
     }
+
+    if (!this.hasPendingFlushWork()) {
+      this.backupFlushRetryAttempt = 0;
+    } else if (this.backupFlushRetryAttempt < StorageService.BACKUP_FLUSH_BACKOFF_MS.length) {
+      this.backupFlushRetryAttempt += 1;
+      this.scheduleBackupFlushTimer(true);
+    }
   }
 
   private static scheduleBackupWrite(
@@ -347,6 +375,9 @@ export class StorageService {
       this.staleNativeBackupKeys.delete(backupKey);
       if (this.hasPendingFlushWork()) {
         this.scheduleBackupFlushTimer();
+      } else {
+        this.clearBackupFlushTimer();
+        this.backupFlushRetryAttempt = 0;
       }
       return;
     }
@@ -372,6 +403,9 @@ export class StorageService {
       }
       if (this.hasPendingFlushWork()) {
         this.scheduleBackupFlushTimer();
+      } else {
+        this.clearBackupFlushTimer();
+        this.backupFlushRetryAttempt = 0;
       }
       return;
     }
@@ -397,6 +431,10 @@ export class StorageService {
       this.quotaFailedLocalKeys.delete(storageKey);
       this.quotaFailedDeleteKeys.delete(storageKey);
       this.pendingLocalHealWrites.delete(storageKey);
+      if (!this.hasPendingFlushWork()) {
+        this.clearBackupFlushTimer();
+        this.backupFlushRetryAttempt = 0;
+      }
       return true;
     } catch {
       return false;
@@ -410,6 +448,10 @@ export class StorageService {
       this.quotaFailedLocalKeys.delete(storageKey);
       this.quotaFailedDeleteKeys.delete(storageKey);
       this.pendingLocalHealWrites.delete(storageKey);
+      if (!this.hasPendingFlushWork()) {
+        this.clearBackupFlushTimer();
+        this.backupFlushRetryAttempt = 0;
+      }
       return true;
     } catch {
       return false;
@@ -463,6 +505,33 @@ export class StorageService {
       this.parseTimestampMs(obj.timestamp),
       this.parseTimestampMs(obj.lastModified)
     );
+  }
+
+  private static getMaxPersistedObjectTimestamp(storageKey: string, backupKey: string): number {
+    let maxTs = 0;
+    const candidates: Array<string | null | undefined> = [
+      this.safeLocalGet(storageKey),
+      this.pendingBackupWrites.get(backupKey),
+      this.pendingLocalHealWrites.get(storageKey),
+      this.staleNativeBackupKeys.has(backupKey) || !this.hasReadableNativeBackup()
+        ? null
+        : this.safeNativeLoadBackup(backupKey),
+    ];
+    for (const raw of candidates) {
+      if (!raw || raw.trim().length === 0) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const ts = this.extractObjectTimestamp(parsed as Record<string, unknown>);
+          if (ts > maxTs) {
+            maxTs = ts;
+          }
+        }
+      } catch {
+        // Ignore malformed JSON candidate
+      }
+    }
+    return maxTs;
   }
 
   private static inspectCandidate(raw: string, kind: BackupDataKind): BackupCandidateMetrics {
@@ -1004,11 +1073,16 @@ export class StorageService {
 
   static saveSettings(settings: UserSettings): void {
     try {
-      const payload = { ...settings, undoDefaultMigrated: true, savedAt: Date.now() };
+      const storageKey = resolveScopedStorageKey(SETTINGS_KEY);
+      const backupKey = resolveScopedBackupKey(SETTINGS_KEY);
+      const now = Date.now();
+      const prevSavedAt = this.getMaxPersistedObjectTimestamp(storageKey, backupKey);
+      const savedAt = prevSavedAt >= now ? prevSavedAt + 1 : now;
+      const payload = { ...settings, undoDefaultMigrated: true, savedAt };
       const serialized = JSON.stringify(payload);
       this.writeLocalAndScheduleBackup(
-        resolveScopedStorageKey(SETTINGS_KEY),
-        resolveScopedBackupKey(SETTINGS_KEY),
+        storageKey,
+        backupKey,
         serialized
       );
       try {
@@ -1093,7 +1167,7 @@ export class StorageService {
     return copy;
   }
 
-  private static computeNextSnapshotMetaTs(
+  private static getMaxSnapshotListTs(
     snapshots: SavedSnapshot[],
     metaTsById: Map<string, number>
   ): number {
@@ -1108,6 +1182,15 @@ export class StorageService {
         maxSeen = candidate;
       }
     }
+    return maxSeen;
+  }
+
+  private static computeNextSnapshotMetaTs(
+    snapshots: SavedSnapshot[],
+    metaTsById: Map<string, number>,
+    floorTs: number = 0
+  ): number {
+    const maxSeen = Math.max(floorTs, this.getMaxSnapshotListTs(snapshots, metaTsById));
     return Math.max(maxSeen + 1, Date.now());
   }
 
@@ -1253,20 +1336,35 @@ export class StorageService {
   static addSnapshot(snapshot: SavedSnapshot): SavedSnapshot[] {
     const cleanSnapshot = this.stripInternalSnapshotMeta(snapshot);
     const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    const prevListMaxTs = this.getMaxSnapshotListTs(list, metaTsById);
     const existingIndex = list.findIndex((s) => s.id === cleanSnapshot.id);
+    const incomingTs = Math.max(
+      this.parseTimestampMs(cleanSnapshot.lastOpened),
+      this.parseTimestampMs(cleanSnapshot.timestamp)
+    );
     let updated: SavedSnapshot[];
     if (existingIndex >= 0) {
+      const existingItem = list[existingIndex];
+      const prevItemTs = Math.max(
+        this.parseTimestampMs(existingItem.lastOpened),
+        this.parseTimestampMs(existingItem.timestamp),
+        metaTsById.get(cleanSnapshot.id) ?? 0
+      );
+      if (incomingTs <= prevItemTs || incomingTs <= prevListMaxTs) {
+        metaTsById.set(
+          cleanSnapshot.id,
+          Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs), incomingTs + 1)
+        );
+      }
       updated = [...list];
       updated[existingIndex] = cleanSnapshot;
-      const existingMetaTs = metaTsById.get(cleanSnapshot.id) ?? 0;
-      const incomingTs = Math.max(
-        this.parseTimestampMs(cleanSnapshot.lastOpened),
-        this.parseTimestampMs(cleanSnapshot.timestamp)
-      );
-      if (existingMetaTs > 0 && existingMetaTs >= incomingTs) {
-        metaTsById.set(cleanSnapshot.id, this.computeNextSnapshotMetaTs(list, metaTsById));
-      }
     } else {
+      if (list.length > 0 && incomingTs <= prevListMaxTs) {
+        metaTsById.set(
+          cleanSnapshot.id,
+          Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs), incomingTs + 1)
+        );
+      }
       updated = [cleanSnapshot, ...list];
     }
     this.saveSnapshotsInternal(updated, { metaTsById });
@@ -1293,11 +1391,18 @@ export class StorageService {
     resetEpoch?: number
   ): SavedSnapshot[] {
     const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
+    const prevListMaxTs = this.getMaxSnapshotListTs(list, metaTsById);
     const now = Date.now();
     let matched = false;
+    let prevItemTs = 0;
     const updated = list.map((item) => {
       if (item.id === id) {
         matched = true;
+        prevItemTs = Math.max(
+          this.parseTimestampMs(item.lastOpened),
+          this.parseTimestampMs(item.timestamp),
+          metaTsById.get(id) ?? 0
+        );
         return {
           ...item,
           lastOpened: now,
@@ -1317,8 +1422,11 @@ export class StorageService {
       }
       return item;
     });
-    if (matched && (metaTsById.get(id) ?? 0) >= now) {
-      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+    if (matched && (now <= prevItemTs || now <= prevListMaxTs)) {
+      metaTsById.set(
+        id,
+        Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs), prevListMaxTs + 1)
+      );
     }
     this.saveSnapshotsInternal(updated, { metaTsById });
     return updated;
@@ -1547,6 +1655,8 @@ export class StorageService {
     panOffsetY: number;
   }): void {
     try {
+      const storageKey = resolveScopedStorageKey(ACTIVE_STATE_KEY);
+      const backupKey = resolveScopedBackupKey(ACTIVE_STATE_KEY);
       const existing = state.resetEpoch === undefined && state.activeSnapshotId ? this.loadActiveState() : null;
       const effectiveEpoch =
         state.resetEpoch !== undefined
@@ -1558,11 +1668,14 @@ export class StorageService {
         effectiveEpoch !== undefined && effectiveEpoch > 0
           ? { ...state, resetEpoch: effectiveEpoch }
           : { ...state };
-      const payload = { ...basePayload, savedAt: Date.now() };
+      const now = Date.now();
+      const prevSavedAt = this.getMaxPersistedObjectTimestamp(storageKey, backupKey);
+      const savedAt = prevSavedAt >= now ? prevSavedAt + 1 : now;
+      const payload = { ...basePayload, savedAt };
       const serialized = JSON.stringify(payload);
       this.writeLocalAndScheduleBackup(
-        resolveScopedStorageKey(ACTIVE_STATE_KEY),
-        resolveScopedBackupKey(ACTIVE_STATE_KEY),
+        storageKey,
+        backupKey,
         serialized
       );
     } catch {
@@ -1804,13 +1917,30 @@ export class StorageService {
     toPersist: SavedSnapshot[],
     metaTsById: Map<string, number>
   ): void {
-    const existingIds = new Set(existing.map((s) => s.id));
+    const existingById = new Map(existing.map((s) => [s.id, s]));
+    let floorTs = this.getMaxSnapshotListTs(existing, metaTsById);
     for (const s of toPersist) {
-      if (!existingIds.has(s.id)) continue;
-      const existingMetaTs = metaTsById.get(s.id) ?? 0;
-      const incomingTs = Math.max(this.parseTimestampMs(s.lastOpened), this.parseTimestampMs(s.timestamp));
-      if (existingMetaTs > 0 && existingMetaTs >= incomingTs) {
-        metaTsById.set(s.id, this.computeNextSnapshotMetaTs(existing, metaTsById));
+      const prevItem = existingById.get(s.id);
+      const prevItemTs = prevItem
+        ? Math.max(
+            this.parseTimestampMs(prevItem.lastOpened),
+            this.parseTimestampMs(prevItem.timestamp),
+            metaTsById.get(s.id) ?? 0
+          )
+        : (metaTsById.get(s.id) ?? 0);
+      const incomingTs = Math.max(
+        this.parseTimestampMs(s.lastOpened),
+        this.parseTimestampMs(s.timestamp)
+      );
+      if (prevItem || (existing.length > 0 && incomingTs <= floorTs)) {
+        if (Math.max(prevItemTs, floorTs) >= incomingTs) {
+          const nextTs = Math.max(
+            this.computeNextSnapshotMetaTs(existing, metaTsById, floorTs),
+            incomingTs + 1
+          );
+          metaTsById.set(s.id, nextTs);
+          floorTs = Math.max(floorTs, nextTs);
+        }
       }
     }
   }
@@ -1929,7 +2059,7 @@ export class StorageService {
             this.saveSnapshotsInternal(mergedList, { metaTsById });
             return {
               importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
-              firstSnapshot: toPersist[0] || validSnapshots[0],
+              firstSnapshot: toPersist[0] || this.stripInternalSnapshotMeta(validSnapshots[0]),
               firstPuzzle,
             };
           }
@@ -2028,7 +2158,7 @@ export class StorageService {
 
         return {
           importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
-          firstSnapshot: toPersist[0] || validSnapshots[0],
+          firstSnapshot: toPersist[0] || this.stripInternalSnapshotMeta(validSnapshots[0]),
           firstPuzzle,
         };
       }
@@ -2054,7 +2184,7 @@ export class StorageService {
         this.saveSnapshotsInternal(mergedList, { metaTsById });
         return {
           importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
-          firstSnapshot: toPersist[0] || validSnapshots[0],
+          firstSnapshot: toPersist[0] || this.stripInternalSnapshotMeta(validSnapshots[0]),
         };
       }
 
