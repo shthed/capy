@@ -513,9 +513,7 @@ export class StorageService {
       this.safeLocalGet(storageKey),
       this.pendingBackupWrites.get(backupKey),
       this.pendingLocalHealWrites.get(storageKey),
-      this.staleNativeBackupKeys.has(backupKey) || !this.hasReadableNativeBackup()
-        ? null
-        : this.safeNativeLoadBackup(backupKey),
+      this.hasReadableNativeBackup() ? this.safeNativeLoadBackup(backupKey) : null,
     ];
     for (const raw of candidates) {
       if (!raw || raw.trim().length === 0) continue;
@@ -529,6 +527,24 @@ export class StorageService {
         }
       } catch {
         // Ignore malformed JSON candidate
+      }
+    }
+    return maxTs;
+  }
+
+  private static getMaxPersistedSnapshotTimestamp(storageKey: string, backupKey: string): number {
+    let maxTs = 0;
+    const candidates: Array<string | null | undefined> = [
+      this.safeLocalGet(storageKey),
+      this.pendingBackupWrites.get(backupKey),
+      this.pendingLocalHealWrites.get(storageKey),
+      this.hasReadableNativeBackup() ? this.safeNativeLoadBackup(backupKey) : null,
+    ];
+    for (const raw of candidates) {
+      if (!raw || raw.trim().length === 0) continue;
+      const metrics = this.inspectCandidate(raw, 'snapshots');
+      if (metrics.parseOk && metrics.maxTs > maxTs) {
+        maxTs = metrics.maxTs;
       }
     }
     return maxTs;
@@ -1335,8 +1351,11 @@ export class StorageService {
 
   static addSnapshot(snapshot: SavedSnapshot): SavedSnapshot[] {
     const cleanSnapshot = this.stripInternalSnapshotMeta(snapshot);
+    const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
+    const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
     const { snapshots: list, metaTsById } = this.loadSnapshotsWithMeta();
-    const prevListMaxTs = this.getMaxSnapshotListTs(list, metaTsById);
+    const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(storageKey, backupKey);
+    const prevListMaxTs = Math.max(this.getMaxSnapshotListTs(list, metaTsById), persistedMaxTs);
     const existingIndex = list.findIndex((s) => s.id === cleanSnapshot.id);
     const incomingTs = Math.max(
       this.parseTimestampMs(cleanSnapshot.lastOpened),
@@ -1350,16 +1369,17 @@ export class StorageService {
         this.parseTimestampMs(existingItem.timestamp),
         metaTsById.get(cleanSnapshot.id) ?? 0
       );
-      if (incomingTs <= prevItemTs || incomingTs <= prevListMaxTs) {
+      const effectiveFloor = Math.max(prevItemTs, prevListMaxTs);
+      if (incomingTs <= effectiveFloor) {
         metaTsById.set(
           cleanSnapshot.id,
-          Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs), incomingTs + 1)
+          Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, effectiveFloor), incomingTs + 1)
         );
       }
       updated = [...list];
       updated[existingIndex] = cleanSnapshot;
     } else {
-      if (list.length > 0 && incomingTs <= prevListMaxTs) {
+      if ((list.length > 0 || persistedMaxTs > 0) && incomingTs <= prevListMaxTs) {
         metaTsById.set(
           cleanSnapshot.id,
           Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs), incomingTs + 1)
@@ -1422,13 +1442,22 @@ export class StorageService {
       }
       return item;
     });
-    if (matched && (now <= prevItemTs || now <= prevListMaxTs)) {
-      metaTsById.set(
-        id,
-        Math.max(this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs), prevListMaxTs + 1)
-      );
+    if (matched) {
+      const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
+      const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
+      const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(storageKey, backupKey);
+      const effectivePrevMaxTs = Math.max(prevListMaxTs, persistedMaxTs);
+      if (now <= prevItemTs || now <= effectivePrevMaxTs) {
+        metaTsById.set(
+          id,
+          Math.max(
+            this.computeNextSnapshotMetaTs(list, metaTsById, effectivePrevMaxTs),
+            effectivePrevMaxTs + 1
+          )
+        );
+      }
+      this.saveSnapshotsInternal(updated, { metaTsById });
     }
-    this.saveSnapshotsInternal(updated, { metaTsById });
     return updated;
   }
 
@@ -1453,7 +1482,11 @@ export class StorageService {
       return item;
     });
     if (matched) {
-      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(
+        resolveScopedStorageKey(SNAPSHOTS_KEY),
+        resolveScopedBackupKey(SNAPSHOTS_KEY)
+      );
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById, persistedMaxTs));
       this.saveSnapshotsInternal(updated, { metaTsById });
     }
     return updated;
@@ -1470,7 +1503,11 @@ export class StorageService {
       return s;
     });
     if (matched) {
-      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(
+        resolveScopedStorageKey(SNAPSHOTS_KEY),
+        resolveScopedBackupKey(SNAPSHOTS_KEY)
+      );
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById, persistedMaxTs));
       this.saveSnapshotsInternal(updated, { metaTsById });
     }
     return updated;
@@ -1487,7 +1524,11 @@ export class StorageService {
       return s;
     });
     if (matched) {
-      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById));
+      const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(
+        resolveScopedStorageKey(SNAPSHOTS_KEY),
+        resolveScopedBackupKey(SNAPSHOTS_KEY)
+      );
+      metaTsById.set(id, this.computeNextSnapshotMetaTs(list, metaTsById, persistedMaxTs));
       this.saveSnapshotsInternal(updated, { metaTsById });
     }
     return updated;
@@ -1499,7 +1540,11 @@ export class StorageService {
     const updated = list.filter((s) => s.id !== id);
     if (updated.length < list.length) {
       if (updated.length > 0) {
-        const nextMetaTs = this.computeNextSnapshotMetaTs(list, metaTsById);
+        const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
+        const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
+        const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(storageKey, backupKey);
+        const prevListMaxTs = Math.max(this.getMaxSnapshotListTs(list, metaTsById), persistedMaxTs);
+        const nextMetaTs = this.computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs);
         metaTsById.delete(id);
         metaTsById.set(updated[0].id, nextMetaTs);
       }
@@ -1915,10 +1960,15 @@ export class StorageService {
   private static syncImportedMetaTimestamps(
     existing: SavedSnapshot[],
     toPersist: SavedSnapshot[],
-    metaTsById: Map<string, number>
+    metaTsById: Map<string, number>,
+    persistedMaxTs: number = this.getMaxPersistedSnapshotTimestamp(
+      resolveScopedStorageKey(SNAPSHOTS_KEY),
+      resolveScopedBackupKey(SNAPSHOTS_KEY)
+    )
   ): void {
     const existingById = new Map(existing.map((s) => [s.id, s]));
-    let floorTs = this.getMaxSnapshotListTs(existing, metaTsById);
+    const hasPriorHistory = existing.length > 0 || persistedMaxTs > 0;
+    let floorTs = Math.max(this.getMaxSnapshotListTs(existing, metaTsById), persistedMaxTs);
     for (const s of toPersist) {
       const prevItem = existingById.get(s.id);
       const prevItemTs = prevItem
@@ -1932,10 +1982,11 @@ export class StorageService {
         this.parseTimestampMs(s.lastOpened),
         this.parseTimestampMs(s.timestamp)
       );
-      if (prevItem || (existing.length > 0 && incomingTs <= floorTs)) {
-        if (Math.max(prevItemTs, floorTs) >= incomingTs) {
+      const effectiveFloor = Math.max(prevItemTs, floorTs);
+      if (prevItem || (hasPriorHistory && incomingTs <= effectiveFloor)) {
+        if (incomingTs <= effectiveFloor) {
           const nextTs = Math.max(
-            this.computeNextSnapshotMetaTs(existing, metaTsById, floorTs),
+            this.computeNextSnapshotMetaTs(existing, metaTsById, effectiveFloor),
             incomingTs + 1
           );
           metaTsById.set(s.id, nextTs);
@@ -2055,7 +2106,11 @@ export class StorageService {
                 await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
               }
             }
-            this.syncImportedMetaTimestamps(existing, toPersist, metaTsById);
+            const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(
+              resolveScopedStorageKey(SNAPSHOTS_KEY),
+              resolveScopedBackupKey(SNAPSHOTS_KEY)
+            );
+            this.syncImportedMetaTimestamps(existing, toPersist, metaTsById, persistedMaxTs);
             this.saveSnapshotsInternal(mergedList, { metaTsById });
             return {
               importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
@@ -2153,7 +2208,11 @@ export class StorageService {
             await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
           }
         }
-        this.syncImportedMetaTimestamps(existing, toPersist, metaTsById);
+        const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(
+          resolveScopedStorageKey(SNAPSHOTS_KEY),
+          resolveScopedBackupKey(SNAPSHOTS_KEY)
+        );
+        this.syncImportedMetaTimestamps(existing, toPersist, metaTsById, persistedMaxTs);
         this.saveSnapshotsInternal(mergedList, { metaTsById });
 
         return {
@@ -2180,7 +2239,11 @@ export class StorageService {
             await this.savePreviewDataUrl(snap.id, snap.previewDataUrl);
           }
         }
-        this.syncImportedMetaTimestamps(existing, toPersist, metaTsById);
+        const persistedMaxTs = this.getMaxPersistedSnapshotTimestamp(
+          resolveScopedStorageKey(SNAPSHOTS_KEY),
+          resolveScopedBackupKey(SNAPSHOTS_KEY)
+        );
+        this.syncImportedMetaTimestamps(existing, toPersist, metaTsById, persistedMaxTs);
         this.saveSnapshotsInternal(mergedList, { metaTsById });
         return {
           importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
