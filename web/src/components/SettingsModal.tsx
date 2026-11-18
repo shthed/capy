@@ -750,6 +750,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <ShieldCheck size={13} className="text-emerald-400" />
                     <span>Privacy Policy</span>
                   </a>
+                  <a
+                    href="https://github.com/capyboop/capy/issues/new/choose"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="about-report-issue-link"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink size={13} className="text-sky-400" />
+                    <span>Report Bug / Ideas</span>
+                  </a>
                 </div>
               </div>
 
