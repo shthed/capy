@@ -8522,6 +8522,34 @@ async function runCodecAndEngineTests() {
     const prevLs = globalThis.localStorage;
     const prevSsrWin = globalThis.window;
     const mockStorage = new Map();
+    const mockBackups = new Map();
+    const resetDurabilityState = () => {
+      globalThis.localStorage = {
+        getItem: (k) => (mockStorage.has(k) ? mockStorage.get(k) : null),
+        setItem: (k, v) => mockStorage.set(k, String(v)),
+        removeItem: (k) => mockStorage.delete(k),
+      };
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      for (const loc of [
+        { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' },
+        { pathname: '/capy/beta/', origin: 'https://example.github.io', search: '' },
+      ]) {
+        globalThis.window.location = loc;
+        storageMod.StorageService.clearActiveState();
+        storageMod.StorageService.saveSnapshots([], { allowEmptyBackup: true, immediateBackup: true });
+        storageMod.StorageService.saveSettings(storageMod.DEFAULT_SETTINGS);
+      }
+      globalThis.window.location = { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' };
+      storageMod.StorageService.flushPendingBackups();
+      mockStorage.clear();
+      mockBackups.clear();
+    };
     globalThis.localStorage = {
       getItem: (k) => (mockStorage.has(k) ? mockStorage.get(k) : null),
       setItem: (k, v) => mockStorage.set(k, String(v)),
@@ -8562,7 +8590,6 @@ async function runCodecAndEngineTests() {
         );
       }
 
-      const mockBackups = new Map();
       globalThis.window.CapyAndroid = {
         saveBackup: (k, v) => {
           mockBackups.set(k, String(v));
@@ -8760,19 +8787,6 @@ async function runCodecAndEngineTests() {
       assert.equal(quotaEvents[0]?.reason, 'quota');
 
       // StorageService P0 save durability: backup recency/validity/richness comparison, empty-wipe protection, and explicit deletes/clears
-      const resetDurabilityState = () => {
-        storageMod.StorageService.flushPendingBackups();
-        mockStorage.clear();
-        mockBackups.clear();
-        globalThis.window.location = { pathname: '/', origin: 'http://127.0.0.1:3000', search: '' };
-        globalThis.window.CapyAndroid = {
-          saveBackup: (k, v) => {
-            mockBackups.set(k, String(v));
-            return true;
-          },
-          loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
-        };
-      };
       const withMockedNow = (nowMs, fn) => {
         const realNow = Date.now;
         Date.now = () => nowMs;
@@ -9376,6 +9390,496 @@ async function runCodecAndEngineTests() {
       } finally {
         globalThis.localStorage = savedLsObj;
       }
+      // Group F: NativeBridge.saveBackup() === false resilience (Bug 1) & Desktop Web !NativeBridge.isNative cleanup (CEO 15:17:24Z)
+      resetDurabilityState();
+      const natS1 = makeSnap('nat-1', { lastOpened: 1000, filledCount: 1 });
+      const natS2 = makeSnap('nat-2', { lastOpened: 2000, filledCount: 2 });
+      storageMod.StorageService.saveSnapshots([natS1, natS2]);
+      storageMod.StorageService.saveActiveState({
+        activeSnapshotId: 'nat-2',
+        activeColorId: 2,
+        filledRegionIds: [1, 2],
+        zoomScale: 1,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      });
+      storageMod.StorageService.flushPendingBackups();
+
+      let nativeWriteOk = false;
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          if (!nativeWriteOk) return false;
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      const afterNativeFailPartial = await storageMod.StorageService.deleteSnapshot('nat-2');
+      assert.deepEqual(afterNativeFailPartial.map((s) => s.id), ['nat-1']);
+      assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => s.id), ['nat-1']);
+      assert.equal(storageMod.StorageService.loadActiveState(), null, 'Failed native backup clearActiveState must not resurrect active state');
+      mockStorage.clear();
+      assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => s.id), ['nat-1'], 'Stale native backup must not override pending partial delete');
+      assert.equal(storageMod.StorageService.loadActiveState(), null);
+      storageMod.StorageService.flushPendingBackups();
+      assert.deepEqual(JSON.parse(mockBackups.get('capy_snapshots_v8') || '[]').map((s) => s.id), ['nat-1', 'nat-2']);
+      nativeWriteOk = true;
+      storageMod.StorageService.flushPendingBackups();
+      assert.deepEqual(JSON.parse(mockBackups.get('capy_snapshots_v8') || '[]').map((s) => s.id), ['nat-1']);
+      assert.equal(mockBackups.get('capy_active_session_v8'), '');
+
+      // Final delete & accidental empty guard during native saveBackup() === false
+      nativeWriteOk = false;
+      await storageMod.StorageService.deleteSnapshot('nat-1');
+      assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+      mockStorage.clear();
+      assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+      nativeWriteOk = true;
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(mockBackups.get('capy_snapshots_v8'), '[]');
+
+      // Accidental saveSnapshots([]) stays blocked while explicit clearAllSnapshots & clearActiveState (even with removeItem throwing) recover cleanly
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([natS1]);
+      storageMod.StorageService.saveActiveState({
+        activeSnapshotId: 'nat-1',
+        activeColorId: 3,
+        filledRegionIds: [1],
+        zoomScale: 1,
+        panOffsetX: 0,
+        panOffsetY: 0,
+      });
+      storageMod.StorageService.flushPendingBackups();
+      storageMod.StorageService.saveSnapshots([]);
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(JSON.parse(mockBackups.get('capy_snapshots_v8') || '[]')[0]?.id, 'nat-1');
+
+      nativeWriteOk = false;
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          if (!nativeWriteOk) return false;
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      const origRemoveItem = globalThis.localStorage.removeItem;
+      globalThis.localStorage.removeItem = () => {
+        throw new Error('Blocked removeItem');
+      };
+      try {
+        storageMod.StorageService.clearActiveState();
+        assert.equal(storageMod.StorageService.loadActiveState(), null, 'clearActiveState must return null even if removeItem and saveBackup both fail');
+      } finally {
+        globalThis.localStorage.removeItem = origRemoveItem;
+      }
+      await storageMod.StorageService.clearAllSnapshots();
+      assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+      assert.equal(storageMod.StorageService.loadActiveState(), null);
+      nativeWriteOk = true;
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(mockBackups.get('capy_snapshots_v8'), '[]');
+      assert.equal(mockBackups.get('capy_active_session_v8'), '');
+
+      // Debounced write failure on native retains latest write and suppresses stale native backup until recovery flush
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([makeSnap('nat-deb', { lastOpened: 1000, filledCount: 1 })]);
+      storageMod.StorageService.flushPendingBackups();
+      nativeWriteOk = false;
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          if (!nativeWriteOk) return false;
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      storageMod.StorageService.saveSnapshots([makeSnap('nat-deb', { lastOpened: 2000, filledCount: 5 })]);
+      storageMod.StorageService.flushPendingBackups();
+      mockStorage.clear();
+      assert.equal(storageMod.StorageService.loadSnapshots()[0]?.filledCount, 5);
+      nativeWriteOk = true;
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(JSON.parse(mockBackups.get('capy_snapshots_v8') || '[]')[0]?.filledCount, 5);
+
+      // Desktop Web (!NativeBridge.isNative): pendingBackupWrites holds QuotaExceededError writes before flush, then clears cleanly on flush
+      resetDurabilityState();
+      delete globalThis.window.CapyAndroid;
+      withMockedNow(5000, () => {
+        storageMod.StorageService.saveSnapshots([makeSnap('web-q', { lastOpened: 5000, filledCount: 6, filledRegionIds: [1, 2, 3, 4, 5, 6] })]);
+        storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, difficulty: 'EASY' });
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'web-q',
+          activeColorId: 1,
+          filledRegionIds: [1, 2, 3],
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+      });
+      storageMod.StorageService.flushPendingBackups();
+      const origWebQuotaSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8' || k === 'capy_user_settings_v8' || k === 'capy_active_session_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return origWebQuotaSet(k, v);
+      };
+      try {
+        withMockedNow(5000, () => {
+          storageMod.StorageService.saveSnapshots([makeSnap('web-q', { lastOpened: 5000, filledCount: 4, filledRegionIds: [1, 2, 3, 4] })]);
+          storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, difficulty: 'NORMAL' });
+          storageMod.StorageService.saveActiveState({
+            activeSnapshotId: 'web-q',
+            activeColorId: 9,
+            filledRegionIds: [1],
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+          });
+        });
+      } finally {
+        globalThis.localStorage.setItem = origWebQuotaSet;
+      }
+      assert.equal(storageMod.StorageService.loadSnapshots()[0]?.filledCount, 4);
+      assert.equal(storageMod.StorageService.loadSettings().difficulty, 'NORMAL');
+      assert.equal(storageMod.StorageService.loadActiveState()?.activeColorId, 9);
+      storageMod.StorageService.flushPendingBackups();
+      let desktopSpyCalls = 0;
+      globalThis.window.CapyAndroid = {
+        saveBackup: () => {
+          desktopSpyCalls += 1;
+          return true;
+        },
+        loadBackup: () => null,
+      };
+      storageMod.StorageService.flushPendingBackups();
+      assert.equal(desktopSpyCalls, 0, 'Desktop Web flush must clear pendingBackupWrites cleanly without leaving stuck entries');
+
+      // Desktop Web clearAllSnapshots & final deleteSnapshot under QuotaExceededError (both with working and throwing removeItem)
+      for (const failRemove of [false, true]) {
+        resetDurabilityState();
+        delete globalThis.window.CapyAndroid;
+        storageMod.StorageService.saveSnapshots([makeSnap('web-del', { lastOpened: 3000 })]);
+        storageMod.StorageService.flushPendingBackups();
+        const savedSetWeb = globalThis.localStorage.setItem;
+        const savedRemWeb = globalThis.localStorage.removeItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedSetWeb(k, v);
+        };
+        if (failRemove) {
+          globalThis.localStorage.removeItem = () => {
+            throw new Error('Blocked removeItem');
+          };
+        }
+        try {
+          await storageMod.StorageService.clearAllSnapshots();
+          assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+        } finally {
+          globalThis.localStorage.setItem = savedSetWeb;
+          globalThis.localStorage.removeItem = savedRemWeb;
+        }
+        resetDurabilityState();
+        delete globalThis.window.CapyAndroid;
+        storageMod.StorageService.saveSnapshots([makeSnap('web-del-final', { lastOpened: 3000 })]);
+        storageMod.StorageService.flushPendingBackups();
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return savedSetWeb(k, v);
+        };
+        if (failRemove) {
+          globalThis.localStorage.removeItem = () => {
+            throw new Error('Blocked removeItem');
+          };
+        }
+        try {
+          await storageMod.StorageService.deleteSnapshot('web-del-final');
+          assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+        } finally {
+          globalThis.localStorage.setItem = savedSetWeb;
+          globalThis.localStorage.removeItem = savedRemWeb;
+        }
+      }
+
+      // Group G: Same-ms QuotaExceededError shrinking writes & deleteSnapshot/clearAllSnapshots under QuotaExceededError (Bug 2)
+      resetDurabilityState();
+      withMockedNow(5000, () => {
+        storageMod.StorageService.saveSnapshots([
+          makeSnap('q-s1', { lastOpened: 5000, filledCount: 5, filledRegionIds: [1, 2, 3, 4, 5] }),
+          makeSnap('q-s2', { lastOpened: 5000, filledCount: 2, filledRegionIds: [1, 2] }),
+        ]);
+        mockStorage.set(
+          'capy_user_settings_v8',
+          JSON.stringify({ ...storageMod.DEFAULT_SETTINGS, undoDefaultMigrated: true, savedAt: 5000, difficulty: 'EASY', legacyExtraKey: 'old' })
+        );
+        storageMod.StorageService.saveActiveState({
+          activeSnapshotId: 'q-s1',
+          activeColorId: 5,
+          filledRegionIds: Array.from({ length: 20 }, (_, i) => i + 1),
+          resetEpoch: 2,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        });
+      });
+      storageMod.StorageService.flushPendingBackups();
+
+      const savedShrinkSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8' || k === 'capy_user_settings_v8' || k === 'capy_active_session_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return savedShrinkSet(k, v);
+      };
+      try {
+        withMockedNow(5000, () => {
+          storageMod.StorageService.saveSnapshots([
+            makeSnap('q-s1', { lastOpened: 5000, filledCount: 4, filledRegionIds: [1, 2, 3, 4] }),
+          ]);
+          storageMod.StorageService.saveSettings({ ...storageMod.DEFAULT_SETTINGS, difficulty: 'NORMAL' });
+          // Undo shrinking active state ([20 items] -> [1])
+          storageMod.StorageService.saveActiveState({
+            activeSnapshotId: 'q-s1',
+            activeColorId: 1,
+            filledRegionIds: [1],
+            resetEpoch: 2,
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+          });
+        });
+        assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => [s.id, s.filledCount]), [['q-s1', 4]]);
+        assert.equal(storageMod.StorageService.loadSettings().difficulty, 'NORMAL');
+        assert.deepEqual(storageMod.StorageService.loadActiveState()?.filledRegionIds, [1]);
+
+        // Switch active puzzle (1 fill -> 0 fills on another snapshot ID at same-ms)
+        withMockedNow(5000, () => {
+          storageMod.StorageService.saveActiveState({
+            activeSnapshotId: 'q-s2',
+            activeColorId: 1,
+            filledRegionIds: [],
+            resetEpoch: 1,
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+          });
+        });
+        assert.equal(storageMod.StorageService.loadActiveState()?.activeSnapshotId, 'q-s2');
+        assert.deepEqual(storageMod.StorageService.loadActiveState()?.filledRegionIds, []);
+      } finally {
+        globalThis.localStorage.setItem = savedShrinkSet;
+      }
+
+      // Partial & final deleteSnapshot and clearAllSnapshots under QuotaExceededError (both with removeItem succeeding and throwing)
+      for (const failRemove of [false, true]) {
+        resetDurabilityState();
+        const olderKeep = makeSnap('keep-1', { lastOpened: 1000, timestamp: 1000, filledCount: 1 });
+        const newerDel = makeSnap('del-2', { lastOpened: 5000, timestamp: 5000, filledCount: 5 });
+        storageMod.StorageService.saveSnapshots([olderKeep, newerDel]);
+        storageMod.StorageService.flushPendingBackups();
+
+        const origDelSet = globalThis.localStorage.setItem;
+        const origDelRem = globalThis.localStorage.removeItem;
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return origDelSet(k, v);
+        };
+        if (failRemove) {
+          globalThis.localStorage.removeItem = () => {
+            throw new Error('Blocked removeItem');
+          };
+        }
+        try {
+          await storageMod.StorageService.deleteSnapshot('del-2');
+          assert.deepEqual(storageMod.StorageService.loadSnapshots().map((s) => s.id), ['keep-1']);
+          await storageMod.StorageService.deleteSnapshot('keep-1');
+          assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+        } finally {
+          globalThis.localStorage.setItem = origDelSet;
+          globalThis.localStorage.removeItem = origDelRem;
+        }
+
+        resetDurabilityState();
+        storageMod.StorageService.saveSnapshots([olderKeep, newerDel]);
+        storageMod.StorageService.flushPendingBackups();
+        globalThis.localStorage.setItem = (k, v) => {
+          if (k === 'capy_snapshots_v8') {
+            const err = new Error('Quota exceeded');
+            err.name = 'QuotaExceededError';
+            throw err;
+          }
+          return origDelSet(k, v);
+        };
+        if (failRemove) {
+          globalThis.localStorage.removeItem = () => {
+            throw new Error('Blocked removeItem');
+          };
+        }
+        try {
+          await storageMod.StorageService.clearAllSnapshots();
+          assert.deepEqual(storageMod.StorageService.loadSnapshots(), []);
+        } finally {
+          globalThis.localStorage.setItem = origDelSet;
+          globalThis.localStorage.removeItem = origDelRem;
+        }
+      }
+
+      // Accidental saveSnapshots([]) under QuotaExceededError does NOT poison quotaFailedLocalKeys
+      resetDurabilityState();
+      mockBackups.set('capy_snapshots_v8', JSON.stringify([makeSnap('snap-old', { lastOpened: 1000, filledCount: 1 })]));
+      mockStorage.set('capy_snapshots_v8', JSON.stringify([makeSnap('snap-new', { lastOpened: 1000, filledCount: 4 })]));
+      const origSkipSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        if (k === 'capy_snapshots_v8') {
+          const err = new Error('Quota exceeded');
+          err.name = 'QuotaExceededError';
+          throw err;
+        }
+        return origSkipSet(k, v);
+      };
+      try {
+        storageMod.StorageService.saveSnapshots([]);
+      } finally {
+        globalThis.localStorage.setItem = origSkipSet;
+      }
+      assert.equal(storageMod.StorageService.loadSnapshots()[0]?.id, 'snap-new');
+
+      // Group H: Per-snapshot-id resetEpoch dominance in SNAPSHOTS_KEY (Bug 3)
+      resetDurabilityState();
+      mockStorage.set(
+        'capy_snapshots_v8',
+        JSON.stringify([makeSnap('p1', { lastOpened: 2000, resetEpoch: 2, filledCount: 0, filledRegionIds: [] })])
+      );
+      mockBackups.set(
+        'capy_snapshots_v8',
+        JSON.stringify([
+          makeSnap('p1', { lastOpened: 2000, resetEpoch: 1, filledCount: 50, filledRegionIds: [1, 2, 3] }),
+          makeSnap('p2', { lastOpened: 1000, resetEpoch: 0, filledCount: 10, filledRegionIds: [1] }),
+        ])
+      );
+      assert.deepEqual(
+        storageMod.StorageService.loadSnapshots().map((s) => [s.id, s.resetEpoch, s.filledCount]),
+        [['p1', 2, 0]]
+      );
+
+      // Symmetrical 1v2 where backup has higher resetEpoch on shared p1
+      resetDurabilityState();
+      mockStorage.set(
+        'capy_snapshots_v8',
+        JSON.stringify([
+          makeSnap('p1', { lastOpened: 2000, resetEpoch: 1, filledCount: 50, filledRegionIds: [1, 2, 3] }),
+          makeSnap('p2', { lastOpened: 1000, resetEpoch: 0, filledCount: 10, filledRegionIds: [1] }),
+        ])
+      );
+      mockBackups.set(
+        'capy_snapshots_v8',
+        JSON.stringify([makeSnap('p1', { lastOpened: 2000, resetEpoch: 2, filledCount: 0, filledRegionIds: [] })])
+      );
+      assert.deepEqual(
+        storageMod.StorageService.loadSnapshots().map((s) => [s.id, s.resetEpoch, s.filledCount]),
+        [['p1', 2, 0]]
+      );
+
+      // Equal total sum (2+1 === 1+2) where shared p1 has strictly higher resetEpoch in local
+      resetDurabilityState();
+      mockStorage.set(
+        'capy_snapshots_v8',
+        JSON.stringify([
+          makeSnap('p1', { lastOpened: 2000, resetEpoch: 2, filledCount: 0, filledRegionIds: [] }),
+          makeSnap('p2', { lastOpened: 1000, resetEpoch: 1, filledCount: 1, filledRegionIds: [1] }),
+        ])
+      );
+      mockBackups.set(
+        'capy_snapshots_v8',
+        JSON.stringify([
+          makeSnap('p1', { lastOpened: 2000, resetEpoch: 1, filledCount: 50, filledRegionIds: [1, 2, 3] }),
+          makeSnap('p3', { lastOpened: 1000, resetEpoch: 2, filledCount: 20, filledRegionIds: [1, 2] }),
+        ])
+      );
+      assert.deepEqual(
+        storageMod.StorageService.loadSnapshots().map((s) => s.id),
+        ['p1', 'p2']
+      );
+
+      // Group I: filledRegionIds finite-number filtering in inspectCandidate('snapshots') (Bug 4)
+      resetDurabilityState();
+      mockStorage.set(
+        'capy_snapshots_v8',
+        JSON.stringify([makeSnap('snap-finite', { lastOpened: 2000, filledCount: 0, filledRegionIds: [null, 'bad', Number.NaN, 1] })])
+      );
+      mockBackups.set(
+        'capy_snapshots_v8',
+        JSON.stringify([makeSnap('snap-finite', { lastOpened: 2000, filledCount: 0, filledRegionIds: [1, 2] })])
+      );
+      assert.deepEqual(storageMod.StorageService.loadSnapshots()[0]?.filledRegionIds, [1, 2]);
+
+      // Group J: Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, k) in inspectCandidate('settings') (Bug 5)
+      resetDurabilityState();
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ toString: 'bad', constructor: 'bad', valueOf: 'bad' })
+      );
+      mockBackups.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'NORMAL', paletteSort: 'HUE' })
+      );
+      assert.equal(storageMod.StorageService.loadSettings().difficulty, 'NORMAL');
+
+      // Group K: deleteSnapshot missing-ID read-only no-op (Bug 6) & negative timestamp/lastOpened clamp
+      resetDurabilityState();
+      storageMod.StorageService.saveSnapshots([makeSnap('existing-1', { lastOpened: 2000 })]);
+      storageMod.StorageService.flushPendingBackups();
+      let setItemCallsOnMissing = 0;
+      let saveBackupCallsOnMissing = 0;
+      const origCountSet = globalThis.localStorage.setItem;
+      globalThis.localStorage.setItem = (k, v) => {
+        setItemCallsOnMissing += 1;
+        return origCountSet(k, v);
+      };
+      globalThis.window.CapyAndroid = {
+        saveBackup: (k, v) => {
+          saveBackupCallsOnMissing += 1;
+          mockBackups.set(k, String(v));
+          return true;
+        },
+        loadBackup: (k) => (mockBackups.has(k) ? mockBackups.get(k) : null),
+      };
+      try {
+        const missingRes = await storageMod.StorageService.deleteSnapshot('nonexistent-id');
+        assert.deepEqual(missingRes.map((s) => s.id), ['existing-1']);
+        storageMod.StorageService.flushPendingBackups();
+        assert.equal(setItemCallsOnMissing, 0, 'Missing-ID deleteSnapshot must not write localStorage');
+        assert.equal(saveBackupCallsOnMissing, 0, 'Missing-ID deleteSnapshot must not schedule or call saveBackup');
+      } finally {
+        globalThis.localStorage.setItem = origCountSet;
+      }
+
+      resetDurabilityState();
+      mockStorage.set(
+        'capy_snapshots_v8',
+        JSON.stringify([makeSnap('neg-ts', { timestamp: -500, lastOpened: -10 })])
+      );
+      const clampedSnap = storageMod.StorageService.loadSnapshots()[0];
+      assert.equal(clampedSnap?.timestamp, 0);
+      assert.equal(clampedSnap?.lastOpened, 0);
+
       resetDurabilityState();
 
       const workerSvcSrc = fs.readFileSync(
@@ -9388,7 +9892,7 @@ async function runCodecAndEngineTests() {
         'PuzzleWorkerService.ts must dynamically import PuzzleGenerator on fallback instead of static bundle import'
       );
     } finally {
-      storageMod.StorageService.flushPendingBackups();
+      resetDurabilityState();
       globalThis.localStorage = prevLs;
       globalThis.window = prevSsrWin;
     }

@@ -1,6 +1,6 @@
 ### 3.0.35 - 2026-11-18 (Beta)
 
-- Harden `StorageService.ts` local/backup durability (`loadRawWithBackupFallback` recency, validity, `resetEpoch`, and richness comparison across snapshots, settings, and active state with stale/corrupt `localStorage` self-healing; `saveSnapshots` `allowEmptyBackup` / `immediateBackup` empty-overwrite guard preserving native backups on accidental empty saves while flushing synchronous native backup updates on `deleteSnapshot` and `clearAllSnapshots`) and add `[Unit 15/15]` durability tests in `web/scripts/test.mjs` [#577](https://github.com/shthed/capy/pull/577)
+- Harden `StorageService.ts` local/backup durability (`loadRawWithBackupFallback` recency, validity, per-snapshot `resetEpoch` dominance, finite `filledRegionIds`, `hasOwnProperty` settings inspection, and `quotaFailedLocalKeys` precedence with stale/corrupt `localStorage` self-healing; `saveSnapshots` `allowEmptyBackup`/`immediateBackup`/`clearLocalOnFailure` empty-overwrite guard; failed native `saveBackup` retry retention gated strictly on `NativeBridge.isNative` so Desktop Web flushes cleanly; read-only missing-ID `deleteSnapshot` no-op; negative snapshot timestamp clamp) and add `[Unit 15/15]` durability tests in `web/scripts/test.mjs` [#577](https://github.com/shthed/capy/pull/577)
 
 ### 3.0.34 - 2026-11-18
 
