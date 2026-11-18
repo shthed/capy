@@ -14,7 +14,7 @@ Zero active agent dev tasks remain in `TODO.md`—the Play Store compliance clea
 
 ### [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](https://github.com/shthed/capy/issues/543)
 
-- **Status**: `In Progress -- Apex & /api/health LIVE; Awaiting www 301 Edge Redirect, HTTPS Toggle & CAPYBOOP_SYNC_TOKEN`
+- **Status**: `In Progress -- Apex & /api/health LIVE; Awaiting www 301 Edge Redirect & HTTPS Toggle`
 - **Live & Target Links**: [capypaint.com](https://capypaint.com/) | [www.capypaint.com](https://www.capypaint.com/) | [capypaint.com/api/health](https://capypaint.com/api/health) | [capyboop/capy Issues](https://github.com/capyboop/capy/issues) | [Capy Production (GitHub Pages)](https://shthed.github.io/capy/) | [Capy Beta (GitHub Pages)](https://shthed.github.io/capy/beta/)
 - **Action**: [capypaint.com](https://capypaint.com/) (`capy-paint` Worker + `CoopRoomDurableObject`) is now live via [`.github/workflows/deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml). Remaining Human Ops: add the [www.capypaint.com](https://www.capypaint.com/) to [capypaint.com](https://capypaint.com/) edge `301` Single Redirect rule, enable **Always Use HTTPS** in [Cloudflare Dashboard](https://dash.cloudflare.com/), and promote `beta` -> `main` once ready (`capyboop.com` deferred out of active Sprint 1 scope per Owner directive).
 <!-- capy-dev-only:start -->

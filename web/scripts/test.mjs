@@ -1653,6 +1653,61 @@ async function runCodecAndEngineTests() {
       assert.equal(bulletGuardRes.version, '3.0.4');
       fs.writeFileSync(path.join(tmpStrictRepo, 'DEV.md'), strictDevDoc, 'utf8');
 
+      // 9c. Public issue tracker & privacy policy guard passes clean files and rejects shthed regressions
+      fs.mkdirSync(path.join(tmpStrictRepo, 'web/src/components'), { recursive: true });
+      fs.mkdirSync(path.join(tmpStrictRepo, 'web/public'), { recursive: true });
+      fs.mkdirSync(path.join(tmpStrictRepo, '.github/ISSUE_TEMPLATE'), { recursive: true });
+      const cleanSettingsTag =
+        '<a href="https://github.com/capyboop/capy/issues/new/choose" data-testid="about-report-issue-link">Report</a>';
+      const cleanPrivacyHtml =
+        '<html><body><a href="https://github.com/capyboop/capy/issues">Issues</a></body></html>';
+      const cleanIssueConfig = 'contact_links:\n  - url: https://capypaint.com/\n';
+      const settingsPath = path.join(tmpStrictRepo, 'web/src/components/SettingsModal.tsx');
+      const privacyPath = path.join(tmpStrictRepo, 'web/public/privacy-policy.html');
+      const issueConfigPath = path.join(tmpStrictRepo, '.github/ISSUE_TEMPLATE/config.yml');
+      const bugTemplatePath = path.join(tmpStrictRepo, '.github/ISSUE_TEMPLATE/bug_report.yml');
+      fs.writeFileSync(settingsPath, cleanSettingsTag, 'utf8');
+      fs.writeFileSync(privacyPath, cleanPrivacyHtml, 'utf8');
+      fs.writeFileSync(issueConfigPath, cleanIssueConfig, 'utf8');
+      fs.writeFileSync(bugTemplatePath, 'name: Bug Report\n', 'utf8');
+      const trackerPassRes = runSanityChecks({
+        repoRoot: tmpStrictRepo,
+        requireProjectMd: true,
+        enforceChannelOrder: true,
+        enforceEpicNaming: true,
+        enforcePrReadinessSpec: true,
+      });
+      assert.equal(trackerPassRes.version, '3.0.4');
+
+      fs.writeFileSync(
+        settingsPath,
+        '<a href="https://github.com/shthed/capy/issues/new/choose" data-testid="about-report-issue-link">Report</a>',
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /about-report-issue-link/
+      );
+      fs.writeFileSync(settingsPath, cleanSettingsTag, 'utf8');
+
+      fs.writeFileSync(
+        privacyPath,
+        '<html><body><a href="https://github.com/shthed/capy/issues">Issues</a></body></html>',
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /privacy-policy\.html/
+      );
+      fs.writeFileSync(privacyPath, cleanPrivacyHtml, 'utf8');
+
+      fs.writeFileSync(bugTemplatePath, 'name: Bug\nabout: https://github.com/shthed/capy\n', 'utf8');
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /ISSUE_TEMPLATE\/bug_report\.yml/
+      );
+      fs.writeFileSync(bugTemplatePath, 'name: Bug Report\n', 'utf8');
+
       // 10. Missing PROJECT.md fails requireProjectMd: true
       fs.unlinkSync(path.join(tmpStrictRepo, 'PROJECT.md'));
       assert.throws(
@@ -2718,6 +2773,10 @@ async function runCodecAndEngineTests() {
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capypaint.com'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://www.capypaint.com'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capyboop.github.io'), true);
+    /* capy-dev-only:start */
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://shthed.github.io'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://shthed.github.io'), false);
+    /* capy-dev-only:end */
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://appassets.androidplatform.net'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('http://localhost:5173'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.workers.dev'), false);
@@ -3488,8 +3547,23 @@ async function runCodecAndEngineTests() {
       'Preview https://capypaint.com/ and https://capypaint.com/ EPIC-2'
     );
     assert.equal(transformPersonaContent(transformedPrEpic), transformedPrEpic);
+    assert.equal(
+      transformPersonaContent('Shthed SHTHED shthed'),
+      'Capyboop CAPYBOOP capyboop'
+    );
+    const publicIssuesDoc =
+      '[#2](https://github.com/capyboop/capy/issues/2) [#5](https://github.com/capyboop/capy/issues/5?q=1) [#20](https://github.com/capyboop/capy/issues/20) [#481](https://github.com/capyboop/capy/issues/481) [#2](https://github.com/shthed/capy/issues/2)';
+    const transformedIssuesDoc = transformPersonaContent(publicIssuesDoc);
+    assert.equal(
+      transformedIssuesDoc,
+      '[#2](https://github.com/capyboop/capy/issues/2) [#5](https://github.com/capyboop/capy/issues/5?q=1) #20 #481 #2'
+    );
+    assert.equal(transformPersonaContent(transformedIssuesDoc), transformedIssuesDoc);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('sync-beta-from-main'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('.github/dependabot.yml'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('CAPYBOOP_SYNC_TOKEN'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('381055+capy'), true);
+    assert.equal(FORBIDDEN_PERSONA_REGEX.test('hairy_dog_trumpet'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('dependabot[bot]'), false);
     const devOnlyStartTag = '<!-- capy-dev-' + 'only:start -->';
     const devOnlyEndTag = '<!-- capy-dev-' + 'only:end -->';
@@ -3516,12 +3590,19 @@ async function runCodecAndEngineTests() {
     try {
       fs.writeFileSync(path.join(tmpLeakCheck, 'ok.yml'), 'if: actor != "dependabot[bot]"\n', 'utf8');
       assert.equal(assertZeroSourcePersonaLeak(tmpLeakCheck), 1);
+      const symlinkCliPath = path.join(tmpLeakCheck, 'rebrand-link.mjs');
+      fs.symlinkSync(path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), symlinkCliPath);
+      const symlinkOut = execFileSync(process.execPath, [symlinkCliPath, '--verify-clean', tmpLeakCheck], {
+        encoding: 'utf8',
+      });
+      assert.equal(symlinkOut.includes('Verified 1 clean files'), true);
       fs.writeFileSync(path.join(tmpLeakCheck, 'leak.md'), 'See sync-beta-from-main workflow\n', 'utf8');
       assert.throws(() => assertZeroSourcePersonaLeak(tmpLeakCheck), /Forbidden persona token/);
     } finally {
       fs.rmSync(tmpLeakCheck, { recursive: true, force: true });
     }
     const tmpCleanStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-clean-stage-'));
+    const stagedNodeModules = path.join(tmpCleanStage, 'web/node_modules');
     try {
       const stageStats = exportCleanPersonaStage({ stageDir: tmpCleanStage });
       assert.equal(stageStats.verifiedFiles > 50, true);
@@ -3547,6 +3628,18 @@ async function runCodecAndEngineTests() {
         fs.existsSync(path.join(tmpCleanStage, 'web/scripts/rebrand-persona.mjs')),
         false
       );
+      const stagedReadme = fs.readFileSync(path.join(tmpCleanStage, 'README.md'), 'utf8');
+      assert.equal(stagedReadme.includes('capyboop.github.io/capy/beta/'), false);
+      assert.equal(stagedReadme.includes('https://github.com/capyboop/capy/releases'), true);
+      const stagedTodo = fs.readFileSync(path.join(tmpCleanStage, 'TODO.md'), 'utf8');
+      assert.equal(stagedTodo.includes('CAPYBOOP_SYNC_TOKEN'), false);
+      const stagedRoadmap = fs.readFileSync(path.join(tmpCleanStage, 'ROADMAP.md'), 'utf8');
+      assert.equal(stagedRoadmap.includes('CAPYBOOP_SYNC_TOKEN'), false);
+      const stagedReleaseYaml = fs.readFileSync(
+        path.join(tmpCleanStage, '.github/workflows/release.yml'),
+        'utf8'
+      );
+      assert.equal(stagedReleaseYaml.includes('GITHUB_STEP_SUMMARY'), true);
       const stagedRedirects = fs.readFileSync(
         path.join(tmpCleanStage, 'web/public/_redirects'),
         'utf8'
@@ -3582,7 +3675,22 @@ async function runCodecAndEngineTests() {
       execFileSync(process.execPath, ['--check', path.join(tmpCleanStage, 'web/scripts/test.mjs')], {
         stdio: 'pipe',
       });
+      const srcNodeModules = path.join(projectRoot, 'node_modules');
+      if (fs.existsSync(srcNodeModules)) {
+        fs.symlinkSync(srcNodeModules, stagedNodeModules, 'dir');
+        execFileSync(process.execPath, ['scripts/test.mjs', '--unit'], {
+          cwd: path.join(tmpCleanStage, 'web'),
+          stdio: 'pipe',
+        });
+      }
     } finally {
+      try {
+        if (fs.lstatSync(stagedNodeModules).isSymbolicLink()) {
+          fs.unlinkSync(stagedNodeModules);
+        }
+      } catch {
+        // Ignore when symlink was not created
+      }
       fs.rmSync(tmpCleanStage, { recursive: true, force: true });
     }
     logUnitPass('rebrand-persona.mjs clean-room export, zero-leak scan & staged sanity verified.');
@@ -8219,6 +8327,10 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(releaseWorkflowYaml.includes('compile-changelog.mjs'), true);
     assert.equal(releaseWorkflowYaml.includes('python3'), false);
+    assert.equal(releaseWorkflowYaml.includes('CAPY_KEYSTORE_BASE64'), true);
+    assert.equal(releaseWorkflowYaml.includes('GITHUB_STEP_SUMMARY'), true);
+    assert.equal(releaseWorkflowYaml.includes("steps.signing.outputs.enabled == 'true'"), true);
+    assert.equal(releaseWorkflowYaml.includes('workflow_dispatch'), true);
 
     // Verify .github/scripts/compile-changelog.mjs stops cleanly at ## headings
     const changelogWithSubheading = `### 3.0.7 - 2026-11-13 (Beta)

@@ -116,6 +116,14 @@ export function normalizeRoomCode(raw: string | null | undefined): string | null
   return cleaned.length > 0 ? cleaned : null;
 }
 
+const ALLOWED_EXACT_RELAY_HOSTS = new Set<string>([
+  'capypaint.com',
+  'www.capypaint.com',
+  'capyboop.github.io',
+  'shthed.github.io',
+  'appassets.androidplatform.net',
+]);
+
 export function isAllowedRelayOrigin(
   originHeader: string | null | undefined,
   extraOriginsCsv?: string | null
@@ -135,11 +143,7 @@ export function isAllowedRelayOrigin(
     if (
       protocol === 'https:' &&
       parsed.port === '' &&
-      (hostname === 'capypaint.com' ||
-        hostname === 'www.capypaint.com' ||
-        hostname.endsWith('.capypaint.com') ||
-        hostname === 'capyboop.github.io' ||
-        hostname === 'appassets.androidplatform.net')
+      (ALLOWED_EXACT_RELAY_HOSTS.has(hostname) || hostname.endsWith('.capypaint.com'))
     ) {
       return true;
     }
