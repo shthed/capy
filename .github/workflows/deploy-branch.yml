@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages previews
+name: CI
 
 on:
   push:
@@ -41,7 +41,7 @@ concurrency:
 
 jobs:
   prepare:
-    name: Prepare Deployment Target
+    name: Target
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -412,7 +412,7 @@ jobs:
           retention-days: 1
 
   android_build:
-    name: Android Build & JUnit Tests
+    name: Android APK
     needs: [prepare, build]
     if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success'
     runs-on: ubuntu-latest
@@ -465,7 +465,7 @@ jobs:
           retention-days: 1
 
   e2e_release_gate:
-    name: Playwright E2E Release Gate
+    name: Playwright E2E
     needs: [prepare, build]
     if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')) || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'))
     runs-on: ubuntu-latest
@@ -522,7 +522,7 @@ jobs:
         run: npm test
 
   deploy:
-    name: Deploy to GitHub Pages
+    name: Deploy Pages
     needs: [prepare, build, android_build]
     if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && needs.android_build.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest

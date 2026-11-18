@@ -1,4 +1,4 @@
-name: Dual AI & Owner PR Review Gate
+name: Gate
 
 on:
   pull_request:
@@ -22,7 +22,7 @@ on:
       - edited
   workflow_run:
     workflows:
-      - Deploy GitHub Pages previews
+      - CI
     types:
       - completed
   workflow_dispatch:
@@ -1054,7 +1054,7 @@ jobs:
             }
 
   ai-review:
-    name: Automated AI PR Reviewer
+    name: AI Review
     if: >-
       github.repository == 'shthed/capy' &&
       (github.event_name == 'workflow_dispatch' ||
@@ -1155,9 +1155,10 @@ jobs:
             const prompt = [
               'You are an independent AI code reviewer for shthed/capy.',
               'Evaluate the pull request against AGENTS.md Golden Invariants:',
-              '1. PR body must have ## Summary at the top and ### PR Readiness Score: 100% at the end with zero <100% items and zero unchecked - [ ] tasks.',
-              '2. No security issues, hardcoded secrets, broken workflows, or regressions.',
-              '3. Zero emojis or ASCII art in .md files.',
+              '1. PR title must be meaningful, descriptive, and action-oriented (reject bare branch/Web-UI placeholders like "Beta", "Main", "Update", "WIP", or "feat():"/"EPIC-*" prefix spam).',
+              '2. PR body must have ## Summary at the top and ### PR Readiness Score: 100% at the end with zero <100% items and zero unchecked - [ ] tasks.',
+              '3. No security issues, hardcoded secrets, broken workflows, or regressions.',
+              '4. Zero emojis or ASCII art in .md files.',
               'Return strict JSON with keys: "verdict" ("APPROVED" or "CHANGES_REQUESTED"), "score" (integer 0-100), and "summary" (concise markdown review).',
               `PR #${prNumber}: ${pr.title}`,
               `Head SHA: ${headSha}`,
