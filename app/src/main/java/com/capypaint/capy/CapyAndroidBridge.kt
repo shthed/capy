@@ -198,12 +198,6 @@ class CapyAndroidBridge(
     }
 
     @JavascriptInterface
-    fun showRewardedAd(): Boolean {
-        Log.d(TAG, "Opt-in rewarded ad requested; no ad SDK bundled, returning false")
-        return false
-    }
-
-    @JavascriptInterface
     fun consumePendingSharedImage(): String? {
         val pending = pendingSharedImageJson
         pendingSharedImageJson = null

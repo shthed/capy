@@ -1,4 +1,8 @@
-### 3.0.30 - 2026-11-16 (Beta)
+### 3.0.31 - 2026-11-18 (Beta)
+
+- Remove Android-only `Optional Ad (+2)` / `AI Credits` UI and `showRewardedAd` bridge hook (`ConsentRewardedAdAdapter` enforces `adFreePlatform: true` and `personalizedAdsConsent: false`), replace fabricated `Community Puzzle Ideas` votes/queue claims with a clean newest-first local **Puzzle Idea Notebook** (`+ Add Idea` / `Save Idea`, normalizing legacy cached votes to `0`), gate `About`-tab Co-op copy / `stat-coop-regions` (`col-span-2` symmetry on `Free Colour Art`), `release-channel-card` (`!NativeBridge.isAndroid`), startup `attemptAutoSignIn()` / `onCloudSnapshot`, and `MainActivity.kt` cold-start Play Games sign-in (`SUPPRESS_GAME_PROFILE_CREATION`), regenerate `phone_3_gallery_daily.png` and `tablet_2_create_gallery.png` store screenshots, and sync Play Store listing/docs and unit/E2E tests [#571](https://github.com/shthed/capy/pull/571)
+
+### 3.0.30 - 2026-11-16
 
 - Fix intermittent `[E2E 12]` Play Daily failure by waiting for the prebaked `daily-*` snapshot to become the active save before asserting, since `waitForPuzzleLoaded` could resolve against the previously mounted puzzle while `daily_saves.capy` was still being fetched and imported [#569](https://github.com/shthed/capy/pull/569)
 

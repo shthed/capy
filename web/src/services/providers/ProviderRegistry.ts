@@ -1635,7 +1635,7 @@ const SEED_COMMUNITY_IDEAS: CommunityPuzzleIdea[] = [
     tags: ['Animals', 'Cozy', 'Nature'],
     authorName: 'River Capy',
     authorId: 'seed_1',
-    votes: 24,
+    votes: 0,
     votedByMe: false,
     status: 'curated',
     createdAt: 1730000000000,
@@ -1648,7 +1648,7 @@ const SEED_COMMUNITY_IDEAS: CommunityPuzzleIdea[] = [
     tags: ['Coloring', 'Line Art', 'Nature'],
     authorName: 'Forest Sprout',
     authorId: 'seed_2',
-    votes: 17,
+    votes: 0,
     votedByMe: false,
     status: 'queued',
     createdAt: 1730100000000,
@@ -1666,13 +1666,20 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       if (raw) {
         const parsed = JSON.parse(raw) as CommunityPuzzleIdea[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => b.votes - a.votes || b.createdAt - a.createdAt);
+          return parsed
+            .filter((item): item is CommunityPuzzleIdea => Boolean(item && typeof item === 'object'))
+            .map((idea) => ({
+              ...idea,
+              votes: 0,
+              votedByMe: false,
+            }))
+            .sort((a, b) => b.createdAt - a.createdAt);
         }
       }
     } catch {
       // Ignore
     }
-    return [...SEED_COMMUNITY_IDEAS];
+    return [...SEED_COMMUNITY_IDEAS].sort((a, b) => b.createdAt - a.createdAt);
   }
 
   private saveIdeas(ideas: CommunityPuzzleIdea[]): void {
@@ -1707,7 +1714,7 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       if (pattern.test(combinedText)) {
         return {
           ok: false,
-          error: 'Please keep community puzzle ideas family-friendly and suitable for all ages.',
+          error: 'Please keep puzzle ideas family-friendly and suitable for all ages.',
         };
       }
     }
@@ -1721,8 +1728,8 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       tags: input.tags && input.tags.length > 0 ? input.tags : [input.category || 'Community'],
       authorName: input.author.displayName,
       authorId: input.author.playerId,
-      votes: 1,
-      votedByMe: true,
+      votes: 0,
+      votedByMe: false,
       status: 'queued',
       createdAt: Date.now(),
     };
@@ -1732,19 +1739,10 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
     return { ok: true, idea: newIdea };
   }
 
-  toggleVoteIdea(ideaId: string): CommunityPuzzleIdea[] {
-    const ideas = this.getCommunityIdeas().map((idea) => {
-      if (idea.id !== ideaId) return idea;
-      const nextVoted = !idea.votedByMe;
-      return {
-        ...idea,
-        votedByMe: nextVoted,
-        votes: Math.max(0, idea.votes + (nextVoted ? 1 : -1)),
-      };
-    });
-    const sorted = ideas.sort((a, b) => b.votes - a.votes || b.createdAt - a.createdAt);
-    this.saveIdeas(sorted);
-    return sorted;
+  toggleVoteIdea(_ideaId: string): CommunityPuzzleIdea[] {
+    const normalized = this.getCommunityIdeas();
+    this.saveIdeas(normalized);
+    return normalized;
   }
 }
 
@@ -1776,14 +1774,14 @@ class DefaultAiArtworkAdapter implements AiArtworkProvider {
 
 class ConsentRewardedAdAdapter implements MonetizationProvider {
   getLedger(): AiCreditLedger {
-    const isDesktopOrWebAdFree = !NativeBridge.isAndroid;
     try {
       const raw = localStorage.getItem(resolveScopedStorageKey(AI_CREDITS_STORAGE_KEY));
       if (raw) {
         const parsed = JSON.parse(raw) as AiCreditLedger;
         return {
           ...parsed,
-          adFreePlatform: isDesktopOrWebAdFree,
+          adFreePlatform: true,
+          personalizedAdsConsent: false,
         };
       }
     } catch {
@@ -1793,7 +1791,7 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
       availableCredits: 3, // Starter free AI generation credits
       lifetimeEarnedCredits: 3,
       lifetimeSpentCredits: 0,
-      adFreePlatform: isDesktopOrWebAdFree,
+      adFreePlatform: true,
       personalizedAdsConsent: false,
     };
   }
@@ -1809,24 +1807,26 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
     }
   }
 
-  setPersonalizedAdsConsent(consent: boolean): AiCreditLedger {
-    const next = { ...this.getLedger(), personalizedAdsConsent: consent };
+  setPersonalizedAdsConsent(_consent: boolean): AiCreditLedger {
+    const next: AiCreditLedger = {
+      ...this.getLedger(),
+      adFreePlatform: true,
+      personalizedAdsConsent: false,
+    };
     this.saveLedger(next);
     return next;
   }
 
   async watchRewardedAdForCredits(): Promise<{ granted: number; ledger: AiCreditLedger }> {
     const current = this.getLedger();
-    // Never show forced ads; only trigger native rewarded ad when explicitly requested on Android
-    const shown = NativeBridge.showRewardedAd();
-    const granted = shown ? 2 : 0;
+    // 100% ad-free across all platforms; no ad SDK is bundled
     const next: AiCreditLedger = {
       ...current,
-      availableCredits: current.availableCredits + granted,
-      lifetimeEarnedCredits: current.lifetimeEarnedCredits + granted,
+      adFreePlatform: true,
+      personalizedAdsConsent: false,
     };
     this.saveLedger(next);
-    return { granted, ledger: next };
+    return { granted: 0, ledger: next };
   }
 
   spendCredits(amount: number): boolean {

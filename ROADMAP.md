@@ -220,8 +220,8 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### TASK-2.5: Android App Verification & Google Play Store Deployment *(Moved from [EPIC-2](https://github.com/shthed/capy/issues/477))*
 
-- **Readiness**: `Ready for Release Ops (Phone/Tablet Store Listing, Graphics & Privacy Policy Staged in v3.0.20; Awaiting Keystore Secrets, Tag & Play Console Upload)`
-- **Description**: Configure release signing secrets (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`), verify `./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease` (plus `MainActivity` `onPause`/`onResume` lifecycle & hardware back navigation), tag `v3.0.20` from `main` to trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml), and publish the Play-signed `.aab` to Google Play Console using [`docs/play-store/PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md) (Phone & Tablet form factors only; Android TV form factor remains unchecked until `US-3.6` ships post-launch).
+- **Readiness**: `Ready for Release Ops (Store-Clean v3.0.31 Build, Phone/Tablet Store Listing, Graphics & Privacy Policy Staged; Awaiting Keystore Secrets, Tag & Play Console Upload)`
+- **Description**: Configure release signing secrets (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`), verify `./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease` (plus `MainActivity` `onPause`/`onResume` lifecycle & hardware back navigation), tag `v3.0.31` from `main` to trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml), and publish the Play-signed `.aab` to Google Play Console using [`docs/play-store/PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md) (Phone & Tablet form factors only; Android TV form factor remains unchecked until `US-3.6` ships post-launch).
 - **Value**: Ships the unified Android wrapper (`com.capypaint.capy`) to Google Play Store alongside the web release.
 - **Why Pushed to [EPIC-3](https://github.com/shthed/capy/issues/478)**: Moved out of [EPIC-2](https://github.com/shthed/capy/issues/477) (`v3.0.x` bugfixes & stabilization) by the Project Owner so Play Store signing and release operations track alongside Sprint 2 readiness.
 
@@ -243,7 +243,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Readiness**: `Deferred Until Post-Play-Store Launch (Per Owner Directive)` *(Dormant `LEANBACK_LAUNCHER` manifest & `320x180` `tv_banner.png` staged in `v3.0.19`; do NOT opt into Android TV form factor in Play Console yet)*
 - **Description**: Add `1920x1080` television `5%` overscan-safe HUD margins, visible `focus-visible` D-pad arrow traversal without canvas focus traps, and a virtual TV canvas reticle supporting `DPAD_CENTER` / `Enter` region fills across Web and Android TV.
 - **Value**: Turns big-screen Android TV and living-room browser play into a comfortable couch-ready experience with a standard TV remote.
-- **Why Deferred**: Deferred by the Project Owner until after the initial Phone & Tablet Google Play Store release (`TASK-2.5` / `v3.0.20`) is live.
+- **Why Deferred**: Deferred by the Project Owner until after the initial Phone & Tablet Google Play Store release (`TASK-2.5` / `v3.0.31`) is live.
 - **Planned Sprint Slices**:
   - **TASK-3.6a**: Add `1920x1080` TV overscan-safe inset CSS + additive native safe-area variables and D-pad arrow focus traversal across `GameTopBar`, `PaletteDock`, `FloatingActions`, and `SettingsModal`.
   - **TASK-3.6b**: Add virtual TV canvas reticle (`DPAD_CENTER` / `Enter` / `Space` tap-to-fill) and `MainActivity.kt` D-pad key forwarding with `1920x1080` Playwright E2E coverage.
@@ -332,9 +332,9 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 ### US-4.4: TV Screen + Phone/Remote Co-op Companion (QR Pairing & Touchpad)
 
 - **Readiness**: `Deferred Until Post-Play-Store Launch (Depends on US-3.6 & EPIC-3/EPIC-5 Cloud/Co-op Hub Promotion)`
-- **Description**: Add `REMOTE_CURSOR` and `REMOTE_ACTION` frames in `worker/coopRoomProtocol.ts`, zero-dependency inline SVG QR pairing (`#room=<CODE>&ctrl=1`) alongside 6-char room codes, and a mobile touchpad/palette controller view driving the TV canvas in real time once TV support ships after Google Play Store deployment (`cloud-coop-hub` remains gated behind `isCloudCoopUiEnabled()` in `v3.0.20`).
+- **Description**: Add `REMOTE_CURSOR` and `REMOTE_ACTION` frames in `worker/coopRoomProtocol.ts`, zero-dependency inline SVG QR pairing (`#room=<CODE>&ctrl=1`) alongside 6-char room codes, and a mobile touchpad/palette controller view driving the TV canvas in real time once TV support ships after Google Play Store deployment (`cloud-coop-hub` remains gated behind `isCloudCoopUiEnabled()` in `v3.0.31`).
 - **Value**: Lets family and friends turn any smartphone into a responsive wireless painting controller for a living-room TV without installing a separate companion app.
-- **Why Deferred**: Deferred by Owner directive until after Google Play Store launch (`TASK-2.5` / `v3.0.20`); `CoopRoomDurableObject` (`worker/`) and `HybridCoopRoomAdapter` stay ready underneath `isCloudCoopUiEnabled()` (`?coop=1` / `?room=...`).
+- **Why Deferred**: Deferred by Owner directive until after Google Play Store launch (`TASK-2.5` / `v3.0.31`); `CoopRoomDurableObject` (`worker/`) and `HybridCoopRoomAdapter` stay ready underneath `isCloudCoopUiEnabled()` (`?coop=1` / `?room=...`).
 - **Planned Sprint Slices**:
   - **TASK-4.4a**: Extend `worker/coopRoomProtocol.ts` and `worker/index.ts` with validated `REMOTE_CURSOR` / `REMOTE_ACTION` frames and rate limits, and clean up unconfigured OAuth clutter in `SettingsModal.tsx` `Saves`.
   - **TASK-4.4b**: Add inline SVG QR pairing (`#room=<CODE>&ctrl=1`) and dedicated phone touchpad controller UI with 2-context Playwright E2E cursor, paint, and undo verification.

@@ -17,7 +17,6 @@ interface CapyAndroidInterface {
   requestCloudSnapshotPull?: (slotKey: string) => boolean;
   isPlayGamesConfigured?: () => boolean;
   signInPlayGames?: () => string | null;
-  showRewardedAd?: () => boolean;
   shareImage?: (title: string, dataUrl: string) => void;
   shareTextLink?: (title: string, url: string) => void;
   shareFile?: (title: string, fileName: string, mimeType: string, base64Data: string) => void;
@@ -600,17 +599,6 @@ class NativeBridgeService {
       }
     } catch {
       // Safe fallback when Play Games SDK pull hook is unavailable
-    }
-    return false;
-  }
-
-  showRewardedAd(): boolean {
-    try {
-      if (window.CapyAndroid?.showRewardedAd) {
-        return window.CapyAndroid.showRewardedAd();
-      }
-    } catch {
-      // Ad-free or unconfigured host
     }
     return false;
   }
