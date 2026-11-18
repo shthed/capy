@@ -43,13 +43,41 @@ jobs:
           echo "tag=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
 
+      - name: Check Android release signing secrets
+        id: signing
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_NAME: ${{ steps.meta.outputs.tag }}
+          CAPY_KEYSTORE_BASE64: ${{ secrets.CAPY_KEYSTORE_BASE64 }}
+          CAPY_KEYSTORE_PASSWORD: ${{ secrets.CAPY_KEYSTORE_PASSWORD }}
+          CAPY_KEY_ALIAS: ${{ secrets.CAPY_KEY_ALIAS }}
+          CAPY_KEY_PASSWORD: ${{ secrets.CAPY_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${CAPY_KEYSTORE_BASE64}" ] && [ -n "${CAPY_KEYSTORE_PASSWORD}" ] && [ -n "${CAPY_KEY_ALIAS}" ] && [ -n "${CAPY_KEY_PASSWORD}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "::error::Missing required release signing secrets (CAPY_KEYSTORE_BASE64, CAPY_KEYSTORE_PASSWORD, CAPY_KEY_ALIAS, CAPY_KEY_PASSWORD)." >&2
+            exit 1
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Release Build Skipped (Android Signing Secrets Not Configured)"
+              echo ""
+              echo "Skipped tagged release publication for \`${TAG_NAME}\` because one or more Android release signing secrets (\`CAPY_KEYSTORE_BASE64\`, \`CAPY_KEYSTORE_PASSWORD\`, \`CAPY_KEY_ALIAS\`, \`CAPY_KEY_PASSWORD\`) are not configured in this repository."
+              echo "Configure all four secrets under **Settings -> Secrets and variables -> Actions -> Secrets** (or trigger \`workflow_dispatch\` once configured) to publish signed APK/AAB releases."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Check out tagged source
+        if: steps.signing.outputs.enabled == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ steps.meta.outputs.tag }}
           fetch-depth: 0
 
       - name: Use Node.js 22
+        if: steps.signing.outputs.enabled == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -57,6 +85,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Build & package Web production bundle (web/)
+        if: steps.signing.outputs.enabled == 'true'
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
@@ -73,17 +102,20 @@ jobs:
           tar -czf "release-assets/capy-web-${TAG_NAME}.tgz" -C web/dist .
 
       - name: Set up JDK 17
+        if: steps.signing.outputs.enabled == 'true'
         uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Setup Gradle
+        if: steps.signing.outputs.enabled == 'true'
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
 
       - name: Build Android APK & Play Store App Bundle (.aab)
+        if: steps.signing.outputs.enabled == 'true'
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
           IS_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
@@ -114,6 +146,7 @@ jobs:
           ls -lh release-assets/
 
       - name: Extract release notes from CHANGELOG.md
+        if: steps.signing.outputs.enabled == 'true'
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
         run: |
@@ -124,6 +157,7 @@ jobs:
             --out release-notes.md
 
       - name: Create or update GitHub Release
+        if: steps.signing.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ steps.meta.outputs.tag }}
