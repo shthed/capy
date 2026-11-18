@@ -184,6 +184,70 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(segmented.regions.length, 64, 'Expected 64 mosaic cells with cellPartitionMap');
 
+    // 2b. RegionSegmenter Phase 2 min-heap strict maxRegions cap with > 9,000 initial regions
+    {
+      const gridBlocks = 104; // 104 * 104 = 10,816 4-connected initial regions (> 8,000 legacy safety cap)
+      const sW = gridBlocks * 4;
+      const sH = gridBlocks * 4;
+      const sClusters = new Int32Array(sW * sH);
+      const sLineMask = new Uint8Array(sW * sH);
+      const sRgba = new Uint8ClampedArray(sW * sH * 4);
+      for (let by = 0; by < gridBlocks; by++) {
+        for (let bx = 0; bx < gridBlocks; bx++) {
+          const clusterIdx = (bx + by) % 2;
+          const col = testPalette[clusterIdx];
+          for (let dy = 0; dy < 4; dy++) {
+            const rowBase = (by * 4 + dy) * sW + bx * 4;
+            for (let dx = 0; dx < 4; dx++) {
+              const p = rowBase + dx;
+              sClusters[p] = clusterIdx;
+              sRgba[p * 4] = col.r;
+              sRgba[p * 4 + 1] = col.g;
+              sRgba[p * 4 + 2] = col.b;
+              sRgba[p * 4 + 3] = 255;
+            }
+          }
+        }
+      }
+      const capped2000 = segmenterMod.RegionSegmenter.segment(
+        sW,
+        sH,
+        testPalette.slice(0, 2),
+        sClusters,
+        12,
+        0,
+        0,
+        sLineMask,
+        'ABSORB_LINES',
+        sRgba,
+        2000
+      );
+      assert.equal(
+        capped2000.regions.length <= 2000 && capped2000.regions.length > 0,
+        true,
+        `Phase 2 min-heap must strictly cap 10,816 components <= 2000 (got ${capped2000.regions.length})`
+      );
+
+      const capped200 = segmenterMod.RegionSegmenter.segment(
+        sW,
+        sH,
+        testPalette.slice(0, 2),
+        sClusters,
+        12,
+        0,
+        0,
+        sLineMask,
+        'ABSORB_LINES',
+        sRgba,
+        200
+      );
+      assert.equal(
+        capped200.regions.length <= 200 && capped200.regions.length > 0,
+        true,
+        `Phase 2 min-heap must strictly cap 10,816 components <= 200 (got ${capped200.regions.length})`
+      );
+    }
+
     const puzzleData = {
       width,
       height,
@@ -221,10 +285,22 @@ async function runCodecAndEngineTests() {
     for (let i = 0; i < fakeImageBytes.length; i++) fakeImageBytes[i] = (i * 31) & 0xff;
     const fakeImageBlob = new Blob([fakeImageBytes], { type: 'image/webp' });
 
-    const singleBinary = await codec.encodeSingleSaveBinaryV2(sampleSnapshot, compact, fakeImageBlob);
+    const fixedExportDate = 1767225600000;
+    const singleBinary = await codec.encodeSingleSaveBinaryV2(sampleSnapshot, compact, fakeImageBlob, {
+      exportDate: fixedExportDate,
+    });
+    const singleBinaryRepeat = await codec.encodeSingleSaveBinaryV2(sampleSnapshot, compact, fakeImageBlob, {
+      exportDate: fixedExportDate,
+    });
     assert.equal(codec.hasBinaryMagicHeader(singleBinary), true, 'Must start with CAPY\\x02 magic header');
+    assert.equal(
+      Buffer.compare(Buffer.from(singleBinary), Buffer.from(singleBinaryRepeat)),
+      0,
+      'encodeSingleSaveBinaryV2 with fixed exportDate must emit byte-identical .capy files'
+    );
     const decodedSingle = await codec.decodeBinarySaveV2(singleBinary);
     assert.equal(decodedSingle.format, 'capy-single-save-v2');
+    assert.equal(decodedSingle.exportDate, fixedExportDate);
     assert.deepEqual(decodedSingle.snapshot.filledRegionIds, [5, 1, 12]);
     assert.equal(decodedSingle.snapshot.parentSnapshotId, 'parent-snap-0');
     assert.deepEqual(decodedSingle.imageBytes, fakeImageBytes);
@@ -232,10 +308,23 @@ async function runCodecAndEngineTests() {
     const archiveBinary = await codec.encodeArchiveSaveBinaryV2(
       [sampleSnapshot],
       { 'snap-test-1': compact },
-      { 'snap-test-1': fakeImageBlob }
+      { 'snap-test-1': fakeImageBlob },
+      { exportDate: fixedExportDate }
+    );
+    const archiveBinaryRepeat = await codec.encodeArchiveSaveBinaryV2(
+      [sampleSnapshot],
+      { 'snap-test-1': compact },
+      { 'snap-test-1': fakeImageBlob },
+      { exportDate: fixedExportDate }
+    );
+    assert.equal(
+      Buffer.compare(Buffer.from(archiveBinary), Buffer.from(archiveBinaryRepeat)),
+      0,
+      'encodeArchiveSaveBinaryV2 with fixed exportDate must emit byte-identical .capy archives'
     );
     const decodedArchive = await codec.decodeBinarySaveV2(archiveBinary);
     assert.equal(decodedArchive.format, 'capy-archive-save-v2');
+    assert.equal(decodedArchive.exportDate, fixedExportDate);
     assert.equal(decodedArchive.snapshots.length, 1);
     assert.equal(decodedArchive.snapshots[0].parentSnapshotId, 'parent-snap-0');
 
@@ -2170,6 +2259,95 @@ async function runCodecAndEngineTests() {
       `Daily presetDescription must not show contradictory low/medium counts: '${dailyA.presetDescription}'`
     );
 
+    // Verify full 20-day cycle coverage, honest labels, and real disk .capy archives
+    const seenDailyIds = new Set();
+    for (let offset = 0; offset < 20; offset++) {
+      const utcDate = new Date(Date.UTC(2026, 10, 18 + offset)).toISOString().slice(0, 10);
+      const featured = dailyMod.getDailyFeaturedPuzzle(utcDate);
+      seenDailyIds.add(featured.snapshotId);
+      assert.equal(featured.config.resolution, 2048);
+      assert.equal(featured.config.maxRegions, 2000);
+      assert.equal(featured.config.minRegionArea, 24);
+      assert.equal(featured.config.colorCount, 64);
+      assert.equal(featured.config.paletteDetail, 'CUSTOM');
+      assert.equal(
+        featured.presetLabel.includes('Max Detail') &&
+          featured.presetDescription.includes('Max Detail') &&
+          !/Cozy Quick|Balanced Classic/i.test(`${featured.presetLabel} ${featured.presetDescription}`),
+        true,
+        `Expected honest Max Detail copy for ${utcDate}, got '${featured.presetLabel}' / '${featured.presetDescription}'`
+      );
+      if (featured.sample.isFreeColor) {
+        assert.equal(featured.presetLabel, 'Free Colour Line Art • Max Detail');
+        assert.equal(featured.config.algorithm, 'LINE_ART');
+        assert.equal(featured.config.isFreeColor, true);
+      }
+    }
+    assert.equal(seenDailyIds.size, 20, `20 consecutive UTC dates must cover all 20 unique daily IDs (got ${seenDailyIds.size})`);
+
+    const sampleArchivePath = path.join(projectRoot, 'public/assets/sample_saves.capy');
+    const dailyArchivePath = path.join(projectRoot, 'public/assets/daily_saves.capy');
+    assert.equal(fs.existsSync(sampleArchivePath), true, 'Missing pre-baked sample_saves.capy asset');
+    assert.equal(fs.existsSync(dailyArchivePath), true, 'Missing pre-baked daily_saves.capy asset');
+
+    const sampleArchiveBytes = new Uint8Array(fs.readFileSync(sampleArchivePath));
+    const decodedSampleArchive = await codec.decodeBinarySaveV2(sampleArchiveBytes);
+    assert.equal(decodedSampleArchive.format, 'capy-archive-save-v2');
+    assert.equal(decodedSampleArchive.exportDate, 1767225600000);
+    assert.equal(decodedSampleArchive.snapshots.length, 4, 'sample_saves.capy must contain all 4 built-in samples');
+    for (const sSnap of decodedSampleArchive.snapshots) {
+      assert.equal(
+        sSnap.totalCount > 0 && sSnap.totalCount <= 2000,
+        true,
+        `Sample '${sSnap.id}' must have 1..2000 regions (got ${sSnap.totalCount})`
+      );
+      const decodedRec = decodedSampleArchive.compactPuzzles?.[sSnap.id];
+      assert.ok(decodedRec, `Missing compact puzzle record for sample '${sSnap.id}'`);
+      assert.equal(
+        decodedRec.regionMetaBytes.byteLength / 20 <= 2000,
+        true,
+        `Sample '${sSnap.id}' decoded regionMeta rows must stay <= 2000`
+      );
+    }
+
+    const dailyArchiveBytes = new Uint8Array(fs.readFileSync(dailyArchivePath));
+    const dailyUnpackedSize =
+      (dailyArchiveBytes[5] & 0x01) !== 0
+        ? zlib.gunzipSync(dailyArchiveBytes.subarray(6)).byteLength
+        : dailyArchiveBytes.byteLength - 6;
+    assert.equal(
+      dailyUnpackedSize < 16 * 1024 * 1024,
+      true,
+      `daily_saves.capy unpacked size must stay safely below 16 MiB codec cap (got ${dailyUnpackedSize})`
+    );
+    const decodedDailyArchive = await codec.decodeBinarySaveV2(dailyArchiveBytes);
+    assert.equal(decodedDailyArchive.format, 'capy-archive-save-v2');
+    assert.equal(decodedDailyArchive.exportDate, 1767225600000);
+    assert.equal(decodedDailyArchive.snapshots.length, 20, 'daily_saves.capy must pack all 20 daily combinations');
+    const packedDailyIds = new Set(decodedDailyArchive.snapshots.map((s) => s.id));
+    for (const dailyId of seenDailyIds) {
+      assert.equal(packedDailyIds.has(dailyId), true, `daily_saves.capy missing '${dailyId}'`);
+    }
+    for (const dSnap of decodedDailyArchive.snapshots) {
+      assert.equal(
+        dSnap.totalCount > 0 && dSnap.totalCount <= 2000,
+        true,
+        `Daily '${dSnap.id}' must have 1..2000 regions (got ${dSnap.totalCount})`
+      );
+      assert.equal(
+        !/Cozy Quick|Balanced Classic/i.test(dSnap.title),
+        true,
+        `Daily snapshot title must not leak stale label: '${dSnap.title}'`
+      );
+      const decodedRec = decodedDailyArchive.compactPuzzles?.[dSnap.id];
+      assert.ok(decodedRec, `Missing compact puzzle record for daily '${dSnap.id}'`);
+      assert.equal(
+        decodedRec.regionMetaBytes.byteLength / 20 <= 2000,
+        true,
+        `Daily '${dSnap.id}' decoded regionMeta rows must stay <= 2000`
+      );
+    }
+
     // 9. PlayerStatsService SSR load, increment, clamping, persistence & monotonic mergeLifetimeStats
     const statsMod = await vite.ssrLoadModule('/src/services/PlayerStatsService.ts');
     try {
@@ -2790,6 +2968,29 @@ async function runCodecAndEngineTests() {
     assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints('ab'.repeat(32)), [
       Array(32).fill('AB').join(':'),
     ]);
+    assert.equal(
+      typeof viteConfigMod.computeDistAssetsDigest,
+      'function',
+      'vite.config.ts must export computeDistAssetsDigest'
+    );
+    const publicAssetsDigestA = viteConfigMod.computeDistAssetsDigest(path.join(projectRoot, 'public/assets'));
+    const publicAssetsDigestB = viteConfigMod.computeDistAssetsDigest(path.join(projectRoot, 'public/assets'));
+    assert.match(publicAssetsDigestA, /^[0-9a-f]{16}$/, 'computeDistAssetsDigest must emit 16-char SHA-256 hex digest');
+    assert.equal(publicAssetsDigestA, publicAssetsDigestB, 'computeDistAssetsDigest must be deterministic');
+    assert.equal(
+      viteConfigMod.computeDistAssetsDigest(path.join(projectRoot, 'nonexistent-assets-dir-check')),
+      'empty'
+    );
+
+    const srcSwText = fs.readFileSync(path.join(projectRoot, 'public/sw.js'), 'utf8');
+    assert.equal(
+      srcSwText.includes('SW_ASSETS_DIGEST') &&
+        srcSwText.includes(".endsWith('.capy')") &&
+        srcSwText.includes("cache: 'no-cache'"),
+      true,
+      'public/sw.js must define SW_ASSETS_DIGEST and Network-First cache:no-cache routing for .capy archives'
+    );
+
     const distSwPath = path.join(projectRoot, 'dist/sw.js');
     if (fs.existsSync(distSwPath)) {
       const distSwText = fs.readFileSync(distSwPath, 'utf8');
@@ -2804,9 +3005,24 @@ async function runCodecAndEngineTests() {
         'Built dist/sw.js must not retain unstamped __CAPY_SW_VERSION__ placeholder'
       );
       assert.equal(
+        distSwText.includes('__CAPY_SW_ASSETS_DIGEST__'),
+        false,
+        'Built dist/sw.js must not retain unstamped __CAPY_SW_ASSETS_DIGEST__ placeholder'
+      );
+      assert.match(
+        distSwText,
+        /const SW_ASSETS_DIGEST = '[0-9a-f]{16}';/,
+        'Built dist/sw.js must stamp SW_ASSETS_DIGEST with a 16-char SHA-256 hex digest'
+      );
+      assert.equal(
         distSwText.includes(".endsWith('.apk')"),
         true,
         'Service Worker must bypass .apk binary downloads'
+      );
+      assert.equal(
+        distSwText.includes(".endsWith('.capy')") && distSwText.includes("cache: 'no-cache'"),
+        true,
+        'Built dist/sw.js must use Network-First cache:no-cache routing for .capy archives'
       );
     }
     logUnitPass('ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService verified.');
@@ -12343,6 +12559,13 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     const mobileHintBar = mobileTopbarPage.getByTestId('create-style-hint-bar');
     await mobileHintBar.waitFor({ state: 'visible', timeout: 3000 });
+    const defaultHintBarText = await mobileHintBar.innerText();
+    assert.equal(
+      defaultHintBarText.includes('Gallery: Max (2048p)') && defaultHintBarText.includes('Uploads: Auto'),
+      true,
+      `create-style-hint-bar must clearly show Gallery Max vs Custom Uploads default mode (got '${defaultHintBarText}')`
+    );
+
     const mobileDailyBox = await mobileTopbarPage.getByTestId('daily-puzzle-card').boundingBox();
     const mobileHintBarBox = await mobileHintBar.boundingBox();
     const mobileSearchBox = await mobileTopbarPage.getByTestId('gallery-search-input').boundingBox();
@@ -12358,18 +12581,49 @@ async function runBrowserBasicsSuite() {
       `create-style-hint-bar must be visible above the fold on 360x780 (bottom=${mobileHintBarBox.y + mobileHintBarBox.height})`
     );
 
+    await mobileTopbarPage.getByTestId('hint-toggle-daily-puzzle').click();
+    await mobileTopbarPage.getByTestId('hint-tooltip-daily-puzzle').waitFor({ state: 'visible', timeout: 3000 });
+
+    const mobileUploadHintToggle = mobileTopbarPage.getByTestId('hint-toggle-upload-photo');
+    await mobileUploadHintToggle.scrollIntoViewIfNeeded();
+    await mobileUploadHintToggle.click();
+    await mobileTopbarPage.getByTestId('hint-tooltip-upload-photo').waitFor({ state: 'visible', timeout: 3000 });
+
     await mobileTopbarPage.getByTestId('create-hint-style-guide-btn').click();
     await mobileTopbarPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
 
-    const mobileAlgoHintToggle = mobileTopbarPage.getByTestId('hint-toggle-algorithm');
-    await mobileAlgoHintToggle.scrollIntoViewIfNeeded();
-    await mobileAlgoHintToggle.click();
+    // Hint & Options must jump straight to options AND automatically open hint-tooltip-algorithm
+    const mobileOptionsJumpBtn = mobileTopbarPage.getByTestId('create-hint-options-btn');
+    await mobileOptionsJumpBtn.scrollIntoViewIfNeeded();
+    await mobileOptionsJumpBtn.click();
     await mobileTopbarPage.getByTestId('hint-tooltip-algorithm').waitFor({ state: 'visible', timeout: 3000 });
 
     const mobileColorHintToggle = mobileTopbarPage.getByTestId('hint-toggle-color-count');
     await mobileColorHintToggle.scrollIntoViewIfNeeded();
     await mobileColorHintToggle.click();
     await mobileTopbarPage.getByTestId('hint-tooltip-color-count').waitFor({ state: 'visible', timeout: 3000 });
+
+    // Detail Level Preset High must sync colorCount + maxRegions + minRegionArea
+    const mobileHighPresetBtn = mobileTopbarPage.getByTestId('detail-preset-high');
+    await mobileHighPresetBtn.scrollIntoViewIfNeeded();
+    await mobileHighPresetBtn.click();
+    const afterHighHintText = await mobileHintBar.innerText();
+    assert.equal(
+      afterHighHintText.includes('38c') && afterHighHintText.includes('500 pcs'),
+      true,
+      `Detail Level Preset High must sync 38c and 500 pcs (got '${afterHighHintText}')`
+    );
+
+    // Quick Max Detail button must jump directly to 64c / 2000 pcs / 2048p
+    const mobileMaxPresetBtn = mobileTopbarPage.getByTestId('create-max-detail-preset-btn');
+    await mobileMaxPresetBtn.scrollIntoViewIfNeeded();
+    await mobileMaxPresetBtn.click();
+    const afterMaxHintText = await mobileHintBar.innerText();
+    assert.equal(
+      afterMaxHintText.includes('Max Detail') && afterMaxHintText.includes('2048p'),
+      true,
+      `Max Detail preset button must apply 64c/2000/2048p Max Detail config (got '${afterMaxHintText}')`
+    );
 
     assert.equal(await mobileTopbarPage.getByText('Optional Ad').count(), 0, '360x780 Create tab must hide Optional Ad');
     assert.equal(await mobileTopbarPage.getByText('AI Credits').count(), 0, '360x780 Create tab must hide AI Credits');
@@ -12382,6 +12636,17 @@ async function runBrowserBasicsSuite() {
       createHintsOverflow <= 0,
       true,
       `Create tab with Style Guide and (i) hint tooltips must have 0px horizontal overflow at 360x780 (got ${createHintsOverflow})`
+    );
+    await mobileTopbarPage.getByTestId('settings-modal-close').click();
+
+    // Closing SettingsModal without saving/regenerating must discard unsaved slider edits on next open
+    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('settings-tab-create').click();
+    const reopenedHintBarText = await mobileTopbarPage.getByTestId('create-style-hint-bar').innerText();
+    assert.equal(
+      reopenedHintBarText.includes('Gallery: Max (2048p)'),
+      true,
+      `Reopening SettingsModal without regenerating must resync localConfig to persisted settings (got '${reopenedHintBarText}')`
     );
     await mobileTopbarPage.getByTestId('settings-modal-close').click();
 

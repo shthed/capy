@@ -1,9 +1,11 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import {
+  DEFAULT_GENERATOR_CONFIG,
   GenerationProgressPayload,
   GeneratorConfig,
   MAX_GENERATOR_CONFIG,
+  matchesGeneratorConfig,
   PaletteColor,
   PalettePreset,
   PuzzleData,
@@ -72,22 +74,8 @@ const ColorPickerPopover = React.lazy(() =>
   import('./components/ColorPickerPopover').then((m) => ({ default: m.ColorPickerPopover }))
 );
 
-function matchesGeneratorConfig(cfg: GeneratorConfig, ref: GeneratorConfig): boolean {
-  return (
-    (cfg.algorithm || 'AUTO') === (ref.algorithm || 'AUTO') &&
-    (cfg.lineHandling || 'ABSORB_LINES') === (ref.lineHandling || 'ABSORB_LINES') &&
-    cfg.paletteDetail === ref.paletteDetail &&
-    cfg.imageType === ref.imageType &&
-    cfg.colorCount === ref.colorCount &&
-    cfg.minRegionArea === ref.minRegionArea &&
-    cfg.maxRegions === ref.maxRegions &&
-    cfg.resolution === ref.resolution &&
-    cfg.smoothingPasses === ref.smoothingPasses
-  );
-}
-
 function isDefaultGeneratorConfig(cfg: GeneratorConfig): boolean {
-  return matchesGeneratorConfig(cfg, DEFAULT_SETTINGS.generatorConfig);
+  return matchesGeneratorConfig(cfg, DEFAULT_GENERATOR_CONFIG);
 }
 
 function isMaxGeneratorConfig(cfg: GeneratorConfig): boolean {

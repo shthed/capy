@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,36 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function collectFilesDeterministic(dirAbs, baseAbs = dirAbs, out = []) {
+  if (!fs.existsSync(dirAbs)) return out;
+  const entries = fs
+    .readdirSync(dirAbs, { withFileTypes: true })
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const entry of entries) {
+    const fullPath = path.join(dirAbs, entry.name);
+    if (entry.isDirectory()) {
+      collectFilesDeterministic(fullPath, baseAbs, out);
+    } else if (entry.isFile()) {
+      const rel = path.relative(baseAbs, fullPath).split(path.sep).join('/');
+      out.push({ rel, fullPath });
+    }
+  }
+  return out;
+}
+
+export function computeDistAssetsDigest(assetsDirAbs: string): string {
+  const files = collectFilesDeterministic(assetsDirAbs);
+  if (files.length === 0) return 'empty';
+  const hash = crypto.createHash('sha256');
+  for (const file of files) {
+    hash.update(file.rel);
+    hash.update('\0');
+    hash.update(fs.readFileSync(file.fullPath));
+    hash.update('\0');
+  }
+  return hash.digest('hex').slice(0, 16);
+}
 
 export function parseAndroidSha256Fingerprints(rawEnv?: string): string[] {
   if (!rawEnv || typeof rawEnv !== 'string') return [];
@@ -46,12 +77,14 @@ function capyPostBuildStampPlugin(): Plugin {
           ? fs
               .readdirSync(assetsDir)
               .filter((name) => /\.(?:js|css)$/i.test(name))
-              .sort((a, b) => a.localeCompare(b))
+              .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
               .map((name) => `./assets/${name}`)
           : [];
+        const assetsDigest = computeDistAssetsDigest(assetsDir);
         const rawSw = fs.readFileSync(swPath, 'utf8');
         const stampedSw = rawSw
           .replace('__CAPY_SW_VERSION__', pkg.version)
+          .replace('__CAPY_SW_ASSETS_DIGEST__', assetsDigest)
           .replace('/* __CAPY_SW_BUILD_ASSETS__ */ []', JSON.stringify(emittedAssetUrls));
         fs.writeFileSync(swPath, stampedSw, 'utf8');
       }

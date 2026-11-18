@@ -1,4 +1,4 @@
-import { PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
+import { DEFAULT_GENERATOR_CONFIG, PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
 import {
   base64ToUint8,
   buildBorderMapFromRegionMap,
@@ -73,18 +73,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   reducedMotion: false,
   largeText: false,
   detailedLoadingProgress: false,
-  generatorConfig: {
-    algorithm: 'AUTO',
-    lineHandling: 'ABSORB_LINES',
-    preset: 'MEDIUM',
-    paletteDetail: 'AUTO',
-    imageType: 'AUTO',
-    colorCount: 16,
-    minRegionArea: 48,
-    maxRegions: 200,
-    resolution: 1024,
-    smoothingPasses: 2,
-  },
+  generatorConfig: { ...DEFAULT_GENERATOR_CONFIG },
 };
 
 function detectSystemReducedMotion(): boolean {
@@ -962,7 +951,10 @@ export class StorageService {
    * Exports a single save in Compact Binary Format v2 (`CAPY\x02...`, ~45-95 KB).
    * Embeds custom uploaded image blobs automatically while keeping built-in/catalog references zero-copy.
    */
-  static async exportSnapshotBinary(id: string): Promise<Uint8Array> {
+  static async exportSnapshotBinary(
+    id: string,
+    options?: { exportDate?: number }
+  ): Promise<Uint8Array> {
     const snapshots = this.loadSnapshots();
     const rawSnapshot = snapshots.find((s) => s.id === id);
     if (!rawSnapshot) throw new Error('Snapshot not found');
@@ -977,13 +969,13 @@ export class StorageService {
       snapshot.sourceRef?.kind === 'url';
     const imageBlob = isZeroCopyRef ? null : await this.loadImageBlob(id);
 
-    return encodeSingleSaveBinaryV2(snapshot, compactRecord, imageBlob);
+    return encodeSingleSaveBinaryV2(snapshot, compactRecord, imageBlob, options);
   }
 
   /**
    * Exports all saves into a single Compact Binary Archive v2 (`CAPY\x02...`).
    */
-  static async exportAllSnapshotsBinary(): Promise<Uint8Array> {
+  static async exportAllSnapshotsBinary(options?: { exportDate?: number }): Promise<Uint8Array> {
     const snapshots = await this.hydrateSnapshotPreviews(this.loadSnapshots());
     const compactRecords: Record<string, CompactPuzzleRecordV2> = {};
     const imageBlobs: Record<string, Blob> = {};
@@ -1006,7 +998,7 @@ export class StorageService {
       }
     }
 
-    return encodeArchiveSaveBinaryV2(snapshots, compactRecords, imageBlobs);
+    return encodeArchiveSaveBinaryV2(snapshots, compactRecords, imageBlobs, options);
   }
 
   /**
