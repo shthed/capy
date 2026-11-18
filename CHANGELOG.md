@@ -1,6 +1,7 @@
-### 3.0.35 - 2026-11-18 (Beta)
+### 3.0.35 - 2026-11-18 (Production, Beta)
 
 - Harden `StorageService.ts` local/backup durability (`loadRawWithBackupFallback` recency, validity, per-snapshot `resetEpoch` dominance, finite `filledRegionIds`, `hasOwnProperty` settings inspection, unconditional monotonic `metaUpdatedAt` across metadata, progress, `addSnapshot`, partial-delete, and archive/single-save imports using both pre-mutation list and raw persisted/unhealed post-clear snapshot timestamp floors via `getMaxPersistedSnapshotTimestamp`, storage-backed monotonic `savedAt` across `saveSettings`/`saveActiveState` including un-overwritten native backups after `clearActiveState`, and `quotaFailedLocalKeys` precedence with stale/corrupt `localStorage` and forced-empty recovery self-healing; `hasReadableNativeBackup()` capability gating for `CapyIOS` vs. `CapyAndroid`; strict `pendingBackupWrites` vs. `pendingLocalHealWrites` queue separation with 3-phase `flushPendingBackups` and bounded exponential backoff retries across Desktop Web, `CapyIOS`, and `CapyAndroid` + `SNAPSHOTS_KEY` `quotaFailedDeleteKeys` preservation; `saveSnapshots` `allowEmptyBackup`/`immediateBackup`/`clearLocalOnFailure` empty-overwrite guard; failed native `saveBackup` retry retention; read-only missing-ID `deleteSnapshot`/`updateSnapshotProgress`/`renameSnapshot`/`togglePinSnapshot`/`updateSnapshotViewport` no-ops; sanitized `isBootstrapBatch` `firstSnapshot` fallbacks; negative snapshot timestamp clamp) and add `[Unit 15/15]` durability tests in `web/scripts/test.mjs` [#577](https://github.com/shthed/capy/pull/577)
+- Retag `3.0.35` as `(Production, Beta)` and untag `3.0.29` via `compile-changelog.mjs --promote`, update `PLAY_STORE_LISTING.md` to `v3.0.35` (`30035`), align CI check titles across `web/scripts/test.mjs`, `DEV.md`, and `TESTING.md`, and sync `ROADMAP.md` and `TODO.md` for `beta -> main` release promotion [#578](https://github.com/shthed/capy/pull/578)
 
 ### 3.0.34 - 2026-11-18
 
@@ -22,7 +23,7 @@
 
 - Fix intermittent `[E2E 12]` Play Daily failure by waiting for the prebaked `daily-*` snapshot to become the active save before asserting, since `waitForPuzzleLoaded` could resolve against the previously mounted puzzle while `daily_saves.capy` was still being fetched and imported [#569](https://github.com/shthed/capy/pull/569)
 
-### 3.0.29 - 2026-11-16 (Production)
+### 3.0.29 - 2026-11-16
 
 - Fix signed Android release builds failing `lintVitalRelease` (`InvalidFragmentVersionForActivityResult` on `registerForActivityResult` in `MainActivity.kt`) by pinning `androidx.fragment:fragment-ktx` `1.8.9` over the stale transitive Fragment from `play-services-games-v2`, run `app:lintVitalRelease` in the per-PR `Android Build & JUnit Tests` job so release-only lint blockers surface before tagging, and realign `CHANGELOG.md` channel markers to `v3.0.26` Production [#566](https://github.com/shthed/capy/pull/566)
 - Retag `CHANGELOG.md` channel markers for the `v3.0.29` Production promotion (`3.0.29` to `(Production, Beta)`, untag `3.0.26`) per the `PROJECT.md` Pre-Promotion checklist [#568](https://github.com/shthed/capy/pull/568)
