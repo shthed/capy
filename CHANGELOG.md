@@ -1,6 +1,6 @@
 ### 3.0.33 - 2026-11-18 (Beta)
 
-- Add public GitHub issue templates (`.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml`, `puzzle_idea.yml`, `config.yml`), add an About-tab **Report Bug / Ideas** button (`about-report-issue-link` -> `https://github.com/capyboop/capy/issues/new/choose`) in `SettingsModal.tsx`, point `web/public/privacy-policy.html` and `README.md` directly to `https://github.com/capyboop/capy/issues`, expand unit/E2E assertions in `web/scripts/test.mjs`, and sync `WEB.md`, `CLOUD.md`, `ROADMAP.md`, `TODO.md`, and `TESTING.md` (deferring `capyboop.com` out of active Sprint 1 scope) [#574](https://github.com/shthed/capy/pull/574)
+- Add public GitHub issue templates (`.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml`, `puzzle_idea.yml`, `config.yml`), add an About-tab **Report Bug / Ideas** button (`about-report-issue-link` -> `https://github.com/capyboop/capy/issues/new/choose`) in `SettingsModal.tsx`, point `web/public/privacy-policy.html` and `README.md` directly to `https://github.com/capyboop/capy/issues`, expand unit/E2E assertions in `web/scripts/test.mjs`, and sync `WEB.md`, `CLOUD.md`, `ROADMAP.md`, `TODO.md`, and `TESTING.md` (deferring `capyboop.com` out of active Sprint 1 scope) [#575](https://github.com/shthed/capy/pull/575)
 
 ### 3.0.32 - 2026-11-18
 
