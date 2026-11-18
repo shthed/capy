@@ -13476,7 +13476,7 @@ async function runBrowserBasicsSuite() {
     const filledBeforeFreeBurst = Number(
       await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
     );
-    await page.evaluate(() => {
+    const activeFreeBurstA = await page.evaluate(() => {
       const canvas = document.querySelector('canvas');
       if (!canvas) throw new Error('Missing canvas for same-frame Free Colour burst');
       const rect = canvas.getBoundingClientRect();
@@ -13517,6 +13517,8 @@ async function runBrowserBasicsSuite() {
           })
         );
       }
+      // Capture Page A's synchronous localStorage state immediately before Page B's BroadcastChannel macrotasks overwrite shared origin storage
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
     });
     await page.waitForFunction(
       (minExpected) =>
@@ -13525,14 +13527,16 @@ async function runBrowserBasicsSuite() {
       filledBeforeFreeBurst + 4,
       { timeout: 5000 }
     );
-    const [filledAfterFreeBurstA, activeFreeBurstA] = await Promise.all([
-      page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count').then(Number),
-      page.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}')),
-    ]);
+    const filledAfterFreeBurstA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
     assert.equal(
       (activeFreeBurstA.filledRegionIds || []).length,
       filledAfterFreeBurstA,
       'C8-1: Page A localStorage filledRegionIds must match DOM count after Free Colour burst'
+    );
+    const expectedCanonicalPaintedJson = JSON.stringify(
+      Object.entries(activeFreeBurstA.paintedRegionColors || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
     );
     await pageB.waitForFunction(
       ({ expectedCount, expectedPaintedJson }) => {
@@ -13540,14 +13544,14 @@ async function runBrowserBasicsSuite() {
           document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
         );
         const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-        return (
-          count === expectedCount &&
-          JSON.stringify(active.paintedRegionColors || {}) === expectedPaintedJson
+        const canonicalPainted = JSON.stringify(
+          Object.entries(active.paintedRegionColors || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
         );
+        return count === expectedCount && canonicalPainted === expectedPaintedJson;
       },
       {
         expectedCount: filledAfterFreeBurstA,
-        expectedPaintedJson: JSON.stringify(activeFreeBurstA.paintedRegionColors || {}),
+        expectedPaintedJson: expectedCanonicalPaintedJson,
       },
       { timeout: 5000 }
     );
@@ -13563,7 +13567,7 @@ async function runBrowserBasicsSuite() {
     const filledBeforeNormalBurst = Number(
       await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
     );
-    await page.evaluate(() => {
+    const idsNormalBurstA = await page.evaluate(() => {
       const canvas = document.querySelector('canvas');
       if (!canvas) throw new Error('Missing canvas for same-frame Normal burst');
       const rect = canvas.getBoundingClientRect();
@@ -13603,6 +13607,7 @@ async function runBrowserBasicsSuite() {
           })
         );
       }
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || [];
     });
     await page.waitForFunction(
       (minExpected) =>
@@ -13611,10 +13616,9 @@ async function runBrowserBasicsSuite() {
       filledBeforeNormalBurst + 3,
       { timeout: 5000 }
     );
-    const [filledAfterNormalBurstA, idsNormalBurstA] = await Promise.all([
-      page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count').then(Number),
-      page.evaluate(() => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || []),
-    ]);
+    const filledAfterNormalBurstA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
     assert.equal(
       idsNormalBurstA.length,
       filledAfterNormalBurstA,
