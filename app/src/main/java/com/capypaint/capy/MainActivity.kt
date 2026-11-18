@@ -215,7 +215,6 @@ class MainActivity : ComponentActivity() {
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
                     deliverPendingDeepLinkIfNeeded()
-                    deliverCachedPlayGamesProfileIfNeeded()
                 }
 
                 override fun onReceivedError(
@@ -524,16 +523,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         try {
+            // Only initialize PlayGamesSdk in onCreate(); defer signIn(), profile fetch, and
+            // SnapshotsClient pulls until WebView explicitly invokes CapyAndroid.signInPlayGames().
             PlayGamesSdk.initialize(this)
-            PlayGames.getGamesSignInClient(this).isAuthenticated.addOnCompleteListener { task ->
-                val isAuthenticated = (task.isSuccessful) && (task.result?.isAuthenticated == true)
-                if (isAuthenticated) {
-                    fetchAndDeliverPlayGamesPlayerProfile()
-                    pullSnapshotFromPlayGames(CLOUD_MANIFEST_SLOT_KEY)
-                } else {
-                    requestPlayGamesSignIn()
-                }
-            }
         } catch (e: Exception) {
             Log.w(TAG, "PlayGamesSdk initialization skipped or unavailable", e)
         }

@@ -1,14 +1,14 @@
 # Capy Paint — Google Play Store Listing & Release Ops Guide
 
-Complete store copy, form declarations, and asset checklist for publishing **Capy Paint** (`com.capypaint.capy`) to Google Play Console targeting `v3.0.20` (`versionCode = 30020`).
+Complete store copy, form declarations, and asset checklist for publishing **Capy Paint** (`com.capypaint.capy`) to Google Play Console targeting `v3.0.31` (`versionCode = 30031`).
 
 ---
 
 ## 1. Store Listing Copy
 
 - **App Name (`<= 30` chars)**: `Capy Paint - Color by Number` (`28` chars)
-- **Short Description (`<= 80` chars)**: `Relaxing offline color-by-number puzzles, custom photo coloring & SVG printables.` (`79` chars)
-- **Category**: `Board` (or `Puzzle`)
+- **Short Description (`<= 80` chars)**: `Relaxing offline color-by-number puzzles, photo coloring & SVG printables.` (`74` chars)
+- **Category**: `Puzzle`
 - **Tags**: `Coloring`, `Puzzle`, `Casual`, `Offline`, `Single player`
 - **Free / Paid & Ads**: `Free`, `Contains ads: No` (100% ad-free core app across Web and Android), `In-app purchases: No`
 - **Full Description (`<= 4000` chars)**:
@@ -18,7 +18,7 @@ Unwind with Capy Paint, a cozy, 100% ad-free color-by-number and free-coloring p
 
 PICK & PAINT AT YOUR OWN PACE
 - Start coloring right away with crisp, pre-generated built-in artworks including Capy Forest, Capybara, Mushroom Forest, and Snail Guitar.
-- Play a fresh deterministic Puzzle of the Day offline every day, or explore curated gallery packs.
+- Play a fresh deterministic Puzzle of the Day offline every day featuring rotating built-in artworks and curated preset styles.
 - Choose Easy Mode (tap any shape to auto-pick its matching color), Normal Mode, or Free Colour creative mode with custom HSL/Hex palettes and 5 curated themes.
 
 TURN ANY PHOTO INTO A PUZZLE OR PRINTABLE SHEET
@@ -62,12 +62,13 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 
 ## 3. Data Safety, Privacy & Content Rating Answers
 
-- **Privacy Policy URL**: `https://capypaint.com/privacy-policy.html` (backed by [`web/public/privacy-policy.html`](../../web/public/privacy-policy.html); fallback Pages mirror: `https://shthed.github.io/capy/privacy-policy.html`)
-- **App Access**: All core gameplay, custom photo puzzles, gallery packs, saves, SVG exports, and replay features work immediately with zero login required (`All functionality is available without special access`).
+- **Privacy Policy URL**: [https://capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html) (backed by [`web/public/privacy-policy.html`](../../web/public/privacy-policy.html); fallback Pages mirror: [https://shthed.github.io/capy/privacy-policy.html](https://shthed.github.io/capy/privacy-policy.html))
+- **Developer Contact Email (Store Settings)**: Set a monitored public support email address under Play Console **Store settings -> Store listing contact details** before submitting for review (required by Google Play Console on every published store listing).
+- **App Access**: All core gameplay, custom photo puzzles, built-in artworks, the daily Puzzle of the Day, saves, SVG exports, and replay features work immediately with zero login required (`All functionality is available without special access`).
 - **Advertising**: `No, my app does not contain ads.`
-- **Data Safety (`v3.0.20`)**:
-  - Does your app collect or share any of the required user data types? `No` (local-first on-device storage and processing by default; Cloud/Co-op UI is hidden behind opt-in developer flags in `v3.0.20`, zero analytics/ad/tracking SDKs bundled).
-  - Note: Once Google Play Games Services v2 or Google Drive OAuth Cloud Sync is promoted for end users in `EPIC-5`, update Data Safety to disclose opt-in Play Games profile/Saved Games sync.
+- **Data Safety (`v3.0.31`)**:
+  - Does your app collect or share any of the required user data types? `No` (local-first on-device storage and processing by default; Cloud/Co-op UI and startup Play Games sign-in are disabled in `v3.0.31`—[`MainActivity.kt`](../../app/src/main/java/com/capypaint/capy/MainActivity.kt) only initializes `PlayGamesSdk` if configured and never invokes `requestPlayGamesSignIn()` on launch unless JS explicitly calls `CapyAndroid.signInPlayGames()` under opt-in flags, [`AndroidManifest.xml`](../../app/src/main/AndroidManifest.xml) sets `SUPPRESS_GAME_PROFILE_CREATION="true"`, `CAPY_PLAY_GAMES_APP_ID` stays unset for initial launch, and zero analytics/ad/tracking SDKs are bundled).
+  - Note: Once Google Play Games Services v2 or Google Drive OAuth Cloud Sync is promoted for end users in [EPIC-5](https://github.com/shthed/capy/issues/480), update Data Safety to disclose opt-in Play Games profile/Saved Games sync.
 - **IARC Content Rating Questionnaire**:
   - Category: `Games` (`Reference, News, or Educational` = No; `Game` = Yes).
   - Violence / Fear / Sexuality / Gambling / Substances / Profanity: `No` across all prompts (`Everyone` / `PEGI 3` / `USK 0`).
@@ -78,9 +79,10 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 
 ## 4. Play Console Release Steps (Human Ops)
 
-1. Configure GitHub Actions signing secrets on the source repository (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`) per [`.github/workflows/release.yml`](../../.github/workflows/release.yml).
-2. Create and push tag `v3.0.20` from updated `main` (`git tag -a v3.0.20 -m "v3.0.20" && git push origin v3.0.20`) to build the signed Play Store `capy-v3.0.20.aab` artifact cleanly.
+1. Configure GitHub Actions signing secrets on the source repository (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`) per [`.github/workflows/release.yml`](../../.github/workflows/release.yml), keeping `CAPY_PLAY_GAMES_APP_ID` unset for the initial `v3.0.31` Phone & Tablet launch.
+2. Create and push tag `v3.0.31` from updated `main` (`git tag -a v3.0.31 -m "v3.0.31" && git push origin v3.0.31`) to build the signed Play Store `capy-v3.0.31.aab` artifact cleanly.
 3. In Google Play Console (`com.capypaint.capy`):
+   - Configure your monitored **Developer contact email** (and optional website [https://capypaint.com/](https://capypaint.com/)) under **Store settings -> Store listing contact details**.
    - Upload `app_icon_512.png`, `feature_graphic.png`, and the `screenshots/` PNGs under **Main store listing** (Phone and Tablet tabs only; skip TV/Wear).
    - Complete **App content** (Privacy Policy URL, Ads = No, App Access = No restrictions, Content Rating = Everyone, Data Safety = No data collected/shared).
-   - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.0.20.aab` (`versionCode = 30020`), verify zero pre-launch manifest warnings, and roll out to testers / Production.
+   - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.0.31.aab` (`versionCode = 30031`), verify zero pre-launch manifest warnings, and roll out to testers / Production.
