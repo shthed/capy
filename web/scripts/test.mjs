@@ -3082,10 +3082,11 @@ async function runCodecAndEngineTests() {
           );
           assert.equal(
             settingsSrc.includes('{!NativeBridge.isAndroid && (') &&
+              settingsSrc.includes('NativeBridge.isAndroid || !channelInfo.showChannelSwitcher') &&
               settingsSrc.includes('data-testid="android-apk-download-link"') &&
               settingsSrc.includes('data-testid="beta-apk-download-link"'),
             true,
-            'SettingsModal must hide Android APK download cards when running inside NativeBridge.isAndroid'
+            'SettingsModal must hide Android APK download cards and release-channel-card when running inside NativeBridge.isAndroid'
           );
           assert.equal(
             providerRegistrySrc.includes("return this.signInWithProvider('play_games_v2');") &&
@@ -3107,17 +3108,135 @@ async function runCodecAndEngineTests() {
           const rewardedRes = await providerMod.ProviderRegistry.monetization.watchRewardedAdForCredits();
           assert.equal(rewardedRes.granted, 0, 'Store-clean build must grant 0 ad credits');
           assert.equal(rewardedRes.ledger.adFreePlatform, true);
-          const seededIdeas = providerMod.ProviderRegistry.catalog.getCommunityIdeas();
-          assert.equal(
-            seededIdeas.length >= 2 && seededIdeas.every((idea) => idea.votes === 0),
-            true,
-            'SEED_COMMUNITY_IDEAS must have votes: 0 with zero fabricated vote counts'
+
+          // Returning-user stale localStorage community ideas & consent checks must stay store-clean
+          const prevIdeasLs = globalThis.localStorage;
+          const ideasMap = new Map();
+          globalThis.localStorage = {
+            getItem: (k) => (ideasMap.has(k) ? ideasMap.get(k) : null),
+            setItem: (k, v) => ideasMap.set(k, String(v)),
+            removeItem: (k) => ideasMap.delete(k),
+          };
+          try {
+            const seededIdeas = providerMod.ProviderRegistry.catalog.getCommunityIdeas();
+            assert.equal(
+              seededIdeas.length >= 2 && seededIdeas.every((idea) => idea.votes === 0 && !idea.votedByMe),
+              true,
+              'SEED_COMMUNITY_IDEAS must have votes: 0 with zero fabricated vote counts'
+            );
+            assert.equal(
+              seededIdeas[0].createdAt >= seededIdeas[1].createdAt,
+              true,
+              'getCommunityIdeas must sort newest-first by createdAt'
+            );
+            ideasMap.set(
+              'capy_community_ideas_v1',
+              JSON.stringify([
+                {
+                  id: 'legacy_old',
+                  title: 'Old Legacy Idea',
+                  prompt: 'Old idea with stale votes from pre-3.0.31 cache',
+                  category: 'Animals',
+                  tags: ['Animals'],
+                  authorName: 'River Capy',
+                  authorId: 'legacy_1',
+                  votes: 24,
+                  votedByMe: true,
+                  status: 'queued',
+                  createdAt: 1700000000000,
+                },
+                {
+                  id: 'legacy_new',
+                  title: 'Newer Legacy Idea',
+                  prompt: 'Newer idea with stale votes from pre-3.0.31 cache',
+                  category: 'Nature',
+                  tags: ['Nature'],
+                  authorName: 'Forest Sprout',
+                  authorId: 'legacy_2',
+                  votes: 17,
+                  votedByMe: false,
+                  status: 'curated',
+                  createdAt: 1720000000000,
+                },
+              ])
+            );
+            const normalizedLegacy = providerMod.ProviderRegistry.catalog.getCommunityIdeas();
+            assert.equal(normalizedLegacy.length, 2);
+            assert.equal(normalizedLegacy[0].id, 'legacy_new', 'Legacy ideas must sort newest-first');
+            assert.equal(
+              normalizedLegacy.every((idea) => idea.votes === 0 && idea.votedByMe === false),
+              true,
+              'Legacy returning-user community ideas must normalize votes=0 and votedByMe=false'
+            );
+            const afterToggle = providerMod.ProviderRegistry.catalog.toggleVoteIdea('legacy_new');
+            assert.equal(
+              afterToggle.every((idea) => idea.votes === 0 && idea.votedByMe === false),
+              true,
+              'toggleVoteIdea must not fabricate votes in store-clean build'
+            );
+            const consentLedger = providerMod.ProviderRegistry.monetization.setPersonalizedAdsConsent(true);
+            assert.equal(consentLedger.adFreePlatform, true);
+            assert.equal(consentLedger.personalizedAdsConsent, false);
+          } finally {
+            if (prevIdeasLs === undefined) {
+              delete globalThis.localStorage;
+            } else {
+              globalThis.localStorage = prevIdeasLs;
+            }
+          }
+
+          // Play Store listing & MainActivity Play Games deferral invariants (when repo docs/app exist)
+          const playStoreListingPath = path.resolve(projectRoot, '../docs/play-store/PLAY_STORE_LISTING.md');
+          if (fs.existsSync(playStoreListingPath)) {
+            const listingDoc = fs.readFileSync(playStoreListingPath, 'utf8');
+            const shortDescMatch = listingDoc.match(/\*\*Short Description \(`<= 80` chars\)\*\*:\s*`([^`]+)`/);
+            assert.ok(shortDescMatch, 'PLAY_STORE_LISTING.md must include backticked Short Description');
+            assert.equal(
+              shortDescMatch[1].length <= 80,
+              true,
+              `PLAY_STORE_LISTING.md Short Description exceeds 80 chars (${shortDescMatch[1].length})`
+            );
+            assert.equal(
+              /\*\*Category\*\*:\s*`Puzzle`/.test(listingDoc),
+              true,
+              'PLAY_STORE_LISTING.md Category must be Puzzle'
+            );
+            assert.equal(
+              listingDoc.toLowerCase().includes('gallery packs'),
+              false,
+              'PLAY_STORE_LISTING.md must not advertise non-existent gallery packs'
+            );
+            assert.equal(
+              listingDoc.includes('[https://capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html)') &&
+                listingDoc.toLowerCase().includes('developer contact email'),
+              true,
+              'PLAY_STORE_LISTING.md must have clickable Privacy Policy links and Developer contact email ops note'
+            );
+          }
+          const mainActivityPath = path.resolve(
+            projectRoot,
+            '../app/src/main/java/com/capypaint/capy/MainActivity.kt'
           );
-          assert.equal(
-            seededIdeas[0].createdAt >= seededIdeas[1].createdAt,
-            true,
-            'getCommunityIdeas must sort newest-first by createdAt'
-          );
+          if (fs.existsSync(mainActivityPath)) {
+            const mainActivitySrc = fs.readFileSync(mainActivityPath, 'utf8');
+            const initMatch = mainActivitySrc.match(/private fun initializePlayGamesIfConfigured\(\)\s*\{[\s\S]*?\n    \}/);
+            assert.ok(initMatch, 'MainActivity.kt must define initializePlayGamesIfConfigured()');
+            assert.equal(
+              initMatch[0].includes('PlayGamesSdk.initialize(this)') &&
+                !initMatch[0].includes('requestPlayGamesSignIn') &&
+                !initMatch[0].includes('isAuthenticated') &&
+                !initMatch[0].includes('pullSnapshotFromPlayGames'),
+              true,
+              'MainActivity.initializePlayGamesIfConfigured() must only initialize SDK without cold-start auto sign-in'
+            );
+            const onPageFinishedMatch = mainActivitySrc.match(/override fun onPageFinished\([^)]*\)\s*\{[\s\S]*?\n                \}/);
+            assert.ok(onPageFinishedMatch, 'MainActivity.kt must define onPageFinished()');
+            assert.equal(
+              onPageFinishedMatch[0].includes('deliverCachedPlayGamesProfileIfNeeded'),
+              false,
+              'MainActivity.onPageFinished() must not push cached Play Games profile on cold launch'
+            );
+          }
         } finally {
           globalThis.window.CapyAndroid = prevCapyAndroid;
         }
@@ -9293,11 +9412,33 @@ async function runBrowserBasicsSuite() {
       'Startup must NOT call signInPlayGames / attemptAutoSignIn when showCloudCoopUi === false'
     );
     await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await androidGatePage.getByTestId('release-channel-card').count(),
+      0,
+      'Android WebView must hide release-channel-card even on localhost'
+    );
     await androidGatePage.getByTestId('settings-tab-create').click();
     await androidGatePage.getByTestId('community-ideas-section').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await androidGatePage.getByText('Optional Ad').count(), 0, 'Android Create tab must not show Optional Ad');
     assert.equal(await androidGatePage.getByText('AI Credits').count(), 0, 'Android Create tab must not show AI Credits');
     assert.equal(await androidGatePage.locator('[data-testid^="vote-idea-"]').count(), 0, 'Android Create tab must not show vote-idea-*');
+    assert.equal(
+      (await androidGatePage.getByTestId('community-ideas-section').innerText()).includes('Puzzle Idea Notebook'),
+      true,
+      'Android Create tab must label local notebook as Puzzle Idea Notebook'
+    );
+    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&capy_channel=beta`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(androidGatePage);
+    await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await androidGatePage.getByTestId('release-channel-card').count(),
+      0,
+      'Android WebView must hide release-channel-card even with ?capy_channel=beta'
+    );
+    assert.equal(await androidGatePage.getByTestId('android-apk-download-link').count(), 0);
+    assert.equal(await androidGatePage.getByTestId('beta-apk-download-link').count(), 0);
     await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(androidGatePage);
     await androidGatePage.waitForFunction(() => (window.__capySignInCalls || 0) >= 1, undefined, { timeout: 3000 });
@@ -9412,6 +9553,26 @@ async function runBrowserBasicsSuite() {
       await page.getByText(/Co-op/).count(),
       0,
       'About tab must not display Co-op strings when showCloudCoopUi === false'
+    );
+    const freeArtLayout = await page.evaluate(() => {
+      const statEl = document.querySelector('[data-testid="stat-free-color-creations"]');
+      const tileEl = statEl?.parentElement;
+      const gridEl = tileEl?.parentElement;
+      if (!tileEl || !gridEl) return null;
+      const tileRect = tileEl.getBoundingClientRect();
+      const gridRect = gridEl.getBoundingClientRect();
+      return {
+        hasColSpan2: tileEl.classList.contains('col-span-2'),
+        tileWidth: tileRect.width,
+        gridWidth: gridRect.width,
+      };
+    });
+    assert.ok(freeArtLayout, 'stat-free-color-creations tile and grid must exist');
+    assert.equal(freeArtLayout.hasColSpan2, true, 'Free Colour Art tile must apply col-span-2 when !showCloudCoopUi');
+    assert.equal(
+      Math.abs(freeArtLayout.tileWidth - freeArtLayout.gridWidth) <= 2,
+      true,
+      `Free Colour Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
     );
 
     // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
@@ -9924,7 +10085,14 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('gallery-empty-state').waitFor({ state: 'visible' });
     await page.getByRole('button', { name: 'Reset Filters' }).click();
 
+    assert.equal(
+      (await page.getByTestId('community-ideas-section').innerText()).includes('Puzzle Idea Notebook'),
+      true,
+      'Create tab must render Puzzle Idea Notebook heading'
+    );
+    assert.equal((await page.getByTestId('toggle-idea-form-btn').innerText()).trim(), '+ Add Idea');
     await page.getByTestId('toggle-idea-form-btn').click();
+    assert.equal((await page.getByTestId('submit-idea-btn').innerText()).trim(), 'Save Idea');
     await page.getByTestId('idea-title-input').fill('Unsafe nsfw test');
     await page.getByTestId('idea-prompt-input').fill('Testing moderation filter');
     await page.getByTestId('submit-idea-btn').click();
@@ -9963,6 +10131,23 @@ async function runBrowserBasicsSuite() {
         true,
         'About tab hero card must show Co-op copy when showCloudCoopUi === true'
       );
+      const coopRowLayout = await page.evaluate(() => {
+        const freeEl = document.querySelector('[data-testid="stat-free-color-creations"]')?.parentElement;
+        const coopEl = document.querySelector('[data-testid="stat-coop-regions"]')?.parentElement;
+        const gridEl = freeEl?.parentElement;
+        if (!freeEl || !coopEl || !gridEl) return null;
+        const freeRect = freeEl.getBoundingClientRect();
+        const coopRect = coopEl.getBoundingClientRect();
+        const gridRect = gridEl.getBoundingClientRect();
+        return {
+          freeColSpan2: freeEl.classList.contains('col-span-2'),
+          sameRow: Math.abs(freeRect.top - coopRect.top) <= 2,
+          freeHalfWidth: freeRect.width < gridRect.width * 0.6,
+        };
+      });
+      assert.ok(coopRowLayout, 'Co-op row layout tiles must exist when showCloudCoopUi === true');
+      assert.equal(coopRowLayout.freeColSpan2, false, 'Free Colour Art must drop col-span-2 when Co-op Regions is visible');
+      assert.equal(coopRowLayout.sameRow && coopRowLayout.freeHalfWidth, true, 'Free Colour Art and Co-op Regions must pair side-by-side in Row 3');
       await page.keyboard.press('Escape');
       await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 

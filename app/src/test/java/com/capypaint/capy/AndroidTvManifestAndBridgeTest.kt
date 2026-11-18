@@ -162,4 +162,34 @@ class AndroidTvManifestAndBridgeTest {
         assertEquals(320, bufferedImage.width)
         assertEquals(180, bufferedImage.height)
     }
+
+    @Test
+    fun `AndroidManifest suppresses auto profile creation and MainActivity defers Play Games sign-in on launch`() {
+        val manifestFile = resolveRepoFile("app/src/main/AndroidManifest.xml")
+        val docFactory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }
+        val doc = docFactory.newDocumentBuilder().parse(manifestFile)
+        val appEl = directChildElements(doc.documentElement, "application").single()
+        val metaDataMap = directChildElements(appEl, "meta-data").associate { el ->
+            androidAttr(el, "name") to androidAttr(el, "value")
+        }
+        assertEquals("@string/game_services_project_id", metaDataMap["com.google.android.gms.games.APP_ID"])
+        assertEquals("true", metaDataMap["com.google.android.gms.games.SUPPRESS_GAME_PROFILE_CREATION"])
+
+        val mainActivitySrc = resolveRepoFile("app/src/main/java/com/capypaint/capy/MainActivity.kt").readText()
+        val initMatch = Regex("""private fun initializePlayGamesIfConfigured\(\)\s*\{[\s\S]*?\n    \}""")
+            .find(mainActivitySrc)
+        assertNotNull("MainActivity must define initializePlayGamesIfConfigured()", initMatch)
+        val initBody = initMatch!!.value
+        assertTrue(initBody.contains("PlayGamesSdk.initialize(this)"))
+        assertTrue(!initBody.contains("requestPlayGamesSignIn"))
+        assertTrue(!initBody.contains("isAuthenticated"))
+        assertTrue(!initBody.contains("pullSnapshotFromPlayGames"))
+
+        val onPageFinishedMatch = Regex("""override fun onPageFinished\([^)]*\)\s*\{[\s\S]*?\n                \}""")
+            .find(mainActivitySrc)
+        assertNotNull("MainActivity must define onPageFinished()", onPageFinishedMatch)
+        assertTrue(!onPageFinishedMatch!!.value.contains("deliverCachedPlayGamesProfileIfNeeded"))
+    }
 }

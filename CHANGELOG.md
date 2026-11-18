@@ -1,6 +1,6 @@
 ### 3.0.31 - 2026-11-18 (Beta)
 
-- Remove Android-only `Optional Ad (+2)` / `AI Credits` UI and `showRewardedAd` bridge hook (`ConsentRewardedAdAdapter` always sets `adFreePlatform: true`), replace fabricated `Community Puzzle Ideas` vote counts and queue claims with a clean newest-first local idea notebook, gate `About`-tab Co-op copy and `stat-coop-regions` plus startup `attemptAutoSignIn()` / `onCloudSnapshot` behind `showCloudCoopUi`, regenerate `phone_3_gallery_daily.png` and `tablet_2_create_gallery.png` store screenshots, and sync Play Store listing/docs and unit/E2E tests [#571](https://github.com/shthed/capy/pull/571)
+- Remove Android-only `Optional Ad (+2)` / `AI Credits` UI and `showRewardedAd` bridge hook (`ConsentRewardedAdAdapter` enforces `adFreePlatform: true` and `personalizedAdsConsent: false`), replace fabricated `Community Puzzle Ideas` votes/queue claims with a clean newest-first local **Puzzle Idea Notebook** (`+ Add Idea` / `Save Idea`, normalizing legacy cached votes to `0`), gate `About`-tab Co-op copy / `stat-coop-regions` (`col-span-2` symmetry on `Free Colour Art`), `release-channel-card` (`!NativeBridge.isAndroid`), startup `attemptAutoSignIn()` / `onCloudSnapshot`, and `MainActivity.kt` cold-start Play Games sign-in (`SUPPRESS_GAME_PROFILE_CREATION`), regenerate `phone_3_gallery_daily.png` and `tablet_2_create_gallery.png` store screenshots, and sync Play Store listing/docs and unit/E2E tests [#571](https://github.com/shthed/capy/pull/571)
 
 ### 3.0.30 - 2026-11-16
 

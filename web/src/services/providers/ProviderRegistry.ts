@@ -1666,7 +1666,14 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       if (raw) {
         const parsed = JSON.parse(raw) as CommunityPuzzleIdea[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => b.createdAt - a.createdAt);
+          return parsed
+            .filter((item): item is CommunityPuzzleIdea => Boolean(item && typeof item === 'object'))
+            .map((idea) => ({
+              ...idea,
+              votes: 0,
+              votedByMe: false,
+            }))
+            .sort((a, b) => b.createdAt - a.createdAt);
         }
       }
     } catch {
@@ -1707,7 +1714,7 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       if (pattern.test(combinedText)) {
         return {
           ok: false,
-          error: 'Please keep community puzzle ideas family-friendly and suitable for all ages.',
+          error: 'Please keep puzzle ideas family-friendly and suitable for all ages.',
         };
       }
     }
@@ -1732,19 +1739,10 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
     return { ok: true, idea: newIdea };
   }
 
-  toggleVoteIdea(ideaId: string): CommunityPuzzleIdea[] {
-    const ideas = this.getCommunityIdeas().map((idea) => {
-      if (idea.id !== ideaId) return idea;
-      const nextVoted = !idea.votedByMe;
-      return {
-        ...idea,
-        votedByMe: nextVoted,
-        votes: Math.max(0, idea.votes + (nextVoted ? 1 : -1)),
-      };
-    });
-    const sorted = ideas.sort((a, b) => b.createdAt - a.createdAt);
-    this.saveIdeas(sorted);
-    return sorted;
+  toggleVoteIdea(_ideaId: string): CommunityPuzzleIdea[] {
+    const normalized = this.getCommunityIdeas();
+    this.saveIdeas(normalized);
+    return normalized;
   }
 }
 
@@ -1809,8 +1807,12 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
     }
   }
 
-  setPersonalizedAdsConsent(consent: boolean): AiCreditLedger {
-    const next = { ...this.getLedger(), adFreePlatform: true, personalizedAdsConsent: consent };
+  setPersonalizedAdsConsent(_consent: boolean): AiCreditLedger {
+    const next: AiCreditLedger = {
+      ...this.getLedger(),
+      adFreePlatform: true,
+      personalizedAdsConsent: false,
+    };
     this.saveLedger(next);
     return next;
   }

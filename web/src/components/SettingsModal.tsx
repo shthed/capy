@@ -840,7 +840,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
                     </div>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                  <div
+                    className={`p-2 rounded-lg bg-slate-900/70 border border-slate-800/80 ${
+                      !showCloudCoopUi ? 'col-span-2' : ''
+                    }`}
+                  >
                     <div className="text-[10px] text-slate-400 font-medium truncate">
                       Free Colour Art
                     </div>
@@ -941,10 +945,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
+                {/* Release Channel Switcher (Stable <-> Beta Opt-In; Web/PWA only) */}
                 {(() => {
                   const channelInfo = resolveReleaseChannel();
-                  if (!channelInfo.showChannelSwitcher) return null;
+                  if (NativeBridge.isAndroid || !channelInfo.showChannelSwitcher) return null;
                   const ns = resolveStorageNamespace();
                   const isBeta = channelInfo.channel === 'beta';
                   const isAlpha = channelInfo.channel === 'alpha';
@@ -2714,7 +2718,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Regenerate Artwork with Settings
               </button>
 
-              {/* Community Puzzle Ideas (Local Idea Notebook) */}
+              {/* Puzzle Idea Notebook (Local Idea Notebook) */}
               <div
                 data-testid="community-ideas-section"
                 className="p-3 rounded-xl bg-slate-950/65 border border-slate-800 space-y-2.5"
@@ -2723,7 +2727,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <Lightbulb size={15} className="text-amber-400" />
                     <span className="text-xs font-extrabold text-slate-200">
-                      Community Puzzle Ideas
+                      Puzzle Idea Notebook
                     </span>
                   </div>
 
@@ -2737,7 +2741,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                       className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-[11px] font-extrabold hover:bg-amber-300 transition-colors cursor-pointer"
                     >
-                      {showIdeaForm ? 'Close' : '+ Submit Idea'}
+                      {showIdeaForm ? 'Close' : '+ Add Idea'}
                     </button>
                   </div>
                 </div>
@@ -2809,7 +2813,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         className="px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-extrabold hover:bg-amber-300 cursor-pointer"
                       >
-                        Post Idea
+                        Save Idea
                       </button>
                     </div>
                   </div>
