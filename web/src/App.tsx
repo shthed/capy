@@ -4807,17 +4807,18 @@ export const App: React.FC = () => {
 
   // Automatically sync when Android Play Games SnapshotsClient delivers a remote cloud snapshot
   useEffect(() => {
+    if (!showCloudCoopUi) return;
     return NativeBridge.onCloudSnapshot(() => {
       void handleSyncCloudProgress();
     });
-  }, [handleSyncCloudProgress]);
+  }, [showCloudCoopUi, handleSyncCloudProgress]);
 
   // Automatically attempt Google / Play Games sign-in on startup and sync saves once puzzle is ready
   const hasAttemptedStartupSignInRef = useRef(false);
   const lastAutoSyncedPlayerIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isLoading || !puzzle || !activeSnapshotId) return;
+    if (!showCloudCoopUi || isLoading || !puzzle || !activeSnapshotId) return;
     let cancelled = false;
 
     const runAutoLoginAndSync = async () => {
@@ -4858,7 +4859,7 @@ export const App: React.FC = () => {
       cancelled = true;
       unsubAuth();
     };
-  }, [isLoading, puzzle, activeSnapshotId, handleSyncCloudProgress]);
+  }, [showCloudCoopUi, isLoading, puzzle, activeSnapshotId, handleSyncCloudProgress]);
 
   // Multi-resolution Infinite Zoom: extract 2x high-detail center sub-tile with seam-preserving palette continuity
   const handleZoomIntoDetailTile = useCallback(() => {

@@ -24,7 +24,6 @@ import {
   Users,
   Share2,
   Cloud,
-  ThumbsUp,
   Lightbulb,
   ZoomIn,
   Copy,
@@ -415,9 +414,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [ideaPrompt, setIdeaPrompt] = useState('');
   const [ideaCategory, setIdeaCategory] = useState('Animals');
   const [ideaFeedback, setIdeaFeedback] = useState<string | null>(null);
-  const [creditLedger, setCreditLedger] = useState(() =>
-    ProviderRegistry.monetization.getLedger()
-  );
 
   // Player Profile, Cloud Sync, Share Link & Co-op Room UI state
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity>(() =>
@@ -712,9 +708,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Capy Paint
                     </h2>
                     <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-0.5">
-                      Offline-first color-by-number &amp; free-coloring studio. Turn any photo or
-                      built-in artwork into a relaxing, zero-latency puzzle with instant saves,
-                      chronological replays, and live local Co-op.
+                      {showCloudCoopUi
+                        ? 'Offline-first color-by-number & free-coloring studio. Turn any photo or built-in artwork into a relaxing, zero-latency puzzle with instant saves, chronological replays, and live local Co-op.'
+                        : 'Offline-first color-by-number & free-coloring studio. Turn any photo or built-in artwork into a relaxing, zero-latency puzzle with instant saves and chronological replays.'}
                     </p>
                   </div>
                 </div>
@@ -774,10 +770,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
-                    <div className="font-bold text-slate-200">Create, Saves &amp; Co-op</div>
+                    <div className="font-bold text-slate-200">
+                      {showCloudCoopUi ? 'Create, Saves & Co-op' : 'Create, Saves & Printable Art'}
+                    </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      Upload any photo in Create, export .capy backups or printable SVGs, and color
-                      together in Co-op.
+                      {showCloudCoopUi
+                        ? 'Upload any photo in Create, export .capy backups or printable SVGs, and color together in Co-op.'
+                        : 'Upload any photo in Create, save progress locally, and export .capy backups or printable SVGs.'}
                     </div>
                   </div>
                 </div>
@@ -852,17 +851,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {effectiveStats.freeColorCreations.toLocaleString()}
                     </div>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Co-op Regions
+                  {showCloudCoopUi && (
+                    <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                      <div className="text-[10px] text-slate-400 font-medium truncate">
+                        Co-op Regions
+                      </div>
+                      <div
+                        data-testid="stat-coop-regions"
+                        className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                      >
+                        {effectiveStats.coopRegionsPainted.toLocaleString()}
+                      </div>
                     </div>
-                    <div
-                      data-testid="stat-coop-regions"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
-                    >
-                      {effectiveStats.coopRegionsPainted.toLocaleString()}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -2713,7 +2714,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Regenerate Artwork with Settings
               </button>
 
-              {/* Community Puzzle Ideas & Opt-In AI Generation Credits */}
+              {/* Community Puzzle Ideas (Local Idea Notebook) */}
               <div
                 data-testid="community-ideas-section"
                 className="p-3 rounded-xl bg-slate-950/65 border border-slate-800 space-y-2.5"
@@ -2724,29 +2725,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="text-xs font-extrabold text-slate-200">
                       Community Puzzle Ideas
                     </span>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] font-bold text-amber-300">
-                      {creditLedger.availableCredits} AI Credits
-                    </span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {!creditLedger.adFreePlatform && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const res = await ProviderRegistry.monetization.watchRewardedAdForCredits();
-                          setCreditLedger(res.ledger);
-                          setIdeaFeedback(
-                            res.granted > 0
-                              ? `+${res.granted} AI Credits added!`
-                              : 'Rewarded ads are optional and only active on Play Store builds.'
-                          );
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold border border-slate-700 cursor-pointer"
-                      >
-                        Optional Ad (+2)
-                      </button>
-                    )}
                     <button
                       type="button"
                       data-testid="toggle-idea-form-btn"
@@ -2797,14 +2778,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       data-testid="idea-prompt-input"
                       value={ideaPrompt}
                       onChange={(e) => setIdeaPrompt(e.target.value)}
-                      placeholder="Describe colors, mood, or style for automated gallery artwork generation..."
+                      placeholder="Describe colors, mood, or style for a future puzzle idea..."
                       rows={2}
                       maxLength={280}
                       className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:border-amber-400 resize-none"
                     />
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] text-slate-400">
-                        Top-voted family-friendly ideas are queued for gallery generation.
+                        Saved locally in your puzzle idea notebook on this device.
                       </span>
                       <button
                         type="button"
@@ -2824,7 +2805,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           setIdeaTitle('');
                           setIdeaPrompt('');
                           setShowIdeaForm(false);
-                          setIdeaFeedback('Idea submitted to the community gallery queue!');
+                          setIdeaFeedback('Idea saved to your local puzzle notebook!');
                         }}
                         className="px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-extrabold hover:bg-amber-300 cursor-pointer"
                       >
@@ -2841,7 +2822,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       data-testid={`community-idea-${idea.id}`}
                       className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/70 border border-slate-800/90"
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-200 truncate">
                             {idea.title}
@@ -2852,21 +2833,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-400 truncate">{idea.prompt}</p>
                       </div>
-                      <button
-                        type="button"
-                        data-testid={`vote-idea-${idea.id}`}
-                        onClick={() =>
-                          setCommunityIdeas(ProviderRegistry.catalog.toggleVoteIdea(idea.id))
-                        }
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border flex-shrink-0 transition-colors cursor-pointer ${
-                          idea.votedByMe
-                            ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
-                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        <ThumbsUp size={11} />
-                        <span>{idea.votes}</span>
-                      </button>
                     </div>
                   ))}
                 </div>

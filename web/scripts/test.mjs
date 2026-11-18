@@ -3093,6 +3093,31 @@ async function runCodecAndEngineTests() {
             true,
             'ProviderRegistry must not fall back from Play Games to web Google OAuth popup inside Android WebView'
           );
+          assert.equal(
+            typeof nativeBridgeMod.NativeBridge.showRewardedAd,
+            'undefined',
+            'NativeBridge.showRewardedAd must be removed for 100% ad-free Play Store parity'
+          );
+          const androidLedger = providerMod.ProviderRegistry.monetization.getLedger();
+          assert.equal(
+            androidLedger.adFreePlatform,
+            true,
+            'ConsentRewardedAdAdapter.getLedger().adFreePlatform must stay true even when NativeBridge.isAndroid is true'
+          );
+          const rewardedRes = await providerMod.ProviderRegistry.monetization.watchRewardedAdForCredits();
+          assert.equal(rewardedRes.granted, 0, 'Store-clean build must grant 0 ad credits');
+          assert.equal(rewardedRes.ledger.adFreePlatform, true);
+          const seededIdeas = providerMod.ProviderRegistry.catalog.getCommunityIdeas();
+          assert.equal(
+            seededIdeas.length >= 2 && seededIdeas.every((idea) => idea.votes === 0),
+            true,
+            'SEED_COMMUNITY_IDEAS must have votes: 0 with zero fabricated vote counts'
+          );
+          assert.equal(
+            seededIdeas[0].createdAt >= seededIdeas[1].createdAt,
+            true,
+            'getCommunityIdeas must sort newest-first by createdAt'
+          );
         } finally {
           globalThis.window.CapyAndroid = prevCapyAndroid;
         }
@@ -9239,6 +9264,46 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('Escape');
     await page.getByTestId('saves-share-print-bar').waitFor({ state: 'hidden', timeout: 3000 });
 
+    // Verify startup ProviderRegistry.auth.attemptAutoSignIn is NOT invoked when showCloudCoopUi === false
+    // and Create tab hides Optional Ad, AI Credits, and vote-idea-* even when NativeBridge.isAndroid === true
+    const androidGateCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    const androidGatePage = await androidGateCtx.newPage();
+    attachErrorListeners(androidGatePage, 'androidGatePage');
+    await androidGatePage.addInitScript(() => {
+      window.__capySignInCalls = 0;
+      window.CapyAndroid = {
+        isPlayGamesConfigured: () => true,
+        signInPlayGames: () => {
+          window.__capySignInCalls = (window.__capySignInCalls || 0) + 1;
+          queueMicrotask(() => window.__capyReceivePlayGamesError?.('PLAY_GAMES_UNAVAILABLE'));
+          return null;
+        },
+        getSafeAreaInsets: () => '{"top":0,"bottom":0,"left":0,"right":0}',
+        setModalOpen: () => {},
+        saveBackup: () => true,
+        loadBackup: () => null,
+      };
+    });
+    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(androidGatePage);
+    await androidGatePage.waitForTimeout(200);
+    assert.equal(
+      await androidGatePage.evaluate(() => window.__capySignInCalls || 0),
+      0,
+      'Startup must NOT call signInPlayGames / attemptAutoSignIn when showCloudCoopUi === false'
+    );
+    await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('settings-tab-create').click();
+    await androidGatePage.getByTestId('community-ideas-section').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await androidGatePage.getByText('Optional Ad').count(), 0, 'Android Create tab must not show Optional Ad');
+    assert.equal(await androidGatePage.getByText('AI Credits').count(), 0, 'Android Create tab must not show AI Credits');
+    assert.equal(await androidGatePage.locator('[data-testid^="vote-idea-"]').count(), 0, 'Android Create tab must not show vote-idea-*');
+    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(androidGatePage);
+    await androidGatePage.waitForFunction(() => (window.__capySignInCalls || 0) >= 1, undefined, { timeout: 3000 });
+    await androidGatePage.close();
+    await androidGateCtx.close();
+
     // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
     await page.evaluate(() => {
       localStorage.removeItem('capy_last_settings_tab');
@@ -9333,6 +9398,21 @@ async function runBrowserBasicsSuite() {
     assert.equal(await page.getByTestId('lifetime-stats-card').isVisible(), true, 'About tab must render lifetime-stats-card');
     assert.equal(await page.getByTestId('release-channel-card').isVisible(), true, 'About tab must render release-channel-card');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'About tab must not render Hints content');
+    assert.equal(
+      /co-op/i.test(await page.getByTestId('about-screen-card').innerText()),
+      false,
+      'About tab hero card must hide Co-op copy when showCloudCoopUi === false'
+    );
+    assert.equal(
+      await page.getByTestId('stat-coop-regions').count(),
+      0,
+      'About tab must hide stat-coop-regions when showCloudCoopUi === false'
+    );
+    assert.equal(
+      await page.getByText(/Co-op/).count(),
+      0,
+      'About tab must not display Co-op strings when showCloudCoopUi === false'
+    );
 
     // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -9854,6 +9934,14 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('idea-prompt-input').fill('Warm paper lanterns floating over a calm twilight river.');
     await page.getByTestId('submit-idea-btn').click();
     assert.equal((await page.getByTestId('community-ideas-section').innerText()).includes('Lantern Capybara Festival'), true);
+    assert.equal(await page.getByText('AI Credits').count(), 0, 'Create tab must not render AI Credits pill');
+    assert.equal(await page.getByText('Optional Ad').count(), 0, 'Create tab must not render Optional Ad button');
+    assert.equal(await page.locator('[data-testid^="vote-idea-"]').count(), 0, 'Create tab must not render vote-idea-* buttons');
+    assert.equal(
+      (await page.getByTestId('idea-feedback-banner').innerText()).includes('local puzzle notebook'),
+      true,
+      'Idea feedback banner must confirm local puzzle notebook save without queue claim'
+    );
 
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
@@ -9867,6 +9955,17 @@ async function runBrowserBasicsSuite() {
     await page.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(page);
     {
+      await page.locator('button[title="Settings and Menu"]').click();
+      await page.getByTestId('settings-tab-about').click();
+      await page.getByTestId('stat-coop-regions').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        /co-op/i.test(await page.getByTestId('about-screen-card').innerText()),
+        true,
+        'About tab hero card must show Co-op copy when showCloudCoopUi === true'
+      );
+      await page.keyboard.press('Escape');
+      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
       const hasBakedClientId = Boolean((process.env.VITE_GOOGLE_CLIENT_ID || '').trim());
       await page.getByTestId('topbar-coop-btn').click();
       await page.getByTestId('cloud-provider-badge-google').waitFor({ state: 'visible', timeout: 3000 });
@@ -12086,6 +12185,10 @@ async function runBrowserBasicsSuite() {
     await mobileColorHintToggle.scrollIntoViewIfNeeded();
     await mobileColorHintToggle.click();
     await mobileTopbarPage.getByTestId('hint-tooltip-color-count').waitFor({ state: 'visible', timeout: 3000 });
+
+    assert.equal(await mobileTopbarPage.getByText('Optional Ad').count(), 0, '360x780 Create tab must hide Optional Ad');
+    assert.equal(await mobileTopbarPage.getByText('AI Credits').count(), 0, '360x780 Create tab must hide AI Credits');
+    assert.equal(await mobileTopbarPage.locator('[data-testid^="vote-idea-"]').count(), 0, '360x780 Create tab must hide vote-idea-*');
 
     const createHintsOverflow = await mobileTopbarPage.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth
