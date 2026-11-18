@@ -1,4 +1,8 @@
-### 3.0.33 - 2026-11-18 (Beta)
+### 3.0.34 - 2026-11-18 (Beta)
+
+- Skip `.github/workflows/release.yml` gracefully on tag pushes when Android signing secrets are absent (keeping `workflow_dispatch` fail-closed), exclude internal Beta channel links in `README.md` and sync-token ops notes in `TODO.md` and `ROADMAP.md` from clean-room public exports, harden public persona export matching (case preservation, symlinked CLI detection, sync-token parity, and preserving public `capyboop/capy#2`--`#5` issue links), allow all GitHub Pages origins in `worker/coopRoomProtocol.ts`, add `validatePublicTrackerPolicy` in `web/scripts/sanity.mjs`, and expand unit and clean-room staged verification in `web/scripts/test.mjs` [#576](https://github.com/shthed/capy/pull/576)
+
+### 3.0.33 - 2026-11-18
 
 - Add public GitHub issue templates (`.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml`, `puzzle_idea.yml`, `config.yml`), add an About-tab **Report Bug / Ideas** button (`about-report-issue-link` -> `https://github.com/capyboop/capy/issues/new/choose`) in `SettingsModal.tsx`, point `web/public/privacy-policy.html` and `README.md` directly to `https://github.com/capyboop/capy/issues`, expand unit/E2E assertions in `web/scripts/test.mjs`, and sync `WEB.md`, `CLOUD.md`, `ROADMAP.md`, `TODO.md`, and `TESTING.md` (deferring `capyboop.com` out of active Sprint 1 scope) [#575](https://github.com/shthed/capy/pull/575)
 
