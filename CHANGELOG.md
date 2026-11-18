@@ -1,6 +1,6 @@
 ### 3.0.34 - 2026-11-18 (Beta)
 
-- Skip `.github/workflows/release.yml` gracefully on tag pushes when Android signing secrets are absent (keeping `workflow_dispatch` fail-closed), exclude internal Beta channel links in `README.md` and sync-token ops notes in `TODO.md` and `ROADMAP.md` from clean-room public exports, harden public persona export matching (case preservation, symlinked CLI detection, sync-token parity, and preserving public `capyboop/capy#2`--`#5` issue links), allow all GitHub Pages origins in `worker/coopRoomProtocol.ts`, add `validatePublicTrackerPolicy` in `web/scripts/sanity.mjs`, and expand unit and clean-room staged verification in `web/scripts/test.mjs` [#576](https://github.com/shthed/capy/pull/576)
+- Skip `.github/workflows/release.yml` gracefully on tag pushes when Android signing secrets are absent (keeping `workflow_dispatch` fail-closed), exclude internal Beta channel links in `README.md`, `TODO.md`, and `ROADMAP.md` and sync-token ops notes from clean-room public exports, harden public persona export matching (case preservation, symlinked CLI detection, sync-token parity, and preserving public `capyboop/capy#2`--`#5` issue links), allow both primary and mirror GitHub Pages origins in `worker/coopRoomProtocol.ts`, add `validatePublicTrackerPolicy` in `web/scripts/sanity.mjs`, and expand unit and clean-room staged verification in `web/scripts/test.mjs` [#576](https://github.com/shthed/capy/pull/576)
 
 ### 3.0.33 - 2026-11-18
 

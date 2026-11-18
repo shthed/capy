@@ -1691,6 +1691,23 @@ async function runCodecAndEngineTests() {
       fs.writeFileSync(settingsPath, cleanSettingsTag, 'utf8');
 
       fs.writeFileSync(
+        settingsPath,
+        '<a onClick={() => console.log(1)} href="https://github.com/capyboop/capy/issues/new/choose" data-testid="about-report-issue-link">Report</a>',
+        'utf8'
+      );
+      runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true });
+      fs.writeFileSync(
+        settingsPath,
+        '<a href="https://github.com/capyboop/capy/issuesevil" data-testid="about-report-issue-link">Report</a>',
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /about-report-issue-link/
+      );
+      fs.writeFileSync(settingsPath, cleanSettingsTag, 'utf8');
+
+      fs.writeFileSync(
         privacyPath,
         '<html><body><a href="https://github.com/shthed/capy/issues">Issues</a></body></html>',
         'utf8'
@@ -1699,12 +1716,30 @@ async function runCodecAndEngineTests() {
         () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
         /privacy-policy\.html/
       );
+      fs.writeFileSync(
+        privacyPath,
+        '<html><body><a href="https://github.com/capyboop/capy/issues">Issues</a><a href="https://github.com/capyboop/capyevil">Evil</a></body></html>',
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /privacy-policy\.html must not link outside capyboop\/capy/
+      );
       fs.writeFileSync(privacyPath, cleanPrivacyHtml, 'utf8');
 
       fs.writeFileSync(bugTemplatePath, 'name: Bug\nabout: https://github.com/shthed/capy\n', 'utf8');
       assert.throws(
         () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
         /ISSUE_TEMPLATE\/bug_report\.yml/
+      );
+      fs.writeFileSync(
+        bugTemplatePath,
+        'name: Bug\nabout: https://github.com/capyboop/capyevil\n',
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /ISSUE_TEMPLATE\/bug_report\.yml must not link outside capyboop\/capy/
       );
       fs.writeFileSync(bugTemplatePath, 'name: Bug Report\n', 'utf8');
 
@@ -3633,8 +3668,12 @@ async function runCodecAndEngineTests() {
       assert.equal(stagedReadme.includes('https://github.com/capyboop/capy/releases'), true);
       const stagedTodo = fs.readFileSync(path.join(tmpCleanStage, 'TODO.md'), 'utf8');
       assert.equal(stagedTodo.includes('CAPYBOOP_SYNC_TOKEN'), false);
+      assert.equal(stagedTodo.includes('capyboop.github.io/capy/beta'), false);
+      assert.equal(stagedTodo.includes('https://capyboop.github.io/capy/'), true);
       const stagedRoadmap = fs.readFileSync(path.join(tmpCleanStage, 'ROADMAP.md'), 'utf8');
       assert.equal(stagedRoadmap.includes('CAPYBOOP_SYNC_TOKEN'), false);
+      assert.equal(stagedRoadmap.includes('capyboop.github.io/capy/beta'), false);
+      assert.equal(stagedRoadmap.includes('https://capyboop.github.io/capy/'), true);
       const stagedReleaseYaml = fs.readFileSync(
         path.join(tmpCleanStage, '.github/workflows/release.yml'),
         'utf8'

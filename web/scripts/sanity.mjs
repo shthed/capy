@@ -608,13 +608,16 @@ export function validateChangelogFragments(root) {
   return count;
 }
 
+const CAPYBOOP_GITHUB_REPO_URL_RE = /^https:\/\/github\.com\/capyboop\/capy(?:$|[/?#])/i;
+const CAPYBOOP_GITHUB_ISSUES_URL_RE = /^https:\/\/github\.com\/capyboop\/capy\/issues(?:$|[/?#])/i;
+
 export function validatePublicTrackerPolicy(repoRoot) {
   const root = path.resolve(repoRoot);
 
   const settingsModalPath = path.join(root, 'web/src/components/SettingsModal.tsx');
   if (fs.existsSync(settingsModalPath)) {
     const settingsSrc = fs.readFileSync(settingsModalPath, 'utf8');
-    const reportLinkMatch = /<a\b[^<>]*data-testid="about-report-issue-link"[^<>]*>/i.exec(
+    const reportLinkMatch = /<a\b(?:=>|[^<>])*data-testid="about-report-issue-link"(?:=>|[^<>])*>/i.exec(
       settingsSrc
     );
     assert.ok(
@@ -624,7 +627,7 @@ export function validatePublicTrackerPolicy(repoRoot) {
     const hrefMatch = /\bhref="([^"]+)"/i.exec(reportLinkMatch[0]);
     assert.ok(hrefMatch, 'about-report-issue-link must specify an href attribute');
     assert.equal(
-      hrefMatch[1].startsWith('https://github.com/capyboop/capy/issues'),
+      CAPYBOOP_GITHUB_ISSUES_URL_RE.test(hrefMatch[1]),
       true,
       `about-report-issue-link must target https://github.com/capyboop/capy/issues (got ${hrefMatch[1]})`
     );
@@ -650,7 +653,7 @@ export function validatePublicTrackerPolicy(repoRoot) {
     );
     for (const url of githubUrls) {
       assert.equal(
-        url.startsWith('https://github.com/capyboop/capy'),
+        CAPYBOOP_GITHUB_REPO_URL_RE.test(url),
         true,
         `web/public/privacy-policy.html must not link outside capyboop/capy: ${url}`
       );
@@ -681,7 +684,7 @@ export function validatePublicTrackerPolicy(repoRoot) {
       );
       for (const url of githubUrls) {
         assert.equal(
-          url.startsWith('https://github.com/capyboop/capy'),
+          CAPYBOOP_GITHUB_REPO_URL_RE.test(url),
           true,
           `.github/ISSUE_TEMPLATE/${entry.name} must not link outside capyboop/capy: ${url}`
         );
