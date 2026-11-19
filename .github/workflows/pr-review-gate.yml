@@ -1057,21 +1057,27 @@ jobs:
     name: AI Review
     if: >-
       github.repository == 'shthed/capy' &&
-      github.event_name == 'workflow_dispatch' &&
-      (github.event.inputs.ai_verdict != '' || github.event.inputs.ai_score != '')
+      ((github.event_name == 'workflow_dispatch' &&
+        (github.event.inputs.ai_verdict != '' || github.event.inputs.ai_score != '')) ||
+        (github.event_name == 'pull_request' &&
+          contains(fromJSON('["opened","synchronize","reopened","ready_for_review"]'), github.event.action)))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Post bot-authored AI review on ready --base beta or main PRs
         uses: actions/github-script@v9
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prNumber = Number(context.payload.inputs?.pr_number || 0) || null;
+            const prNumber =
+              context.payload.pull_request?.number ||
+              (Number(context.payload.inputs?.pr_number || 0) || null);
             if (!prNumber) {
-              core.setFailed('pr_number is required.');
+              core.info('No pull request number associated with event; skipping AI review.');
               return;
             }
 
@@ -1099,20 +1105,90 @@ jobs:
             }
 
             const headSha = pr.head.sha;
-            const expectedSha = String(context.payload.inputs?.head_sha || '').trim();
-            if (expectedSha && expectedSha.toLowerCase() !== headSha.toLowerCase()) {
-              core.setFailed(`Head SHA mismatch for PR #${prNumber}: expected ${expectedSha}, live HEAD is ${headSha}.`);
+            const dispatchVerdict = String(context.payload.inputs?.ai_verdict || '').trim().toUpperCase();
+            const dispatchScoreRaw = String(context.payload.inputs?.ai_score || '').trim();
+            const isDispatchReview = context.eventName === 'workflow_dispatch' && (dispatchVerdict !== '' || dispatchScoreRaw !== '');
+
+            if (!isDispatchReview && (pr.head?.ref || '').trim() === 'sync/beta-from-main') {
+              core.info(`PR #${prNumber} is sync/beta-from-main; handled by verified ancestry sync or explicit bot dispatch.`);
               return;
             }
 
-            const verdict = String(context.payload.inputs?.ai_verdict || '').trim().toUpperCase();
-            const score = Math.round(Number(context.payload.inputs?.ai_score));
-            const summary =
+            let verdict = dispatchVerdict;
+            let score = Math.round(Number(dispatchScoreRaw));
+            let summary =
               String(context.payload.inputs?.ai_summary || '').trim() ||
               'Independent AI review completed via github-actions[bot].';
-            if ((verdict !== 'APPROVED' && verdict !== 'CHANGES_REQUESTED') || !Number.isFinite(score) || score < 0 || score > 100) {
-              core.setFailed(`Invalid ai_verdict (${verdict}) or ai_score (${context.payload.inputs?.ai_score}).`);
-              return;
+
+            if (isDispatchReview) {
+              const expectedSha = String(context.payload.inputs?.head_sha || '').trim();
+              if (expectedSha && expectedSha.toLowerCase() !== headSha.toLowerCase()) {
+                core.setFailed(`Head SHA mismatch for PR #${prNumber}: expected ${expectedSha}, live HEAD is ${headSha}.`);
+                return;
+              }
+              if ((verdict !== 'APPROVED' && verdict !== 'CHANGES_REQUESTED') || !Number.isFinite(score) || score < 0 || score > 100) {
+                core.setFailed(`Invalid ai_verdict (${verdict}) or ai_score (${dispatchScoreRaw}).`);
+                return;
+              }
+            } else {
+              const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+              if (!apiKey) {
+                core.warning(`PR #${prNumber}: GEMINI_API_KEY not configured; awaiting $0 workflow_dispatch bot review.`);
+                return;
+              }
+              const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-4-argon', 'gemini-2.5-flash'];
+              const { data: diffRaw } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: prNumber,
+                mediaType: { format: 'diff' },
+              });
+              const diffText = String(diffRaw || '').slice(0, 100000);
+              const prompt = [
+                'You are an independent AI code reviewer for shthed/capy. Return strict JSON: {"verdict":"APPROVED"|"CHANGES_REQUESTED","score":0-100,"summary":"..."}',
+                `PR #${prNumber}: ${pr.title}`,
+                `Head SHA: ${headSha}`,
+                `PR Body:\n${pr.body || '(empty)'}`,
+                `Diff:\n${diffText}`,
+              ].join('\n\n');
+              let payload = null;
+              for (let i = 0; i < GEMINI_MODELS.length; i++) {
+                const model = GEMINI_MODELS[i];
+                const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+                  body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { responseMimeType: 'application/json', temperature: 0.1 },
+                  }),
+                });
+                if (resp.ok) {
+                  payload = await resp.json();
+                  break;
+                }
+                const errText = typeof resp.text === 'function' ? await resp.text() : '';
+                if (resp.status === 402 || resp.status === 429) {
+                  core.warning(`Gemini API HTTP ${resp.status} (${model}); skipping paid/rate-limited call gracefully—use $0 workflow_dispatch bot review.`);
+                  return;
+                }
+                if (resp.status === 404 && i < GEMINI_MODELS.length - 1) {
+                  core.warning(`Gemini model ${model} returned HTTP 404; retrying with ${GEMINI_MODELS[i + 1]}.`);
+                  continue;
+                }
+                throw new Error(`Gemini API HTTP ${resp.status} (${model}): ${errText.slice(0, 300)}`);
+              }
+              if (!payload) {
+                core.info(`PR #${prNumber}: Gemini API unavailable; awaiting $0 workflow_dispatch bot review.`);
+                return;
+              }
+              const parsed = JSON.parse(payload?.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+              verdict = String(parsed?.verdict || '').toUpperCase();
+              score = Math.round(Number(parsed?.score));
+              summary = String(parsed?.summary || '').trim() || 'Automated AI review completed.';
+              if ((verdict !== 'APPROVED' && verdict !== 'CHANGES_REQUESTED') || !Number.isFinite(score) || score < 0 || score > 100) {
+                core.warning(`Invalid AI review JSON response; awaiting $0 workflow_dispatch bot review.`);
+                return;
+              }
             }
 
             const markerRegex = new RegExp(
