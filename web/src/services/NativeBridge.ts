@@ -1,3 +1,5 @@
+import { uint8ToBase64 } from '../utils/base64';
+
 export type HapticType = 'tick' | 'success' | 'warning' | 'error';
 
 interface CapyAndroidInterface {
@@ -83,21 +85,6 @@ export function isAllowedSharedImageDataUrl(rawUrl: string): boolean {
   return /^data:image\/(?:png|jpeg|jpg|webp|gif|bmp|avif|heic|heif);base64,[A-Za-z0-9+/=]+$/i.test(
     trimmed
   );
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const len = bytes.byteLength;
-  const chunkSize = 0x2000;
-  for (let i = 0; i < len; i += chunkSize) {
-    const end = Math.min(i + chunkSize, len);
-    let chunk = '';
-    for (let j = i; j < end; j++) {
-      chunk += String.fromCharCode(bytes[j]);
-    }
-    binary += chunk;
-  }
-  return btoa(binary);
 }
 
 export interface BridgeListenOptions {

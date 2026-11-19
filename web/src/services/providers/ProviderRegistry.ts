@@ -11,6 +11,7 @@ import { normalizeCoopRoomCode } from '../ShareLinkService';
 import { resolveReleaseChannel } from '../../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../StorageNamespace';
 import { StorageService } from '../StorageService';
+import { base64ToUint8, uint8ToBase64 } from '../../utils/base64';
 import {
   AppleCloudDriver,
   GoogleCloudDriver,
@@ -93,26 +94,6 @@ function getTabPeerSuffix(): string {
   } catch {
     return randomHexId(4);
   }
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.byteLength; i += chunkSize) {
-    binary += String.fromCharCode(
-      ...Array.from(bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength)))
-    );
-  }
-  return btoa(binary);
-}
-
-function base64ToUint8(b64: string): Uint8Array {
-  const binary = atob(b64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    out[i] = binary.charCodeAt(i);
-  }
-  return out;
 }
 
 export function computeSlotKeyForSnapshot(snap: {

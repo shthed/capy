@@ -1,4 +1,10 @@
 import { resolveScopedStorageKey } from '../StorageNamespace';
+import {
+  DEV_DEBUG_STORAGE_KEY,
+  isDebugEnvironmentEnabled as isGoogleMockTokenEnvironmentAllowed,
+} from '../../utils/debugEnvironment';
+
+export { DEV_DEBUG_STORAGE_KEY, isGoogleMockTokenEnvironmentAllowed };
 
 export const GOOGLE_CLIENT_ID_STORAGE_KEY = 'capy_google_oauth_client_id_v1';
 export const GOOGLE_TOKEN_STORAGE_KEY = 'capy_google_oauth_token_v1';
@@ -76,8 +82,6 @@ declare global {
   }
 }
 
-export const DEV_DEBUG_STORAGE_KEY = 'capy_dev_debug';
-
 function sanitizeHttpsUrl(raw?: string): string | undefined {
   if (!raw || typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
@@ -88,45 +92,6 @@ function sanitizeHttpsUrl(raw?: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-export function isGoogleMockTokenEnvironmentAllowed(
-  search?: string,
-  storageValue?: string | null,
-  isDevOverride?: boolean
-): boolean {
-  const isDev =
-    isDevOverride !== undefined ? isDevOverride : Boolean(import.meta.env?.DEV);
-  if (isDev) return true;
-
-  const effectiveSearch =
-    search !== undefined
-      ? search
-      : typeof window !== 'undefined'
-        ? (window.location?.search ?? '')
-        : '';
-  if (effectiveSearch) {
-    const params = new URLSearchParams(
-      effectiveSearch.startsWith('?') ? effectiveSearch : `?${effectiveSearch}`
-    );
-    const rawDebug = (params.get('capy_debug') || '').trim().toLowerCase();
-    if (rawDebug === '0' || rawDebug === 'false') {
-      return false;
-    }
-    if (rawDebug === '1' || rawDebug === 'true') {
-      return true;
-    }
-  }
-
-  let stored = storageValue;
-  if (stored === undefined && typeof window !== 'undefined') {
-    try {
-      stored = window.localStorage?.getItem(DEV_DEBUG_STORAGE_KEY) ?? null;
-    } catch {
-      stored = null;
-    }
-  }
-  return stored === '1' || stored === 'true';
 }
 
 export function getAllowedMockGoogleOAuthToken(): string {
