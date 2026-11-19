@@ -1,10 +1,30 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { StorageService, isDebugStorageExposed } from './services/StorageService';
 import { PwaService } from './services/PwaService';
 import { resolveScopedStorageKey } from './services/StorageNamespace';
 import './index.css';
+
+function DebugCrashGate(): null {
+  if (typeof window !== 'undefined' && isDebugStorageExposed()) {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('capy_test_crash') === '1') {
+      throw new Error('Debug ErrorBoundary trigger');
+    }
+  }
+  return null;
+}
+
+function clearDebugCrashQueryParam(): void {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return;
+  const url = new URL(window.location.href);
+  if (url.searchParams.has('capy_test_crash')) {
+    url.searchParams.delete('capy_test_crash');
+    window.history.replaceState({}, '', url.toString());
+  }
+}
 
 if (typeof window !== 'undefined') {
   if (isDebugStorageExposed()) {
@@ -29,6 +49,9 @@ if (typeof window !== 'undefined') {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary onReset={clearDebugCrashQueryParam}>
+      <DebugCrashGate />
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );

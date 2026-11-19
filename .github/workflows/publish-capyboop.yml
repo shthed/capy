@@ -135,6 +135,8 @@ jobs:
               PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
               git push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
             else
+              # shthed/capy main is the canonical tree source; external PRs merged on capyboop/capy
+              # must be back-ported into shthed/capy (beta -> main) before pushing to main.
               TREE_SHA="$(git write-tree)"
               REMOTE_TREE_SHA="$(git rev-parse FETCH_HEAD^{tree})"
               if [ "${TREE_SHA}" = "${REMOTE_TREE_SHA}" ]; then

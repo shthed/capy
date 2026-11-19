@@ -3382,29 +3382,76 @@ async function runCodecAndEngineTests() {
             offSnap();
           }
 
-          // 5. Structural check: Android APK cards hidden inside NativeBridge.isAndroid & OAuth never falls back to GIS
-          const settingsSrc = fs.readFileSync(
-            path.join(projectRoot, 'src/components/SettingsModal.tsx'),
-            'utf8'
-          );
-          const providerRegistrySrc = fs.readFileSync(
-            path.join(projectRoot, 'src/services/providers/ProviderRegistry.ts'),
-            'utf8'
-          );
-          assert.equal(
-            settingsSrc.includes('{!NativeBridge.isAndroid && (') &&
-              settingsSrc.includes('NativeBridge.isAndroid || !channelInfo.showChannelSwitcher') &&
-              settingsSrc.includes('data-testid="android-apk-download-link"') &&
-              settingsSrc.includes('data-testid="beta-apk-download-link"'),
-            true,
-            'SettingsModal must hide Android APK download cards and release-channel-card when running inside NativeBridge.isAndroid'
-          );
-          assert.equal(
-            providerRegistrySrc.includes("return this.signInWithProvider('play_games_v2');") &&
-              !providerRegistrySrc.includes('// Fall through to Google OAuth'),
-            true,
-            'ProviderRegistry must not fall back from Play Games to web Google OAuth popup inside Android WebView'
-          );
+          // 5. Behavioral check: Android WebView routes signInWithGoogle strictly to play_games_v2 without GIS OAuth fallback
+          // (SettingsModal DOM hiding of APK cards and release-channel-card under window.CapyAndroid is verified in [E2E 03] & [E2E 05])
+          {
+            let gisPopupCalls = 0;
+            const prevGoogle = globalThis.window.google;
+            const prevSignInAndroid = globalThis.window.CapyAndroid;
+            const prevSignInLs = globalThis.localStorage;
+            const authLsMap = new Map();
+            globalThis.localStorage = {
+              getItem: (k) => (authLsMap.has(k) ? authLsMap.get(k) : null),
+              setItem: (k, v) => authLsMap.set(k, String(v)),
+              removeItem: (k) => authLsMap.delete(k),
+            };
+            globalThis.window.google = {
+              accounts: {
+                oauth2: {
+                  initTokenClient: () => {
+                    gisPopupCalls++;
+                    return { requestAccessToken: () => {} };
+                  },
+                },
+              },
+            };
+            globalThis.window.CapyAndroid = {
+              isPlayGamesConfigured: () => true,
+              signInPlayGames: () => {
+                setTimeout(() => {
+                  globalThis.window.__capyReceivePlayGamesError?.('PLAY_GAMES_CANCELED');
+                }, 5);
+                return null;
+              },
+            };
+            nativeBridgeMod.NativeBridge.attachWindowCallbacks();
+            try {
+              let routedErr = null;
+              try {
+                await providerMod.ProviderRegistry.auth.signInWithGoogle();
+              } catch (err) {
+                routedErr = err;
+              }
+              assert.equal(routedErr?.message, 'PLAY_GAMES_CANCELED');
+              assert.equal(
+                gisPopupCalls,
+                0,
+                'Android signInWithGoogle error must reject instead of falling back to GIS popup'
+              );
+
+              globalThis.window.CapyAndroid = {
+                isPlayGamesConfigured: () => true,
+                signInPlayGames: () =>
+                  JSON.stringify({ playerId: 'pgs_android_routed', displayName: 'Play Games Capy' }),
+              };
+              const signedInProfile = await providerMod.ProviderRegistry.auth.signInWithGoogle();
+              assert.equal(signedInProfile.provider, 'play_games_v2');
+              assert.equal(signedInProfile.playerId, 'pgs_android_routed');
+              assert.equal(
+                gisPopupCalls,
+                0,
+                'Android signInWithGoogle success must use play_games_v2 without GIS popup'
+              );
+              await providerMod.ProviderRegistry.auth.signOut();
+            } finally {
+              if (prevSignInLs === undefined) delete globalThis.localStorage;
+              else globalThis.localStorage = prevSignInLs;
+              if (prevSignInAndroid === undefined) delete globalThis.window.CapyAndroid;
+              else globalThis.window.CapyAndroid = prevSignInAndroid;
+              if (prevGoogle === undefined) delete globalThis.window.google;
+              else globalThis.window.google = prevGoogle;
+            }
+          }
           assert.equal(
             typeof nativeBridgeMod.NativeBridge.showRewardedAd,
             'undefined',
@@ -3595,6 +3642,14 @@ async function runCodecAndEngineTests() {
       '[#2](https://github.com/capyboop/capy/issues/2) [#5](https://github.com/capyboop/capy/issues/5?q=1) #20 #481 #2'
     );
     assert.equal(transformPersonaContent(transformedIssuesDoc), transformedIssuesDoc);
+    const guideBarDoc =
+      '**Related Guides**: [`README.md`](./README.md) | [`CAPYBOOP.md`](./CAPYBOOP.md) | [`AGENTS.md`](./AGENTS.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md` Rule 11](./AGENTS.md#1-ai-golden-invariants)';
+    const strippedGuideBar = transformPersonaContent(guideBarDoc);
+    assert.equal(
+      strippedGuideBar,
+      '**Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | `AGENTS.md` Rule 11'
+    );
+    assert.equal(transformPersonaContent(strippedGuideBar), strippedGuideBar);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('sync-beta-from-main'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('.github/dependabot.yml'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('CAPYBOOP_SYNC_TOKEN'), true);
@@ -3688,6 +3743,20 @@ async function runCodecAndEngineTests() {
         stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
         true
       );
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, 'AGENTS.md')), false);
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, 'CAPYBOOP.md')), false);
+      for (const publicDoc of [
+        'CONTRIBUTING.md',
+        'SUPPORT.md',
+        'SECURITY.md',
+        '.github/PULL_REQUEST_TEMPLATE.md',
+      ]) {
+        assert.equal(
+          fs.existsSync(path.join(tmpCleanStage, publicDoc)),
+          true,
+          `Clean export must retain ${publicDoc}`
+        );
+      }
       for (const tplFile of ['config.yml', 'bug_report.yml', 'feature_request.yml', 'puzzle_idea.yml']) {
         assert.equal(
           fs.existsSync(path.join(tmpCleanStage, `.github/ISSUE_TEMPLATE/${tplFile}`)),
@@ -8309,6 +8378,56 @@ async function runCodecAndEngineTests() {
         `${wfFile} Upload Pages artifact step must set include-hidden-files: true`
       );
     }
+
+    // Verify regenerate-puzzles.yml triggers only on workflow_dispatch or path-filtered pushes to beta (no schedule).
+    // Note: regenerate-puzzles.yml is a dev-only workflow stripped from clean-room capyboop/capy exports.
+    const regenWorkflowPath = path.resolve(projectRoot, '../.github/workflows/regenerate-puzzles.yml');
+    if (fs.existsSync(regenWorkflowPath)) {
+      const regenWorkflow = parsedWorkflows?.['regenerate-puzzles.yml'];
+      assert.ok(regenWorkflow, 'Expected parsed regenerate-puzzles.yml workflow');
+      // PyYAML parses YAML 1.1 `on:` as boolean True -> JSON key "true"
+      const regenOn = regenWorkflow.on ?? regenWorkflow.true;
+      assert.ok(regenOn && typeof regenOn === 'object', 'Expected on: block in regenerate-puzzles.yml');
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(regenOn, 'schedule'),
+        false,
+        'regenerate-puzzles.yml must not trigger on a cron schedule'
+      );
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(regenOn, 'workflow_dispatch'),
+        true,
+        'regenerate-puzzles.yml must retain workflow_dispatch for on-demand runs'
+      );
+      const regenPush = regenOn.push;
+      assert.ok(regenPush && Array.isArray(regenPush.branches), 'regenerate-puzzles.yml must define push.branches');
+      assert.equal(
+        regenPush.branches.includes('beta'),
+        true,
+        'regenerate-puzzles.yml push.branches must include beta'
+      );
+      assert.ok(Array.isArray(regenPush.paths), 'regenerate-puzzles.yml must define push.paths');
+      for (const expectedPath of [
+        'web/public/assets/**',
+        '!web/public/assets/**/*.capy',
+        '!web/public/assets/presets/**',
+        '!web/public/assets/icon-*.png',
+        '!web/public/assets/apple-touch-icon.png',
+        'web/scripts/generate-sample-saves.mjs',
+        'web/src/engine/**',
+        'web/src/services/CapyCodec.ts',
+        'web/src/services/DailyPuzzleService.ts',
+        'web/src/services/PuzzleWorkerService.ts',
+        'web/src/services/StorageService.ts',
+        'web/src/types/index.ts',
+        '.github/workflows/regenerate-puzzles.yml',
+      ]) {
+        assert.equal(
+          regenPush.paths.includes(expectedPath),
+          true,
+          `regenerate-puzzles.yml push.paths must include ${expectedPath}`
+        );
+      }
+    }
     logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs & upload-pages-artifact dotfiles verified.');
 
     // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
@@ -12634,6 +12753,8 @@ async function runBrowserBasicsSuite() {
     );
     assert.equal(await page.getByTestId('lifetime-stats-card').isVisible(), true, 'About tab must render lifetime-stats-card');
     assert.equal(await page.getByTestId('release-channel-card').isVisible(), true, 'About tab must render release-channel-card');
+    assert.equal(await page.getByTestId('android-apk-download-link').isVisible(), true, 'About tab must render android-apk-download-link on Web');
+    assert.equal(await page.getByTestId('beta-apk-download-link').isVisible(), true, 'About tab must render beta-apk-download-link on Web');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'About tab must not render Hints content');
     assert.equal(
       /co-op/i.test(await page.getByTestId('about-screen-card').innerText()),
@@ -15257,6 +15378,17 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+
+    const titleOverflow = await mobileTopbarPage.getByTestId('topbar-saves-title').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      text: el.textContent || '',
+    }));
+    assert.equal(
+      titleOverflow.scrollWidth <= titleOverflow.clientWidth + 1,
+      true,
+      `topbar-saves-title ("${titleOverflow.text}") should expand to fit without premature clipping (scrollWidth=${titleOverflow.scrollWidth}, clientWidth=${titleOverflow.clientWidth})`
+    );
     await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
     await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step1.png');
     const normalDocOverflow = await mobileTopbarPage.evaluate(() => ({
@@ -16390,7 +16522,86 @@ async function runBrowserBasicsSuite() {
     );
 
     await m3Page.close();
-    logE2ePass('Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, and fractional DPR verified.');
+
+    // ErrorBoundary recovery, non-destructive backup download & non-debug suppression
+    const nonDebugEbCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    try {
+      const nonDebugEbPage = await nonDebugEbCtx.newPage();
+      attachErrorListeners(nonDebugEbPage, 'nonDebugEbPage');
+      await nonDebugEbPage.goto(`${BASE_URL}/?skipTutorial=1&capy_test_crash=1`, {
+        waitUntil: 'networkidle',
+      });
+      await waitForPuzzleLoaded(nonDebugEbPage);
+      assert.equal(
+        await nonDebugEbPage.getByTestId('app-error-boundary').count(),
+        0,
+        'Non-debug browser must ignore ?capy_test_crash=1 instead of crashing'
+      );
+      await nonDebugEbPage.close();
+    } finally {
+      await nonDebugEbCtx.close();
+    }
+
+    const ebPage = await context.newPage();
+    await ebPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(ebPage);
+    await ebPage.evaluate(() => {
+      const snaps = window.capyStorage.loadSnapshots();
+      snaps.unshift({
+        id: 'eb_preserved_save',
+        title: 'EB Preserved Puzzle',
+        totalRegions: 10,
+        filledCount: 3,
+        filledRegionIds: [1, 2, 3],
+        timestamp: Date.now(),
+        lastOpened: Date.now(),
+        isCustom: true,
+        isAutoSample: false,
+        algorithm: 'CLASSIC',
+        resetEpoch: 0,
+      });
+      window.capyStorage.saveSnapshots(snaps);
+    });
+
+    await ebPage.goto(`${BASE_URL}/?skipTutorial=1&capy_debug=1&capy_test_crash=1`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await ebPage.getByTestId('app-error-boundary').waitFor({ state: 'visible', timeout: 5000 });
+    const ebMsg = await ebPage.getByTestId('error-boundary-message').innerText();
+    assert.equal(
+      ebMsg.includes('Debug ErrorBoundary trigger'),
+      true,
+      `Expected Debug ErrorBoundary trigger message, got: ${ebMsg}`
+    );
+
+    const [ebDownload] = await Promise.all([
+      ebPage.waitForEvent('download', { timeout: 5000 }),
+      ebPage.getByTestId('error-boundary-export-btn').click(),
+    ]);
+    assert.equal(
+      ebDownload.suggestedFilename().endsWith('.capy') || ebDownload.suggestedFilename().endsWith('.json'),
+      true,
+      `Unexpected emergency backup filename: ${ebDownload.suggestedFilename()}`
+    );
+    await ebPage.getByTestId('error-boundary-export-status').waitFor({ state: 'visible', timeout: 5000 });
+
+    const preservedBeforeReset = await ebPage.evaluate(() => {
+      const raw = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return raw.some((s) => s.id === 'eb_preserved_save');
+    });
+    assert.equal(preservedBeforeReset, true, 'ErrorBoundary state and backup export must preserve local saves');
+
+    attachErrorListeners(ebPage, 'ebPagePostRecovery');
+    await ebPage.getByTestId('error-boundary-retry-btn').click();
+    await waitForPuzzleLoaded(ebPage);
+    assert.equal(
+      await ebPage.evaluate(() => !window.location.search.includes('capy_test_crash=1')),
+      true,
+      'ErrorBoundary retry must strip capy_test_crash query param before re-mounting App'
+    );
+    await ebPage.close();
+
+    logE2ePass('Atomic malformed import UI, zero-snapshot Capy Forest recovery, corrupt #s= deep link, fractional DPR & ErrorBoundary verified.');
 
     // -------------------------------------------------------------------------
     // 20. Channel Storage Sandbox Isolation & UserSettings Enum Persistence E2E

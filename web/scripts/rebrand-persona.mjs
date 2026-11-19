@@ -21,6 +21,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
 export const DEV_ONLY_RELATIVE_PATHS = new Set([
+  'AGENTS.md',
+  'CAPYBOOP.md',
   'web/scripts/rebrand-persona.mjs',
   '.github/workflows/publish-capyboop.yml',
   '.github/workflows/pr-review-gate.yml',
@@ -90,6 +92,9 @@ export function stripDevOnlyBlocks(content) {
 
 export function transformPersonaContent(content) {
   return stripDevOnlyBlocks(content)
+    .replace(/\s*\|\s*\[`?(?:AGENTS|CAPYBOOP)\.md`?\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)/g, '')
+    .replace(/\[`?(?:AGENTS|CAPYBOOP)\.md`?\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)\s*\|\s*/g, '')
+    .replace(/\[([^\[\]\r\n]+)\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)/g, '$1')
     .replace(
       /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed\/capy\/(?:pull|issues|milestone)\/\d+|capyboop\/capy\/(?:(?:pull|milestone)\/\d+|issues\/(?!(?:2|3|4|5)(?:[/?#)]|$))\d+))(?:[/?#][^\s)]*)?\)/g,
       '$1'
