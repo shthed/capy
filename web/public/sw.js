@@ -2,6 +2,7 @@
 // Isolates caches by both semantic version and normalized deployment scope path.
 
 const SW_BUILD_VERSION = '__CAPY_SW_VERSION__';
+const SW_ASSETS_DIGEST = '__CAPY_SW_ASSETS_DIGEST__';
 const EFFECTIVE_VERSION = SW_BUILD_VERSION.startsWith('__CAPY_') ? 'dev' : SW_BUILD_VERSION;
 const BUILD_ASSET_RELATIVE_URLS = /* __CAPY_SW_BUILD_ASSETS__ */ [];
 
@@ -28,6 +29,8 @@ function shouldEvictCacheKey(key) {
 const PRECACHE_RELATIVE_URLS = [
   './',
   './index.html',
+  './favicon.ico',
+  './privacy-policy.html',
   './manifest.webmanifest',
   './assets/sample_saves.capy',
   './assets/daily_saves.capy',
@@ -133,62 +136,191 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Strategy depending on request type (strictly same-origin non-API, non-APK assets)
+function isHtmlContentType(response) {
+  const ct = (response.headers.get('content-type') || '').toLowerCase();
+  return ct.includes('text/html');
+}
+
+function isCacheableAssetResponse(request, response) {
+  if (!response || !response.ok) return false;
+  if (response.redirected) return false;
+  if (response.type && response.type !== 'basic') return false;
+  if (request.mode !== 'navigate' && isHtmlContentType(response)) {
+    const pathname = new URL(request.url).pathname.toLowerCase();
+    if (!pathname.endsWith('.html') && !pathname.endsWith('/')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const SCOPE_NO_SLASH = SCOPE_PATH.length > 1 && SCOPE_PATH.endsWith('/')
+  ? SCOPE_PATH.slice(0, -1)
+  : SCOPE_PATH;
+
+function isWithinSwScope(pathname) {
+  return pathname === SCOPE_NO_SLASH || pathname.startsWith(SCOPE_PATH);
+}
+
+// Fetch: Strategy depending on request type (strictly same-origin scoped non-API, non-APK assets)
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
   if (request.method !== 'GET') return;
+  if (request.cache === 'only-if-cached' && request.mode !== 'same-origin') return;
+  if (request.headers && request.headers.has('range')) return;
   const url = new URL(request.url);
   if (!url.protocol.startsWith('http')) return;
   if (url.origin !== self.location.origin) return;
+  if (!isWithinSwScope(url.pathname)) return;
   if (url.pathname.includes('/api/')) return;
+  if (url.pathname.includes('/.well-known/')) return;
   if (url.pathname.toLowerCase().endsWith('.apk')) return;
 
-  // 1. Navigation requests (HTML document): Network-first with scoped cache fallback
+  // 1. Navigation requests (HTML document): Network-first with standalone static HTML isolation
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
+        const canonicalIndexUrl = new URL('./index.html', SCOPE_URL).href;
+        const scopeRootUrl = new URL('./', SCOPE_URL).href;
+        const canonicalIndexPath = new URL(canonicalIndexUrl).pathname;
+        const navLowerPath = url.pathname.toLowerCase();
+        const isStandaloneHtmlDoc =
+          navLowerPath.endsWith('.html') && url.pathname !== canonicalIndexPath;
         try {
           const networkResponse = await fetch(request);
-          if (networkResponse && networkResponse.status === 200) {
+          if (
+            networkResponse &&
+            networkResponse.ok &&
+            !networkResponse.redirected &&
+            (!networkResponse.type || networkResponse.type === 'basic') &&
+            isHtmlContentType(networkResponse)
+          ) {
             try {
               const cache = await caches.open(CACHE_NAME);
-              await cache.put(request, networkResponse.clone());
+              if (isStandaloneHtmlDoc) {
+                await cache.put(request, networkResponse.clone());
+              } else {
+                await Promise.all([
+                  cache.put(canonicalIndexUrl, networkResponse.clone()),
+                  cache.put(scopeRootUrl, networkResponse.clone()),
+                ]);
+              }
             } catch (cacheErr) {
               console.warn('[ServiceWorker] Failed to cache navigation response:', cacheErr);
             }
           }
           return networkResponse;
-        } catch (networkError) {
+        } catch {
           const cache = await caches.open(CACHE_NAME);
+          if (isStandaloneHtmlDoc) {
+            const exactStandalone =
+              (await cache.match(request)) ||
+              (await cache.match(request.url)) ||
+              (await cache.match(`${url.origin}${url.pathname}`));
+            return exactStandalone || Response.error();
+          }
           const cachedResponse =
-            (await cache.match(request, { ignoreSearch: true })) ||
-            (await cache.match(new URL('./index.html', SCOPE_URL).href, { ignoreSearch: true })) ||
-            (await cache.match(new URL('./', SCOPE_URL).href, { ignoreSearch: true }));
+            (await cache.match(canonicalIndexUrl)) ||
+            (await cache.match(scopeRootUrl)) ||
+            (await cache.match(request)) ||
+            (await cache.match(request.url)) ||
+            (await cache.match('./'));
           if (cachedResponse) {
             return cachedResponse;
           }
-          throw networkError;
+          return Response.error();
         }
       })()
     );
     return;
   }
 
-  // 2. Same-origin static assets & workers (JS, CSS, images, workers): Cache-first with network fallback
+  const lowerPath = url.pathname.toLowerCase();
+
+  // 2. Mutable .capy pack files: Network-first (respecting exact query string) with offline cache fallback
+  if (lowerPath.endsWith('.capy')) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        try {
+          const response = await fetch(request, { cache: 'no-cache' });
+          if (isCacheableAssetResponse(request, response)) {
+            try {
+              await cache.put(request, response.clone());
+            } catch (cacheErr) {
+              console.warn('[ServiceWorker] Failed to cache .capy response:', request.url, cacheErr);
+            }
+            return response;
+          }
+          if (!response || !response.ok) {
+            const cachedFallback =
+              (await cache.match(request)) ||
+              (await cache.match(request.url));
+            if (cachedFallback && !isHtmlContentType(cachedFallback)) {
+              return cachedFallback;
+            }
+          }
+          return response;
+        } catch (err) {
+          const cached =
+            (await cache.match(request)) ||
+            (await cache.match(request.url));
+          if (cached && !isHtmlContentType(cached)) {
+            return cached;
+          }
+          throw err;
+        }
+      })()
+    );
+    return;
+  }
+
+  // 3. Mutable JSON, manifests & static HTML docs: Stale-While-Revalidate with exact query key
+  if (
+    lowerPath.endsWith('.webmanifest') ||
+    lowerPath.endsWith('.json') ||
+    lowerPath.endsWith('.html')
+  ) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = (await cache.match(request)) || (await cache.match(request.url));
+        const networkPromise = fetch(request, { cache: 'no-cache' }).then(async (response) => {
+          if (isCacheableAssetResponse(request, response)) {
+            try {
+              await cache.put(request, response.clone());
+            } catch (cacheErr) {
+              console.warn('[ServiceWorker] Failed to revalidate asset:', request.url, cacheErr);
+            }
+          }
+          return response;
+        });
+
+        if (cached && (lowerPath.endsWith('.html') || !isHtmlContentType(cached))) {
+          event.waitUntil(networkPromise.catch(() => undefined));
+          return cached;
+        }
+        return await networkPromise;
+      })()
+    );
+    return;
+  }
+
+  // 4. Hashed static assets & images (JS, CSS, images, workers): Cache-first with query isolation & HTML-fallback rejection
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE_NAME);
       const cached =
-        (await cache.match(request, { ignoreSearch: true })) ||
-        (await cache.match(request.url, { ignoreSearch: true }));
-      if (cached) {
+        (await cache.match(request)) ||
+        (await cache.match(request.url));
+      if (cached && !isHtmlContentType(cached)) {
         return cached;
       }
 
       try {
         const response = await fetch(request);
-        if (response && response.status === 200) {
+        if (isCacheableAssetResponse(request, response)) {
           try {
             await cache.put(request, response.clone());
           } catch (cacheErr) {
@@ -197,8 +329,10 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       } catch (err) {
-        const fallback = await cache.match(request.url, { ignoreSearch: true });
-        if (fallback) return fallback;
+        const fallback =
+          (await cache.match(request)) ||
+          (await cache.match(request.url));
+        if (fallback && !isHtmlContentType(fallback)) return fallback;
         throw err;
       }
     })()

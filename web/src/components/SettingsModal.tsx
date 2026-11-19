@@ -24,7 +24,6 @@ import {
   Users,
   Share2,
   Cloud,
-  ThumbsUp,
   Lightbulb,
   ZoomIn,
   Copy,
@@ -34,12 +33,14 @@ import {
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
+import { isAllowedSampleAssetPath, isSafeSnapshotPreviewDataUrl } from '../services/CapyCodec';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
 } from '../services/providers/ProviderRegistry';
+import { getAllowedMockGoogleOAuthToken } from '../services/providers/GoogleCloudSyncClient';
 import { CoopParticipant, PlayerIdentity } from '../services/providers/types';
 import {
   CANVAS_BG_MAP,
@@ -47,6 +48,7 @@ import {
   PresetCanvasBgColor,
   argbToHex,
   computeProgressPercentage,
+  DEFAULT_GENERATOR_CONFIG,
   hexToArgb,
   Difficulty,
   GeneratorAlgorithm,
@@ -54,6 +56,8 @@ import {
   HintFillStyle,
   ImageType,
   LineHandlingMode,
+  MAX_GENERATOR_CONFIG,
+  matchesGeneratorConfig,
   PaletteDetail,
   PaletteSortOrder,
   RegionColorMode,
@@ -348,6 +352,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return 0;
   });
   const [localConfig, setLocalConfig] = useState<GeneratorConfig>(settings.generatorConfig);
+  const prevIsOpenRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (isOpen && !prevIsOpenRef.current) {
+      setLocalConfig(settings.generatorConfig);
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, settings.generatorConfig]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState<string>('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -415,9 +426,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [ideaPrompt, setIdeaPrompt] = useState('');
   const [ideaCategory, setIdeaCategory] = useState('Animals');
   const [ideaFeedback, setIdeaFeedback] = useState<string | null>(null);
-  const [creditLedger, setCreditLedger] = useState(() =>
-    ProviderRegistry.monetization.getLedger()
-  );
 
   // Player Profile, Cloud Sync, Share Link & Co-op Room UI state
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity>(() =>
@@ -712,9 +720,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Capy Paint
                     </h2>
                     <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-0.5">
-                      Offline-first color-by-number &amp; free-coloring studio. Turn any photo or
-                      built-in artwork into a relaxing, zero-latency puzzle with instant saves,
-                      chronological replays, and live local Co-op.
+                      {showCloudCoopUi
+                        ? 'Offline-first color-by-number & free-coloring studio. Turn any photo or built-in artwork into a relaxing, zero-latency puzzle with instant saves, chronological replays, and live local Co-op.'
+                        : 'Offline-first color-by-number & free-coloring studio. Turn any photo or built-in artwork into a relaxing, zero-latency puzzle with instant saves and chronological replays.'}
                     </p>
                   </div>
                 </div>
@@ -743,6 +751,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   >
                     <ShieldCheck size={13} className="text-emerald-400" />
                     <span>Privacy Policy</span>
+                  </a>
+                  <a
+                    href="https://github.com/capyboop/capy/issues/new/choose"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="about-report-issue-link"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink size={13} className="text-sky-400" />
+                    <span>Report Bug / Ideas</span>
                   </a>
                 </div>
               </div>
@@ -774,10 +792,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
-                    <div className="font-bold text-slate-200">Create, Saves &amp; Co-op</div>
+                    <div className="font-bold text-slate-200">
+                      {showCloudCoopUi ? 'Create, Saves & Co-op' : 'Create, Saves & Printable Art'}
+                    </div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      Upload any photo in Create, export .capy backups or printable SVGs, and color
-                      together in Co-op.
+                      {showCloudCoopUi
+                        ? 'Upload any photo in Create, export .capy backups or printable SVGs, and color together in Co-op.'
+                        : 'Upload any photo in Create, save progress locally, and export .capy backups or printable SVGs.'}
                     </div>
                   </div>
                 </div>
@@ -841,7 +862,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {formatFastestCompletion(effectiveStats.fastestCompletionMs)}
                     </div>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                  <div
+                    className={`p-2 rounded-lg bg-slate-900/70 border border-slate-800/80 ${
+                      !showCloudCoopUi ? 'col-span-2' : ''
+                    }`}
+                  >
                     <div className="text-[10px] text-slate-400 font-medium truncate">
                       Free Colour Art
                     </div>
@@ -852,17 +877,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {effectiveStats.freeColorCreations.toLocaleString()}
                     </div>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
-                    <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Co-op Regions
+                  {showCloudCoopUi && (
+                    <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800/80">
+                      <div className="text-[10px] text-slate-400 font-medium truncate">
+                        Co-op Regions
+                      </div>
+                      <div
+                        data-testid="stat-coop-regions"
+                        className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
+                      >
+                        {effectiveStats.coopRegionsPainted.toLocaleString()}
+                      </div>
                     </div>
-                    <div
-                      data-testid="stat-coop-regions"
-                      className="text-sm sm:text-base font-extrabold font-mono text-slate-200 tabular-nums"
-                    >
-                      {effectiveStats.coopRegionsPainted.toLocaleString()}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -940,10 +967,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* Release Channel Switcher (Stable <-> Beta Opt-In) */}
+                {/* Release Channel Switcher (Stable <-> Beta Opt-In; Web/PWA only) */}
                 {(() => {
                   const channelInfo = resolveReleaseChannel();
-                  if (!channelInfo.showChannelSwitcher) return null;
+                  if (NativeBridge.isAndroid || !channelInfo.showChannelSwitcher) return null;
                   const ns = resolveStorageNamespace();
                   const isBeta = channelInfo.channel === 'beta';
                   const isAlpha = channelInfo.channel === 'alpha';
@@ -1905,7 +1932,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Deterministic Offline UTC Puzzle of the Day Hero Card */}
               <div
                 data-testid="daily-puzzle-card"
-                className="relative overflow-hidden rounded-xl border border-amber-400/40 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/25 p-3 sm:p-3.5 shadow-lg"
+                className="relative overflow-hidden rounded-xl border border-amber-400/40 bg-gradient-to-br from-slate-900 via-slate-950 to-amber-950/25 p-3 sm:p-3.5 shadow-lg space-y-2"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="relative h-24 sm:h-20 sm:w-28 w-full flex-shrink-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
@@ -1927,6 +1954,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         {dailyPuzzle.utcDate} UTC
                       </span>
+                      {renderHintButton('daily-puzzle', 'Puzzle of the Day')}
                     </div>
                     <div className="text-sm sm:text-base font-extrabold text-slate-100 truncate">
                       {dailyPuzzle.sample.title}
@@ -1955,55 +1983,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Play Daily</span>
                   </button>
                 </div>
+                {renderHintCallout(
+                  'daily-puzzle',
+                  'Deterministic daily challenge paired cleanly across every device by UTC date. All 20 daily combinations are pre-baked at Max Detail (2048p • up to 2000 pieces • 64 colours, or 20 colours in Free Colour mode) for instant zero-wait play.'
+                )}
               </div>
 
               {/* Above-the-Fold Style Guide & Hint Quick-Jump Bar */}
-              <div
-                data-testid="create-style-hint-bar"
-                className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-2 rounded-xl border border-slate-800 bg-slate-950/75"
-              >
-                <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-slate-300">
-                  <Info size={13} className="text-amber-400 flex-shrink-0" />
-                  <span className="truncate">
-                    <span className="font-bold text-slate-100">Style:</span>{' '}
-                    {localConfig.algorithm || 'AUTO'} • {localConfig.paletteDetail} ({localConfig.colorCount}c, {localConfig.resolution}p)
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    type="button"
-                    data-testid="create-hint-style-guide-btn"
-                    onClick={() => {
-                      setShowPresetGallery(true);
-                      onExplorePresetGallery?.();
-                      requestAnimationFrame(() => {
-                        presetGallerySectionRef.current?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        });
-                      });
-                    }}
-                    className="px-2 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold transition-colors cursor-pointer"
+              {(() => {
+                const isDefaultCfg = matchesGeneratorConfig(localConfig, DEFAULT_GENERATOR_CONFIG);
+                const isMaxCfg = matchesGeneratorConfig(localConfig, MAX_GENERATOR_CONFIG);
+                return (
+                  <div
+                    data-testid="create-style-hint-bar"
+                    className="flex flex-wrap items-center justify-between gap-2 px-2.5 py-2 rounded-xl border border-slate-800 bg-slate-950/75"
                   >
-                    Style Guide (10)
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="create-hint-options-btn"
-                    onClick={() => {
-                      requestAnimationFrame(() => {
-                        createOptionsSectionRef.current?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'start',
-                        });
-                      });
-                    }}
-                    className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
-                  >
-                    Hint &amp; Options
-                  </button>
-                </div>
-              </div>
+                    <div className="flex items-start gap-1.5 flex-1 min-w-0 text-[11px] text-slate-300 leading-snug">
+                      <Info size={13} className="text-amber-400 flex-shrink-0 mt-0.5" />
+                      <span className="min-w-0 break-words">
+                        <span className="font-bold text-slate-100">Active Mode:</span>{' '}
+                        {isDefaultCfg
+                          ? 'Gallery: Max (2048p) • Uploads: Auto (16c, 1024p)'
+                          : isMaxCfg
+                            ? `Max Detail • ${localConfig.algorithm || 'AUTO'} (64c • 2000 pcs • 2048p)`
+                            : `Custom: ${localConfig.algorithm || 'AUTO'} • ${localConfig.paletteDetail} (${localConfig.colorCount}c • ${localConfig.maxRegions || 200} pcs • ${localConfig.resolution}p)`}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        data-testid="create-hint-style-guide-btn"
+                        onClick={() => {
+                          setShowPresetGallery(true);
+                          onExplorePresetGallery?.();
+                          requestAnimationFrame(() => {
+                            presetGallerySectionRef.current?.scrollIntoView({
+                              behavior: 'smooth',
+                              block: 'start',
+                            });
+                          });
+                        }}
+                        className="px-2 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        Style Guide (10)
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="create-hint-options-btn"
+                        onClick={() => {
+                          setOpenHintId('algorithm');
+                          requestAnimationFrame(() => {
+                            createOptionsSectionRef.current?.scrollIntoView({
+                              behavior: 'smooth',
+                              block: 'start',
+                            });
+                          });
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
+                      >
+                        Hint &amp; Options
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Built-in Sample Artwork Gallery with Search & Tag Filter Chips */}
               <div className="space-y-2">
@@ -2143,17 +2186,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Action Row: Upload Photo & Infinite Zoom Detail Sub-Puzzle */}
               <div className="space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onUploadImage();
-                      onClose();
-                    }}
-                    className="w-full flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-                  >
-                    <ImageIcon size={16} />
-                    <span>Choose Photo from Device</span>
-                  </button>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <button
+                      type="button"
+                      data-testid="create-upload-photo-btn"
+                      onClick={() => {
+                        onUploadImage();
+                        onClose();
+                      }}
+                      className="flex-1 min-w-0 flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+                    >
+                      <ImageIcon size={16} className="flex-shrink-0" />
+                      <span className="truncate">Choose Photo from Device</span>
+                    </button>
+                    {renderHintButton('upload-photo', 'Choose Photo from Device')}
+                  </div>
 
                   {onZoomIntoDetailTile && sourceImage && (
                     <div className="flex items-center gap-1.5">
@@ -2174,6 +2221,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   )}
                 </div>
+                {renderHintCallout(
+                  'upload-photo',
+                  'Pick any JPG, PNG, or WebP artwork or photo from your device and segment it locally using your chosen algorithm, colours, piece count, and resolution below.'
+                )}
                 {onZoomIntoDetailTile &&
                   sourceImage &&
                   renderHintCallout(
@@ -2420,26 +2471,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 {renderHintCallout(
                   'detail-preset',
-                  'Picks how many palette colours are extracted. Auto, Low, Medium, and High auto-tune the palette for your image; Custom locks in your exact Target Palette Colours slider.'
+                  'Picks how many palette colours, max puzzle pieces, and minimum speckle sizes are extracted. Auto, Low, Medium, and High sync all three knobs; Custom keeps your manual slider adjustments.'
                 )}
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {(
                     [
-                      { key: 'AUTO', label: 'Auto', colorCount: 16 },
-                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10 },
-                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18 },
-                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38 },
-                      { key: 'CUSTOM', label: 'Custom', colorCount: null },
+                      { key: 'AUTO', label: 'Auto', colorCount: 16, maxRegions: 200, minRegionArea: 48 },
+                      { key: 'LOW', label: 'Low (~8-12)', colorCount: 10, maxRegions: 100, minRegionArea: 96 },
+                      { key: 'MEDIUM', label: 'Medium (~14-24)', colorCount: 18, maxRegions: 250, minRegionArea: 48 },
+                      { key: 'HIGH', label: 'High (~30-50)', colorCount: 38, maxRegions: 500, minRegionArea: 24 },
+                      { key: 'CUSTOM', label: 'Custom', colorCount: null, maxRegions: null, minRegionArea: null },
                     ] as const
                   ).map((det) => (
                     <button
                       key={det.key}
                       type="button"
+                      data-testid={`detail-preset-${det.key.toLowerCase()}`}
                       onClick={() =>
                         setLocalConfig((prev) => ({
                           ...prev,
                           paletteDetail: det.key as PaletteDetail,
                           ...(det.colorCount !== null ? { colorCount: det.colorCount } : {}),
+                          ...(det.maxRegions !== null ? { maxRegions: det.maxRegions } : {}),
+                          ...(det.minRegionArea !== null ? { minRegionArea: det.minRegionArea } : {}),
                         }))
                       }
                       className={`py-1.5 px-1 rounded-lg border text-xs font-bold text-center transition-all ${
@@ -2456,8 +2510,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Manual Fine-Tuning Sliders */}
               <div className="space-y-3.5 p-3 rounded-xl bg-slate-950/50 border border-slate-800">
-                <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Manual Fine-Tuning &amp; Constraints
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Manual Fine-Tuning &amp; Constraints
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="create-max-detail-preset-btn"
+                    onClick={() =>
+                      setLocalConfig((prev) => ({
+                        ...MAX_GENERATOR_CONFIG,
+                        algorithm: prev.algorithm || MAX_GENERATOR_CONFIG.algorithm,
+                        lineHandling: prev.lineHandling || MAX_GENERATOR_CONFIG.lineHandling,
+                        imageType: prev.imageType || MAX_GENERATOR_CONFIG.imageType,
+                        ...(prev.isFreeColor !== undefined ? { isFreeColor: prev.isFreeColor } : {}),
+                      }))
+                    }
+                    className={`px-2 py-1 rounded-md border text-[10px] font-extrabold transition-all cursor-pointer ${
+                      localConfig.paletteDetail === 'CUSTOM' &&
+                      localConfig.colorCount === MAX_GENERATOR_CONFIG.colorCount &&
+                      localConfig.maxRegions === MAX_GENERATOR_CONFIG.maxRegions &&
+                      localConfig.minRegionArea === MAX_GENERATOR_CONFIG.minRegionArea &&
+                      localConfig.resolution === MAX_GENERATOR_CONFIG.resolution
+                        ? 'border-amber-400 bg-amber-400 text-slate-950 shadow-xs'
+                        : 'border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20'
+                    }`}
+                  >
+                    Max Detail (64c • 2000 • 2048p)
+                  </button>
                 </div>
 
                 {/* Colors Count */}
@@ -2713,7 +2793,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Regenerate Artwork with Settings
               </button>
 
-              {/* Community Puzzle Ideas & Opt-In AI Generation Credits */}
+              {/* Puzzle Idea Notebook (Local Idea Notebook) */}
               <div
                 data-testid="community-ideas-section"
                 className="p-3 rounded-xl bg-slate-950/65 border border-slate-800 space-y-2.5"
@@ -2722,31 +2802,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <Lightbulb size={15} className="text-amber-400" />
                     <span className="text-xs font-extrabold text-slate-200">
-                      Community Puzzle Ideas
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[10px] font-bold text-amber-300">
-                      {creditLedger.availableCredits} AI Credits
+                      Puzzle Idea Notebook
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {!creditLedger.adFreePlatform && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const res = await ProviderRegistry.monetization.watchRewardedAdForCredits();
-                          setCreditLedger(res.ledger);
-                          setIdeaFeedback(
-                            res.granted > 0
-                              ? `+${res.granted} AI Credits added!`
-                              : 'Rewarded ads are optional and only active on Play Store builds.'
-                          );
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold border border-slate-700 cursor-pointer"
-                      >
-                        Optional Ad (+2)
-                      </button>
-                    )}
                     <button
                       type="button"
                       data-testid="toggle-idea-form-btn"
@@ -2756,7 +2816,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                       className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-[11px] font-extrabold hover:bg-amber-300 transition-colors cursor-pointer"
                     >
-                      {showIdeaForm ? 'Close' : '+ Submit Idea'}
+                      {showIdeaForm ? 'Close' : '+ Add Idea'}
                     </button>
                   </div>
                 </div>
@@ -2797,14 +2857,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       data-testid="idea-prompt-input"
                       value={ideaPrompt}
                       onChange={(e) => setIdeaPrompt(e.target.value)}
-                      placeholder="Describe colors, mood, or style for automated gallery artwork generation..."
+                      placeholder="Describe colors, mood, or style for a future puzzle idea..."
                       rows={2}
                       maxLength={280}
                       className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 focus:outline-none focus:border-amber-400 resize-none"
                     />
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-[10px] text-slate-400">
-                        Top-voted family-friendly ideas are queued for gallery generation.
+                        Saved locally in your puzzle idea notebook on this device.
                       </span>
                       <button
                         type="button"
@@ -2824,11 +2884,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           setIdeaTitle('');
                           setIdeaPrompt('');
                           setShowIdeaForm(false);
-                          setIdeaFeedback('Idea submitted to the community gallery queue!');
+                          setIdeaFeedback('Idea saved to your local puzzle notebook!');
                         }}
                         className="px-3 py-1.5 rounded-lg bg-amber-400 text-slate-950 text-xs font-extrabold hover:bg-amber-300 cursor-pointer"
                       >
-                        Post Idea
+                        Save Idea
                       </button>
                     </div>
                   </div>
@@ -2841,7 +2901,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       data-testid={`community-idea-${idea.id}`}
                       className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/70 border border-slate-800/90"
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs font-bold text-slate-200 truncate">
                             {idea.title}
@@ -2852,21 +2912,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-400 truncate">{idea.prompt}</p>
                       </div>
-                      <button
-                        type="button"
-                        data-testid={`vote-idea-${idea.id}`}
-                        onClick={() =>
-                          setCommunityIdeas(ProviderRegistry.catalog.toggleVoteIdea(idea.id))
-                        }
-                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border flex-shrink-0 transition-colors cursor-pointer ${
-                          idea.votedByMe
-                            ? 'bg-amber-400/20 text-amber-300 border-amber-400/50'
-                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        <ThumbsUp size={11} />
-                        <span>{idea.votes}</span>
-                      </button>
                     </div>
                   ))}
                 </div>
@@ -2887,13 +2932,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const isActive = snap.id === activeSnapshotId;
                         const isSelected = snap.id === currentSelectedId;
                         const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                        const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                        const safeSampleThumb = isAllowedSampleAssetPath(snap.sampleAssetPath)
+                          ? snap.sampleAssetPath
+                          : undefined;
+                        const safePreviewThumb = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
+                          ? snap.previewDataUrl.trim()
+                          : undefined;
+                        const primaryThumb = safeSampleThumb || safePreviewThumb;
                         const fallbackThumb =
                           primaryThumb &&
                           failedThumbSrcs[primaryThumb] &&
-                          snap.previewDataUrl &&
-                          snap.previewDataUrl !== primaryThumb
-                            ? snap.previewDataUrl
+                          safePreviewThumb &&
+                          safePreviewThumb !== primaryThumb
+                            ? safePreviewThumb
                             : undefined;
                         const thumbSrc =
                           primaryThumb && !failedThumbSrcs[primaryThumb]
@@ -2980,13 +3031,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const isActive = snap.id === activeSnapshotId;
                         const isSelected = snap.id === currentSelectedId;
                         const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                        const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                        const safeSampleThumb = isAllowedSampleAssetPath(snap.sampleAssetPath)
+                          ? snap.sampleAssetPath
+                          : undefined;
+                        const safePreviewThumb = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
+                          ? snap.previewDataUrl.trim()
+                          : undefined;
+                        const primaryThumb = safeSampleThumb || safePreviewThumb;
                         const fallbackThumb =
                           primaryThumb &&
                           failedThumbSrcs[primaryThumb] &&
-                          snap.previewDataUrl &&
-                          snap.previewDataUrl !== primaryThumb
-                            ? snap.previewDataUrl
+                          safePreviewThumb &&
+                          safePreviewThumb !== primaryThumb
+                            ? safePreviewThumb
                             : undefined;
                         const thumbSrc =
                           primaryThumb && !failedThumbSrcs[primaryThumb]
@@ -3547,11 +3604,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               } • ${playerIdentity.email || playerIdentity.displayName}`
                             : NativeBridge.isAndroid ||
                                 Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                                (typeof window !== 'undefined' &&
-                                  Boolean(
-                                    (window as unknown as { __capyMockGoogleOAuthToken?: string })
-                                      .__capyMockGoogleOAuthToken
-                                  ))
+                                Boolean(getAllowedMockGoogleOAuthToken())
                               ? 'Local Profile • Sign in to sync saves across devices'
                               : 'Local Profile • Saves stored locally on this device'}
                         </div>
@@ -3574,11 +3627,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     ) : NativeBridge.isAndroid ||
                       Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                      (typeof window !== 'undefined' &&
-                        Boolean(
-                          (window as unknown as { __capyMockGoogleOAuthToken?: string })
-                            .__capyMockGoogleOAuthToken
-                        )) ? (
+                      Boolean(getAllowedMockGoogleOAuthToken()) ? (
                       <button
                         type="button"
                         data-testid="play-games-signin-btn"

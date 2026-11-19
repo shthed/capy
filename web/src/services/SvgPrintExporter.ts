@@ -8,6 +8,7 @@ export interface PrintableSvgOptions {
 
 export function escapeSvgXml(value: string): string {
   return String(value)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -29,6 +30,7 @@ function clamp(val: number, min: number, max: number): number {
 }
 
 function formatCoord(n: number): string {
+  if (!Number.isFinite(n)) return '0';
   const rounded = Math.round(n * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '');
 }
@@ -39,7 +41,7 @@ function formatCoord(n: number): string {
  */
 function traceRegionBoundaryPath(puzzle: PuzzleData, offsetX: number, offsetY: number): string {
   const { width, height, regionMap, borderMap } = puzzle;
-  if (width <= 0 || height <= 0) return '';
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return '';
 
   const segments: string[] = [];
   const totalPixels = width * height;
@@ -126,7 +128,10 @@ function resolveRegionDisplayNumber(
   if (typeof maybeIndexed === 'number' && Number.isFinite(maybeIndexed)) {
     return Math.max(1, Math.floor(maybeIndexed) + 1);
   }
-  return Math.max(1, Math.floor(region.colorId || 1));
+  if (typeof region.colorId === 'number' && Number.isFinite(region.colorId)) {
+    return Math.max(1, Math.floor(region.colorId));
+  }
+  return 1;
 }
 
 function resolveRegionRadius(region: Region): number {
@@ -149,17 +154,26 @@ export function buildPrintableColoringSvg(
   puzzle: PuzzleData,
   options?: PrintableSvgOptions
 ): string {
-  const width = Math.max(1, Math.round(puzzle.width || 1));
-  const height = Math.max(1, Math.round(puzzle.height || 1));
+  const rawW = Number.isFinite(puzzle.width) ? puzzle.width : 1;
+  const rawH = Number.isFinite(puzzle.height) ? puzzle.height : 1;
+  const width = Math.max(1, Math.round(rawW));
+  const height = Math.max(1, Math.round(rawH));
   const rawTitle = (options?.title || 'Capy Coloring Sheet').trim() || 'Capy Coloring Sheet';
   const escapedTitle = escapeSvgXml(rawTitle);
 
-  const effectivePalette =
+  const rawPalette =
     options?.palette && options.palette.length > 0 ? options.palette : puzzle.palette || [];
+  const effectivePalette = Array.isArray(rawPalette)
+    ? rawPalette.filter(
+        (swatch): swatch is PaletteColor => Boolean(swatch && typeof swatch === 'object')
+      )
+    : [];
 
   const displayNumberByColorId = new Map<number, number>();
   effectivePalette.forEach((swatch, idx) => {
-    displayNumberByColorId.set(swatch.id, idx + 1);
+    if (typeof swatch.id === 'number' && Number.isFinite(swatch.id)) {
+      displayNumberByColorId.set(swatch.id, idx + 1);
+    }
   });
 
   const maxDim = Math.max(width, height, 320);
@@ -189,6 +203,7 @@ export function buildPrintableColoringSvg(
   const maxFont = clamp(maxDim * 0.032, 12, 26);
 
   for (const region of puzzle.regions || []) {
+    if (!region || !Number.isFinite(region.centroidX) || !Number.isFinite(region.centroidY)) continue;
     const radius = resolveRegionRadius(region);
     if (radius < 1.2 && (region.area || 0) < 4) continue;
     const dispNum = resolveRegionDisplayNumber(region, displayNumberByColorId);
@@ -219,7 +234,11 @@ export function buildPrintableColoringSvg(
       const row = Math.floor(idx / legendCols);
       const itemX = artX + col * colWidth;
       const itemY = legendTop + legendHeaderHeight + row * swatchRowHeight;
-      const safeHex = escapeSvgXml((swatch.hex || '#94a3b8').toUpperCase());
+      const rawHex =
+        typeof swatch?.hex === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(swatch.hex.trim())
+          ? swatch.hex.trim().toUpperCase()
+          : '#94A3B8';
+      const safeHex = escapeSvgXml(rawHex);
       const numLabel = idx + 1;
       const textX = formatCoord(itemX + Number(chipSize) + 6);
       const textY = formatCoord(itemY + Number(chipSize) * 0.76);
@@ -278,7 +297,13 @@ export async function exportPrintableColoringSvg(
   puzzle: PuzzleData,
   options?: PrintableSvgOptions
 ): Promise<boolean> {
-  if (!puzzle || puzzle.width <= 0 || puzzle.height <= 0) {
+  if (
+    !puzzle ||
+    !Number.isFinite(puzzle.width) ||
+    !Number.isFinite(puzzle.height) ||
+    puzzle.width <= 0 ||
+    puzzle.height <= 0
+  ) {
     return false;
   }
   try {

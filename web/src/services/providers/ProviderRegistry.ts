@@ -2,10 +2,12 @@ import { SAMPLE_GALLERY, SampleArtwork, SavedSnapshot } from '../../types';
 import {
   decodeProgressDeltaToken,
   encodeProgressDeltaToken,
+  isAllowedSampleAssetPath,
   mergeProgressDeltas,
   ProgressDeltaV2,
 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
+import { normalizeCoopRoomCode } from '../ShareLinkService';
 import { resolveReleaseChannel } from '../../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../StorageNamespace';
 import { StorageService } from '../StorageService';
@@ -17,7 +19,9 @@ import {
   SteamCloudDriver,
 } from './CloudProviderDrivers';
 import {
+  getAllowedMockGoogleOAuthToken,
   getConfiguredGoogleClientId,
+  isExplicitlySignedOut,
   setConfiguredGoogleClientId,
 } from './GoogleCloudSyncClient';
 import {
@@ -153,6 +157,7 @@ class MultiProviderAuthManager implements AuthProvider {
   private readonly playGamesDriver: PlayGamesAndroidDriver;
   private identity: PlayerIdentity;
   private listeners = new Set<(id: PlayerIdentity) => void>();
+  private playGamesListenerAttached = false;
 
   constructor() {
     const googleDriver = new GoogleCloudDriver();
@@ -164,8 +169,14 @@ class MultiProviderAuthManager implements AuthProvider {
     this.registerDriver(new AppleCloudDriver());
 
     this.identity = this.loadOrCreateIdentity();
+    this.ensurePlayGamesProfileListener();
+  }
 
+  private ensurePlayGamesProfileListener(): void {
+    if (this.playGamesListenerAttached || typeof window === 'undefined') return;
+    this.playGamesListenerAttached = true;
     NativeBridge.onPlayGamesProfile((profile) => {
+      if (isExplicitlySignedOut()) return;
       this.playGamesDriver.setResolvedProfile(profile.playerId, profile.displayName);
       this.applyPlayGamesProfile(profile.playerId, profile.displayName);
     });
@@ -334,11 +345,16 @@ class MultiProviderAuthManager implements AuthProvider {
   }
 
   updateGuestProfile(displayName: string, avatarColorHex?: string): PlayerIdentity {
-    const trimmed = displayName.trim().slice(0, 24) || this.identity.displayName;
+    const sanitized = displayName.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 24);
+    const trimmed = sanitized || this.identity.displayName;
+    const safeColor =
+      avatarColorHex && /^#[0-9a-fA-F]{3,8}$/.test(avatarColorHex.trim())
+        ? avatarColorHex.trim()
+        : this.identity.avatarColorHex;
     this.identity = {
       ...this.identity,
       displayName: trimmed,
-      avatarColorHex: avatarColorHex || this.identity.avatarColorHex,
+      avatarColorHex: safeColor,
     };
     this.persistBaseIdentity(this.identity);
     this.emit();
@@ -346,6 +362,7 @@ class MultiProviderAuthManager implements AuthProvider {
   }
 
   async attemptAutoSignIn(): Promise<PlayerIdentity | null> {
+    this.ensurePlayGamesProfileListener();
     if (this.identity.isAuthenticated && this.hasActiveCloudToken()) {
       return this.identity;
     }
@@ -384,6 +401,7 @@ class MultiProviderAuthManager implements AuthProvider {
     providerId: CloudProviderId,
     options?: { clientId?: string }
   ): Promise<PlayerIdentity> {
+    this.ensurePlayGamesProfileListener();
     const driver = this.drivers.get(providerId);
     if (!driver) {
       throw new Error(`Unsupported cloud provider: ${providerId}`);
@@ -408,8 +426,7 @@ class MultiProviderAuthManager implements AuthProvider {
       setConfiguredGoogleClientId(customClientId);
     }
     const clientId = customClientId?.trim() || getConfiguredGoogleClientId();
-    const hasMockToken =
-      typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
+    const hasMockToken = Boolean(getAllowedMockGoogleOAuthToken());
 
     if (NativeBridge.isAndroid && !hasMockToken) {
       return this.signInWithProvider('play_games_v2');
@@ -418,6 +435,7 @@ class MultiProviderAuthManager implements AuthProvider {
   }
 
   async signInWithPlayGames(): Promise<PlayerIdentity> {
+    this.ensurePlayGamesProfileListener();
     if (NativeBridge.isAndroid) {
       return this.signInWithProvider('play_games_v2');
     }
@@ -455,6 +473,7 @@ class MultiProviderAuthManager implements AuthProvider {
   }
 
   subscribe(listener: (identity: PlayerIdentity) => void): () => void {
+    this.ensurePlayGamesProfileListener();
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -557,14 +576,14 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     const activeDriver = this.auth.getActiveCloudDriver();
     if (activeDriver) {
       try {
-        const ok = await activeDriver.writeSlotEnvelope(envelope);
-        if (ok) return true;
+        return Boolean(await activeDriver.writeSlotEnvelope(envelope));
       } catch (err) {
         console.warn(`Cloud driver (${activeDriver.id}) slot push failed:`, err);
+        return false;
       }
     }
 
-    return nativeSaved || true;
+    return Boolean(nativeSaved);
   }
 
   private async pullRemoteLibraryManifest(): Promise<{
@@ -586,10 +605,19 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     if (playGamesDriver && NativeBridge.isAndroid) {
       try {
         const nativeManifest = await playGamesDriver.readManifest();
-        if (nativeManifest?.entries) {
+        if (nativeManifest?.entries && typeof nativeManifest.entries === 'object') {
           backend = 'play_games_snapshots';
           latestUpdatedAt = Math.max(latestUpdatedAt, nativeManifest.updatedAt || 0);
           for (const [k, entry] of Object.entries(nativeManifest.entries)) {
+            if (
+              !entry ||
+              typeof entry !== 'object' ||
+              typeof entry.deltaToken !== 'string' ||
+              typeof entry.lastOpened !== 'number' ||
+              !Number.isFinite(entry.lastOpened)
+            ) {
+              continue;
+            }
             const existing = mergedEntries[k];
             if (!existing || entry.lastOpened >= existing.lastOpened) {
               mergedEntries[k] = entry;
@@ -607,9 +635,18 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       try {
         const remoteManifest = await activeDriver.readManifest();
         backend = mapProviderToBackendKind(activeDriver.id);
-        if (remoteManifest?.entries) {
+        if (remoteManifest?.entries && typeof remoteManifest.entries === 'object') {
           latestUpdatedAt = Math.max(latestUpdatedAt, remoteManifest.updatedAt || 0);
           for (const [k, entry] of Object.entries(remoteManifest.entries)) {
+            if (
+              !entry ||
+              typeof entry !== 'object' ||
+              typeof entry.deltaToken !== 'string' ||
+              typeof entry.lastOpened !== 'number' ||
+              !Number.isFinite(entry.lastOpened)
+            ) {
+              continue;
+            }
             const existing = mergedEntries[k];
             if (!existing || entry.lastOpened >= existing.lastOpened) {
               mergedEntries[k] = entry;
@@ -655,34 +692,62 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     if (activeDriver) {
       try {
         const ok = await activeDriver.writeManifest(manifest);
-        if (ok) {
-          return {
-            pushed: true,
-            backend: mapProviderToBackendKind(activeDriver.id),
-          };
-        }
+        return {
+          pushed: Boolean(ok),
+          backend: mapProviderToBackendKind(activeDriver.id),
+        };
       } catch (err) {
         console.warn(`Failed to push manifest to cloud driver (${activeDriver.id}):`, err);
+        return {
+          pushed: false,
+          backend: mapProviderToBackendKind(activeDriver.id),
+        };
       }
     }
 
     return {
-      pushed: nativeSaved || true,
+      pushed: Boolean(nativeSaved),
       backend: nativeSaved ? 'play_games_snapshots' : 'local_cache',
     };
   }
 
   async syncFullLibrary(localSnapshots: SavedSnapshot[]): Promise<CloudLibrarySyncSummary> {
+    const initialLocalIds = new Set(localSnapshots.map((s) => s.id));
+    const initialLocalSlots = new Set(localSnapshots.map((s) => computeSlotKeyForSnapshot(s)));
+    let sawStoragePopulated = StorageService.loadSnapshots().length > 0;
+    const getAuthoritativeSnapshots = (): SavedSnapshot[] => {
+      const fresh = StorageService.loadSnapshots();
+      if (fresh.length > 0) {
+        sawStoragePopulated = true;
+        return fresh;
+      }
+      if (sawStoragePopulated || localSnapshots.length === 0) {
+        return fresh;
+      }
+      return [...localSnapshots];
+    };
+    const buildSlotMap = (snaps: SavedSnapshot[]) => {
+      const map = new Map<string, SavedSnapshot>();
+      for (const snap of snaps) {
+        map.set(computeSlotKeyForSnapshot(snap), snap);
+      }
+      return map;
+    };
+    const findLocalSnap = (
+      snaps: SavedSnapshot[],
+      bySlot: Map<string, SavedSnapshot>,
+      slotKey: string,
+      snapshotId: string
+    ): SavedSnapshot | undefined =>
+      bySlot.get(slotKey) || snaps.find((s) => s.id === snapshotId);
+
     const { manifest: remoteManifest } = await this.pullRemoteLibraryManifest();
     const activeDriver = this.auth.getActiveCloudDriver();
     let importedSavesFromCloud = 0;
     let mergedRegionsFromCloud = 0;
 
-    let currentSnapshots = [...localSnapshots];
-    const localBySlot = new Map<string, SavedSnapshot>();
-    for (const snap of currentSnapshots) {
-      localBySlot.set(computeSlotKeyForSnapshot(snap), snap);
-    }
+    let currentSnapshots = getAuthoritativeSnapshots();
+    let localBySlot = buildSlotMap(currentSnapshots);
 
     // 1. Merge remote manifest entries into local StorageService
     if (remoteManifest?.entries) {
@@ -694,78 +759,131 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
           continue;
         }
 
-        let localSnap =
-          localBySlot.get(slotKey) ||
-          currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
+        currentSnapshots = getAuthoritativeSnapshots();
+        localBySlot = buildSlotMap(currentSnapshots);
+        let localSnap = findLocalSnap(currentSnapshots, localBySlot, slotKey, remoteEntry.snapshotId);
+        if (
+          !localSnap &&
+          (initialLocalIds.has(remoteEntry.snapshotId) || initialLocalSlots.has(slotKey))
+        ) {
+          continue;
+        }
 
         const remoteBlobRef = remoteEntry.cloudBinaryRef || remoteEntry.driveBinaryFileId;
 
         if (!localSnap && remoteBlobRef && activeDriver) {
           try {
             const bin = await activeDriver.readBinaryBlob(remoteBlobRef);
-            if (bin && bin.byteLength > 0) {
+            currentSnapshots = getAuthoritativeSnapshots();
+            localBySlot = buildSlotMap(currentSnapshots);
+            localSnap = findLocalSnap(currentSnapshots, localBySlot, slotKey, remoteEntry.snapshotId);
+            if (
+              !localSnap &&
+              (initialLocalIds.has(remoteEntry.snapshotId) || initialLocalSlots.has(slotKey))
+            ) {
+              continue;
+            }
+            if (!localSnap && bin && bin.byteLength > 0) {
               const imported = await StorageService.importSnapshotData(bin);
+              currentSnapshots = getAuthoritativeSnapshots();
+              localBySlot = buildSlotMap(currentSnapshots);
               if (imported.importedCount > 0) {
                 importedSavesFromCloud += imported.importedCount;
-                currentSnapshots = StorageService.loadSnapshots();
-                localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
               }
+              localSnap = findLocalSnap(currentSnapshots, localBySlot, slotKey, remoteEntry.snapshotId);
             }
           } catch (err) {
             console.warn(`Failed to download binary save from ${activeDriver.id}:`, err);
           }
         }
 
-        if (!localSnap && remoteEntry.inlineBinaryB64) {
+        if (
+          !localSnap &&
+          typeof remoteEntry.inlineBinaryB64 === 'string' &&
+          remoteEntry.inlineBinaryB64.length > 0 &&
+          remoteEntry.inlineBinaryB64.length <= 260_000
+        ) {
           try {
             const bin = base64ToUint8(remoteEntry.inlineBinaryB64);
             const imported = await StorageService.importSnapshotData(bin);
+            currentSnapshots = getAuthoritativeSnapshots();
+            localBySlot = buildSlotMap(currentSnapshots);
             if (imported.importedCount > 0) {
               importedSavesFromCloud += imported.importedCount;
-              currentSnapshots = StorageService.loadSnapshots();
-              localSnap = currentSnapshots.find((s) => s.id === remoteEntry.snapshotId);
             }
+            localSnap = findLocalSnap(currentSnapshots, localBySlot, slotKey, remoteEntry.snapshotId);
           } catch (err) {
             console.warn('Failed to import inline binary puzzle from cloud manifest:', err);
           }
-        } else if (
-          !localSnap &&
-          (remoteEntry.sampleAssetPath || remoteEntry.sourceRef?.kind === 'sample')
-        ) {
-          const targetUri = (
-            remoteEntry.sampleAssetPath ||
-            remoteEntry.sourceRef?.uri ||
-            ''
-          ).replace(/^\.\//, '');
-          const matchedSample = SAMPLE_GALLERY.find(
-            (s) => s.assetPath.replace(/^\.\//, '') === targetUri
-          );
-          if (matchedSample && typeof fetch !== 'undefined') {
-            try {
-              const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
-              if (bundleResp && bundleResp.ok) {
-                await StorageService.importSnapshotData(await bundleResp.arrayBuffer());
-                currentSnapshots = StorageService.loadSnapshots();
-                localSnap = currentSnapshots.find(
-                  (s) =>
-                    (s.sampleAssetPath || s.sourceRef?.uri || '').replace(/^\.\//, '') ===
-                    targetUri
+        } else if (!localSnap) {
+          const rawSampleUri =
+            typeof remoteEntry.sampleAssetPath === 'string' &&
+            remoteEntry.sampleAssetPath.trim().length > 0
+              ? remoteEntry.sampleAssetPath
+              : remoteEntry.sourceRef &&
+                  typeof remoteEntry.sourceRef === 'object' &&
+                  remoteEntry.sourceRef.kind === 'sample' &&
+                  typeof remoteEntry.sourceRef.uri === 'string'
+                ? remoteEntry.sourceRef.uri
+                : '';
+          if (rawSampleUri.trim().length > 0) {
+            const targetUri = rawSampleUri.replace(/^\.\//, '');
+            const matchedSample = SAMPLE_GALLERY.find(
+              (s) => s.assetPath.replace(/^\.\//, '') === targetUri
+            );
+            if (matchedSample && typeof fetch !== 'undefined') {
+              try {
+                const bundleResp = await fetch('./assets/sample_saves.capy').catch(() => null);
+                currentSnapshots = getAuthoritativeSnapshots();
+                localBySlot = buildSlotMap(currentSnapshots);
+                localSnap = findLocalSnap(
+                  currentSnapshots,
+                  localBySlot,
+                  slotKey,
+                  remoteEntry.snapshotId
                 );
-                if (localSnap) {
-                  importedSavesFromCloud += 1;
+                if (
+                  !localSnap &&
+                  (initialLocalIds.has(remoteEntry.snapshotId) || initialLocalSlots.has(slotKey))
+                ) {
+                  continue;
                 }
+                if (!localSnap && bundleResp && bundleResp.ok) {
+                  await StorageService.importSnapshotData(await bundleResp.arrayBuffer());
+                  currentSnapshots = getAuthoritativeSnapshots();
+                  localBySlot = buildSlotMap(currentSnapshots);
+                  localSnap = currentSnapshots.find((s) => {
+                    const sUri =
+                      typeof s.sampleAssetPath === 'string'
+                        ? s.sampleAssetPath
+                        : typeof s.sourceRef?.uri === 'string'
+                          ? s.sourceRef.uri
+                          : '';
+                    return sUri.replace(/^\.\//, '') === targetUri;
+                  });
+                  if (localSnap) {
+                    importedSavesFromCloud += 1;
+                  }
+                }
+              } catch {
+                // Ignore sample bundle bootstrap error
               }
-            } catch {
-              // Ignore sample bundle bootstrap error
             }
           }
         }
 
+        currentSnapshots = getAuthoritativeSnapshots();
+        localBySlot = buildSlotMap(currentSnapshots);
+        localSnap = findLocalSnap(currentSnapshots, localBySlot, slotKey, remoteEntry.snapshotId);
         if (localSnap) {
+          const validEntryResetEpoch =
+            typeof remoteEntry.resetEpoch === 'number' && Number.isFinite(remoteEntry.resetEpoch)
+              ? remoteEntry.resetEpoch
+              : undefined;
           const effectiveRemoteDelta: ProgressDeltaV2 =
-            remoteDelta.resetEpoch !== undefined || remoteEntry.resetEpoch === undefined
+            remoteDelta.resetEpoch !== undefined || validEntryResetEpoch === undefined
               ? remoteDelta
-              : { ...remoteDelta, resetEpoch: remoteEntry.resetEpoch };
+              : { ...remoteDelta, resetEpoch: validEntryResetEpoch };
           const localEpoch = localSnap.resetEpoch ?? 0;
           const localDelta: ProgressDeltaV2 = {
             version: 2,
@@ -807,7 +925,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
               undefined,
               mergedEpoch > 0 ? mergedEpoch : undefined
             );
-            localBySlot.set(slotKey, currentSnapshots.find((s) => s.id === localSnap!.id)!);
+            localBySlot = buildSlotMap(currentSnapshots);
           }
         }
       }
@@ -815,11 +933,19 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
     // 2. Also merge any legacy single-slot vault envelopes into matching local snapshots
     const legacyVault = this.readLocalVault();
+    currentSnapshots = getAuthoritativeSnapshots();
+    localBySlot = buildSlotMap(currentSnapshots);
     for (const [slotKey, env] of Object.entries(legacyVault)) {
-      const localSnap = localBySlot.get(slotKey);
-      if (!localSnap || !env.deltaToken) continue;
+      const initialSnap = localBySlot.get(slotKey);
+      if (!initialSnap || !env.deltaToken) continue;
+      const targetSnapId = initialSnap.id;
       try {
         const rawRemoteDelta = await decodeProgressDeltaToken(env.deltaToken);
+        currentSnapshots = getAuthoritativeSnapshots();
+        localBySlot = buildSlotMap(currentSnapshots);
+        const localSnap =
+          localBySlot.get(slotKey) || currentSnapshots.find((s) => s.id === targetSnapId);
+        if (!localSnap) continue;
         const remoteDelta: ProgressDeltaV2 =
           rawRemoteDelta.resetEpoch !== undefined || env.resetEpoch === undefined
             ? rawRemoteDelta
@@ -858,7 +984,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
             undefined,
             mergedEpoch > 0 ? mergedEpoch : undefined
           );
-          localBySlot.set(slotKey, currentSnapshots.find((s) => s.id === localSnap.id)!);
+          localBySlot = buildSlotMap(currentSnapshots);
         }
       } catch {
         // Ignore malformed legacy envelope
@@ -866,20 +992,29 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     }
 
     // 3. Build updated CloudLibraryManifestV2 from all local snapshots & upload any new custom .capy v2 binaries
-    currentSnapshots = StorageService.loadSnapshots();
+    currentSnapshots = getAuthoritativeSnapshots();
     const nextEntries: Record<string, CloudSaveEntryV2> = {
       ...(remoteManifest?.entries || {}),
     };
+    const builtEpochBySlot = new Map<string, number>();
+    const builtFilledKeyBySlot = new Map<string, string>();
 
-    for (const snap of currentSnapshots) {
-      const slotKey = computeSlotKeyForSnapshot(snap);
-      const existingRemote = nextEntries[slotKey];
-      const snapEpoch = Math.max(snap.resetEpoch ?? 0, existingRemote?.resetEpoch ?? 0);
+    const encodeManifestEntry = async (
+      snap: SavedSnapshot,
+      slotKey: string,
+      snapEpoch: number,
+      existingRemote?: CloudSaveEntryV2,
+      cloudBinaryRef?: string,
+      inlineBinaryB64?: string
+    ): Promise<CloudSaveEntryV2> => {
+      const safeSourceRef =
+        snap.sourceRef ||
+        (isAllowedSampleAssetPath(snap.sampleAssetPath)
+          ? { kind: 'sample' as const, uri: snap.sampleAssetPath }
+          : undefined);
       const deltaToken = await encodeProgressDeltaToken({
         version: 2,
-        sourceRef:
-          snap.sourceRef ||
-          (snap.sampleAssetPath ? { kind: 'sample', uri: snap.sampleAssetPath } : undefined),
+        sourceRef: safeSourceRef,
         filledRegionIds: snap.filledRegionIds || [],
         ...(snap.paintedRegionColors && Object.keys(snap.paintedRegionColors).length > 0
           ? { paintedRegionColors: snap.paintedRegionColors }
@@ -888,6 +1023,33 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
         ...(snapEpoch > 0 ? { resetEpoch: snapEpoch } : {}),
         updatedAt: snap.lastOpened || snap.timestamp || Date.now(),
       });
+      const resolvedBinaryRef =
+        cloudBinaryRef || existingRemote?.cloudBinaryRef || existingRemote?.driveBinaryFileId;
+      const resolvedInlineB64 = inlineBinaryB64 || existingRemote?.inlineBinaryB64;
+      return {
+        snapshotId: snap.id,
+        slotKey,
+        title: snap.title,
+        createdAt: snap.timestamp || Date.now(),
+        lastOpened: snap.lastOpened || Date.now(),
+        isPinned: snap.isPinned,
+        filledCount: (snap.filledRegionIds || []).length,
+        totalCount: snap.totalCount || 0,
+        ...(snapEpoch > 0 ? { resetEpoch: snapEpoch } : {}),
+        deltaToken,
+        sourceRef: safeSourceRef,
+        sampleAssetPath: snap.sampleAssetPath,
+        ...(resolvedBinaryRef
+          ? { cloudBinaryRef: resolvedBinaryRef, driveBinaryFileId: resolvedBinaryRef }
+          : {}),
+        ...(resolvedInlineB64 ? { inlineBinaryB64: resolvedInlineB64 } : {}),
+      };
+    };
+
+    for (const snap of currentSnapshots) {
+      const slotKey = computeSlotKeyForSnapshot(snap);
+      const existingRemote = nextEntries[slotKey];
+      const snapEpoch = Math.max(snap.resetEpoch ?? 0, existingRemote?.resetEpoch ?? 0);
 
       let cloudBinaryRef = existingRemote?.cloudBinaryRef || existingRemote?.driveBinaryFileId;
       let inlineBinaryB64 = existingRemote?.inlineBinaryB64;
@@ -919,24 +1081,51 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
         }
       }
 
-      nextEntries[slotKey] = {
-        snapshotId: snap.id,
+      nextEntries[slotKey] = await encodeManifestEntry(
+        snap,
         slotKey,
-        title: snap.title,
-        createdAt: snap.timestamp || Date.now(),
-        lastOpened: snap.lastOpened || Date.now(),
-        isPinned: snap.isPinned,
-        filledCount: (snap.filledRegionIds || []).length,
-        totalCount: snap.totalCount || 0,
-        ...(snapEpoch > 0 ? { resetEpoch: snapEpoch } : {}),
-        deltaToken,
-        sourceRef: snap.sourceRef,
-        sampleAssetPath: snap.sampleAssetPath,
-        ...(cloudBinaryRef
-          ? { cloudBinaryRef, driveBinaryFileId: cloudBinaryRef }
-          : {}),
-        ...(inlineBinaryB64 ? { inlineBinaryB64 } : {}),
-      };
+        snapEpoch,
+        existingRemote,
+        cloudBinaryRef,
+        inlineBinaryB64
+      );
+      builtEpochBySlot.set(slotKey, snapEpoch);
+      builtFilledKeyBySlot.set(
+        slotKey,
+        `${snapEpoch}:${(snap.filledRegionIds || []).join(',')}`
+      );
+    }
+
+    // Re-read StorageService right before pushing manifest so mid-Step-3 resets or deletions are never overwritten
+    const latestSnapshots = getAuthoritativeSnapshots();
+    const latestSlotSet = new Set<string>();
+    for (const latestSnap of latestSnapshots) {
+      const slotKey = computeSlotKeyForSnapshot(latestSnap);
+      latestSlotSet.add(slotKey);
+      const latestEpoch = Math.max(
+        latestSnap.resetEpoch ?? 0,
+        remoteManifest?.entries?.[slotKey]?.resetEpoch ?? 0
+      );
+      const latestFilledKey = `${latestEpoch}:${(latestSnap.filledRegionIds || []).join(',')}`;
+      if (
+        !builtEpochBySlot.has(slotKey) ||
+        builtEpochBySlot.get(slotKey) !== latestEpoch ||
+        builtFilledKeyBySlot.get(slotKey) !== latestFilledKey
+      ) {
+        nextEntries[slotKey] = await encodeManifestEntry(
+          latestSnap,
+          slotKey,
+          latestEpoch,
+          nextEntries[slotKey]
+        );
+        builtEpochBySlot.set(slotKey, latestEpoch);
+        builtFilledKeyBySlot.set(slotKey, latestFilledKey);
+      }
+    }
+    for (const builtSlot of builtEpochBySlot.keys()) {
+      if (!latestSlotSet.has(builtSlot) && !remoteManifest?.entries?.[builtSlot]) {
+        delete nextEntries[builtSlot];
+      }
     }
 
     const syncedAt = Date.now();
@@ -949,7 +1138,15 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
     };
 
     const { pushed, backend } = await this.pushRemoteLibraryManifest(updatedManifest);
-    this.auth.markSynced(syncedAt);
+    if (pushed) {
+      this.auth.markSynced(syncedAt);
+    }
+    const afterPushSnapshots = getAuthoritativeSnapshots();
+    const hasPendingLocalChanges = afterPushSnapshots.some((s) => {
+      const slotKey = computeSlotKeyForSnapshot(s);
+      const pushedEpoch = updatedManifest.entries[slotKey]?.resetEpoch ?? 0;
+      return (s.resetEpoch ?? 0) > pushedEpoch;
+    });
 
     return {
       syncedAt,
@@ -958,6 +1155,7 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       mergedRegionsFromCloud,
       pushedToCloud: pushed,
       cloudBackend: backend,
+      hasPendingLocalChanges,
     };
   }
 
@@ -1024,7 +1222,9 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
       devicePlayerId: this.auth.getCurrentIdentity().playerId,
     };
     const pushedToCloud = await this.pushEnvelope(envelope);
-    this.auth.markSynced(syncedAt);
+    if (pushedToCloud) {
+      this.auth.markSynced(syncedAt);
+    }
 
     return {
       slotKey,
@@ -1052,7 +1252,20 @@ export function resolveCoopRoomWsUrl(
   locationLike?: LocationLike | null
 ): string | null {
   if (explicitEnvUrl && explicitEnvUrl.trim().length > 0) {
-    return explicitEnvUrl.trim();
+    try {
+      const parsed = new URL(explicitEnvUrl.trim());
+      const proto = parsed.protocol.toLowerCase();
+      const host = parsed.hostname.toLowerCase();
+      if (proto === 'wss:') {
+        return parsed.toString();
+      }
+      if (proto === 'ws:' && (host === 'localhost' || host === '127.0.0.1' || host === '[::1]')) {
+        return parsed.toString();
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
   if (!locationLike?.hostname) return null;
 
@@ -1110,6 +1323,7 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   private wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private wsReconnectAttempt = 0;
   private isLeavingRoom = false;
+  private wsTerminallyClosed = false;
   private detachLifecycleListeners: (() => void) | null = null;
   private participants = new Map<string, CoopParticipant>();
   private participantTransports = new Map<string, 'channel' | 'ws'>();
@@ -1129,16 +1343,13 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     participant: CoopParticipant,
     initialSeedToken?: string
   ): Promise<void> {
-    this.leaveRoom();
-
-    const normalized = rawRoomCode
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 8);
+    const normalized = normalizeCoopRoomCode(rawRoomCode);
     if (!normalized) throw new Error('Invalid room code');
 
+    this.leaveRoom();
+
     this.isLeavingRoom = false;
+    this.wsTerminallyClosed = false;
     this.roomCode = normalized;
     this.selfParticipant = { ...participant, lastActiveAt: Date.now() };
     this.seedToken = initialSeedToken;
@@ -1150,7 +1361,11 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     if (typeof BroadcastChannel !== 'undefined') {
       this.channel = new BroadcastChannel(resolveCoopBroadcastChannelName(normalized));
       this.channel.onmessage = (ev: MessageEvent<CoopRoomWireMessage>) => {
-        if (ev.data) this.handleWireMessage(ev.data, 'channel');
+        try {
+          if (ev.data) this.handleWireMessage(ev.data, 'channel');
+        } catch {
+          // Ignore malformed BroadcastChannel frame
+        }
       };
     }
 
@@ -1203,7 +1418,9 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     this.detachLifecycleListeners?.();
     const cleanups: Array<() => void> = [];
     const recoverIfDisconnected = () => {
-      if (this.isLeavingRoom || !this.roomCode || !this.wsEndpoint) return;
+      if (this.isLeavingRoom || this.wsTerminallyClosed || !this.roomCode || !this.wsEndpoint) {
+        return;
+      }
       if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
         if (this.wsReconnectTimer) {
           clearTimeout(this.wsReconnectTimer);
@@ -1233,7 +1450,13 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   }
 
   private openWebSocket(): void {
-    if (this.isLeavingRoom || !this.roomCode || !this.wsEndpoint || typeof WebSocket === 'undefined') {
+    if (
+      this.isLeavingRoom ||
+      this.wsTerminallyClosed ||
+      !this.roomCode ||
+      !this.wsEndpoint ||
+      typeof WebSocket === 'undefined'
+    ) {
       return;
     }
     if (this.wsReconnectTimer) {
@@ -1249,7 +1472,13 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
       this.ws = socket;
 
       socket.onopen = () => {
-        if (this.ws !== socket || this.isLeavingRoom || !this.roomCode || !this.selfParticipant) {
+        if (
+          this.ws !== socket ||
+          this.isLeavingRoom ||
+          this.wsTerminallyClosed ||
+          !this.roomCode ||
+          !this.selfParticipant
+        ) {
           try {
             socket.close();
           } catch {
@@ -1278,11 +1507,28 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
         }
       };
 
-      socket.onclose = () => {
+      socket.onclose = (ev) => {
         if (this.ws === socket) {
           this.ws = null;
         }
         this.clearWsParticipants();
+        const code = typeof ev?.code === 'number' ? ev.code : 0;
+        const isTerminalPolicyClose =
+          code === 1008 || code === 1009 || (code >= 4000 && code <= 4999);
+        if (isTerminalPolicyClose) {
+          this.wsTerminallyClosed = true;
+          if (this.wsPingTimer) {
+            clearInterval(this.wsPingTimer);
+            this.wsPingTimer = null;
+          }
+          if (this.wsReconnectTimer) {
+            clearTimeout(this.wsReconnectTimer);
+            this.wsReconnectTimer = null;
+          }
+          this.detachLifecycleListeners?.();
+          this.detachLifecycleListeners = null;
+          return;
+        }
         if (!this.isLeavingRoom && this.roomCode && this.wsEndpoint) {
           this.scheduleWsReconnect();
         }
@@ -1298,13 +1544,19 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   }
 
   private scheduleWsReconnect(): void {
-    if (this.wsReconnectTimer || this.isLeavingRoom || !this.roomCode || !this.wsEndpoint) {
+    if (
+      this.wsReconnectTimer ||
+      this.isLeavingRoom ||
+      this.wsTerminallyClosed ||
+      !this.roomCode ||
+      !this.wsEndpoint
+    ) {
       return;
     }
     const delayMs = computeCoopReconnectDelayMs(this.wsReconnectAttempt++);
     this.wsReconnectTimer = setTimeout(() => {
       this.wsReconnectTimer = null;
-      if (!this.isLeavingRoom && this.roomCode && this.wsEndpoint) {
+      if (!this.isLeavingRoom && !this.wsTerminallyClosed && this.roomCode && this.wsEndpoint) {
         this.openWebSocket();
       }
     }, delayMs);
@@ -1375,6 +1627,7 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     this.participantTransports.clear();
     this.seenEventIds.clear();
     this.isLeavingRoom = false;
+    this.wsTerminallyClosed = false;
     this.emitParticipants();
   }
 
@@ -1402,26 +1655,60 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
   }
 
   private handleWireMessage(msg: CoopRoomWireMessage, source: 'channel' | 'ws' = 'channel'): void {
-    if (!this.roomCode || msg.roomCode !== this.roomCode || !msg.sender) return;
-    if (this.selfParticipant && msg.sender.playerId === this.selfParticipant.playerId) return;
+    if (
+      !this.roomCode ||
+      !msg ||
+      typeof msg !== 'object' ||
+      msg.roomCode !== this.roomCode ||
+      !msg.sender ||
+      typeof msg.sender !== 'object'
+    ) {
+      return;
+    }
+    const rawSenderId =
+      typeof msg.sender.playerId === 'string' ? msg.sender.playerId.trim() : '';
+    if (
+      !rawSenderId ||
+      rawSenderId.length > 64 ||
+      /[\u0000-\u001F\u007F]/.test(rawSenderId)
+    ) {
+      return;
+    }
+    if (this.selfParticipant && rawSenderId === this.selfParticipant.playerId) return;
 
-    if (msg.type === 'WELCOME_STATE' && msg.sender.playerId === '__capy_room_relay__') {
-      if (msg.seedToken) {
+    if (msg.type === 'WELCOME_STATE' && rawSenderId === '__capy_room_relay__') {
+      if (typeof msg.seedToken === 'string' && msg.seedToken.length > 0 && msg.seedToken.length <= 4096) {
         const relaySender: CoopParticipant = { ...msg.sender, lastActiveAt: Date.now() };
         for (const h of this.welcomeHandlers) h(msg.seedToken, relaySender);
       }
       return;
     }
 
+    if (rawSenderId === '__capy_room_relay__') {
+      return;
+    }
+
     if (msg.type === 'LEAVE') {
-      this.participants.delete(msg.sender.playerId);
-      this.participantTransports.delete(msg.sender.playerId);
+      this.participants.delete(rawSenderId);
+      this.participantTransports.delete(rawSenderId);
       this.emitParticipants();
       return;
     }
 
+    const cleanDisplayName =
+      typeof msg.sender.displayName === 'string'
+        ? msg.sender.displayName.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 40) || 'Capy Painter'
+        : 'Capy Painter';
+    const cleanAvatarHex =
+      typeof msg.sender.avatarColorHex === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(msg.sender.avatarColorHex)
+        ? msg.sender.avatarColorHex
+        : '#fbbf24';
+
     const updatedSender: CoopParticipant = {
       ...msg.sender,
+      playerId: rawSenderId,
+      displayName: cleanDisplayName,
+      avatarColorHex: cleanAvatarHex,
       lastActiveAt: Date.now(),
     };
     const pid = updatedSender.playerId;
@@ -1438,7 +1725,7 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     }
 
     if (msg.type === 'HELLO') {
-      if (msg.seedToken) {
+      if (typeof msg.seedToken === 'string' && msg.seedToken.length > 0 && msg.seedToken.length <= 4096) {
         for (const h of this.welcomeHandlers) h(msg.seedToken, updatedSender);
       }
       // Reply with our current welcome state on the transport that delivered HELLO
@@ -1460,42 +1747,112 @@ export class HybridCoopRoomAdapter implements RealtimeRoomProvider {
     }
 
     if (msg.type === 'WELCOME_STATE') {
-      if (msg.seedToken) {
+      if (typeof msg.seedToken === 'string' && msg.seedToken.length > 0 && msg.seedToken.length <= 4096) {
         for (const h of this.welcomeHandlers) h(msg.seedToken, updatedSender);
       }
       return;
     }
 
-    if (msg.type === 'PAINT_EVENT' && msg.paintEvent) {
-      if (this.seenEventIds.has(msg.paintEvent.eventId)) return;
-      this.rememberEventId(msg.paintEvent.eventId);
-      for (const h of this.paintHandlers) h(msg.paintEvent);
+    if (
+      msg.type === 'PAINT_EVENT' &&
+      msg.paintEvent &&
+      typeof msg.paintEvent === 'object' &&
+      !Array.isArray(msg.paintEvent)
+    ) {
+      const ev = msg.paintEvent;
+      if (
+        typeof ev.eventId !== 'string' ||
+        ev.eventId.trim().length === 0 ||
+        ev.eventId.length > 96 ||
+        (ev.roomCode !== undefined && ev.roomCode !== this.roomCode) ||
+        (ev.playerId !== undefined &&
+          (typeof ev.playerId !== 'string' || ev.playerId.trim() !== pid)) ||
+        !Array.isArray(ev.regionIds) ||
+        ev.regionIds.length === 0 ||
+        ev.regionIds.length > 512 ||
+        ev.regionIds.some((id) => typeof id !== 'number' || !Number.isInteger(id) || id < 0 || id > 1_000_000)
+      ) {
+        return;
+      }
+      if (ev.paintedColors !== undefined) {
+        if (!ev.paintedColors || typeof ev.paintedColors !== 'object' || Array.isArray(ev.paintedColors)) {
+          return;
+        }
+        const colorEntries = Object.entries(ev.paintedColors);
+        if (colorEntries.length > 512) return;
+        for (const [k, v] of colorEntries) {
+          if (
+            !/^\d+$/.test(k) ||
+            typeof v !== 'number' ||
+            !Number.isInteger(v) ||
+            v < 0 ||
+            v > 0xffffffff
+          ) {
+            return;
+          }
+        }
+      }
+      if (this.seenEventIds.has(ev.eventId)) return;
+      this.rememberEventId(ev.eventId);
+      for (const h of this.paintHandlers) h(ev);
       return;
     }
 
-    if (msg.type === 'UNFILL_EVENT' && msg.unfillEvent) {
+    if (
+      msg.type === 'UNFILL_EVENT' &&
+      msg.unfillEvent &&
+      typeof msg.unfillEvent === 'object' &&
+      !Array.isArray(msg.unfillEvent)
+    ) {
       const ev = msg.unfillEvent;
-      const senderId = ev.senderId || ev.playerId || msg.sender.playerId;
-      if (!senderId || (this.selfParticipant && senderId === this.selfParticipant.playerId)) {
+      if (
+        (ev.roomCode !== undefined && ev.roomCode !== this.roomCode) ||
+        (ev.senderId !== undefined &&
+          (typeof ev.senderId !== 'string' || ev.senderId.trim() !== pid)) ||
+        (ev.playerId !== undefined &&
+          (typeof ev.playerId !== 'string' || ev.playerId.trim() !== pid))
+      ) {
+        return;
+      }
+      const senderId =
+        typeof ev.senderId === 'string' && ev.senderId.trim().length > 0
+          ? ev.senderId.trim()
+          : typeof ev.playerId === 'string' && ev.playerId.trim().length > 0
+            ? ev.playerId.trim()
+            : pid;
+      if (
+        !senderId ||
+        senderId === '__capy_room_relay__' ||
+        (this.selfParticipant && senderId === this.selfParticipant.playerId)
+      ) {
         return;
       }
       const normalizedRegionIds = Array.isArray(ev.regionIds)
-        ? ev.regionIds.filter((id) => Number.isInteger(id) && id > 0)
-        : typeof ev.regionId === 'number' && Number.isInteger(ev.regionId) && ev.regionId > 0
+        ? ev.regionIds.filter((id) => Number.isInteger(id) && id > 0 && id <= 1_000_000)
+        : typeof ev.regionId === 'number' &&
+            Number.isInteger(ev.regionId) &&
+            ev.regionId > 0 &&
+            ev.regionId <= 1_000_000
           ? [ev.regionId]
           : [];
-      if (normalizedRegionIds.length === 0) return;
-      if (ev.eventId) {
-        if (this.seenEventIds.has(ev.eventId)) return;
-        this.rememberEventId(ev.eventId);
+      if (normalizedRegionIds.length === 0 || normalizedRegionIds.length > 512) return;
+      if (ev.eventId !== undefined) {
+        if (typeof ev.eventId !== 'string' || ev.eventId.length > 96) return;
+        if (ev.eventId) {
+          if (this.seenEventIds.has(ev.eventId)) return;
+          this.rememberEventId(ev.eventId);
+        }
       }
       const normalizedEvent: CoopUnfillEvent = {
         ...ev,
         senderId,
-        playerId: ev.playerId || senderId,
-        regionId: ev.regionId ?? normalizedRegionIds[0],
+        playerId: typeof ev.playerId === 'string' && ev.playerId.trim() ? ev.playerId.trim() : senderId,
+        regionId:
+          typeof ev.regionId === 'number' && Number.isInteger(ev.regionId)
+            ? ev.regionId
+            : normalizedRegionIds[0],
         regionIds: normalizedRegionIds,
-        timestamp: typeof ev.timestamp === 'number' ? ev.timestamp : Date.now(),
+        timestamp: typeof ev.timestamp === 'number' && Number.isFinite(ev.timestamp) ? ev.timestamp : Date.now(),
       };
       for (const h of this.unfillHandlers) h(normalizedEvent);
     }
@@ -1635,7 +1992,7 @@ const SEED_COMMUNITY_IDEAS: CommunityPuzzleIdea[] = [
     tags: ['Animals', 'Cozy', 'Nature'],
     authorName: 'River Capy',
     authorId: 'seed_1',
-    votes: 24,
+    votes: 0,
     votedByMe: false,
     status: 'curated',
     createdAt: 1730000000000,
@@ -1648,7 +2005,7 @@ const SEED_COMMUNITY_IDEAS: CommunityPuzzleIdea[] = [
     tags: ['Coloring', 'Line Art', 'Nature'],
     authorName: 'Forest Sprout',
     authorId: 'seed_2',
-    votes: 17,
+    votes: 0,
     votedByMe: false,
     status: 'queued',
     createdAt: 1730100000000,
@@ -1666,13 +2023,35 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       if (raw) {
         const parsed = JSON.parse(raw) as CommunityPuzzleIdea[];
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.sort((a, b) => b.votes - a.votes || b.createdAt - a.createdAt);
+          const valid = parsed
+            .filter(
+              (item): item is CommunityPuzzleIdea =>
+                Boolean(
+                  item &&
+                    typeof item === 'object' &&
+                    typeof item.id === 'string' &&
+                    typeof item.title === 'string' &&
+                    typeof item.prompt === 'string'
+                )
+            )
+            .map((idea) => ({
+              ...idea,
+              votes: 0,
+              votedByMe: false,
+              createdAt:
+                typeof idea.createdAt === 'number' && Number.isFinite(idea.createdAt)
+                  ? idea.createdAt
+                  : 0,
+            }));
+          if (valid.length > 0) {
+            return valid.sort((a, b) => b.createdAt - a.createdAt);
+          }
         }
       }
     } catch {
       // Ignore
     }
-    return [...SEED_COMMUNITY_IDEAS];
+    return [...SEED_COMMUNITY_IDEAS].sort((a, b) => b.createdAt - a.createdAt);
   }
 
   private saveIdeas(ideas: CommunityPuzzleIdea[]): void {
@@ -1707,7 +2086,7 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       if (pattern.test(combinedText)) {
         return {
           ok: false,
-          error: 'Please keep community puzzle ideas family-friendly and suitable for all ages.',
+          error: 'Please keep puzzle ideas family-friendly and suitable for all ages.',
         };
       }
     }
@@ -1721,8 +2100,8 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
       tags: input.tags && input.tags.length > 0 ? input.tags : [input.category || 'Community'],
       authorName: input.author.displayName,
       authorId: input.author.playerId,
-      votes: 1,
-      votedByMe: true,
+      votes: 0,
+      votedByMe: false,
       status: 'queued',
       createdAt: Date.now(),
     };
@@ -1732,19 +2111,10 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
     return { ok: true, idea: newIdea };
   }
 
-  toggleVoteIdea(ideaId: string): CommunityPuzzleIdea[] {
-    const ideas = this.getCommunityIdeas().map((idea) => {
-      if (idea.id !== ideaId) return idea;
-      const nextVoted = !idea.votedByMe;
-      return {
-        ...idea,
-        votedByMe: nextVoted,
-        votes: Math.max(0, idea.votes + (nextVoted ? 1 : -1)),
-      };
-    });
-    const sorted = ideas.sort((a, b) => b.votes - a.votes || b.createdAt - a.createdAt);
-    this.saveIdeas(sorted);
-    return sorted;
+  toggleVoteIdea(_ideaId: string): CommunityPuzzleIdea[] {
+    const normalized = this.getCommunityIdeas();
+    this.saveIdeas(normalized);
+    return normalized;
   }
 }
 
@@ -1776,14 +2146,18 @@ class DefaultAiArtworkAdapter implements AiArtworkProvider {
 
 class ConsentRewardedAdAdapter implements MonetizationProvider {
   getLedger(): AiCreditLedger {
-    const isDesktopOrWebAdFree = !NativeBridge.isAndroid;
     try {
       const raw = localStorage.getItem(resolveScopedStorageKey(AI_CREDITS_STORAGE_KEY));
       if (raw) {
-        const parsed = JSON.parse(raw) as AiCreditLedger;
+        const parsed = JSON.parse(raw) as Partial<AiCreditLedger>;
+        const nonNegInt = (v: unknown, fallback: number) =>
+          typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : fallback;
         return {
-          ...parsed,
-          adFreePlatform: isDesktopOrWebAdFree,
+          availableCredits: nonNegInt(parsed.availableCredits, 3),
+          lifetimeEarnedCredits: nonNegInt(parsed.lifetimeEarnedCredits, 3),
+          lifetimeSpentCredits: nonNegInt(parsed.lifetimeSpentCredits, 0),
+          adFreePlatform: true,
+          personalizedAdsConsent: false,
         };
       }
     } catch {
@@ -1793,7 +2167,7 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
       availableCredits: 3, // Starter free AI generation credits
       lifetimeEarnedCredits: 3,
       lifetimeSpentCredits: 0,
-      adFreePlatform: isDesktopOrWebAdFree,
+      adFreePlatform: true,
       personalizedAdsConsent: false,
     };
   }
@@ -1809,24 +2183,26 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
     }
   }
 
-  setPersonalizedAdsConsent(consent: boolean): AiCreditLedger {
-    const next = { ...this.getLedger(), personalizedAdsConsent: consent };
+  setPersonalizedAdsConsent(_consent: boolean): AiCreditLedger {
+    const next: AiCreditLedger = {
+      ...this.getLedger(),
+      adFreePlatform: true,
+      personalizedAdsConsent: false,
+    };
     this.saveLedger(next);
     return next;
   }
 
   async watchRewardedAdForCredits(): Promise<{ granted: number; ledger: AiCreditLedger }> {
     const current = this.getLedger();
-    // Never show forced ads; only trigger native rewarded ad when explicitly requested on Android
-    const shown = NativeBridge.showRewardedAd();
-    const granted = shown ? 2 : 0;
+    // 100% ad-free across all platforms; no ad SDK is bundled
     const next: AiCreditLedger = {
       ...current,
-      availableCredits: current.availableCredits + granted,
-      lifetimeEarnedCredits: current.lifetimeEarnedCredits + granted,
+      adFreePlatform: true,
+      personalizedAdsConsent: false,
     };
     this.saveLedger(next);
-    return { granted, ledger: next };
+    return { granted: 0, ledger: next };
   }
 
   spendCredits(amount: number): boolean {

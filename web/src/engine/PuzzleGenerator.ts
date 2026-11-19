@@ -913,13 +913,15 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
 
     const resolvedColors = imageAnalysis.resolveColorCount(config.paletteDetail, config.colorCount);
 
-    let calibratedMinArea = config.minRegionArea || 48;
-    if (config.paletteDetail === 'LOW') {
-      calibratedMinArea = Math.max(64, config.minRegionArea || 64);
-    } else if (config.paletteDetail === 'MEDIUM' || config.paletteDetail === 'AUTO') {
-      calibratedMinArea = Math.max(40, config.minRegionArea || 48);
-    } else if (config.paletteDetail === 'HIGH') {
-      calibratedMinArea = Math.max(20, config.minRegionArea || 28);
+    let calibratedMinArea = config.minRegionArea ? Math.max(12, config.minRegionArea) : 48;
+    if (!config.minRegionArea) {
+      if (config.paletteDetail === 'LOW') {
+        calibratedMinArea = 64;
+      } else if (config.paletteDetail === 'MEDIUM' || config.paletteDetail === 'AUTO') {
+        calibratedMinArea = 48;
+      } else if (config.paletteDetail === 'HIGH') {
+        calibratedMinArea = 28;
+      }
     }
 
     let calibratedMaxRegions = config.maxRegions || 200;

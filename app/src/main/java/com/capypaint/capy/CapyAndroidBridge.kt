@@ -1,5 +1,6 @@
 package com.capypaint.capy
 
+import android.annotation.TargetApi
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
@@ -18,7 +19,6 @@ import androidx.core.content.edit
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URI
-import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -32,6 +32,7 @@ class CapyAndroidBridge(
     private val isPlayGamesConfiguredProvider: () -> Boolean = {
         isPlayGamesAppIdConfigured(readPlayGamesAppId(context))
     },
+    private val originGuard: () -> Boolean = { true },
 ) {
     @Volatile
     var isModalOpen: Boolean = false
@@ -75,6 +76,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun haptic(type: String) {
+        if (!originGuard()) return
         val view = rootViewProvider()
         view?.post {
             performHaptic(context, view, type)
@@ -83,6 +85,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun setModalOpen(isOpen: Boolean) {
+        if (!originGuard()) return
         Log.d(TAG, "Modal state updated: isOpen=$isOpen")
         isModalOpen = isOpen
         onModalStateChanged(isOpen)
@@ -90,11 +93,13 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun saveBackup(key: String, data: String): Boolean {
+        if (!originGuard()) return false
         return saveBackupToDir(backupDir, key, data)
     }
 
     @JavascriptInterface
     fun loadBackup(key: String): String? {
+        if (!originGuard()) return null
         return loadBackupFromDir(backupDir, key)
     }
 
@@ -104,6 +109,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun saveCloudSnapshot(slotKey: String, payloadJson: String): Boolean {
+        if (!originGuard()) return false
         val savedLocal = saveBackupToDir(cloudDir, slotKey, payloadJson)
         onSaveCloudSnapshot?.invoke(slotKey, payloadJson)
         return savedLocal
@@ -111,6 +117,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun loadCloudSnapshot(slotKey: String): String? {
+        if (!originGuard()) return null
         return loadBackupFromDir(cloudDir, slotKey)
     }
 
@@ -121,6 +128,7 @@ class CapyAndroidBridge(
         totalChunks: Int,
         base64Chunk: String,
     ): Boolean {
+        if (!originGuard()) return false
         val savedLocal = saveCloudBinaryChunkToDir(
             dir = cloudDir,
             blobKey = blobKey,
@@ -136,11 +144,13 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun loadCloudBinaryChunk(blobKey: String, chunkIndex: Int): String? {
+        if (!originGuard()) return null
         return loadCloudBinaryChunkFromDir(cloudDir, blobKey, chunkIndex)
     }
 
     @JavascriptInterface
     fun isPlayGamesConfigured(): Boolean {
+        if (!originGuard()) return false
         return try {
             isPlayGamesConfiguredProvider()
         } catch (_: Exception) {
@@ -150,6 +160,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun requestCloudSnapshotPull(slotKey: String): Boolean {
+        if (!originGuard()) return false
         if (!isPlayGamesConfigured()) {
             return false
         }
@@ -192,19 +203,15 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun signInPlayGames(): String? {
+        if (!originGuard()) return null
         Log.d(TAG, "Play Games v2 sign-in requested")
         onRequestPlayGamesSignIn?.invoke()
         return loadCachedPlayGamesProfileJson()
     }
 
     @JavascriptInterface
-    fun showRewardedAd(): Boolean {
-        Log.d(TAG, "Opt-in rewarded ad requested; no ad SDK bundled, returning false")
-        return false
-    }
-
-    @JavascriptInterface
     fun consumePendingSharedImage(): String? {
+        if (!originGuard()) return null
         val pending = pendingSharedImageJson
         pendingSharedImageJson = null
         return pending
@@ -212,6 +219,7 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun consumePendingDeepLink(): String? {
+        if (!originGuard()) return null
         val pending = pendingDeepLinkUrl
         pendingDeepLinkUrl = null
         return pending
@@ -225,35 +233,51 @@ class CapyAndroidBridge(
 
     @JavascriptInterface
     fun shareTextLink(title: String, url: String) {
+        if (!originGuard()) return
+        if (!isAllowedShareTextUrl(url)) {
+            Log.w(TAG, "Blocked unsafe shareTextLink URL: $url")
+            return
+        }
+        val safeTitle = sanitizeShareTitle(title)
         try {
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
-                putExtra(Intent.EXTRA_SUBJECT, title)
-                putExtra(Intent.EXTRA_TITLE, title)
-                putExtra(Intent.EXTRA_TEXT, url)
+                putExtra(Intent.EXTRA_SUBJECT, safeTitle)
+                putExtra(Intent.EXTRA_TITLE, safeTitle)
+                putExtra(Intent.EXTRA_TEXT, url.trim())
             }
-            val chooser = Intent.createChooser(shareIntent, title).apply {
+            val chooser = Intent.createChooser(shareIntent, safeTitle).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
-            Log.i(TAG, "Dispatched text link share chooser for '$title'")
+            Log.i(TAG, "Dispatched text link share chooser for '$safeTitle'")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to share text link '$title'", e)
+            Log.e(TAG, "Failed to share text link '$safeTitle'", e)
         }
     }
 
     @JavascriptInterface
     fun shareImage(title: String, dataUrl: String) {
+        if (!originGuard()) return
         val spec = resolveShareImageSpec(dataUrl)
         shareFile(title, spec.fileName, spec.mimeType, spec.base64Payload)
     }
 
     @JavascriptInterface
     fun shareFile(title: String, fileName: String, mimeType: String, base64Data: String) {
+        if (!originGuard()) return
         try {
+            if (base64Data.length > MAX_SHARE_BASE64_CHARS) {
+                Log.w(TAG, "Rejected oversized share payload (${base64Data.length} chars)")
+                return
+            }
             val commaIndex = base64Data.indexOf(',')
             val base64Part = if (commaIndex >= 0) base64Data.substring(commaIndex + 1) else base64Data
             val bytes = Base64.decode(base64Part, Base64.DEFAULT)
+            if (bytes.isEmpty() || bytes.size > MAX_SHARE_FILE_BYTES) {
+                Log.w(TAG, "Rejected invalid share byte length (${bytes.size} bytes)")
+                return
+            }
 
             val shareFile = prepareSharedExportFile(context.cacheDir, fileName)
             shareFile.writeBytes(bytes)
@@ -264,14 +288,15 @@ class CapyAndroidBridge(
                 shareFile,
             )
 
-            val resolvedMime = mimeType.ifBlank { "application/octet-stream" }
+            val resolvedMime = resolveAllowedExportMimeType(mimeType)
+            val safeTitle = sanitizeShareTitle(title)
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = resolvedMime
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_TITLE, title)
+                putExtra(Intent.EXTRA_TITLE, safeTitle)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            val chooser = Intent.createChooser(shareIntent, title).apply {
+            val chooser = Intent.createChooser(shareIntent, safeTitle).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
@@ -285,6 +310,12 @@ class CapyAndroidBridge(
         ALLOW_INTERNAL,
         OPEN_EXTERNAL,
         BLOCK,
+    }
+
+    enum class SnapshotPushDecision {
+        COMMIT_INCOMING,
+        SKIP_IDENTICAL,
+        MERGE_UNSEEN_REMOTE,
     }
 
     data class ShareImageSpec(
@@ -327,6 +358,32 @@ class CapyAndroidBridge(
         }
     }
 
+    internal object Api26FileMover {
+        @TargetApi(Build.VERSION_CODES.O)
+        fun moveReplacing(source: File, target: File): Boolean {
+            return try {
+                Files.move(
+                    source.toPath(),
+                    target.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE,
+                )
+                true
+            } catch (_: Exception) {
+                try {
+                    Files.move(
+                        source.toPath(),
+                        target.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                    )
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+        }
+    }
+
     companion object {
         const val TAG = "CapyBridge"
         const val BACKUP_FOLDER_NAME = "capy_saves"
@@ -338,8 +395,23 @@ class CapyAndroidBridge(
         const val KEY_PLAY_GAMES_DISPLAY_NAME = "display_name"
         const val ALLOWED_DEEP_LINK_HOST = "capypaint.com"
         const val APP_ASSETS_HOST = "appassets.androidplatform.net"
+        const val APP_ASSETS_ORIGIN = "https://$APP_ASSETS_HOST"
+        const val MAX_BACKUP_PAYLOAD_CHARS = 16 * 1024 * 1024
+        const val MAX_SHARE_FILE_BYTES = 16 * 1024 * 1024
+        const val MAX_SHARE_BASE64_CHARS = 24 * 1024 * 1024
         val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
-        val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io")
+        val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io", "capyboop.github.io")
+        private val FILE_IO_LOCK = Any()
+        private val ALLOWED_EXPORT_MIME_TYPES = setOf(
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/gif",
+            "image/svg+xml",
+            "application/json",
+            "text/plain",
+            "application/octet-stream",
+        )
 
         /**
          * Returns true when the Google Play Console Game Services Project ID is configured
@@ -423,64 +495,92 @@ class CapyAndroidBridge(
             }
         }
 
-        fun saveBackupToDir(dir: File, key: String, data: String): Boolean {
-            val safeKey = sanitizeKey(key)
-            val tmpFile = File(dir, "$safeKey.json.tmp")
+        private fun isInsideDirectory(dir: File, target: File): Boolean {
             return try {
-                if (!dir.exists() && !dir.mkdirs()) {
-                    Log.e(TAG, "Failed to create backup directory: ${dir.absolutePath}")
-                    return false
-                }
-                val targetFile = File(dir, "$safeKey.json")
-                FileOutputStream(tmpFile).use { fos ->
-                    fos.write(data.toByteArray(Charsets.UTF_8))
-                    fos.flush()
-                    fos.fd.sync()
-                }
-                try {
-                    Files.move(
-                        tmpFile.toPath(),
-                        targetFile.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE,
-                    )
-                } catch (_: AtomicMoveNotSupportedException) {
-                    try {
-                        Files.move(
-                            tmpFile.toPath(),
-                            targetFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING,
-                        )
-                    } catch (_: Exception) {
-                        if (!tmpFile.renameTo(targetFile)) {
-                            throw IllegalStateException("Failed to rename ${tmpFile.name} to ${targetFile.name}")
-                        }
-                    }
-                }
-                Log.d(TAG, "Saved backup: $key (${data.length} chars)")
-                true
-            } catch (e: Exception) {
-                if (tmpFile.exists()) {
-                    tmpFile.delete()
-                }
-                Log.e(TAG, "Failed to save backup: $key", e)
+                val basePath = dir.canonicalFile.path
+                val targetPath = target.canonicalFile.path
+                targetPath.startsWith("$basePath${File.separator}")
+            } catch (_: Exception) {
                 false
             }
         }
 
-        fun loadBackupFromDir(dir: File, key: String): String? {
-            return try {
-                val targetFile = File(dir, "${sanitizeKey(key)}.json")
-                if (!targetFile.exists()) {
-                    Log.d(TAG, "No backup file found for key: $key")
-                    return null
+        internal fun shouldUseAtomicNioMove(sdkInt: Int = Build.VERSION.SDK_INT): Boolean {
+            return sdkInt >= Build.VERSION_CODES.O
+        }
+
+        private fun replaceFileAtomically(source: File, target: File) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (Api26FileMover.moveReplacing(source, target)) {
+                    return
                 }
-                val content = targetFile.readText(Charsets.UTF_8)
-                Log.d(TAG, "Loaded backup: $key (${content.length} chars)")
-                content
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to load backup: $key", e)
-                null
+            }
+            if (!source.renameTo(target)) {
+                throw IllegalStateException("Failed to rename ${source.name} to ${target.name}")
+            }
+        }
+
+        fun saveBackupToDir(dir: File, key: String, data: String): Boolean {
+            if (data.length > MAX_BACKUP_PAYLOAD_CHARS) {
+                Log.w(TAG, "Rejected oversized backup payload for key: $key (${data.length} chars)")
+                return false
+            }
+            val safeKey = sanitizeKey(key)
+            val tmpPrefix = if (safeKey.length >= 3) safeKey.take(40) else "capy_$safeKey"
+            return synchronized(FILE_IO_LOCK) {
+                var tmpFile: File? = null
+                try {
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        Log.e(TAG, "Failed to create backup directory: ${dir.absolutePath}")
+                        return@synchronized false
+                    }
+                    val targetFile = File(dir, "$safeKey.json")
+                    if (!isInsideDirectory(dir, targetFile)) {
+                        Log.e(TAG, "Rejected path escape attempt for backup key: $key")
+                        return@synchronized false
+                    }
+                    val createdTmp = File.createTempFile("$tmpPrefix.", ".json.tmp", dir)
+                    tmpFile = createdTmp
+                    if (!isInsideDirectory(dir, createdTmp)) {
+                        Log.e(TAG, "Rejected temp path escape attempt for backup key: $key")
+                        return@synchronized false
+                    }
+                    FileOutputStream(createdTmp).use { fos ->
+                        fos.write(data.toByteArray(Charsets.UTF_8))
+                        fos.flush()
+                        fos.fd.sync()
+                    }
+                    replaceFileAtomically(createdTmp, targetFile)
+                    Log.d(TAG, "Saved backup: $key (${data.length} chars)")
+                    true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to save backup: $key", e)
+                    false
+                } finally {
+                    tmpFile?.let {
+                        if (it.exists()) {
+                            it.delete()
+                        }
+                    }
+                }
+            }
+        }
+
+        fun loadBackupFromDir(dir: File, key: String): String? {
+            return synchronized(FILE_IO_LOCK) {
+                try {
+                    val targetFile = File(dir, "${sanitizeKey(key)}.json")
+                    if (!isInsideDirectory(dir, targetFile) || !targetFile.exists()) {
+                        Log.d(TAG, "No backup file found for key: $key")
+                        return@synchronized null
+                    }
+                    val content = targetFile.readText(Charsets.UTF_8)
+                    Log.d(TAG, "Loaded backup: $key (${content.length} chars)")
+                    content
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to load backup: $key", e)
+                    null
+                }
             }
         }
 
@@ -511,64 +611,62 @@ class CapyAndroidBridge(
             ) {
                 return false
             }
-            val slotKey = formatCloudBinaryChunkSlotKey(blobKey, chunkIndex)
-            val saved = saveBackupToDir(dir, slotKey, base64Chunk)
-            if (!saved) return false
+            return synchronized(FILE_IO_LOCK) {
+                val slotKey = formatCloudBinaryChunkSlotKey(blobKey, chunkIndex)
+                val saved = saveBackupToDir(dir, slotKey, base64Chunk)
+                if (!saved) return@synchronized false
 
-            if (chunkIndex == totalChunks - 1) {
-                val safePrefix = sanitizeKey(blobKey)
-                for (staleIdx in totalChunks until MAX_CLOUD_BINARY_CHUNKS) {
-                    val staleFile = File(dir, "${safePrefix}_part_$staleIdx.json")
-                    if (staleFile.exists()) {
-                        staleFile.delete()
+                if (chunkIndex == totalChunks - 1) {
+                    val safePrefix = sanitizeKey(blobKey)
+                    for (staleIdx in totalChunks until MAX_CLOUD_BINARY_CHUNKS) {
+                        val staleFile = File(dir, "${safePrefix}_part_$staleIdx.json")
+                        if (isInsideDirectory(dir, staleFile) && staleFile.exists()) {
+                            staleFile.delete()
+                        }
                     }
                 }
+                true
             }
-            return true
         }
 
         fun loadCloudBinaryChunkFromDir(dir: File, blobKey: String, chunkIndex: Int): String? {
             if ((blobKey.isBlank()) || (chunkIndex < 0) || (chunkIndex >= MAX_CLOUD_BINARY_CHUNKS)) {
                 return null
             }
-            return loadBackupFromDir(dir, formatCloudBinaryChunkSlotKey(blobKey, chunkIndex))
+            return synchronized(FILE_IO_LOCK) {
+                loadBackupFromDir(dir, formatCloudBinaryChunkSlotKey(blobKey, chunkIndex))
+            }
         }
 
         private fun writeAtomicBytesFile(dir: File, fileName: String, bytes: ByteArray): Boolean {
-            val tmpFile = File(dir, "$fileName.tmp")
-            return try {
-                if ((!dir.exists()) && (!dir.mkdirs())) return false
-                val targetFile = File(dir, fileName)
-                FileOutputStream(tmpFile).use { fos ->
-                    fos.write(bytes)
-                    fos.flush()
-                    fos.fd.sync()
-                }
+            val safeFileName = sanitizeFileName(fileName)
+            val tmpPrefix = if (safeFileName.length >= 3) safeFileName.take(40) else "capy_$safeFileName"
+            return synchronized(FILE_IO_LOCK) {
+                var tmpFile: File? = null
                 try {
-                    Files.move(
-                        tmpFile.toPath(),
-                        targetFile.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE,
-                    )
-                } catch (_: AtomicMoveNotSupportedException) {
-                    try {
-                        Files.move(
-                            tmpFile.toPath(),
-                            targetFile.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING,
-                        )
-                    } catch (_: Exception) {
-                        if (!tmpFile.renameTo(targetFile)) {
-                            throw IllegalStateException("Failed to rename ${tmpFile.name}")
+                    if ((!dir.exists()) && (!dir.mkdirs())) return@synchronized false
+                    val targetFile = File(dir, safeFileName)
+                    if (!isInsideDirectory(dir, targetFile)) return@synchronized false
+                    val createdTmp = File.createTempFile("$tmpPrefix.", ".tmp", dir)
+                    tmpFile = createdTmp
+                    if (!isInsideDirectory(dir, createdTmp)) return@synchronized false
+                    FileOutputStream(createdTmp).use { fos ->
+                        fos.write(bytes)
+                        fos.flush()
+                        fos.fd.sync()
+                    }
+                    replaceFileAtomically(createdTmp, targetFile)
+                    true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed writing atomic binary chunk: $safeFileName", e)
+                    false
+                } finally {
+                    tmpFile?.let {
+                        if (it.exists()) {
+                            it.delete()
                         }
                     }
                 }
-                true
-            } catch (e: Exception) {
-                if (tmpFile.exists()) tmpFile.delete()
-                Log.e(TAG, "Failed writing atomic binary chunk: $fileName", e)
-                false
             }
         }
 
@@ -590,57 +688,65 @@ class CapyAndroidBridge(
             if ((totalChunks < 1) || (totalChunks > MAX_CLOUD_BINARY_CHUNKS)) return 0
 
             val safeKey = sanitizeKey(blobKey)
-            for (i in 0 until totalChunks) {
-                val start = i * chunkSizeBytes
-                val end = minOf(bytes.size, start + chunkSizeBytes)
-                val slice = bytes.copyOfRange(start, end)
-                if (!writeAtomicBytesFile(dir, "${safeKey}_bin_$i.bin", slice)) {
-                    return 0
+            return synchronized(FILE_IO_LOCK) {
+                for (i in 0 until totalChunks) {
+                    val start = i * chunkSizeBytes
+                    val end = minOf(bytes.size, start + chunkSizeBytes)
+                    val slice = bytes.copyOfRange(start, end)
+                    if (!writeAtomicBytesFile(dir, "${safeKey}_bin_$i.bin", slice)) {
+                        return@synchronized 0
+                    }
                 }
+                val metaText = "$totalChunks:${bytes.size}"
+                if (!saveBackupToDir(dir, "${safeKey}_bin_meta", metaText)) {
+                    return@synchronized 0
+                }
+                for (staleIdx in totalChunks until MAX_CLOUD_BINARY_CHUNKS) {
+                    val staleFile = File(dir, "${safeKey}_bin_$staleIdx.bin")
+                    if (isInsideDirectory(dir, staleFile) && staleFile.exists()) {
+                        staleFile.delete()
+                    }
+                }
+                totalChunks
             }
-            val metaText = "$totalChunks:${bytes.size}"
-            if (!saveBackupToDir(dir, "${safeKey}_bin_meta", metaText)) {
-                return 0
-            }
-            for (staleIdx in totalChunks until MAX_CLOUD_BINARY_CHUNKS) {
-                val staleFile = File(dir, "${safeKey}_bin_$staleIdx.bin")
-                if (staleFile.exists()) staleFile.delete()
-            }
-            return totalChunks
         }
 
         fun loadCloudBinaryBytesFromDir(dir: File, blobKey: String): ByteArray? {
             if (blobKey.isBlank()) return null
             val safeKey = sanitizeKey(blobKey)
-            val metaText = loadBackupFromDir(dir, "${safeKey}_bin_meta") ?: return null
-            val parts = metaText.split(':')
-            if (parts.size != 2) return null
-            val totalChunks = parts[0].toIntOrNull() ?: return null
-            val expectedBytes = parts[1].toIntOrNull() ?: return null
-            if (
-                (totalChunks !in 1..MAX_CLOUD_BINARY_CHUNKS) ||
-                (expectedBytes !in 1..MAX_CLOUD_BINARY_TOTAL_BYTES)
-            ) {
-                return null
-            }
-
-            return try {
-                val out = ByteArray(expectedBytes)
-                var writeOffset = 0
-                for (i in 0 until totalChunks) {
-                    val chunkFile = File(dir, "${safeKey}_bin_$i.bin")
-                    if (!chunkFile.exists()) return null
-                    val chunkBytes = chunkFile.readBytes()
-                    if ((chunkBytes.isEmpty()) || ((writeOffset + chunkBytes.size) > expectedBytes)) {
-                        return null
-                    }
-                    System.arraycopy(chunkBytes, 0, out, writeOffset, chunkBytes.size)
-                    writeOffset += chunkBytes.size
+            return synchronized(FILE_IO_LOCK) {
+                val metaText = loadBackupFromDir(dir, "${safeKey}_bin_meta") ?: return@synchronized null
+                val parts = metaText.split(':')
+                if (parts.size != 2) return@synchronized null
+                val totalChunks = parts[0].toIntOrNull() ?: return@synchronized null
+                val expectedBytes = parts[1].toIntOrNull() ?: return@synchronized null
+                if (
+                    (totalChunks !in 1..MAX_CLOUD_BINARY_CHUNKS) ||
+                    (expectedBytes !in 1..MAX_CLOUD_BINARY_TOTAL_BYTES)
+                ) {
+                    return@synchronized null
                 }
-                if (writeOffset == expectedBytes) out else null
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed loading chunked cloud binary: $blobKey", e)
-                null
+
+                try {
+                    val out = ByteArray(expectedBytes)
+                    var writeOffset = 0
+                    for (i in 0 until totalChunks) {
+                        val chunkFile = File(dir, "${safeKey}_bin_$i.bin")
+                        if (!isInsideDirectory(dir, chunkFile) || !chunkFile.exists()) {
+                            return@synchronized null
+                        }
+                        val chunkBytes = chunkFile.readBytes()
+                        if ((chunkBytes.isEmpty()) || ((writeOffset + chunkBytes.size) > expectedBytes)) {
+                            return@synchronized null
+                        }
+                        System.arraycopy(chunkBytes, 0, out, writeOffset, chunkBytes.size)
+                        writeOffset += chunkBytes.size
+                    }
+                    if (writeOffset == expectedBytes) out else null
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed loading chunked cloud binary: $blobKey", e)
+                    null
+                }
             }
         }
 
@@ -692,6 +798,72 @@ class CapyAndroidBridge(
             return File(sharedDir, safeName)
         }
 
+        fun sanitizeShareTitle(
+            rawTitle: String?,
+            fallback: String = "",
+            maxLength: Int = 120,
+        ): String {
+            if (rawTitle.isNullOrBlank()) return fallback
+            val sb = StringBuilder(minOf(rawTitle.length, maxLength))
+            var lastWasSpace = true
+            for (ch in rawTitle) {
+                if (ch.isISOControl() || ch.isWhitespace()) {
+                    if (!lastWasSpace && sb.length < maxLength) {
+                        sb.append(' ')
+                        lastWasSpace = true
+                    }
+                } else {
+                    if (sb.length >= maxLength) break
+                    sb.append(ch)
+                    lastWasSpace = false
+                }
+            }
+            val cleaned = sb.toString().trim()
+            return cleaned.ifEmpty { fallback }
+        }
+
+        fun resolveAllowedExportMimeType(rawMime: String?): String {
+            val clean = rawMime?.trim()?.lowercase()?.substringBefore(';')?.trim() ?: ""
+            return if (clean in ALLOWED_EXPORT_MIME_TYPES) clean else "application/octet-stream"
+        }
+
+        fun normalizeSharedImageMimeType(rawMime: String?): String {
+            val clean = rawMime?.trim()?.lowercase()?.substringBefore(';')?.trim() ?: ""
+            return when (clean) {
+                "image/jpeg", "image/jpg" -> "image/jpeg"
+                "image/webp" -> "image/webp"
+                "image/gif" -> "image/gif"
+                else -> "image/png"
+            }
+        }
+
+        fun isAllowedSharedImageDataUrl(dataUrl: String?): Boolean {
+            if (dataUrl.isNullOrBlank()) return false
+            val trimmed = dataUrl.trim()
+            if (trimmed.any { it.isISOControl() }) return false
+            return Regex("^data:image/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$", RegexOption.IGNORE_CASE)
+                .matches(trimmed)
+        }
+
+        fun isAllowedShareTextUrl(rawUrl: String?): Boolean {
+            if (rawUrl.isNullOrBlank()) return false
+            val trimmed = rawUrl.trim()
+            if (trimmed.any { it.isWhitespace() || it.isISOControl() }) return false
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase() ?: return false
+                val host = uri.host?.lowercase() ?: return false
+                if (uri.userInfo != null) return false
+                when (scheme) {
+                    "https" -> host.isNotBlank()
+                    "http" -> (host == "localhost" || host == "127.0.0.1")
+                    else -> false
+                }
+            } catch (_: Exception) {
+                false
+            }
+        }
+
         fun classifyWebViewNavigation(rawUrl: String?): WebViewNavigationAction {
             if (rawUrl.isNullOrBlank()) return WebViewNavigationAction.BLOCK
             val trimmed = rawUrl.trim()
@@ -701,16 +873,101 @@ class CapyAndroidBridge(
             if (trimmed.any { it.isISOControl() }) return WebViewNavigationAction.BLOCK
             return try {
                 val uri = URI(trimmed)
+                if (uri.userInfo != null) return WebViewNavigationAction.BLOCK
                 val scheme = uri.scheme?.lowercase() ?: return WebViewNavigationAction.BLOCK
                 val host = uri.host?.lowercase()
                 when {
-                    scheme == "https" && host == APP_ASSETS_HOST -> WebViewNavigationAction.ALLOW_INTERNAL
+                    scheme == "https" &&
+                        host == APP_ASSETS_HOST &&
+                        (uri.port == -1 || uri.port == 443) -> WebViewNavigationAction.ALLOW_INTERNAL
                     (scheme == "https" || scheme == "http") && !host.isNullOrBlank() -> WebViewNavigationAction.OPEN_EXTERNAL
                     else -> WebViewNavigationAction.BLOCK
                 }
             } catch (_: Exception) {
                 WebViewNavigationAction.BLOCK
             }
+        }
+
+        fun isTrustedPageUrl(rawUrl: String?): Boolean {
+            if (rawUrl.isNullOrBlank()) return false
+            val trimmed = rawUrl.trim()
+            if (trimmed.any { it.isWhitespace() || it.isISOControl() }) return false
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase() ?: return false
+                val host = uri.host?.lowercase() ?: return false
+                val path = uri.path
+                scheme == "https" &&
+                    host == APP_ASSETS_HOST &&
+                    (uri.port == -1 || uri.port == 443) &&
+                    uri.userInfo == null &&
+                    (path.isNullOrEmpty() || path.startsWith("/"))
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun isTrustedBridgeOrigin(origin: String?, isMainFrame: Boolean): Boolean {
+            if (!isMainFrame || origin.isNullOrBlank()) return false
+            val trimmed = origin.trim()
+            if (trimmed.any { it.isWhitespace() || it.isISOControl() }) return false
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase() ?: return false
+                val host = uri.host?.lowercase() ?: return false
+                scheme == "https" &&
+                    host == APP_ASSETS_HOST &&
+                    (uri.port == -1 || uri.port == 443) &&
+                    uri.userInfo == null &&
+                    uri.path.isNullOrEmpty() &&
+                    uri.query == null &&
+                    uri.fragment == null
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        fun shouldBlockDocumentRequest(
+            url: String?,
+            isForMainFrame: Boolean,
+            secFetchDest: String?,
+        ): Boolean {
+            if (url.isNullOrBlank()) return false
+            val trimmed = url.trim()
+            if (trimmed.equals("about:blank", ignoreCase = true)) return false
+            if (isTrustedPageUrl(trimmed)) return false
+            val dest = secFetchDest?.trim()?.lowercase()
+            return isForMainFrame || dest == "iframe" || dest == "frame" || dest == "document"
+        }
+
+        fun looksLikeJsonObject(raw: String?): Boolean {
+            val trimmed = raw?.trim() ?: return false
+            return trimmed.startsWith("{") && trimmed.endsWith("}")
+        }
+
+        fun decideSnapshotPushAction(
+            slotKey: String,
+            existingRemotePayload: String?,
+            lastKnownRemotePayload: String?,
+            incomingPayload: String,
+        ): SnapshotPushDecision {
+            val safeSlot = sanitizeKey(slotKey)
+            if (safeSlot.startsWith("pgblob_")) {
+                return if (existingRemotePayload == incomingPayload) {
+                    SnapshotPushDecision.SKIP_IDENTICAL
+                } else {
+                    SnapshotPushDecision.COMMIT_INCOMING
+                }
+            }
+            if (!existingRemotePayload.isNullOrBlank()) {
+                if (existingRemotePayload == incomingPayload) {
+                    return SnapshotPushDecision.SKIP_IDENTICAL
+                }
+                if (looksLikeJsonObject(existingRemotePayload) && existingRemotePayload != lastKnownRemotePayload) {
+                    return SnapshotPushDecision.MERGE_UNSEEN_REMOTE
+                }
+            }
+            return SnapshotPushDecision.COMMIT_INCOMING
         }
 
         fun escapeJsonString(value: String, replaceNewlinesWithSpace: Boolean = false): String {
@@ -767,6 +1024,8 @@ class CapyAndroidBridge(
                 val host = uri.host?.lowercase() ?: return false
                 val path = uri.path ?: ""
                 if (scheme != "https") return false
+                if (uri.userInfo != null) return false
+                if (uri.port != -1 && uri.port != 443) return false
                 if (host in ROOT_DEEP_LINK_HOSTS) {
                     path.isEmpty() || path.startsWith("/")
                 } else if (host in GITHUB_PAGES_DEEP_LINK_HOSTS) {

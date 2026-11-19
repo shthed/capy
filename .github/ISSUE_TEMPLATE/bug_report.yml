@@ -1,0 +1,47 @@
+name: Bug Report
+description: Report a bug on capypaint.com or the Android app
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve **Capy Paint**! Please describe what went wrong so we can fix it.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where did this happen?
+      options:
+        - Web (capypaint.com)
+        - Web Beta
+        - Android App
+        - Android TV
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Browser / Device / App Version
+      description: Example - Chrome on Pixel 8, Safari on iPhone 15, or Desktop Firefox
+      placeholder: e.g. Chrome 130 on Android 15 (v3.0.x)
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Clear description of the bug or visual glitch.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Optional steps to trigger the issue.
+      placeholder: |
+        1. Open Settings -> Create
+        2. Tap ...
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?

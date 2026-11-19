@@ -7,8 +7,11 @@
 **Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages.
 
 - **[Play Capy in Your Browser (`capypaint.com`)](https://capypaint.com/)**
-- **[Download the Android APK (Stable)](https://capypaint.com/capy.apk)**
-- **[Try Upcoming Features on the Beta Channel](https://shthed.github.io/capy/beta/)** ([Beta Android APK](https://shthed.github.io/capy/beta/capy.apk) | [Official GitHub Releases](https://github.com/shthed/capy/releases))
+- **[Download the Android APK (Stable)](https://capypaint.com/capy.apk)** ([Official GitHub Releases](https://github.com/shthed/capy/releases))
+<!-- capy-dev-only:start -->
+- **[Try Upcoming Features on the Beta Channel](https://shthed.github.io/capy/beta/)** ([Beta Android APK](https://shthed.github.io/capy/beta/capy.apk))
+<!-- capy-dev-only:end -->
+- **[Public Issue Tracker & Feedback](https://github.com/capyboop/capy/issues)** ([Report a Bug, Request a Feature, or Share a Puzzle Idea](https://github.com/capyboop/capy/issues/new/choose))
 - **[Read the Privacy Policy](https://capypaint.com/privacy-policy.html)**
 
 ---
@@ -37,9 +40,9 @@
 
 - **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
 - **Turn Any Photo into a Puzzle or Printable Sheet**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, dive into **Infinite Zoom 2x Detail Tiles** with one-tap **Parent Puzzle** breadcrumbs, or export crisp monochrome **Printable Vector SVG (`.svg`) Coloring Sheets** for physical paper coloring.
-- **Shareable Links and Simultaneous Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or host a 6-character **Co-op Room** to paint the same puzzle simultaneously with live collaborator ripples and real-time undo sync.
-- **Compact `.capy` v2 Saves and CRDT Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) and conflict-free Set-Union Cloud Sync across Google Account (Google Drive `appDataFolder`) and Android Google Play Games Services v2 ensure zero progress is ever lost across devices.
-- **Daily Featured Puzzle, Searchable Gallery and Community Ideas**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), track your **Lifetime Stats**, and vote on upcoming community gallery packs.
+- **Shareable Links and Optional Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or enable opt-in 6-character **Co-op Rooms** (`?coop=1`) to paint the same puzzle simultaneously with live collaborator ripples and real-time undo sync.
+- **Compact `.capy` v2 Saves and Optional Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) keep your library portable locally, with opt-in conflict-free Set-Union Cloud Sync (`?coop=1`) across Google Account (Google Drive `appDataFolder`) and Android Google Play Games Services v2.
+- **Daily Featured Puzzle, Searchable Gallery and Lifetime Stats**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), keep a local **Puzzle Idea Notebook**, and track your **Lifetime Stats**.
 - **Smooth Navigation and Inclusive Accessibility**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
 - **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
 - **100% Offline-First and Private**: All image processing and coloring run locally inside a sandboxed Web Worker. Play completely offline with zero forced accounts or ads.

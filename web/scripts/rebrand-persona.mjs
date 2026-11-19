@@ -80,7 +80,7 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 export const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy\s*dog\s*trumpet|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|dependabot\.ya?ml/i;
+  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|dependabot\.ya?ml/i;
 
 export function stripDevOnlyBlocks(content) {
   return content
@@ -91,7 +91,7 @@ export function stripDevOnlyBlocks(content) {
 export function transformPersonaContent(content) {
   return stripDevOnlyBlocks(content)
     .replace(
-      /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed|capyboop)\/capy\/(?:pull|issues|milestone)\/\d+(?:[/?#][^\s)]*)?\)/g,
+      /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed\/capy\/(?:pull|issues|milestone)\/\d+|capyboop\/capy\/(?:(?:pull|milestone)\/\d+|issues\/(?!(?:2|3|4|5)(?:[/?#)]|$))\d+))(?:[/?#][^\s)]*)?\)/g,
       '$1'
     )
     .replace(
@@ -104,7 +104,13 @@ export function transformPersonaContent(content) {
     .replaceAll('https://shthed.github.io/capy', 'https://capyboop.github.io/capy')
     .replaceAll('shthed.github.io', 'capyboop.github.io')
     .replaceAll('shthed/capy', 'capyboop/capy')
-    .replace(/shthed/gi, (match) => (match === match.toUpperCase() ? 'CAPYBOOP' : 'capyboop'));
+    .replace(/shthed/gi, (match) =>
+      match === match.toUpperCase()
+        ? 'CAPYBOOP'
+        : match[0] === match[0].toUpperCase()
+          ? 'Capyboop'
+          : 'capyboop'
+    );
 }
 
 export function sanitizeCommitMessage(rawMessage) {
@@ -224,7 +230,16 @@ export function exportCleanPersonaStage({ repoRoot = REPO_ROOT, stageDir }) {
   return { filesCopied, filesTransformed, verifiedFiles };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const isCliEntrypoint = (() => {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  }
+})();
+
+if (isCliEntrypoint) {
   const args = process.argv.slice(2);
 
   if (args.includes('--sanitize-message')) {

@@ -30,13 +30,19 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.graphics.scale
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.google.android.gms.games.PlayGames
 import com.google.android.gms.games.PlayGamesSdk
 import com.google.android.gms.games.SnapshotsClient
+import com.google.android.gms.games.snapshot.Snapshot
 import com.google.android.gms.games.snapshot.SnapshotMetadataChange
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
@@ -45,6 +51,9 @@ class MainActivity : ComponentActivity() {
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private lateinit var bridge: CapyAndroidBridge
     private var isPageLoaded: Boolean = false
+    @Volatile
+    private var isTrustedPageLoaded: Boolean = false
+    private val lastKnownRemotePayloads = ConcurrentHashMap<String, String>()
     private val shareDecodeExecutor = Executors.newSingleThreadExecutor()
 
     private fun updateBackCallbackState() {
@@ -79,7 +88,7 @@ class MainActivity : ComponentActivity() {
         override fun handleOnBackPressed() {
             val wv = webView
             if ((wv != null) && bridge.isModalOpen) {
-                wv.evaluateJavascript("window.__capyCloseModal && window.__capyCloseModal();", null)
+                evaluateOnTrustedPage("window.__capyCloseModal && window.__capyCloseModal();")
             } else if ((wv != null) && wv.canGoBack()) {
                 wv.goBack()
                 updateBackCallbackState()
@@ -127,6 +136,7 @@ class MainActivity : ComponentActivity() {
                     pullSnapshotFromPlayGames(slotKey)
                 }
             },
+            originGuard = { isTrustedPageLoaded },
         )
 
         initializePlayGamesIfConfigured()
@@ -151,6 +161,11 @@ class MainActivity : ComponentActivity() {
                 domStorageEnabled = true
                 allowFileAccess = false
                 allowContentAccess = false
+                @Suppress("DEPRECATION")
+                allowFileAccessFromFileURLs = false
+                @Suppress("DEPRECATION")
+                allowUniversalAccessFromFileURLs = false
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 mediaPlaybackRequiresUserGesture = false
                 cacheMode = WebSettings.LOAD_DEFAULT
                 setSupportZoom(false)
@@ -164,12 +179,57 @@ class MainActivity : ComponentActivity() {
 
             addJavascriptInterface(bridge, "CapyAndroid")
 
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+                WebViewCompat.addWebMessageListener(
+                    this,
+                    "CapyAndroidChannel",
+                    setOf(CapyAndroidBridge.APP_ASSETS_ORIGIN),
+                ) { _, message, sourceOrigin, isMainFrame, _ ->
+                    if (!CapyAndroidBridge.isTrustedBridgeOrigin(sourceOrigin.toString(), isMainFrame)) {
+                        Log.w(TAG, "Ignored untrusted WebMessage from $sourceOrigin (mainFrame=$isMainFrame)")
+                        return@addWebMessageListener
+                    }
+                    if (message.type == WebMessageCompat.TYPE_STRING) {
+                        val data = message.data ?: return@addWebMessageListener
+                        if (data == "ping") {
+                            Log.d(TAG, "Verified WebMessage channel ping from $sourceOrigin")
+                        }
+                    }
+                }
+            }
+
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(
                     view: WebView,
                     request: WebResourceRequest,
                 ): WebResourceResponse? {
-                    return assetLoader.shouldInterceptRequest(request.url)
+                    val reqUrl = request.url ?: return null
+                    val scheme = reqUrl.scheme?.lowercase()
+                    val secFetchDest = request.requestHeaders?.get("Sec-Fetch-Dest")
+                        ?: request.requestHeaders?.get("sec-fetch-dest")
+                    if (
+                        scheme == "file" ||
+                        scheme == "content" ||
+                        CapyAndroidBridge.shouldBlockDocumentRequest(
+                            reqUrl.toString(),
+                            request.isForMainFrame,
+                            secFetchDest,
+                        )
+                    ) {
+                        Log.w(TAG, "Blocked untrusted WebView request: $reqUrl (mainFrame=${request.isForMainFrame})")
+                        return WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            403,
+                            "Forbidden",
+                            emptyMap(),
+                            ByteArrayInputStream(ByteArray(0)),
+                        )
+                    }
+                    if (scheme != "https" || reqUrl.host?.lowercase() != CapyAndroidBridge.APP_ASSETS_HOST) {
+                        return null
+                    }
+                    return assetLoader.shouldInterceptRequest(reqUrl)
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -200,6 +260,7 @@ class MainActivity : ComponentActivity() {
                     super.onPageStarted(view, url, favicon)
                     isPageLoaded = false
                     bridge.setModalOpen(false)
+                    isTrustedPageLoaded = CapyAndroidBridge.isTrustedPageUrl(url)
                 }
 
                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
@@ -209,13 +270,15 @@ class MainActivity : ComponentActivity() {
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     super.onPageFinished(view, url)
-                    isPageLoaded = true
+                    val trusted = CapyAndroidBridge.isTrustedPageUrl(url)
+                    isTrustedPageLoaded = trusted
+                    isPageLoaded = trusted
                     updateBackCallbackState()
                     Log.d(TAG, "WebView page finished loading: $url")
+                    if (!trusted) return
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
                     deliverPendingDeepLinkIfNeeded()
-                    deliverCachedPlayGamesProfileIfNeeded()
                 }
 
                 override fun onReceivedError(
@@ -295,31 +358,46 @@ class MainActivity : ComponentActivity() {
         handleIncomingIntent(intent)
         val restored = if (savedInstanceState != null) wv.restoreState(savedInstanceState) else null
         if (restored == null) {
+            isTrustedPageLoaded = true
             wv.loadUrl(START_URL)
+        } else {
+            val restoredOk = CapyAndroidBridge.isTrustedPageUrl(wv.url)
+            isTrustedPageLoaded = restoredOk
+            if (!restoredOk) {
+                isTrustedPageLoaded = true
+                wv.loadUrl(START_URL)
+            }
+        }
+    }
+
+    private fun evaluateOnTrustedPage(script: String) {
+        val wv = webView ?: return
+        wv.post {
+            if (!CapyAndroidBridge.isTrustedPageUrl(wv.url)) {
+                Log.w(TAG, "Blocked JS evaluation on untrusted WebView URL: ${wv.url}")
+                return@post
+            }
+            wv.evaluateJavascript(script, null)
         }
     }
 
     private fun applySafeAreaInsetsToWebView() {
-        val wv = webView ?: return
         val topCss = bridge.safeAreaTopCss
         val bottomCss = bridge.safeAreaBottomCss
         val leftCss = bridge.safeAreaLeftCss
         val rightCss = bridge.safeAreaRightCss
-        wv.post {
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        document.documentElement.style.setProperty('--safe-area-top', '${topCss}px');
-                        document.documentElement.style.setProperty('--safe-area-bottom', '${bottomCss}px');
-                        document.documentElement.style.setProperty('--safe-area-left', '${leftCss}px');
-                        document.documentElement.style.setProperty('--safe-area-right', '${rightCss}px');
-                    } catch (e) {}
-                })();
-                """.trimIndent(),
-                null,
-            )
-        }
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    document.documentElement.style.setProperty('--safe-area-top', '${topCss}px');
+                    document.documentElement.style.setProperty('--safe-area-bottom', '${bottomCss}px');
+                    document.documentElement.style.setProperty('--safe-area-left', '${leftCss}px');
+                    document.documentElement.style.setProperty('--safe-area-right', '${rightCss}px');
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
     }
 
     @SuppressLint("InternalInsetResource", "DiscouragedApi")
@@ -369,11 +447,19 @@ class MainActivity : ComponentActivity() {
         }
         if (imageUri == null) return
 
-        val title = imageUri.lastPathSegment?.substringAfterLast('/') ?: "Shared Photo"
+        val title = CapyAndroidBridge.sanitizeShareTitle(
+            imageUri.lastPathSegment?.substringAfterLast('/'),
+            fallback = "Shared Photo",
+            maxLength = 80,
+        )
         val appResolver = applicationContext.contentResolver
         shareDecodeExecutor.execute {
             try {
                 val dataUrl = decodeAndDownsampleSharedImage(appResolver, imageUri, type) ?: return@execute
+                if (!CapyAndroidBridge.isAllowedSharedImageDataUrl(dataUrl)) {
+                    Log.w(TAG, "Rejected unsafe shared image data URL")
+                    return@execute
+                }
                 runOnUiThread {
                     if (isDestroyed || isFinishing) return@runOnUiThread
                     bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
@@ -455,8 +541,9 @@ class MainActivity : ComponentActivity() {
             readBoundedBytes(stream, CapyAndroidBridge.MAX_RAW_SHARED_IMAGE_BYTES)
         } ?: return null
         if (rawBytes.isEmpty()) return null
+        val safeMime = CapyAndroidBridge.normalizeSharedImageMimeType(mimeType)
         val base64 = Base64.encodeToString(rawBytes, Base64.NO_WRAP)
-        return "data:$mimeType;base64,$base64"
+        return "data:$safeMime;base64,$base64"
     }
 
     private fun readBoundedBytes(stream: InputStream, maxBytes: Int): ByteArray? {
@@ -478,43 +565,35 @@ class MainActivity : ComponentActivity() {
 
     private fun deliverPendingSharedImageIfNeeded() {
         val pendingJson = bridge.consumePendingSharedImage() ?: return
-        val wv = webView ?: return
-        wv.post {
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        var payload = $pendingJson;
-                        if (window.__capyReceiveSharedImage && payload && payload.dataUrl) {
-                            window.__capyReceiveSharedImage(payload.title || "Shared Photo", payload.dataUrl);
-                        }
-                    } catch (e) {}
-                })();
-                """.trimIndent(),
-                null,
-            )
-        }
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    var payload = $pendingJson;
+                    if (window.__capyReceiveSharedImage && payload && payload.dataUrl) {
+                        window.__capyReceiveSharedImage(payload.title || "Shared Photo", payload.dataUrl);
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
     }
 
     private fun deliverPendingDeepLinkIfNeeded() {
         val pendingUrl = bridge.consumePendingDeepLink() ?: return
         if (!CapyAndroidBridge.isAllowedCapyDeepLink(pendingUrl)) return
-        val wv = webView ?: return
         val escapedUrl = CapyAndroidBridge.escapeJsString(pendingUrl)
-        wv.post {
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        if (window.__capyReceiveDeepLink) {
-                            window.__capyReceiveDeepLink("$escapedUrl");
-                        }
-                    } catch (e) {}
-                })();
-                """.trimIndent(),
-                null,
-            )
-        }
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    if (window.__capyReceiveDeepLink) {
+                        window.__capyReceiveDeepLink("$escapedUrl");
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
     }
 
     private fun initializePlayGamesIfConfigured() {
@@ -524,16 +603,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         try {
+            // Only initialize PlayGamesSdk in onCreate(); defer signIn(), profile fetch, and
+            // SnapshotsClient pulls until WebView explicitly invokes CapyAndroid.signInPlayGames().
             PlayGamesSdk.initialize(this)
-            PlayGames.getGamesSignInClient(this).isAuthenticated.addOnCompleteListener { task ->
-                val isAuthenticated = (task.isSuccessful) && (task.result?.isAuthenticated == true)
-                if (isAuthenticated) {
-                    fetchAndDeliverPlayGamesPlayerProfile()
-                    pullSnapshotFromPlayGames(CLOUD_MANIFEST_SLOT_KEY)
-                } else {
-                    requestPlayGamesSignIn()
-                }
-            }
         } catch (e: Exception) {
             Log.w(TAG, "PlayGamesSdk initialization skipped or unavailable", e)
         }
@@ -589,39 +661,118 @@ class MainActivity : ComponentActivity() {
 
     private fun deliverCachedPlayGamesProfileIfNeeded() {
         val profileJson = bridge.loadCachedPlayGamesProfileJson() ?: return
-        val wv = webView ?: return
-        wv.post {
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        if (window.__capyReceivePlayGamesProfile) {
-                            window.__capyReceivePlayGamesProfile($profileJson);
-                        }
-                    } catch (e) {}
-                })();
-                """.trimIndent(),
-                null,
-            )
-        }
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    if (window.__capyReceivePlayGamesProfile) {
+                        window.__capyReceivePlayGamesProfile($profileJson);
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
     }
 
     private fun deliverPlayGamesSignInError(reasonCode: String) {
-        val wv = webView ?: return
         val safeReason = CapyAndroidBridge.escapeJsString(reasonCode)
-        wv.post {
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        if (window.__capyReceivePlayGamesError) {
-                            window.__capyReceivePlayGamesError("$safeReason");
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    if (window.__capyReceivePlayGamesError) {
+                        window.__capyReceivePlayGamesError("$safeReason");
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
+    }
+
+    private fun deliverCloudSnapshotErrorToWebView(slotKey: String, reasonCode: String) {
+        val safeSlot = CapyAndroidBridge.escapeJsString(slotKey)
+        val safeReason = CapyAndroidBridge.escapeJsString(reasonCode)
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    if (window.__capyReceiveCloudSnapshotError) {
+                        window.__capyReceiveCloudSnapshotError("$safeSlot", "$safeReason");
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
+    }
+
+    private fun commitSnapshotPayload(
+        snapshotsClient: SnapshotsClient,
+        snapshot: Snapshot,
+        slotKey: String,
+        safeSlot: String,
+        payloadJson: String,
+    ) {
+        snapshot.snapshotContents.writeBytes(payloadJson.toByteArray(Charsets.UTF_8))
+        val metadataChange = SnapshotMetadataChange.Builder()
+            .setDescription("Capy Paint Cloud Save ($safeSlot)")
+            .build()
+        snapshotsClient.commitAndClose(snapshot, metadataChange)
+            .addOnSuccessListener {
+                lastKnownRemotePayloads[safeSlot] = payloadJson
+            }
+            .addOnFailureListener { err ->
+                Log.w(TAG, "Failed to commit Play Games snapshot '$safeSlot'", err)
+                deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_COMMIT_FAILED")
+            }
+    }
+
+    private fun handlePlayGamesSnapshotConflict(
+        snapshotsClient: SnapshotsClient,
+        slotKey: String,
+        safeSlot: String,
+        conflictId: String,
+        serverSnapshot: Snapshot,
+        conflictingSnapshot: Snapshot,
+    ) {
+        try {
+            val serverBytes = serverSnapshot.snapshotContents.readFully()
+            val otherBytes = conflictingSnapshot.snapshotContents.readFully()
+            val serverJson = if (serverBytes.isNotEmpty()) String(serverBytes, Charsets.UTF_8) else null
+            val otherJson = if (otherBytes.isNotEmpty()) String(otherBytes, Charsets.UTF_8) else null
+            val chosenJson = serverJson ?: otherJson
+            if (chosenJson != null) {
+                lastKnownRemotePayloads[safeSlot] = chosenJson
+            }
+            if (!safeSlot.startsWith("pgblob_")) {
+                if (serverJson != null) {
+                    bridge.saveLocalCloudSnapshotOnly(slotKey, serverJson)
+                    deliverCloudSnapshotToWebView(slotKey, serverJson)
+                }
+                if (otherJson != null && otherJson != serverJson) {
+                    bridge.saveLocalCloudSnapshotOnly(slotKey, otherJson)
+                    deliverCloudSnapshotToWebView(slotKey, otherJson)
+                }
+            } else if (chosenJson != null) {
+                bridge.saveLocalCloudSnapshotOnly(slotKey, chosenJson)
+                deliverCloudSnapshotToWebView(slotKey, chosenJson)
+            }
+            snapshotsClient.resolveConflict(conflictId, serverSnapshot)
+                .addOnSuccessListener { resolved ->
+                    resolved.data?.let { s ->
+                        try {
+                            snapshotsClient.discardAndClose(s)
+                        } catch (_: Exception) {
+                            // Ignore if already closed
                         }
-                    } catch (e) {}
-                })();
-                """.trimIndent(),
-                null,
-            )
+                    }
+                }
+                .addOnFailureListener { err ->
+                    Log.w(TAG, "Failed resolving Play Games snapshot conflict '$safeSlot'", err)
+                    deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error resolving Play Games snapshot conflict '$safeSlot'", e)
+            deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
         }
     }
 
@@ -629,29 +780,81 @@ class MainActivity : ComponentActivity() {
         val appId = getString(R.string.game_services_project_id)
         if (!CapyAndroidBridge.isPlayGamesAppIdConfigured(appId)) return
         val safeSlot = CapyAndroidBridge.sanitizeKey(slotKey)
+        val resolutionPolicy = if (safeSlot.startsWith("pgblob_")) {
+            SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED
+        } else {
+            SnapshotsClient.RESOLUTION_POLICY_MANUAL
+        }
         try {
             val snapshotsClient = PlayGames.getSnapshotsClient(this)
             snapshotsClient.open(
                 safeSlot,
                 true,
-                SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED,
+                resolutionPolicy,
             ).addOnSuccessListener { dataOrConflict ->
+                if (dataOrConflict.isConflict) {
+                    val conflict = dataOrConflict.conflict
+                    if (conflict != null) {
+                        handlePlayGamesSnapshotConflict(
+                            snapshotsClient = snapshotsClient,
+                            slotKey = slotKey,
+                            safeSlot = safeSlot,
+                            conflictId = conflict.conflictId,
+                            serverSnapshot = conflict.snapshot,
+                            conflictingSnapshot = conflict.conflictingSnapshot,
+                        )
+                    } else {
+                        deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
+                    }
+                    return@addOnSuccessListener
+                }
                 val snapshot = dataOrConflict.data
-                if (snapshot != null) {
-                    snapshot.snapshotContents.writeBytes(payloadJson.toByteArray(Charsets.UTF_8))
-                    val metadataChange = SnapshotMetadataChange.Builder()
-                        .setDescription("Capy Paint Cloud Save ($safeSlot)")
-                        .build()
-                    snapshotsClient.commitAndClose(snapshot, metadataChange)
-                        .addOnFailureListener { err ->
-                            Log.w(TAG, "Failed to commit Play Games snapshot '$safeSlot'", err)
+                if (snapshot == null) {
+                    deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_UNAVAILABLE")
+                    return@addOnSuccessListener
+                }
+                try {
+                    val existingBytes = snapshot.snapshotContents.readFully()
+                    val existingJson = if (existingBytes.isEmpty()) null else String(existingBytes, Charsets.UTF_8)
+                    when (
+                        CapyAndroidBridge.decideSnapshotPushAction(
+                            slotKey = slotKey,
+                            existingRemotePayload = existingJson,
+                            lastKnownRemotePayload = lastKnownRemotePayloads[safeSlot],
+                            incomingPayload = payloadJson,
+                        )
+                    ) {
+                        CapyAndroidBridge.SnapshotPushDecision.SKIP_IDENTICAL -> {
+                            lastKnownRemotePayloads[safeSlot] = payloadJson
+                            snapshotsClient.discardAndClose(snapshot)
                         }
+                        CapyAndroidBridge.SnapshotPushDecision.MERGE_UNSEEN_REMOTE -> {
+                            val remotePayload = existingJson!!
+                            lastKnownRemotePayloads[safeSlot] = remotePayload
+                            bridge.saveLocalCloudSnapshotOnly(slotKey, remotePayload)
+                            deliverCloudSnapshotToWebView(slotKey, remotePayload)
+                            snapshotsClient.discardAndClose(snapshot)
+                        }
+                        CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING -> {
+                            commitSnapshotPayload(snapshotsClient, snapshot, slotKey, safeSlot, payloadJson)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed inspecting Play Games snapshot '$safeSlot' before commit", e)
+                    try {
+                        snapshotsClient.discardAndClose(snapshot)
+                    } catch (_: Exception) {
+                        // Ignore cleanup error
+                    }
+                    deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_WRITE_FAILED")
                 }
             }.addOnFailureListener { err ->
                 Log.w(TAG, "Failed to open Play Games snapshot '$safeSlot' for writing", err)
+                deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_WRITE_FAILED")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error pushing Play Games snapshot '$safeSlot'", e)
+            deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_WRITE_FAILED")
         }
     }
 
@@ -664,8 +867,24 @@ class MainActivity : ComponentActivity() {
             snapshotsClient.open(
                 safeSlot,
                 false,
-                SnapshotsClient.RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED,
+                SnapshotsClient.RESOLUTION_POLICY_MANUAL,
             ).addOnSuccessListener { dataOrConflict ->
+                if (dataOrConflict.isConflict) {
+                    val conflict = dataOrConflict.conflict
+                    if (conflict != null) {
+                        handlePlayGamesSnapshotConflict(
+                            snapshotsClient = snapshotsClient,
+                            slotKey = slotKey,
+                            safeSlot = safeSlot,
+                            conflictId = conflict.conflictId,
+                            serverSnapshot = conflict.snapshot,
+                            conflictingSnapshot = conflict.conflictingSnapshot,
+                        )
+                    } else {
+                        deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
+                    }
+                    return@addOnSuccessListener
+                }
                 val snapshot = dataOrConflict.data
                 if (snapshot != null) {
                     try {
@@ -673,40 +892,40 @@ class MainActivity : ComponentActivity() {
                         snapshotsClient.discardAndClose(snapshot)
                         if (bytes.isNotEmpty()) {
                             val payloadJson = String(bytes, Charsets.UTF_8)
+                            lastKnownRemotePayloads[safeSlot] = payloadJson
                             bridge.saveLocalCloudSnapshotOnly(slotKey, payloadJson)
                             deliverCloudSnapshotToWebView(slotKey, payloadJson)
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Failed reading Play Games snapshot '$safeSlot'", e)
+                        deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_READ_FAILED")
                     }
                 }
             }.addOnFailureListener { err ->
                 Log.d(TAG, "No existing Play Games snapshot found for '$safeSlot'", err)
+                deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_READ_FAILED")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error pulling Play Games snapshot '$safeSlot'", e)
+            deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_READ_FAILED")
         }
     }
 
     private fun deliverCloudSnapshotToWebView(slotKey: String, payloadJson: String) {
         if (!isPageLoaded) return
-        val wv = webView ?: return
         val safeSlot = CapyAndroidBridge.escapeJsString(slotKey)
         val safePayload = CapyAndroidBridge.escapeJsString(payloadJson)
-        wv.post {
-            wv.evaluateJavascript(
-                """
-                (function() {
-                    try {
-                        if (window.__capyReceiveCloudSnapshot) {
-                            window.__capyReceiveCloudSnapshot("$safeSlot", "$safePayload");
-                        }
-                    } catch (e) {}
-                })();
-                """.trimIndent(),
-                null,
-            )
-        }
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    if (window.__capyReceiveCloudSnapshot) {
+                        window.__capyReceiveCloudSnapshot("$safeSlot", "$safePayload");
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

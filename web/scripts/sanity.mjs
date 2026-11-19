@@ -608,6 +608,98 @@ export function validateChangelogFragments(root) {
   return count;
 }
 
+const CAPYBOOP_GITHUB_REPO_URL_RE = /^https:\/\/github\.com\/capyboop\/capy(?:$|[/?#])/i;
+const CAPYBOOP_GITHUB_ISSUES_URL_RE = /^https:\/\/github\.com\/capyboop\/capy\/issues(?:$|[/?#])/i;
+
+export function validatePublicTrackerPolicy(repoRoot) {
+  const root = path.resolve(repoRoot);
+
+  const settingsModalPath = path.join(root, 'web/src/components/SettingsModal.tsx');
+  if (fs.existsSync(settingsModalPath)) {
+    const settingsSrc = fs.readFileSync(settingsModalPath, 'utf8');
+    const reportLinkMatch = /<a\b(?:=>|[^<>])*data-testid="about-report-issue-link"(?:=>|[^<>])*>/i.exec(
+      settingsSrc
+    );
+    assert.ok(
+      reportLinkMatch,
+      'web/src/components/SettingsModal.tsx must render data-testid="about-report-issue-link"'
+    );
+    const hrefMatch = /\bhref="([^"]+)"/i.exec(reportLinkMatch[0]);
+    assert.ok(hrefMatch, 'about-report-issue-link must specify an href attribute');
+    assert.equal(
+      CAPYBOOP_GITHUB_ISSUES_URL_RE.test(hrefMatch[1]),
+      true,
+      `about-report-issue-link must target https://github.com/capyboop/capy/issues (got ${hrefMatch[1]})`
+    );
+    /* capy-dev-only:start */
+    assert.equal(
+      /shthed/i.test(reportLinkMatch[0]),
+      false,
+      'about-report-issue-link must not reference shthed'
+    );
+    /* capy-dev-only:end */
+  }
+
+  const privacyPath = path.join(root, 'web/public/privacy-policy.html');
+  if (fs.existsSync(privacyPath)) {
+    const privacyHtml = fs.readFileSync(privacyPath, 'utf8');
+    assert.equal(
+      privacyHtml.includes('https://github.com/capyboop/capy/issues'),
+      true,
+      'web/public/privacy-policy.html must link to https://github.com/capyboop/capy/issues'
+    );
+    const githubUrls = [...privacyHtml.matchAll(/https:\/\/github\.com\/[^\s"'<>]+/gi)].map(
+      (m) => m[0]
+    );
+    for (const url of githubUrls) {
+      assert.equal(
+        CAPYBOOP_GITHUB_REPO_URL_RE.test(url),
+        true,
+        `web/public/privacy-policy.html must not link outside capyboop/capy: ${url}`
+      );
+    }
+    /* capy-dev-only:start */
+    assert.equal(
+      /shthed/i.test(privacyHtml),
+      false,
+      'web/public/privacy-policy.html must not contain shthed'
+    );
+    /* capy-dev-only:end */
+  }
+
+  const issueTemplateDir = path.join(root, '.github/ISSUE_TEMPLATE');
+  if (fs.existsSync(issueTemplateDir)) {
+    const templateEntries = fs.readdirSync(issueTemplateDir, { withFileTypes: true });
+    assert.equal(
+      templateEntries.some((entry) => entry.isFile() && entry.name === 'config.yml'),
+      true,
+      '.github/ISSUE_TEMPLATE/config.yml must exist'
+    );
+    for (const entry of templateEntries) {
+      if (!entry.isFile()) continue;
+      const tplPath = path.join(issueTemplateDir, entry.name);
+      const tplText = fs.readFileSync(tplPath, 'utf8');
+      const githubUrls = [...tplText.matchAll(/https:\/\/github\.com\/[^\s"'<>]+/gi)].map(
+        (m) => m[0]
+      );
+      for (const url of githubUrls) {
+        assert.equal(
+          CAPYBOOP_GITHUB_REPO_URL_RE.test(url),
+          true,
+          `.github/ISSUE_TEMPLATE/${entry.name} must not link outside capyboop/capy: ${url}`
+        );
+      }
+      /* capy-dev-only:start */
+      assert.equal(
+        /shthed/i.test(tplText),
+        false,
+        `.github/ISSUE_TEMPLATE/${entry.name} must not contain shthed`
+      );
+      /* capy-dev-only:end */
+    }
+  }
+}
+
 export function runSanityChecks({
   repoRoot = DEFAULT_REPO_ROOT,
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
@@ -679,6 +771,9 @@ export function runSanityChecks({
       );
     }
   }
+
+  // 1c. Public issue tracker & privacy policy regression guard
+  validatePublicTrackerPolicy(root);
 
   // 2. CHANGELOG.md contract
   const changelogPath = path.join(root, 'CHANGELOG.md');
