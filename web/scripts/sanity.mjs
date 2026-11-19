@@ -224,7 +224,7 @@ export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
   const hint = `Use [EPIC-N](https://github.com/<owner>/capy/issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
   assert.equal(/#47[6-9]\b|#480\b/.test(markdownText), false, hint);
   assert.equal(
-    /\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/issues\/\d+/.test(markdownText),
+    /\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/issues\/\d+/.test(markdownText),
     false,
     hint
   );
@@ -618,8 +618,8 @@ export function validateChangelogFragments(root) {
   return count;
 }
 
-const CAPYBOOP_GITHUB_REPO_URL_RE = /^https:\/\/github\.com\/capyboop\/capy(?:$|[/?#])/i;
-const CAPYBOOP_GITHUB_ISSUES_URL_RE = /^https:\/\/github\.com\/capyboop\/capy\/issues(?:$|[/?#])/i;
+const CAPYBOOP_GITHUB_REPO_URL_RE = /^https:\/\/github\.com\/capyboop\/paint(?:$|[/?#])/i;
+const CAPYBOOP_GITHUB_ISSUES_URL_RE = /^https:\/\/github\.com\/capyboop\/paint\/issues(?:$|[/?#])/i;
 
 export function validatePublicTrackerPolicy(repoRoot) {
   const root = path.resolve(repoRoot);
@@ -639,7 +639,7 @@ export function validatePublicTrackerPolicy(repoRoot) {
     assert.equal(
       CAPYBOOP_GITHUB_ISSUES_URL_RE.test(hrefMatch[1]),
       true,
-      `about-report-issue-link must target https://github.com/capyboop/capy/issues (got ${hrefMatch[1]})`
+      `about-report-issue-link must target https://github.com/capyboop/paint/issues (got ${hrefMatch[1]})`
     );
     /* capy-dev-only:start */
     assert.equal(
@@ -654,9 +654,9 @@ export function validatePublicTrackerPolicy(repoRoot) {
   if (fs.existsSync(privacyPath)) {
     const privacyHtml = fs.readFileSync(privacyPath, 'utf8');
     assert.equal(
-      privacyHtml.includes('https://github.com/capyboop/capy/issues'),
+      privacyHtml.includes('https://github.com/capyboop/paint/issues'),
       true,
-      'web/public/privacy-policy.html must link to https://github.com/capyboop/capy/issues'
+      'web/public/privacy-policy.html must link to https://github.com/capyboop/paint/issues'
     );
     const githubUrls = [...privacyHtml.matchAll(/https:\/\/github\.com\/[^\s"'<>]+/gi)].map(
       (m) => m[0]
@@ -665,7 +665,7 @@ export function validatePublicTrackerPolicy(repoRoot) {
       assert.equal(
         CAPYBOOP_GITHUB_REPO_URL_RE.test(url),
         true,
-        `web/public/privacy-policy.html must not link outside capyboop/capy: ${url}`
+        `web/public/privacy-policy.html must not link outside capyboop/paint: ${url}`
       );
     }
     /* capy-dev-only:start */
@@ -696,7 +696,7 @@ export function validatePublicTrackerPolicy(repoRoot) {
         assert.equal(
           CAPYBOOP_GITHUB_REPO_URL_RE.test(url),
           true,
-          `.github/ISSUE_TEMPLATE/${entry.name} must not link outside capyboop/capy: ${url}`
+          `.github/ISSUE_TEMPLATE/${entry.name} must not link outside capyboop/paint: ${url}`
         );
       }
       /* capy-dev-only:start */
