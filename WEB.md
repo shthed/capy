@@ -99,9 +99,12 @@ flowchart TB
 - **[`TargetSpotlightOverlay.tsx`](./web/src/components/TargetSpotlightOverlay.tsx)**: Non-blocking SVG + CSS spotlight ring (`spotlight-ring`) and directional Bézier arrow (`spotlight-pointer`) highlighting the live target controls for all 14 `OnboardingTutorial` steps (`TUTORIAL_STEP_TARGETS`) and 8 `FeatureOfferBanner` tips (`FEATURE_OFFER_TARGETS`), honoring `reducedMotion` and `ResizeObserver` layout changes.
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx)**: Compact YouTube-style playback scrubber HUD (`0.5x`--`20x`, Follow Painting, Auto-Loop, Skip-to-End, Exit) stacked cleanly above `PaletteDock` on incomplete puzzles and auto-dismissing when a palette swatch is clicked.
 - **[`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx)**: Lazy-loaded custom HSL/Hex swatch editor and 5 theme presets for Free Colour mode.
+- **[`ErrorBoundary.tsx`](./web/src/components/ErrorBoundary.tsx)**: Root React crash-recovery boundary wrapping `main.tsx` (`exportEmergencySavesBackup` non-destructive `.capy` -> `.json` download, redacted message display, and retry `?capy_test_crash=1` URL strip).
 - **[`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx)**: Non-blocking bottom progress HUD supporting Simple (Fast Mode) and Detailed 6-stage pipeline inspection.
 
-### Services, Providers & Engine (`web/src/services/`, `web/src/engine/`)
+### Services, Providers, Utilities & Engine (`web/src/services/`, `web/src/utils/`, `web/src/engine/`)
+- **[`telemetry.ts`](./web/src/services/telemetry.ts)** & **[`cloudSyncCoordinator.ts`](./web/src/services/cloudSyncCoordinator.ts)**: Bounded 50-entry FIFO non-PII swallowed-error ring buffer (`reportSwallowed` with `Bearer`/`ya29.`/query+fragment redaction and debug-gated console warnings) and coalesced trailing-pass cloud sync controller (`createCoalescedSyncController` / `isManifestCloudSnapshotSlot`).
+- **[`web/src/utils/`](./web/src/utils/base64.ts)**: Shared chunk-safe binary <-> base64 helpers (`base64.ts`), debug environment gate (`debugEnvironment.ts`), and safe snapshot thumbnail resolvers (`snapshotPaths.ts`).
 - **[`CapyCodec.ts`](./web/src/services/CapyCodec.ts)**: Scanline RLE + LEB128 varints (`CompactPuzzleRecordV2`), strict `.capy` v2 Gzip / decompressed-size / RLE bounds (`decodeRegionMapRle`, `validateRegionMetaFloat32`), schema + `__proto__` stripping (`assertValidPalette`, `assertValidSourceRef`, `assertValidSavedSnapshot`, `unpackFramedPayload`), and CRDT `ProgressDeltaV2` tokens.
 - **[`StorageService.ts`](./web/src/services/StorageService.ts)**: IndexedDB (`capy_game_storage_v8`) + `localStorage` + native Android disk backup persistence with `quarantineCorruptLocalPayload` recovery (preserving native backups without overwriting them with `[]`), `isDebugStorageExposed()` gating, synchronous native flush on `deleteSnapshot`, `updatedAt` active-save freshness comparison, strict `deserializePuzzle` bounds, and atomic `importSnapshotData` (`isCloudCoopUiEnabled()` in [`StorageNamespace.ts`](./web/src/services/StorageNamespace.ts) gates unfinished Cloud/Co-op hub UI behind `?coop=1`, valid `4-8`-char `?room=...`, or `localStorage['capy_dev_cloud_coop_ui'] === '1'`).
 - **[`SvgPrintExporter.ts`](./web/src/services/SvgPrintExporter.ts)**: Pure SSR-testable printable monochrome vector `.svg` coloring sheet builder (`buildPrintableColoringSvg`, `exportPrintableColoringSvg`) tracing collinear-merged `#1e293b` `<path>` outlines from `regionMap` transitions, stripping XML 1.0 illegal C0 control/non-character code points in `escapeSvgXml`, filtering nullish palette entries, enforcing `Number.isFinite` dimension/coordinate/color-ID safeguards, centered `<text>` region numbers, and a bottom color-key swatch legend.
@@ -432,7 +435,7 @@ From `web/`:
 
 ```bash
 npm ci                    # Clean dependency install
-npm run lint              # Strict TypeScript check (tsc --noEmit)
+npm run lint              # Strict TypeScript + oxlint guardrails (tsc + oxlint)
 npm run build             # Production Vite bundle -> web/dist/
 npm test                  # Unified Vite SSR unit/codec + Playwright E2E suite
 npm run gallery:capture   # Refresh docs/gallery/*.png showcase screenshots

@@ -1,12 +1,12 @@
 {
   "name": "capy-paint",
-  "version": "3.0.37",
+  "version": "3.0.38",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "lint": "tsc --noEmit && tsc --noEmit -p ../worker/tsconfig.json",
+    "lint": "tsc --noEmit && tsc --noEmit -p ../worker/tsconfig.json && oxlint -c .oxlintrc.json --format unix src/",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "test": "node scripts/test.mjs",
     "test:unit": "node scripts/test.mjs --unit",
@@ -31,6 +31,7 @@
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^6.3.0",
+    "oxlint": "1.94.0",
     "playwright": "^1.65.0",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
