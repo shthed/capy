@@ -1,4 +1,8 @@
-### 3.0.38 - 2026-11-19 (Beta)
+### 3.0.39 - 2026-11-19 (Beta)
+
+- Replace the daily cron `schedule` in `.github/workflows/regenerate-puzzles.yml` with on-demand `workflow_dispatch` and path-filtered `push` triggers on `beta` (covering puzzle source assets, `web/src/engine/**`, `generate-sample-saves.mjs`, codec/storage/worker/daily-service files, `web/src/types/index.ts`, and the workflow file while excluding `.capy` archives, `presets/**`, and app icons), add `yaml.safe_load` trigger assertions in `web/scripts/test.mjs`, and document the trigger behavior in `DEV.md` and `TESTING.md` [#589](https://github.com/shthed/capy/pull/589)
+
+### 3.0.38 - 2026-11-19
 
 - Add `oxlint` hooks/catch/complexity guardrails alongside `tsc` in `npm run lint`, introduce bounded non-PII `reportSwallowed` telemetry (`web/src/services/telemetry.ts`) and crash-safe `<ErrorBoundary>` recovery with `.capy` and JSON emergency backup export (`web/src/components/ErrorBoundary.tsx`, `web/src/main.tsx`), consolidate duplicated `base64`, `debugEnvironment`, `snapshotPaths`, and `cloudSyncCoordinator` helpers (`CapyCodec.ts`, `NativeBridge.ts`, `ProviderRegistry.ts`, `StorageService.ts`, `GoogleCloudSyncClient.ts`, `SettingsModal.tsx`, `App.tsx`), migrate brittle JSX/TS source-string assertions in `web/scripts/release-safety-hardening.test.mjs` and `web/scripts/test.mjs` to behavioral SSR and Playwright E2E checks, and sync `DEV.md`, `WEB.md`, and `TESTING.md` [#588](https://github.com/shthed/capy/pull/588)
 
