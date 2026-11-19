@@ -1,6 +1,7 @@
 ### 3.0.41 - 2026-11-19 (Alpha)
 
 - Retarget the clean-room public mirror workflow, in-app **Report Bug / Ideas** link (`SettingsModal.tsx`), `privacy-policy.html`, `sanity.mjs` / `test.mjs` guards, and studio documentation from `capyboop/capy` to the standalone `capyboop/paint` repository [#595](https://github.com/shthed/capy/pull/595)
+- Align the root `README.md` heading (`# Capy Paint`) with the standalone `capyboop/paint` repository [#598](https://github.com/shthed/capy/pull/598)
 
 ### 3.0.40 - 2026-11-19 (Production, Beta)
 
