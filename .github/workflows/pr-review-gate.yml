@@ -31,6 +31,22 @@ on:
         description: 'Pull request number to re-evaluate'
         required: true
         type: string
+      head_sha:
+        description: 'Expected 40-char PR head SHA for bot AI review dispatch'
+        required: false
+        type: string
+      ai_verdict:
+        description: 'Optional AI review verdict (APPROVED or CHANGES_REQUESTED)'
+        required: false
+        type: string
+      ai_score:
+        description: 'Optional AI review score (0-100)'
+        required: false
+        type: string
+      ai_summary:
+        description: 'Optional concise markdown AI review summary'
+        required: false
+        type: string
 
 permissions:
   contents: write
