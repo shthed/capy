@@ -13,60 +13,78 @@ const MAX_MESSAGE_LENGTH = 240;
 
 const swallowedErrorRing: SwallowedErrorRecord[] = [];
 
-function sanitizeNonPiiMessage(err: unknown): string {
-  let raw = 'Unknown error';
-  if (err instanceof Error) {
-    raw = err.message || err.name || 'Error';
-  } else if (typeof err === 'string') {
-    raw = err;
-  } else if (err && typeof err === 'object' && 'message' in err) {
-    const candidate = (err as { message?: unknown }).message;
-    raw = typeof candidate === 'string' ? candidate : String(candidate ?? 'Object error');
-  } else if (err !== undefined && err !== null) {
-    try {
-      raw = String(err);
-    } catch {
-      raw = 'Unserializable error';
-    }
-  }
-
-  const redacted = raw
+export function redactSensitiveTokens(text: string): string {
+  return text
     .replace(/\s+/g, ' ')
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\bya29\.[A-Za-z0-9_-]+/g, '[redacted-token]')
-    .replace(/([?&](?:access_token|token|code|secret)=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/\bya29\.[A-Za-z0-9._-]+/g, '[redacted-token]')
+    .replace(/([?&#](?:access_token|id_token|refresh_token|token|code|secret)=)[^&#\s]+/gi, '$1[redacted]')
     .trim();
+}
 
-  if (!redacted) return 'Unknown error';
-  return redacted.length > MAX_MESSAGE_LENGTH
-    ? `${redacted.slice(0, MAX_MESSAGE_LENGTH - 3)}...`
-    : redacted;
+export function sanitizeNonPiiMessage(
+  err: unknown,
+  fallback = 'Unknown error',
+  maxLength = MAX_MESSAGE_LENGTH
+): string {
+  let raw = fallback;
+  try {
+    if (err instanceof Error) {
+      const msg = (err as { message?: unknown }).message;
+      if (typeof msg === 'string' && msg.length > 0) {
+        raw = msg;
+      } else if (msg !== undefined && msg !== null && msg !== '') {
+        raw = String(msg);
+      } else {
+        const name = (err as { name?: unknown }).name;
+        raw = typeof name === 'string' && name.length > 0 ? name : 'Error';
+      }
+    } else if (typeof err === 'string') {
+      raw = err;
+    } else if (err && typeof err === 'object' && 'message' in err) {
+      const candidate = (err as { message?: unknown }).message;
+      raw = typeof candidate === 'string' ? candidate : String(candidate ?? 'Object error');
+    } else if (err !== undefined && err !== null) {
+      raw = String(err);
+    }
+  } catch {
+    raw = 'Unserializable error';
+  }
+
+  const redacted = redactSensitiveTokens(raw);
+  if (!redacted) return fallback;
+  const safeMax = Math.max(16, maxLength);
+  return redacted.length > safeMax ? `${redacted.slice(0, safeMax - 3)}...` : redacted;
 }
 
 function sanitizeContext(
   context?: Record<string, unknown>
 ): Record<string, unknown> | undefined {
   if (!context || typeof context !== 'object') return undefined;
-  const out: Record<string, unknown> = {};
-  let count = 0;
-  for (const [key, value] of Object.entries(context)) {
-    if (count >= 8) break;
-    const cleanKey = key.trim().slice(0, 48);
-    if (!cleanKey) continue;
-    if (
-      value === null ||
-      typeof value === 'boolean' ||
-      (typeof value === 'number' && Number.isFinite(value))
-    ) {
-      out[cleanKey] = value;
-      count++;
-    } else if (typeof value === 'string') {
-      const safeVal = value.replace(/\s+/g, ' ').trim();
-      out[cleanKey] = safeVal.length > 160 ? `${safeVal.slice(0, 157)}...` : safeVal;
-      count++;
+  try {
+    const out: Record<string, unknown> = {};
+    let count = 0;
+    for (const [key, value] of Object.entries(context)) {
+      if (count >= 8) break;
+      const cleanKey = key.trim().slice(0, 48);
+      if (!cleanKey) continue;
+      if (
+        value === null ||
+        typeof value === 'boolean' ||
+        (typeof value === 'number' && Number.isFinite(value))
+      ) {
+        out[cleanKey] = value;
+        count++;
+      } else if (typeof value === 'string') {
+        const safeVal = redactSensitiveTokens(value);
+        out[cleanKey] = safeVal.length > 160 ? `${safeVal.slice(0, 157)}...` : safeVal;
+        count++;
+      }
     }
+    return count > 0 ? out : undefined;
+  } catch {
+    return undefined;
   }
-  return count > 0 ? out : undefined;
 }
 
 /**

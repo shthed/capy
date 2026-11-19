@@ -2,7 +2,7 @@ import React from 'react';
 import { Download, RefreshCw, RotateCcw, ShieldAlert } from 'lucide-react';
 import { NativeBridge } from '../services/NativeBridge';
 import { StorageService } from '../services/StorageService';
-import { reportSwallowed } from '../services/telemetry';
+import { reportSwallowed, sanitizeNonPiiMessage } from '../services/telemetry';
 
 export interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -14,6 +14,7 @@ export interface ErrorBoundaryProps {
 export interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
+  safeMessage: string;
   exportStatus: 'idle' | 'exporting' | 'exported' | 'error';
   exportMessage: string;
 }
@@ -48,21 +49,30 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     this.state = {
       hasError: false,
       error: null,
+      safeMessage: '',
       exportStatus: 'idle',
       exportMessage: '',
     };
   }
 
-  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+  static getDerivedStateFromError(error: unknown): Partial<ErrorBoundaryState> {
+    const safeMessage = sanitizeNonPiiMessage(error, 'Unexpected rendering failure', 180);
     return {
       hasError: true,
-      error: error instanceof Error ? error : new Error(String(error ?? 'Unknown error')),
+      error: error instanceof Error ? error : new Error(safeMessage),
+      safeMessage,
     };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    let componentStack = '';
+    try {
+      componentStack = typeof info?.componentStack === 'string' ? info.componentStack.slice(0, 160) : '';
+    } catch {
+      componentStack = '';
+    }
     reportSwallowed('ErrorBoundary', error, {
-      componentStack: info?.componentStack ? info.componentStack.slice(0, 160) : '',
+      componentStack,
     });
   }
 
@@ -75,6 +85,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     this.setState({
       hasError: false,
       error: null,
+      safeMessage: '',
       exportStatus: 'idle',
       exportMessage: '',
     });
@@ -112,8 +123,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       return this.props.children;
     }
 
-    const rawMsg = this.state.error?.message?.trim() || 'Unexpected rendering failure';
-    const safeMsg = rawMsg.length > 180 ? `${rawMsg.slice(0, 177)}...` : rawMsg;
+    const safeMsg =
+      this.state.safeMessage ||
+      sanitizeNonPiiMessage(this.state.error, 'Unexpected rendering failure', 180);
 
     return (
       <div

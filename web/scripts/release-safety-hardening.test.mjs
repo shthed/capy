@@ -4191,7 +4191,8 @@ export async function runReleaseSafetyHardeningTests(vite) {
         globalThis.fetch = prevFetch;
         if (prevSs === undefined) delete globalThis.sessionStorage;
         else globalThis.sessionStorage = prevSs;
-        globalThis.localStorage = prevLs;
+        if (prevLs === undefined) delete globalThis.localStorage;
+        else globalThis.localStorage = prevLs;
         if (prevWin === undefined) delete globalThis.window;
         else globalThis.window = prevWin;
       }
@@ -4239,23 +4240,43 @@ export async function runReleaseSafetyHardeningTests(vite) {
         localStorage: globalThis.localStorage,
       };
 
+      const debugEnvMod8 = await vite.ssrLoadModule('/src/utils/debugEnvironment.ts');
+      assert.equal(
+        debugEnvMod8.isDebugEnvironmentEnabled('?capy_debug=0', '1', false),
+        false,
+        'Non-dev ?capy_debug=0 override must suppress debug mode even when storage flag is set'
+      );
+
       telemetryMod.reportSwallowed(
         'TestScope',
-        new Error('Auth failed Bearer abc.def.ghi ya29.secret_tok ?access_token=xyz&foo=1'),
-        { count: 3, ok: true, nested: { bad: 1 }, note: 'x'.repeat(200) }
+        new Error('Auth failed Bearer abc.def.ghi ya29.abc123.def456 #access_token=hash_tok&id_token=id_sec ?access_token=xyz&foo=1'),
+        {
+          count: 3,
+          ok: true,
+          nested: { bad: 1 },
+          note: 'x'.repeat(200),
+          authUrl: 'https://capypaint.com/#token=ctx_tok&Bearer ctx_bearer ya29.ctx.seg',
+        }
       );
       const logAfterRedaction = telemetryMod.getSwallowedErrorLog();
       assert.equal(logAfterRedaction.length, 1);
       assert.equal(logAfterRedaction[0].scope, 'TestScope');
       assert.equal(logAfterRedaction[0].message.includes('abc.def.ghi'), false);
-      assert.equal(logAfterRedaction[0].message.includes('ya29.secret_tok'), false);
+      assert.equal(logAfterRedaction[0].message.includes('ya29.abc123'), false);
+      assert.equal(logAfterRedaction[0].message.includes('def456'), false);
+      assert.equal(logAfterRedaction[0].message.includes('hash_tok'), false);
+      assert.equal(logAfterRedaction[0].message.includes('id_sec'), false);
       assert.equal(logAfterRedaction[0].message.includes('xyz'), false);
       assert.equal(logAfterRedaction[0].message.includes('Bearer [redacted]'), true);
       assert.equal(logAfterRedaction[0].message.includes('[redacted-token]'), true);
       assert.equal(logAfterRedaction[0].context?.count, 3);
       assert.equal(logAfterRedaction[0].context?.ok, true);
       assert.equal('nested' in (logAfterRedaction[0].context || {}), false);
-      assert.equal(logAfterRedaction[0].context?.note?.length <= 160, true);
+      assert.equal(String(logAfterRedaction[0].context?.note || '').length <= 160, true);
+      const safeCtxUrl = String(logAfterRedaction[0].context?.authUrl || '');
+      assert.equal(safeCtxUrl.includes('ctx_tok'), false);
+      assert.equal(safeCtxUrl.includes('ctx_bearer'), false);
+      assert.equal(safeCtxUrl.includes('ya29.ctx'), false);
       if (process.env.NODE_ENV === 'production') {
         assert.equal(warnCalls.length, 0, 'Production non-debug mode must suppress console.warn');
       }
@@ -4266,14 +4287,40 @@ export async function runReleaseSafetyHardeningTests(vite) {
       assert.equal(telemetryMod.getSwallowedErrorLog()[0].scope, 'TestScope');
       assert.equal(telemetryMod.getSwallowedErrorLog()[0].context?.count, 3);
 
-      // Unserializable object must never rethrow and debug query logs console.warn
+      // Unserializable inputs, throwing getters, null-proto objects & Proxy traps must never rethrow, and debug query emits fresh console.warn
+      warnCalls.length = 0;
       globalThis.window.location.search = '?capy_debug=1';
       telemetryMod.reportSwallowed('CircularScope', {
         toString() {
           throw new Error('cannot stringify');
         },
       });
-      assert.equal(warnCalls.length > 0, true, 'Debug mode must emit console.warn for telemetry');
+      assert.equal(warnCalls.length, 1, 'Debug mode must emit console.warn for telemetry');
+
+      const throwingErr = new Error('ignored');
+      Object.defineProperty(throwingErr, 'message', {
+        get() {
+          throw new Error('getter failed');
+        },
+      });
+      telemetryMod.reportSwallowed('GetterScope', throwingErr);
+      telemetryMod.reportSwallowed('NullProtoScope', Object.create(null));
+      telemetryMod.reportSwallowed('NullProtoMsgScope', { message: Object.create(null) });
+      const throwingProxyCtx = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('proxy ownKeys failed');
+          },
+        }
+      );
+      telemetryMod.reportSwallowed('ProxyCtxScope', 'ok msg', throwingProxyCtx);
+      const afterHostileCalls = telemetryMod.getSwallowedErrorLog();
+      assert.equal(
+        afterHostileCalls.slice(-4).map((r) => r.scope).join(','),
+        'GetterScope,NullProtoScope,NullProtoMsgScope,ProxyCtxScope'
+      );
+      assert.equal(afterHostileCalls[afterHostileCalls.length - 1].message, 'ok msg');
 
       // Ring buffer eviction caps entries strictly at MAX_SWALLOWED_ERROR_RECORDS (50)
       telemetryMod.clearSwallowedErrorLog();
@@ -4285,7 +4332,7 @@ export async function runReleaseSafetyHardeningTests(vite) {
       assert.equal(bounded[0].message, 'err-15');
       assert.equal(bounded[bounded.length - 1].message, `err-${telemetryMod.MAX_SWALLOWED_ERROR_RECORDS + 14}`);
 
-      // ErrorBoundary state derivation, telemetry capture & binary -> JSON backup fallback
+      // ErrorBoundary state derivation, unserializable input safety, token redaction & binary -> JSON backup fallback
       const ebMod = await vite.ssrLoadModule('/src/components/ErrorBoundary.tsx');
       const storageMod8 = await vite.ssrLoadModule('/src/services/StorageService.ts');
       const nbMod8 = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
@@ -4293,6 +4340,26 @@ export async function runReleaseSafetyHardeningTests(vite) {
       const derived = ebMod.ErrorBoundary.getDerivedStateFromError(new Error('Boom boundary'));
       assert.equal(derived.hasError, true);
       assert.equal(derived.error?.message, 'Boom boundary');
+      assert.equal(derived.safeMessage, 'Boom boundary');
+
+      const derivedNullProto = ebMod.ErrorBoundary.getDerivedStateFromError(Object.create(null));
+      assert.equal(derivedNullProto.hasError, true);
+      assert.equal(derivedNullProto.safeMessage, 'Unserializable error');
+
+      const derivedSecret = ebMod.ErrorBoundary.getDerivedStateFromError(
+        new Error('Crash Bearer secret_tok ya29.a.b #access_token=frag_sec')
+      );
+      assert.equal(derivedSecret.safeMessage.includes('secret_tok'), false);
+      assert.equal(derivedSecret.safeMessage.includes('ya29.a'), false);
+      assert.equal(derivedSecret.safeMessage.includes('frag_sec'), false);
+      const ebRenderMal = new ebMod.ErrorBoundary({ children: null });
+      ebRenderMal.state = {
+        ...ebRenderMal.state,
+        hasError: true,
+        error: { message: 12345 },
+        safeMessage: '',
+      };
+      assert.ok(ebRenderMal.render(), 'ErrorBoundary.render() must tolerate non-string error.message safely');
 
       telemetryMod.clearSwallowedErrorLog();
       const ebInstance = new ebMod.ErrorBoundary({ children: null });
@@ -4338,7 +4405,8 @@ export async function runReleaseSafetyHardeningTests(vite) {
     } finally {
       console.warn = origConsoleWarn;
       telemetryMod.clearSwallowedErrorLog();
-      globalThis.localStorage = prevLs8;
+      if (prevLs8 === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = prevLs8;
       if (prevWin8 === undefined) delete globalThis.window;
       else globalThis.window = prevWin8;
     }
