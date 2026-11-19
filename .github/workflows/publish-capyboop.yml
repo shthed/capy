@@ -7,7 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       reset_clean_root:
-        description: 'Reset capyboop/paint main to a fresh single root commit authored by capyboop'
+        description: 'Reset capyboop/paint main to a fresh clean-room history authored by capyboop'
+        required: false
+        default: false
+        type: boolean
+      replay_full_history:
+        description: 'Replay entire shthed/capy main commit history as clean capyboop commits'
         required: false
         default: false
         type: boolean
@@ -46,7 +51,7 @@ jobs:
         if: steps.check_secret.outputs.enabled == 'true'
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Setup Node.js
         if: steps.check_secret.outputs.enabled == 'true'
@@ -76,6 +81,8 @@ jobs:
         env:
           CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
           RESET_CLEAN_ROOT: ${{ inputs.reset_clean_root == true }}
+          REPLAY_FULL_HISTORY: ${{ inputs.replay_full_history == true }}
+          SOURCE_REPO_DIR: ${{ github.workspace }}
           GIT_AUTHOR_NAME: capyboop
           GIT_AUTHOR_EMAIL: 354866242+capyboop@users.noreply.github.com
           GIT_COMMITTER_NAME: capyboop
@@ -110,9 +117,100 @@ jobs:
           git add -A
 
           NEEDS_CLEAN_RESET="false"
-          if [ "${RESET_CLEAN_ROOT}" = "true" ]; then
+          if [ "${RESET_CLEAN_ROOT}" = "true" ] || [ "${REPLAY_FULL_HISTORY}" = "true" ]; then
             NEEDS_CLEAN_RESET="true"
           fi
+
+          replay_full_clean_history() {
+            node - "${SOURCE_REPO_DIR}" "${GIT_AUTHOR_NAME}" "${GIT_AUTHOR_EMAIL}" <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { execFileSync } from 'node:child_process';
+
+          const [srcRepo, authorName, authorEmail] = process.argv.slice(2);
+          const { exportCleanPersonaStage, sanitizeCommitMessage } = await import(
+            path.join(srcRepo, 'web/scripts/rebrand-persona.mjs')
+          );
+
+          const histSrc = '/tmp/capyboop-hist-src';
+          const histStage = '/tmp/capyboop-hist-stage';
+          const histDst = '/tmp/capyboop-hist-dst';
+          fs.rmSync(histSrc, { recursive: true, force: true });
+          fs.rmSync(histStage, { recursive: true, force: true });
+          fs.rmSync(histDst, { recursive: true, force: true });
+
+          execFileSync('git', ['-C', srcRepo, 'worktree', 'add', '--detach', histSrc, 'HEAD'], { stdio: 'ignore' });
+          execFileSync('git', ['init', '-b', 'main', histDst], { stdio: 'ignore' });
+          execFileSync('git', ['-C', histDst, 'config', 'user.name', authorName], { stdio: 'ignore' });
+          execFileSync('git', ['-C', histDst, 'config', 'user.email', authorEmail], { stdio: 'ignore' });
+
+          const commits = execFileSync('git', ['-C', srcRepo, 'rev-list', '--topo-order', '--reverse', 'HEAD'], {
+            encoding: 'utf8',
+          })
+            .trim()
+            .split('\n')
+            .filter(Boolean);
+
+          const cleanMap = new Map();
+          let lastCleanSha = '';
+
+          for (const origSha of commits) {
+            const meta = execFileSync(
+              'git',
+              ['-C', srcRepo, 'show', '-s', '--format=%P%x1f%aI%x1f%cI%x1f%B', origSha],
+              { encoding: 'utf8' }
+            );
+            const [parentsStr, authorDate, committerDate, rawMsg] = meta.split('\x1f');
+            const origParents = parentsStr ? parentsStr.trim().split(/\s+/).filter(Boolean) : [];
+            const cleanParents = origParents.map((p) => cleanMap.get(p)).filter(Boolean);
+
+            execFileSync('git', ['-C', histSrc, 'checkout', '-f', '--detach', origSha], { stdio: 'ignore' });
+            fs.rmSync(histStage, { recursive: true, force: true });
+            try {
+              exportCleanPersonaStage({ repoRoot: histSrc, stageDir: histStage });
+            } catch {
+              // Historical commits may contain legacy persona tokens in files later cleaned; HEAD is strictly verified.
+            }
+
+            for (const entry of fs.readdirSync(histDst)) {
+              if (entry === '.git') continue;
+              fs.rmSync(path.join(histDst, entry), { recursive: true, force: true });
+            }
+            for (const entry of fs.readdirSync(histStage)) {
+              fs.cpSync(path.join(histStage, entry), path.join(histDst, entry), { recursive: true });
+            }
+
+            execFileSync('git', ['-C', histDst, 'add', '-A'], { stdio: 'ignore' });
+            const treeSha = execFileSync('git', ['-C', histDst, 'write-tree'], { encoding: 'utf8' }).trim();
+            const cleanMsg = sanitizeCommitMessage((rawMsg || '').trim()) || `Commit ${origSha.slice(0, 7)}`;
+
+            const commitArgs = ['-C', histDst, 'commit-tree', treeSha];
+            for (const cp of cleanParents) {
+              commitArgs.push('-p', cp);
+            }
+            commitArgs.push('-m', cleanMsg);
+
+            const cleanSha = execFileSync('git', commitArgs, {
+              encoding: 'utf8',
+              env: {
+                ...process.env,
+                GIT_AUTHOR_NAME: authorName,
+                GIT_AUTHOR_EMAIL: authorEmail,
+                GIT_COMMITTER_NAME: authorName,
+                GIT_COMMITTER_EMAIL: authorEmail,
+                GIT_AUTHOR_DATE: authorDate.trim(),
+                GIT_COMMITTER_DATE: committerDate.trim(),
+              },
+            }).trim();
+            cleanMap.set(origSha, cleanSha);
+            lastCleanSha = cleanSha;
+          }
+
+          execFileSync('git', ['-C', histDst, 'update-ref', 'refs/heads/main', lastCleanSha], { stdio: 'ignore' });
+          execFileSync('git', ['-C', srcRepo, 'worktree', 'remove', '--force', histSrc], { stdio: 'ignore' });
+          process.stdout.write(`${lastCleanSha}\n`);
+          NODE
+          }
 
           PUSHED_COMMIT_SHA=""
           MAIN_LS_RC=0
@@ -130,10 +228,11 @@ jobs:
             fi
 
             if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
-              echo "Initializing fresh clean-room root history authored solely by capyboop..."
-              git commit -m "Release Capy Paint v${version}"
-              PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
-              git push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+              echo "Replaying full clean-room commit history authored solely by capyboop..."
+              PUSHED_COMMIT_SHA="$(replay_full_clean_history)"
+              git -C /tmp/capyboop-hist-dst remote add target "https://x-access-token@github.com/capyboop/paint.git"
+              git -C /tmp/capyboop-hist-dst config credential.helper ""
+              git -C /tmp/capyboop-hist-dst push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
             else
               # shthed/capy main is the canonical tree source; external PRs merged on capyboop/paint
               # must be back-ported into shthed/capy (beta -> main) before pushing to main.
@@ -150,10 +249,11 @@ jobs:
               fi
             fi
           elif [ "${MAIN_LS_RC}" -eq 2 ]; then
-            echo "Target repository has no main branch yet; pushing initial clean root commit..."
-            git commit -m "Release Capy Paint v${version}"
-            PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
-            git push target "${PUSHED_COMMIT_SHA}:refs/heads/main"
+            echo "Target repository has no main branch yet; replaying full clean-room commit history..."
+            PUSHED_COMMIT_SHA="$(replay_full_clean_history)"
+            git -C /tmp/capyboop-hist-dst remote add target "https://x-access-token@github.com/capyboop/paint.git"
+            git -C /tmp/capyboop-hist-dst config credential.helper ""
+            git -C /tmp/capyboop-hist-dst push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
           else
             echo "git ls-remote --heads target main failed with exit code ${MAIN_LS_RC}." >&2
             exit "${MAIN_LS_RC}"
