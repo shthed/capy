@@ -282,17 +282,21 @@ jobs:
           fi
 
           TAG_NAME="v${version}"
+          TAG_REPO_DIR="/tmp/capyboop-stage"
+          if [ -d /tmp/capyboop-hist-dst/.git ]; then
+            TAG_REPO_DIR="/tmp/capyboop-hist-dst"
+          fi
           if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
             echo "Force-syncing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) onto clean root..."
-            git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
-            git push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+            git -C "${TAG_REPO_DIR}" tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+            git -C "${TAG_REPO_DIR}" push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
           else
             TAG_LS_RC=0
             git ls-remote --exit-code --tags target "refs/tags/${TAG_NAME}" >/dev/null || TAG_LS_RC=$?
             if [ "${TAG_LS_RC}" -eq 2 ]; then
               echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/paint..."
-              git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
-              git push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+              git -C "${TAG_REPO_DIR}" tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
+              git -C "${TAG_REPO_DIR}" push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
             elif [ "${TAG_LS_RC}" -eq 0 ]; then
               echo "Tag ${TAG_NAME} already exists on capyboop/paint; skipping tag push."
             else
