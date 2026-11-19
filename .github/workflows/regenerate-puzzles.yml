@@ -109,16 +109,24 @@ jobs:
           PR_BODY=$(cat <<'EOF'
           ## Summary
 
-          Automatically regenerates the pre-built sample and daily puzzles at Max detail settings so new players can open them right away without waiting for generation.
+          Automatically regenerates the pre-built sample and daily puzzles at maximum detail settings so players can open them immediately without waiting for on-device generation.
 
-          - Regenerated `web/public/assets/sample_saves.capy` and `web/public/assets/daily_saves.capy` via `npm run generate:samples`.
-          - Verified `npm run test:sanity`, `npm run lint`, `npm run build`, and `npm run test:unit`.
+          ### When the Job Runs
+
+          - **Puzzle/Engine Updates**: Runs automatically when `beta` receives changes under `web/src/engine/**`, `web/scripts/generate-sample-saves.mjs`, `web/public/assets/*.webp`, or `.github/workflows/regenerate-puzzles.yml`.
+          - **Manual Trigger**: Can be run on demand via `workflow_dispatch` (serialized per ref via `regenerate-puzzles-${{ github.ref }}`).
+
+          ### How It Works
+
+          - Runs `npm run generate:samples` (`web/scripts/generate-sample-saves.mjs`) against a local Vite server and headless Playwright Chromium using `MAX_GENERATOR_CONFIG` (`2048` resolution, `64` colors, `<= 2000` regions, `ABSORB_LINES`, `HIGH`).
+          - Rebuilds the `4` starter samples (`web/public/assets/sample_saves.capy`) and `20` daily combinations (`web/public/assets/daily_saves.capy`) with deterministic timestamps and a `< 14 MB` decompressed payload ceiling.
+          - Verifies `npm run test:sanity && npm run lint && npm run build && npm run test:unit` and pushes/updates this `--base beta` PR only when `.capy` bytes change.
 
           ### PR Readiness Score: 100%
 
           <details><summary>PR Readiness Checklist</summary>
 
-          - **100%** — **Pre-Generated Bundles**: `sample_saves.capy` and `daily_saves.capy` regenerated headlessly at Max settings (`<= 2000` regions).
+          - **100%** — **Pre-Generated Bundles**: `sample_saves.capy` and `daily_saves.capy` regenerated headlessly at Max settings (`<= 2000` regions, `< 14 MB` unpacked).
           - **100%** — **Verification Gates**: `npm run test:sanity`, `npm run lint`, `npm run build`, and `npm run test:unit` passed.
 
           </details>
