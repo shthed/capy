@@ -1428,11 +1428,18 @@ export class StorageService {
     return hydrated;
   }
 
+  static normalizeSnapshotTitle(title: string): string {
+    const cleaned = title.replace(/\s*\(Max Detail \(Auto\)\)\s*$/i, '').trim();
+    return cleaned || title;
+  }
+
   private static stripInternalSnapshotMeta(snapshot: SavedSnapshot): SavedSnapshot {
-    if (!Object.prototype.hasOwnProperty.call(snapshot, 'metaUpdatedAt')) {
+    const normalizedTitle = this.normalizeSnapshotTitle(snapshot.title);
+    const hasMeta = Object.prototype.hasOwnProperty.call(snapshot, 'metaUpdatedAt');
+    if (!hasMeta && normalizedTitle === snapshot.title) {
       return snapshot;
     }
-    const copy = { ...snapshot } as SavedSnapshot & { metaUpdatedAt?: unknown };
+    const copy = { ...snapshot, title: normalizedTitle } as SavedSnapshot & { metaUpdatedAt?: unknown };
     delete copy.metaUpdatedAt;
     return copy;
   }
@@ -1535,6 +1542,7 @@ export class StorageService {
         const cachedPreview = inlinePreview || this.previewCache.get(this.previewCacheKey(s.id));
         const base: SavedSnapshot = {
           ...s,
+          title: this.normalizeSnapshotTitle(s.title),
           filledRegionIds: Array.isArray(s.filledRegionIds)
             ? s.filledRegionIds.filter((id) => typeof id === 'number' && Number.isFinite(id))
             : [],
