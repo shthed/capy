@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
-import { isAllowedSampleAssetPath, isSafeSnapshotPreviewDataUrl } from '../services/CapyCodec';
+import { resolveSafeSnapshotThumbnail } from '../utils/snapshotPaths';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
 import {
@@ -2932,26 +2932,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const isActive = snap.id === activeSnapshotId;
                         const isSelected = snap.id === currentSelectedId;
                         const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                        const safeSampleThumb = isAllowedSampleAssetPath(snap.sampleAssetPath)
-                          ? snap.sampleAssetPath
-                          : undefined;
-                        const safePreviewThumb = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
-                          ? snap.previewDataUrl.trim()
-                          : undefined;
-                        const primaryThumb = safeSampleThumb || safePreviewThumb;
-                        const fallbackThumb =
-                          primaryThumb &&
-                          failedThumbSrcs[primaryThumb] &&
-                          safePreviewThumb &&
-                          safePreviewThumb !== primaryThumb
-                            ? safePreviewThumb
-                            : undefined;
-                        const thumbSrc =
-                          primaryThumb && !failedThumbSrcs[primaryThumb]
-                            ? primaryThumb
-                            : fallbackThumb && !failedThumbSrcs[fallbackThumb]
-                              ? fallbackThumb
-                              : undefined;
+                        const { thumbSrc } = resolveSafeSnapshotThumbnail(snap, failedThumbSrcs);
 
                         return (
                           <div
@@ -3031,26 +3012,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const isActive = snap.id === activeSnapshotId;
                         const isSelected = snap.id === currentSelectedId;
                         const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                        const safeSampleThumb = isAllowedSampleAssetPath(snap.sampleAssetPath)
-                          ? snap.sampleAssetPath
-                          : undefined;
-                        const safePreviewThumb = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
-                          ? snap.previewDataUrl.trim()
-                          : undefined;
-                        const primaryThumb = safeSampleThumb || safePreviewThumb;
-                        const fallbackThumb =
-                          primaryThumb &&
-                          failedThumbSrcs[primaryThumb] &&
-                          safePreviewThumb &&
-                          safePreviewThumb !== primaryThumb
-                            ? safePreviewThumb
-                            : undefined;
-                        const thumbSrc =
-                          primaryThumb && !failedThumbSrcs[primaryThumb]
-                            ? primaryThumb
-                            : fallbackThumb && !failedThumbSrcs[fallbackThumb]
-                              ? fallbackThumb
-                              : undefined;
+                        const { thumbSrc } = resolveSafeSnapshotThumbnail(snap, failedThumbSrcs);
 
                         return (
                           <div

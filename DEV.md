@@ -255,7 +255,7 @@ Run the mandatory checks matching your changed files before pushing:
 cd web
 npm ci                   # Clean dependency install (first run or lockfile change)
 npm run dev              # Local Vite dev server on http://localhost:3000
-npm run lint             # Strict TypeScript check (tsc --noEmit) -- MANDATORY for code PRs
+npm run lint             # Strict TypeScript + oxlint guardrails (tsc + oxlint) -- MANDATORY for code PRs
 npm run build            # Production bundle (tsc && vite build -> web/dist/) -- MANDATORY for code PRs
 npm run test:unit        # Fast Vite SSR engine, codec, version/changelog & workflow unit checks
 npm test                 # Unified engine, codec, version/changelog & Playwright E2E suite

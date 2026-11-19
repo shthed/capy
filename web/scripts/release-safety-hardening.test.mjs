@@ -147,9 +147,25 @@ export async function runReleaseSafetyHardeningTests(vite) {
     );
   }
 
-  // 2. StorageService window.capyStorage gating + SettingsModal Store-clean gating
+  // 2. Debug gating parity, ad-free components & isCloudCoopUiEnabled gating
   {
+    const debugEnvMod = await vite.ssrLoadModule('/src/utils/debugEnvironment.ts');
     const storageMod = await vite.ssrLoadModule('/src/services/StorageService.ts');
+    const gClientMod = await vite.ssrLoadModule('/src/services/providers/GoogleCloudSyncClient.ts');
+    const nsMod = await vite.ssrLoadModule('/src/services/StorageNamespace.ts');
+    const nbMod2 = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
+    const regMod2 = await vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts');
+
+    assert.equal(
+      storageMod.isDebugStorageExposed,
+      debugEnvMod.isDebugEnvironmentEnabled,
+      'StorageService.isDebugStorageExposed must re-export shared isDebugEnvironmentEnabled'
+    );
+    assert.equal(
+      gClientMod.isGoogleMockTokenEnvironmentAllowed,
+      debugEnvMod.isDebugEnvironmentEnabled,
+      'GoogleCloudSyncClient.isGoogleMockTokenEnvironmentAllowed must re-export shared isDebugEnvironmentEnabled'
+    );
     assert.equal(
       storageMod.isDebugStorageExposed('', null, false),
       false,
@@ -181,20 +197,49 @@ export async function runReleaseSafetyHardeningTests(vite) {
       'Vite dev mode must allow debug storage exposure'
     );
 
-    const settingsSrc = fs.readFileSync(
-      path.join(WEB_ROOT, 'src/components/SettingsModal.tsx'),
-      'utf8'
+    const componentFiles = [];
+    const walkComponents = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walkComponents(full);
+        } else if (entry.isFile() && /\.(ts|tsx)$/.test(entry.name)) {
+          componentFiles.push(full);
+        }
+      }
+    };
+    walkComponents(path.join(WEB_ROOT, 'src/components'));
+    assert.equal(componentFiles.length > 0, true, 'Expected component files in src/components');
+    for (const filePath of componentFiles) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      assert.equal(
+        /\b(?:AI Credits|Optional Ad|watchAd|ad_watch)\b/i.test(content),
+        false,
+        `${path.relative(WEB_ROOT, filePath)} must remain free of Play Store ad/credit monetization hooks`
+      );
+    }
+
+    assert.equal(
+      typeof nbMod2.NativeBridge.showRewardedAd,
+      'undefined',
+      'NativeBridge.showRewardedAd must remain absent for ad-free parity'
     );
     assert.equal(
-      /\b(?:AI Credits|Optional Ad|watchAd|ad_watch)\b/i.test(settingsSrc),
+      regMod2.ProviderRegistry.monetization.getLedger().adFreePlatform,
+      true,
+      'ProviderRegistry monetization ledger must enforce adFreePlatform === true'
+    );
+
+    assert.equal(nsMod.isCloudCoopUiEnabled('', null), false, 'Cloud Co-op UI must default off');
+    assert.equal(nsMod.isCloudCoopUiEnabled('?coop=0', '1'), false, '?coop=0 must override stored flag');
+    assert.equal(nsMod.isCloudCoopUiEnabled('?coop=1', null), true, '?coop=1 must enable Cloud Co-op UI');
+    assert.equal(nsMod.isCloudCoopUiEnabled('?room=ABCD23', null), true, '?room= must enable Cloud Co-op UI');
+    assert.equal(
+      nsMod.isCloudCoopUiEnabled('?coop=0&room=ABCD23', null),
       false,
-      'SettingsModal.tsx must remain free of Play Store ad/credit monetization hooks'
+      'Explicit ?coop=0 must suppress Cloud Co-op UI even when room= is present'
     );
-    assert.match(
-      settingsSrc,
-      /\{showCloudCoopUi\s*\?\s*\(\s*<div[^>]*data-testid="cloud-coop-hub"/,
-      'cloud-coop-hub must remain gated inside showCloudCoopUi'
-    );
+    assert.equal(nsMod.isCloudCoopUiEnabled('', '1'), true, 'capy_dev_cloud_coop_ui=1 must enable Cloud Co-op UI');
   }
 
   // 3. NativeBridge SSR safety, deep-link validation & shared image / share link guards
@@ -2872,13 +2917,78 @@ export async function runReleaseSafetyHardeningTests(vite) {
         assert.equal(codecMod.isAllowedSampleAssetPath('/evil-beacon.png'), false);
         assert.equal(codecMod.isAllowedSampleAssetPath('https://evil.com/a.webp'), false);
 
-        // Verify UI thumbnail/image consumers filter sampleAssetPath & previewDataUrl via CapyCodec helpers
-        const settingsSrc = fs.readFileSync(path.join(WEB_ROOT, 'src/components/SettingsModal.tsx'), 'utf8');
-        assert.equal(settingsSrc.includes('isAllowedSampleAssetPath('), true);
-        assert.equal(settingsSrc.includes('isSafeSnapshotPreviewDataUrl('), true);
-        const appSrcRef = fs.readFileSync(path.join(WEB_ROOT, 'src/App.tsx'), 'utf8');
-        assert.equal(appSrcRef.includes('isAllowedSampleAssetPath('), true);
-        assert.equal(appSrcRef.includes('isSafeSnapshotPreviewDataUrl('), true);
+        // Verify snapshot thumbnail resolution helpers reject unsafe URIs & resolve safe fallbacks
+        const snapshotPathsMod = await vite.ssrLoadModule('/src/utils/snapshotPaths.ts');
+        assert.equal(
+          snapshotPathsMod.resolveSafeSampleAssetPath({ sampleAssetPath: './assets/capy_forest.webp' }),
+          './assets/capy_forest.webp'
+        );
+        assert.equal(
+          snapshotPathsMod.resolveSafeSampleAssetPath({
+            sampleAssetPath: 'https://evil.example/beacon.png',
+            sourceRef: { kind: 'sample', uri: './assets/capybara.webp' },
+          }),
+          './assets/capybara.webp'
+        );
+        assert.equal(
+          snapshotPathsMod.resolveSafeSampleAssetPath(
+            {
+              sampleAssetPath: './assets/capy_forest.webp',
+              sourceRef: { kind: 'catalog', uri: './assets/capybara.webp' },
+            },
+            true
+          ),
+          './assets/capybara.webp'
+        );
+        assert.equal(
+          snapshotPathsMod.resolveSafeSampleAssetPath({
+            sampleAssetPath: 'javascript:alert(1)',
+            sourceRef: { kind: 'url', uri: './assets/capybara.webp' },
+          }),
+          undefined,
+          'Unsafe sampleAssetPath and non-sample sourceRef kind must resolve to undefined'
+        );
+        assert.equal(
+          snapshotPathsMod.resolveSafeSnapshotPreviewUrl({
+            previewDataUrl: 'data:image/png;base64,AAAA',
+          }),
+          'data:image/png;base64,AAAA'
+        );
+        assert.equal(
+          snapshotPathsMod.resolveSafeSnapshotPreviewUrl({
+            previewDataUrl: 'data:image/svg+xml;base64,AAAA',
+          }),
+          undefined,
+          'Unsafe SVG data URL preview must be rejected'
+        );
+        const primaryThumbRes = snapshotPathsMod.resolveSafeSnapshotThumbnail(
+          {
+            sampleAssetPath: './assets/capybara.webp',
+            previewDataUrl: 'data:image/webp;base64,BBBB',
+          },
+          {}
+        );
+        assert.equal(primaryThumbRes.thumbSrc, './assets/capybara.webp');
+        assert.equal(primaryThumbRes.fallbackThumb, undefined);
+
+        const failedPrimaryThumbRes = snapshotPathsMod.resolveSafeSnapshotThumbnail(
+          {
+            sampleAssetPath: './assets/capybara.webp',
+            previewDataUrl: 'data:image/webp;base64,BBBB',
+          },
+          { './assets/capybara.webp': true }
+        );
+        assert.equal(failedPrimaryThumbRes.fallbackThumb, 'data:image/webp;base64,BBBB');
+        assert.equal(failedPrimaryThumbRes.thumbSrc, 'data:image/webp;base64,BBBB');
+
+        const bothFailedThumbRes = snapshotPathsMod.resolveSafeSnapshotThumbnail(
+          {
+            sampleAssetPath: './assets/capybara.webp',
+            previewDataUrl: 'data:image/webp;base64,BBBB',
+          },
+          { './assets/capybara.webp': true, 'data:image/webp;base64,BBBB': true }
+        );
+        assert.equal(bothFailedThumbRes.thumbSrc, undefined);
 
         // Verify sw.js preserves #573 SW_ASSETS_DIGEST & omits ignoreSearch: true
         const swSrc = fs.readFileSync(path.join(WEB_ROOT, 'public/sw.js'), 'utf8');
@@ -3507,20 +3617,72 @@ export async function runReleaseSafetyHardeningTests(vite) {
           nbMod.NativeBridge.attachWindowCallbacks();
         }
 
-        // 7i. App.tsx filters pgblob_* chunks out of onCloudSnapshot and coalesces concurrent handleSyncCloudProgress calls
-        const appSrc = fs.readFileSync(path.join(WEB_ROOT, 'src/App.tsx'), 'utf8');
-        assert.match(
-          appSrc,
-          /NativeBridge\.onCloudSnapshot\([\s\S]*?!slotKey\.startsWith\('pgblob_'\)/,
-          'App.tsx must register slotFilter excluding pgblob_* chunks from triggering manifest sync storms'
-        );
-        assert.match(
-          appSrc,
-          /cloudSyncInFlightRef\.current[\s\S]*?cloudSyncQueuedRef\.current\s*=\s*true[\s\S]*?while\s*\(cloudSyncQueuedRef\.current\)/,
-          'App.tsx must coalesce overlapping handleSyncCloudProgress invocations with single trailing pass'
-        );
+        // 7i. cloudSyncCoordinator filters pgblob_* / *_part_N chunks out of onCloudSnapshot and coalesces concurrent sync passes
+        const syncCoordMod = await vite.ssrLoadModule('/src/services/cloudSyncCoordinator.ts');
+        assert.equal(syncCoordMod.isManifestCloudSnapshotSlot('capy_cloud_manifest_v2'), true);
+        assert.equal(syncCoordMod.isManifestCloudSnapshotSlot('capy_save_1'), true);
+        assert.equal(syncCoordMod.isManifestCloudSnapshotSlot('pgblob_storm_check_part_0'), false);
+        assert.equal(syncCoordMod.isManifestCloudSnapshotSlot('custom_slot_part_2'), false);
+        assert.equal(syncCoordMod.isManifestCloudSnapshotSlot(''), false);
 
-        // Verify live NativeBridge + PlayGamesAndroidDriver multi-chunk isolation with !slotKey.startsWith('pgblob_') listener
+        {
+          const controller = syncCoordMod.createCoalescedSyncController();
+          assert.equal(controller.isInFlight(), false);
+          let releaseFirstPass = null;
+          let runCount = 0;
+          const p1 = controller.run(async () => {
+            runCount++;
+            if (runCount === 1) {
+              await new Promise((resolve) => {
+                releaseFirstPass = resolve;
+              });
+              return 'pass-1';
+            }
+            return 'pass-2';
+          });
+          await Promise.resolve();
+          assert.equal(controller.isInFlight(), true);
+          const p2 = controller.run(async () => {
+            runCount++;
+            return 'trailing-pass';
+          });
+          assert.equal(p2, p1, 'Overlapping run() calls must share the active coalesced promise');
+          releaseFirstPass?.();
+          const res1 = await p1;
+          assert.equal(res1, 'trailing-pass', 'Coalesced controller must run exactly one trailing pass');
+          assert.equal(runCount, 2);
+          assert.equal(controller.isInFlight(), false);
+
+          // Mid-pass requestTrailingPass() schedules a follow-up pass cleanly and error resets in-flight state
+          let trailingRuns = 0;
+          let releaseMidPass = null;
+          const pMid = controller.run(async () => {
+            trailingRuns++;
+            if (trailingRuns === 1) {
+              controller.requestTrailingPass();
+              await new Promise((resolve) => {
+                releaseMidPass = resolve;
+              });
+            }
+            return `mid-${trailingRuns}`;
+          });
+          await Promise.resolve();
+          releaseMidPass?.();
+          assert.equal(await pMid, 'mid-2');
+          assert.equal(trailingRuns, 2);
+          assert.equal(controller.isInFlight(), false);
+
+          await assert.rejects(
+            () =>
+              controller.run(async () => {
+                throw new Error('simulated sync pass failure');
+              }),
+            /simulated sync pass failure/
+          );
+          assert.equal(controller.isInFlight(), false, 'Failed sync pass must clear inFlight state');
+        }
+
+        // Verify live NativeBridge + PlayGamesAndroidDriver multi-chunk isolation with isManifestCloudSnapshotSlot
         let nonBlobTriggers = 0;
         const part0 = codecMod.uint8ToBase64(new Uint8Array([10, 20, 30, 40]));
         const part1 = codecMod.uint8ToBase64(new Uint8Array([50, 60, 70, 80]));
@@ -3550,7 +3712,7 @@ export async function runReleaseSafetyHardeningTests(vite) {
           () => {
             nonBlobTriggers++;
           },
-          { slotFilter: (slotKey) => !slotKey.startsWith('pgblob_') }
+          { slotFilter: syncCoordMod.isManifestCloudSnapshotSlot }
         );
         try {
           const stormDriver = new driversMod.PlayGamesAndroidDriver();
@@ -3558,6 +3720,9 @@ export async function runReleaseSafetyHardeningTests(vite) {
           assert.deepEqual(Array.from(assembled || []), [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]);
           assert.deepEqual(chunkPullCounts, { 0: 1, 1: 1, 2: 1 }, 'Each pgblob chunk must be pulled exactly once');
           assert.equal(nonBlobTriggers, 0, 'Non-pgblob App listener must fire 0 times on pgblob_* chunk arrivals');
+
+          globalThis.window.__capyReceiveCloudSnapshot('custom_snapshot_part_0', '{"chunk":0}');
+          assert.equal(nonBlobTriggers, 0, 'Manifest listener must ignore *_part_N chunk slots');
 
           globalThis.window.__capyReceiveCloudSnapshot('capy_cloud_manifest_v2', '{"version":2,"entries":{}}');
           assert.equal(nonBlobTriggers, 1, 'Non-pgblob App listener must still fire on manifest snapshots');
@@ -3872,10 +4037,11 @@ export async function runReleaseSafetyHardeningTests(vite) {
             'Reset occurring during pushRemoteLibraryManifest must set hasPendingLocalChanges so App.tsx schedules trailing pass'
           );
 
+          const appSrc = fs.readFileSync(path.join(WEB_ROOT, 'src/App.tsx'), 'utf8');
           assert.match(
             appSrc,
-            /libSummary\.hasPendingLocalChanges[\s\S]*?latestSavedEpoch > pushedSlotEpoch[\s\S]*?cloudSyncQueuedRef\.current = true/,
-            'App.tsx must re-queue cloud sync when resetEpoch advances mid-sync'
+            /libSummary\.hasPendingLocalChanges[\s\S]*?latestSavedEpoch > pushedSlotEpoch[\s\S]*?controller\.requestTrailingPass\(\)/,
+            'App.tsx must re-queue cloud sync via controller.requestTrailingPass() when resetEpoch advances mid-sync'
           );
         }
 
@@ -3898,18 +4064,19 @@ export async function runReleaseSafetyHardeningTests(vite) {
             'sample_assets_capy_forest_webp',
             'computeSlotKeyForSnapshot must strip leading ./ to produce canonical slotKey'
           );
+          const appSrc7l = fs.readFileSync(path.join(WEB_ROOT, 'src/App.tsx'), 'utf8');
           assert.match(
-            appSrc,
+            appSrc7l,
             /import\s*\{[^}]*\bcomputeSlotKeyForSnapshot\b[^}]*\}\s*from\s*'\.\/services\/providers\/ProviderRegistry'/,
             'App.tsx must import computeSlotKeyForSnapshot from ProviderRegistry'
           );
           assert.match(
-            appSrc,
+            appSrc7l,
             /const slotKey = computeSlotKeyForSnapshot\(/,
             'App.tsx executeSingleSyncPass must compute active slotKey via computeSlotKeyForSnapshot'
           );
           assert.equal(
-            appSrc.includes('sample_${startSampleUri.replace'),
+            appSrc7l.includes('sample_${startSampleUri.replace'),
             false,
             'App.tsx must not diverge with inline sample_ slotKey string formatting'
           );
@@ -3979,7 +4146,7 @@ export async function runReleaseSafetyHardeningTests(vite) {
           assert.deepEqual(syncRes.mergedDelta.filledRegionIds, [], 'Canonical slotKey syncProgress must not resurrect stale epoch-0 progress');
         }
 
-        // 7m. C8-3 regression: PlayGamesAndroidDriver.readBinaryBlob must require pgblob_ prefix and App.tsx must filter _part_N slots
+        // 7m. C8-3 regression: PlayGamesAndroidDriver.readBinaryBlob must require pgblob_ prefix and isManifestCloudSnapshotSlot filters chunk slots
         {
           let unexpectedPullAttempts = 0;
           globalThis.window.CapyAndroid = {
@@ -4007,10 +4174,17 @@ export async function runReleaseSafetyHardeningTests(vite) {
             0,
             'Rejected non-pgblob_ refs must never invoke requestCloudSnapshotPull'
           );
-          assert.match(
-            appSrc,
-            /slotFilter:\s*\(slotKey\)\s*=>\s*!slotKey\.startsWith\('pgblob_'\)\s*&&\s*!\/_part_\\d\+\$\/\.test\(slotKey\)/,
-            'App.tsx onCloudSnapshot slotFilter must ignore both pgblob_* and *_part_N chunk slots'
+          for (const chunkSlot of ['pgblob_x', 'pgblob_abc_part_0', 'manifest_part_1', 'slot_part_12']) {
+            assert.equal(
+              syncCoordMod.isManifestCloudSnapshotSlot(chunkSlot),
+              false,
+              `isManifestCloudSnapshotSlot must exclude chunk slot ${chunkSlot}`
+            );
+          }
+          assert.equal(
+            syncCoordMod.isManifestCloudSnapshotSlot('capy_cloud_manifest_v2'),
+            true,
+            'isManifestCloudSnapshotSlot must allow manifest slot'
           );
         }
       } finally {
@@ -4021,6 +4195,152 @@ export async function runReleaseSafetyHardeningTests(vite) {
         if (prevWin === undefined) delete globalThis.window;
         else globalThis.window = prevWin;
       }
+    }
+  }
+
+  // 8. Stage 1 shared base64 utilities, non-PII reportSwallowed ring buffer & ErrorBoundary recovery
+  {
+    const base64Mod = await vite.ssrLoadModule('/src/utils/base64.ts');
+    const codecMod8 = await vite.ssrLoadModule('/src/services/CapyCodec.ts');
+    assert.equal(codecMod8.uint8ToBase64, base64Mod.uint8ToBase64, 'CapyCodec must re-export shared uint8ToBase64');
+    assert.equal(codecMod8.base64ToUint8, base64Mod.base64ToUint8, 'CapyCodec must re-export shared base64ToUint8');
+    assert.equal(base64Mod.uint8ToBase64(new Uint8Array(0)), '');
+    assert.deepEqual(Array.from(base64Mod.base64ToUint8('')), []);
+
+    const largeBytes = new Uint8Array(25_000);
+    for (let i = 0; i < largeBytes.length; i++) {
+      largeBytes[i] = (i * 31 + 7) & 0xff;
+    }
+    const largeEncoded = base64Mod.uint8ToBase64(largeBytes);
+    const largeDecoded = base64Mod.base64ToUint8(largeEncoded);
+    assert.equal(largeDecoded.byteLength, largeBytes.byteLength);
+    assert.equal(largeDecoded[0], largeBytes[0]);
+    assert.equal(largeDecoded[24_999], largeBytes[24_999]);
+    assert.equal(Buffer.compare(Buffer.from(largeDecoded), Buffer.from(largeBytes)), 0);
+
+    const telemetryMod = await vite.ssrLoadModule('/src/services/telemetry.ts');
+    telemetryMod.clearSwallowedErrorLog();
+    assert.equal(telemetryMod.getSwallowedErrorLog().length, 0);
+
+    const origConsoleWarn = console.warn;
+    const warnCalls = [];
+    const prevWin8 = globalThis.window;
+    const prevLs8 = globalThis.localStorage;
+    try {
+      console.warn = (...args) => warnCalls.push(args);
+      const mockLs8 = new Map();
+      globalThis.localStorage = {
+        getItem: (k) => (mockLs8.has(k) ? mockLs8.get(k) : null),
+        setItem: (k, v) => mockLs8.set(k, String(v)),
+        removeItem: (k) => mockLs8.delete(k),
+      };
+      globalThis.window = {
+        location: { search: '' },
+        localStorage: globalThis.localStorage,
+      };
+
+      telemetryMod.reportSwallowed(
+        'TestScope',
+        new Error('Auth failed Bearer abc.def.ghi ya29.secret_tok ?access_token=xyz&foo=1'),
+        { count: 3, ok: true, nested: { bad: 1 }, note: 'x'.repeat(200) }
+      );
+      const logAfterRedaction = telemetryMod.getSwallowedErrorLog();
+      assert.equal(logAfterRedaction.length, 1);
+      assert.equal(logAfterRedaction[0].scope, 'TestScope');
+      assert.equal(logAfterRedaction[0].message.includes('abc.def.ghi'), false);
+      assert.equal(logAfterRedaction[0].message.includes('ya29.secret_tok'), false);
+      assert.equal(logAfterRedaction[0].message.includes('xyz'), false);
+      assert.equal(logAfterRedaction[0].message.includes('Bearer [redacted]'), true);
+      assert.equal(logAfterRedaction[0].message.includes('[redacted-token]'), true);
+      assert.equal(logAfterRedaction[0].context?.count, 3);
+      assert.equal(logAfterRedaction[0].context?.ok, true);
+      assert.equal('nested' in (logAfterRedaction[0].context || {}), false);
+      assert.equal(logAfterRedaction[0].context?.note?.length <= 160, true);
+      if (process.env.NODE_ENV === 'production') {
+        assert.equal(warnCalls.length, 0, 'Production non-debug mode must suppress console.warn');
+      }
+
+      // Defensive cloning prevents caller mutations from altering ring buffer state
+      logAfterRedaction[0].scope = 'mutated';
+      if (logAfterRedaction[0].context) logAfterRedaction[0].context.count = 999;
+      assert.equal(telemetryMod.getSwallowedErrorLog()[0].scope, 'TestScope');
+      assert.equal(telemetryMod.getSwallowedErrorLog()[0].context?.count, 3);
+
+      // Unserializable object must never rethrow and debug query logs console.warn
+      globalThis.window.location.search = '?capy_debug=1';
+      telemetryMod.reportSwallowed('CircularScope', {
+        toString() {
+          throw new Error('cannot stringify');
+        },
+      });
+      assert.equal(warnCalls.length > 0, true, 'Debug mode must emit console.warn for telemetry');
+
+      // Ring buffer eviction caps entries strictly at MAX_SWALLOWED_ERROR_RECORDS (50)
+      telemetryMod.clearSwallowedErrorLog();
+      for (let i = 0; i < telemetryMod.MAX_SWALLOWED_ERROR_RECORDS + 15; i++) {
+        telemetryMod.reportSwallowed('Ring', `err-${i}`);
+      }
+      const bounded = telemetryMod.getSwallowedErrorLog();
+      assert.equal(bounded.length, telemetryMod.MAX_SWALLOWED_ERROR_RECORDS);
+      assert.equal(bounded[0].message, 'err-15');
+      assert.equal(bounded[bounded.length - 1].message, `err-${telemetryMod.MAX_SWALLOWED_ERROR_RECORDS + 14}`);
+
+      // ErrorBoundary state derivation, telemetry capture & binary -> JSON backup fallback
+      const ebMod = await vite.ssrLoadModule('/src/components/ErrorBoundary.tsx');
+      const storageMod8 = await vite.ssrLoadModule('/src/services/StorageService.ts');
+      const nbMod8 = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
+
+      const derived = ebMod.ErrorBoundary.getDerivedStateFromError(new Error('Boom boundary'));
+      assert.equal(derived.hasError, true);
+      assert.equal(derived.error?.message, 'Boom boundary');
+
+      telemetryMod.clearSwallowedErrorLog();
+      const ebInstance = new ebMod.ErrorBoundary({ children: null });
+      ebInstance.componentDidCatch(new Error('Render crash Bearer tok999'), {
+        componentStack: '\n  at App\n  at Root',
+      });
+      const ebLog = telemetryMod.getSwallowedErrorLog();
+      assert.equal(ebLog.length, 1);
+      assert.equal(ebLog[0].scope, 'ErrorBoundary');
+      assert.equal(ebLog[0].message.includes('tok999'), false);
+
+      const origExportBinary = storageMod8.StorageService.exportAllSnapshotsBinary;
+      const origExportJson = storageMod8.StorageService.exportAllSnapshots;
+      const origExportFile = nbMod8.NativeBridge.exportOrShareFile;
+      const exportedFiles = [];
+      try {
+        storageMod8.StorageService.exportAllSnapshotsBinary = async () => new Uint8Array([1, 2, 3, 4]);
+        storageMod8.StorageService.exportAllSnapshots = async () => '{"version":2,"snapshots":[]}';
+        nbMod8.NativeBridge.exportOrShareFile = async (opts) => {
+          exportedFiles.push(opts);
+        };
+
+        assert.equal(await ebMod.exportEmergencySavesBackup(), 'binary');
+        assert.equal(exportedFiles.length, 1);
+        assert.equal(exportedFiles[0].fileName, 'capy_emergency_backup.capy');
+
+        telemetryMod.clearSwallowedErrorLog();
+        storageMod8.StorageService.exportAllSnapshotsBinary = async () => {
+          throw new Error('binary packing failed');
+        };
+        assert.equal(await ebMod.exportEmergencySavesBackup(), 'json');
+        assert.equal(exportedFiles.length, 2);
+        assert.equal(exportedFiles[1].fileName, 'capy_emergency_backup.json');
+        assert.equal(
+          telemetryMod.getSwallowedErrorLog().some((r) => r.scope === 'ErrorBoundary.exportBackupBinary'),
+          true
+        );
+      } finally {
+        storageMod8.StorageService.exportAllSnapshotsBinary = origExportBinary;
+        storageMod8.StorageService.exportAllSnapshots = origExportJson;
+        nbMod8.NativeBridge.exportOrShareFile = origExportFile;
+      }
+    } finally {
+      console.warn = origConsoleWarn;
+      telemetryMod.clearSwallowedErrorLog();
+      globalThis.localStorage = prevLs8;
+      if (prevWin8 === undefined) delete globalThis.window;
+      else globalThis.window = prevWin8;
     }
   }
 }

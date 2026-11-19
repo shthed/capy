@@ -36,6 +36,14 @@ import {
   ProgressDeltaV2,
 } from './services/CapyCodec';
 import {
+  createCoalescedSyncController,
+  isManifestCloudSnapshotSlot,
+} from './services/cloudSyncCoordinator';
+import {
+  resolveSafeSampleAssetPath,
+  resolveSafeSnapshotPreviewUrl,
+} from './utils/snapshotPaths';
+import {
   buildShareProgressUrl,
   clearShareHashFromWindowUrl,
   generateCoopRoomCode,
@@ -605,11 +613,9 @@ export const App: React.FC = () => {
   // Resolve full-resolution source image URL for built-in samples or IndexedDB image blobs
   const resolveSnapshotImageSrc = useCallback(
     async (snap: SavedSnapshot): Promise<{ src: string; objectUrl: string | null }> => {
-      if (snap.sourceRef?.kind === 'sample' && isAllowedSampleAssetPath(snap.sourceRef.uri)) {
-        return { src: snap.sourceRef.uri, objectUrl: null };
-      }
-      if (isAllowedSampleAssetPath(snap.sampleAssetPath)) {
-        return { src: snap.sampleAssetPath, objectUrl: null };
+      const safeSampleSrc = resolveSafeSampleAssetPath(snap, true);
+      if (safeSampleSrc) {
+        return { src: safeSampleSrc, objectUrl: null };
       }
 
       const blobId =
@@ -624,9 +630,7 @@ export const App: React.FC = () => {
         return { src: nextUrl, objectUrl: nextUrl };
       }
 
-      const safePreview = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
-        ? snap.previewDataUrl.trim()
-        : './assets/capybara.webp';
+      const safePreview = resolveSafeSnapshotPreviewUrl(snap) ?? './assets/capybara.webp';
       return { src: safePreview, objectUrl: null };
     },
     []
@@ -4721,28 +4725,23 @@ export const App: React.FC = () => {
     return url;
   }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled]);
 
-  const cloudSyncInFlightRef = useRef<Promise<{
+  interface CloudSyncUiSummary {
     addedFromCloud: number;
     syncedAt: number;
     uploadedCount?: number;
     downloadedCount?: number;
     backend?: string;
-  } | null> | null>(null);
-  const cloudSyncQueuedRef = useRef<boolean>(false);
+  }
+  const cloudSyncControllerRef = useRef<ReturnType<
+    typeof createCoalescedSyncController<CloudSyncUiSummary>
+  > | null>(null);
 
-  const handleSyncCloudProgress = useCallback(async (): Promise<{
-    addedFromCloud: number;
-    syncedAt: number;
-    uploadedCount?: number;
-    downloadedCount?: number;
-    backend?: string;
-  } | null> => {
-    if (cloudSyncInFlightRef.current) {
-      cloudSyncQueuedRef.current = true;
-      return cloudSyncInFlightRef.current;
-    }
+  const handleSyncCloudProgress = useCallback(async (): Promise<CloudSyncUiSummary | null> => {
+    const controller =
+      cloudSyncControllerRef.current ??
+      (cloudSyncControllerRef.current = createCoalescedSyncController<CloudSyncUiSummary>());
 
-    const executeSingleSyncPass = async () => {
+    const executeSingleSyncPass = async (): Promise<CloudSyncUiSummary> => {
       const startCoop = liveCoopRef.current;
       const startSnapshotId = startCoop.activeSnapshotId;
       const startPuzzle = startCoop.puzzle;
@@ -4988,7 +4987,7 @@ export const App: React.FC = () => {
         libSummary.hasPendingLocalChanges ||
         (pushedSlotEpoch !== null && latestSavedEpoch > pushedSlotEpoch)
       ) {
-        cloudSyncQueuedRef.current = true;
+        controller.requestTrailingPass();
       }
 
       const totalAdded = Math.max(libSummary.mergedRegionsFromCloud, slotAdded);
@@ -5002,29 +5001,7 @@ export const App: React.FC = () => {
       };
     };
 
-    const syncPromise = (async () => {
-      await Promise.resolve();
-      let latestSummary: {
-        addedFromCloud: number;
-        syncedAt: number;
-        uploadedCount?: number;
-        downloadedCount?: number;
-        backend?: string;
-      } | null = null;
-      try {
-        do {
-          cloudSyncQueuedRef.current = false;
-          latestSummary = await executeSingleSyncPass();
-        } while (cloudSyncQueuedRef.current);
-      } finally {
-        cloudSyncInFlightRef.current = null;
-        cloudSyncQueuedRef.current = false;
-      }
-      return latestSummary;
-    })();
-
-    cloudSyncInFlightRef.current = syncPromise;
-    return syncPromise;
+    return controller.run(executeSingleSyncPass);
   }, []);
 
   // Automatically sync when Android Play Games SnapshotsClient delivers a non-blob remote cloud snapshot
@@ -5034,7 +5011,7 @@ export const App: React.FC = () => {
       () => {
         void handleSyncCloudProgress();
       },
-      { slotFilter: (slotKey) => !slotKey.startsWith('pgblob_') && !/_part_\d+$/.test(slotKey) }
+      { slotFilter: isManifestCloudSnapshotSlot }
     );
   }, [showCloudCoopUi, handleSyncCloudProgress]);
 
