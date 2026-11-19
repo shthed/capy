@@ -8379,50 +8379,54 @@ async function runCodecAndEngineTests() {
       );
     }
 
-    // Verify regenerate-puzzles.yml triggers only on workflow_dispatch or path-filtered pushes to beta (no schedule)
-    const regenWorkflow = parsedWorkflows?.['regenerate-puzzles.yml'];
-    assert.ok(regenWorkflow, 'Expected parsed regenerate-puzzles.yml workflow');
-    // PyYAML parses YAML 1.1 `on:` as boolean True -> JSON key "true"
-    const regenOn = regenWorkflow.on ?? regenWorkflow.true;
-    assert.ok(regenOn && typeof regenOn === 'object', 'Expected on: block in regenerate-puzzles.yml');
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(regenOn, 'schedule'),
-      false,
-      'regenerate-puzzles.yml must not trigger on a cron schedule'
-    );
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(regenOn, 'workflow_dispatch'),
-      true,
-      'regenerate-puzzles.yml must retain workflow_dispatch for on-demand runs'
-    );
-    const regenPush = regenOn.push;
-    assert.ok(regenPush && Array.isArray(regenPush.branches), 'regenerate-puzzles.yml must define push.branches');
-    assert.equal(
-      regenPush.branches.includes('beta'),
-      true,
-      'regenerate-puzzles.yml push.branches must include beta'
-    );
-    assert.ok(Array.isArray(regenPush.paths), 'regenerate-puzzles.yml must define push.paths');
-    for (const expectedPath of [
-      'web/public/assets/**',
-      '!web/public/assets/**/*.capy',
-      '!web/public/assets/presets/**',
-      '!web/public/assets/icon-*.png',
-      '!web/public/assets/apple-touch-icon.png',
-      'web/scripts/generate-sample-saves.mjs',
-      'web/src/engine/**',
-      'web/src/services/CapyCodec.ts',
-      'web/src/services/DailyPuzzleService.ts',
-      'web/src/services/PuzzleWorkerService.ts',
-      'web/src/services/StorageService.ts',
-      'web/src/types/index.ts',
-      '.github/workflows/regenerate-puzzles.yml',
-    ]) {
+    // Verify regenerate-puzzles.yml triggers only on workflow_dispatch or path-filtered pushes to beta (no schedule).
+    // Note: regenerate-puzzles.yml is a dev-only workflow stripped from clean-room capyboop/capy exports.
+    const regenWorkflowPath = path.resolve(projectRoot, '../.github/workflows/regenerate-puzzles.yml');
+    if (fs.existsSync(regenWorkflowPath)) {
+      const regenWorkflow = parsedWorkflows?.['regenerate-puzzles.yml'];
+      assert.ok(regenWorkflow, 'Expected parsed regenerate-puzzles.yml workflow');
+      // PyYAML parses YAML 1.1 `on:` as boolean True -> JSON key "true"
+      const regenOn = regenWorkflow.on ?? regenWorkflow.true;
+      assert.ok(regenOn && typeof regenOn === 'object', 'Expected on: block in regenerate-puzzles.yml');
       assert.equal(
-        regenPush.paths.includes(expectedPath),
-        true,
-        `regenerate-puzzles.yml push.paths must include ${expectedPath}`
+        Object.prototype.hasOwnProperty.call(regenOn, 'schedule'),
+        false,
+        'regenerate-puzzles.yml must not trigger on a cron schedule'
       );
+      assert.equal(
+        Object.prototype.hasOwnProperty.call(regenOn, 'workflow_dispatch'),
+        true,
+        'regenerate-puzzles.yml must retain workflow_dispatch for on-demand runs'
+      );
+      const regenPush = regenOn.push;
+      assert.ok(regenPush && Array.isArray(regenPush.branches), 'regenerate-puzzles.yml must define push.branches');
+      assert.equal(
+        regenPush.branches.includes('beta'),
+        true,
+        'regenerate-puzzles.yml push.branches must include beta'
+      );
+      assert.ok(Array.isArray(regenPush.paths), 'regenerate-puzzles.yml must define push.paths');
+      for (const expectedPath of [
+        'web/public/assets/**',
+        '!web/public/assets/**/*.capy',
+        '!web/public/assets/presets/**',
+        '!web/public/assets/icon-*.png',
+        '!web/public/assets/apple-touch-icon.png',
+        'web/scripts/generate-sample-saves.mjs',
+        'web/src/engine/**',
+        'web/src/services/CapyCodec.ts',
+        'web/src/services/DailyPuzzleService.ts',
+        'web/src/services/PuzzleWorkerService.ts',
+        'web/src/services/StorageService.ts',
+        'web/src/types/index.ts',
+        '.github/workflows/regenerate-puzzles.yml',
+      ]) {
+        assert.equal(
+          regenPush.paths.includes(expectedPath),
+          true,
+          `regenerate-puzzles.yml push.paths must include ${expectedPath}`
+        );
+      }
     }
     logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs & upload-pages-artifact dotfiles verified.');
 
