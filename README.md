@@ -1,4 +1,4 @@
-# Capy: Color-by-Number Suite
+# Capy Paint
 
 [![Web App](https://img.shields.io/badge/Web_App-Play_Online-blue?style=for-the-badge&logo=googlechrome&logoColor=white)](https://capypaint.com/)
 [![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://capypaint.com/capy.apk)
