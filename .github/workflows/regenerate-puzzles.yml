@@ -1,9 +1,24 @@
 name: Regenerate Pre-Baked Max-Settings Puzzles
 
 on:
-  schedule:
-    - cron: '15 0 * * *'
   workflow_dispatch:
+  push:
+    branches:
+      - beta
+    paths:
+      - 'web/public/assets/**'
+      - '!web/public/assets/**/*.capy'
+      - '!web/public/assets/presets/**'
+      - '!web/public/assets/icon-*.png'
+      - '!web/public/assets/apple-touch-icon.png'
+      - 'web/scripts/generate-sample-saves.mjs'
+      - 'web/src/engine/**'
+      - 'web/src/services/CapyCodec.ts'
+      - 'web/src/services/DailyPuzzleService.ts'
+      - 'web/src/services/PuzzleWorkerService.ts'
+      - 'web/src/services/StorageService.ts'
+      - 'web/src/types/index.ts'
+      - '.github/workflows/regenerate-puzzles.yml'
 
 permissions:
   contents: write
