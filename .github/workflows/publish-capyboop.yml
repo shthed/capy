@@ -182,7 +182,29 @@ jobs:
 
             execFileSync('git', ['-C', histDst, 'add', '-A'], { stdio: 'ignore' });
             const treeSha = execFileSync('git', ['-C', histDst, 'write-tree'], { encoding: 'utf8' }).trim();
-            const cleanMsg = sanitizeCommitMessage((rawMsg || '').trim()) || `Commit ${origSha.slice(0, 7)}`;
+            const scrubHistMsg = (m) =>
+              m
+                .replace(/pr-review-gate/gi, 'review-gate')
+                .replace(/publish-capyboop/gi, 'publish-mirror')
+                .replace(/rebrand-persona/gi, 'persona-export')
+                .replace(/open-pr\.yml/gi, 'open-pr')
+                .replace(/persona:capyboop/gi, 'persona:mirror')
+                .replace(/capy-dev-only/gi, 'dev-only')
+                .replace(/sync-beta-from-main/gi, 'sync-beta')
+                .replace(/sync-agile-tracker/gi, 'sync-tracker')
+                .replace(/dependabot\.ya?ml/gi, 'dependabot')
+                .replace(/CAPYBOOP_SYNC_TOKEN/gi, 'SYNC_TOKEN');
+            let cleanMsg = '';
+            try {
+              cleanMsg = sanitizeCommitMessage((rawMsg || '').trim());
+            } catch {
+              try {
+                cleanMsg = sanitizeCommitMessage(scrubHistMsg((rawMsg || '').trim()));
+              } catch {
+                cleanMsg = `Historical commit ${origSha.slice(0, 7)}`;
+              }
+            }
+            cleanMsg = cleanMsg || `Commit ${origSha.slice(0, 7)}`;
 
             const commitArgs = ['-C', histDst, 'commit-tree', treeSha];
             for (const cp of cleanParents) {
