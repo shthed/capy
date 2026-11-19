@@ -1,4 +1,4 @@
-name: Publish Clean Mirror to capyboop/capy
+name: Publish Clean Mirror to capyboop/paint
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       reset_clean_root:
-        description: 'Reset capyboop/capy main to a fresh single root commit authored by capyboop'
+        description: 'Reset capyboop/paint main to a fresh single root commit authored by capyboop'
         required: false
         default: false
         type: boolean
@@ -36,9 +36,9 @@ jobs:
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             {
-              echo "### capyboop/capy Auto-Publish Skipped (Token Not Configured)"
+              echo "### capyboop/paint Auto-Publish Skipped (Token Not Configured)"
               echo ""
-              echo "Add fine-grained Personal Access Token secret \`CAPYBOOP_SYNC_TOKEN\` (scoped to \`capyboop/capy\` with **Contents: Read & write** and **Workflows: Read & write**) under \`shthed/capy\` **Settings -> Secrets and variables -> Actions -> Secrets** to publish every \`main\` merge automatically."
+              echo "Add fine-grained Personal Access Token secret \`CAPYBOOP_SYNC_TOKEN\` (scoped to \`capyboop/paint\` with **Contents: Read & write** and **Workflows: Read & write**) under \`shthed/capy\` **Settings -> Secrets and variables -> Actions -> Secrets** to publish every \`main\` merge automatically."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -71,7 +71,7 @@ jobs:
             printf 'version=%s\n' "${VERSION}"
           } >> "$GITHUB_ENV"
 
-      - name: Commit as capyboop, push main, and sync release tag on capyboop/capy
+      - name: Commit as capyboop, push main, and sync release tag on capyboop/paint
         if: steps.check_secret.outputs.enabled == 'true'
         env:
           CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
@@ -106,7 +106,7 @@ jobs:
           git config user.name "${GIT_AUTHOR_NAME}"
           git config user.email "${GIT_AUTHOR_EMAIL}"
           git config credential.helper ""
-          git remote add target "https://x-access-token@github.com/capyboop/capy.git"
+          git remote add target "https://x-access-token@github.com/capyboop/paint.git"
           git add -A
 
           NEEDS_CLEAN_RESET="false"
@@ -135,12 +135,12 @@ jobs:
               PUSHED_COMMIT_SHA="$(git rev-parse HEAD)"
               git push --force target "${PUSHED_COMMIT_SHA}:refs/heads/main"
             else
-              # shthed/capy main is the canonical tree source; external PRs merged on capyboop/capy
+              # shthed/capy main is the canonical tree source; external PRs merged on capyboop/paint
               # must be back-ported into shthed/capy (beta -> main) before pushing to main.
               TREE_SHA="$(git write-tree)"
               REMOTE_TREE_SHA="$(git rev-parse FETCH_HEAD^{tree})"
               if [ "${TREE_SHA}" = "${REMOTE_TREE_SHA}" ]; then
-                echo "capyboop/capy main already matches clean tree (${TREE_SHA})."
+                echo "capyboop/paint main already matches clean tree (${TREE_SHA})."
                 PUSHED_COMMIT_SHA="$(git rev-parse FETCH_HEAD)"
               else
                 PARENT_SHA="$(git rev-parse FETCH_HEAD)"
@@ -168,11 +168,11 @@ jobs:
             TAG_LS_RC=0
             git ls-remote --exit-code --tags target "refs/tags/${TAG_NAME}" >/dev/null || TAG_LS_RC=$?
             if [ "${TAG_LS_RC}" -eq 2 ]; then
-              echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/capy..."
+              echo "Pushing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) to capyboop/paint..."
               git tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
               git push target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
             elif [ "${TAG_LS_RC}" -eq 0 ]; then
-              echo "Tag ${TAG_NAME} already exists on capyboop/capy; skipping tag push."
+              echo "Tag ${TAG_NAME} already exists on capyboop/paint; skipping tag push."
             else
               echo "git ls-remote --tags target refs/tags/${TAG_NAME} failed with exit code ${TAG_LS_RC}." >&2
               exit "${TAG_LS_RC}"

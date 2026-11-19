@@ -16,9 +16,9 @@ Welcome to **Capy** support! Here is where to find answers, play the latest vers
 
 ## Getting Help or Reporting an Issue
 
-- **Bugs, Crashes, or Visual Glitches**: Open a [Bug Report](https://github.com/capyboop/capy/issues/new/choose) and include your browser or Android device model, app version, and steps to reproduce.
-- **Feature Requests and Puzzle Ideas**: Submit a [Feature Request or Puzzle Idea](https://github.com/capyboop/capy/issues/new/choose).
-- **Existing Issues**: Browse or search [open issues](https://github.com/capyboop/capy/issues) before creating a duplicate report.
+- **Bugs, Crashes, or Visual Glitches**: Open a [Bug Report](https://github.com/capyboop/paint/issues/new/choose) and include your browser or Android device model, app version, and steps to reproduce.
+- **Feature Requests and Puzzle Ideas**: Submit a [Feature Request or Puzzle Idea](https://github.com/capyboop/paint/issues/new/choose).
+- **Existing Issues**: Browse or search [open issues](https://github.com/capyboop/paint/issues) before creating a duplicate report.
 
 ---
 
