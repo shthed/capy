@@ -3595,6 +3595,14 @@ async function runCodecAndEngineTests() {
       '[#2](https://github.com/capyboop/capy/issues/2) [#5](https://github.com/capyboop/capy/issues/5?q=1) #20 #481 #2'
     );
     assert.equal(transformPersonaContent(transformedIssuesDoc), transformedIssuesDoc);
+    const guideBarDoc =
+      '**Related Guides**: [`README.md`](./README.md) | [`CAPYBOOP.md`](./CAPYBOOP.md) | [`AGENTS.md`](./AGENTS.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md` Rule 11](./AGENTS.md#1-ai-golden-invariants)';
+    const strippedGuideBar = transformPersonaContent(guideBarDoc);
+    assert.equal(
+      strippedGuideBar,
+      '**Related Guides**: [`README.md`](./README.md) | [`DEV.md`](./DEV.md) | `AGENTS.md` Rule 11'
+    );
+    assert.equal(transformPersonaContent(strippedGuideBar), strippedGuideBar);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('sync-beta-from-main'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('.github/dependabot.yml'), true);
     assert.equal(FORBIDDEN_PERSONA_REGEX.test('CAPYBOOP_SYNC_TOKEN'), true);
@@ -3688,6 +3696,20 @@ async function runCodecAndEngineTests() {
         stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
         true
       );
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, 'AGENTS.md')), false);
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, 'CAPYBOOP.md')), false);
+      for (const publicDoc of [
+        'CONTRIBUTING.md',
+        'SUPPORT.md',
+        'SECURITY.md',
+        '.github/PULL_REQUEST_TEMPLATE.md',
+      ]) {
+        assert.equal(
+          fs.existsSync(path.join(tmpCleanStage, publicDoc)),
+          true,
+          `Clean export must retain ${publicDoc}`
+        );
+      }
       for (const tplFile of ['config.yml', 'bug_report.yml', 'feature_request.yml', 'puzzle_idea.yml']) {
         assert.equal(
           fs.existsSync(path.join(tmpCleanStage, `.github/ISSUE_TEMPLATE/${tplFile}`)),
