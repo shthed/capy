@@ -17,6 +17,7 @@ import {
   validatePrReadinessSpec,
   validateRootGuideIndex,
 } from './sanity.mjs';
+import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -11467,7 +11468,8 @@ async function runCodecAndEngineTests() {
       globalThis.window = prevSsrWin;
     }
 
-    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService & StorageService verified.');
+    await runReleaseSafetyHardeningTests(vite);
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService & M1 release safety hardening verified.');
     assert.equal(
       unitStep,
       unitTotal,
@@ -11522,6 +11524,9 @@ async function runBrowserBasicsSuite() {
       hasTouch: true,
       acceptDownloads: true,
       permissions: ['clipboard-read', 'clipboard-write'],
+    });
+    await context.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
     });
     const page = await context.newPage();
     attachErrorListeners(page, 'main');
@@ -12226,6 +12231,9 @@ async function runBrowserBasicsSuite() {
     // Unconditional pre-filled snapshot/bootstrap undoStack parity check (isolated context so offerPage queue stays pristine)
     {
       const prefilledContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+      await prefilledContext.addInitScript(() => {
+        localStorage.setItem('capy_dev_debug', '1');
+      });
       const prefilledPage = await prefilledContext.newPage();
       attachErrorListeners(prefilledPage, 'prefilledPage');
       await prefilledPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
@@ -13201,7 +13209,7 @@ async function runBrowserBasicsSuite() {
 
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    logE2ePass('Gallery search, category chips, and community idea moderation verified.');
+    logE2ePass('Gallery search, category chips, Store-clean Create tab gating, and community idea moderation verified.');
 
     // -------------------------------------------------------------------------
     // 8. Shareable Link (#s=<token>), Simultaneous Co-op, Saves View Modes & Google Drive CRDT Sync
@@ -13452,12 +13460,185 @@ async function runBrowserBasicsSuite() {
       'BF-1: Undoing a Free Colour repaint on Page A must broadcast restored color to Co-op peer Page B'
     );
 
-    // Turn Free Colour Mode back off before closing pageB
+    // C8-1 regression (Free Colour Mode): rapid synchronous same-frame clicks must not drop strokes or desync Co-op peer
+    if (swatchCount > 0) {
+      const firstSwatch = swatchButtons.nth(0);
+      const firstSwatchTestId = await firstSwatch.getAttribute('data-testid');
+      await firstSwatch.click();
+      if (firstSwatchTestId) {
+        await page.waitForFunction(
+          (tid) => document.querySelector(`[data-testid="${tid}"]`)?.getAttribute('aria-pressed') === 'true',
+          firstSwatchTestId,
+          { timeout: 3000 }
+        );
+      }
+    }
+    const filledBeforeFreeBurst = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    const activeFreeBurstA = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) throw new Error('Missing canvas for same-frame Free Colour burst');
+      const rect = canvas.getBoundingClientRect();
+      const points = [
+        [0.2, 0.25],
+        [0.8, 0.25],
+        [0.2, 0.75],
+        [0.8, 0.75],
+        [0.5, 0.5],
+      ];
+      for (let i = 0; i < points.length; i++) {
+        const clientX = rect.left + rect.width * points[i][0];
+        const clientY = rect.top + rect.height * points[i][1];
+        canvas.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 100 + i,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons: 1,
+            clientX,
+            clientY,
+          })
+        );
+        canvas.dispatchEvent(
+          new PointerEvent('pointerup', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 100 + i,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons: 0,
+            clientX,
+            clientY,
+          })
+        );
+      }
+      // Capture Page A's synchronous localStorage state immediately before Page B's BroadcastChannel macrotasks overwrite shared origin storage
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+    });
+    await page.waitForFunction(
+      (minExpected) =>
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) >=
+        minExpected,
+      filledBeforeFreeBurst + 4,
+      { timeout: 5000 }
+    );
+    const filledAfterFreeBurstA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(
+      (activeFreeBurstA.filledRegionIds || []).length,
+      filledAfterFreeBurstA,
+      'C8-1: Page A localStorage filledRegionIds must match DOM count after Free Colour burst'
+    );
+    const expectedCanonicalPaintedJson = JSON.stringify(
+      Object.entries(activeFreeBurstA.paintedRegionColors || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
+    );
+    await pageB.waitForFunction(
+      ({ expectedCount, expectedPaintedJson }) => {
+        const count = Number(
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
+        );
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        const canonicalPainted = JSON.stringify(
+          Object.entries(active.paintedRegionColors || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
+        );
+        return count === expectedCount && canonicalPainted === expectedPaintedJson;
+      },
+      {
+        expectedCount: filledAfterFreeBurstA,
+        expectedPaintedJson: expectedCanonicalPaintedJson,
+      },
+      { timeout: 5000 }
+    );
+
+    // Turn Free Colour Mode back off before running Normal Mode burst and closing pageB
     await settingsBtn.click();
     const freeColorLabelOff = await page.waitForSelector('text=Free Colour Mode');
     await freeColorLabelOff.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // C8-1 regression (Normal Mode): rapid synchronous same-frame clicks must accumulate every fill and stay synced with Co-op peer
+    const filledBeforeNormalBurst = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    const idsNormalBurstA = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) throw new Error('Missing canvas for same-frame Normal burst');
+      const rect = canvas.getBoundingClientRect();
+      const points = [
+        [0.14, 0.22],
+        [0.86, 0.22],
+        [0.14, 0.82],
+        [0.86, 0.82],
+      ];
+      for (let i = 0; i < points.length; i++) {
+        const clientX = rect.left + rect.width * points[i][0];
+        const clientY = rect.top + rect.height * points[i][1];
+        canvas.dispatchEvent(
+          new PointerEvent('pointerdown', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 200 + i,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons: 1,
+            clientX,
+            clientY,
+          })
+        );
+        canvas.dispatchEvent(
+          new PointerEvent('pointerup', {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 200 + i,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons: 0,
+            clientX,
+            clientY,
+          })
+        );
+      }
+      return JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || [];
+    });
+    await page.waitForFunction(
+      (minExpected) =>
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) >=
+        minExpected,
+      filledBeforeNormalBurst + 3,
+      { timeout: 5000 }
+    );
+    const filledAfterNormalBurstA = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(
+      idsNormalBurstA.length,
+      filledAfterNormalBurstA,
+      'C8-1: Page A localStorage filledRegionIds must match DOM count after Normal Mode burst'
+    );
+    await pageB.waitForFunction(
+      ({ expectedCount, expectedSortedIdsJson }) => {
+        const count = Number(
+          document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')
+        );
+        const ids = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || [];
+        const sortedIds = [...ids].sort((a, b) => a - b);
+        return count === expectedCount && JSON.stringify(sortedIds) === expectedSortedIdsJson;
+      },
+      {
+        expectedCount: filledAfterNormalBurstA,
+        expectedSortedIdsJson: JSON.stringify([...idsNormalBurstA].sort((a, b) => a - b)),
+      },
+      { timeout: 5000 }
+    );
 
     await pageB.close();
 
@@ -15024,6 +15205,9 @@ async function runBrowserBasicsSuite() {
     // -------------------------------------------------------------------------
     logE2eStart('Verifying 360x780 mobile GameTopBar lanes (ALPHA #520), OnboardingTutorial, SettingsModal tabs, Saves grid & FeatureOfferBanner...');
     const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await mobileTopbarContext.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+    });
     const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
     await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&pr=520`, { waitUntil: 'networkidle' });
@@ -15531,6 +15715,9 @@ async function runBrowserBasicsSuite() {
     // -------------------------------------------------------------------------
     logE2eStart('Verifying 360x780 viewport-save races, clearActiveState/deleteSnapshot safety, blob URL revocation, error recovery & tap-burst non-starvation...');
     const viewportRaceContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await viewportRaceContext.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+    });
     const viewportRacePage = await viewportRaceContext.newPage();
     attachErrorListeners(viewportRacePage, 'viewportRacePage');
     await viewportRacePage.goto(`${BASE_URL}/?capy_channel=alpha&skipTutorial=1`, { waitUntil: 'networkidle' });

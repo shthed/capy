@@ -111,39 +111,54 @@ export function normalizeRoomCode(raw: string | null | undefined): string | null
   const cleaned = raw
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .slice(0, 8);
-  return cleaned.length > 0 ? cleaned : null;
+    .replace(/[^A-Z0-9]/g, '');
+  return cleaned.length >= 4 && cleaned.length <= 8 ? cleaned : null;
 }
 
 const ALLOWED_EXACT_RELAY_HOSTS = new Set<string>([
   'capypaint.com',
   'www.capypaint.com',
   'capyboop.github.io',
+  /* capy-dev-only:start */
   'shthed.github.io',
+  /* capy-dev-only:end */
   'appassets.androidplatform.net',
 ]);
 
 export function isAllowedRelayOrigin(
   originHeader: string | null | undefined,
-  extraOriginsCsv?: string | null
+  extraOriginsCsv?: string | null,
+  allowLocalhostOrigins: boolean = true
 ): boolean {
   if (!originHeader || originHeader.trim().length === 0) {
     return false;
   }
+  const trimmed = originHeader.trim();
+  if (/[\u0000-\u001F\u007F]/.test(trimmed)) {
+    return false;
+  }
   try {
-    const parsed = new URL(originHeader.trim());
+    const parsed = new URL(trimmed);
+    if (parsed.username !== '' || parsed.password !== '') {
+      return false;
+    }
     const protocol = parsed.protocol.toLowerCase();
     const hostname = parsed.hostname.toLowerCase();
 
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return protocol === 'http:' || protocol === 'https:';
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
+      return allowLocalhostOrigins && (protocol === 'http:' || protocol === 'https:');
     }
+
+    const isCapySubdomain =
+      hostname.endsWith('.capypaint.com') &&
+      hostname.length > '.capypaint.com'.length &&
+      !hostname.startsWith('.') &&
+      !hostname.endsWith('.');
 
     if (
       protocol === 'https:' &&
       parsed.port === '' &&
-      (ALLOWED_EXACT_RELAY_HOSTS.has(hostname) || hostname.endsWith('.capypaint.com'))
+      (ALLOWED_EXACT_RELAY_HOSTS.has(hostname) || isCapySubdomain)
     ) {
       return true;
     }
@@ -191,57 +206,127 @@ function isValidRegionIdArray(val: unknown): val is number[] {
   return true;
 }
 
-function isValidPaintEvent(raw: unknown): raw is Record<string, unknown> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+function sanitizePaintEvent(
+  raw: unknown,
+  expectedRoomCode: string,
+  senderPlayerId: string
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const ev = raw as Record<string, unknown>;
   if (
     typeof ev.eventId !== 'string' ||
     ev.eventId.trim().length < 1 ||
     ev.eventId.length > MAX_EVENT_ID_CHARS
   ) {
-    return false;
+    return null;
+  }
+  if (ev.roomCode !== undefined) {
+    const evRoom = typeof ev.roomCode === 'string' ? normalizeRoomCode(ev.roomCode) : null;
+    if (evRoom !== expectedRoomCode) return null;
+  }
+  if (ev.playerId !== undefined) {
+    if (typeof ev.playerId !== 'string' || ev.playerId.trim() !== senderPlayerId) {
+      return null;
+    }
+  }
+  if (ev.displayName !== undefined && (typeof ev.displayName !== 'string' || ev.displayName.length > 64)) {
+    return null;
+  }
+  if (
+    ev.avatarColorHex !== undefined &&
+    (typeof ev.avatarColorHex !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(ev.avatarColorHex))
+  ) {
+    return null;
+  }
+  if (ev.timestamp !== undefined && (typeof ev.timestamp !== 'number' || !Number.isFinite(ev.timestamp))) {
+    return null;
   }
   if (ev.action !== undefined && ev.action !== 'FILL' && ev.action !== 'UNFILL') {
-    return false;
+    return null;
   }
   if (!isValidRegionIdArray(ev.regionIds)) {
-    return false;
+    return null;
   }
+
+  let cleanPaintedColors: Record<string, number> | undefined;
   if (ev.paintedColors !== undefined) {
     if (!ev.paintedColors || typeof ev.paintedColors !== 'object' || Array.isArray(ev.paintedColors)) {
-      return false;
+      return null;
     }
     const entries = Object.entries(ev.paintedColors as Record<string, unknown>);
-    if (entries.length > MAX_EVENT_REGION_IDS) return false;
+    if (entries.length > MAX_EVENT_REGION_IDS) return null;
+    cleanPaintedColors = {};
     for (const [key, colorVal] of entries) {
-      if (!/^\d+$/.test(key)) return false;
+      if (!/^\d+$/.test(key)) return null;
       const rid = Number(key);
-      if (!Number.isInteger(rid) || rid < 0 || rid > MAX_REGION_ID_VALUE) return false;
+      if (!Number.isInteger(rid) || rid < 0 || rid > MAX_REGION_ID_VALUE) return null;
       if (
         typeof colorVal !== 'number' ||
         !Number.isInteger(colorVal) ||
         colorVal < 0 ||
         colorVal > 0xffffffff
       ) {
-        return false;
+        return null;
       }
+      cleanPaintedColors[key] = colorVal;
     }
   }
-  return true;
+
+  return {
+    eventId: ev.eventId.trim(),
+    ...(ev.roomCode !== undefined ? { roomCode: expectedRoomCode } : {}),
+    ...(ev.playerId !== undefined ? { playerId: senderPlayerId } : {}),
+    ...(typeof ev.displayName === 'string' ? { displayName: ev.displayName } : {}),
+    ...(typeof ev.avatarColorHex === 'string' ? { avatarColorHex: ev.avatarColorHex } : {}),
+    ...(ev.action !== undefined ? { action: ev.action } : {}),
+    regionIds: ev.regionIds,
+    ...(cleanPaintedColors !== undefined ? { paintedColors: cleanPaintedColors } : {}),
+    ...(typeof ev.timestamp === 'number' ? { timestamp: ev.timestamp } : {}),
+  };
 }
 
-function isValidUnfillEvent(raw: unknown): raw is Record<string, unknown> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+function sanitizeUnfillEvent(
+  raw: unknown,
+  expectedRoomCode: string,
+  senderPlayerId: string
+): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const ev = raw as Record<string, unknown>;
   if (
     typeof ev.eventId !== 'string' ||
     ev.eventId.trim().length < 1 ||
     ev.eventId.length > MAX_EVENT_ID_CHARS
   ) {
-    return false;
+    return null;
+  }
+  if (ev.roomCode !== undefined) {
+    const evRoom = typeof ev.roomCode === 'string' ? normalizeRoomCode(ev.roomCode) : null;
+    if (evRoom !== expectedRoomCode) return null;
+  }
+  if (ev.senderId !== undefined) {
+    if (typeof ev.senderId !== 'string' || ev.senderId.trim() !== senderPlayerId) {
+      return null;
+    }
+  }
+  if (ev.playerId !== undefined) {
+    if (typeof ev.playerId !== 'string' || ev.playerId.trim() !== senderPlayerId) {
+      return null;
+    }
+  }
+  if (ev.displayName !== undefined && (typeof ev.displayName !== 'string' || ev.displayName.length > 64)) {
+    return null;
+  }
+  if (
+    ev.avatarColorHex !== undefined &&
+    (typeof ev.avatarColorHex !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(ev.avatarColorHex))
+  ) {
+    return null;
+  }
+  if (ev.timestamp !== undefined && (typeof ev.timestamp !== 'number' || !Number.isFinite(ev.timestamp))) {
+    return null;
   }
   if (!isValidRegionIdArray(ev.regionIds)) {
-    return false;
+    return null;
   }
   if (ev.regionId !== undefined) {
     if (
@@ -250,10 +335,21 @@ function isValidUnfillEvent(raw: unknown): raw is Record<string, unknown> {
       ev.regionId < 0 ||
       ev.regionId > MAX_REGION_ID_VALUE
     ) {
-      return false;
+      return null;
     }
   }
-  return true;
+
+  return {
+    eventId: ev.eventId.trim(),
+    ...(ev.roomCode !== undefined ? { roomCode: expectedRoomCode } : {}),
+    ...(ev.senderId !== undefined ? { senderId: senderPlayerId } : {}),
+    ...(ev.playerId !== undefined ? { playerId: senderPlayerId } : {}),
+    ...(typeof ev.displayName === 'string' ? { displayName: ev.displayName } : {}),
+    ...(typeof ev.avatarColorHex === 'string' ? { avatarColorHex: ev.avatarColorHex } : {}),
+    ...(ev.regionId !== undefined ? { regionId: ev.regionId } : {}),
+    regionIds: ev.regionIds,
+    ...(typeof ev.timestamp === 'number' ? { timestamp: ev.timestamp } : {}),
+  };
 }
 
 export function validateCoopFrame(
@@ -310,6 +406,7 @@ export function validateCoopFrame(
     typeof sender.playerId !== 'string' ||
     trimmedPlayerId.length === 0 ||
     sender.playerId.length > 64 ||
+    /[\u0000-\u001F\u007F]/.test(trimmedPlayerId) ||
     typeof sender.displayName !== 'string' ||
     sender.displayName.length > 64
   ) {
@@ -320,6 +417,9 @@ export function validateCoopFrame(
   }
 
   if (record.seedToken !== undefined) {
+    if (type !== 'HELLO' && type !== 'WELCOME_STATE') {
+      return { ok: false, reason: 'invalid_seed_token' };
+    }
     if (typeof record.seedToken !== 'string') {
       return { ok: false, reason: 'invalid_seed_token' };
     }
@@ -331,21 +431,38 @@ export function validateCoopFrame(
     }
   }
 
-  if (type === 'PAINT_EVENT' || record.paintEvent !== undefined) {
-    if (!isValidPaintEvent(record.paintEvent)) {
-      return { ok: false, reason: 'invalid_event_payload' };
-    }
+  if (type !== 'PAINT_EVENT' && record.paintEvent !== undefined) {
+    return { ok: false, reason: 'invalid_event_payload' };
+  }
+  if (type !== 'UNFILL_EVENT' && record.unfillEvent !== undefined) {
+    return { ok: false, reason: 'invalid_event_payload' };
   }
 
-  if (type === 'UNFILL_EVENT' || record.unfillEvent !== undefined) {
-    if (!isValidUnfillEvent(record.unfillEvent)) {
+  let sanitizedPaintEvent: Record<string, unknown> | undefined;
+  if (type === 'PAINT_EVENT') {
+    const clean = sanitizePaintEvent(record.paintEvent, expectedRoomCode, trimmedPlayerId);
+    if (!clean) {
       return { ok: false, reason: 'invalid_event_payload' };
     }
+    sanitizedPaintEvent = clean;
   }
+
+  let sanitizedUnfillEvent: Record<string, unknown> | undefined;
+  if (type === 'UNFILL_EVENT') {
+    const clean = sanitizeUnfillEvent(record.unfillEvent, expectedRoomCode, trimmedPlayerId);
+    if (!clean) {
+      return { ok: false, reason: 'invalid_event_payload' };
+    }
+    sanitizedUnfillEvent = clean;
+  }
+
+  const cleanDisplayName =
+    sender.displayName.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 40) ||
+    'Capy Painter';
 
   const sanitizedSender: RelayParticipant = {
     playerId: trimmedPlayerId,
-    displayName: sender.displayName.trim().slice(0, 40) || 'Capy Painter',
+    displayName: cleanDisplayName,
     avatarColorHex:
       typeof sender.avatarColorHex === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(sender.avatarColorHex)
         ? sender.avatarColorHex
@@ -360,12 +477,8 @@ export function validateCoopFrame(
     ...(typeof record.seedToken === 'string' && record.seedToken.length > 0
       ? { seedToken: record.seedToken }
       : {}),
-    ...(record.paintEvent && typeof record.paintEvent === 'object'
-      ? { paintEvent: record.paintEvent as Record<string, unknown> }
-      : {}),
-    ...(record.unfillEvent && typeof record.unfillEvent === 'object'
-      ? { unfillEvent: record.unfillEvent as Record<string, unknown> }
-      : {}),
+    ...(sanitizedPaintEvent ? { paintEvent: sanitizedPaintEvent } : {}),
+    ...(sanitizedUnfillEvent ? { unfillEvent: sanitizedUnfillEvent } : {}),
     sentAt:
       typeof record.sentAt === 'number' && Number.isFinite(record.sentAt)
         ? record.sentAt
@@ -425,6 +538,7 @@ export function evaluateRoomSeedAction(params: {
   lastWriteAtMs: number;
   nowMs: number;
   debounceMs?: number;
+  isSeedAuthority?: boolean;
 }): 'ignore' | 'write_now' | 'debounce' {
   const {
     messageType,
@@ -435,6 +549,7 @@ export function evaluateRoomSeedAction(params: {
     lastWriteAtMs,
     nowMs,
     debounceMs = SEED_CHECKPOINT_DEBOUNCE_MS,
+    isSeedAuthority = true,
   } = params;
 
   if (!incomingSeedToken) {
@@ -442,11 +557,14 @@ export function evaluateRoomSeedAction(params: {
   }
 
   if (messageType === 'HELLO') {
+    if (!isSeedAuthority) {
+      return 'ignore';
+    }
     return existingSeedToken === null ? 'write_now' : 'ignore';
   }
 
   if (messageType === 'WELCOME_STATE') {
-    if (!hasSocketJoined || incomingSeedToken === lastSavedSeedToken) {
+    if (!hasSocketJoined || !isSeedAuthority || incomingSeedToken === lastSavedSeedToken) {
       return 'ignore';
     }
     return nowMs - lastWriteAtMs >= debounceMs ? 'write_now' : 'debounce';

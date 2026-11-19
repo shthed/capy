@@ -37,6 +37,7 @@ declare global {
     ) => void;
     __capyReceivePlayGamesError?: (reason: string) => void;
     __capyReceiveCloudSnapshot?: (slotKey: string, payloadJson: string) => void;
+    __capyReceiveCloudSnapshotError?: (slotKey: string, reason: string) => void;
     webkit?: {
       messageHandlers?: {
         CapyIOS?: {
@@ -45,6 +46,43 @@ declare global {
       };
     };
   }
+}
+
+const ALLOWED_ROOT_DEEP_LINK_HOSTS = new Set(['capypaint.com', 'www.capypaint.com']);
+const ALLOWED_PAGES_DEEP_LINK_HOSTS = new Set(['shthed.github.io', 'capyboop.github.io']);
+
+export function isValidAndroidDeepLink(rawUrl: string): boolean {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || /\s/.test(trimmed) || /[\u0000-\u001F\u007F]/.test(trimmed)) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol.toLowerCase() !== 'https:') return false;
+    if (parsed.port !== '' || parsed.username !== '' || parsed.password !== '') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (ALLOWED_ROOT_DEEP_LINK_HOSTS.has(host)) {
+      return true;
+    }
+    if (ALLOWED_PAGES_DEEP_LINK_HOSTS.has(host)) {
+      return parsed.pathname === '/capy' || parsed.pathname.startsWith('/capy/');
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedSharedImageDataUrl(rawUrl: string): boolean {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (/[\u0000-\u001F\u007F]/.test(trimmed)) return false;
+  return /^data:image\/(?:png|jpeg|jpg|webp|gif|bmp|avif|heic|heif);base64,[A-Za-z0-9+/=]+$/i.test(
+    trimmed
+  );
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -62,27 +100,76 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-class NativeBridgeService {
+export interface BridgeListenOptions {
+  once?: boolean;
+}
+
+export interface CloudSnapshotListenOptions extends BridgeListenOptions {
+  slotKey?: string;
+  slotFilter?: (slotKey: string) => boolean;
+}
+
+export class NativeBridgeService {
   private primaryModalCloseHandler: (() => void) | null = null;
   private overlayBackStack: Array<() => void> = [];
   private sharedImageHandler: ((title: string, dataUrl: string) => void) | null = null;
   private deepLinkHandler: ((url: string) => void) | null = null;
-  private playGamesProfileHandler:
-    | ((profile: { playerId: string; displayName: string }) => void)
-    | null = null;
-  private playGamesErrorHandler: ((reason: string) => void) | null = null;
-  private cloudSnapshotHandler: ((slotKey: string, payloadJson: string) => void) | null = null;
+  private playGamesProfileHandlers = new Set<
+    (profile: { playerId: string; displayName: string }) => boolean | void
+  >();
+  private playGamesErrorHandlers = new Set<(reason: string) => boolean | void>();
+  private cloudSnapshotHandlers = new Set<
+    (slotKey: string, payloadJson: string) => boolean | void
+  >();
+  private cloudSnapshotErrorHandlers = new Set<
+    (slotKey: string, reason: string) => boolean | void
+  >();
   private pendingSharedImages: Array<{ title: string; dataUrl: string }> = [];
   private pendingDeepLinks: string[] = [];
   private pendingPlayGamesProfiles: Array<{ playerId: string; displayName: string }> = [];
   private pendingPlayGamesErrors: string[] = [];
   private pendingCloudSnapshots: Array<{ slotKey: string; payloadJson: string }> = [];
+  private pendingCloudSnapshotErrors: Array<{ slotKey: string; reason: string }> = [];
+  private abortedInFlightCloudSlots = new Set<string>();
 
-  private static pushBounded<T>(queue: T[], item: T, maxItems = 32): void {
+  private static pushBounded<T>(queue: T[], item: T, maxItems = 128): void {
     if (queue.length >= maxItems) {
       queue.shift();
     }
     queue.push(item);
+  }
+
+  discardAbortedCloudPulls(slots: Iterable<string>): void {
+    const slotSet = new Set<string>();
+    for (const slot of slots) {
+      if (typeof slot === 'string' && slot.length > 0) {
+        slotSet.add(slot);
+      }
+    }
+    if (slotSet.size === 0) return;
+    this.pendingCloudSnapshots = this.pendingCloudSnapshots.filter(
+      (item) => !slotSet.has(item.slotKey)
+    );
+    this.pendingCloudSnapshotErrors = this.pendingCloudSnapshotErrors.filter(
+      (item) => !slotSet.has(item.slotKey)
+    );
+    for (const slot of slotSet) {
+      if (this.abortedInFlightCloudSlots.size >= 256 && !this.abortedInFlightCloudSlots.has(slot)) {
+        const oldest = this.abortedInFlightCloudSlots.values().next().value;
+        if (oldest !== undefined) {
+          this.abortedInFlightCloudSlots.delete(oldest);
+        }
+      }
+      this.abortedInFlightCloudSlots.add(slot);
+    }
+  }
+
+  clearAbortedCloudPulls(slots: Iterable<string>): void {
+    for (const slot of slots) {
+      if (typeof slot === 'string' && slot.length > 0) {
+        this.abortedInFlightCloudSlots.delete(slot);
+      }
+    }
   }
 
   constructor() {
@@ -107,8 +194,11 @@ class NativeBridgeService {
       };
 
       window.__capyReceiveSharedImage = (title: string, dataUrl: string) => {
-        if (!dataUrl) return;
-        const resolvedTitle = title || 'Shared Photo';
+        if (!isAllowedSharedImageDataUrl(dataUrl)) return;
+        const resolvedTitle =
+          typeof title === 'string' && title.trim().length > 0
+            ? title.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 80) || 'Shared Photo'
+            : 'Shared Photo';
         if (this.sharedImageHandler) {
           this.sharedImageHandler(resolvedTitle, dataUrl);
         } else {
@@ -120,7 +210,7 @@ class NativeBridgeService {
       };
 
       window.__capyReceiveDeepLink = (url: string) => {
-        if (!url) return;
+        if (!isValidAndroidDeepLink(url)) return;
         if (this.deepLinkHandler) {
           this.deepLinkHandler(url);
         } else {
@@ -139,9 +229,21 @@ class NativeBridgeService {
               playerId: parsed.playerId.trim(),
               displayName: parsed.displayName.trim(),
             };
-            if (this.playGamesProfileHandler) {
-              this.playGamesProfileHandler(profile);
-            } else {
+            if (!profile.playerId || !profile.displayName) return;
+            let matchedAndConsumed = false;
+            if (this.playGamesProfileHandlers.size > 0) {
+              for (const handler of [...this.playGamesProfileHandlers]) {
+                try {
+                  if (handler(profile) !== false) {
+                    matchedAndConsumed = true;
+                  }
+                } catch {
+                  // Throwing listener still consumed the delivery
+                  matchedAndConsumed = true;
+                }
+              }
+            }
+            if (!matchedAndConsumed) {
               NativeBridgeService.pushBounded(this.pendingPlayGamesProfiles, profile);
             }
           }
@@ -152,19 +254,81 @@ class NativeBridgeService {
 
       window.__capyReceivePlayGamesError = (reason: string) => {
         const cleanReason = (reason || 'PLAY_GAMES_UNAVAILABLE').trim();
-        if (this.playGamesErrorHandler) {
-          this.playGamesErrorHandler(cleanReason);
-        } else {
+        let matchedAndConsumed = false;
+        if (this.playGamesErrorHandlers.size > 0) {
+          for (const handler of [...this.playGamesErrorHandlers]) {
+            try {
+              if (handler(cleanReason) !== false) {
+                matchedAndConsumed = true;
+              }
+            } catch {
+              // Throwing listener still consumed the delivery
+              matchedAndConsumed = true;
+            }
+          }
+        }
+        if (!matchedAndConsumed) {
           NativeBridgeService.pushBounded(this.pendingPlayGamesErrors, cleanReason);
         }
       };
 
       window.__capyReceiveCloudSnapshot = (slotKey: string, payloadJson: string) => {
         if (!slotKey || !payloadJson) return;
-        if (this.cloudSnapshotHandler) {
-          this.cloudSnapshotHandler(slotKey, payloadJson);
-        } else {
-          NativeBridgeService.pushBounded(this.pendingCloudSnapshots, { slotKey, payloadJson });
+        let matchedAndConsumed = false;
+        if (this.cloudSnapshotHandlers.size > 0) {
+          for (const handler of [...this.cloudSnapshotHandlers]) {
+            try {
+              if (handler(slotKey, payloadJson) !== false) {
+                matchedAndConsumed = true;
+              }
+            } catch {
+              // Throwing listener still consumed the delivery
+              matchedAndConsumed = true;
+            }
+          }
+        }
+        if (!matchedAndConsumed) {
+          if (this.abortedInFlightCloudSlots.delete(slotKey)) {
+            return;
+          }
+          NativeBridgeService.pushBounded(
+            this.pendingCloudSnapshots,
+            { slotKey, payloadJson },
+            128
+          );
+        }
+      };
+
+      window.__capyReceiveCloudSnapshotError = (slotKey: string, reason: string) => {
+        if (!slotKey) return;
+        const cleanSlot = String(slotKey).trim();
+        if (!cleanSlot) return;
+        const cleanReason =
+          typeof reason === 'string' && reason.trim().length > 0
+            ? reason.trim()
+            : 'PLAY_GAMES_SNAPSHOT_FAILED';
+        let matchedAndConsumed = false;
+        if (this.cloudSnapshotErrorHandlers.size > 0) {
+          for (const handler of [...this.cloudSnapshotErrorHandlers]) {
+            try {
+              if (handler(cleanSlot, cleanReason) !== false) {
+                matchedAndConsumed = true;
+              }
+            } catch {
+              // Throwing listener still consumed the delivery
+              matchedAndConsumed = true;
+            }
+          }
+        }
+        if (!matchedAndConsumed) {
+          if (this.abortedInFlightCloudSlots.delete(cleanSlot)) {
+            return;
+          }
+          NativeBridgeService.pushBounded(
+            this.pendingCloudSnapshotErrors,
+            { slotKey: cleanSlot, reason: cleanReason },
+            128
+          );
         }
       };
     }
@@ -248,6 +412,7 @@ class NativeBridgeService {
   }
 
   private syncNativeModalFlag(): void {
+    if (typeof window === 'undefined') return;
     const anyOpen = this.overlayBackStack.length > 0 || this.primaryModalCloseHandler !== null;
     try {
       if (window.CapyAndroid?.setModalOpen) {
@@ -282,6 +447,7 @@ class NativeBridgeService {
   }
 
   saveBackup(key: string, data: string): boolean {
+    if (typeof window === 'undefined' || !key || typeof data !== 'string') return false;
     try {
       if (window.CapyAndroid?.saveBackup) {
         return window.CapyAndroid.saveBackup(key, data);
@@ -297,6 +463,7 @@ class NativeBridgeService {
   }
 
   loadBackup(key: string): string | null {
+    if (typeof window === 'undefined' || !key) return null;
     try {
       if (window.CapyAndroid?.loadBackup) {
         const result = window.CapyAndroid.loadBackup(key);
@@ -313,15 +480,17 @@ class NativeBridgeService {
     if (this.pendingSharedImages.length > 0) {
       const queued = this.pendingSharedImages.splice(0, this.pendingSharedImages.length);
       for (const item of queued) {
-        handler(item.title, item.dataUrl);
+        if (isAllowedSharedImageDataUrl(item.dataUrl)) {
+          handler(item.title, item.dataUrl);
+        }
       }
     }
     try {
-      if (window.CapyAndroid?.consumePendingSharedImage) {
+      if (typeof window !== 'undefined' && window.CapyAndroid?.consumePendingSharedImage) {
         const raw = window.CapyAndroid.consumePendingSharedImage();
         if (raw) {
           const parsed = JSON.parse(raw) as { title?: string; dataUrl?: string };
-          if (parsed.dataUrl) {
+          if (parsed.dataUrl && isAllowedSharedImageDataUrl(parsed.dataUrl)) {
             handler(parsed.title || 'Shared Photo', parsed.dataUrl);
           }
         }
@@ -337,13 +506,18 @@ class NativeBridgeService {
   }
 
   async shareImage(title: string, dataUrl: string): Promise<void> {
+    if (typeof dataUrl !== 'string') return;
+    const trimmedUrl = dataUrl.trim();
+    if (!isAllowedSharedImageDataUrl(trimmedUrl) && !/^blob:/i.test(trimmedUrl)) {
+      return;
+    }
     try {
-      if (window.CapyAndroid?.shareImage) {
-        window.CapyAndroid.shareImage(title, dataUrl);
+      if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage) {
+        window.CapyAndroid.shareImage(title, trimmedUrl);
         return;
       }
       if (typeof navigator !== 'undefined' && navigator.share) {
-        const res = await fetch(dataUrl);
+        const res = await fetch(trimmedUrl);
         const blob = await res.blob();
         const file = new File([blob], `${title.replace(/\s+/g, '_').toLowerCase()}.png`, {
           type: 'image/png',
@@ -355,7 +529,7 @@ class NativeBridgeService {
         return;
       }
       // Fallback on desktop web without Web Share API: trigger download
-      const res = await fetch(dataUrl);
+      const res = await fetch(trimmedUrl);
       const blob = await res.blob();
       await this.exportOrShareFile({
         title,
@@ -417,13 +591,15 @@ class NativeBridgeService {
     if (this.pendingDeepLinks.length > 0) {
       const queued = this.pendingDeepLinks.splice(0, this.pendingDeepLinks.length);
       for (const url of queued) {
-        handler(url);
+        if (isValidAndroidDeepLink(url)) {
+          handler(url);
+        }
       }
     }
     try {
-      if (window.CapyAndroid?.consumePendingDeepLink) {
+      if (typeof window !== 'undefined' && window.CapyAndroid?.consumePendingDeepLink) {
         const pendingUrl = window.CapyAndroid.consumePendingDeepLink();
-        if (pendingUrl && pendingUrl.length > 0) {
+        if (pendingUrl && isValidAndroidDeepLink(pendingUrl)) {
           handler(pendingUrl);
         }
       }
@@ -438,37 +614,160 @@ class NativeBridgeService {
   }
 
   onPlayGamesProfile(
-    handler: (profile: { playerId: string; displayName: string }) => void
+    handler: (profile: { playerId: string; displayName: string }) => void | boolean,
+    options?: BridgeListenOptions
   ): () => void {
-    this.playGamesProfileHandler = handler;
-    if (this.pendingPlayGamesProfiles.length > 0) {
-      const queued = this.pendingPlayGamesProfiles.splice(
-        0,
-        this.pendingPlayGamesProfiles.length
-      );
-      for (const profile of queued) {
-        handler(profile);
+    const once = Boolean(options?.once);
+    let settled = false;
+    let unsubscribed = false;
+    let onceConsumed = false;
+    const listener = (profile: { playerId: string; displayName: string }): boolean => {
+      if (unsubscribed || settled) return false;
+      if (once) {
+        settled = true;
+        this.playGamesProfileHandlers.delete(listener);
+      }
+      let returnedFalse = false;
+      let threw = false;
+      try {
+        const res = handler(profile);
+        if (res === false) {
+          returnedFalse = true;
+          return false;
+        }
+        return true;
+      } catch (err) {
+        threw = true;
+        throw err;
+      } finally {
+        if (once) {
+          if (!threw && returnedFalse && !unsubscribed) {
+            settled = false;
+            this.playGamesProfileHandlers.add(listener);
+          } else {
+            onceConsumed = true;
+          }
+        }
+      }
+    };
+    let i = 0;
+    while (i < this.pendingPlayGamesProfiles.length) {
+      if (unsubscribed) break;
+      const profile = this.pendingPlayGamesProfiles.splice(i, 1)[0];
+      if (once) {
+        settled = true;
+      }
+      let consumed = true;
+      let threw = false;
+      try {
+        const res = handler(profile);
+        if (res === false) {
+          consumed = false;
+        }
+      } catch {
+        threw = true;
+        consumed = true;
+      }
+      if (!threw && !consumed) {
+        if (once && !unsubscribed) {
+          settled = false;
+        }
+        this.pendingPlayGamesProfiles.splice(
+          Math.min(i, this.pendingPlayGamesProfiles.length),
+          0,
+          profile
+        );
+        i++;
+      } else if (once) {
+        onceConsumed = true;
+        break;
       }
     }
+    if (!unsubscribed && !(once && onceConsumed)) {
+      this.playGamesProfileHandlers.add(listener);
+    }
     return () => {
-      if (this.playGamesProfileHandler === handler) {
-        this.playGamesProfileHandler = null;
-      }
+      unsubscribed = true;
+      this.playGamesProfileHandlers.delete(listener);
     };
   }
 
-  onPlayGamesError(handler: (reason: string) => void): () => void {
-    this.playGamesErrorHandler = handler;
-    if (this.pendingPlayGamesErrors.length > 0) {
-      const queued = this.pendingPlayGamesErrors.splice(0, this.pendingPlayGamesErrors.length);
-      for (const reason of queued) {
-        handler(reason);
+  onPlayGamesError(
+    handler: (reason: string) => void | boolean,
+    options?: BridgeListenOptions
+  ): () => void {
+    const once = Boolean(options?.once);
+    let settled = false;
+    let unsubscribed = false;
+    let onceConsumed = false;
+    const listener = (reason: string): boolean => {
+      if (unsubscribed || settled) return false;
+      if (once) {
+        settled = true;
+        this.playGamesErrorHandlers.delete(listener);
+      }
+      let returnedFalse = false;
+      let threw = false;
+      try {
+        const res = handler(reason);
+        if (res === false) {
+          returnedFalse = true;
+          return false;
+        }
+        return true;
+      } catch (err) {
+        threw = true;
+        throw err;
+      } finally {
+        if (once) {
+          if (!threw && returnedFalse && !unsubscribed) {
+            settled = false;
+            this.playGamesErrorHandlers.add(listener);
+          } else {
+            onceConsumed = true;
+          }
+        }
+      }
+    };
+    let i = 0;
+    while (i < this.pendingPlayGamesErrors.length) {
+      if (unsubscribed) break;
+      const reason = this.pendingPlayGamesErrors.splice(i, 1)[0];
+      if (once) {
+        settled = true;
+      }
+      let consumed = true;
+      let threw = false;
+      try {
+        const res = handler(reason);
+        if (res === false) {
+          consumed = false;
+        }
+      } catch {
+        threw = true;
+        consumed = true;
+      }
+      if (!threw && !consumed) {
+        if (once && !unsubscribed) {
+          settled = false;
+        }
+        this.pendingPlayGamesErrors.splice(
+          Math.min(i, this.pendingPlayGamesErrors.length),
+          0,
+          reason
+        );
+        i++;
+      } else if (once) {
+        onceConsumed = true;
+        break;
       }
     }
+    if (!unsubscribed && !(once && onceConsumed)) {
+      this.playGamesErrorHandlers.add(listener);
+    }
     return () => {
-      if (this.playGamesErrorHandler === handler) {
-        this.playGamesErrorHandler = null;
-      }
+      unsubscribed = true;
+      this.playGamesErrorHandlers.delete(listener);
     };
   }
 
@@ -484,22 +783,192 @@ class NativeBridgeService {
     return true;
   }
 
-  onCloudSnapshot(handler: (slotKey: string, payloadJson: string) => void): () => void {
-    this.cloudSnapshotHandler = handler;
-    if (this.pendingCloudSnapshots.length > 0) {
-      const queued = this.pendingCloudSnapshots.splice(0, this.pendingCloudSnapshots.length);
-      for (const snap of queued) {
-        handler(snap.slotKey, snap.payloadJson);
+  onCloudSnapshot(
+    handler: (slotKey: string, payloadJson: string) => void | boolean,
+    options?: CloudSnapshotListenOptions
+  ): () => void {
+    const slotKeyFilter = options?.slotKey;
+    const slotFnFilter = options?.slotFilter;
+    const once = Boolean(options?.once);
+    const matchesSlot = (slot: string): boolean => {
+      if (slotKeyFilter !== undefined && slot !== slotKeyFilter) return false;
+      if (slotFnFilter && !slotFnFilter(slot)) return false;
+      return true;
+    };
+    let settled = false;
+    let unsubscribed = false;
+    let onceConsumed = false;
+    const listener = (slot: string, payloadJson: string): boolean => {
+      if (unsubscribed || settled) return false;
+      if (!matchesSlot(slot)) return false;
+      if (once) {
+        settled = true;
+        this.cloudSnapshotHandlers.delete(listener);
+      }
+      let returnedFalse = false;
+      let threw = false;
+      try {
+        const res = handler(slot, payloadJson);
+        if (res === false) {
+          returnedFalse = true;
+          return false;
+        }
+        return true;
+      } catch (err) {
+        threw = true;
+        throw err;
+      } finally {
+        if (once) {
+          if (!threw && returnedFalse && !unsubscribed) {
+            settled = false;
+            this.cloudSnapshotHandlers.add(listener);
+          } else {
+            onceConsumed = true;
+          }
+        }
+      }
+    };
+    let i = 0;
+    while (i < this.pendingCloudSnapshots.length) {
+      if (unsubscribed) break;
+      const item = this.pendingCloudSnapshots[i];
+      if (!matchesSlot(item.slotKey)) {
+        i++;
+        continue;
+      }
+      this.pendingCloudSnapshots.splice(i, 1);
+      if (once) {
+        settled = true;
+      }
+      let consumed = true;
+      let threw = false;
+      try {
+        const res = handler(item.slotKey, item.payloadJson);
+        if (res === false) {
+          consumed = false;
+        }
+      } catch {
+        threw = true;
+        consumed = true;
+      }
+      if (!threw && !consumed) {
+        if (once && !unsubscribed) {
+          settled = false;
+        }
+        this.pendingCloudSnapshots.splice(
+          Math.min(i, this.pendingCloudSnapshots.length),
+          0,
+          item
+        );
+        i++;
+      } else if (once) {
+        onceConsumed = true;
+        break;
       }
     }
+    if (!unsubscribed && !(once && onceConsumed)) {
+      this.cloudSnapshotHandlers.add(listener);
+    }
     return () => {
-      if (this.cloudSnapshotHandler === handler) {
-        this.cloudSnapshotHandler = null;
+      unsubscribed = true;
+      this.cloudSnapshotHandlers.delete(listener);
+    };
+  }
+
+  onCloudSnapshotError(
+    handler: (slotKey: string, reason: string) => void | boolean,
+    options?: CloudSnapshotListenOptions
+  ): () => void {
+    const slotKeyFilter = options?.slotKey;
+    const slotFnFilter = options?.slotFilter;
+    const once = Boolean(options?.once);
+    const matchesSlot = (slot: string): boolean => {
+      if (slotKeyFilter !== undefined && slot !== slotKeyFilter) return false;
+      if (slotFnFilter && !slotFnFilter(slot)) return false;
+      return true;
+    };
+    let settled = false;
+    let unsubscribed = false;
+    let onceConsumed = false;
+    const listener = (slot: string, reason: string): boolean => {
+      if (unsubscribed || settled) return false;
+      if (!matchesSlot(slot)) return false;
+      if (once) {
+        settled = true;
+        this.cloudSnapshotErrorHandlers.delete(listener);
       }
+      let returnedFalse = false;
+      let threw = false;
+      try {
+        const res = handler(slot, reason);
+        if (res === false) {
+          returnedFalse = true;
+          return false;
+        }
+        return true;
+      } catch (err) {
+        threw = true;
+        throw err;
+      } finally {
+        if (once) {
+          if (!threw && returnedFalse && !unsubscribed) {
+            settled = false;
+            this.cloudSnapshotErrorHandlers.add(listener);
+          } else {
+            onceConsumed = true;
+          }
+        }
+      }
+    };
+    let i = 0;
+    while (i < this.pendingCloudSnapshotErrors.length) {
+      if (unsubscribed) break;
+      const item = this.pendingCloudSnapshotErrors[i];
+      if (!matchesSlot(item.slotKey)) {
+        i++;
+        continue;
+      }
+      this.pendingCloudSnapshotErrors.splice(i, 1);
+      if (once) {
+        settled = true;
+      }
+      let consumed = true;
+      let threw = false;
+      try {
+        const res = handler(item.slotKey, item.reason);
+        if (res === false) {
+          consumed = false;
+        }
+      } catch {
+        threw = true;
+        consumed = true;
+      }
+      if (!threw && !consumed) {
+        if (once && !unsubscribed) {
+          settled = false;
+        }
+        this.pendingCloudSnapshotErrors.splice(
+          Math.min(i, this.pendingCloudSnapshotErrors.length),
+          0,
+          item
+        );
+        i++;
+      } else if (once) {
+        onceConsumed = true;
+        break;
+      }
+    }
+    if (!unsubscribed && !(once && onceConsumed)) {
+      this.cloudSnapshotErrorHandlers.add(listener);
+    }
+    return () => {
+      unsubscribed = true;
+      this.cloudSnapshotErrorHandlers.delete(listener);
     };
   }
 
   signInPlayGames(): { playerId: string; displayName: string } | null {
+    if (typeof window === 'undefined') return null;
     try {
       if (window.CapyAndroid?.signInPlayGames) {
         const raw = window.CapyAndroid.signInPlayGames();
@@ -517,6 +986,7 @@ class NativeBridgeService {
   }
 
   saveCloudSnapshot(slotKey: string, payloadJson: string): boolean {
+    if (typeof window === 'undefined' || !slotKey || typeof payloadJson !== 'string') return false;
     try {
       if (window.CapyAndroid?.saveCloudSnapshot) {
         return window.CapyAndroid.saveCloudSnapshot(slotKey, payloadJson);
@@ -528,6 +998,7 @@ class NativeBridgeService {
   }
 
   loadCloudSnapshot(slotKey: string): string | null {
+    if (typeof window === 'undefined' || !slotKey) return null;
     try {
       if (window.CapyAndroid?.loadCloudSnapshot) {
         const res = window.CapyAndroid.loadCloudSnapshot(slotKey);
@@ -546,6 +1017,7 @@ class NativeBridgeService {
     base64Chunk: string
   ): boolean {
     if (
+      typeof window === 'undefined' ||
       !blobKey ||
       !base64Chunk ||
       chunkIndex < 0 ||
@@ -574,7 +1046,7 @@ class NativeBridgeService {
   }
 
   loadCloudBinaryChunk(blobKey: string, chunkIndex: number): string | null {
-    if (!blobKey || chunkIndex < 0) return null;
+    if (typeof window === 'undefined' || !blobKey || chunkIndex < 0) return null;
     try {
       if (window.CapyAndroid?.loadCloudBinaryChunk) {
         const res = window.CapyAndroid.loadCloudBinaryChunk(blobKey, chunkIndex);
@@ -592,7 +1064,8 @@ class NativeBridgeService {
   }
 
   requestCloudSnapshotPull(slotKey: string): boolean {
-    if (!slotKey) return false;
+    if (typeof window === 'undefined' || !slotKey) return false;
+    this.abortedInFlightCloudSlots.delete(slotKey);
     try {
       if (window.CapyAndroid?.requestCloudSnapshotPull) {
         return window.CapyAndroid.requestCloudSnapshotPull(slotKey);
@@ -604,20 +1077,32 @@ class NativeBridgeService {
   }
 
   async shareTextLink(title: string, url: string): Promise<'shared' | 'copied'> {
+    if (typeof url !== 'string') return 'copied';
+    let safeUrl = '';
     try {
-      if (window.CapyAndroid?.shareTextLink) {
-        window.CapyAndroid.shareTextLink(title, url);
+      const parsed = new URL(url.trim());
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        safeUrl = parsed.toString();
+      }
+    } catch {
+      return 'copied';
+    }
+    if (!safeUrl) return 'copied';
+
+    try {
+      if (typeof window !== 'undefined' && window.CapyAndroid?.shareTextLink) {
+        window.CapyAndroid.shareTextLink(title, safeUrl);
         return 'shared';
       }
       if (typeof navigator !== 'undefined' && navigator.share) {
-        await navigator.share({ title, url });
+        await navigator.share({ title, url: safeUrl });
         return 'shared';
       }
     } catch {
       // Fall through to clipboard copy if user dismissed or Web Share unavailable
     }
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(safeUrl);
     }
     return 'copied';
   }

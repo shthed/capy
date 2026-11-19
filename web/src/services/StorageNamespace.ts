@@ -1,4 +1,5 @@
 import { ReleaseChannel, resolveReleaseChannel } from '../version';
+import { normalizeCoopRoomCode } from './ShareLinkService';
 
 export interface StorageNamespaceInfo {
   channel: ReleaseChannel;
@@ -105,7 +106,7 @@ export function isCloudCoopUiEnabled(
     if (rawCoop === '0' || rawCoop === 'false') {
       return false;
     }
-    if (rawCoop === '1' || rawCoop === 'true' || Boolean((params.get('room') || '').trim())) {
+    if (rawCoop === '1' || rawCoop === 'true' || Boolean(normalizeCoopRoomCode(params.get('room')))) {
       return true;
     }
   }

@@ -76,6 +76,68 @@ declare global {
   }
 }
 
+export const DEV_DEBUG_STORAGE_KEY = 'capy_dev_debug';
+
+function sanitizeHttpsUrl(raw?: string): string | undefined {
+  if (!raw || typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (!/^https:\/\/[^\s]+$/i.test(trimmed)) return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function isGoogleMockTokenEnvironmentAllowed(
+  search?: string,
+  storageValue?: string | null,
+  isDevOverride?: boolean
+): boolean {
+  const isDev =
+    isDevOverride !== undefined ? isDevOverride : Boolean(import.meta.env?.DEV);
+  if (isDev) return true;
+
+  const effectiveSearch =
+    search !== undefined
+      ? search
+      : typeof window !== 'undefined'
+        ? (window.location?.search ?? '')
+        : '';
+  if (effectiveSearch) {
+    const params = new URLSearchParams(
+      effectiveSearch.startsWith('?') ? effectiveSearch : `?${effectiveSearch}`
+    );
+    const rawDebug = (params.get('capy_debug') || '').trim().toLowerCase();
+    if (rawDebug === '0' || rawDebug === 'false') {
+      return false;
+    }
+    if (rawDebug === '1' || rawDebug === 'true') {
+      return true;
+    }
+  }
+
+  let stored = storageValue;
+  if (stored === undefined && typeof window !== 'undefined') {
+    try {
+      stored = window.localStorage?.getItem(DEV_DEBUG_STORAGE_KEY) ?? null;
+    } catch {
+      stored = null;
+    }
+  }
+  return stored === '1' || stored === 'true';
+}
+
+export function getAllowedMockGoogleOAuthToken(): string {
+  if (typeof window === 'undefined' || !isGoogleMockTokenEnvironmentAllowed()) {
+    return '';
+  }
+  return typeof window.__capyMockGoogleOAuthToken === 'string'
+    ? window.__capyMockGoogleOAuthToken.trim()
+    : '';
+}
+
 export function isExplicitlySignedOut(): boolean {
   try {
     if (typeof localStorage === 'undefined') return false;
@@ -134,35 +196,116 @@ export function setConfiguredGoogleClientId(clientId: string): void {
   }
 }
 
+let inMemoryGoogleSession: GoogleOAuthSession | null = null;
+
+function validateParsedGoogleSession(rawParsed: unknown): GoogleOAuthSession | null {
+  const parsed = rawParsed as Partial<GoogleOAuthSession> | null;
+  if (
+    !parsed ||
+    typeof parsed !== 'object' ||
+    typeof parsed.accessToken !== 'string' ||
+    parsed.accessToken.trim().length === 0 ||
+    typeof parsed.sub !== 'string' ||
+    parsed.sub.trim().length === 0 ||
+    typeof parsed.displayName !== 'string' ||
+    parsed.displayName.trim().length === 0 ||
+    typeof parsed.expiresAt !== 'number' ||
+    !Number.isFinite(parsed.expiresAt)
+  ) {
+    return null;
+  }
+  if (Date.now() >= parsed.expiresAt - 30_000) {
+    return null;
+  }
+  const cleanName = parsed.displayName.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!cleanName) return null;
+  return {
+    ...parsed,
+    accessToken: parsed.accessToken.trim(),
+    sub: parsed.sub.trim(),
+    displayName: cleanName,
+    picture: sanitizeHttpsUrl(parsed.picture),
+    expiresAt: parsed.expiresAt,
+  };
+}
+
 export function loadCachedGoogleSession(): GoogleOAuthSession | null {
+  const scopedKey = resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY);
   try {
-    if (typeof localStorage === 'undefined') return null;
-    const raw = localStorage.getItem(resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as GoogleOAuthSession;
-    if (
-      parsed &&
-      parsed.accessToken &&
-      parsed.sub &&
-      parsed.displayName &&
-      typeof parsed.expiresAt === 'number' &&
-      Date.now() < parsed.expiresAt - 30_000
-    ) {
-      return parsed;
+    if (typeof localStorage !== 'undefined') {
+      const legacyRaw = localStorage.getItem(scopedKey);
+      if (legacyRaw) {
+        localStorage.removeItem(scopedKey);
+        const migrated = validateParsedGoogleSession(JSON.parse(legacyRaw));
+        if (migrated) {
+          inMemoryGoogleSession = migrated;
+          if (typeof sessionStorage !== 'undefined') {
+            try {
+              sessionStorage.setItem(scopedKey, JSON.stringify(migrated));
+            } catch {
+              // Ignore sessionStorage restrictions
+            }
+          }
+          return migrated;
+        }
+        inMemoryGoogleSession = null;
+        if (typeof sessionStorage !== 'undefined') {
+          try {
+            sessionStorage.removeItem(scopedKey);
+          } catch {
+            // Ignore
+          }
+        }
+        return null;
+      }
     }
   } catch {
-    // Ignore malformed session
+    try {
+      localStorage?.removeItem(scopedKey);
+    } catch {
+      // Ignore
+    }
+  }
+
+  if (inMemoryGoogleSession) {
+    if (Date.now() < inMemoryGoogleSession.expiresAt - 30_000) {
+      return inMemoryGoogleSession;
+    }
+    inMemoryGoogleSession = null;
+  }
+
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const raw = sessionStorage.getItem(scopedKey);
+      if (raw) {
+        const parsed = validateParsedGoogleSession(JSON.parse(raw));
+        if (parsed) {
+          inMemoryGoogleSession = parsed;
+          return parsed;
+        }
+        sessionStorage.removeItem(scopedKey);
+      }
+    }
+  } catch {
+    // Ignore malformed sessionStorage payload
   }
   return null;
 }
 
 export function saveCachedGoogleSession(session: GoogleOAuthSession): void {
+  const scopedKey = resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY);
+  const normalized = validateParsedGoogleSession(session) ?? session;
+  inMemoryGoogleSession = normalized;
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(scopedKey, JSON.stringify(normalized));
+    }
+  } catch {
+    // Ignore sessionStorage restrictions
+  }
   try {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(
-        resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY),
-        JSON.stringify(session)
-      );
+      localStorage.removeItem(scopedKey);
     }
   } catch {
     // Ignore
@@ -170,16 +313,21 @@ export function saveCachedGoogleSession(session: GoogleOAuthSession): void {
 }
 
 export function clearCachedGoogleSession(): void {
+  const scopedKey = resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY);
   try {
     const existing = loadCachedGoogleSession();
+    inMemoryGoogleSession = null;
     if (existing?.accessToken && typeof window !== 'undefined') {
       window.google?.accounts?.oauth2?.revoke?.(existing.accessToken, () => {});
     }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(scopedKey);
+    }
     if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY));
+      localStorage.removeItem(scopedKey);
     }
   } catch {
-    // Ignore
+    inMemoryGoogleSession = null;
   }
 }
 
@@ -189,7 +337,7 @@ function ensureGoogleIdentityScriptLoaded(): Promise<void> {
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('Window is not available'));
   }
-  if (window.google?.accounts?.oauth2 || window.__capyMockGoogleOAuthToken) {
+  if (window.google?.accounts?.oauth2 || getAllowedMockGoogleOAuthToken()) {
     return Promise.resolve();
   }
   if (gsiScriptPromise) return gsiScriptPromise;
@@ -211,10 +359,18 @@ function ensureGoogleIdentityScriptLoaded(): Promise<void> {
       return;
     }
 
+    if (!document.head) {
+      gsiScriptPromise = null;
+      reject(new Error('Document head is unavailable'));
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = 'https://accounts.google.com/gsi/client';
     script.async = true;
     script.defer = true;
+    script.crossOrigin = 'anonymous';
+    script.referrerPolicy = 'strict-origin-when-cross-origin';
     script.onload = () => resolve();
     script.onerror = () => {
       gsiScriptPromise = null;
@@ -249,13 +405,16 @@ export function decodeGoogleIdTokenPayload(jwt: string): {
       email?: string;
       picture?: string;
     };
-    const sub = (data.sub || data.email || '').trim();
+    const sub = (data.sub || data.email || '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
     if (!sub) return null;
+    const rawName = (data.name || data.given_name || data.email || 'Google Player')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .trim();
     return {
       sub,
-      displayName: (data.name || data.given_name || data.email || 'Google Player').trim(),
-      email: data.email?.trim(),
-      picture: data.picture?.trim(),
+      displayName: rawName || 'Google Player',
+      email: data.email?.replace(/[\u0000-\u001F\u007F]/g, '').trim(),
+      picture: sanitizeHttpsUrl(data.picture),
     };
   } catch {
     return null;
@@ -273,6 +432,9 @@ export async function fetchGoogleUserProfile(accessToken: string): Promise<{
       Authorization: `Bearer ${accessToken}`,
     },
   });
+  if (res.status === 401) {
+    clearCachedGoogleSession();
+  }
   if (!res.ok) {
     throw new Error(`Google UserInfo request failed (${res.status})`);
   }
@@ -283,16 +445,19 @@ export async function fetchGoogleUserProfile(accessToken: string): Promise<{
     email?: string;
     picture?: string;
   };
-  const sub = (data.sub || data.email || '').trim();
-  const displayName = (data.name || data.given_name || data.email || 'Google Player').trim();
+  const sub = (data.sub || data.email || '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  const displayName =
+    (data.name || data.given_name || data.email || 'Google Player')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .trim() || 'Google Player';
   if (!sub) {
     throw new Error('Google UserInfo response did not include a user subject ID');
   }
   return {
     sub,
     displayName,
-    email: data.email?.trim(),
-    picture: data.picture?.trim(),
+    email: data.email?.replace(/[\u0000-\u001F\u007F]/g, '').trim(),
+    picture: sanitizeHttpsUrl(data.picture),
   };
 }
 
@@ -311,9 +476,8 @@ export async function attemptSilentOrOneTapGoogleSignIn(
   const cached = loadCachedGoogleSession();
   if (cached) return cached;
 
-  const hasMock =
-    typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
-  const cleanClientId = clientId.trim() || (hasMock ? 'capy_mock_client_id' : '');
+  const mockToken = getAllowedMockGoogleOAuthToken();
+  const cleanClientId = clientId.trim() || (mockToken ? 'capy_mock_client_id' : '');
   if (!cleanClientId) return null;
 
   try {
@@ -322,12 +486,11 @@ export async function attemptSilentOrOneTapGoogleSignIn(
     return null;
   }
 
-  if (typeof window !== 'undefined' && window.__capyMockGoogleOAuthToken) {
+  if (mockToken) {
     try {
-      const accessToken = window.__capyMockGoogleOAuthToken;
-      const profile = await fetchGoogleUserProfile(accessToken);
+      const profile = await fetchGoogleUserProfile(mockToken);
       const session: GoogleOAuthSession = {
-        accessToken,
+        accessToken: mockToken,
         expiresAt: Date.now() + 3600 * 1000,
         sub: profile.sub,
         displayName: profile.displayName,
@@ -442,7 +605,8 @@ export async function signInWithGoogleOAuthPopup(
   prompt: 'consent' | 'select_account' | '' = 'select_account'
 ): Promise<GoogleOAuthSession> {
   setExplicitlySignedOut(false);
-  const cleanClientId = clientId.trim();
+  const mockToken = getAllowedMockGoogleOAuthToken();
+  const cleanClientId = clientId.trim() || (mockToken ? 'capy_mock_client_id' : '');
   if (!cleanClientId) {
     const err = new Error('GOOGLE_CLIENT_ID_REQUIRED');
     err.name = 'GOOGLE_CLIENT_ID_REQUIRED';
@@ -451,12 +615,11 @@ export async function signInWithGoogleOAuthPopup(
 
   await ensureGoogleIdentityScriptLoaded();
 
-  // Support E2E Playwright mock token injection when testing without an external popup
-  if (typeof window !== 'undefined' && window.__capyMockGoogleOAuthToken) {
-    const accessToken = window.__capyMockGoogleOAuthToken;
-    const profile = await fetchGoogleUserProfile(accessToken);
+  // Support E2E Playwright mock token injection strictly in dev/debug mode
+  if (mockToken) {
+    const profile = await fetchGoogleUserProfile(mockToken);
     const session: GoogleOAuthSession = {
-      accessToken,
+      accessToken: mockToken,
       expiresAt: Date.now() + 3600 * 1000,
       sub: profile.sub,
       displayName: profile.displayName,
@@ -509,11 +672,32 @@ export async function signInWithGoogleOAuthPopup(
   return session;
 }
 
+export function isValidGoogleDriveFileId(fileId: unknown): fileId is string {
+  if (typeof fileId !== 'string') return false;
+  const trimmed = fileId.trim();
+  if (!trimmed || trimmed.length > 256) return false;
+  if (trimmed === '.' || trimmed === '..' || trimmed.includes('..')) return false;
+  return /^[a-zA-Z0-9_-]{1,256}$/.test(trimmed);
+}
+
 /**
  * Client for reading and writing files inside the user's hidden, application-private
  * Google Drive `appDataFolder` (`https://www.googleapis.com/auth/drive.appdata`).
  */
 export class GoogleDriveAppDataClient {
+  private static assertValidFileId(fileId: unknown): string {
+    if (!isValidGoogleDriveFileId(fileId)) {
+      throw new Error('Invalid Google Drive file ID');
+    }
+    return fileId.trim();
+  }
+
+  private static handleAuthFailure(res: Response): void {
+    if (res.status === 401) {
+      clearCachedGoogleSession();
+    }
+  }
+
   static async findFileByName(
     accessToken: string,
     fileName: string
@@ -533,20 +717,27 @@ export class GoogleDriveAppDataClient {
         Authorization: `Bearer ${accessToken}`,
       },
     });
+    this.handleAuthFailure(res);
     if (!res.ok) {
       throw new Error(`Google Drive appDataFolder list failed (${res.status})`);
     }
     const body = (await res.json()) as { files?: DriveAppDataFileMetadata[] };
-    return body.files && body.files.length > 0 ? body.files[0] : null;
+    const first = body.files && body.files.length > 0 ? body.files[0] : null;
+    if (first && !isValidGoogleDriveFileId(first.id)) {
+      throw new Error('Invalid Google Drive file ID in response');
+    }
+    return first;
   }
 
   static async downloadJsonFile<T>(accessToken: string, fileId: string): Promise<T | null> {
-    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    const safeFileId = this.assertValidFileId(fileId);
+    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(safeFileId)}?alt=media`;
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
     });
+    this.handleAuthFailure(res);
     if (res.status === 404) return null;
     if (!res.ok) {
       throw new Error(`Google Drive appDataFolder download failed (${res.status})`);
@@ -558,12 +749,14 @@ export class GoogleDriveAppDataClient {
     accessToken: string,
     fileId: string
   ): Promise<Uint8Array | null> {
-    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`;
+    const safeFileId = this.assertValidFileId(fileId);
+    const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(safeFileId)}?alt=media`;
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
     });
+    this.handleAuthFailure(res);
     if (res.status === 404) return null;
     if (!res.ok) {
       throw new Error(`Google Drive binary download failed (${res.status})`);
@@ -577,12 +770,16 @@ export class GoogleDriveAppDataClient {
     payload: unknown,
     existingFileId?: string
   ): Promise<DriveAppDataFileMetadata> {
-    const boundary = `capy_drive_boundary_${Date.now().toString(36)}`;
+    const safeExistingId =
+      existingFileId !== undefined ? this.assertValidFileId(existingFileId) : undefined;
+    const boundary = `capy_drive_boundary_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
     const metadata: Record<string, unknown> = {
       name: fileName,
       mimeType: 'application/json',
     };
-    if (!existingFileId) {
+    if (!safeExistingId) {
       metadata.parents = ['appDataFolder'];
     }
 
@@ -595,22 +792,27 @@ export class GoogleDriveAppDataClient {
       `${JSON.stringify(payload)}\r\n` +
       `--${boundary}--`;
 
-    const endpoint = existingFileId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existingFileId)}?uploadType=multipart&fields=id,name,modifiedTime`
+    const endpoint = safeExistingId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(safeExistingId)}?uploadType=multipart&fields=id,name,modifiedTime`
       : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime`;
 
     const res = await fetch(endpoint, {
-      method: existingFileId ? 'PATCH' : 'POST',
+      method: safeExistingId ? 'PATCH' : 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
       body: multipartBody,
     });
+    this.handleAuthFailure(res);
     if (!res.ok) {
       throw new Error(`Google Drive appDataFolder upload failed (${res.status})`);
     }
-    return (await res.json()) as DriveAppDataFileMetadata;
+    const uploaded = (await res.json()) as DriveAppDataFileMetadata;
+    if (!uploaded || !isValidGoogleDriveFileId(uploaded.id)) {
+      throw new Error('Invalid Google Drive file ID in response');
+    }
+    return uploaded;
   }
 
   static async uploadBinaryFile(
@@ -619,12 +821,16 @@ export class GoogleDriveAppDataClient {
     bytes: Uint8Array,
     existingFileId?: string
   ): Promise<DriveAppDataFileMetadata> {
-    const boundary = `capy_drive_bin_${Date.now().toString(36)}`;
+    const safeExistingId =
+      existingFileId !== undefined ? this.assertValidFileId(existingFileId) : undefined;
+    const boundary = `capy_drive_bin_${Date.now().toString(36)}_${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
     const metadata: Record<string, unknown> = {
       name: fileName,
       mimeType: 'application/octet-stream',
     };
-    if (!existingFileId) {
+    if (!safeExistingId) {
       metadata.parents = ['appDataFolder'];
     }
 
@@ -640,21 +846,26 @@ export class GoogleDriveAppDataClient {
       type: `multipart/related; boundary=${boundary}`,
     });
 
-    const endpoint = existingFileId
-      ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(existingFileId)}?uploadType=multipart&fields=id,name,modifiedTime`
+    const endpoint = safeExistingId
+      ? `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(safeExistingId)}?uploadType=multipart&fields=id,name,modifiedTime`
       : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime`;
 
     const res = await fetch(endpoint, {
-      method: existingFileId ? 'PATCH' : 'POST',
+      method: safeExistingId ? 'PATCH' : 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
       body: bodyBlob,
     });
+    this.handleAuthFailure(res);
     if (!res.ok) {
       throw new Error(`Google Drive binary upload failed (${res.status})`);
     }
-    return (await res.json()) as DriveAppDataFileMetadata;
+    const uploaded = (await res.json()) as DriveAppDataFileMetadata;
+    if (!uploaded || !isValidGoogleDriveFileId(uploaded.id)) {
+      throw new Error('Invalid Google Drive file ID in response');
+    }
+    return uploaded;
   }
 }
