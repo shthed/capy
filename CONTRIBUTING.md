@@ -8,8 +8,8 @@ Thank you for your interest in contributing to **Capy** ([`https://github.com/sh
 
 ## Ways to Contribute
 
-- **Report Bugs**: Open a [Bug Report](https://github.com/capyboop/capy/issues/new/choose) with your browser/device/app version and reproduction steps.
-- **Suggest Features or Puzzle Ideas**: Use the [Feature Request or Puzzle Idea forms](https://github.com/capyboop/capy/issues/new/choose).
+- **Report Bugs**: Open a [Bug Report](https://github.com/capyboop/paint/issues/new/choose) with your browser/device/app version and reproduction steps.
+- **Suggest Features or Puzzle Ideas**: Use the [Feature Request or Puzzle Idea forms](https://github.com/capyboop/paint/issues/new/choose).
 - **Submit Pull Requests**: Fork `https://github.com/shthed/capy`, create a focused branch from `main`, and open a Pull Request using [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md).
 
 ---
