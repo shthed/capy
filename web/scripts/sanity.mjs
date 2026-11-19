@@ -35,6 +35,10 @@ const SKIP_DIRS = new Set([
 
 // M3B strict defaults:
 const DEFAULT_REQUIRE_PROJECT_MD = true;
+let DEFAULT_REQUIRE_AGENTS_MD = false;
+/* capy-dev-only:start */
+DEFAULT_REQUIRE_AGENTS_MD = true;
+/* capy-dev-only:end */
 const DEFAULT_ENFORCE_CHANNEL_ORDER = true;
 const DEFAULT_ENFORCE_EPIC_NAMING = true;
 const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
@@ -411,6 +415,7 @@ export function validatePrReadinessSpec(
   root,
   {
     requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
+    requireAgentsMd = DEFAULT_REQUIRE_AGENTS_MD,
     enforcePrReadinessSpec = DEFAULT_ENFORCE_PR_READINESS_SPEC,
   } = {}
 ) {
@@ -422,6 +427,7 @@ export function validatePrReadinessSpec(
     const absPath = path.join(resolvedRoot, relFile);
     if (!fs.existsSync(absPath)) {
       if (relFile === 'PROJECT.md' && !requireProjectMd) continue;
+      if (relFile === 'AGENTS.md' && !requireAgentsMd) continue;
       assert.fail(`Required governance doc missing: ${relFile}`);
     }
     const raw = fs.readFileSync(absPath, 'utf8');
@@ -475,6 +481,8 @@ export function validatePrReadinessSpec(
   return { scannedFiles };
 }
 
+const DEV_ONLY_ROOT_MD_FILES = new Set(['AGENTS.md', 'CAPYBOOP.md']);
+
 export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD } = {}) {
   const resolvedRoot = path.resolve(root);
   const rootMdFiles = fs
@@ -496,6 +504,7 @@ export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIR
   );
 
   for (const f of rootMdFiles) {
+    if (DEV_ONLY_ROOT_MD_FILES.has(f)) continue;
     if (f !== 'README.md') {
       assert.equal(
         readmeText.includes(`./${f}`),
@@ -517,6 +526,7 @@ export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIR
       fs.readFileSync(path.join(resolvedRoot, 'PROJECT.md'), 'utf8')
     );
     for (const f of rootMdFiles) {
+      if (DEV_ONLY_ROOT_MD_FILES.has(f)) continue;
       if (f !== 'LICENSE.md' && f !== 'PROJECT.md') {
         assert.equal(
           projectText.includes(`./${f}`),
