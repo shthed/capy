@@ -1,5 +1,7 @@
 package com.capypaint.capy
 
+import android.annotation.TargetApi
+import android.os.Build
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -429,5 +431,222 @@ class CapyAndroidBridgeTest {
         val second = CapyAndroidBridge.resolveHapticSpec("success")
         assertEquals(first, second)
         assertEquals(first.hashCode(), second.hashCode())
+    }
+
+    @Test
+    fun `isAllowedCapyDeepLink rejects userinfo spoofs and non-standard ports while accepting capyboop pages`() {
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capyboop.github.io/capy/#s=abc123"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com:443/#s=abc123"))
+
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://evil.example@capypaint.com/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com:8443/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capyboop.github.io/other-repo/#s=abc"))
+    }
+
+    @Test
+    fun `isAllowedShareTextUrl and export MIME helpers block unsafe schemes and MIME injection`() {
+        assertTrue(CapyAndroidBridge.isAllowedShareTextUrl("https://capypaint.com/#s=abc"))
+        assertTrue(CapyAndroidBridge.isAllowedShareTextUrl("http://localhost:3000/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedShareTextUrl("javascript:alert(1)"))
+        assertFalse(CapyAndroidBridge.isAllowedShareTextUrl("file:///etc/passwd"))
+        assertFalse(CapyAndroidBridge.isAllowedShareTextUrl("http://evil.example/phish"))
+        assertFalse(CapyAndroidBridge.isAllowedShareTextUrl("https://evil@capypaint.com/"))
+
+        assertEquals("image/png", CapyAndroidBridge.resolveAllowedExportMimeType(" image/PNG "))
+        assertEquals("application/octet-stream", CapyAndroidBridge.resolveAllowedExportMimeType("text/html"))
+        assertEquals("application/octet-stream", CapyAndroidBridge.resolveAllowedExportMimeType("image/png\r\nX-Injected: 1"))
+
+        assertEquals("image/webp", CapyAndroidBridge.normalizeSharedImageMimeType("image/webp;charset=utf-8"))
+        assertEquals("image/png", CapyAndroidBridge.normalizeSharedImageMimeType("image/svg+xml;xss=1"))
+        assertTrue(CapyAndroidBridge.isAllowedSharedImageDataUrl("data:image/png;base64,AA=="))
+        assertFalse(CapyAndroidBridge.isAllowedSharedImageDataUrl("data:image/svg+xml,<svg/>"))
+        assertFalse(CapyAndroidBridge.isAllowedSharedImageDataUrl("javascript:alert(1)"))
+
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.BLOCK,
+            CapyAndroidBridge.classifyWebViewNavigation("https://evil@appassets.androidplatform.net/assets/www/index.html"),
+        )
+        assertEquals(
+            CapyAndroidBridge.WebViewNavigationAction.OPEN_EXTERNAL,
+            CapyAndroidBridge.classifyWebViewNavigation("https://appassets.androidplatform.net:8443/"),
+        )
+        assertEquals(
+            "Hello Capy",
+            CapyAndroidBridge.sanitizeShareTitle("  Hello\r\n\u0000\tCapy  "),
+        )
+        assertEquals(
+            "Shared Photo",
+            CapyAndroidBridge.sanitizeShareTitle("\n\t", fallback = "Shared Photo"),
+        )
+    }
+
+    @Test
+    fun `isTrustedPageUrl and isTrustedBridgeOrigin strictly permit only appassets origin`() {
+        assertTrue(CapyAndroidBridge.isTrustedPageUrl("https://appassets.androidplatform.net/assets/www/index.html"))
+        assertTrue(CapyAndroidBridge.isTrustedPageUrl("https://appassets.androidplatform.net/assets/www/index.html?skipTutorial=1"))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl(null))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl("about:blank"))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl("http://appassets.androidplatform.net/assets/www/index.html"))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl("https://appassets.androidplatform.net.evil.com/assets/www/index.html"))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl("https://evil@appassets.androidplatform.net/assets/www/index.html"))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl("file:///assets/www/index.html"))
+        assertFalse(CapyAndroidBridge.isTrustedPageUrl("javascript:alert(1)"))
+
+        assertTrue(CapyAndroidBridge.isTrustedBridgeOrigin("https://appassets.androidplatform.net", isMainFrame = true))
+        assertFalse(CapyAndroidBridge.isTrustedBridgeOrigin("https://appassets.androidplatform.net", isMainFrame = false))
+        assertFalse(CapyAndroidBridge.isTrustedBridgeOrigin("https://appassets.androidplatform.net/assets/", isMainFrame = true))
+        assertFalse(CapyAndroidBridge.isTrustedBridgeOrigin("https://appassets.androidplatform.net?foo=1", isMainFrame = true))
+        assertFalse(CapyAndroidBridge.isTrustedBridgeOrigin("https://capypaint.com", isMainFrame = true))
+        assertFalse(CapyAndroidBridge.isTrustedBridgeOrigin("https://appassets.androidplatform.net.evil.com", isMainFrame = true))
+        assertFalse(CapyAndroidBridge.isTrustedBridgeOrigin(null, isMainFrame = true))
+    }
+
+    @Test
+    fun `shouldBlockDocumentRequest blocks untrusted mainFrame and iframe loads while permitting appassets and subresources`() {
+        assertFalse(CapyAndroidBridge.shouldBlockDocumentRequest("https://appassets.androidplatform.net/assets/www/index.html", true, "document"))
+        assertFalse(CapyAndroidBridge.shouldBlockDocumentRequest("about:blank", false, "iframe"))
+        assertFalse(CapyAndroidBridge.shouldBlockDocumentRequest("https://accounts.google.com/gsi/client", false, "script"))
+        assertFalse(CapyAndroidBridge.shouldBlockDocumentRequest("https://capypaint.com/api", false, "empty"))
+
+        assertTrue(CapyAndroidBridge.shouldBlockDocumentRequest("https://evil.example/phish.html", true, "document"))
+        assertTrue(CapyAndroidBridge.shouldBlockDocumentRequest("https://evil.example/frame.html", false, "iframe"))
+        assertTrue(CapyAndroidBridge.shouldBlockDocumentRequest("https://evil.example/frame.html", false, "frame"))
+        assertTrue(CapyAndroidBridge.shouldBlockDocumentRequest("https://evil.example/doc.html", false, "DOCUMENT"))
+    }
+
+    @Test
+    fun `decideSnapshotPushAction prevents blind overwrites when unseen remote JSON exists`() {
+        assertTrue(CapyAndroidBridge.looksLikeJsonObject("""{"version":2}"""))
+        assertFalse(CapyAndroidBridge.looksLikeJsonObject("not-json"))
+        assertFalse(CapyAndroidBridge.looksLikeJsonObject("   "))
+
+        assertEquals(
+            CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING,
+            CapyAndroidBridge.decideSnapshotPushAction(
+                slotKey = "capy_cloud_manifest_v2",
+                existingRemotePayload = null,
+                lastKnownRemotePayload = null,
+                incomingPayload = """{"version":2,"entries":{"a":1}}""",
+            ),
+        )
+        assertEquals(
+            CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING,
+            CapyAndroidBridge.decideSnapshotPushAction(
+                slotKey = "capy_cloud_manifest_v2",
+                existingRemotePayload = "corrupt-text",
+                lastKnownRemotePayload = null,
+                incomingPayload = """{"version":2,"entries":{"a":1}}""",
+            ),
+        )
+        assertEquals(
+            CapyAndroidBridge.SnapshotPushDecision.SKIP_IDENTICAL,
+            CapyAndroidBridge.decideSnapshotPushAction(
+                slotKey = "capy_cloud_manifest_v2",
+                existingRemotePayload = """{"version":2,"entries":{"a":1}}""",
+                lastKnownRemotePayload = null,
+                incomingPayload = """{"version":2,"entries":{"a":1}}""",
+            ),
+        )
+        assertEquals(
+            CapyAndroidBridge.SnapshotPushDecision.MERGE_UNSEEN_REMOTE,
+            CapyAndroidBridge.decideSnapshotPushAction(
+                slotKey = "capy_cloud_manifest_v2",
+                existingRemotePayload = """{"version":2,"entries":{"remote":1}}""",
+                lastKnownRemotePayload = """{"version":2,"entries":{"older":1}}""",
+                incomingPayload = """{"version":2,"entries":{"local":1}}""",
+            ),
+        )
+        assertEquals(
+            CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING,
+            CapyAndroidBridge.decideSnapshotPushAction(
+                slotKey = "capy_cloud_manifest_v2",
+                existingRemotePayload = """{"version":2,"entries":{"remote":1}}""",
+                lastKnownRemotePayload = """{"version":2,"entries":{"remote":1}}""",
+                incomingPayload = """{"version":2,"entries":{"merged":1}}""",
+            ),
+        )
+        assertEquals(
+            CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING,
+            CapyAndroidBridge.decideSnapshotPushAction(
+                slotKey = "pgblob_save_1_part_0",
+                existingRemotePayload = "AAAA",
+                lastKnownRemotePayload = null,
+                incomingPayload = "BBBB",
+            ),
+        )
+    }
+
+    @Test
+    fun `concurrent saveBackupToDir and loadBackupFromDir serialize safely without tmp residue`() {
+        val backupDir = tempFolder.newFolder("capy_concurrent_io")
+        val threadCount = 8
+        val iterations = 25
+        val errors = java.util.concurrent.CopyOnWriteArrayList<Throwable>()
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val threads = (0 until threadCount).map { tid ->
+            Thread {
+                try {
+                    latch.await()
+                    for (iter in 0 until iterations) {
+                        val payload = """{"thread":$tid,"iter":$iter,"pad":"${"x".repeat(64)}"}"""
+                        val saved = CapyAndroidBridge.saveBackupToDir(
+                            dir = backupDir,
+                            key = "capy_cloud_manifest_v2",
+                            data = payload,
+                        )
+                        assertTrue(saved)
+                        val readBack = CapyAndroidBridge.loadBackupFromDir(
+                            dir = backupDir,
+                            key = "capy_cloud_manifest_v2",
+                        )
+                        assertNotNull(readBack)
+                        assertTrue(readBack!!.startsWith("""{"thread":""") && readBack.endsWith("""xxx"}"""))
+                    }
+                } catch (t: Throwable) {
+                    errors.add(t)
+                }
+            }
+        }
+        threads.forEach { it.start() }
+        latch.countDown()
+        threads.forEach { it.join(15_000) }
+        assertTrue("Unexpected thread errors: $errors", errors.isEmpty())
+
+        val remainingFiles = backupDir.listFiles()?.map { it.name } ?: emptyList()
+        assertEquals(listOf("capy_cloud_manifest_v2.json"), remainingFiles)
+        assertTrue(remainingFiles.none { it.endsWith(".tmp") })
+    }
+
+    @Test
+    fun `shouldUseAtomicNioMove enforces API 26 Build_VERSION_CODES_O threshold`() {
+        assertFalse(CapyAndroidBridge.shouldUseAtomicNioMove(24))
+        assertFalse(CapyAndroidBridge.shouldUseAtomicNioMove(25))
+        assertTrue(CapyAndroidBridge.shouldUseAtomicNioMove(Build.VERSION_CODES.O))
+        assertTrue(CapyAndroidBridge.shouldUseAtomicNioMove(Build.VERSION_CODES.TIRAMISU))
+    }
+
+    @Test
+    @TargetApi(Build.VERSION_CODES.O)
+    fun `Api26FileMover moveReplacing atomically replaces existing target without tmp residue`() {
+        val dir = tempFolder.newFolder("capy_api26_mover")
+        val target = File(dir, "snapshot.json")
+        val src1 = File.createTempFile("capy_m1.", ".tmp", dir)
+        src1.writeText("""{"v":1}""", Charsets.UTF_8)
+        assertTrue(CapyAndroidBridge.Api26FileMover.moveReplacing(src1, target))
+        assertEquals("""{"v":1}""", target.readText(Charsets.UTF_8))
+        assertFalse(src1.exists())
+
+        val src2 = File.createTempFile("capy_m2.", ".tmp", dir)
+        src2.writeText("""{"v":2}""", Charsets.UTF_8)
+        assertTrue(CapyAndroidBridge.Api26FileMover.moveReplacing(src2, target))
+        assertEquals("""{"v":2}""", target.readText(Charsets.UTF_8))
+        assertFalse(src2.exists())
+
+        assertTrue(CapyAndroidBridge.saveBackupToDir(dir, "fallback_check", """{"mode":"rename_1"}"""))
+        assertTrue(CapyAndroidBridge.saveBackupToDir(dir, "fallback_check", """{"mode":"rename_2"}"""))
+        assertEquals("""{"mode":"rename_2"}""", CapyAndroidBridge.loadBackupFromDir(dir, "fallback_check"))
+
+        val names = dir.listFiles()?.map { it.name }?.sorted() ?: emptyList()
+        assertEquals(listOf("fallback_check.json", "snapshot.json"), names)
     }
 }

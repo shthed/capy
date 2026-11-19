@@ -131,7 +131,7 @@ To prevent narrow, 1-pixel serpentine filaments and jagged staircases along grad
 $$\frac{P}{A} > \tau_{\text{ratio}}$$
 
 * Strategy thresholds (`maxPerimeterToAreaRatio`): `1.8` for `PAINTERLY`, `2.0` for `LINE_ART` and `POSTERIZED`, and `2.2` for `MOSAIC_CEL`.
-* Any region below `minRegionArea`, exceeding `maxPerimeterToAreaRatio`, or pruned to satisfy `maxRegions` is merged into its most harmonious neighboring region in $O(\text{area})$ amortized time via Disjoint-Set Union-Find root tracking.
+* Any region below `minRegionArea` (`AutoPuzzleGenerator` honors explicit `config.minRegionArea >= 12`), exceeding `maxPerimeterToAreaRatio`, or pruned to satisfy `maxRegions` is merged cleanly into its most harmonious neighboring region in Disjoint-Set Union-Find root tracking, using an $O(R \log R)$ `Int32Array` binary min-heap keyed by `(area, rootId)` with `isolatedRoots` tracking in Phase 2 so `maxRegions` (including `<= 2000` Max Detail caps on intricate artwork) is strictly satisfied without merge-count truncation.
 
 ### 4.3 Interior Centroid Placement (Pole of Inaccessibility)
 Number labels are never placed at bounding box centers (which often fall outside crescent or concave shapes):

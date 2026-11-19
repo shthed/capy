@@ -1,13 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
-import { StorageService } from './services/StorageService';
+import { StorageService, isDebugStorageExposed } from './services/StorageService';
 import { PwaService } from './services/PwaService';
 import { resolveScopedStorageKey } from './services/StorageNamespace';
 import './index.css';
 
 if (typeof window !== 'undefined') {
-  (window as any).capyStorage = StorageService;
+  if (isDebugStorageExposed()) {
+    (window as unknown as { capyStorage?: typeof StorageService }).capyStorage = StorageService;
+  }
   (window as any).capyPwa = PwaService;
 
   const PRELOAD_RELOAD_GUARD_KEY = 'capy_preload_reload_v1';

@@ -137,6 +137,7 @@ export interface CloudLibrarySyncSummary {
   mergedRegionsFromCloud: number;
   pushedToCloud: boolean;
   cloudBackend: CloudBackendKind;
+  hasPendingLocalChanges?: boolean;
 }
 
 export interface CloudSaveProvider {

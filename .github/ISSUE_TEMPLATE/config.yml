@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Play Capy Paint Live (capypaint.com)
+    url: https://capypaint.com/
+    about: Open the live web app to check if an issue is already fixed in production.
+  - name: Privacy Policy & Data Safety
+    url: https://capypaint.com/privacy-policy.html
+    about: Review local-first photo processing and optional Google Drive or Play Games sync disclosures.

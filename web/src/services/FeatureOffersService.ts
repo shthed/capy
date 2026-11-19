@@ -53,7 +53,7 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     id: 'create_gallery',
     title: 'Daily Puzzle & Gallery',
     message:
-      'Open Create in the menu for today’s Daily Puzzle, extra pictures, and new ideas.',
+      'Open Create in the menu for today’s Daily Puzzle, extra pictures, and photo puzzles.',
     tutorialStepIndex: 8,
   },
   photo_upload: {
