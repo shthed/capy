@@ -90,21 +90,23 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
           data-filled-count={filledCount}
           onClick={onOpenSaves}
           title="View saves and snapshots"
-          className={`flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer flex-shrink-0 ${
+          className={`flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer min-w-0 max-w-full flex-shrink ${
             isCompleted
               ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-300'
               : 'bg-slate-900/80 text-amber-400 border border-slate-700/60 hover:bg-slate-800/80'
           }`}
         >
           {activeTitle ? (
-            <span className="truncate max-w-[38px] min-[390px]:max-w-[74px] sm:max-w-[200px]">
+            <span data-testid="topbar-saves-title" className="truncate min-w-0 flex-1">
               {activeTitle}
             </span>
           ) : (
-            <span>Capy Paint</span>
+            <span data-testid="topbar-saves-title" className="truncate min-w-0">
+              Capy Paint
+            </span>
           )}
-          <span>•</span>
-          <span>{progressPercentage}%</span>
+          <span className="flex-shrink-0">•</span>
+          <span className="flex-shrink-0 whitespace-nowrap">{progressPercentage}%</span>
         </button>
 
         {releaseChannelBadge && onOpenReleaseChannel && (
