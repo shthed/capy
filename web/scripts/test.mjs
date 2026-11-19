@@ -15378,6 +15378,17 @@ async function runBrowserBasicsSuite() {
       true,
       'Settings button must fit inside right lane and 360px viewport'
     );
+
+    const titleOverflow = await mobileTopbarPage.getByTestId('topbar-saves-title').evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      text: el.textContent || '',
+    }));
+    assert.equal(
+      titleOverflow.scrollWidth <= titleOverflow.clientWidth + 1,
+      true,
+      `topbar-saves-title ("${titleOverflow.text}") should expand to fit without premature clipping (scrollWidth=${titleOverflow.scrollWidth}, clientWidth=${titleOverflow.clientWidth})`
+    );
     await assertSpotlightAligned(mobileTopbarPage, 'tutorial');
     await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step1.png');
     const normalDocOverflow = await mobileTopbarPage.evaluate(() => ({

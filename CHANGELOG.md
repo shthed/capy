@@ -1,3 +1,7 @@
+### 3.0.40 - 2026-11-19 (Alpha)
+
+- Allow the `GameTopBar` puzzle save title pill (`topbar-saves-btn` / `topbar-saves-title`) to expand across available left-lane width on mobile and desktop instead of truncating at fixed `38px`/`74px`/`200px` caps, and add a `360x780` Playwright overflow assertion in `web/scripts/test.mjs` [#590](https://github.com/shthed/capy/pull/590)
+
 ### 3.0.39 - 2026-11-19 (Beta)
 
 - Replace the daily cron `schedule` in `.github/workflows/regenerate-puzzles.yml` with on-demand `workflow_dispatch` and path-filtered `push` triggers on `beta` (covering puzzle source assets, `web/src/engine/**`, `generate-sample-saves.mjs`, codec/storage/worker/daily-service files, `web/src/types/index.ts`, and the workflow file while excluding `.capy` archives, `presets/**`, and app icons), add `yaml.safe_load` trigger assertions in `web/scripts/test.mjs`, and document the trigger behavior in `DEV.md` and `TESTING.md` [#589](https://github.com/shthed/capy/pull/589)
