@@ -127,17 +127,109 @@ jobs:
           wranglerVersion: '4.160.1'
           command: deploy
 
-      - name: Verify capypaint.com /api/health
+      - name: Sync Edge HTTPS & www 301 Redirect
+        if: steps.creds.outputs.enabled == 'true'
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          CF_API="https://api.cloudflare.com/client/v4"
+          CF_TOKEN="$(printf '%s' "${CF_TOKEN}" | tr -d '[:space:]')"
+          CF_ACCOUNT="$(printf '%s' "${CF_ACCOUNT}" | tr -d '[:space:]')"
+
+          api() {
+            local body
+            body="$(curl -sS -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' "$@")"
+            if [ "$(printf '%s' "${body}" | jq -r '.success // false')" != "true" ]; then
+              echo "::error::Cloudflare API call failed: $(printf '%s' "${body}" | jq -c '.errors // .' 2>/dev/null || echo 'non-JSON response')" >&2
+              return 1
+            fi
+            printf '%s' "${body}"
+          }
+
+          ZONES_JSON="$(api "${CF_API}/zones?name=capypaint.com&account.id=${CF_ACCOUNT}")"
+          ZONE_ID="$(printf '%s' "${ZONES_JSON}" | jq -r '.result[0].id // empty')"
+          if [ -z "${ZONE_ID}" ]; then
+            echo "::error::Zone capypaint.com not found in this account."
+            exit 1
+          fi
+
+          # 1. Enforce Always Use HTTPS
+          api -X PATCH "${CF_API}/zones/${ZONE_ID}/settings/always_use_https" \
+            -d '{"value":"on"}' > /dev/null
+          echo "Enabled Always Use HTTPS on capypaint.com."
+
+          # 2. Enforce www.capypaint.com -> https://capypaint.com 301 Single Redirect
+          ENTRYPOINT_RESP="$(curl -sS -H "Authorization: Bearer ${CF_TOKEN}" -H 'Content-Type: application/json' \
+            "${CF_API}/zones/${ZONE_ID}/rulesets/phases/http_request_dynamic_redirect/entrypoint")"
+          if [ "$(printf '%s' "${ENTRYPOINT_RESP}" | jq -r '.success // false')" = "true" ]; then
+            EXISTING_RULES="$(printf '%s' "${ENTRYPOINT_RESP}" | jq -c '[.result.rules[]? | select(.ref != "capy_www_redirect" and .description != "Redirect www.capypaint.com to capypaint.com")]')"
+          else
+            EXISTING_RULES='[]'
+          fi
+
+          WWW_RULE="$(jq -nc '{
+            ref: "capy_www_redirect",
+            description: "Redirect www.capypaint.com to capypaint.com",
+            enabled: true,
+            expression: "(http.host eq \"www.capypaint.com\")",
+            action: "redirect",
+            action_parameters: {
+              from_value: {
+                status_code: 301,
+                target_url: {
+                  expression: "concat(\"https://capypaint.com\", http.request.uri.path)"
+                },
+                preserve_query_string: true
+              }
+            }
+          }')"
+
+          PAYLOAD="$(jq -nc --argjson existing "${EXISTING_RULES}" --argjson rule "${WWW_RULE}" '{rules: ($existing + [$rule])}')"
+          api -X PUT "${CF_API}/zones/${ZONE_ID}/rulesets/phases/http_request_dynamic_redirect/entrypoint" \
+            -d "${PAYLOAD}" > /dev/null
+          echo "Synced www.capypaint.com -> https://capypaint.com 301 Single Redirect rule."
+
+      - name: Verify capypaint.com /api/health & edge redirects
         if: steps.creds.outputs.enabled == 'true'
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5 6 7 8 9 10; do
             if BODY="$(curl -fsSL --max-time 10 https://capypaint.com/api/health)" && node -e 'const j = JSON.parse(process.argv[1]); if (j.ok !== true) process.exit(1);' "${BODY}"; then
               echo "Verified https://capypaint.com/api/health: ${BODY}"
-              exit 0
+              break
+            fi
+            if [ "${attempt}" -eq 10 ]; then
+              echo "ERROR: https://capypaint.com/api/health check failed after 10 attempts." >&2
+              exit 1
             fi
             echo "Waiting for Cloudflare edge propagation (attempt ${attempt}/10)..."
             sleep 5
           done
-          echo "ERROR: https://capypaint.com/api/health check failed after 10 attempts." >&2
-          exit 1
+
+          check_redirect() {
+            local url="$1"
+            local expected_prefix="$2"
+            local headers status location
+            for attempt in 1 2 3 4 5 6; do
+              headers="$(curl -sSI --max-time 10 "${url}" | tr -d '\r')"
+              status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
+              location="$(printf '%s\n' "${headers}" | awk 'tolower($1)=="location:" {print $2; exit}')"
+              if [ "${status}" = "301" ] || [ "${status}" = "308" ]; then
+                case "${location}" in
+                  "${expected_prefix}"*)
+                    echo "Verified ${url} -> ${status} ${location}"
+                    return 0
+                    ;;
+                esac
+              fi
+              echo "Waiting for ${url} redirect propagation (attempt ${attempt}/6, got ${status} -> ${location:-none})..."
+              sleep 5
+            done
+            echo "ERROR: ${url} did not redirect to ${expected_prefix}* (last: ${status} -> ${location:-none})" >&2
+            exit 1
+          }
+
+          check_redirect "http://capypaint.com/" "https://capypaint.com/"
+          check_redirect "https://www.capypaint.com/" "https://capypaint.com/"
