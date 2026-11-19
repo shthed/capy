@@ -819,8 +819,8 @@ async function runCodecAndEngineTests() {
       /missing active channel heading for 3\.0\.4/
     );
 
-    const validEpicUrl = 'https://github.com/' + 'capyboop/capy/issues/477';
-    const validPrRef = '[' + '#482](' + 'https://github.com/' + 'capyboop/capy/pull/482)';
+    const validEpicUrl = 'https://github.com/' + 'capyboop/paint/issues/477';
+    const validPrRef = '[' + '#482](' + 'https://github.com/' + 'capyboop/paint/pull/482)';
     validateEpicNaming(`See [EPIC-2](${validEpicUrl}), plain EPIC-2, and ${validPrRef}`, 'DEV.md');
     for (const badNum of ['476', '477', '480']) {
       assert.throws(
@@ -828,7 +828,7 @@ async function runCodecAndEngineTests() {
         /EPIC-N/
       );
     }
-    const badIssueLink = '[' + '#481](' + 'https://github.com/' + 'capyboop/capy/issues/481)';
+    const badIssueLink = '[' + '#481](' + 'https://github.com/' + 'capyboop/paint/issues/481)';
     assert.throws(() => validateEpicNaming(`Link ${badIssueLink}`, 'ROADMAP.md'), /EPIC-N/);
     const badCombinedEpic = '[EPIC-2 (' + '#477)](' + validEpicUrl + ')';
     assert.throws(() => validateEpicNaming(`Combined ${badCombinedEpic}`, 'AGENTS.md'), /EPIC-N/);
@@ -961,7 +961,7 @@ async function runCodecAndEngineTests() {
           '- Improved color layout with Tailwind bg-amber-400/20 accents and clean checks.',
           '',
           '- **Beta**: https://capypaint.com/beta/',
-          '- **Related PRs**: [#20](https://github.com/capyboop/capy/pull/20) [#100](https://github.com/capyboop/capy/pull/100)',
+          '- **Related PRs**: [#20](https://github.com/capyboop/paint/pull/20) [#100](https://github.com/capyboop/paint/pull/100)',
           '',
           '### PR Readiness Score: 99% (threshold >= 95%)',
           '',
@@ -1264,7 +1264,7 @@ async function runCodecAndEngineTests() {
           '* 2 points for rollout timing.',
           'Review these 5 points before merging.',
           'Score: 98% (-2% docs, -5% follow-up).',
-          'See https://github.com/capyboop/capy/pull/20 and https://github.com/capyboop/capy/pull/100',
+          'See https://github.com/capyboop/paint/pull/20 and https://github.com/capyboop/paint/pull/100',
           'Classes bg-amber-400/20 width="100%" ~15--20% 0.5x--20x 1/20th date 2026/01/20 100% offline per_page: 100',
         ].join('\n'),
         'false-positive-guard.md'
@@ -1659,9 +1659,9 @@ async function runCodecAndEngineTests() {
       fs.mkdirSync(path.join(tmpStrictRepo, 'web/public'), { recursive: true });
       fs.mkdirSync(path.join(tmpStrictRepo, '.github/ISSUE_TEMPLATE'), { recursive: true });
       const cleanSettingsTag =
-        '<a href="https://github.com/capyboop/capy/issues/new/choose" data-testid="about-report-issue-link">Report</a>';
+        '<a href="https://github.com/capyboop/paint/issues/new/choose" data-testid="about-report-issue-link">Report</a>';
       const cleanPrivacyHtml =
-        '<html><body><a href="https://github.com/capyboop/capy/issues">Issues</a></body></html>';
+        '<html><body><a href="https://github.com/capyboop/paint/issues">Issues</a></body></html>';
       const cleanIssueConfig = 'contact_links:\n  - url: https://capypaint.com/\n';
       const settingsPath = path.join(tmpStrictRepo, 'web/src/components/SettingsModal.tsx');
       const privacyPath = path.join(tmpStrictRepo, 'web/public/privacy-policy.html');
@@ -1693,13 +1693,13 @@ async function runCodecAndEngineTests() {
 
       fs.writeFileSync(
         settingsPath,
-        '<a onClick={() => console.log(1)} href="https://github.com/capyboop/capy/issues/new/choose" data-testid="about-report-issue-link">Report</a>',
+        '<a onClick={() => console.log(1)} href="https://github.com/capyboop/paint/issues/new/choose" data-testid="about-report-issue-link">Report</a>',
         'utf8'
       );
       runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true });
       fs.writeFileSync(
         settingsPath,
-        '<a href="https://github.com/capyboop/capy/issuesevil" data-testid="about-report-issue-link">Report</a>',
+        '<a href="https://github.com/capyboop/paint/issuesevil" data-testid="about-report-issue-link">Report</a>',
         'utf8'
       );
       assert.throws(
@@ -1719,12 +1719,12 @@ async function runCodecAndEngineTests() {
       );
       fs.writeFileSync(
         privacyPath,
-        '<html><body><a href="https://github.com/capyboop/capy/issues">Issues</a><a href="https://github.com/capyboop/capyevil">Evil</a></body></html>',
+        '<html><body><a href="https://github.com/capyboop/paint/issues">Issues</a><a href="https://github.com/capyboop/paintevil">Evil</a></body></html>',
         'utf8'
       );
       assert.throws(
         () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
-        /privacy-policy\.html must not link outside capyboop\/capy/
+        /privacy-policy\.html must not link outside capyboop\/paint/
       );
       fs.writeFileSync(privacyPath, cleanPrivacyHtml, 'utf8');
 
@@ -1735,12 +1735,12 @@ async function runCodecAndEngineTests() {
       );
       fs.writeFileSync(
         bugTemplatePath,
-        'name: Bug\nabout: https://github.com/capyboop/capyevil\n',
+        'name: Bug\nabout: https://github.com/capyboop/paintevil\n',
         'utf8'
       );
       assert.throws(
         () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
-        /ISSUE_TEMPLATE\/bug_report\.yml must not link outside capyboop\/capy/
+        /ISSUE_TEMPLATE\/bug_report\.yml must not link outside capyboop\/paint/
       );
       fs.writeFileSync(bugTemplatePath, 'name: Bug Report\n', 'utf8');
 
@@ -3619,7 +3619,7 @@ async function runCodecAndEngineTests() {
     const transformedOnce = transformPersonaContent(sampleDoc);
     assert.equal(
       transformedOnce,
-      'Repo https://github.com/capyboop/capy (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
+      'Repo https://github.com/capyboop/paint (`capyboop`) #482 #477 Sprint 1 preview https://capypaint.com/'
     );
     assert.equal(transformPersonaContent(transformedOnce), transformedOnce);
     const samplePrEpicDoc =
@@ -3635,11 +3635,11 @@ async function runCodecAndEngineTests() {
       'Capyboop CAPYBOOP capyboop'
     );
     const publicIssuesDoc =
-      '[#2](https://github.com/capyboop/capy/issues/2) [#5](https://github.com/capyboop/capy/issues/5?q=1) [#20](https://github.com/capyboop/capy/issues/20) [#481](https://github.com/capyboop/capy/issues/481) [#2](https://github.com/shthed/capy/issues/2)';
+      '[#2](https://github.com/capyboop/paint/issues/2) [#5](https://github.com/capyboop/paint/issues/5?q=1) [#20](https://github.com/capyboop/paint/issues/20) [#481](https://github.com/capyboop/paint/issues/481) [#2](https://github.com/shthed/capy/issues/2)';
     const transformedIssuesDoc = transformPersonaContent(publicIssuesDoc);
     assert.equal(
       transformedIssuesDoc,
-      '[#2](https://github.com/capyboop/capy/issues/2) [#5](https://github.com/capyboop/capy/issues/5?q=1) #20 #481 #2'
+      '[#2](https://github.com/capyboop/paint/issues/2) [#5](https://github.com/capyboop/paint/issues/5?q=1) #20 #481 #2'
     );
     assert.equal(transformPersonaContent(transformedIssuesDoc), transformedIssuesDoc);
     const guideBarDoc =
@@ -3675,7 +3675,7 @@ async function runCodecAndEngineTests() {
     );
     assert.equal(
       sanitizeCommitMessage('Add Cloudflare Worker for shthed/capy (#482)\n\nCo-authored-by: shthed'),
-      'Add Cloudflare Worker for capyboop/capy'
+      'Add Cloudflare Worker for capyboop/paint'
     );
     const tmpLeakCheck = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-leak-check-'));
     try {
@@ -3721,7 +3721,7 @@ async function runCodecAndEngineTests() {
       );
       const stagedReadme = fs.readFileSync(path.join(tmpCleanStage, 'README.md'), 'utf8');
       assert.equal(stagedReadme.includes('capyboop.github.io/capy/beta/'), false);
-      assert.equal(stagedReadme.includes('https://github.com/capyboop/capy/releases'), true);
+      assert.equal(stagedReadme.includes('https://github.com/capyboop/paint/releases'), true);
       const stagedTodo = fs.readFileSync(path.join(tmpCleanStage, 'TODO.md'), 'utf8');
       assert.equal(stagedTodo.includes('CAPYBOOP_SYNC_TOKEN'), false);
       assert.equal(stagedTodo.includes('capyboop.github.io/capy/beta'), false);
@@ -3740,7 +3740,7 @@ async function runCodecAndEngineTests() {
         'utf8'
       );
       assert.equal(
-        stagedRedirects.includes('https://github.com/capyboop/capy/releases/latest/download/capy.apk'),
+        stagedRedirects.includes('https://github.com/capyboop/paint/releases/latest/download/capy.apk'),
         true
       );
       assert.equal(fs.existsSync(path.join(tmpCleanStage, 'AGENTS.md')), false);
@@ -3769,9 +3769,9 @@ async function runCodecAndEngineTests() {
         'utf8'
       );
       assert.equal(
-        stagedPrivacy.includes('https://github.com/capyboop/capy/issues'),
+        stagedPrivacy.includes('https://github.com/capyboop/paint/issues'),
         true,
-        'privacy-policy.html must link to capyboop/capy/issues'
+        'privacy-policy.html must link to capyboop/paint/issues'
       );
       const stagedSanityMod = await import(
         pathToFileURL(path.join(tmpCleanStage, 'web/scripts/sanity.mjs')).href
@@ -8380,7 +8380,7 @@ async function runCodecAndEngineTests() {
     }
 
     // Verify regenerate-puzzles.yml triggers only on workflow_dispatch or path-filtered pushes to beta (no schedule).
-    // Note: regenerate-puzzles.yml is a dev-only workflow stripped from clean-room capyboop/capy exports.
+    // Note: regenerate-puzzles.yml is a dev-only workflow stripped from clean-room capyboop/paint exports.
     const regenWorkflowPath = path.resolve(projectRoot, '../.github/workflows/regenerate-puzzles.yml');
     if (fs.existsSync(regenWorkflowPath)) {
       const regenWorkflow = parsedWorkflows?.['regenerate-puzzles.yml'];
@@ -8550,7 +8550,7 @@ async function runCodecAndEngineTests() {
       );
       fs.writeFileSync(
         path.join(tmpCompileRepo, 'CHANGELOG.md'),
-        `### 3.0.7 - 2026-11-12 (Beta)\n\n- Beta item [#495](https://github.com/capyboop/capy/pull/495)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod item [#488](https://github.com/capyboop/capy/pull/488)\n`,
+        `### 3.0.7 - 2026-11-12 (Beta)\n\n- Beta item [#495](https://github.com/capyboop/paint/pull/495)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod item [#488](https://github.com/capyboop/paint/pull/488)\n`,
         'utf8'
       );
       fs.writeFileSync(path.join(tmpCompileRepo, '.changelog/README.md'), '# Fragments\n', 'utf8');
@@ -8597,7 +8597,7 @@ async function runCodecAndEngineTests() {
       // Refuse promoting an (Alpha) top heading
       fs.writeFileSync(
         path.join(tmpCompileRepo, 'CHANGELOG.md'),
-        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- Alpha preview [#498](https://github.com/capyboop/capy/pull/498)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod [#488](https://github.com/capyboop/capy/pull/488)\n`,
+        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- Alpha preview [#498](https://github.com/capyboop/paint/pull/498)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod [#488](https://github.com/capyboop/paint/pull/488)\n`,
         'utf8'
       );
       assert.throws(() => compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true }));
@@ -11688,9 +11688,9 @@ async function runBrowserBasicsSuite() {
     assert.equal(privacyRes?.status(), 200);
     assert.equal((await page.evaluate(() => document.body.innerText)).includes('Google Play Data Safety'), true);
     assert.equal(
-      await page.locator('a[href="https://github.com/capyboop/capy/issues"]').count(),
+      await page.locator('a[href="https://github.com/capyboop/paint/issues"]').count(),
       1,
-      'privacy-policy.html must link to https://github.com/capyboop/capy/issues'
+      'privacy-policy.html must link to https://github.com/capyboop/paint/issues'
     );
 
     let workerRequestedOnBoot = false;
@@ -12748,8 +12748,8 @@ async function runBrowserBasicsSuite() {
     assert.equal(await page.getByTestId('about-report-issue-link').isVisible(), true, 'About tab must render about-report-issue-link');
     assert.equal(
       await page.getByTestId('about-report-issue-link').getAttribute('href'),
-      'https://github.com/capyboop/capy/issues/new/choose',
-      'about-report-issue-link must point to public capyboop/capy issue chooser'
+      'https://github.com/capyboop/paint/issues/new/choose',
+      'about-report-issue-link must point to public capyboop/paint issue chooser'
     );
     assert.equal(await page.getByTestId('lifetime-stats-card').isVisible(), true, 'About tab must render lifetime-stats-card');
     assert.equal(await page.getByTestId('release-channel-card').isVisible(), true, 'About tab must render release-channel-card');

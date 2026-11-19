@@ -753,7 +753,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span>Privacy Policy</span>
                   </a>
                   <a
-                    href="https://github.com/capyboop/capy/issues/new/choose"
+                    href="https://github.com/capyboop/paint/issues/new/choose"
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="about-report-issue-link"

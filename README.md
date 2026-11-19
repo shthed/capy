@@ -11,7 +11,7 @@
 <!-- capy-dev-only:start -->
 - **[Try Upcoming Features on the Beta Channel](https://shthed.github.io/capy/beta/)** ([Beta Android APK](https://shthed.github.io/capy/beta/capy.apk))
 <!-- capy-dev-only:end -->
-- **[Public Issue Tracker & Feedback](https://github.com/capyboop/capy/issues)** ([Report a Bug, Request a Feature, or Share a Puzzle Idea](https://github.com/capyboop/capy/issues/new/choose))
+- **[Public Issue Tracker & Feedback](https://github.com/capyboop/paint/issues)** ([Report a Bug, Request a Feature, or Share a Puzzle Idea](https://github.com/capyboop/paint/issues/new/choose))
 - **[Read the Privacy Policy](https://capypaint.com/privacy-policy.html)**
 
 ---
@@ -96,9 +96,9 @@ npm run test:sanity && npm run lint && npm run build && npm test
 
 ## Contributing, Issues & Support
 
-Contributions, bug reports, feature requests, and puzzle ideas are welcome on [`capyboop/capy`](https://github.com/capyboop/capy):
+Contributions, bug reports, feature requests, and puzzle ideas are welcome on [`capyboop/paint`](https://github.com/capyboop/paint):
 
-- **Report a Bug, Request a Feature, or Share a Puzzle Idea**: Use the [GitHub Issue Templates](https://github.com/capyboop/capy/issues/new/choose).
+- **Report a Bug, Request a Feature, or Share a Puzzle Idea**: Use the [GitHub Issue Templates](https://github.com/capyboop/paint/issues/new/choose).
 - **Submit a Pull Request**: Follow [`CONTRIBUTING.md`](./CONTRIBUTING.md) for local setup, required checks (`npm run test:sanity && npm run lint && npm run build && npm test`), and PR guidelines.
 - **Help and Troubleshooting**: See [`SUPPORT.md`](./SUPPORT.md) for player support, download links, and offline/privacy FAQ.
 - **Security Vulnerabilities**: Report security issues privately via [`SECURITY.md`](./SECURITY.md).
