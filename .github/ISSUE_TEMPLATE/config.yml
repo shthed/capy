@@ -7,11 +7,11 @@ contact_links:
     url: https://capypaint.com/privacy-policy.html
     about: Review local-first photo processing and optional Google Drive or Play Games sync disclosures.
   - name: Contributing & Local Setup
-    url: https://github.com/capyboop/capy/blob/main/CONTRIBUTING.md
+    url: https://github.com/capyboop/paint/blob/main/CONTRIBUTING.md
     about: Learn how to run Capy locally, run tests, and submit a Pull Request.
   - name: Support & FAQ
-    url: https://github.com/capyboop/capy/blob/main/SUPPORT.md
+    url: https://github.com/capyboop/paint/blob/main/SUPPORT.md
     about: Find help, download links, and offline/privacy answers.
   - name: Report a Security Vulnerability
-    url: https://github.com/capyboop/capy/security/advisories/new
+    url: https://github.com/capyboop/paint/security/advisories/new
     about: Privately report security issues instead of opening a public issue.

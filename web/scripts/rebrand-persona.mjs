@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Clean-room public persona exporter for `capyboop/capy`.
+ * Clean-room public persona exporter for `capyboop/paint`.
  *
  * Exports a clean, standalone copy of the repository where `capyboop` is the sole
  * author and owner with zero trace of `shthed`, dev-only mirror/review workflows, or
@@ -96,19 +96,19 @@ export function transformPersonaContent(content) {
     .replace(/\[`?(?:AGENTS|CAPYBOOP)\.md`?\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)\s*\|\s*/g, '')
     .replace(/\[([^\[\]\r\n]+)\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)/g, '$1')
     .replace(
-      /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed\/capy\/(?:pull|issues|milestone)\/\d+|capyboop\/capy\/(?:(?:pull|milestone)\/\d+|issues\/(?!(?:2|3|4|5)(?:[/?#)]|$))\d+))(?:[/?#][^\s)]*)?\)/g,
+      /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed\/capy\/(?:pull|issues|milestone)\/\d+|capyboop\/(?:capy|paint)\/(?:(?:pull|milestone)\/\d+|issues\/(?!(?:2|3|4|5)(?:[/?#)]|$))\d+))(?:[/?#][^\s)]*)?\)/g,
       '$1'
     )
     .replace(
       /https:\/\/(?:shthed|capyboop)\.github\.io\/capy\/(?:alpha|PR|pull)\/\d+\/?/g,
       'https://capypaint.com/'
     )
-    .replaceAll('https://github.com/shthed/capy', 'https://github.com/capyboop/capy')
-    .replaceAll('github.com/shthed/capy', 'github.com/capyboop/capy')
+    .replaceAll('https://github.com/shthed/capy', 'https://github.com/capyboop/paint')
+    .replaceAll('github.com/shthed/capy', 'github.com/capyboop/paint')
     .replaceAll('github.com/shthed', 'github.com/capyboop')
     .replaceAll('https://shthed.github.io/capy', 'https://capyboop.github.io/capy')
     .replaceAll('shthed.github.io', 'capyboop.github.io')
-    .replaceAll('shthed/capy', 'capyboop/capy')
+    .replaceAll('shthed/capy', 'capyboop/paint')
     .replace(/shthed/gi, (match) =>
       match === match.toUpperCase()
         ? 'CAPYBOOP'
