@@ -1,11 +1,14 @@
 import { base64ToUint8, uint8ToBase64 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
+import { isCloudCoopUiEnabled } from '../StorageNamespace';
 import {
   attemptSilentOrOneTapGoogleSignIn,
   clearCachedGoogleSession,
+  getAllowedMockGoogleOAuthToken,
   getConfiguredGoogleClientId,
   GoogleDriveAppDataClient,
   isExplicitlySignedOut,
+  isValidGoogleDriveFileId,
   loadCachedGoogleSession,
   setConfiguredGoogleClientId,
   setExplicitlySignedOut,
@@ -36,7 +39,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
   private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
     const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(task);
-    const tracked = next.finally(() => {
+    const tracked = next.catch(() => undefined).finally(() => {
       if (this.writeLocks.get(lockKey) === tracked) {
         this.writeLocks.delete(lockKey);
       }
@@ -47,8 +50,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
 
   getDescriptor(): CloudProviderDescriptor {
     const clientId = getConfiguredGoogleClientId();
-    const hasMock =
-      typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
+    const hasMock = Boolean(getAllowedMockGoogleOAuthToken());
     return {
       id: 'google',
       displayName: 'Google Account',
@@ -97,8 +99,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
       setConfiguredGoogleClientId(options.clientId);
     }
     const clientId = options?.clientId?.trim() || getConfiguredGoogleClientId();
-    const hasMock =
-      typeof window !== 'undefined' && Boolean(window.__capyMockGoogleOAuthToken);
+    const hasMock = Boolean(getAllowedMockGoogleOAuthToken());
     const session = await signInWithGoogleOAuthPopup(
       clientId || (hasMock ? 'capy_mock_client_id' : '')
     );
@@ -206,8 +207,11 @@ export class GoogleCloudDriver implements CloudProviderDriver {
 
   async readBinaryBlob(blobRef: string): Promise<Uint8Array | null> {
     const session = loadCachedGoogleSession();
-    if (!session?.accessToken || !blobRef) return null;
-    return GoogleDriveAppDataClient.downloadBinaryFile(session.accessToken, blobRef);
+    const cleanRef = typeof blobRef === 'string' ? blobRef.trim() : '';
+    if (!session?.accessToken || !isValidGoogleDriveFileId(cleanRef)) {
+      return null;
+    }
+    return GoogleDriveAppDataClient.downloadBinaryFile(session.accessToken, cleanRef);
   }
 
   async writeBinaryBlob(
@@ -290,36 +294,23 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
         lastSyncedAt: Date.now(),
       };
     }
-    if (!NativeBridge.isPlayGamesConfigured()) {
-      return null;
-    }
-    const immediate = NativeBridge.signInPlayGames();
-    if (immediate) {
-      this.activeProfile = immediate;
-      return {
-        playerId: immediate.playerId,
-        displayName: immediate.displayName,
-        provider: 'play_games_v2',
-        isAuthenticated: true,
-        lastSyncedAt: Date.now(),
-      };
+    if (!isCloudCoopUiEnabled() || !NativeBridge.isPlayGamesConfigured()) {
+      return this.restoreSession();
     }
     return new Promise<Partial<PlayerIdentity> | null>((resolve) => {
       let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
       let unsubProfile: () => void = () => {};
       let unsubError: () => void = () => {};
       const cleanup = () => {
-        clearTimeout(timer);
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
         unsubProfile();
         unsubError();
       };
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(null);
-      }, 4500);
-      unsubProfile = NativeBridge.onPlayGamesProfile((profile) => {
+      const finishProfile = (profile: { playerId: string; displayName: string }) => {
         if (settled) return;
         settled = true;
         cleanup();
@@ -331,13 +322,59 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
           isAuthenticated: true,
           lastSyncedAt: Date.now(),
         });
-      });
-      unsubError = NativeBridge.onPlayGamesError(() => {
+      };
+      const finishNull = () => {
         if (settled) return;
         settled = true;
         cleanup();
         resolve(null);
-      });
+      };
+
+      unsubProfile = NativeBridge.onPlayGamesProfile(
+        (profile) => {
+          if (settled) return false;
+          finishProfile(profile);
+          return true;
+        },
+        { once: true }
+      );
+      if (settled) {
+        unsubProfile();
+        cleanup();
+        return;
+      }
+      unsubError = NativeBridge.onPlayGamesError(
+        () => {
+          if (settled) return false;
+          finishNull();
+          return true;
+        },
+        { once: true }
+      );
+      if (settled) {
+        unsubError();
+        cleanup();
+        return;
+      }
+
+      let immediate: { playerId: string; displayName: string } | null = null;
+      try {
+        immediate = NativeBridge.signInPlayGames();
+      } catch {
+        immediate = null;
+      }
+      if (settled) {
+        cleanup();
+        return;
+      }
+      if (immediate) {
+        finishProfile(immediate);
+        return;
+      }
+
+      timer = setTimeout(() => {
+        finishNull();
+      }, 4500);
     });
   }
 
@@ -346,51 +383,83 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     if (!NativeBridge.isAndroid) {
       throw new Error('PLAY_GAMES_UNCONFIGURED');
     }
-    const immediate = NativeBridge.signInPlayGames();
-    if (immediate) {
-      this.activeProfile = immediate;
-      return {
-        playerId: immediate.playerId,
-        displayName: immediate.displayName,
-        provider: 'play_games_v2',
-        isAuthenticated: true,
-        lastSyncedAt: Date.now(),
-      };
-    }
-    if (!NativeBridge.isPlayGamesConfigured()) {
-      throw new Error('PLAY_GAMES_UNCONFIGURED');
-    }
     // Wait up to 8 seconds for the native Play Games interactive signIn() callback or immediate error
     const outcome = await new Promise<
       | { ok: true; profile: { playerId: string; displayName: string } }
       | { ok: false; error: string }
     >((resolve) => {
       let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
       let unsubProfile: () => void = () => {};
       let unsubError: () => void = () => {};
       const cleanup = () => {
-        clearTimeout(timer);
+        if (timer !== null) {
+          clearTimeout(timer);
+          timer = null;
+        }
         unsubProfile();
         unsubError();
       };
-      const timer = setTimeout(() => {
+      const finish = (
+        result:
+          | { ok: true; profile: { playerId: string; displayName: string } }
+          | { ok: false; error: string }
+      ) => {
         if (settled) return;
         settled = true;
         cleanup();
-        resolve({ ok: false, error: 'PLAY_GAMES_UNCONFIGURED' });
+        resolve(result);
+      };
+
+      unsubProfile = NativeBridge.onPlayGamesProfile(
+        (profile) => {
+          if (settled) return false;
+          finish({ ok: true, profile });
+          return true;
+        },
+        { once: true }
+      );
+      if (settled) {
+        unsubProfile();
+        cleanup();
+        return;
+      }
+      unsubError = NativeBridge.onPlayGamesError(
+        (reason) => {
+          if (settled) return false;
+          finish({ ok: false, error: reason || 'PLAY_GAMES_UNAVAILABLE' });
+          return true;
+        },
+        { once: true }
+      );
+      if (settled) {
+        unsubError();
+        cleanup();
+        return;
+      }
+
+      let immediate: { playerId: string; displayName: string } | null = null;
+      try {
+        immediate = NativeBridge.signInPlayGames();
+      } catch {
+        immediate = null;
+      }
+      if (settled) {
+        cleanup();
+        return;
+      }
+      if (immediate) {
+        finish({ ok: true, profile: immediate });
+        return;
+      }
+      if (!NativeBridge.isPlayGamesConfigured()) {
+        finish({ ok: false, error: 'PLAY_GAMES_UNCONFIGURED' });
+        return;
+      }
+
+      timer = setTimeout(() => {
+        finish({ ok: false, error: 'PLAY_GAMES_UNCONFIGURED' });
       }, 8000);
-      unsubProfile = NativeBridge.onPlayGamesProfile((profile) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve({ ok: true, profile });
-      });
-      unsubError = NativeBridge.onPlayGamesError((reason) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve({ ok: false, error: reason || 'PLAY_GAMES_UNAVAILABLE' });
-      });
     });
     if (!outcome.ok) {
       throw new Error(outcome.error);
@@ -414,7 +483,18 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     const raw = NativeBridge.loadCloudSnapshot(CLOUD_MANIFEST_SLOT_KEY);
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as CloudLibraryManifestV2;
+      const parsed = JSON.parse(raw) as CloudLibraryManifestV2;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        parsed.version === 2 &&
+        parsed.entries &&
+        typeof parsed.entries === 'object' &&
+        !Array.isArray(parsed.entries)
+      ) {
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -431,7 +511,16 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     const raw = NativeBridge.loadCloudSnapshot(slotKey);
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as CloudSaveEnvelope;
+      const parsed = JSON.parse(raw) as CloudSaveEnvelope;
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        typeof parsed.slotKey === 'string' &&
+        typeof parsed.deltaToken === 'string'
+      ) {
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -447,6 +536,15 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     if (!match) return null;
 
     const safeBlobKey = match[1];
+    if (
+      !safeBlobKey.startsWith('pgblob_') ||
+      safeBlobKey.length <= 'pgblob_'.length ||
+      safeBlobKey === '.' ||
+      safeBlobKey === '..' ||
+      safeBlobKey.includes('..')
+    ) {
+      return null;
+    }
     const totalChunks = Number(match[2]);
     const expectedBytes = Number(match[3]);
     if (
@@ -460,33 +558,148 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
       return null;
     }
 
+    const chunkPayloads = new Array<string | null>(totalChunks).fill(null);
+    const missingIndices: number[] = [];
+    for (let i = 0; i < totalChunks; i++) {
+      const localChunk = NativeBridge.loadCloudBinaryChunk(safeBlobKey, i);
+      if (localChunk) {
+        chunkPayloads[i] = localChunk;
+      } else {
+        missingIndices.push(i);
+      }
+    }
+
+    if (missingIndices.length > 0) {
+      const slotToIdx = new Map<string, number>();
+      const remainingMissing = new Set<number>(missingIndices);
+      for (const idx of missingIndices) {
+        slotToIdx.set(`${safeBlobKey}_part_${idx}`, idx);
+      }
+
+      NativeBridge.clearAbortedCloudPulls(slotToIdx.keys());
+      const pendingPullSlots = new Set<string>();
+
+      const pulledOk = await new Promise<boolean>((resolve) => {
+        let settled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let unsubSnap: () => void = () => {};
+        let unsubErr: () => void = () => {};
+        const cleanup = () => {
+          if (timer !== null) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          unsubSnap();
+          unsubErr();
+        };
+        const finish = (ok: boolean) => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          if (pendingPullSlots.size > 0) {
+            NativeBridge.discardAbortedCloudPulls(pendingPullSlots);
+            pendingPullSlots.clear();
+          }
+          resolve(ok);
+        };
+
+        unsubSnap = NativeBridge.onCloudSnapshot(
+          (slot, payload) => {
+            if (settled) return false;
+            const idx = slotToIdx.get(slot);
+            if (idx === undefined) return false;
+            pendingPullSlots.delete(slot);
+            if (!payload) {
+              finish(false);
+              return true;
+            }
+            chunkPayloads[idx] = payload;
+            remainingMissing.delete(idx);
+            if (remainingMissing.size === 0) {
+              finish(true);
+            }
+            return true;
+          },
+          { slotFilter: (slot) => slotToIdx.has(slot) }
+        );
+        if (settled) {
+          unsubSnap();
+          cleanup();
+          return;
+        }
+
+        unsubErr = NativeBridge.onCloudSnapshotError(
+          (slot) => {
+            if (settled) return false;
+            if (!slotToIdx.has(slot)) return false;
+            pendingPullSlots.delete(slot);
+            finish(false);
+            return true;
+          },
+          { slotFilter: (slot) => slotToIdx.has(slot), once: true }
+        );
+        if (settled) {
+          unsubErr();
+          cleanup();
+          return;
+        }
+
+        for (const idx of [...remainingMissing]) {
+          if (settled) break;
+          if (!remainingMissing.has(idx)) continue;
+          const partSlot = `${safeBlobKey}_part_${idx}`;
+          pendingPullSlots.add(partSlot);
+          let pullStarted = false;
+          try {
+            pullStarted = NativeBridge.requestCloudSnapshotPull(partSlot);
+          } catch {
+            pullStarted = false;
+          }
+          if (settled) break;
+          if (!pullStarted) {
+            pendingPullSlots.delete(partSlot);
+            const diskFallback = NativeBridge.loadCloudBinaryChunk(safeBlobKey, idx);
+            if (diskFallback) {
+              chunkPayloads[idx] = diskFallback;
+              remainingMissing.delete(idx);
+            } else {
+              finish(false);
+              break;
+            }
+          }
+        }
+
+        if (settled) {
+          cleanup();
+          return;
+        }
+        if (remainingMissing.size === 0) {
+          finish(true);
+          return;
+        }
+
+        timer = setTimeout(() => {
+          for (const idx of [...remainingMissing]) {
+            const diskFallback = NativeBridge.loadCloudBinaryChunk(safeBlobKey, idx);
+            if (diskFallback) {
+              chunkPayloads[idx] = diskFallback;
+              remainingMissing.delete(idx);
+            }
+          }
+          finish(remainingMissing.size === 0);
+        }, 1500);
+      });
+
+      if (!pulledOk) {
+        return null;
+      }
+    }
+
     const assembled = new Uint8Array(expectedBytes);
     let writeOffset = 0;
 
     for (let i = 0; i < totalChunks; i++) {
-      let chunkB64 = NativeBridge.loadCloudBinaryChunk(safeBlobKey, i);
-      if (!chunkB64) {
-        const expectedPartSlot = `${safeBlobKey}_part_${i}`;
-        const pullStarted = NativeBridge.requestCloudSnapshotPull(expectedPartSlot);
-        if (pullStarted) {
-          chunkB64 = await new Promise<string | null>((resolve) => {
-            let settled = false;
-            const timer = setTimeout(() => {
-              if (settled) return;
-              settled = true;
-              unsub();
-              resolve(NativeBridge.loadCloudBinaryChunk(safeBlobKey, i));
-            }, 1500);
-            const unsub = NativeBridge.onCloudSnapshot((slot, payload) => {
-              if (settled || slot !== expectedPartSlot) return;
-              settled = true;
-              clearTimeout(timer);
-              unsub();
-              resolve(payload || null);
-            });
-          });
-        }
-      }
+      const chunkB64 = chunkPayloads[i];
       if (!chunkB64) return null;
 
       let partBytes: Uint8Array;
@@ -511,15 +724,29 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     bytes: Uint8Array
   ): Promise<string | null> {
     if (
-      !slotKey ||
+      typeof slotKey !== 'string' ||
       !bytes ||
       bytes.byteLength === 0 ||
       bytes.byteLength > MAX_PLAY_GAMES_BINARY_BYTES
     ) {
       return null;
     }
-    const cleanSlot = slotKey.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64) || 'custom_save';
+    const trimmedSlot = slotKey.trim();
+    if (!trimmedSlot || trimmedSlot === '.' || trimmedSlot === '..' || trimmedSlot.includes('..')) {
+      return null;
+    }
+    const cleanSlot = trimmedSlot.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64) || 'custom_save';
     const safeBlobKey = `pgblob_${cleanSlot}`;
+    if (
+      cleanSlot === '.' ||
+      cleanSlot === '..' ||
+      cleanSlot.includes('..') ||
+      safeBlobKey === '.' ||
+      safeBlobKey === '..' ||
+      safeBlobKey.includes('..')
+    ) {
+      return null;
+    }
     const totalChunks = Math.ceil(bytes.byteLength / PLAY_GAMES_BINARY_CHUNK_BYTES);
     if (totalChunks < 1 || totalChunks > MAX_PLAY_GAMES_BINARY_CHUNKS) {
       return null;

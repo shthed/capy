@@ -15,16 +15,34 @@ export interface ParsedShareLink {
   tokenError?: string;
 }
 
+export function normalizeCoopRoomCode(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+  return cleaned.length >= 4 && cleaned.length <= 8 ? cleaned : null;
+}
+
 export function generateCoopRoomCode(length: number = 6): string {
+  const safeLen = Math.max(4, Math.min(8, Math.floor(length)));
   let code = '';
-  for (let i = 0; i < length; i++) {
+  const bytes = new Uint8Array(safeLen);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+    for (let i = 0; i < safeLen; i++) {
+      code += UNAMBIGUOUS_ROOM_ALPHABET[bytes[i] % UNAMBIGUOUS_ROOM_ALPHABET.length];
+    }
+    return code;
+  }
+  for (let i = 0; i < safeLen; i++) {
     code += UNAMBIGUOUS_ROOM_ALPHABET[Math.floor(Math.random() * UNAMBIGUOUS_ROOM_ALPHABET.length)];
   }
   return code;
 }
 
 export function resolveSampleFromSourceRef(sourceRef?: PuzzleSourceRef): SampleArtwork | null {
-  if (!sourceRef) return null;
+  if (!sourceRef || typeof sourceRef !== 'object' || typeof sourceRef.uri !== 'string') return null;
   if (sourceRef.kind === 'sample' || sourceRef.kind === 'catalog') {
     const cleanUri = sourceRef.uri.replace(/^\.\//, '');
     const byPath = SAMPLE_GALLERY.find(
@@ -84,10 +102,7 @@ export async function parseShareLinkFromUrl(rawUrl: string): Promise<ParsedShare
   try {
     const parsed = new URL(rawUrl, CANONICAL_PRODUCTION_URL);
     const roomParam = parsed.searchParams.get('room');
-    const cleanRoom = roomParam
-      ? roomParam.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)
-      : '';
-    roomCode = cleanRoom.length >= 4 ? cleanRoom : null;
+    roomCode = normalizeCoopRoomCode(roomParam);
 
     const rawHash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
     if (rawHash) {

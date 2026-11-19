@@ -1,4 +1,4 @@
-import { PaletteColor, PuzzleData, PuzzleSourceRef, Region, SavedSnapshot } from '../types';
+import { PaletteColor, PuzzleData, PuzzleSourceRef, Region, SAMPLE_GALLERY, SavedSnapshot } from '../types';
 
 /**
  * Compact Puzzle & Save Codec v2 (`CapyCodec`)
@@ -141,19 +141,32 @@ export function encodeRegionMapRle(regionMap: Int32Array): Uint8Array {
  * Decodes a scanline RLE + Varint byte stream back into an Int32Array `regionMap` of length `totalPixels`.
  */
 export function decodeRegionMapRle(rle: Uint8Array, totalPixels: number): Int32Array {
-  if (!Number.isInteger(totalPixels) || totalPixels < 0 || totalPixels > MAX_PUZZLE_PIXELS) {
+  if (!Number.isInteger(totalPixels) || totalPixels <= 0 || totalPixels > MAX_PUZZLE_PIXELS) {
     throw new Error('Invalid regionMap pixel count');
+  }
+  if (!(rle instanceof Uint8Array) || rle.length === 0) {
+    throw new Error('Invalid or empty RLE regionMap');
   }
   const regionMap = new Int32Array(totalPixels);
   const cursor = { pos: 0 };
   let writeIdx = 0;
 
-  while (cursor.pos < rle.length && writeIdx < totalPixels) {
+  while (cursor.pos < rle.length) {
     const rid = readVarint(rle, cursor);
     const runLen = readVarint(rle, cursor);
-    const end = Math.min(totalPixels, writeIdx + runLen);
+    if (runLen === 0) {
+      throw new Error('Invalid zero-length run in RLE regionMap');
+    }
+    if (writeIdx + runLen > totalPixels) {
+      throw new Error('RLE regionMap run exceeds expected puzzle pixel count');
+    }
+    const end = writeIdx + runLen;
     regionMap.fill(rid, writeIdx, end);
     writeIdx = end;
+  }
+
+  if (writeIdx !== totalPixels || cursor.pos !== rle.length) {
+    throw new Error('Decoded RLE regionMap length mismatch');
   }
 
   return regionMap;
@@ -209,11 +222,245 @@ export function isCompactPuzzleRecordV2(val: unknown): val is CompactPuzzleRecor
   );
 }
 
+const ALLOWED_SOURCE_KINDS = new Set(['sample', 'catalog', 'url', 'blob']);
+
+export function assertValidPalette(palette: unknown): asserts palette is PaletteColor[] {
+  if (!Array.isArray(palette) || palette.length > 4096) {
+    throw new Error('Invalid puzzle palette: expected array');
+  }
+  for (let i = 0; i < palette.length; i++) {
+    const swatch = palette[i] as Record<string, unknown> | null | undefined;
+    if (!swatch || typeof swatch !== 'object' || Array.isArray(swatch)) {
+      throw new Error(`Invalid palette swatch at index ${i}`);
+    }
+    if (typeof swatch.id !== 'number' || !Number.isInteger(swatch.id) || swatch.id < 0) {
+      throw new Error(`Invalid palette swatch id at index ${i}`);
+    }
+    if (typeof swatch.hex !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(swatch.hex.trim())) {
+      throw new Error(`Invalid palette swatch hex at index ${i}`);
+    }
+    if (swatch.isLight !== undefined && typeof swatch.isLight !== 'boolean') {
+      throw new Error(`Invalid palette swatch isLight at index ${i}`);
+    }
+    if (swatch.argb !== undefined && (typeof swatch.argb !== 'number' || !Number.isFinite(swatch.argb))) {
+      throw new Error(`Invalid palette swatch argb at index ${i}`);
+    }
+    for (const chan of ['r', 'g', 'b'] as const) {
+      const val = swatch[chan];
+      if (
+        val !== undefined &&
+        (typeof val !== 'number' || !Number.isFinite(val) || val < 0 || val > 255)
+      ) {
+        throw new Error(`Invalid palette swatch ${chan} at index ${i}`);
+      }
+    }
+  }
+}
+
+const CONTROL_OR_WS_RE = /[\s\u0000-\u001F\u007F]/;
+
+export function isAllowedSampleAssetPath(rawPath: unknown): rawPath is string {
+  if (typeof rawPath !== 'string') return false;
+  if (rawPath.length === 0 || rawPath.length > 256 || CONTROL_OR_WS_RE.test(rawPath)) {
+    return false;
+  }
+  const clean = rawPath.replace(/^\.\//, '');
+  return SAMPLE_GALLERY.some((s) => s.assetPath.replace(/^\.\//, '') === clean);
+}
+
+export function isSafeSnapshotPreviewDataUrl(rawUrl: unknown): rawUrl is string {
+  if (typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  return /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(trimmed);
+}
+
+export function assertValidSourceRef(sourceRef: unknown): asserts sourceRef is PuzzleSourceRef {
+  if (!sourceRef || typeof sourceRef !== 'object' || Array.isArray(sourceRef)) {
+    throw new Error('Invalid puzzle sourceRef');
+  }
+  const ref = sourceRef as Record<string, unknown>;
+  if (typeof ref.kind !== 'string' || !ALLOWED_SOURCE_KINDS.has(ref.kind)) {
+    throw new Error('Invalid puzzle sourceRef kind');
+  }
+  if (typeof ref.uri !== 'string' || ref.uri.trim().length === 0 || ref.uri.length > 2048) {
+    throw new Error('Invalid puzzle sourceRef uri');
+  }
+  if (CONTROL_OR_WS_RE.test(ref.uri)) {
+    throw new Error('Invalid puzzle sourceRef uri');
+  }
+  const trimmedUri = ref.uri.trim();
+  if (ref.kind === 'sample') {
+    if (!isAllowedSampleAssetPath(trimmedUri)) {
+      throw new Error('Invalid puzzle sourceRef sample asset path');
+    }
+  } else if (ref.kind === 'catalog') {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(trimmedUri) || trimmedUri.includes('..')) {
+      throw new Error('Invalid puzzle sourceRef catalog id');
+    }
+  } else if (ref.kind === 'blob') {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$/.test(trimmedUri) || trimmedUri.includes('..')) {
+      throw new Error('Invalid puzzle sourceRef blob id');
+    }
+  } else if (ref.kind === 'url') {
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmedUri);
+    } catch {
+      throw new Error('Invalid puzzle sourceRef URL');
+    }
+    const proto = parsed.protocol.toLowerCase();
+    const host = parsed.hostname.toLowerCase();
+    if (proto !== 'https:' && !(proto === 'http:' && (host === 'localhost' || host === '127.0.0.1'))) {
+      throw new Error('Unsafe sourceRef URL protocol');
+    }
+    if (parsed.username !== '' || parsed.password !== '') {
+      throw new Error('Invalid puzzle sourceRef URL credentials');
+    }
+  }
+  if (
+    ref.contentHash !== undefined &&
+    (typeof ref.contentHash !== 'string' || ref.contentHash.length > 256)
+  ) {
+    throw new Error('Invalid puzzle sourceRef contentHash');
+  }
+}
+
+export function assertValidSavedSnapshot(
+  snap: unknown,
+  options?: { strictV2?: boolean }
+): asserts snap is SavedSnapshot {
+  if (!snap || typeof snap !== 'object' || Array.isArray(snap)) {
+    throw new Error('Invalid snapshot object');
+  }
+  const s = snap as Record<string, unknown>;
+  if (typeof s.id !== 'string' || s.id.trim().length === 0 || s.id.length > 256) {
+    throw new Error('Invalid snapshot id');
+  }
+  if (typeof s.title !== 'string' || s.title.trim().length === 0 || s.title.length > 512) {
+    throw new Error('Invalid snapshot title');
+  }
+  if (options?.strictV2) {
+    if (!Array.isArray(s.filledRegionIds)) {
+      throw new Error('Invalid snapshot filledRegionIds: expected array');
+    }
+    if (typeof s.filledCount !== 'number' || !Number.isFinite(s.filledCount) || s.filledCount < 0) {
+      throw new Error('Invalid snapshot filledCount');
+    }
+    if (typeof s.totalCount !== 'number' || !Number.isFinite(s.totalCount) || s.totalCount < 0) {
+      throw new Error('Invalid snapshot totalCount');
+    }
+  }
+  if (s.filledRegionIds !== undefined) {
+    if (!Array.isArray(s.filledRegionIds) || s.filledRegionIds.length > MAX_DELTA_REGION_ENTRIES) {
+      throw new Error('Invalid snapshot filledRegionIds');
+    }
+    for (let i = 0; i < s.filledRegionIds.length; i++) {
+      const rid = s.filledRegionIds[i];
+      if (typeof rid !== 'number' || !Number.isInteger(rid) || rid <= 0 || rid > MAX_PUZZLE_PIXELS) {
+        throw new Error('Invalid region ID in snapshot filledRegionIds');
+      }
+    }
+  }
+  for (const nonNegField of [
+    'filledCount',
+    'totalCount',
+    'timestamp',
+    'lastOpened',
+    'resetEpoch',
+    'fileSizeBytes',
+  ] as const) {
+    const val = s[nonNegField];
+    if (val !== undefined && (typeof val !== 'number' || !Number.isFinite(val) || val < 0)) {
+      throw new Error(`Invalid snapshot ${nonNegField}`);
+    }
+  }
+  for (const finiteField of ['zoomScale', 'panOffsetX', 'panOffsetY'] as const) {
+    const val = s[finiteField];
+    if (val !== undefined && (typeof val !== 'number' || !Number.isFinite(val))) {
+      throw new Error(`Invalid snapshot ${finiteField}`);
+    }
+  }
+  if (s.sampleAssetPath !== undefined && s.sampleAssetPath !== null && s.sampleAssetPath !== '') {
+    if (!isAllowedSampleAssetPath(s.sampleAssetPath)) {
+      throw new Error('Invalid snapshot sampleAssetPath');
+    }
+  }
+  if (s.sourceRef !== undefined) {
+    assertValidSourceRef(s.sourceRef);
+  }
+  if (s.customPalette !== undefined) {
+    assertValidPalette(s.customPalette);
+  }
+  if (s.paintedRegionColors !== undefined) {
+    if (
+      !s.paintedRegionColors ||
+      typeof s.paintedRegionColors !== 'object' ||
+      Array.isArray(s.paintedRegionColors)
+    ) {
+      throw new Error('Invalid snapshot paintedRegionColors');
+    }
+    const entries = Object.entries(s.paintedRegionColors as Record<string, unknown>);
+    if (entries.length > MAX_DELTA_REGION_ENTRIES) {
+      throw new Error('Snapshot paintedRegionColors exceeds limit');
+    }
+    for (const [k, v] of entries) {
+      if (!/^\d+$/.test(k) || typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
+        throw new Error('Invalid entry in snapshot paintedRegionColors');
+      }
+    }
+  }
+  if (s.previewDataUrl !== undefined && s.previewDataUrl !== '') {
+    if (!isSafeSnapshotPreviewDataUrl(s.previewDataUrl)) {
+      throw new Error('Invalid snapshot previewDataUrl');
+    }
+  }
+}
+
+function validateRegionMetaFloat32(regionMeta: Float32Array, maxAllowedRegionId: number): number {
+  if (!(regionMeta instanceof Float32Array) || regionMeta.length % REGION_META_STRIDE !== 0) {
+    throw new Error('Invalid regionMeta Float32Array in compact puzzle record');
+  }
+  const regionCount = Math.floor(regionMeta.length / REGION_META_STRIDE);
+  if (regionCount > maxAllowedRegionId) {
+    throw new Error(`Puzzle region count (${regionCount}) exceeds limit`);
+  }
+  let maxRegionId = 0;
+  for (let i = 0; i < regionCount; i++) {
+    const base = i * REGION_META_STRIDE;
+    const rawRid = regionMeta[base];
+    const rawColorId = regionMeta[base + 1];
+    const centroidX = regionMeta[base + 2];
+    const centroidY = regionMeta[base + 3];
+    const maxRadius = regionMeta[base + 4];
+    if (
+      !Number.isFinite(rawRid) ||
+      rawRid < 0 ||
+      !Number.isFinite(rawColorId) ||
+      rawColorId < 0 ||
+      !Number.isFinite(centroidX) ||
+      !Number.isFinite(centroidY) ||
+      !Number.isFinite(maxRadius) ||
+      maxRadius < 0
+    ) {
+      throw new Error('Invalid non-finite or negative region metadata in compact puzzle record');
+    }
+    const rid = Math.round(rawRid);
+    if (rid > maxAllowedRegionId) {
+      throw new Error(`Region ID (${rid}) exceeds limit (${maxAllowedRegionId})`);
+    }
+    if (rid > maxRegionId) maxRegionId = rid;
+  }
+  return maxRegionId;
+}
+
 /**
  * Reconstructs full `PuzzleData` (`regionMap`, `borderMap`, `regions` with bounding boxes and `pixels`)
  * from a `CompactPuzzleRecordV2` in two zero-allocation linear passes (< 3 ms on 1024x1024).
  */
 export function decompressPuzzleRecord(record: CompactPuzzleRecordV2): PuzzleData {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) {
+    throw new Error('Invalid compact puzzle record');
+  }
   const { width, height, palette, regionMeta, rleRegionMap, isFreeColor } = record;
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
     throw new Error('Invalid puzzle dimensions');
@@ -222,27 +469,18 @@ export function decompressPuzzleRecord(record: CompactPuzzleRecordV2): PuzzleDat
   if (!Number.isSafeInteger(total) || total <= 0 || total > MAX_PUZZLE_PIXELS) {
     throw new Error(`Puzzle pixel count (${total}) exceeds limit (${MAX_PUZZLE_PIXELS})`);
   }
-  const regionMap = decodeRegionMapRle(rleRegionMap, total);
-  if (regionMap.length !== total) {
-    throw new Error('Decoded regionMap length mismatch');
+  assertValidPalette(palette);
+  if (isFreeColor !== undefined && typeof isFreeColor !== 'boolean') {
+    throw new Error('Invalid isFreeColor flag in compact puzzle record');
   }
 
   const maxAllowedRegionId = Math.max(total, MAX_DELTA_REGION_ENTRIES);
+  const maxRegionId = validateRegionMetaFloat32(regionMeta, maxAllowedRegionId);
   const regionCount = Math.floor(regionMeta.length / REGION_META_STRIDE);
-  if (regionCount > maxAllowedRegionId) {
-    throw new Error(`Puzzle region count (${regionCount}) exceeds limit`);
-  }
-  let maxRegionId = 0;
-  for (let i = 0; i < regionCount; i++) {
-    const rawRid = regionMeta[i * REGION_META_STRIDE];
-    if (!Number.isFinite(rawRid) || rawRid < 0) {
-      throw new Error('Invalid region ID in compact puzzle metadata');
-    }
-    const rid = Math.round(rawRid);
-    if (rid > maxAllowedRegionId) {
-      throw new Error(`Region ID (${rid}) exceeds limit (${maxAllowedRegionId})`);
-    }
-    if (rid > maxRegionId) maxRegionId = rid;
+
+  const regionMap = decodeRegionMapRle(rleRegionMap, total);
+  if (regionMap.length !== total) {
+    throw new Error('Decoded regionMap length mismatch');
   }
 
   // Map regionId -> region array index (0..regionCount-1), or -1 if absent
@@ -470,6 +708,9 @@ function unpackFramedPayload<T>(packed: Uint8Array): T {
         ) {
           throw new Error('Malformed framed payload: invalid binary chunk descriptor');
         }
+        if (chunkLengths[node.__chunkIdx] !== undefined) {
+          throw new Error('Malformed framed payload: duplicate binary chunk index');
+        }
         chunkLengths[node.__chunkIdx] = node.byteLength;
         return;
       }
@@ -485,8 +726,8 @@ function unpackFramedPayload<T>(packed: Uint8Array): T {
   const chunkSlices: Uint8Array[] = [];
   let cursor = chunkSliceStart;
   for (let i = 0; i < chunkLengths.length; i++) {
-    const len = chunkLengths[i] ?? 0;
-    if (len < 0 || cursor + len > packed.byteLength) {
+    const len = chunkLengths[i];
+    if (len === undefined || len < 0 || cursor + len > packed.byteLength) {
       throw new Error('Malformed framed payload: binary chunk exceeds bounds');
     }
     chunkSlices[i] = packed.slice(cursor, cursor + len);
@@ -503,6 +744,7 @@ function unpackFramedPayload<T>(packed: Uint8Array): T {
     }
     const result: Record<string, any> = {};
     for (const k of Object.keys(node)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
       result[k] = hydrate(node[k]);
     }
     return result;
@@ -528,6 +770,28 @@ function recordToSerializable(rec: CompactPuzzleRecordV2): SerializedCompactPuzz
 }
 
 export function serializableToRecord(ser: SerializedCompactPuzzleV2): CompactPuzzleRecordV2 {
+  if (!ser || typeof ser !== 'object' || Array.isArray(ser)) {
+    throw new Error('Malformed compact puzzle payload');
+  }
+  if (
+    !Number.isInteger(ser.width) ||
+    !Number.isInteger(ser.height) ||
+    ser.width <= 0 ||
+    ser.height <= 0
+  ) {
+    throw new Error('Invalid compact puzzle dimensions');
+  }
+  const total = ser.width * ser.height;
+  if (!Number.isSafeInteger(total) || total <= 0 || total > MAX_PUZZLE_PIXELS) {
+    throw new Error(`Puzzle pixel count (${total}) exceeds limit (${MAX_PUZZLE_PIXELS})`);
+  }
+  assertValidPalette(ser.palette);
+  if (ser.isFreeColor !== undefined && typeof ser.isFreeColor !== 'boolean') {
+    throw new Error('Invalid isFreeColor flag in compact puzzle');
+  }
+  if (!(ser.rleRegionMap instanceof Uint8Array) || ser.rleRegionMap.byteLength === 0) {
+    throw new Error('Invalid or empty rleRegionMap in compact puzzle');
+  }
   if (
     !(ser.regionMetaBytes instanceof Uint8Array) ||
     ser.regionMetaBytes.byteLength % (REGION_META_STRIDE * 4) !== 0
@@ -535,13 +799,15 @@ export function serializableToRecord(ser: SerializedCompactPuzzleV2): CompactPuz
     throw new Error('Malformed compact puzzle regionMetaBytes');
   }
   const alignedBuf = ser.regionMetaBytes.slice().buffer;
+  const regionMeta = new Float32Array(alignedBuf);
+  validateRegionMetaFloat32(regionMeta, Math.max(total, MAX_DELTA_REGION_ENTRIES));
   return {
     __capyCompactV2: 2,
     width: ser.width,
     height: ser.height,
     ...(ser.isFreeColor !== undefined ? { isFreeColor: ser.isFreeColor } : {}),
     palette: ser.palette,
-    regionMeta: new Float32Array(alignedBuf),
+    regionMeta,
     rleRegionMap: ser.rleRegionMap,
   };
 }
@@ -670,7 +936,69 @@ export async function decodeBinarySaveV2(
     (flags & FLAG_GZIP) !== 0
       ? await gzipDecompress(rawBody, MAX_BINARY_SAVE_DECOMPRESSED_BYTES)
       : rawBody;
-  return unpackFramedPayload<SingleSavePayloadV2 | ArchiveSavePayloadV2>(framed);
+  const decoded = unpackFramedPayload<unknown>(framed);
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+    throw new Error('Malformed Capy v2 binary payload');
+  }
+  const payload = decoded as Record<string, unknown>;
+  if (payload.version !== BINARY_VERSION_V2) {
+    throw new Error('Invalid Capy v2 binary payload version');
+  }
+  if (typeof payload.exportDate !== 'number' || !Number.isFinite(payload.exportDate)) {
+    throw new Error('Invalid Capy v2 binary exportDate');
+  }
+
+  if (payload.format === 'capy-single-save-v2') {
+    assertValidSavedSnapshot(payload.snapshot, { strictV2: true });
+    if (payload.compactPuzzle !== null) {
+      serializableToRecord(payload.compactPuzzle as SerializedCompactPuzzleV2);
+    }
+    if (payload.imageBytes !== undefined && !(payload.imageBytes instanceof Uint8Array)) {
+      throw new Error('Invalid Capy v2 binary imageBytes');
+    }
+    if (payload.imageMimeType !== undefined && typeof payload.imageMimeType !== 'string') {
+      throw new Error('Invalid Capy v2 binary imageMimeType');
+    }
+    return payload as unknown as SingleSavePayloadV2;
+  }
+
+  if (payload.format === 'capy-archive-save-v2') {
+    if (!Array.isArray(payload.snapshots)) {
+      throw new Error('Invalid Capy v2 archive snapshots list');
+    }
+    for (let i = 0; i < payload.snapshots.length; i++) {
+      assertValidSavedSnapshot(payload.snapshots[i], { strictV2: true });
+    }
+    if (
+      !payload.compactPuzzles ||
+      typeof payload.compactPuzzles !== 'object' ||
+      Array.isArray(payload.compactPuzzles)
+    ) {
+      throw new Error('Invalid Capy v2 archive compactPuzzles map');
+    }
+    for (const comp of Object.values(payload.compactPuzzles as Record<string, unknown>)) {
+      serializableToRecord(comp as SerializedCompactPuzzleV2);
+    }
+    if (payload.images !== undefined) {
+      if (!payload.images || typeof payload.images !== 'object' || Array.isArray(payload.images)) {
+        throw new Error('Invalid Capy v2 archive images map');
+      }
+      for (const imgEntry of Object.values(payload.images as Record<string, unknown>)) {
+        if (
+          !imgEntry ||
+          typeof imgEntry !== 'object' ||
+          Array.isArray(imgEntry) ||
+          !((imgEntry as { bytes?: unknown }).bytes instanceof Uint8Array) ||
+          typeof (imgEntry as { mimeType?: unknown }).mimeType !== 'string'
+        ) {
+          throw new Error('Invalid image entry in Capy v2 archive');
+        }
+      }
+    }
+    return payload as unknown as ArchiveSavePayloadV2;
+  }
+
+  throw new Error('Invalid or unrecognized Capy v2 binary format');
 }
 
 // ---------------------------------------------------------------------------
@@ -824,10 +1152,12 @@ export async function decodeProgressDeltaToken(token: string): Promise<ProgressD
     const refText = new TextDecoder().decode(raw.subarray(cursor.pos, cursor.pos + refLen));
     cursor.pos += refLen;
     const parsedRef = JSON.parse(refText) as unknown;
-    if (!parsedRef || typeof parsedRef !== 'object' || Array.isArray(parsedRef)) {
-      throw new Error('Malformed progress delta sourceRef');
-    }
-    sourceRef = parsedRef as PuzzleSourceRef;
+    assertValidSourceRef(parsedRef);
+    sourceRef = {
+      kind: parsedRef.kind,
+      uri: parsedRef.uri,
+      ...(parsedRef.contentHash !== undefined ? { contentHash: parsedRef.contentHash } : {}),
+    };
   }
 
   const filledLen = readVarint(raw, cursor);

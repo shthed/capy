@@ -33,12 +33,14 @@ import {
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
+import { isAllowedSampleAssetPath, isSafeSnapshotPreviewDataUrl } from '../services/CapyCodec';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
 import {
   COLLABORATOR_AVATAR_COLORS,
   ProviderRegistry,
 } from '../services/providers/ProviderRegistry';
+import { getAllowedMockGoogleOAuthToken } from '../services/providers/GoogleCloudSyncClient';
 import { CoopParticipant, PlayerIdentity } from '../services/providers/types';
 import {
   CANVAS_BG_MAP,
@@ -2930,13 +2932,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const isActive = snap.id === activeSnapshotId;
                         const isSelected = snap.id === currentSelectedId;
                         const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                        const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                        const safeSampleThumb = isAllowedSampleAssetPath(snap.sampleAssetPath)
+                          ? snap.sampleAssetPath
+                          : undefined;
+                        const safePreviewThumb = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
+                          ? snap.previewDataUrl.trim()
+                          : undefined;
+                        const primaryThumb = safeSampleThumb || safePreviewThumb;
                         const fallbackThumb =
                           primaryThumb &&
                           failedThumbSrcs[primaryThumb] &&
-                          snap.previewDataUrl &&
-                          snap.previewDataUrl !== primaryThumb
-                            ? snap.previewDataUrl
+                          safePreviewThumb &&
+                          safePreviewThumb !== primaryThumb
+                            ? safePreviewThumb
                             : undefined;
                         const thumbSrc =
                           primaryThumb && !failedThumbSrcs[primaryThumb]
@@ -3023,13 +3031,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const isActive = snap.id === activeSnapshotId;
                         const isSelected = snap.id === currentSelectedId;
                         const progressPct = computeProgressPercentage(snap.filledCount, snap.totalCount);
-                        const primaryThumb = snap.sampleAssetPath || snap.previewDataUrl;
+                        const safeSampleThumb = isAllowedSampleAssetPath(snap.sampleAssetPath)
+                          ? snap.sampleAssetPath
+                          : undefined;
+                        const safePreviewThumb = isSafeSnapshotPreviewDataUrl(snap.previewDataUrl)
+                          ? snap.previewDataUrl.trim()
+                          : undefined;
+                        const primaryThumb = safeSampleThumb || safePreviewThumb;
                         const fallbackThumb =
                           primaryThumb &&
                           failedThumbSrcs[primaryThumb] &&
-                          snap.previewDataUrl &&
-                          snap.previewDataUrl !== primaryThumb
-                            ? snap.previewDataUrl
+                          safePreviewThumb &&
+                          safePreviewThumb !== primaryThumb
+                            ? safePreviewThumb
                             : undefined;
                         const thumbSrc =
                           primaryThumb && !failedThumbSrcs[primaryThumb]
@@ -3590,11 +3604,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               } • ${playerIdentity.email || playerIdentity.displayName}`
                             : NativeBridge.isAndroid ||
                                 Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                                (typeof window !== 'undefined' &&
-                                  Boolean(
-                                    (window as unknown as { __capyMockGoogleOAuthToken?: string })
-                                      .__capyMockGoogleOAuthToken
-                                  ))
+                                Boolean(getAllowedMockGoogleOAuthToken())
                               ? 'Local Profile • Sign in to sync saves across devices'
                               : 'Local Profile • Saves stored locally on this device'}
                         </div>
@@ -3617,11 +3627,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     ) : NativeBridge.isAndroid ||
                       Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                      (typeof window !== 'undefined' &&
-                        Boolean(
-                          (window as unknown as { __capyMockGoogleOAuthToken?: string })
-                            .__capyMockGoogleOAuthToken
-                        )) ? (
+                      Boolean(getAllowedMockGoogleOAuthToken()) ? (
                       <button
                         type="button"
                         data-testid="play-games-signin-btn"
