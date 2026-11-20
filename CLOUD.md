@@ -251,7 +251,7 @@ Choose either native Cloudflare Git builds (Option 1, zero GitHub secrets) or Gi
   6. **Canonical `www` & HTTPS edge redirects (`capypaint.com`)**: Because [`wrangler.jsonc`](./wrangler.jsonc) uses `"run_worker_first": ["/api/*"]` so static page hits never consume Worker requests, add a **Rules -> Redirect Rules -> Single Redirect** (`www.capypaint.com/*` -> `https://capypaint.com/$1`, `301`, Preserve query string) and enable **SSL/TLS -> Edge Certificates -> Always Use HTTPS** in [Cloudflare Dashboard](https://dash.cloudflare.com/).
 
 ### Companion Studio Domain ([capyboop.com](https://capyboop.com/)) -- Deferred
-- **Status**: Deferred out of active Sprint 1 scope per Project Owner directive while prioritizing [capypaint.com](https://capypaint.com/) and [capyboop/paint](https://github.com/capyboop/paint/issues).
+- **Status**: Deferred out of active Sprint 1 scope while prioritizing [capypaint.com](https://capypaint.com/) and [capyboop/paint](https://github.com/capyboop/paint/issues).
 - **Target Architecture**: [capypaint.com](https://capypaint.com/) hosts **Capy Paint** (`capy-paint` Worker + `CoopRoomDurableObject`), while [capyboop.com](https://capyboop.com/) is reserved for **CapyGame** ([shthed/capygame](https://github.com/shthed/capygame) / [CapyGame GitHub Pages](https://shthed.github.io/capygame/)) using Cloudflare Workers Static Assets + `public/_headers` (`COOP`/`COEP` headers for `SharedArrayBuffer`) when revisited.
 <!-- capy-dev-only:start -->
 

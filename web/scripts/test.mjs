@@ -12,9 +12,11 @@ import {
   runSanityChecks,
   validateChangelogChannelOrder,
   validateEpicNaming,
+  /* capy-dev-only:start */
   validateNoLegacyPrRubric,
   validatePrReadinessChecklist,
   validatePrReadinessSpec,
+  /* capy-dev-only:end */
   validateRootGuideIndex,
 } from './sanity.mjs';
 import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
@@ -836,7 +838,7 @@ async function runCodecAndEngineTests() {
       /\[EPIC-N\]\(\.\.\/\.\.\/issues\/<num>\)/
     );
     const badCombinedEpic = '[EPIC-2 (' + '#477)](' + validEpicUrl + ')';
-    assert.throws(() => validateEpicNaming(`Combined ${badCombinedEpic}`, 'AGENTS.md'), /EPIC-N/);
+    assert.throws(() => validateEpicNaming(`Combined ${badCombinedEpic}`, 'GUIDE.md'), /EPIC-N/);
     const badUnlinkedCombinedEpic = '[EPIC-6 (#' + '481)]';
     assert.throws(() => validateEpicNaming(`Unlinked ${badUnlinkedCombinedEpic}`, 'ROADMAP.md'), /EPIC-N/);
 
@@ -846,7 +848,6 @@ async function runCodecAndEngineTests() {
         'README.md',
         'PROJECT.md',
         'DEV.md',
-        'AGENTS.md',
         'ROADMAP.md',
         'TODO.md',
         'WEB.md',
@@ -866,7 +867,7 @@ async function runCodecAndEngineTests() {
       fs.writeFileSync(path.join(tmpGuideDir, 'PROJECT.md'), `# PROJECT\n${allLinks}\n`, 'utf8');
       const guideRes = validateRootGuideIndex(tmpGuideDir, { requireProjectMd: true });
       assert.equal(guideRes.hasProjectMd, true);
-      assert.equal(guideRes.rootMdFiles.length, 13);
+      assert.equal(guideRes.rootMdFiles.length, rootMdNames.length);
 
       fs.writeFileSync(
         path.join(tmpGuideDir, 'README.md'),
@@ -899,7 +900,8 @@ async function runCodecAndEngineTests() {
       fs.rmSync(tmpGuideDir, { recursive: true, force: true });
     }
 
-    // Standalone %-first PR Readiness Checklist & legacy rubric guards (runs in clean-room export too)
+    /* capy-dev-only:start */
+    // Dev-only %-first PR Readiness Checklist & legacy rubric guards
     {
       const oneItem = validatePrReadinessChecklist(
         [
@@ -1296,12 +1298,18 @@ async function runCodecAndEngineTests() {
       // Spec validation with requireProjectMd: false (main-branch mode)
       const tmpMainSpecDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-readiness-main-'));
       try {
+        fs.mkdirSync(path.join(tmpMainSpecDir, 'docs/ai'), { recursive: true });
         fs.writeFileSync(
           path.join(tmpMainSpecDir, 'AGENTS.md'),
           '# AGENTS\nReport >= 95% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
           'utf8'
         );
-        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nVerify PR Readiness 100%.\n', 'utf8');
+        fs.writeFileSync(
+          path.join(tmpMainSpecDir, 'docs/ai/pr-readiness.md'),
+          '# PR Readiness\nPR Readiness Checklist 100% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
+          'utf8'
+        );
+        fs.writeFileSync(path.join(tmpMainSpecDir, 'DEV.md'), '# DEV\nEngineering guide.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'TESTING.md'), '# TESTING\nAll checks.\n', 'utf8');
         fs.writeFileSync(path.join(tmpMainSpecDir, 'README.md'), '# README\n100% offline.\n', 'utf8');
         assert.throws(
@@ -1314,17 +1322,17 @@ async function runCodecAndEngineTests() {
           '# AGENTS\nReport 100% PR Readiness in <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n',
           'utf8'
         );
-        assert.equal(validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false }).scannedFiles.length, 4);
+        assert.equal(validatePrReadinessSpec(tmpMainSpecDir, { requireProjectMd: false }).scannedFiles.length, 5);
       } finally {
         fs.rmSync(tmpMainSpecDir, { recursive: true, force: true });
       }
     }
 
-    /* capy-dev-only:start */
     const tmpStrictRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-sanity-strict-'));
     try {
       fs.mkdirSync(path.join(tmpStrictRepo, 'web/src'), { recursive: true });
       fs.mkdirSync(path.join(tmpStrictRepo, 'app'), { recursive: true });
+      fs.mkdirSync(path.join(tmpStrictRepo, 'docs/ai'), { recursive: true });
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'web/package.json'),
         JSON.stringify({ name: 'capy-paint', version: '3.0.4' }, null, 2),
@@ -1357,18 +1365,16 @@ async function runCodecAndEngineTests() {
       ];
       const strictAllLinks = strictRootMds.map((n) => `[${n}](./${n})`).join(' ');
       const strictAgentsDoc = `# AGENTS.md\n${strictAllLinks}\nReport 100% PR Readiness Score inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
-      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist 100% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
-      const strictDevDoc = `# DEV.md\n${strictAllLinks}\nVerify PR Readiness Score (100%).\n`;
+      const strictPrReadinessDoc = `# PR Readiness\nPR Readiness Checklist 100% inside <details> with % at the start of each line and as many or as few scope-relevant items as needed.\n`;
+      const strictProjectDoc = `# PROJECT.md\n${strictAllLinks}\n`;
+      const strictDevDoc = `# DEV.md\n${strictAllLinks}\n`;
+      fs.writeFileSync(path.join(tmpStrictRepo, 'docs/ai/pr-readiness.md'), strictPrReadinessDoc, 'utf8');
       for (const name of strictRootMds) {
         if (name === 'CHANGELOG.md') continue;
         const content =
           name === 'AGENTS.md'
             ? strictAgentsDoc
-            : name === 'PROJECT.md'
-              ? strictProjectDoc
-              : name === 'DEV.md'
-                ? strictDevDoc
-                : `# ${name}\n${strictAllLinks}\n`;
+            : `# ${name}\n${strictAllLinks}\n`;
         fs.writeFileSync(path.join(tmpStrictRepo, name), content, 'utf8');
       }
       const makeStrictChangelog = ({
@@ -1400,7 +1406,7 @@ async function runCodecAndEngineTests() {
         enforcePrReadinessSpec: true,
       });
       assert.equal(strictRes.version, '3.0.4');
-      assert.equal(strictRes.markdownFilesChecked, 13);
+      assert.equal(strictRes.markdownFilesChecked, 14);
 
       // 1. Missing ./PROJECT.md from README.md
       fs.writeFileSync(
@@ -1581,8 +1587,8 @@ async function runCodecAndEngineTests() {
 
       // 8. Missing flexible-count or %-start spec fails when enforcePrReadinessSpec: true
       fs.writeFileSync(
-        path.join(tmpStrictRepo, 'PROJECT.md'),
-        `# PROJECT.md\n${strictAllLinks}\nPR Readiness Checklist 100% inside <details> with % at the start of each line.\n`,
+        path.join(tmpStrictRepo, 'docs/ai/pr-readiness.md'),
+        '# PR Readiness\nPR Readiness Checklist 100% inside <details> with % at the start of each line.\n',
         'utf8'
       );
       assert.throws(
@@ -1594,9 +1600,9 @@ async function runCodecAndEngineTests() {
             enforceEpicNaming: true,
             enforcePrReadinessSpec: true,
           }),
-        /PROJECT\.md must allow variable/
+        /docs\/ai\/pr-readiness\.md must allow variable/
       );
-      fs.writeFileSync(path.join(tmpStrictRepo, 'PROJECT.md'), strictProjectDoc, 'utf8');
+      fs.writeFileSync(path.join(tmpStrictRepo, 'docs/ai/pr-readiness.md'), strictPrReadinessDoc, 'utf8');
 
       fs.writeFileSync(
         path.join(tmpStrictRepo, 'AGENTS.md'),
@@ -1766,7 +1772,7 @@ async function runCodecAndEngineTests() {
       fs.rmSync(tmpStrictRepo, { recursive: true, force: true });
     }
     /* capy-dev-only:end */
-    logUnitPass('SemVer parity, <2s sanity.mjs gate, CHANGELOG contract, Epic naming & PR Readiness checks verified.');
+    logUnitPass('SemVer parity, <2s sanity.mjs gate, CHANGELOG contract, and Epic naming checks verified.');
 
     // Unit-test .github/scripts/cleanup-gh-pages-previews.mjs and .github/scripts/cleanup-branches.mjs
     logUnitStart('Testing .github/scripts cleanup-gh-pages-previews.mjs & cleanup-branches.mjs...');
@@ -4379,6 +4385,214 @@ async function runCodecAndEngineTests() {
       );
       assert.equal(fs.existsSync(path.join(tmpCleanStage, 'AGENTS.md')), false);
       assert.equal(fs.existsSync(path.join(tmpCleanStage, 'CAPYBOOP.md')), false);
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, 'docs/ai')), false);
+      assert.equal(
+        fs.existsSync(path.join(tmpCleanStage, '.github/workflows/open-issue.yml')),
+        false
+      );
+      // Verify AI-dev leak rejection and product-AI preservation
+      for (const badToken of [
+        'open-issue.yml',
+        'AGENTS.md',
+        'CAPYBOOP.md',
+        'docs/ai/pr-readiness.md',
+        '.agents/environment.json',
+        'Antigravity',
+        'conversation://abc',
+        'Gemini 4 Argon',
+        'MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API',
+        'Claude Opus',
+        'codex/',
+        'ChatGPT',
+        'GitHub Copilot',
+        'PR Readiness Score',
+        'WHITEBOARD.md',
+        '/grill-me',
+        '/teamwork',
+        '/goal',
+        '/plan',
+        'WHITEBOARD',
+        '.agents',
+        'PR_READINESS',
+        'PrReadiness',
+        'clean-room',
+        'regenerate-puzzles',
+        'automation/sprint-1',
+        'AI Contributors',
+        'bot-authored',
+        'Owner directive',
+        'review:ai-approved',
+        'ai-agent',
+        'capyboop/capy',
+      ]) {
+        assert.equal(
+          FORBIDDEN_PERSONA_REGEX.test(badToken),
+          true,
+          `FORBIDDEN_PERSONA_REGEX must reject "${badToken}"`
+        );
+      }
+      for (const safeToken of [
+        'AiArtworkProvider',
+        'AiCreditLedger',
+        'Starter free AI generation credits',
+        'AI Credits',
+        'EPIC-5',
+        'project owner (capyboop)',
+        'User-Agent: capy-paint',
+        'github-actions[bot]',
+      ]) {
+        assert.equal(
+          FORBIDDEN_PERSONA_REGEX.test(safeToken),
+          false,
+          `FORBIDDEN_PERSONA_REGEX must allow "${safeToken}"`
+        );
+      }
+      assert.equal(
+        transformPersonaContent('See [Guide](./docs/ai/workflow-and-models.md) | [DEV](./DEV.md)'),
+        'See [DEV](./DEV.md)'
+      );
+      assert.equal(
+        sanitizeCommitMessage('Update AGENTS.md, Gemini 4, codex/, and open-issue.yml (#607)'),
+        'Update project docs, CI, feature/, and GitHub workflow'
+      );
+      for (const [rawMsg, expectedOut] of [
+        ['Add /goal and /plan workflow support for AI Contributors', 'Add workflow and workflow workflow support for contributors'],
+        ['Update WHITEBOARD and Project Owner directive for bot-authored PRs', 'Update status notes and Project project guideline for automated PRs'],
+        ['Sync .agents directory and PR_READINESS check', 'Sync dev environment config directory and PR checklist check'],
+        ['Fix automation/sprint-12 branch cleanup and clean-room regenerate-puzzles.yml', 'Fix feature/sprint-12 branch cleanup and public asset generation'],
+      ]) {
+        const cleaned = sanitizeCommitMessage(rawMsg);
+        assert.equal(cleaned, expectedOut);
+        assert.equal(FORBIDDEN_PERSONA_REGEX.test(cleaned), false, `Sanitized output leaked: ${cleaned}`);
+      }
+      // Verify multi-line scrub() contract used by publish-capyboop.yml (strips multi-line capy-dev-only blocks and preserves list indentation)
+      const publishYmlText = fs.readFileSync(
+        path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
+        'utf8'
+      );
+      assert.equal(
+        publishYmlText.includes("transformPersonaContent(String(text || ''))\n              .split(/\\r?\\n/)"),
+        true,
+        'publish-capyboop.yml scrub() must run transformPersonaContent on full multi-line string before splitting'
+      );
+      const scrubEpic = (text) =>
+        transformPersonaContent(String(text || ''))
+          .split(/\r?\n/)
+          .map((line) => {
+            if (!line.trim()) return '';
+            const [, indent = '', rest = ''] = line.match(/^(\s*)(.*)$/) || [];
+            return `${indent}${sanitizeCommitMessage(rest, { fallback: rest })}`;
+          })
+          .join('\n');
+      const scrubbedEpic = scrubEpic(
+        [
+          '# EPIC-2',
+          'Public line',
+          '<!-- capy-dev-only:start -->',
+          'Secret private roadmap note mentioning internal workflow',
+          '<!-- capy-dev-only:end -->',
+          '  - Indented sub-bullet',
+          '    - Nested sub-bullet',
+        ].join('\n')
+      );
+      assert.equal(scrubbedEpic.includes('Secret private roadmap note'), false);
+      assert.equal(scrubbedEpic.includes('internal-only'), false);
+      assert.equal(scrubbedEpic.includes('  - Indented sub-bullet'), true);
+      assert.equal(scrubbedEpic.includes('    - Nested sub-bullet'), true);
+
+      // Verify assertZeroSourcePersonaLeak rejects forbidden relative file paths
+      const badPathFile = path.join(tmpCleanStage, 'clean-room-leak.md');
+      fs.writeFileSync(badPathFile, 'Harmless public text\n', 'utf8');
+      try {
+        assert.throws(
+          () => assertZeroSourcePersonaLeak(tmpCleanStage),
+          /Forbidden persona token "clean-room" leaked in path clean-room-leak\.md/
+        );
+      } finally {
+        fs.rmSync(badPathFile, { force: true });
+      }
+
+      const tmpVerifyLog = path.join(tmpCleanStage, 'verify-log-clean.txt');
+      const tmpVerifyLeak = path.join(tmpCleanStage, 'verify-log-leak.txt');
+      fs.writeFileSync(tmpVerifyLog, 'capyboop Update Capy Paint AiArtworkProvider\x00', 'utf8');
+      fs.writeFileSync(tmpVerifyLeak, 'capyboop Update AGENTS.md for Antigravity\x00', 'utf8');
+      try {
+        execFileSync(
+          process.execPath,
+          [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), '--verify-log', tmpVerifyLog],
+          { stdio: 'pipe' }
+        );
+        let leakRc = 0;
+        try {
+          execFileSync(
+            process.execPath,
+            [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), '--verify-log', tmpVerifyLeak],
+            { stdio: 'pipe' }
+          );
+        } catch (err) {
+          leakRc = Number(err.status || 1);
+        }
+        assert.equal(leakRc, 2, '--verify-log must exit 2 on forbidden persona token');
+        for (const badVerifyArgs of [['--verify-log'], ['--verify-log', '--dry-run']]) {
+          let missingArgRc = 0;
+          try {
+            execFileSync(
+              process.execPath,
+              [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), ...badVerifyArgs],
+              { stdio: 'pipe' }
+            );
+          } catch (err) {
+            missingArgRc = Number(err.status || 0);
+          }
+          assert.equal(missingArgRc, 1, `--verify-log missing arg (${badVerifyArgs.join(' ')}) must exit 1`);
+        }
+      } finally {
+        fs.rmSync(tmpVerifyLog, { force: true });
+        fs.rmSync(tmpVerifyLeak, { force: true });
+      }
+      const stagedGitignore = fs.readFileSync(path.join(tmpCleanStage, '.gitignore'), 'utf8');
+      assert.equal(stagedGitignore.includes('.agents/'), false);
+      const stagedCleanupBranches = fs.readFileSync(
+        path.join(tmpCleanStage, '.github/workflows/cleanup-branches.yml'),
+        'utf8'
+      );
+      assert.equal(stagedCleanupBranches.includes('name: Cleanup stale branches'), true);
+      assert.equal(stagedCleanupBranches.includes('codex/'), false);
+      assert.equal(stagedCleanupBranches.includes('automation/'), false);
+      const stagedMetadata = fs.readFileSync(path.join(tmpCleanStage, 'web/metadata.json'), 'utf8');
+      assert.equal(stagedMetadata.includes('MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API'), false);
+      const stagedProviders = fs.readFileSync(
+        path.join(tmpCleanStage, 'web/src/services/providers/ProviderRegistry.ts'),
+        'utf8'
+      );
+      assert.equal(stagedProviders.includes('AiArtworkProvider'), true);
+      assert.equal(stagedProviders.includes('AiCreditLedger'), true);
+      assert.equal(stagedRoadmap.includes('EPIC-5'), true);
+
+      // Verify cross-ref guardrail presence & regex behavior in open-pr.yml, open-issue.yml & pr-review-gate.yml
+      const crossRefRe =
+        /(?:https?:\/\/github\.com\/capyboop\/paint\/(?:issues|pull)\/\d+|(?<![A-Za-z0-9_.-])capyboop\/paint#\d+)/i;
+      for (const wfRel of [
+        '.github/workflows/open-pr.yml',
+        '.github/workflows/open-issue.yml',
+        '.github/workflows/pr-review-gate.yml',
+      ]) {
+        const wfSrc = fs.readFileSync(path.resolve(projectRoot, '..', wfRel), 'utf8');
+        assert.equal(
+          wfSrc.includes('FORBIDDEN_PUBLIC_CROSS_REF_RE'),
+          true,
+          `${wfRel} must enforce FORBIDDEN_PUBLIC_CROSS_REF_RE`
+        );
+      }
+      const badCrossRefUrl = 'https://github.com/' + 'capyboop/paint/issues/3';
+      const badCrossRefPr = 'https://github.com/' + 'capyboop/paint/pull/9';
+      const badCrossRefShort = 'capyboop/' + 'paint#3';
+      assert.equal(crossRefRe.test(`Fixes ${badCrossRefUrl}`), true);
+      assert.equal(crossRefRe.test(`See ${badCrossRefPr}`), true);
+      assert.equal(crossRefRe.test(`Refs ${badCrossRefShort}`), true);
+      assert.equal(crossRefRe.test('See `capyboop/paint` public issue 3'), false);
+      assert.equal(crossRefRe.test('https://github.com/capyboop/paint/issues'), false);
+
       for (const publicDoc of [
         'CONTRIBUTING.md',
         'SUPPORT.md',
@@ -8142,8 +8356,22 @@ async function runCodecAndEngineTests() {
         ghContains,
         ghFromJson
       ),
+      true,
+      'Human PR title edit must trigger review-gate for cross-ref guardrail'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'shthed',
+          event: { action: 'edited', changes: {} },
+        },
+        ghContains,
+        ghFromJson
+      ),
       false,
-      'Human PR title-only edit must not trigger review-gate'
+      'Human PR edit without base/body/title changes must not trigger review-gate'
     );
     assert.equal(
       evalReviewGateIf(
@@ -8222,7 +8450,7 @@ async function runCodecAndEngineTests() {
       publishScript.includes('git log FETCH_HEAD --format="%an %ae %cn %ce %B%x00" > "${LOG_FILE}"'),
       true
     );
-    assert.equal(publishScript.includes('grep -iaqzE'), true);
+    assert.equal(publishScript.includes('--verify-log'), true);
     assert.equal(publishScript.includes('NEEDS_CLEAN_RESET'), true);
     assert.equal(publishScript.includes('GIT_ASKPASS'), true);
     assert.equal(publishScript.includes('chmod 700 "${ASKPASS_SCRIPT}"'), true);
@@ -9023,6 +9251,7 @@ async function runCodecAndEngineTests() {
       );
     }
 
+    /* capy-dev-only:start */
     // Verify regenerate-puzzles.yml triggers only on workflow_dispatch or path-filtered pushes to beta (no schedule).
     // Note: regenerate-puzzles.yml is a dev-only workflow stripped from clean-room capyboop/paint exports.
     const regenWorkflowPath = path.resolve(projectRoot, '../.github/workflows/regenerate-puzzles.yml');
@@ -9072,6 +9301,7 @@ async function runCodecAndEngineTests() {
         );
       }
     }
+    /* capy-dev-only:end */
     logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs & upload-pages-artifact dotfiles verified.');
 
     // Verify .github/scripts/compile-changelog.mjs & release.yml wiring
