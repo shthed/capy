@@ -77,6 +77,7 @@ export function resolveReleaseChannel(
   const isCustomDomain =
     originHostname === 'capypaint.com' ||
     originHostname === 'www.capypaint.com' ||
+    originHostname === 'paint.capyboop.com' ||
     originHostname.endsWith('.capypaint.com') ||
     originHostname === 'appassets.androidplatform.net';
 

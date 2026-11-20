@@ -1258,6 +1258,7 @@ export function resolveCoopRoomWsUrl(
   if (
     hostname === 'capypaint.com' ||
     hostname === 'www.capypaint.com' ||
+    hostname === 'paint.capyboop.com' ||
     hostname.endsWith('.capypaint.com')
   ) {
     const wsProto = locationLike.protocol === 'http:' ? 'ws:' : 'wss:';
