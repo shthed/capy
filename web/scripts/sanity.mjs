@@ -221,10 +221,10 @@ export function validateChangelogChannelOrder(
 }
 
 export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
-  const hint = `Use [EPIC-N](https://github.com/<owner>/capy/issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
+  const hint = `Use [EPIC-N](../../issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
   assert.equal(/#47[6-9]\b|#480\b/.test(markdownText), false, hint);
   assert.equal(
-    /\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/issues\/\d+/.test(markdownText),
+    /\[#\d+\]\((?:https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/|(?:\.\.\/){2,})issues\/\d+/.test(markdownText),
     false,
     hint
   );
@@ -540,6 +540,8 @@ export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIR
   return { rootMdFiles, hasProjectMd };
 }
 
+export const MAX_CHANGELOG_FRAGMENT_LENGTH = 320;
+
 export function parseChangelogFragment(rawContent, relFile = '.changelog/fragment.md') {
   const normalized = String(rawContent || '').replace(/\r\n/g, '\n');
   const fmMatch = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(normalized);
@@ -585,6 +587,11 @@ export function parseChangelogFragment(rawContent, relFile = '.changelog/fragmen
     /^#{1,6}\s|^-\s/.test(body),
     false,
     `Changelog fragment ${relFile} summary must be plain text without headings or list prefixes`
+  );
+  assert.equal(
+    body.length <= MAX_CHANGELOG_FRAGMENT_LENGTH,
+    true,
+    `Changelog fragment ${relFile} summary is too long (${body.length} chars > ${MAX_CHANGELOG_FRAGMENT_LENGTH} max); keep each bullet to 1--2 concise sentences`
   );
 
   return {
@@ -814,12 +821,12 @@ export function runSanityChecks({
 
   const bulletLines = changelogText.split('\n').filter((line) => line.startsWith('- '));
   assert.equal(bulletLines.length >= 398, true, `Expected >= 398 bullets, got ${bulletLines.length}`);
-  let bulletRe = /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/;
+  let bulletRe = /^- (?:\[#\d+\]\(\.\.\/\.\.\/pull\/\d+\)|#\d+)\s+\S/;
   /* capy-dev-only:start */
-  bulletRe = /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/;
+  bulletRe = /^- \[#\d+\]\(\.\.\/\.\.\/pull\/\d+\)\s+\S/;
   /* capy-dev-only:end */
   for (const b of bulletLines) {
-    assert.match(b, bulletRe, `Invalid CHANGELOG bullet suffix: ${b}`);
+    assert.match(b, bulletRe, `Invalid CHANGELOG bullet prefix: ${b}`);
   }
 
   // 3. Markdown hygiene & portable relative links across all .md files
@@ -890,7 +897,8 @@ export function runSanityChecks({
         cleanTarget.startsWith('mailto:') ||
         cleanTarget.startsWith('tel:') ||
         cleanTarget.startsWith('data:') ||
-        cleanTarget.startsWith('#')
+        cleanTarget.startsWith('#') ||
+        /^(?:\.\.\/){2,}(?:pull|issues|milestone)\/\d+(?:[/?#].*)?$/.test(cleanTarget)
       ) {
         continue;
       }

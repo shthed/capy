@@ -1,6 +1,6 @@
 # Capy Paint — Google Play Store Listing & Release Ops Guide
 
-Complete store copy, form declarations, and asset checklist for publishing **Capy Paint** (`com.capyboop.paint`) to Google Play Console targeting `v3.0.43` (`versionCode = 30043`).
+Complete store copy, form declarations, and asset checklist for publishing **Capy Paint** (`com.capyboop.paint`) to Google Play Console targeting `v3.0.8` (`versionCode = 30008`, sourced from [`web/package.json`](../../web/package.json)).
 
 ---
 
@@ -66,9 +66,9 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 - **Developer Contact Email (Store Settings)**: Set a monitored public support email address under Play Console **Store settings -> Store listing contact details** before submitting for review (required by Google Play Console on every published store listing).
 - **App Access**: All core gameplay, custom photo puzzles, built-in artworks, the daily Puzzle of the Day, saves, SVG exports, and replay features work immediately with zero login required (`All functionality is available without special access`).
 - **Advertising**: `No, my app does not contain ads.`
-- **Data Safety (`v3.0.43`)**:
-  - Does your app collect or share any of the required user data types? `No` (local-first on-device storage and processing by default; Cloud/Co-op UI and startup Play Games sign-in are disabled in `v3.0.43`—[`MainActivity.kt`](../../app/src/main/java/com/capyboop/paint/MainActivity.kt) only initializes `PlayGamesSdk` if configured and never invokes `requestPlayGamesSignIn()` on launch unless JS explicitly calls `CapyAndroid.signInPlayGames()` under opt-in flags, [`AndroidManifest.xml`](../../app/src/main/AndroidManifest.xml) sets `SUPPRESS_GAME_PROFILE_CREATION="true"`, `CAPY_PLAY_GAMES_APP_ID` stays unset for initial launch, and zero analytics/ad/tracking SDKs are bundled).
-  - Note: Once Google Play Games Services v2 or Google Drive OAuth Cloud Sync is promoted for end users in [EPIC-5](https://github.com/shthed/capy/issues/480), update Data Safety to disclose opt-in Play Games profile/Saved Games sync.
+- **Data Safety (`v3.0.8`)**:
+  - Does your app collect or share any of the required user data types? `No` (local-first on-device storage and processing by default; Cloud/Co-op UI and startup Play Games sign-in are disabled in `v3.0.8`—[`MainActivity.kt`](../../app/src/main/java/com/capyboop/paint/MainActivity.kt) only initializes `PlayGamesSdk` if configured and never invokes `requestPlayGamesSignIn()` on launch unless JS explicitly calls `CapyAndroid.signInPlayGames()` under opt-in flags, [`AndroidManifest.xml`](../../app/src/main/AndroidManifest.xml) sets `SUPPRESS_GAME_PROFILE_CREATION="true"`, `CAPY_PLAY_GAMES_APP_ID` stays unset for initial launch, and zero analytics/ad/tracking SDKs are bundled).
+  - Note: Once Google Play Games Services v2 or Google Drive OAuth Cloud Sync is promoted for end users in [EPIC-5](../../../../issues/480), update Data Safety to disclose opt-in Play Games profile/Saved Games sync.
 - **IARC Content Rating Questionnaire**:
   - Category: `Games` (`Reference, News, or Educational` = No; `Game` = Yes).
   - Violence / Fear / Sexuality / Gambling / Substances / Profanity: `No` across all prompts (`Everyone` / `PEGI 3` / `USK 0`).
@@ -79,10 +79,10 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 
 ## 4. Play Console Release Steps (Human Ops)
 
-1. Verify GitHub Actions signing secrets on the source repository (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`, already configured in repository Actions secrets) per [`.github/workflows/release.yml`](../../.github/workflows/release.yml), keeping `CAPY_PLAY_GAMES_APP_ID` unset for the initial `v3.0.43` Phone & Tablet launch.
-2. Create and push tag `v3.0.43` from updated `main` (`git tag -a v3.0.43 -m "v3.0.43" && git push origin v3.0.43`) to build the signed Play Store `capy-v3.0.43.aab` artifact cleanly.
+1. Verify GitHub Actions signing secrets on the source repository (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`, already configured in repository Actions secrets) per [`.github/workflows/release.yml`](../../.github/workflows/release.yml), keeping `CAPY_PLAY_GAMES_APP_ID` unset for the initial `v3.0.8` Phone & Tablet launch.
+2. Create and push tag `v3.0.8` (matching [`web/package.json`](../../web/package.json)) from updated `main` (`git tag -a v3.0.8 -m "v3.0.8" && git push origin v3.0.8`) to build the signed Play Store `capy-v3.0.8.aab` artifact cleanly.
 3. In Google Play Console (`com.capyboop.paint`):
    - Configure your monitored **Developer contact email** (and optional website [https://capypaint.com/](https://capypaint.com/)) under **Store settings -> Store listing contact details**.
    - Upload `app_icon_512.png`, `feature_graphic.png`, and the `screenshots/` PNGs under **Main store listing** (Phone and Tablet tabs only; skip TV/Wear).
    - Complete **App content** (Privacy Policy URL, Ads = No, App Access = No restrictions, Content Rating = Everyone, Data Safety = No data collected/shared).
-   - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.0.43.aab` (`versionCode = 30043`), verify zero pre-launch manifest warnings, and roll out to testers / Production.
+   - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.0.8.aab` (`versionCode = 30008`), verify zero pre-launch manifest warnings, and roll out to testers / Production.
