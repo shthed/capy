@@ -1037,7 +1037,7 @@ jobs:
                     !livePr.draft &&
                     livePr.head?.sha === headSha &&
                     livePr.mergeable !== false &&
-                    livePr.mergeable_state === 'blocked' &&
+                    ['blocked', 'unstable'].includes(livePr.mergeable_state) &&
                     (await headChecksGreen())
                   ) {
                     await directMergeWithFallback();
