@@ -1,8 +1,12 @@
-### 3.0.43 - 2026-11-20 (Alpha)
+### 3.0.44 - 2026-11-20 (Alpha)
+
+- Bind `paint.capyboop.com` (`custom_domain: true`) on `capy-paint` in `wrangler.jsonc`, allow `paint.capyboop.com` in `worker/coopRoomProtocol.ts` (`ALLOWED_EXACT_RELAY_HOSTS`), `ProviderRegistry.ts` (`resolveCoopRoomWsUrl`), `web/src/version.ts` (`resolveReleaseChannel`), and `web/public/_headers` (`connect-src`), and add unit tests in `web/scripts/test.mjs` [#595](https://github.com/shthed/capy/pull/595)
+
+### 3.0.43 - 2026-11-20 (Beta)
 
 - Rename Android `applicationId`, `namespace`, Kotlin source/test packages (`app/src/main/java/com/capyboop/paint/`), `FileProvider` authority, ProGuard keep rules, Digital Asset Links (`assetlinks.json`), `privacy-policy.html`, and store/architecture docs from `com.capypaint.capy` to `com.capyboop.paint` [#601](https://github.com/shthed/capy/pull/601)
 
-### 3.0.42 - 2026-11-20 (Beta)
+### 3.0.42 - 2026-11-20
 
 - Add Fat-Finger Mode (`fatFingerAssist`) and configurable Finger Reach Radius (`touchReachRadiusPx` `8px`--`40px` with `Compact 12px` / `Standard 22px` / `Large 34px` presets) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` and `StorageService.ts`, implement zero-allocation radial near-miss hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`, wired through `App.tsx`) scaling dynamically with zoom, add unit and Playwright E2E micro-region tap tests in `web/scripts/test.mjs`, move `US-3.5` from [EPIC-3](https://github.com/shthed/capy/issues/478) into [EPIC-2](https://github.com/shthed/capy/issues/477), and sync `WEB.md`, `ROADMAP.md`, and `TODO.md` [#602](https://github.com/shthed/capy/pull/602)
 

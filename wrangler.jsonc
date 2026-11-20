@@ -15,6 +15,10 @@
     {
       "pattern": "www.capypaint.com",
       "custom_domain": true
+    },
+    {
+      "pattern": "paint.capyboop.com",
+      "custom_domain": true
     }
   ],
   "assets": {

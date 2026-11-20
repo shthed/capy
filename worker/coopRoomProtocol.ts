@@ -118,6 +118,7 @@ export function normalizeRoomCode(raw: string | null | undefined): string | null
 const ALLOWED_EXACT_RELAY_HOSTS = new Set<string>([
   'capypaint.com',
   'www.capypaint.com',
+  'paint.capyboop.com',
   'capyboop.github.io',
   /* capy-dev-only:start */
   'shthed.github.io',
