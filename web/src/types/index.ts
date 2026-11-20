@@ -102,6 +102,8 @@ export function matchesGeneratorConfig(cfg: GeneratorConfig, ref: GeneratorConfi
 export interface UserSettings {
   autoAdvance: boolean;
   difficulty: Difficulty;
+  fatFingerAssist: boolean;
+  touchReachRadiusPx: number;
   isPaintMode: boolean;
   isFreeColorMode: boolean;
   raisePaletteDock: boolean;

@@ -1,9 +1,13 @@
-### 3.0.41 - 2026-11-19 (Alpha)
+### 3.0.42 - 2026-11-20 (Alpha)
+
+- Add Fat-Finger Mode (`fatFingerAssist`) and configurable Finger Reach Radius (`touchReachRadiusPx` `8px`--`40px` with `Compact 12px` / `Standard 22px` / `Large 34px` presets) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` and `StorageService.ts`, implement zero-allocation radial near-miss hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`, wired through `App.tsx`) scaling dynamically with zoom, add unit and Playwright E2E micro-region tap tests in `web/scripts/test.mjs`, move `US-3.5` from [EPIC-3](https://github.com/shthed/capy/issues/478) into [EPIC-2](https://github.com/shthed/capy/issues/477), and sync `WEB.md`, `ROADMAP.md`, and `TODO.md` [#602](https://github.com/shthed/capy/pull/602)
+
+### 3.0.41 - 2026-11-19 (Beta)
 
 - Retarget the clean-room public mirror workflow, in-app **Report Bug / Ideas** link (`SettingsModal.tsx`), `privacy-policy.html`, `sanity.mjs` / `test.mjs` guards, and studio documentation from `capyboop/capy` to the standalone `capyboop/paint` repository [#595](https://github.com/shthed/capy/pull/595)
 - Align the root `README.md` heading (`# Capy Paint`) with the standalone `capyboop/paint` repository [#598](https://github.com/shthed/capy/pull/598)
 
-### 3.0.40 - 2026-11-19 (Production, Beta)
+### 3.0.40 - 2026-11-19 (Production)
 
 - Allow the `GameTopBar` puzzle save title pill (`topbar-saves-btn` / `topbar-saves-title`) to expand across available left-lane width on mobile and desktop instead of truncating at fixed `38px`/`74px`/`200px` caps, and add a `360x780` Playwright overflow assertion in `web/scripts/test.mjs` [#590](https://github.com/shthed/capy/pull/590)
 

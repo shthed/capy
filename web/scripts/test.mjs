@@ -2317,6 +2317,198 @@ async function runCodecAndEngineTests() {
     assert.equal(canvasMod.getNextZoomStop(8), 12);
     assert.equal(canvasMod.getNextZoomStop(12), 1);
 
+    // 7b. US-3.5 Fat-Finger Mode: resolveNearTapRegionId zero-allocation radial hit-testing
+    {
+      const width = 128;
+      const height = 128;
+      const regionMap = new Int32Array(width * height);
+      const setRect = (x0, y0, x1, y1, id) => {
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
+            regionMap[y * width + x] = id;
+          }
+        }
+      };
+      // Micro-region 1 (colorId 1 = active) at (20..21, 20..21)
+      setRect(20, 20, 21, 21, 1);
+      // Micro-region 2 (colorId 2 = non-active) at (26..27, 20..21)
+      setRect(26, 20, 27, 21, 2);
+      // Filled region 3 (colorId 1) at (50..53, 50..53) next to unfilled micro-region 4 (colorId 2) at (55..56, 50..51)
+      setRect(50, 50, 53, 53, 3);
+      setRect(55, 50, 56, 51, 4);
+      // Isolated micro-region 5 (colorId 2 = non-active) at (80..81, 80..81), far from active regions
+      setRect(80, 80, 81, 81, 5);
+
+      const regionById = new Map([
+        [1, { id: 1, colorId: 1, pixelCount: 4, centroidX: 20, centroidY: 20, maxRadius: 1 }],
+        [2, { id: 2, colorId: 2, pixelCount: 4, centroidX: 26, centroidY: 20, maxRadius: 1 }],
+        [3, { id: 3, colorId: 1, pixelCount: 16, centroidX: 51, centroidY: 51, maxRadius: 2 }],
+        [4, { id: 4, colorId: 2, pixelCount: 4, centroidX: 55, centroidY: 50, maxRadius: 1 }],
+        [5, { id: 5, colorId: 2, pixelCount: 4, centroidX: 80, centroidY: 80, maxRadius: 1 }],
+      ]);
+      const filledRegionIds = new Set([3]);
+      const baseParams = {
+        width,
+        height,
+        regionMap,
+        regionById,
+        filledRegionIds,
+        activeColorId: 1,
+        touchReachRadiusPx: 22,
+        totalScreenScale: 1,
+        isFreeColorMode: false,
+      };
+
+      // Direct O(1) hit works even when fatFingerAssist is false
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 20.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: false,
+        }),
+        1,
+        'Direct O(1) hit on unfilled active region must succeed with fatFingerAssist=false'
+      );
+
+      // Near-miss with fatFingerAssist=false must return 0
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 17.5,
+          canvasY: 20.5,
+          difficulty: 'EASY',
+          fatFingerAssist: false,
+        }),
+        0,
+        'Near-miss on border with fatFingerAssist=false must return 0'
+      );
+
+      // NORMAL + fatFingerAssist=true: snaps strictly to activeColorId (1), ignores isolated non-active (5)
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 17.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+        }),
+        1,
+        'NORMAL + fatFingerAssist=true must snap to nearby unfilled activeColorId region'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 83.5,
+          canvasY: 80.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+        }),
+        0,
+        'NORMAL + fatFingerAssist=true must NOT snap to non-activeColorId region'
+      );
+
+      // EASY + fatFingerAssist=true: prefers activeColorId (1) over closer non-active (2), and falls back to any unfilled color on border/filled pixels
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 24.5,
+          canvasY: 20.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+        }),
+        1,
+        'EASY + fatFingerAssist=true must prefer activeColorId (1 at dx=-3) over non-active (2 at dx=+2)'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 83.5,
+          canvasY: 80.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+        }),
+        5,
+        'EASY + fatFingerAssist=true on border near non-active region must snap to 5'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 52.5,
+          canvasY: 50.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+        }),
+        4,
+        'EASY + fatFingerAssist=true on filled region must snap to nearby unfilled region of any color'
+      );
+
+      // Zoom scaling: touchReachRadiusPx=22 at totalScreenScale=4 -> 5.5 puzzle px
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 14.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 22,
+          totalScreenScale: 4,
+        }),
+        0,
+        'Zoomed-in 4x (reach=5.5px) must not reach region 6px away'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 16.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 22,
+          totalScreenScale: 4,
+        }),
+        1,
+        'Zoomed-in 4x (reach=5.5px) must reach region 4px away'
+      );
+
+      // Zoomed-out 64px puzzle-space cap: 40 / 0.25 = 160 -> capped at 64px
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 85.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 40,
+          totalScreenScale: 0.25,
+        }),
+        1,
+        'Zoomed-out 0.25x cap (64px) must reach region 64px away (85 - 21 = 64)'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 86.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 40,
+          totalScreenScale: 0.25,
+        }),
+        0,
+        'Zoomed-out 0.25x cap (64px) must NOT reach region 65px away (86 - 21 = 65)'
+      );
+
+      // Zero-allocation verification: no Set/Map/Array allocations inside resolveNearTapRegionId
+      const fnSource = canvasMod.resolveNearTapRegionId.toString();
+      assert.equal(
+        /new\s+(Map|Set|Array)\b/.test(fnSource),
+        false,
+        'resolveNearTapRegionId must not allocate Map/Set/Array'
+      );
+    }
+
     // 8. DailyPuzzleService deterministic UTC date seeding & consecutive-date variation
     const dailyMod = await vite.ssrLoadModule('/src/services/DailyPuzzleService.ts');
     const dailyA = dailyMod.getDailyFeaturedPuzzle('2026-11-11');
@@ -8690,16 +8882,39 @@ async function runCodecAndEngineTests() {
     try {
       assert.equal(storageMod.DEFAULT_SETTINGS.regionColorMode, 'DETAIL');
       assert.equal(storageMod.DEFAULT_SETTINGS.paletteSort, 'HUE');
+      assert.equal(storageMod.DEFAULT_SETTINGS.fatFingerAssist, true);
+      assert.equal(storageMod.DEFAULT_SETTINGS.touchReachRadiusPx, 22);
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
         difficulty: 'NORMAL',
         paletteSort: 'HUE',
         highlightStyle: 'CENTROID_GLOW',
+        fatFingerAssist: false,
+        touchReachRadiusPx: 34,
       });
       const loadedNormalHue = storageMod.StorageService.loadSettings();
       assert.equal(loadedNormalHue.difficulty, 'NORMAL');
       assert.equal(loadedNormalHue.paletteSort, 'HUE');
       assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
+      assert.equal(loadedNormalHue.fatFingerAssist, false);
+      assert.equal(loadedNormalHue.touchReachRadiusPx, 34);
+
+      // Verify [8, 40] clamping and absent fatFingerAssist fallback to resolvedDifficulty === 'EASY'
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'NORMAL', touchReachRadiusPx: 99 })
+      );
+      const clampedHighNormal = storageMod.StorageService.loadSettings();
+      assert.equal(clampedHighNormal.touchReachRadiusPx, 40);
+      assert.equal(clampedHighNormal.fatFingerAssist, false);
+
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'EASY', touchReachRadiusPx: 2 })
+      );
+      const clampedLowEasy = storageMod.StorageService.loadSettings();
+      assert.equal(clampedLowEasy.touchReachRadiusPx, 8);
+      assert.equal(clampedLowEasy.fatFingerAssist, true);
 
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
@@ -12695,6 +12910,66 @@ async function runBrowserBasicsSuite() {
     const startX = box.x + box.width / 2;
     const startY = box.y + box.height / 2;
 
+    // Verify US-3.5 Fat-Finger near-miss tap assist on artwork margin (exact pixel out of bounds, within 34px reach)
+    {
+      const edgeY = box.y + box.height * 0.5;
+      // Locate an x-coordinate just outside the left artwork edge (within 0.04 * box.width margin)
+      const nearMissX = box.x + Math.max(2, box.width * 0.04 - 4);
+      const beforeMiss = await page.evaluate(() => {
+        const s = window.capyStorage.loadSettings();
+        s.difficulty = 'EASY';
+        s.fatFingerAssist = false;
+        s.touchReachRadiusPx = 34;
+        window.capyStorage.saveSettings(s);
+        return JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0;
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(page);
+      await page.mouse.click(nearMissX, edgeY);
+      await page.waitForTimeout(150);
+      const afterAssistOff = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0
+      );
+      assert.equal(
+        afterAssistOff,
+        beforeMiss,
+        'Near-miss tap outside artwork edge with fatFingerAssist=false must not fill any region'
+      );
+
+      // Enable fatFingerAssist=true with Large 34px reach and tap the same near-miss coordinate
+      await page.evaluate(() => {
+        const s = window.capyStorage.loadSettings();
+        s.difficulty = 'EASY';
+        s.fatFingerAssist = true;
+        s.touchReachRadiusPx = 34;
+        window.capyStorage.saveSettings(s);
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(page);
+      await page.mouse.click(nearMissX, edgeY);
+      await page.waitForTimeout(200);
+      const afterAssistOn = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0
+      );
+      assert.equal(
+        afterAssistOn >= beforeMiss,
+        true,
+        'Near-miss tap with fatFingerAssist=true must not regress filledCount'
+      );
+      // Also verify an inner-margin tap 3px off the left artwork edge at 1x fit view snaps to an edge region
+      const marginTapX = box.x + Math.max(2, box.width * 0.04 - 2);
+      await page.mouse.click(marginTapX, box.y + box.height * 0.45);
+      await page.waitForTimeout(200);
+      const afterSecondNearTap = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0
+      );
+      assert.equal(
+        afterSecondNearTap > beforeMiss,
+        true,
+        `Near-miss tap with fatFingerAssist=true (34px) must snap and fill an adjacent unfilled region (before=${beforeMiss}, after=${afterSecondNearTap})`
+      );
+    }
+
     // One-finger double-tap-and-drag zoom + inertial flick + zero-latency cancel + background drag
     await page.evaluate(
       async ({ x, y }) => {
@@ -12837,6 +13112,36 @@ async function runBrowserBasicsSuite() {
     await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo must reappear when toggled back on');
+
+    // Verify Fat-Finger Tap Assist toggle and Finger Reach Radius presets in Tab 1
+    await page.getByTestId('setting-fat-finger-assist').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('setting-touch-reach-radius').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('setting-touch-reach-preset-12').click();
+    assert.equal(
+      await page.getByTestId('setting-touch-reach-radius').inputValue(),
+      '12',
+      'Compact 12px preset must update touchReachRadiusPx slider to 12'
+    );
+    await page.getByTestId('setting-touch-reach-preset-34').click();
+    assert.equal(
+      await page.getByTestId('setting-touch-reach-radius').inputValue(),
+      '34',
+      'Large 34px preset must update touchReachRadiusPx slider to 34'
+    );
+    await page.getByTestId('setting-touch-reach-preset-22').click();
+    assert.equal(
+      await page.getByTestId('setting-touch-reach-radius').inputValue(),
+      '22',
+      'Standard 22px preset must restore touchReachRadiusPx slider to 22'
+    );
+    const prevFatFingerChecked = await page.getByTestId('setting-fat-finger-assist').getAttribute('aria-checked');
+    await page.getByTestId('setting-fat-finger-assist').click();
+    assert.equal(
+      await page.getByTestId('setting-fat-finger-assist').getAttribute('aria-checked'),
+      prevFatFingerChecked === 'true' ? 'false' : 'true',
+      'Fat-Finger Tap Assist toggle must flip aria-checked'
+    );
+    await page.getByTestId('setting-fat-finger-assist').click();
 
     // Tab 2: Hints
     await page.getByRole('button', { name: 'Hints', exact: true }).click();
@@ -16284,6 +16589,14 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(tapStarvePage, 'tapStarvePage');
     await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(tapStarvePage);
+    await tapStarvePage.evaluate(() => {
+      const raw = localStorage.getItem('capy_user_settings_v8');
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.fatFingerAssist = false;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(parsed));
+    });
+    await tapStarvePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(tapStarvePage);
     const tapStarveBox = await tapStarvePage.getByTestId('puzzle-canvas').boundingBox();
     assert.ok(tapStarveBox, 'Expected puzzle-canvas boundingBox for tap-starvation regression');
     const tapX = tapStarveBox.x + tapStarveBox.width / 2;
@@ -16622,6 +16935,8 @@ async function runBrowserBasicsSuite() {
       s.difficulty = 'NORMAL';
       s.paletteSort = 'HUE';
       s.highlightStyle = 'CENTROID_GLOW';
+      s.fatFingerAssist = false;
+      s.touchReachRadiusPx = 34;
       window.capyStorage.saveSettings(s);
     });
     await page.reload({ waitUntil: 'networkidle' });
@@ -16632,12 +16947,16 @@ async function runBrowserBasicsSuite() {
         difficulty: s.difficulty,
         paletteSort: s.paletteSort,
         highlightStyle: s.highlightStyle,
+        fatFingerAssist: s.fatFingerAssist,
+        touchReachRadiusPx: s.touchReachRadiusPx,
       };
     });
     assert.deepEqual(persistedEnums, {
       difficulty: 'NORMAL',
       paletteSort: 'HUE',
       highlightStyle: 'CENTROID_GLOW',
+      fatFingerAssist: false,
+      touchReachRadiusPx: 34,
     });
 
     const sandboxBetaPage = await context.newPage();
