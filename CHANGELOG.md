@@ -1,8 +1,12 @@
-### 3.0.45 - 2026-11-20 (Alpha)
+### 3.0.46 - 2026-11-20 (Alpha)
+
+- Enlarge all interactive UI buttons, icons, switches, sliders, color dots, popovers, and palette swatches under Large Text & Buttons mode (`data-large-text="true"` in `web/src/index.css`, `GameTopBar.tsx`, `FloatingActions.tsx`, `ReplayControls.tsx`, `PaletteDock.tsx`, `SettingsModal.tsx`, `ColorPickerPopover.tsx`, `FeatureOfferBanner.tsx`, and `App.tsx`) with responsive `360px`/`400px`/`640px` scaling, mobile 2-row `ReplayControls` wrapping, and synchronized `PaletteDock` centering; enable `fatFingerAssist: true` by default across both `EASY` and `NORMAL` upgrades (`StorageService.ts`, `PuzzleCanvas.tsx`) while preserving explicit `false` opt-outs, couple Large Text ON toggles (Settings and Onboarding) to `fatFingerAssist: true` plus a non-destructive `>= 34px` effective reach boost, polish `SettingsModal.tsx` reach-radius dimming and preset auto-enable, fix both `#602` `PuzzleCanvas.tsx` regressions (Paint Mode single-tap double-paint via `paintedOnDownRef` and Free Colour Mode direct-hit repaint in `resolveNearTapRegionId`), expand unit (`[Unit 04/15]`, `[Unit 15/15]`) and Playwright E2E (`[E2E 22/22]`) coverage in `web/scripts/test.mjs`, and sync `WEB.md` and `TESTING.md` [#605](https://github.com/shthed/capy/pull/605)
+
+### 3.0.45 - 2026-11-20 (Beta)
 
 - Implement anonymous in-game feedback (`capyboop/paint#3`): add `FEEDBACK_RATE_LIMITER` (`5` req / `60s`) in `wrangler.jsonc`, pure-TS `worker/feedbackProtocol.ts` validation/sanitization/CORS/GitHub issue formatting, rate-limited `POST` / `OPTIONS /api/feedback` relay in `worker/index.ts` with `CAPYBOOP_FEEDBACK_TOKEN` and graceful `503` prefilled fallback, `web/src/services/FeedbackService.ts`, a collapsible mobile-first Anonymous Feedback card in `SettingsModal.tsx` Tab 0 (preserving `about-report-issue-link`), unit and Playwright E2E tests in `web/scripts/test.mjs`, and docs in `CLOUD.md` and `WEB.md` [#603](https://github.com/shthed/capy/pull/603)
 
-### 3.0.44 - 2026-11-20 (Beta)
+### 3.0.44 - 2026-11-20
 
 - Bind `paint.capyboop.com` (`custom_domain: true`) on `capy-paint` in `wrangler.jsonc`, allow `paint.capyboop.com` in `worker/coopRoomProtocol.ts` (`ALLOWED_EXACT_RELAY_HOSTS`), `ProviderRegistry.ts` (`resolveCoopRoomWsUrl`), `web/src/version.ts` (`resolveReleaseChannel`), and `web/public/_headers` (`connect-src`), and add unit tests in `web/scripts/test.mjs` [#595](https://github.com/shthed/capy/pull/595)
 
