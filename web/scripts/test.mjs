@@ -3775,7 +3775,7 @@ async function runCodecAndEngineTests() {
           }
           const mainActivityPath = path.resolve(
             projectRoot,
-            '../app/src/main/java/com/capypaint/capy/MainActivity.kt'
+            '../app/src/main/java/com/capyboop/paint/MainActivity.kt'
           );
           if (fs.existsSync(mainActivityPath)) {
             const mainActivitySrc = fs.readFileSync(mainActivityPath, 'utf8');
@@ -8280,7 +8280,7 @@ async function runCodecAndEngineTests() {
             'root = ET.parse(sys.argv[1]).getroot()',
             'features = {el.attrib.get(ns + "name"): el.attrib.get(ns + "required") for el in root.findall("uses-feature")}',
             'app = root.find("application")',
-            'main_act = next(a for a in app.findall("activity") if a.attrib.get(ns + "name") == "com.capypaint.capy.MainActivity")',
+            'main_act = next(a for a in app.findall("activity") if a.attrib.get(ns + "name") == "com.capyboop.paint.MainActivity")',
             'filters = []',
             'for flt in main_act.findall("intent-filter"):',
             '    filters.append({',
@@ -11899,7 +11899,7 @@ async function runBrowserBasicsSuite() {
     const assetLinksRes = await page.goto(`${BASE_URL}/.well-known/assetlinks.json`);
     assert.equal(assetLinksRes?.status(), 200);
     const assetLinksJson = JSON.parse(await assetLinksRes.text());
-    assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capypaint.capy');
+    assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capyboop.paint');
     assert.equal(Array.isArray(assetLinksJson[0]?.target?.sha256_cert_fingerprints), true);
     assert.equal(
       assetLinksJson[0].target.sha256_cert_fingerprints.includes(

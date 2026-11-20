@@ -15,11 +15,11 @@ val capyVersionName = "$verMajor.$verMinor.$verPatch"
 val capyVersionCode = (verMajor * 10000) + (verMinor * 100) + verPatch
 
 android {
-    namespace = "com.capypaint.capy"
+    namespace = "com.capyboop.paint"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.capypaint.capy"
+        applicationId = "com.capyboop.paint"
         minSdk = 24
         targetSdk = 36
         versionCode = capyVersionCode
