@@ -24,6 +24,7 @@ interface CapyAndroidInterface {
   shareFile?: (title: string, fileName: string, mimeType: string, base64Data: string) => void;
   consumePendingSharedImage?: () => string | null;
   consumePendingDeepLink?: () => string | null;
+  openExternalOAuth?: (authUrl: string) => boolean;
   getAppVersion?: () => string;
   getSafeAreaInsets?: () => string;
 }
@@ -34,6 +35,7 @@ declare global {
     __capyCloseModal?: () => boolean;
     __capyReceiveSharedImage?: (title: string, dataUrl: string) => void;
     __capyReceiveDeepLink?: (url: string) => void;
+    __capyReceiveOAuthCallback?: (url: string) => void;
     __capyReceivePlayGamesProfile?: (
       profile: { playerId?: string; displayName?: string } | string
     ) => void;
@@ -1059,6 +1061,29 @@ export class NativeBridgeService {
       }
     } catch {
       // Safe fallback when Play Games SDK pull hook is unavailable
+    }
+    return false;
+  }
+
+  openExternalOAuth(authUrl: string): boolean {
+    if (typeof window === 'undefined' || typeof authUrl !== 'string') return false;
+    const trimmed = authUrl.trim();
+    if (!trimmed || /[\u0000-\u001F\u007F\s]/.test(trimmed)) return false;
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol.toLowerCase() !== 'https:') return false;
+      if (parsed.port !== '' || parsed.username !== '' || parsed.password !== '') {
+        return false;
+      }
+      const host = parsed.hostname.toLowerCase();
+      if (host !== 'accounts.google.com' && host !== 'login.microsoftonline.com') {
+        return false;
+      }
+      if (window.CapyAndroid?.openExternalOAuth) {
+        return Boolean(window.CapyAndroid.openExternalOAuth(parsed.toString()));
+      }
+    } catch {
+      return false;
     }
     return false;
   }
