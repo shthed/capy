@@ -1,9 +1,37 @@
-### 3.0.41 - 2026-11-19 (Alpha)
+### 3.0.48 - 2026-11-20 (Alpha)
+
+- Omit region boundary lines on completed (filled) regions across both full base-canvas rebuilds and incremental region fills (`writeBaseCanvasPixels` / `writeRegionPixelsToImageData` in `PuzzleCanvas.tsx`) so finished artwork renders seamlessly while unpainted regions retain 1px slate borders in standard Paint-by-Number mode, add unit coverage in `web/scripts/test.mjs`, and sync `WEB.md` [#608](https://github.com/shthed/capy/pull/608)
+
+### 3.0.47 - 2026-11-20 (Beta)
+
+- Implement `$0` Bring-Your-Own-Cloud (BYOC) Account Login & automatic cross-device Cloud Sync: add shared WebCrypto `S256` OAuth 2.0 PKCE helper (`web/src/services/providers/OAuthPkceHelper.ts`), client-direct `MicrosoftCloudDriver` (`MicrosoftCloudSyncClient.ts` + OneDrive `special/approot` REST API with per-file write mutex & traversal validation), modular `AppleCloudDriver` (`AppleCloudSyncClient.ts` + Sign in with Apple JS / CloudKit JS / iOS `CapyIOS` bridge), Android external-browser OAuth PKCE bridge (`openExternalOAuth` in `CapyAndroidBridge.kt` and `NativeBridge.ts`, `capypaint://oauth/callback` in `AndroidManifest.xml` and `MainActivity.kt`, and JUnit4 allowlist tests in `CapyAndroidBridgeTest.kt`), `createAutoCloudSyncScheduler` (`15s` debounced post-paint push, `30s` stale `visibilitychange` pull+merge, and `online` reconnect sync wired in `App.tsx`), mobile-first `CloudAccountCard.tsx` extracted from `SettingsModal.tsx` (auto-hiding unconfigured providers to preserve Play Store compliance and accountless `#s=`/`.capy` fallback), optional `VITE_MICROSOFT_CLIENT_ID` and `VITE_APPLE_*` CI workflow variables, unit + Playwright E2E tests in `web/scripts/test.mjs`, and synced `CLOUD.md`, `APP.md`, and `WEB.md` [#604](https://github.com/shthed/capy/pull/604)
+
+### 3.0.46 - 2026-11-20
+
+- Enlarge all interactive UI buttons, icons, switches, sliders, color dots, popovers, and palette swatches under Large Text & Buttons mode (`data-large-text="true"` in `web/src/index.css`, `GameTopBar.tsx`, `FloatingActions.tsx`, `ReplayControls.tsx`, `PaletteDock.tsx`, `SettingsModal.tsx`, `ColorPickerPopover.tsx`, `FeatureOfferBanner.tsx`, and `App.tsx`) with responsive `360px`/`400px`/`640px` scaling, mobile 2-row `ReplayControls` wrapping, and synchronized `PaletteDock` centering; enable `fatFingerAssist: true` by default across both `EASY` and `NORMAL` upgrades (`StorageService.ts`, `PuzzleCanvas.tsx`) while preserving explicit `false` opt-outs, couple Large Text ON toggles (Settings and Onboarding) to `fatFingerAssist: true` plus a non-destructive `>= 34px` effective reach boost, polish `SettingsModal.tsx` reach-radius dimming and preset auto-enable, fix both `#602` `PuzzleCanvas.tsx` regressions (Paint Mode single-tap double-paint via `paintedInGestureRef` and Free Colour Mode direct-hit repaint in `resolveNearTapRegionId`), expand unit (`[Unit 04/15]`, `[Unit 15/15]`) and Playwright E2E (`[E2E 22/22]`) coverage in `web/scripts/test.mjs`, and sync `WEB.md` and `TESTING.md` [#605](https://github.com/shthed/capy/pull/605)
+
+### 3.0.45 - 2026-11-20
+
+- Implement anonymous in-game feedback (`capyboop/paint#3`): add `FEEDBACK_RATE_LIMITER` (`5` req / `60s`) in `wrangler.jsonc`, pure-TS `worker/feedbackProtocol.ts` validation/sanitization/CORS/GitHub issue formatting, rate-limited `POST` / `OPTIONS /api/feedback` relay in `worker/index.ts` with `CAPYBOOP_FEEDBACK_TOKEN` and graceful `503` prefilled fallback, `web/src/services/FeedbackService.ts`, a collapsible mobile-first Anonymous Feedback card in `SettingsModal.tsx` Tab 0 (preserving `about-report-issue-link`), unit and Playwright E2E tests in `web/scripts/test.mjs`, and docs in `CLOUD.md` and `WEB.md` [#603](https://github.com/shthed/capy/pull/603)
+
+### 3.0.44 - 2026-11-20
+
+- Bind `paint.capyboop.com` (`custom_domain: true`) on `capy-paint` in `wrangler.jsonc`, allow `paint.capyboop.com` in `worker/coopRoomProtocol.ts` (`ALLOWED_EXACT_RELAY_HOSTS`), `ProviderRegistry.ts` (`resolveCoopRoomWsUrl`), `web/src/version.ts` (`resolveReleaseChannel`), and `web/public/_headers` (`connect-src`), and add unit tests in `web/scripts/test.mjs` [#595](https://github.com/shthed/capy/pull/595)
+
+### 3.0.43 - 2026-11-20
+
+- Rename Android `applicationId`, `namespace`, Kotlin source/test packages (`app/src/main/java/com/capyboop/paint/`), `FileProvider` authority, ProGuard keep rules, Digital Asset Links (`assetlinks.json`), `privacy-policy.html`, and store/architecture docs from `com.capypaint.capy` to `com.capyboop.paint` [#601](https://github.com/shthed/capy/pull/601)
+
+### 3.0.42 - 2026-11-20
+
+- Add Fat-Finger Mode (`fatFingerAssist`) and configurable Finger Reach Radius (`touchReachRadiusPx` `8px`--`40px` with `Compact 12px` / `Standard 22px` / `Large 34px` presets) under `Difficulty (Tap Forgiveness)` in `SettingsModal.tsx` and `StorageService.ts`, implement zero-allocation radial near-miss hit-testing (`resolveNearTapRegionId` in `PuzzleCanvas.tsx`, wired through `App.tsx`) scaling dynamically with zoom, add unit and Playwright E2E micro-region tap tests in `web/scripts/test.mjs`, move `US-3.5` from [EPIC-3](https://github.com/shthed/capy/issues/478) into [EPIC-2](https://github.com/shthed/capy/issues/477), and sync `WEB.md`, `ROADMAP.md`, and `TODO.md` [#602](https://github.com/shthed/capy/pull/602)
+
+### 3.0.41 - 2026-11-19 (Production)
 
 - Retarget the clean-room public mirror workflow, in-app **Report Bug / Ideas** link (`SettingsModal.tsx`), `privacy-policy.html`, `sanity.mjs` / `test.mjs` guards, and studio documentation from `capyboop/capy` to the standalone `capyboop/paint` repository [#595](https://github.com/shthed/capy/pull/595)
 - Align the root `README.md` heading (`# Capy Paint`) with the standalone `capyboop/paint` repository [#598](https://github.com/shthed/capy/pull/598)
 
-### 3.0.40 - 2026-11-19 (Production, Beta)
+### 3.0.40 - 2026-11-19
 
 - Allow the `GameTopBar` puzzle save title pill (`topbar-saves-btn` / `topbar-saves-title`) to expand across available left-lane width on mobile and desktop instead of truncating at fixed `38px`/`74px`/`200px` caps, and add a `360x780` Playwright overflow assertion in `web/scripts/test.mjs` [#590](https://github.com/shthed/capy/pull/590)
 

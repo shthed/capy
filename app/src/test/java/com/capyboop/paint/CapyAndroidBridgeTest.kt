@@ -1,4 +1,4 @@
-package com.capypaint.capy
+package com.capyboop.paint
 
 import android.annotation.TargetApi
 import android.os.Build
@@ -401,7 +401,7 @@ class CapyAndroidBridgeTest {
         )
         assertEquals(
             CapyAndroidBridge.WebViewNavigationAction.BLOCK,
-            CapyAndroidBridge.classifyWebViewNavigation("file:///data/data/com.capypaint.capy/shared_prefs"),
+            CapyAndroidBridge.classifyWebViewNavigation("file:///data/data/com.capyboop.paint/shared_prefs"),
         )
         assertEquals(
             CapyAndroidBridge.WebViewNavigationAction.BLOCK,
@@ -649,4 +649,56 @@ class CapyAndroidBridgeTest {
         val names = dir.listFiles()?.map { it.name }?.sorted() ?: emptyList()
         assertEquals(listOf("fallback_check.json", "snapshot.json"), names)
     }
+
+    @Test
+    fun `isAllowedExternalOAuthUrl strictly allows HTTPS Google and Microsoft OAuth hosts only`() {
+        assertTrue(
+            CapyAndroidBridge.isAllowedExternalOAuthUrl(
+                "https://accounts.google.com/o/oauth2/v2/auth?client_id=abc&response_type=code&code_challenge=xyz&code_challenge_method=S256"
+            )
+        )
+        assertTrue(
+            CapyAndroidBridge.isAllowedExternalOAuthUrl(
+                "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=abc&response_type=code&code_challenge=xyz&code_challenge_method=S256"
+            )
+        )
+
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl(null))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl(""))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("http://accounts.google.com/o/oauth2/v2/auth"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("http://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://evil.example.com/oauth"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://accounts.google.com.evil.example/oauth"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://user:pass@accounts.google.com/oauth"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://accounts.google.com:8443/oauth"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("javascript:alert(1)"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://accounts.google.com/oauth\nfoo"))
+    }
+
+    @Test
+    fun `isAllowedOAuthCallbackUrl validates capypaint oauth callback scheme and rejects unsafe URIs`() {
+        assertTrue(
+            CapyAndroidBridge.isAllowedOAuthCallbackUrl(
+                "capypaint://oauth/callback?code=auth_code_123&state=csrf_state_abc"
+            )
+        )
+        assertTrue(
+            CapyAndroidBridge.isAllowedOAuthCallbackUrl(
+                "capypaint://oauth/callback?error=access_denied&state=csrf_state_abc"
+            )
+        )
+
+        assertFalse(CapyAndroidBridge.isAllowedOAuthCallbackUrl(null))
+        assertFalse(CapyAndroidBridge.isAllowedOAuthCallbackUrl(""))
+        assertFalse(CapyAndroidBridge.isAllowedOAuthCallbackUrl("https://capypaint.com/oauth/callback?code=1"))
+        assertFalse(CapyAndroidBridge.isAllowedOAuthCallbackUrl("capypaint://other/callback?code=1"))
+        assertFalse(CapyAndroidBridge.isAllowedOAuthCallbackUrl("capypaint://oauth/evil?code=1"))
+        assertFalse(CapyAndroidBridge.isAllowedOAuthCallbackUrl("capypaint://oauth/callback?code=1\r\ninject"))
+        assertFalse(
+            CapyAndroidBridge.isAllowedOAuthCallbackUrl(
+                "capypaint://oauth/callback?code=" + "a".repeat(5000)
+            )
+        )
+    }
 }
+

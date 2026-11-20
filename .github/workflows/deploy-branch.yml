@@ -390,6 +390,10 @@ jobs:
         working-directory: web
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_APPLE_CLIENT_ID: ${{ vars.VITE_APPLE_CLIENT_ID }}
+          VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
+          VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
           if [ "${{ steps.node-modules-cache.outputs.cache-hit }}" != "true" ]; then
@@ -445,6 +449,10 @@ jobs:
       - name: Run unit tests, release lint, and build Debug APK (app/)
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_APPLE_CLIENT_ID: ${{ vars.VITE_APPLE_CLIENT_ID }}
+          VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
+          VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
           CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: ./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleDebug --build-cache

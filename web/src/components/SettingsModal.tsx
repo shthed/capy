@@ -23,25 +23,22 @@ import {
   Search,
   Users,
   Share2,
-  Cloud,
   Lightbulb,
   ZoomIn,
   Copy,
   Printer,
   Info,
   ShieldCheck,
+  MessageSquare,
 } from 'lucide-react';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { resolveSafeSnapshotThumbnail } from '../utils/snapshotPaths';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
-import {
-  COLLABORATOR_AVATAR_COLORS,
-  ProviderRegistry,
-} from '../services/providers/ProviderRegistry';
-import { getAllowedMockGoogleOAuthToken } from '../services/providers/GoogleCloudSyncClient';
+import { ProviderRegistry } from '../services/providers/ProviderRegistry';
 import { CoopParticipant, PlayerIdentity } from '../services/providers/types';
+import { CloudAccountCard, CloudSyncLiveStatus } from './CloudAccountCard';
 import {
   CANVAS_BG_MAP,
   CanvasBgColor,
@@ -75,6 +72,15 @@ import {
   PlayerLifetimeStats,
   PlayerStatsService,
 } from '../services/PlayerStatsService';
+import {
+  FEEDBACK_CATEGORIES,
+  FEEDBACK_MAX_DETAILS_CHARS,
+  FEEDBACK_MAX_TITLE_CHARS,
+  FeedbackCategory,
+  FeedbackSubmitResult,
+  PUBLIC_ISSUES_URL,
+  submitAnonymousFeedback,
+} from '../services/FeedbackService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -122,6 +128,8 @@ interface SettingsModalProps {
     downloadedCount?: number;
     backend?: string;
   } | null>;
+  cloudSyncStatus?: CloudSyncLiveStatus;
+  lastCloudSyncError?: string | null;
   onZoomIntoDetailTile?: () => void;
   onStartTutorial?: () => void;
   onTabOpened?: (tabId: number) => void;
@@ -327,6 +335,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onShareProgressLink,
   onCopyCoopInviteLink,
   onSyncCloudProgress,
+  cloudSyncStatus,
+  lastCloudSyncError,
   onZoomIntoDetailTile,
   onStartTutorial,
   onTabOpened,
@@ -383,6 +393,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const presetGallerySectionRef = useRef<HTMLDivElement | null>(null);
   const createOptionsSectionRef = useRef<HTMLDivElement | null>(null);
 
+  // Anonymous In-Game Feedback state (Tab 0: About)
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<FeedbackCategory>('bug');
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackDetails, setFeedbackDetails] = useState('');
+  const [feedbackHoneypot, setFeedbackHoneypot] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackResult, setFeedbackResult] = useState<FeedbackSubmitResult | null>(null);
+
+  const activeFeedbackCategoryMeta =
+    FEEDBACK_CATEGORIES.find((c) => c.id === feedbackCategory) ?? FEEDBACK_CATEGORIES[0];
+
+  const handleSubmitFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (feedbackSubmitting) return;
+    setFeedbackSubmitting(true);
+    setFeedbackResult(null);
+    const result = await submitAnonymousFeedback({
+      category: feedbackCategory,
+      title: feedbackTitle,
+      details: feedbackDetails,
+      website: feedbackHoneypot,
+    });
+    setFeedbackResult(result);
+    if (result.ok) {
+      setFeedbackTitle('');
+      setFeedbackDetails('');
+      setFeedbackHoneypot('');
+    }
+    setFeedbackSubmitting(false);
+  };
+
   const renderHintButton = (id: string, title: string) => {
     const isExpanded = openHintId === id;
     return (
@@ -395,7 +437,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           e.stopPropagation();
           setOpenHintId((prev) => (prev === id ? null : id));
         }}
-        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold transition-colors cursor-pointer flex-shrink-0 ${
+        className={`capy-hint-icon-btn inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold transition-colors cursor-pointer flex-shrink-0 ${
           isExpanded
             ? 'bg-amber-400 text-slate-950 border-amber-300'
             : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-400/60 hover:text-amber-300'
@@ -431,8 +473,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity>(() =>
     ProviderRegistry.auth.getCurrentIdentity()
   );
-  const [editingProfileName, setEditingProfileName] = useState(false);
-  const [profileNameDraft, setProfileNameDraft] = useState(playerIdentity.displayName);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hubNotice, setHubNotice] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<{ ok: boolean; message: string } | null>(null);
@@ -446,7 +486,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     return ProviderRegistry.auth.subscribe((id) => {
       setPlayerIdentity(id);
-      setProfileNameDraft(id.displayName);
     });
   }, []);
 
@@ -690,7 +729,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             data-testid="settings-modal-close"
             onClick={onClose}
-            className="p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+            className="capy-icon-btn p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
             title="Close"
           >
             <X size={20} />
@@ -747,7 +786,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="about-privacy-policy-link"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                    className="capy-link-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
                   >
                     <ShieldCheck size={13} className="text-emerald-400" />
                     <span>Privacy Policy</span>
@@ -757,13 +796,209 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="about-report-issue-link"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                    className="capy-link-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
                   >
                     <ExternalLink size={13} className="text-sky-400" />
                     <span>Report Bug / Ideas</span>
                   </a>
+                  <button
+                    type="button"
+                    data-testid="about-open-feedback-btn"
+                    aria-expanded={isFeedbackOpen}
+                    onClick={() => setIsFeedbackOpen((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                      isFeedbackOpen
+                        ? 'bg-sky-500/20 text-sky-200 border-sky-400/70'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-700/80'
+                    }`}
+                  >
+                    <MessageSquare size={13} className="text-sky-400" />
+                    <span>{isFeedbackOpen ? 'Hide Feedback Form' : 'Send Feedback'}</span>
+                  </button>
                 </div>
               </div>
+
+              {/* Collapsible Anonymous In-Game Feedback Form */}
+              {isFeedbackOpen && (
+                <form
+                  data-testid="in-game-feedback-card"
+                  onSubmit={handleSubmitFeedback}
+                  noValidate
+                  className="p-3.5 sm:p-4 rounded-xl bg-slate-950/80 border border-sky-500/30 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-slate-100">
+                        Send Anonymous Feedback
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Sent anonymously to capyboop/paint Issues — no account required. Includes
+                        app version &amp; platform only.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Category Selector Pills */}
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Feedback category">
+                    {FEEDBACK_CATEGORIES.map((cat) => {
+                      const active = feedbackCategory === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          data-testid={`feedback-category-${cat.id}`}
+                          aria-pressed={active}
+                          onClick={() => {
+                            setFeedbackCategory(cat.id);
+                            setFeedbackResult(null);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-amber-400 text-slate-950 border-amber-300'
+                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700/80'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Hidden Honeypot Field */}
+                  <input
+                    type="text"
+                    name="website"
+                    value={feedbackHoneypot}
+                    onChange={(e) => setFeedbackHoneypot(e.target.value)}
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    className="hidden"
+                  />
+
+                  {/* Title Input */}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="capy-feedback-title"
+                      className="block text-[11px] font-semibold text-slate-300"
+                    >
+                      Title
+                    </label>
+                    <input
+                      id="capy-feedback-title"
+                      type="text"
+                      data-testid="feedback-title-input"
+                      value={feedbackTitle}
+                      onChange={(e) => setFeedbackTitle(e.target.value)}
+                      maxLength={FEEDBACK_MAX_TITLE_CHARS}
+                      placeholder={activeFeedbackCategoryMeta.titlePlaceholder}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700/90 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  {/* Details Textarea + Character Counter */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <label
+                        htmlFor="capy-feedback-details"
+                        className="block text-[11px] font-semibold text-slate-300"
+                      >
+                        Details
+                      </label>
+                      <span
+                        data-testid="feedback-details-counter"
+                        className="text-[10px] font-mono text-slate-400"
+                      >
+                        {feedbackDetails.length}/{FEEDBACK_MAX_DETAILS_CHARS}
+                      </span>
+                    </div>
+                    <textarea
+                      id="capy-feedback-details"
+                      data-testid="feedback-details-input"
+                      rows={3}
+                      value={feedbackDetails}
+                      onChange={(e) => setFeedbackDetails(e.target.value)}
+                      maxLength={FEEDBACK_MAX_DETAILS_CHARS}
+                      placeholder={activeFeedbackCategoryMeta.detailsPlaceholder}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700/90 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 resize-y"
+                    />
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="submit"
+                      data-testid="feedback-submit-btn"
+                      disabled={feedbackSubmitting}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer"
+                    >
+                      <MessageSquare size={13} />
+                      <span>{feedbackSubmitting ? 'Sending...' : 'Submit Feedback'}</span>
+                    </button>
+                    <a
+                      href={PUBLIC_ISSUES_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-400 hover:text-sky-300 underline underline-offset-2"
+                    >
+                      <span>Browse capyboop/paint Issues</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+
+                  {/* Inline Status Banner (zero blocking alert()) */}
+                  {feedbackResult && (
+                    <div
+                      data-testid="feedback-status-banner"
+                      role="status"
+                      className={`p-2.5 rounded-lg border text-xs space-y-1 ${
+                        feedbackResult.ok
+                          ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
+                          : 'bg-amber-950/60 border-amber-500/40 text-amber-200'
+                      }`}
+                    >
+                      {feedbackResult.ok ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span>
+                            Thanks! Your anonymous feedback was submitted
+                            {feedbackResult.issueNumber ? ` as issue #${feedbackResult.issueNumber}` : ''}.
+                          </span>
+                          {feedbackResult.issueUrl && (
+                            <a
+                              href={feedbackResult.issueUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              data-testid="feedback-issue-link"
+                              className="inline-flex items-center gap-1 font-bold text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
+                            >
+                              <span>
+                                {feedbackResult.issueNumber
+                                  ? `View Issue #${feedbackResult.issueNumber}`
+                                  : 'View Issue on GitHub'}
+                              </span>
+                              <ExternalLink size={11} />
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div>{feedbackResult.error}</div>
+                          <a
+                            href={feedbackResult.fallbackUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="feedback-fallback-link"
+                            className="inline-flex items-center gap-1 font-bold text-amber-300 hover:text-amber-200 underline underline-offset-2"
+                          >
+                            <span>Open prefilled GitHub form</span>
+                            <ExternalLink size={11} />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </form>
+              )}
 
               {/* How to Play & Core Features */}
               <div className="space-y-2">
@@ -956,7 +1191,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       href="capy.apk"
                       download="capy.apk"
                       data-testid="android-apk-download-link"
-                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
+                      className="capy-link-btn flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
                     >
                       <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
                       <div className="min-w-0">
@@ -1021,7 +1256,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <a
                           href={primaryTargetUrl}
                           data-testid="toggle-beta-channel-btn"
-                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          className={`capy-link-btn flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                             isBeta
                               ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
                               : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border-violet-400/50'
@@ -1035,7 +1270,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             href={channelInfo.betaApkUrl}
                             download="capy-beta.apk"
                             data-testid="beta-apk-download-link"
-                            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
+                            className="capy-link-btn flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
                           >
                             <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
                             <span>Beta Android APK</span>
@@ -1074,7 +1309,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => {
                           updateSettings({ canvasBgColor: key, canvasBgArgb: item.argb });
                         }}
-                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                        className={`capy-color-dot w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                           isSelected
                             ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
                             : 'border-slate-700/80 hover:scale-105'
@@ -1096,7 +1331,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Custom Background Colour Picker */}
                   <label
                     title="Custom Background Colour"
-                    className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
+                    className={`capy-color-dot relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
                       settings.canvasBgColor === 'CUSTOM'
                         ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
                         : 'border-slate-700/80 hover:border-slate-500'
@@ -1186,6 +1421,102 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {/* Fat-Finger Tap Assist & Finger Reach Radius */}
+                <div className="mt-2 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="pr-3 min-w-0">
+                      <div className="text-xs sm:text-sm font-semibold text-slate-200">
+                        Fat-Finger Tap Assist
+                      </div>
+                      <div className="text-[11px] text-slate-400 leading-tight">
+                        Snaps near-miss taps onto nearby unfilled micro-regions (prefers active colour; Easy mode falls back to any colour)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      data-testid="setting-fat-finger-assist"
+                      aria-checked={Boolean(settings.fatFingerAssist)}
+                      onClick={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
+                      className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                        settings.fatFingerAssist ? 'bg-amber-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          settings.fatFingerAssist ? 'translate-x-4.5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div
+                    data-testid="setting-touch-reach-controls"
+                    className={`space-y-1.5 pt-2 border-t border-slate-800/60 transition-opacity ${
+                      settings.fatFingerAssist ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-xs gap-2">
+                      <span className="text-slate-300 font-semibold">Finger Reach Radius</span>
+                      <span
+                        data-testid="setting-touch-reach-value"
+                        className="text-amber-400 font-mono font-bold text-right"
+                      >
+                        {settings.fatFingerAssist &&
+                        settings.largeText &&
+                        Math.round(settings.touchReachRadiusPx ?? 22) < 34
+                          ? `34px (Large UI • saved ${Math.round(settings.touchReachRadiusPx ?? 22)}px)`
+                          : `${Math.round(settings.touchReachRadiusPx ?? 22)}px`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="8"
+                      max="40"
+                      step="1"
+                      data-testid="setting-touch-reach-radius"
+                      value={Math.round(settings.touchReachRadiusPx ?? 22)}
+                      onChange={(e) =>
+                        updateSettings({
+                          fatFingerAssist: true,
+                          touchReachRadiusPx: Math.round(
+                            Math.min(40, Math.max(8, parseInt(e.target.value, 10) || 22))
+                          ),
+                        })
+                      }
+                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                      {(
+                        [
+                          { px: 12, label: 'Compact 12px' },
+                          { px: 22, label: 'Standard 22px' },
+                          { px: 34, label: 'Large 34px' },
+                        ] as const
+                      ).map((preset) => (
+                        <button
+                          key={preset.px}
+                          type="button"
+                          data-testid={`setting-touch-reach-preset-${preset.px}`}
+                          onClick={() =>
+                            updateSettings({
+                              fatFingerAssist: true,
+                              touchReachRadiusPx: preset.px,
+                            })
+                          }
+                          className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all ${
+                            Math.round(settings.touchReachRadiusPx ?? 22) === preset.px
+                              ? 'border-amber-400 bg-slate-800/80 text-amber-300 ring-1 ring-amber-400'
+                              : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Palette Order */}
@@ -1243,14 +1574,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={Boolean(isFullscreen)}
                         onClick={onToggleFullscreen}
-                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
                           isFullscreen ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
                         title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
                       >
                         <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                             isFullscreen ? 'translate-x-4.5' : 'translate-x-0'
                           }`}
                         />
@@ -1334,13 +1667,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={Boolean(settings[item.key])}
                         onClick={() => updateSetting(item.key, !settings[item.key])}
-                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
                           settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
                       >
                         <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                             settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
                           }`}
                         />
@@ -1400,12 +1735,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="setting-snap-zoom-levels"
                     aria-checked={Boolean(settings.snapZoomLevels)}
                     onClick={() => updateSetting('snapZoomLevels', !settings.snapZoomLevels)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.snapZoomLevels ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.snapZoomLevels ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1430,12 +1765,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() =>
                       updateSetting('soundEnabled', !(settings.soundEnabled !== false))
                     }
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.soundEnabled !== false ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.soundEnabled !== false ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1464,14 +1799,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
 
-                {/* Large Text (Low-Vision) */}
+                {/* Large Text & Buttons (Low-Vision) */}
                 <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
                   <div className="pr-3 min-w-0">
                     <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Large Text (Low-Vision)
+                      Large Text &amp; Buttons (Low-Vision)
                     </div>
                     <div className="text-[11px] text-slate-400 leading-tight">
-                      Enlarges UI copy and canvas region numbers for easier reading
+                      Enlarges text, buttons, icons, and canvas region numbers, and enables Fat-Finger Tap Assist
                     </div>
                   </div>
                   <button
@@ -1479,13 +1814,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     role="switch"
                     data-testid="setting-large-text"
                     aria-checked={Boolean(settings.largeText)}
-                    onClick={() => updateSetting('largeText', !settings.largeText)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    onClick={() => {
+                      const nextLargeText = !settings.largeText;
+                      if (nextLargeText) {
+                        updateSettings({ largeText: true, fatFingerAssist: true });
+                      } else {
+                        updateSetting('largeText', false);
+                      }
+                    }}
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.largeText ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.largeText ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1508,12 +1850,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="setting-reduced-motion"
                     aria-checked={Boolean(settings.reducedMotion)}
                     onClick={() => updateSetting('reducedMotion', !settings.reducedMotion)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.reducedMotion ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.reducedMotion ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1651,12 +1993,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() =>
                       updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
                     }
-                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                       settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
                         settings.autoReplayOnLoad !== false ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -1678,12 +2020,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="toggle-replay-follow-btn"
                     aria-checked={Boolean(settings.replayFollow)}
                     onClick={() => updateSetting('replayFollow', !settings.replayFollow)}
-                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                       settings.replayFollow ? 'bg-amber-400' : 'bg-slate-700'
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
                         settings.replayFollow ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -1705,12 +2047,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="toggle-replay-loop-btn"
                     aria-checked={Boolean(settings.replayLoop)}
                     onClick={() => updateSetting('replayLoop', !settings.replayLoop)}
-                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                       settings.replayLoop ? 'bg-amber-400' : 'bg-slate-700'
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
                         settings.replayLoop ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -1787,7 +2129,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         title={col.label}
                         onClick={() => updateSetting('hintColorArgb', hexToArgb(col.hex))}
-                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                        className={`capy-color-dot w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                           isSelected
                             ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
                             : 'border-slate-700/80 hover:scale-105'
@@ -1809,7 +2151,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Custom Hint Colour Picker */}
                   <label
                     title="Custom Hint Colour"
-                    className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
+                    className="capy-color-dot relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
                   >
                     <input
                       type="color"
@@ -1908,13 +2250,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={Boolean(settings[item.key])}
                         onClick={() => updateSetting(item.key, !settings[item.key])}
-                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
                           settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
                       >
                         <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                             settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
                           }`}
                         />
@@ -3134,12 +3478,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() =>
                           updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
                         }
-                        className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                        className={`capy-switch w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                           settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
                         }`}
                       >
                         <span
-                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
+                          className={`capy-switch-knob absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
                             settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
                           }`}
                         />
@@ -3452,7 +3796,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setConfirmClearAll(true)}
-                          className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                          className="px-2 py-1 rounded-lg text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors cursor-pointer"
                         >
                           Delete All Saves
                         </button>
@@ -3478,7 +3822,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="button"
                     aria-label="Dismiss import message"
                     onClick={() => setImportNotice(null)}
-                    className="p-0.5 rounded hover:bg-white/10 cursor-pointer"
+                    className="capy-icon-btn p-0.5 rounded hover:bg-white/10 cursor-pointer"
                   >
                     <X size={13} />
                   </button>
@@ -3491,236 +3835,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 data-testid="cloud-coop-hub"
                 className="p-3 rounded-xl bg-slate-950/75 border border-slate-800 space-y-3"
               >
-                {/* Row A: Player Identity, Modular Cloud Providers (Google / Steam / Microsoft / Apple) & CRDT Cloud Sync */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {playerIdentity.avatarUrl ? (
-                      <img
-                        src={playerIdentity.avatarUrl}
-                        alt={playerIdentity.displayName}
-                        className="w-7 h-7 rounded-full ring-2 ring-emerald-500/60 flex-shrink-0 object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        title="Cycle Avatar Color"
-                        onClick={() => {
-                          const idx = COLLABORATOR_AVATAR_COLORS.indexOf(
-                            playerIdentity.avatarColorHex
-                          );
-                          const nextColor =
-                            COLLABORATOR_AVATAR_COLORS[
-                              (idx + 1) % COLLABORATOR_AVATAR_COLORS.length
-                            ];
-                          ProviderRegistry.auth.updateGuestProfile(
-                            playerIdentity.displayName,
-                            nextColor
-                          );
-                        }}
-                        className="w-6 h-6 rounded-full ring-2 ring-slate-700 flex-shrink-0 cursor-pointer"
-                        style={{ backgroundColor: playerIdentity.avatarColorHex }}
-                      />
-                    )}
-                    {editingProfileName ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={profileNameDraft}
-                          onChange={(e) => setProfileNameDraft(e.target.value)}
-                          maxLength={24}
-                          className="px-2 py-0.5 rounded bg-slate-900 border border-amber-400 text-xs text-white w-32 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            ProviderRegistry.auth.updateGuestProfile(profileNameDraft);
-                            setEditingProfileName(false);
-                          }}
-                          className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-bold cursor-pointer"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-extrabold text-slate-100 truncate">
-                            {playerIdentity.displayName}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setEditingProfileName(true)}
-                            title="Edit Display Name"
-                            className="text-slate-400 hover:text-amber-300 cursor-pointer"
-                          >
-                            <Edit2 size={11} />
-                          </button>
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {playerIdentity.isAuthenticated
-                            ? `${
-                                playerIdentity.provider === 'play_games_v2'
-                                  ? 'Google Play Games'
-                                  : 'Google Account'
-                              } • ${playerIdentity.email || playerIdentity.displayName}`
-                            : NativeBridge.isAndroid ||
-                                Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                                Boolean(getAllowedMockGoogleOAuthToken())
-                              ? 'Local Profile • Sign in to sync saves across devices'
-                              : 'Local Profile • Saves stored locally on this device'}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {playerIdentity.isAuthenticated ? (
-                      <button
-                        type="button"
-                        data-testid="play-games-signout-btn"
-                        onClick={async () => {
-                          await ProviderRegistry.auth.signOut();
-                          setHubNotice('Signed out of cloud profile.');
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 cursor-pointer"
-                      >
-                        Sign Out
-                      </button>
-                    ) : NativeBridge.isAndroid ||
-                      Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                      Boolean(getAllowedMockGoogleOAuthToken()) ? (
-                      <button
-                        type="button"
-                        data-testid="play-games-signin-btn"
-                        disabled={isSyncingCloud}
-                        onClick={async () => {
-                          try {
-                            setIsSyncingCloud(true);
-                            const signedIn = await ProviderRegistry.auth.signInWithPlayGames();
-                            const syncRes = onSyncCloudProgress
-                              ? await onSyncCloudProgress()
-                              : null;
-                            const syncDetail =
-                              syncRes &&
-                              ((syncRes.downloadedCount || 0) > 0 ||
-                                (syncRes.uploadedCount || 0) > 0 ||
-                                syncRes.addedFromCloud > 0)
-                                ? ` (${syncRes.downloadedCount || 0} pulled, ${syncRes.uploadedCount || 0} pushed)`
-                                : '';
-                            setHubNotice(
-                              `Signed in with ${
-                                signedIn.provider === 'play_games_v2' ? 'Play Games' : 'Google'
-                              } as ${signedIn.displayName}${
-                                signedIn.email ? ` (${signedIn.email})` : ''
-                              }! Cloud saves synced${syncDetail}.`
-                            );
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : String(err);
-                            if (
-                              msg === 'GOOGLE_CLIENT_ID_REQUIRED' ||
-                              msg === 'PLAY_GAMES_UNCONFIGURED'
-                            ) {
-                              setHubNotice(
-                                'Google Cloud Sign-In requires VITE_GOOGLE_CLIENT_ID (Web) or CAPY_PLAY_GAMES_APP_ID (Android) configured in repository build variables — see CLOUD.md.'
-                              );
-                            } else if (
-                              msg === 'PLAY_GAMES_UNAVAILABLE' ||
-                              msg === 'PLAY_GAMES_PROFILE_UNAVAILABLE'
-                            ) {
-                              setHubNotice(
-                                'Google Play Games Services is currently unavailable or offline on this device. Local saves remain safe.'
-                              );
-                            } else {
-                              setHubNotice(`Google Sign-In failed: ${msg}`);
-                            }
-                          } finally {
-                            setIsSyncingCloud(false);
-                          }
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 cursor-pointer"
-                      >
-                        {NativeBridge.isAndroid ? 'Play Games Login' : 'Google Login'}
-                      </button>
-                    ) : null}
-
-                    {onSyncCloudProgress && (
-                      <button
-                        type="button"
-                        data-testid="cloud-sync-btn"
-                        disabled={isSyncingCloud}
-                        onClick={async () => {
-                          setIsSyncingCloud(true);
-                          try {
-                            const res = await onSyncCloudProgress();
-                            if (res) {
-                              const parts: string[] = [];
-                              if (res.addedFromCloud > 0) {
-                                parts.push(`+${res.addedFromCloud} regions merged`);
-                              }
-                              if ((res.downloadedCount || 0) > 0) {
-                                parts.push(`${res.downloadedCount} saves pulled`);
-                              }
-                              if ((res.uploadedCount || 0) > 0) {
-                                parts.push(`${res.uploadedCount} saves pushed`);
-                              }
-                              setHubNotice(
-                                parts.length > 0
-                                  ? `Cloud Sync complete (${parts.join(', ')})!`
-                                  : `Cloud Sync up to date (${ProviderRegistry.cloudSave.providerName})!`
-                              );
-                            }
-                          } catch (err) {
-                            setHubNotice(
-                              `Cloud Sync failed: ${err instanceof Error ? err.message : 'Unable to reach cloud storage.'}`
-                            );
-                          } finally {
-                            setIsSyncingCloud(false);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 text-[11px] font-bold border border-sky-400/40 cursor-pointer"
-                      >
-                        <Cloud size={12} />
-                        <span>{isSyncingCloud ? 'Syncing...' : 'Cloud Sync'}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Modular Multi-Platform Cloud Provider Status Row (Google Active + Steam / Microsoft / Apple) */}
-                <div
-                  data-testid="cloud-providers-bar"
-                  className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-slate-400 pb-2 border-b border-slate-800/60"
-                >
-                  <span className="font-semibold text-slate-300">
-                    Cloud Backend: {ProviderRegistry.cloudSave.providerName}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {cloudProviders
-                      .filter((p) => p.id !== 'play_games_v2' || NativeBridge.isAndroid)
-                      .map((prov) => {
-                        const isCurrent =
-                          playerIdentity.isAuthenticated && playerIdentity.provider === prov.id;
-                        return (
-                          <span
-                            key={prov.id}
-                            data-testid={`cloud-provider-badge-${prov.id}`}
-                            title={prov.storageName}
-                            className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${
-                              isCurrent
-                                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                                : prov.isSupported
-                                  ? 'bg-slate-900 border-slate-700 text-slate-200'
-                                  : 'bg-slate-900/50 border-slate-800/80 text-slate-500'
-                            }`}
-                          >
-                            {prov.displayName}
-                            {isCurrent ? ' • Connected' : prov.comingSoon ? ' • Soon' : ''}
-                          </span>
-                        );
-                      })}
-                  </div>
-                </div>
+                <CloudAccountCard
+                  playerIdentity={playerIdentity}
+                  cloudProviders={cloudProviders}
+                  isSyncingCloud={isSyncingCloud}
+                  cloudSyncStatus={cloudSyncStatus}
+                  lastCloudSyncError={lastCloudSyncError}
+                  onSyncingChange={setIsSyncingCloud}
+                  onHubNotice={setHubNotice}
+                  onSyncCloudProgress={onSyncCloudProgress}
+                />
 
                 {/* Row B: Shareable Game Link & Simultaneous Co-op Room */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">

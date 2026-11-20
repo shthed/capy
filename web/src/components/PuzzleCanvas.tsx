@@ -12,6 +12,7 @@ import {
   HintFillStyle,
   PaletteColor,
   PaletteSortOrder,
+  Difficulty,
   PuzzleData,
   Region,
   RegionColorMode,
@@ -27,6 +28,9 @@ interface PuzzleCanvasProps {
   isPreviewMode: boolean;
   isPaintMode: boolean;
   isFreeColorMode?: boolean;
+  difficulty?: Difficulty;
+  fatFingerAssist?: boolean;
+  touchReachRadiusPx?: number;
   paintedRegionColors?: Map<number, number>;
   canvasBgColor: CanvasBgColor;
   canvasBgArgb: number;
@@ -118,6 +122,224 @@ export function getNextZoomStop(currentScale: number): number {
   return ZOOM_DETENT_STOPS[0];
 }
 
+export const TOUCH_REACH_RADIUS_MIN = 8;
+export const TOUCH_REACH_RADIUS_MAX = 40;
+export const TOUCH_REACH_RADIUS_DEFAULT = 22;
+export const TOUCH_REACH_RADIUS_PRESETS = [12, 22, 34] as const;
+
+export interface ResolveNearTapParams {
+  width: number;
+  height: number;
+  regionMap: Int32Array;
+  regionById: Map<number, Region>;
+  filledRegionIds: Set<number>;
+  canvasX: number;
+  canvasY: number;
+  activeColorId: number;
+  difficulty: Difficulty;
+  fatFingerAssist: boolean;
+  touchReachRadiusPx: number;
+  totalScreenScale: number;
+  isFreeColorMode?: boolean;
+}
+
+/**
+ * Zero-allocation radial near-tap hit-testing.
+ * - O(1) fast-path when (floor(canvasX), floor(canvasY)) lands on a playable unfilled region.
+ * - When fatFingerAssist is enabled and direct hit misses (border/filled/wrong-color),
+ *   scans integer offsets inside Math.min(64, touchReachRadiusPx / totalScreenScale)
+ *   using scalar distance registers with zero heap allocations.
+ */
+export function resolveNearTapRegionId(params: ResolveNearTapParams): number {
+  const {
+    width,
+    height,
+    regionMap,
+    regionById,
+    filledRegionIds,
+    canvasX,
+    canvasY,
+    activeColorId,
+    difficulty,
+    fatFingerAssist,
+    touchReachRadiusPx,
+    totalScreenScale,
+    isFreeColorMode = false,
+  } = params;
+
+  const lx = Math.floor(canvasX);
+  const ly = Math.floor(canvasY);
+  if (!Number.isFinite(lx) || !Number.isFinite(ly)) return 0;
+  const allowAnyColor = difficulty === 'EASY' || isFreeColorMode;
+
+  if (lx >= 0 && lx < width && ly >= 0 && ly < height) {
+    const exactId = regionMap[ly * width + lx];
+    if (exactId > 0) {
+      if (isFreeColorMode) return exactId;
+      if (!filledRegionIds.has(exactId)) {
+        if (difficulty === 'EASY') return exactId;
+        const exactReg = regionById.get(exactId);
+        if (exactReg && exactReg.colorId === activeColorId) return exactId;
+      }
+    }
+  }
+
+  if (!fatFingerAssist || !(totalScreenScale > 0) || !(touchReachRadiusPx > 0)) {
+    return 0;
+  }
+
+  const rawRadius = touchReachRadiusPx / totalScreenScale;
+  const maxRFloat = rawRadius > 64 ? 64 : rawRadius;
+  if (!(maxRFloat > 0)) return 0;
+
+  const maxR = Math.ceil(maxRFloat);
+  const maxRSq = maxRFloat * maxRFloat;
+
+  let bestActiveId = 0;
+  let bestActiveDistSq = Infinity;
+  let bestAnyId = 0;
+  let bestAnyDistSq = Infinity;
+
+  for (let dy = -maxR; dy <= maxR; dy++) {
+    const ny = ly + dy;
+    if (ny < 0 || ny >= height) continue;
+    const dySq = dy * dy;
+    const rowOffset = ny * width;
+    for (let dx = -maxR; dx <= maxR; dx++) {
+      const distSq = dx * dx + dySq;
+      if (distSq > maxRSq) continue;
+      const nx = lx + dx;
+      if (nx < 0 || nx >= width) continue;
+      const candId = regionMap[rowOffset + nx];
+      if (candId <= 0 || filledRegionIds.has(candId)) continue;
+      const reg = regionById.get(candId);
+      if (!reg) continue;
+      if (reg.colorId === activeColorId) {
+        if (distSq < bestActiveDistSq) {
+          bestActiveDistSq = distSq;
+          bestActiveId = candId;
+        }
+      } else if (allowAnyColor) {
+        if (distSq < bestAnyDistSq) {
+          bestAnyDistSq = distSq;
+          bestAnyId = candId;
+        }
+      }
+    }
+  }
+
+  return bestActiveId > 0 ? bestActiveId : allowAnyColor ? bestAnyId : 0;
+}
+
+/**
+ * Writes a single region's pixels into a base RGBA ImageData buffer.
+ * Completed (filled) regions never draw region boundaries so finished artwork
+ * renders seamlessly; unfilled regions keep 1px slate borders in standard mode.
+ */
+export function writeRegionPixelsToImageData(
+  data: Uint8ClampedArray,
+  borderMap: Uint8Array,
+  pixels: Int32Array | number[],
+  r: number,
+  g: number,
+  b: number,
+  isFilled: boolean,
+  isDetailMode: boolean,
+  srcPixels: Uint8ClampedArray | null,
+  isColoring: boolean
+): void {
+  for (let i = 0; i < pixels.length; i++) {
+    const pIndex = pixels[i];
+    const idx = pIndex * 4;
+
+    if (isFilled) {
+      if (isColoring) {
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      } else if (isDetailMode && srcPixels) {
+        data[idx] = srcPixels[idx];
+        data[idx + 1] = srcPixels[idx + 1];
+        data[idx + 2] = srcPixels[idx + 2];
+        data[idx + 3] = 255;
+      } else {
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      }
+    } else if (!isColoring && borderMap[pIndex] === 1) {
+      data[idx] = 51;
+      data[idx + 1] = 65;
+      data[idx + 2] = 85;
+      data[idx + 3] = 255;
+    } else {
+      data[idx] = 255;
+      data[idx + 1] = 255;
+      data[idx + 2] = 255;
+      data[idx + 3] = 255;
+    }
+  }
+}
+
+/**
+ * Populates the full base RGBA ImageData buffer for a puzzle.
+ * Completed (filled) regions omit boundary lines; unfilled regions retain 1px
+ * slate borders in standard mode.
+ */
+export function writeBaseCanvasPixels(
+  data: Uint8ClampedArray,
+  regionMap: Int32Array,
+  borderMap: Uint8Array,
+  filledRegionIds: Set<number>,
+  regMap: Map<number, Region>,
+  palMap: Map<number, PaletteColor>,
+  paintedRegionColors: Map<number, number> | undefined,
+  isDetailMode: boolean,
+  srcPixels: Uint8ClampedArray | null,
+  isColoring: boolean
+): void {
+  const total = regionMap.length;
+  for (let i = 0; i < total; i++) {
+    const rId = regionMap[i];
+    const isFilled = filledRegionIds.has(rId);
+    const idx = i * 4;
+
+    if (isFilled) {
+      const reg = regMap.get(rId);
+      const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
+      const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
+      if (isColoring) {
+        data[idx] = col ? col.r : 255;
+        data[idx + 1] = col ? col.g : 255;
+        data[idx + 2] = col ? col.b : 255;
+        data[idx + 3] = 255;
+      } else if (isDetailMode && srcPixels) {
+        data[idx] = srcPixels[idx];
+        data[idx + 1] = srcPixels[idx + 1];
+        data[idx + 2] = srcPixels[idx + 2];
+        data[idx + 3] = 255;
+      } else {
+        data[idx] = col ? col.r : 255;
+        data[idx + 1] = col ? col.g : 255;
+        data[idx + 2] = col ? col.b : 255;
+        data[idx + 3] = 255;
+      }
+    } else if (!isColoring && borderMap[i] === 1) {
+      data[idx] = 51;
+      data[idx + 1] = 65;
+      data[idx + 2] = 85;
+      data[idx + 3] = 255;
+    } else {
+      data[idx] = 255;
+      data[idx + 1] = 255;
+      data[idx + 2] = 255;
+      data[idx + 3] = 255;
+    }
+  }
+}
+
 /**
  * Strict viewport bounding for pan/zoom offsets.
  * Guarantees that the artwork cannot be panned away into empty void
@@ -196,6 +418,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   isPreviewMode,
   isPaintMode,
   isFreeColorMode = false,
+  difficulty = 'EASY',
+  fatFingerAssist = true,
+  touchReachRadiusPx = TOUCH_REACH_RADIUS_DEFAULT,
   paintedRegionColors,
   canvasBgColor,
   canvasBgArgb,
@@ -354,6 +579,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Drag & Pinch interaction tracking
   const isDraggingRef = useRef(false);
+  const paintedInGestureRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const totalDragDistanceRef = useRef(0);
@@ -895,64 +1121,25 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       customColors?: Map<number, number>,
       isFreeColor?: boolean
     ) => {
-      const { borderMap } = puzzleData;
       const targetColorId = customColors?.get(region.id) ?? region.colorId;
       const col = paletteMap.get(targetColorId);
       const r = col?.r ?? 71;
       const g = col?.g ?? 85;
       const b = col?.b ?? 105;
-      const borderR = Math.floor(r * 0.72);
-      const borderG = Math.floor(g * 0.72);
-      const borderB = Math.floor(b * 0.72);
-
       const isColoring = Boolean(isFreeColor || puzzleData.isFreeColor);
-      const pixels = region.pixels;
-      for (let i = 0; i < pixels.length; i++) {
-        const pIndex = pixels[i];
-        const idx = pIndex * 4;
-        const isBorder = borderMap[pIndex] === 1;
 
-        if (isFilled) {
-          if (isColoring) {
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = borderR;
-            data[idx + 1] = borderG;
-            data[idx + 2] = borderB;
-            data[idx + 3] = 255;
-          } else if (isDetailMode && srcPixels) {
-            data[idx] = srcPixels[idx];
-            data[idx + 1] = srcPixels[idx + 1];
-            data[idx + 2] = srcPixels[idx + 2];
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-          }
-        } else {
-          if (isColoring) {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = 51;
-            data[idx + 1] = 65;
-            data[idx + 2] = 85;
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          }
-        }
-      }
+      writeRegionPixelsToImageData(
+        data,
+        puzzleData.borderMap,
+        region.pixels,
+        r,
+        g,
+        b,
+        isFilled,
+        isDetailMode,
+        srcPixels,
+        isColoring
+      );
     },
     []
   );
@@ -1012,60 +1199,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const imgData = baseCtx.createImageData(width, height);
       const data = imgData.data;
       const srcPixels = sourcePixelsRef.current;
-      const total = width * height;
 
       const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
-      // Initialize background & unfilled pixels
-      for (let i = 0; i < total; i++) {
-        const rId = regionMap[i];
-        const isFilled = filledRegionIds.has(rId);
-        const isBorder = borderMap[i] === 1;
-        const idx = i * 4;
-
-        if (isFilled) {
-          const reg = regMap.get(rId);
-          const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
-          const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
-          if (isColoring) {
-            data[idx] = col ? col.r : 255;
-            data[idx + 1] = col ? col.g : 255;
-            data[idx + 2] = col ? col.b : 255;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = col ? Math.floor(col.r * 0.72) : 71;
-            data[idx + 1] = col ? Math.floor(col.g * 0.72) : 85;
-            data[idx + 2] = col ? Math.floor(col.b * 0.72) : 105;
-            data[idx + 3] = 255;
-          } else if (isDetailMode && srcPixels) {
-            data[idx] = srcPixels[idx];
-            data[idx + 1] = srcPixels[idx + 1];
-            data[idx + 2] = srcPixels[idx + 2];
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = col ? col.r : 255;
-            data[idx + 1] = col ? col.g : 255;
-            data[idx + 2] = col ? col.b : 255;
-            data[idx + 3] = 255;
-          }
-        } else {
-          if (isColoring) {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = 51;
-            data[idx + 1] = 65;
-            data[idx + 2] = 85;
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          }
-        }
-      }
+      writeBaseCanvasPixels(
+        data,
+        regionMap,
+        borderMap,
+        filledRegionIds,
+        regMap,
+        palMap,
+        paintedRegionColors,
+        isDetailMode,
+        srcPixels,
+        isColoring
+      );
 
       baseCtx.putImageData(imgData, 0, 0);
       baseImageDataRef.current = imgData;
@@ -1358,15 +1505,15 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const canvasX = (screenX - offsetRef.current.x - baseOffsetX) / effScale;
       const canvasY = (screenY - offsetRef.current.y - baseOffsetY) / effScale;
 
-      return { x: canvasX, y: canvasY, screenX, screenY };
+      return { x: canvasX, y: canvasY, screenX, screenY, effScale };
     },
     [puzzle]
   );
 
-  // Bresenham line painting for smooth drag strokes
+  // Bresenham line painting for smooth drag strokes; returns true when at least one eligible region is dispatched
   const hitTestAndPaintLine = useCallback(
-    (x1: number, y1: number, x2: number, y2: number) => {
-      if (!puzzle) return;
+    (x1: number, y1: number, x2: number, y2: number): boolean => {
+      if (!puzzle) return false;
       const { width, height, regionMap } = puzzle;
 
       const dx = x2 - x1;
@@ -1375,6 +1522,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const steps = Math.max(1, Math.floor(dist * 0.8));
 
       const intersected = new Set<number>();
+      let didPaintEligible = false;
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const lx = Math.floor(x1 + t * dx);
@@ -1384,6 +1532,15 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           const rId = regionMap[ly * width + lx];
           if (rId > 0) {
             intersected.add(rId);
+            if (
+              !didPaintEligible &&
+              (isFreeColorMode ||
+                (!filledRegionIds.has(rId) &&
+                  (difficulty === 'EASY' ||
+                    regionByIdRef.current.get(rId)?.colorId === activeColorId)))
+            ) {
+              didPaintEligible = true;
+            }
           }
         }
       }
@@ -1391,8 +1548,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       if (intersected.size > 0) {
         onBatchRegionsClicked(intersected);
       }
+      return didPaintEligible;
     },
-    [puzzle, onBatchRegionsClicked]
+    [puzzle, onBatchRegionsClicked, isFreeColorMode, filledRegionIds, difficulty, activeColorId]
   );
 
   // Calculate visible regions/colors with debouncing
@@ -1876,6 +2034,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
+    paintedInGestureRef.current = false;
     stopMomentum();
     refreshCanvasRect();
     resetPointerRing(e.clientX, e.clientY, performance.now());
@@ -1950,7 +2109,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     // Only start continuous paint if touching inside the image region
     if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
       onPuzzleInteractionRef.current?.();
-      hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
+      if (hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y)) {
+        paintedInGestureRef.current = true;
+      }
       setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
     }
   };
@@ -2106,7 +2267,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // If touching outside the image region on the background canvas, drag always pans!
     if (!isPinchPanningRef.current && !isRightClick && !isTouchingOutsideImage && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
-      hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
+      if (hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y)) {
+        paintedInGestureRef.current = true;
+      }
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
       const container = containerRef.current;
@@ -2172,6 +2335,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // If one-finger double-tap zoom or pan was active, finish cleanly without clicks
     if (isOneFingerZoomingRef.current || isDoubleTapPanningRef.current) {
+      paintedInGestureRef.current = false;
       isOneFingerZoomingRef.current = false;
       isDoubleTapPanningRef.current = false;
       isDoubleTapCandidateRef.current = false;
@@ -2186,6 +2350,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     isDoubleTapPanningRef.current = false;
 
     if (!isDraggingRef.current) {
+      paintedInGestureRef.current = false;
       if (touchPointerCountRef.current === 0) {
         wasPinchingRef.current = false;
         isPinchPanningRef.current = false;
@@ -2205,12 +2370,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     }
 
     if (wasRightClick || touchStartDistRef.current !== null) {
+      paintedInGestureRef.current = false;
       commitTransformState(true);
       return;
     }
 
     // Trigger smooth pan momentum if dragged sufficiently
     if (totalDragDistanceRef.current >= 12) {
+      paintedInGestureRef.current = false;
       commitTransformState(true);
       if (panMomentum && !reducedMotionRef.current && (!isPaintMode || isPreviewMode || wasPinchPan)) {
         const count = pointerRingCountRef.current;
@@ -2300,23 +2467,44 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       lastTapUpTimeRef.current = Date.now();
       lastTapUpPosRef.current = { x: e.clientX, y: e.clientY };
 
+      const alreadyPaintedInGesture = paintedInGestureRef.current;
+      paintedInGestureRef.current = false;
+
       if (isPreviewMode) {
         onTogglePreview();
-      } else {
+      } else if (!alreadyPaintedInGesture) {
         const coords = screenToCanvasCoords(e.clientX, e.clientY);
         if (coords && puzzle) {
           setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
           const lx = Math.floor(coords.x);
           const ly = Math.floor(coords.y);
           onPuzzleInteractionRef.current?.();
-          if (lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height) {
-            const rId = puzzle.regionMap[ly * puzzle.width + lx];
-            if (rId > 0) {
-              if (isPaintMode) {
+          const rId = resolveNearTapRegionId({
+            width: puzzle.width,
+            height: puzzle.height,
+            regionMap: puzzle.regionMap,
+            regionById: regionByIdRef.current,
+            filledRegionIds,
+            canvasX: coords.x,
+            canvasY: coords.y,
+            activeColorId,
+            difficulty,
+            fatFingerAssist,
+            touchReachRadiusPx,
+            totalScreenScale: coords.effScale,
+            isFreeColorMode,
+          });
+          const inBounds = lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height;
+          const exactId = inBounds ? puzzle.regionMap[ly * puzzle.width + lx] : 0;
+          if (rId > 0) {
+            if (isPaintMode) {
+              if (inBounds && exactId === rId) {
                 hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
               } else {
                 onRegionClicked(rId);
               }
+            } else {
+              onRegionClicked(rId);
             }
           }
         }
@@ -2325,6 +2513,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   };
 
   const handlePointerCancel = (e: React.PointerEvent) => {
+    paintedInGestureRef.current = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {

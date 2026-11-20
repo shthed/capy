@@ -67,3 +67,97 @@ export function createCoalescedSyncController<T>(): CoalescedSyncController<T> {
     },
   };
 }
+
+export interface AutoCloudSyncSchedulerOptions {
+  sync: () => Promise<unknown>;
+  canSync: () => boolean;
+  debounceMs?: number;
+  staleVisibilityMs?: number;
+  now?: () => number;
+  setTimer?: (cb: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer?: (id: ReturnType<typeof setTimeout>) => void;
+}
+
+export interface AutoCloudSyncScheduler {
+  notifyLocalMutation: () => void;
+  notifyVisibilityVisible: () => void;
+  notifyOnline: () => void;
+  markSynced: (timestamp?: number) => void;
+  dispose: () => void;
+}
+
+/**
+ * Schedules automatic background cloud syncs without overlapping network storms or rAF allocations:
+ * - Debounces local save/paint mutations (default 15s) before pushing to BYOC cloud storage.
+ * - Pulls + merges when the tab/app becomes visible if stale (default > 30s since last sync).
+ * - Immediately syncs when connectivity returns (`online` event).
+ * Strictly no-ops whenever `canSync()` returns false (unauthenticated or offline).
+ */
+export function createAutoCloudSyncScheduler(
+  options: AutoCloudSyncSchedulerOptions
+): AutoCloudSyncScheduler {
+  const debounceMs = options.debounceMs ?? 15_000;
+  const staleVisibilityMs = options.staleVisibilityMs ?? 30_000;
+  const now = options.now ?? (() => Date.now());
+  const setTimer = options.setTimer ?? ((cb, ms) => setTimeout(cb, ms));
+  const clearTimer = options.clearTimer ?? ((id) => clearTimeout(id));
+
+  let debounceHandle: ReturnType<typeof setTimeout> | null = null;
+  let lastSyncedAt = 0;
+  let disposed = false;
+
+  const cancelDebounce = () => {
+    if (debounceHandle !== null) {
+      clearTimer(debounceHandle);
+      debounceHandle = null;
+    }
+  };
+
+  const triggerSync = () => {
+    if (disposed || !options.canSync()) return;
+    void Promise.resolve(options.sync())
+      .then(() => {
+        if (!disposed) {
+          lastSyncedAt = now();
+        }
+      })
+      .catch(() => {
+        // Sync errors are surfaced through the UI status handler
+      });
+  };
+
+  return {
+    notifyLocalMutation(): void {
+      if (disposed || !options.canSync()) return;
+      cancelDebounce();
+      debounceHandle = setTimer(() => {
+        debounceHandle = null;
+        triggerSync();
+      }, debounceMs);
+    },
+
+    notifyVisibilityVisible(): void {
+      if (disposed || !options.canSync()) return;
+      if (lastSyncedAt === 0 || now() - lastSyncedAt >= staleVisibilityMs) {
+        cancelDebounce();
+        triggerSync();
+      }
+    },
+
+    notifyOnline(): void {
+      if (disposed || !options.canSync()) return;
+      cancelDebounce();
+      triggerSync();
+    },
+
+    markSynced(timestamp?: number): void {
+      lastSyncedAt = timestamp ?? now();
+    },
+
+    dispose(): void {
+      disposed = true;
+      cancelDebounce();
+    },
+  };
+}
+
