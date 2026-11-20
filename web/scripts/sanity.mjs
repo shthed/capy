@@ -19,7 +19,9 @@ const DEFAULT_REPO_ROOT = path.resolve(__dirname, '../..');
 
 const SKIP_DIRS = new Set([
   '.git',
+  /* capy-dev-only:start */
   '.agents',
+  /* capy-dev-only:end */
   '.kotlin',
   '.artifacts',
   '.idea',
@@ -35,13 +37,12 @@ const SKIP_DIRS = new Set([
 
 // M3B strict defaults:
 const DEFAULT_REQUIRE_PROJECT_MD = true;
-let DEFAULT_REQUIRE_AGENTS_MD = false;
 /* capy-dev-only:start */
-DEFAULT_REQUIRE_AGENTS_MD = true;
+const DEFAULT_REQUIRE_AGENTS_MD = true;
+const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
 /* capy-dev-only:end */
 const DEFAULT_ENFORCE_CHANNEL_ORDER = true;
 const DEFAULT_ENFORCE_EPIC_NAMING = true;
-const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
 
 function collectMarkdownFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -221,10 +222,10 @@ export function validateChangelogChannelOrder(
 }
 
 export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
-  const hint = `Use [EPIC-N](https://github.com/<owner>/capy/issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
+  const hint = `Use [EPIC-N](../../issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
   assert.equal(/#47[6-9]\b|#480\b/.test(markdownText), false, hint);
   assert.equal(
-    /\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/issues\/\d+/.test(markdownText),
+    /\[#\d+\]\((?:https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/|(?:\.\.\/){2,})issues\/\d+/.test(markdownText),
     false,
     hint
   );
@@ -287,6 +288,7 @@ function extractNonThresholdPercentages(text) {
   ];
 }
 
+/* capy-dev-only:start */
 export function validateNoLegacyPrRubric(text, relFile = 'document.md') {
   const withoutUrls = String(text || '')
     .replace(/\r\n/g, '\n')
@@ -420,14 +422,24 @@ export function validatePrReadinessSpec(
   } = {}
 ) {
   const resolvedRoot = path.resolve(root);
-  const governanceRelFiles = ['AGENTS.md', 'PROJECT.md', 'DEV.md', 'TESTING.md', 'README.md'];
+  const governanceRelFiles = [
+    'AGENTS.md',
+    'docs/ai/pr-readiness.md',
+    'PROJECT.md',
+    'DEV.md',
+    'TESTING.md',
+    'README.md',
+  ];
   const scannedFiles = [];
 
   for (const relFile of governanceRelFiles) {
     const absPath = path.join(resolvedRoot, relFile);
     if (!fs.existsSync(absPath)) {
       if (relFile === 'PROJECT.md' && !requireProjectMd) continue;
-      if (relFile === 'AGENTS.md' && !requireAgentsMd) continue;
+      if ((relFile === 'AGENTS.md' || relFile === 'docs/ai/pr-readiness.md') && !requireAgentsMd) {
+        continue;
+      }
+      if (relFile === 'docs/ai/pr-readiness.md' && !enforcePrReadinessSpec) continue;
       assert.fail(`Required governance doc missing: ${relFile}`);
     }
     const raw = fs.readFileSync(absPath, 'utf8');
@@ -451,24 +463,21 @@ export function validatePrReadinessSpec(
         /(?:as many|flexible|variable|not (?:capped|limited|fixed)|any number|scope-relevant)/i,
         'AGENTS.md must allow variable PR Readiness checklist item counts'
       );
-    } else if (relFile === 'PROJECT.md') {
-      assert.match(publicText, /pr readiness/i, 'PROJECT.md must document PR Readiness format');
-      assert.match(publicText, /checklist/i, 'PROJECT.md must name PR Readiness Checklist');
-      assert.match(publicText, /<details>/i, 'PROJECT.md must document <details> PR Readiness block');
-      assert.match(publicText, /100%/, 'PROJECT.md must specify 100% PR Readiness threshold');
+    } else if (relFile === 'docs/ai/pr-readiness.md') {
+      assert.match(publicText, /pr readiness/i, 'docs/ai/pr-readiness.md must document PR Readiness format');
+      assert.match(publicText, /checklist/i, 'docs/ai/pr-readiness.md must name PR Readiness Checklist');
+      assert.match(publicText, /<details>/i, 'docs/ai/pr-readiness.md must document <details> PR Readiness block');
+      assert.match(publicText, /100%/, 'docs/ai/pr-readiness.md must specify 100% PR Readiness threshold');
       assert.match(
         publicText,
         /(?:start of each|at the start|%\s*-first)/i,
-        'PROJECT.md must specify putting % at the start of each checklist line'
+        'docs/ai/pr-readiness.md must specify putting % at the start of each checklist line'
       );
       assert.match(
         publicText,
         /(?:as many|flexible|variable|not (?:capped|limited|fixed)|any number|scope-relevant)/i,
-        'PROJECT.md must allow variable PR Readiness checklist item counts'
+        'docs/ai/pr-readiness.md must allow variable PR Readiness checklist item counts'
       );
-    } else if (relFile === 'DEV.md') {
-      assert.match(publicText, /pr readiness/i, 'DEV.md must reference PR Readiness');
-      assert.match(publicText, /100%/, 'DEV.md must reference 100% PR Readiness threshold');
     }
   }
 
@@ -480,8 +489,14 @@ export function validatePrReadinessSpec(
 
   return { scannedFiles };
 }
+/* capy-dev-only:end */
 
-const DEV_ONLY_ROOT_MD_FILES = new Set(['AGENTS.md', 'CAPYBOOP.md']);
+const DEV_ONLY_ROOT_MD_FILES = new Set([
+  /* capy-dev-only:start */
+  'AGENTS.md',
+  'CAPYBOOP.md',
+  /* capy-dev-only:end */
+]);
 
 export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD } = {}) {
   const resolvedRoot = path.resolve(root);
@@ -540,6 +555,8 @@ export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIR
   return { rootMdFiles, hasProjectMd };
 }
 
+export const MAX_CHANGELOG_FRAGMENT_LENGTH = 320;
+
 export function parseChangelogFragment(rawContent, relFile = '.changelog/fragment.md') {
   const normalized = String(rawContent || '').replace(/\r\n/g, '\n');
   const fmMatch = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(normalized);
@@ -585,6 +602,11 @@ export function parseChangelogFragment(rawContent, relFile = '.changelog/fragmen
     /^#{1,6}\s|^-\s/.test(body),
     false,
     `Changelog fragment ${relFile} summary must be plain text without headings or list prefixes`
+  );
+  assert.equal(
+    body.length <= MAX_CHANGELOG_FRAGMENT_LENGTH,
+    true,
+    `Changelog fragment ${relFile} summary is too long (${body.length} chars > ${MAX_CHANGELOG_FRAGMENT_LENGTH} max); keep each bullet to 1--2 concise sentences`
   );
 
   return {
@@ -715,7 +737,9 @@ export function runSanityChecks({
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
   enforceChannelOrder = DEFAULT_ENFORCE_CHANNEL_ORDER,
   enforceEpicNaming = DEFAULT_ENFORCE_EPIC_NAMING,
+  /* capy-dev-only:start */
   enforcePrReadinessSpec = DEFAULT_ENFORCE_PR_READINESS_SPEC,
+  /* capy-dev-only:end */
 } = {}) {
   const t0 = performance.now();
   const root = path.resolve(repoRoot);
@@ -814,17 +838,19 @@ export function runSanityChecks({
 
   const bulletLines = changelogText.split('\n').filter((line) => line.startsWith('- '));
   assert.equal(bulletLines.length >= 398, true, `Expected >= 398 bullets, got ${bulletLines.length}`);
-  let bulletRe = /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/;
+  let bulletRe = /^- (?:\[#\d+\]\(\.\.\/\.\.\/pull\/\d+\)|#\d+)\s+\S/;
   /* capy-dev-only:start */
-  bulletRe = /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/;
+  bulletRe = /^- \[#\d+\]\(\.\.\/\.\.\/pull\/\d+\)\s+\S/;
   /* capy-dev-only:end */
   for (const b of bulletLines) {
-    assert.match(b, bulletRe, `Invalid CHANGELOG bullet suffix: ${b}`);
+    assert.match(b, bulletRe, `Invalid CHANGELOG bullet prefix: ${b}`);
   }
 
   // 3. Markdown hygiene & portable relative links across all .md files
   validateRootGuideIndex(root, { requireProjectMd });
+  /* capy-dev-only:start */
   validatePrReadinessSpec(root, { requireProjectMd, enforcePrReadinessSpec });
+  /* capy-dev-only:end */
 
   const mdFiles = collectMarkdownFiles(root);
   assert.equal(mdFiles.length >= 10, true, 'Expected >= 10 repository .md files');
@@ -890,7 +916,8 @@ export function runSanityChecks({
         cleanTarget.startsWith('mailto:') ||
         cleanTarget.startsWith('tel:') ||
         cleanTarget.startsWith('data:') ||
-        cleanTarget.startsWith('#')
+        cleanTarget.startsWith('#') ||
+        /^(?:\.\.\/){2,}(?:pull|issues|milestone)\/\d+(?:[/?#].*)?$/.test(cleanTarget)
       ) {
         continue;
       }

@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       reset_clean_root:
@@ -64,14 +66,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Verify tag push targets origin/main
+        id: check_ref
         if: steps.check_secret.outputs.enabled == 'true'
+        env:
+          TRIGGER_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "${TRIGGER_REF}" == refs/tags/* ]]; then
+            HEAD_SHA="$(git rev-parse HEAD)"
+            MAIN_SHA="$(git rev-parse -q --verify refs/remotes/origin/main || true)"
+            if [ -z "${MAIN_SHA}" ] || [ "${HEAD_SHA}" != "${MAIN_SHA}" ]; then
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "Tag ${TRIGGER_REF} (${HEAD_SHA}) does not match origin/main (${MAIN_SHA:-missing}); skipping capyboop/paint publish."
+              exit 0
+            fi
+          fi
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.check_ref.outputs.should_publish == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       - name: Export clean-room capyboop workspace and verify zero leaks
-        if: steps.check_secret.outputs.enabled == 'true'
+        if: steps.check_ref.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           node web/scripts/rebrand-persona.mjs --stage-dir /tmp/capyboop-stage
@@ -88,7 +108,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Commit as capyboop, push main, and sync release tag on capyboop/paint
-        if: steps.check_secret.outputs.enabled == 'true'
+        if: steps.check_ref.outputs.should_publish == 'true'
         env:
           CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
           RESET_CLEAN_ROOT: ${{ inputs.reset_clean_root == true }}
@@ -193,29 +213,10 @@ jobs:
 
             execFileSync('git', ['-C', histDst, 'add', '-A'], { stdio: 'ignore' });
             const treeSha = execFileSync('git', ['-C', histDst, 'write-tree'], { encoding: 'utf8' }).trim();
-            const scrubHistMsg = (m) =>
-              m
-                .replace(/pr-review-gate/gi, 'review-gate')
-                .replace(/publish-capyboop/gi, 'publish-mirror')
-                .replace(/rebrand-persona/gi, 'persona-export')
-                .replace(/open-pr\.yml/gi, 'open-pr')
-                .replace(/persona:capyboop/gi, 'persona:mirror')
-                .replace(/capy-dev-only/gi, 'dev-only')
-                .replace(/sync-beta-from-main/gi, 'sync-beta')
-                .replace(/sync-agile-tracker/gi, 'sync-tracker')
-                .replace(/dependabot\.ya?ml/gi, 'dependabot')
-                .replace(/CAPYBOOP_SYNC_TOKEN/gi, 'SYNC_TOKEN');
-            let cleanMsg = '';
-            try {
-              cleanMsg = sanitizeCommitMessage((rawMsg || '').trim());
-            } catch {
-              try {
-                cleanMsg = sanitizeCommitMessage(scrubHistMsg((rawMsg || '').trim()));
-              } catch {
-                cleanMsg = `Historical commit ${origSha.slice(0, 7)}`;
-              }
-            }
-            cleanMsg = cleanMsg || `Commit ${origSha.slice(0, 7)}`;
+            const cleanMsg =
+              sanitizeCommitMessage((rawMsg || '').trim(), {
+                fallback: `Historical commit ${origSha.slice(0, 7)}`,
+              }) || `Commit ${origSha.slice(0, 7)}`;
 
             const commitArgs = ['-C', histDst, 'commit-tree', treeSha];
             for (const cp of cleanParents) {
@@ -251,13 +252,13 @@ jobs:
           if [ "${MAIN_LS_RC}" -eq 0 ]; then
             git fetch target main
             git log FETCH_HEAD --format="%an %ae %cn %ce %B%x00" > "${LOG_FILE}"
-            GREP_RC=0
-            grep -iaqzE "shthed|hairy[[:space:]_-]*dog[[:space:]_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|dependabot\.ya?ml" "${LOG_FILE}" || GREP_RC=$?
-            if [ "${GREP_RC}" -eq 0 ]; then
+            VERIFY_LOG_RC=0
+            node "${SOURCE_REPO_DIR}/web/scripts/rebrand-persona.mjs" --verify-log "${LOG_FILE}" || VERIFY_LOG_RC=$?
+            if [ "${VERIFY_LOG_RC}" -eq 2 ]; then
               NEEDS_CLEAN_RESET="true"
-            elif [ "${GREP_RC}" -ne 1 ]; then
-              echo "Failed to scan FETCH_HEAD commit history (grep exit ${GREP_RC})." >&2
-              exit "${GREP_RC}"
+            elif [ "${VERIFY_LOG_RC}" -ne 0 ]; then
+              echo "Failed to scan FETCH_HEAD commit history (verify-log exit ${VERIFY_LOG_RC})." >&2
+              exit "${VERIFY_LOG_RC}"
             fi
 
             if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
@@ -297,7 +298,11 @@ jobs:
           if [ -d /tmp/capyboop-hist-dst/.git ]; then
             TAG_REPO_DIR="/tmp/capyboop-hist-dst"
           fi
-          if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
+          TAG_COMMIT="$(git -C "${SOURCE_REPO_DIR}" rev-parse -q --verify "refs/tags/${TAG_NAME}^{commit}" || true)"
+          HEAD_COMMIT="$(git -C "${SOURCE_REPO_DIR}" rev-parse HEAD)"
+          if [ -z "${TAG_COMMIT}" ] || [ "${TAG_COMMIT}" != "${HEAD_COMMIT}" ]; then
+            echo "Tag ${TAG_NAME} does not point to HEAD (${HEAD_COMMIT}) on source repository; skipping tag push to capyboop/paint."
+          elif [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
             echo "Force-syncing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) onto clean root..."
             git -C "${TAG_REPO_DIR}" tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
             git -C "${TAG_REPO_DIR}" push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
@@ -362,7 +367,7 @@ jobs:
         run: |
           node - <<'NODE'
           import path from 'node:path';
-          const { transformPersonaContent } = await import(
+          const { FORBIDDEN_PERSONA_REGEX, transformPersonaContent, sanitizeCommitMessage } = await import(
             path.resolve(process.cwd(), 'web/scripts/rebrand-persona.mjs')
           );
           const botHeaders = {
@@ -382,15 +387,14 @@ jobs:
           const existingTitles = new Set(Array.isArray(dstIssues) ? dstIssues.map((i) => i.title.trim()) : []);
 
           const scrub = (text) =>
-            transformPersonaContent(text || '')
-              .replace(/pr-review-gate/gi, 'review-gate')
-              .replace(/publish-capyboop/gi, 'publish-mirror')
-              .replace(/rebrand-persona/gi, 'persona-export')
-              .replace(/open-pr\.yml/gi, 'open-pr')
-              .replace(/sync-beta-from-main/gi, 'sync-beta')
-              .replace(/sync-agile-tracker/gi, 'sync-tracker')
-              .replace(/CAPYBOOP_SYNC_TOKEN/gi, 'SYNC_TOKEN')
-              .replace(/shthed/gi, 'capyboop');
+            transformPersonaContent(String(text || ''))
+              .split(/\r?\n/)
+              .map((line) => {
+                if (!line.trim()) return '';
+                const [, indent = '', rest = ''] = line.match(/^(\s*)(.*)$/) || [];
+                return `${indent}${sanitizeCommitMessage(rest, { fallback: rest })}`;
+              })
+              .join('\n');
 
           for (const num of [477, 478, 479, 480]) {
             const srcResp = await fetch(`https://api.github.com/repos/shthed/capy/issues/${num}`, {
@@ -403,7 +407,7 @@ jobs:
             }
             const cleanTitle = scrub(src.title).trim();
             const cleanBody = scrub(src.body || '').trim();
-            if (/shthed/i.test(`${cleanTitle}\n${cleanBody}`)) {
+            if (FORBIDDEN_PERSONA_REGEX.test(`${cleanTitle}\n${cleanBody}`)) {
               throw new Error(`Refusing to publish #${num}: source persona still detected.`);
             }
             if (!existingTitles.has(cleanTitle)) {

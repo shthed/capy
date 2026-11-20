@@ -73,7 +73,7 @@ jobs:
             (github.event_name == 'pull_request_review' && contains(github.event.review.body || '', '<!-- capy-review:')) ||
             (github.event_name == 'issue_comment' && contains(github.event.comment.body || '', '<!-- capy-review:') && !contains(github.event.comment.body || '', '<!-- capy-pages-preview -->'))))) &&
       (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && !contains(github.event.comment.body || '', '<!-- capy-gate-status -->'))) &&
-      (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null || github.event.changes.body != null)
+      (github.event_name != 'pull_request' || github.event.action != 'edited' || github.event.changes.base != null || github.event.changes.body != null || github.event.changes.title != null)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -707,8 +707,14 @@ jobs:
               }
             }
 
+            const FORBIDDEN_PUBLIC_CROSS_REF_RE =
+              /(?:https?:\/\/github\.com\/capyboop\/paint\/(?:issues|pull)\/\d+|(?<![A-Za-z0-9_.-])capyboop\/paint#\d+)/i;
+            const hasForbiddenCrossRef =
+              FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.title || '')) ||
+              FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.body || ''));
+
             const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
-            const strictAiReady = !isDraft && !changesRequested && aiOrSyncReady;
+            const strictAiReady = !isDraft && !changesRequested && !hasForbiddenCrossRef && aiOrSyncReady;
             const gatePassed = strictAiReady;
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
@@ -734,6 +740,7 @@ jobs:
 
             // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars) & upsert gate status comment
             const blockers = [];
+            if (hasForbiddenCrossRef) blockers.push('Forbidden capyboop/paint cross-ref');
             if (changesRequested) blockers.push('Changes requested / hold');
             if (isDraft) {
               blockers.push('Draft PR');
@@ -755,7 +762,7 @@ jobs:
 
             let state = 'pending';
             let description = `${targetScope}: Blocked by ${blockers.join(', ') || 'Pending checks'}`;
-            if (changesRequested) {
+            if (changesRequested || hasForbiddenCrossRef) {
               state = 'failure';
             } else if (gatePassed) {
               state = 'success';
@@ -1208,6 +1215,16 @@ jobs:
                 core.warning(`Invalid AI review JSON response; awaiting $0 workflow_dispatch bot review.`);
                 return;
               }
+            }
+
+            const FORBIDDEN_PUBLIC_CROSS_REF_RE =
+              /(?:https?:\/\/github\.com\/capyboop\/paint\/(?:issues|pull)\/\d+|(?<![A-Za-z0-9_.-])capyboop\/paint#\d+)/i;
+            const summaryCrossRefMatch = summary.match(FORBIDDEN_PUBLIC_CROSS_REF_RE);
+            if (summaryCrossRefMatch) {
+              core.setFailed(
+                `Forbidden public mirror cross-reference "${summaryCrossRefMatch[0]}" in AI review summary. Use plain text (e.g. \`capyboop/paint\` public issue N) instead of live URLs or #N shorthand.`
+              );
+              return;
             }
 
             const markerRegex = new RegExp(

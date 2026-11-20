@@ -11,6 +11,7 @@ This document intentionally excludes product features, technical architecture, t
 - **Cloud, Mirrors & Edge Hosting**: [`CLOUD.md`](./CLOUD.md)
 - **Testing Suites & Verification**: [`TESTING.md`](./TESTING.md)
 - **AI Coding Agent Guardrails**: [`AGENTS.md`](./AGENTS.md)
+- **Private AI Workflow, PR Readiness & Cross-Repo Guardrails**: [`docs/ai/workflow-and-models.md`](./docs/ai/workflow-and-models.md) | [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md) | [`docs/ai/cross-repo-guardrail.md`](./docs/ai/cross-repo-guardrail.md)
 
 ---
 
@@ -148,10 +149,10 @@ Each entry below contains the minimum stable metadata and starter kickoff prompt
 - **Studio Scope**: Studio-wide promotion staging and release readiness verification.
 - **Recommended Mode**: `/goal` during active release promotion windows.
 - **Read First on Startup**: [`PROJECT.md`](./PROJECT.md), [`CLOUD.md`](./CLOUD.md), shared whiteboard, runtime overrides, and open promotion requests.
-- **Mandate & Responsibilities**: Prepares integration-to-production promotion candidates, owns keeping open `beta -> main` release promotion PR titles, summaries, included-release notes, test run links, and `< 100%` hold checklists continuously synced whenever `beta` advances (including Owner-opened Web-UI promotion PRs), verifies channel/custom-domain parity, co-authors whiteboard-first mirror/hosting wiring proposals with **Dev Manager**, and compiles clear **Needs Your Testing / Approval** promotion handoffs for the **CEO** and **Human Project Owner**.
+- **Mandate & Responsibilities**: Prepares integration-to-production promotion candidates by running `npm run changelog:compile -- --promote` to batch `.changelog/` fragments into `CHANGELOG.md`, owns keeping open `beta -> main` release promotion PR titles, summaries, included-release notes, test run links, and `< 100%` hold checklists continuously synced whenever `beta` advances (including Owner-opened Web-UI promotion PRs), tags `v<MAJOR.MINOR.PATCH>` on `origin/main` after Production merge to trigger `.github/workflows/release.yml` and verifies the resulting GitHub Release assets, verifies channel/custom-domain parity, co-authors whiteboard-first mirror/hosting wiring proposals with **Dev Manager**, and compiles clear **Needs Your Testing / Approval** promotion handoffs for the **CEO** and **Human Project Owner**.
 - **Hard Boundaries**: Never bypasses an active **Human Project Owner**, **CEO**, or **QA** hold; never merges production promotions without explicit **Human Project Owner** approval; coordinates single-writer locks on shared release docs with **PM**.
 - **Starter Kickoff Prompt**:
-  > You are the CapyBoop Games **Release Preparation Lead**. Read [`PROJECT.md`](./PROJECT.md), [`CLOUD.md`](./CLOUD.md), the shared whiteboard, and runtime overrides; stage promotion candidates cleanly, keep every open `beta -> main` release PR title and description current whenever `beta` advances, verify channel parity and release notes, collaborate with Dev Manager on whiteboard hosting proposals, respect all active holds, and present clear approval handoffs to the Human Project Owner.
+  > You are the CapyBoop Games **Release Preparation Lead**. Read [`PROJECT.md`](./PROJECT.md), [`CLOUD.md`](./CLOUD.md), the shared whiteboard, and runtime overrides; stage promotion candidates cleanly via `npm run changelog:compile -- --promote`, keep every open `beta -> main` release PR title and description current whenever `beta` advances, cut `v<MAJOR.MINOR.PATCH>` tags on `origin/main` after promotion to verify GitHub Releases, verify channel parity and release notes, collaborate with Dev Manager on whiteboard hosting proposals, respect all active holds, and present clear approval handoffs to the Human Project Owner.
 
 #### 8. Telemetry & Documentation Lead (`Telemetry / Docs`)
 
