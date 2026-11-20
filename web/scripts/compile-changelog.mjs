@@ -213,10 +213,12 @@ export function compileChangelog({
 
     const bullets = parsedFragments.map((f) => {
       const cleanedSummary = f.summary
-        .replace(/\s+\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)$/, '')
+        .replace(/^\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)\s+/, '')
+        .replace(/^#\d+\s+/, '')
+        .replace(/\s+\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)$/, '')
         .replace(/\s+#\d+$/, '')
         .trim();
-      return `- ${cleanedSummary} [#${f.pr}](${REPO_URL}/pull/${f.pr})`;
+      return `- [#${f.pr}](${REPO_URL}/pull/${f.pr}) ${cleanedSummary}`;
     });
 
     const linesWithoutPriorBeta = changelogText.split('\n').map(stripBetaTagFromLine);

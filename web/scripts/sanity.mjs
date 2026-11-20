@@ -814,12 +814,12 @@ export function runSanityChecks({
 
   const bulletLines = changelogText.split('\n').filter((line) => line.startsWith('- '));
   assert.equal(bulletLines.length >= 398, true, `Expected >= 398 bullets, got ${bulletLines.length}`);
-  let bulletRe = /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/;
+  let bulletRe = /^- (?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)|#\d+)\s+\S/;
   /* capy-dev-only:start */
-  bulletRe = /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/;
+  bulletRe = /^- \[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)\s+\S/;
   /* capy-dev-only:end */
   for (const b of bulletLines) {
-    assert.match(b, bulletRe, `Invalid CHANGELOG bullet suffix: ${b}`);
+    assert.match(b, bulletRe, `Invalid CHANGELOG bullet prefix: ${b}`);
   }
 
   // 3. Markdown hygiene & portable relative links across all .md files

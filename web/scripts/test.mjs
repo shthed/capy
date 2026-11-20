@@ -633,15 +633,15 @@ async function runCodecAndEngineTests() {
       true,
       `Expected >= 398 single-line PR bullets in CHANGELOG.md, got ${changelogBullets.length}`
     );
-    let changelogBulletRe = /\s(?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/capy\/pull\/\d+\)|#\d+)$/;
+    let changelogBulletRe = /^- (?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)|#\d+)\s+\S/;
     /* capy-dev-only:start */
-    changelogBulletRe = /\s\[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)$/;
+    changelogBulletRe = /^- \[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)\s+\S/;
     /* capy-dev-only:end */
     for (const bullet of changelogBullets) {
       assert.equal(
         changelogBulletRe.test(bullet),
         true,
-        `Each CHANGELOG.md bullet must end with a valid PR reference: ${bullet}`
+        `Each CHANGELOG.md bullet must start with a valid PR reference: ${bullet}`
       );
     }
 
@@ -1369,17 +1369,17 @@ async function runCodecAndEngineTests() {
       const makeStrictChangelog = ({
         headings = ['### 3.0.4 - 2026-11-13 (Beta)', '### 3.0.1 - 2026-11-12 (Production)', '### 0.1.0 - 2026-10-01'],
         bulletCount = 398,
-        firstBulletSuffix = '[#493](https://github.com/shthed/capy/pull/493)',
+        firstBulletPrefix = '[#493](https://github.com/shthed/capy/pull/493)',
       } = {}) => {
-        const lines = [headings[0], '', `- Top change ${firstBulletSuffix}`, ''];
+        const lines = [headings[0], '', `- ${firstBulletPrefix} Top change`, ''];
         for (let i = 1; i < headings.length; i++) {
           lines.push(headings[i], '');
           if (i === headings.length - 1) {
             for (let b = 1; b < bulletCount; b++) {
-              lines.push(`- Historical change ${b} [#${b}](https://github.com/shthed/capy/pull/${b})`);
+              lines.push(`- [#${b}](https://github.com/shthed/capy/pull/${b}) Historical change ${b}`);
             }
           } else {
-            lines.push(`- Channel release [#${i}](https://github.com/shthed/capy/pull/${i})`, '');
+            lines.push(`- [#${i}](https://github.com/shthed/capy/pull/${i}) Channel release`, '');
           }
         }
         return `${lines.join('\n')}\n`;
@@ -1474,7 +1474,7 @@ async function runCodecAndEngineTests() {
       // 5. Bare #490 bullet fails clickable PR link check
       fs.writeFileSync(
         strictChangelogPath,
-        makeStrictChangelog({ firstBulletSuffix: '#490' }),
+        makeStrictChangelog({ firstBulletPrefix: '#490' }),
         'utf8'
       );
       assert.throws(
@@ -1486,7 +1486,7 @@ async function runCodecAndEngineTests() {
             enforceEpicNaming: true,
             enforcePrReadinessSpec: true,
           }),
-        /Invalid CHANGELOG bullet suffix/
+        /Invalid CHANGELOG bullet prefix/
       );
 
       // 6. Inverted Alpha after Beta fails enforceChannelOrder
@@ -1620,10 +1620,10 @@ async function runCodecAndEngineTests() {
       fs.writeFileSync(
         strictChangelogPath,
         makeStrictChangelog({
-          firstBulletSuffix: '[#100](https://github.com/shthed/capy/pull/100)',
+          firstBulletPrefix: '[#100](https://github.com/shthed/capy/pull/100)',
         }).replace(
-          'Historical change 20 [#20](https://github.com/shthed/capy/pull/20)',
-          'Rebuild interface [#20](https://github.com/shthed/capy/pull/20)'
+          '[#20](https://github.com/shthed/capy/pull/20) Historical change 20',
+          '[#20](https://github.com/shthed/capy/pull/20) Rebuild interface'
         ),
         'utf8'
       );
@@ -9179,7 +9179,7 @@ async function runCodecAndEngineTests() {
       );
       fs.writeFileSync(
         path.join(tmpCompileRepo, 'CHANGELOG.md'),
-        `### 3.0.7 - 2026-11-12 (Beta)\n\n- Beta item [#495](https://github.com/capyboop/paint/pull/495)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod item [#488](https://github.com/capyboop/paint/pull/488)\n`,
+        `### 3.0.7 - 2026-11-12 (Beta)\n\n- [#495](https://github.com/capyboop/paint/pull/495) Beta item\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- [#488](https://github.com/capyboop/paint/pull/488) Prod item\n`,
         'utf8'
       );
       fs.writeFileSync(path.join(tmpCompileRepo, '.changelog/README.md'), '# Fragments\n', 'utf8');
@@ -9213,6 +9213,8 @@ async function runCodecAndEngineTests() {
       assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/README.md')), true);
       const compiledCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
       assert.equal(compiledCl.startsWith('### 3.1.0 - 2026-11-13 (Beta)\n'), true);
+      assert.match(compiledCl, /\n- \[#496\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/496\) Fix edge zoom jitter\n/);
+      assert.match(compiledCl, /\n- \[#497\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/497\) Add loupe magnifier\n/);
       assert.equal(compiledCl.includes('### 3.0.7 - 2026-11-12\n'), true);
       assert.equal(compiledCl.includes('### 3.0.1 - 2026-11-10 (Production)\n'), true);
 
@@ -9226,7 +9228,7 @@ async function runCodecAndEngineTests() {
       // Refuse promoting an (Alpha) top heading
       fs.writeFileSync(
         path.join(tmpCompileRepo, 'CHANGELOG.md'),
-        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- Alpha preview [#498](https://github.com/capyboop/paint/pull/498)\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- Prod [#488](https://github.com/capyboop/paint/pull/488)\n`,
+        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- [#498](https://github.com/capyboop/paint/pull/498) Alpha preview\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- [#488](https://github.com/capyboop/paint/pull/488) Prod\n`,
         'utf8'
       );
       assert.throws(() => compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true }));
