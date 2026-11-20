@@ -2534,6 +2534,34 @@ async function runCodecAndEngineTests() {
         'Free Colour Mode border miss (exactId=0) must still snap to nearest unfilled region 2'
       );
 
+      // Non-finite (NaN / Infinity) coordinates must return 0 immediately without scanning
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: Number.NaN,
+          canvasY: 20.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+        }),
+        0,
+        'NaN canvasX must return 0 safely'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 20.5,
+          canvasY: Number.POSITIVE_INFINITY,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+        }),
+        0,
+        'Infinity canvasY must return 0 safely'
+      );
+
       // Zero-allocation verification: no Set/Map/Array allocations inside resolveNearTapRegionId
       const fnSource = canvasMod.resolveNearTapRegionId.toString();
       assert.equal(
@@ -17672,7 +17700,43 @@ async function runBrowserBasicsSuite() {
         normalMobileBoxes.swatch1
     );
 
-    // Open SettingsModal, verify normal switch size, test Fat-Finger preset auto-enable & Large Text coupling
+    // Select a mid-dock swatch (#8) before toggling Large Text so live useLayoutEffect centering is exercised
+    const midDockSwatchId = await ltMobilePage.evaluate(() => {
+      const swatches = Array.from(document.querySelectorAll('[data-testid^="palette-swatch-"]'));
+      if (swatches.length === 0) return null;
+      const target = swatches[Math.min(7, swatches.length - 1)];
+      return target.getAttribute('data-testid');
+    });
+    if (midDockSwatchId) {
+      const midSwatchBtn = ltMobilePage.getByTestId(midDockSwatchId);
+      await midSwatchBtn.scrollIntoViewIfNeeded();
+      await midSwatchBtn.click();
+      await ltMobilePage.waitForTimeout(250);
+    }
+
+    const assertSwitchKnobContained = async (page, testId, expectedChecked, label) => {
+      const sw = page.getByTestId(testId);
+      await sw.scrollIntoViewIfNeeded();
+      assert.equal(
+        await sw.getAttribute('aria-checked'),
+        String(expectedChecked),
+        `${label}: expected aria-checked=${expectedChecked}`
+      );
+      await page.waitForTimeout(220);
+      const swBox = await sw.boundingBox();
+      const knobBox = await sw.locator('.capy-switch-knob').boundingBox();
+      assert.ok(swBox && knobBox, `${label}: expected visible switch and knob boxes`);
+      assert.equal(
+        knobBox.x >= swBox.x - 0.5 &&
+          knobBox.x + knobBox.width <= swBox.x + swBox.width + 0.5 &&
+          knobBox.y >= swBox.y - 0.5 &&
+          knobBox.y + knobBox.height <= swBox.y + swBox.height + 0.5,
+        true,
+        `${label}: knob ${JSON.stringify(knobBox)} must stay strictly inside switch track ${JSON.stringify(swBox)}`
+      );
+    };
+
+    // Open SettingsModal, verify normal switch size & knob containment, test Fat-Finger preset auto-enable & Large Text coupling
     await ltMobilePage.getByTestId('topbar-settings-btn').click();
     await ltMobilePage.getByTestId('settings-tab-settings').click();
     const ltSwitch = ltMobilePage.getByTestId('setting-large-text');
@@ -17681,6 +17745,10 @@ async function runBrowserBasicsSuite() {
     const normalSwitchBox = await ltSwitch.boundingBox();
     const normalCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
     assert.ok(normalSwitchBox && normalCloseBox);
+
+    // Verify Normal-mode switch knob containment (checked & unchecked) remains unaffected
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Normal mode fatFinger ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', false, 'Normal mode largeText OFF');
 
     // Verify default fatFingerAssist is enabled on fresh load, then turn OFF to verify dim + preset auto-enable
     assert.equal(await ffSwitch.getAttribute('aria-checked'), 'true', 'Fresh install must default fatFingerAssist to true');
@@ -17719,7 +17787,37 @@ async function runBrowserBasicsSuite() {
       'Large Text effective reach boost must not mutate saved touchReachRadiusPx slider value'
     );
 
-    // Measure enlarged SettingsModal controls & verify tabs zero-overflow at 360x780
+    // Fix 8: Toggling fatFingerAssist OFF while largeText stays ON must drop the "(Large UI ...)" boost readout
+    await ffSwitch.click();
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', false, 'Large Text Variant 1 fatFinger OFF');
+    const disabledReachLabel = (await ltMobilePage.getByTestId('setting-touch-reach-value').innerText()).trim();
+    assert.equal(
+      disabledReachLabel,
+      '22px',
+      `Disabling fatFingerAssist while largeText=true must drop Large UI boost readout (got '${disabledReachLabel}')`
+    );
+    await ffSwitch.click();
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Large Text Variant 1 fatFinger ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'Large Text Variant 1 largeText ON');
+
+    // Fix 1: Verify Variant 2 switch (w-11 h-6 + translate-x-5) knob containment in both checked & unchecked states
+    const followInitial = (await ltMobilePage.getByTestId('toggle-replay-follow-btn').getAttribute('aria-checked')) === 'true';
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', followInitial, 'Large Text Variant 2 follow initial');
+    await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', !followInitial, 'Large Text Variant 2 follow toggled');
+    await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
+
+    // Fix 2: Enlarged range slider must compute appearance === 'none' so 24px custom thumb renders on Chromium/WebView
+    const sliderAppearance = await ltMobilePage
+      .getByTestId('setting-touch-reach-radius')
+      .evaluate((el) => getComputedStyle(el).appearance);
+    assert.equal(
+      sliderAppearance,
+      'none',
+      `Large Text setting-touch-reach-radius must compute appearance: none (got '${sliderAppearance}')`
+    );
+
+    // Measure enlarged SettingsModal controls & verify tabs zero-overflow and 40px/16px specificity at 360x780
     const largeSwitchBox = await ltSwitch.boundingBox();
     const largeFfSwitchBox = await ffSwitch.boundingBox();
     const largeCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
@@ -17750,6 +17848,26 @@ async function runBrowserBasicsSuite() {
       true,
       `Large Text SettingsModal tabs must not overflow at 360x780 (${JSON.stringify(ltTabsOverflow)})`
     );
+    // Fix 3: Catch-all :where() must allow settings-tab-about 40px min-height and 16px SVG at 360x780
+    const tabAboutComputed = await ltMobilePage.getByTestId('settings-tab-about').evaluate((btn) => {
+      const svg = btn.querySelector('svg');
+      return {
+        minHeight: getComputedStyle(btn).minHeight,
+        svgW: svg ? getComputedStyle(svg).width : null,
+        svgH: svg ? getComputedStyle(svg).height : null,
+      };
+    });
+    assert.equal(
+      tabAboutComputed.minHeight,
+      '40px',
+      `360x780 settings-tab-about must compute minHeight=40px (got ${JSON.stringify(tabAboutComputed)})`
+    );
+    assert.equal(
+      tabAboutComputed.svgW === '16px' && tabAboutComputed.svgH === '16px',
+      true,
+      `360x780 settings-tab-about SVG must compute 16px x 16px (got ${JSON.stringify(tabAboutComputed)})`
+    );
+
     const ltTabsBox = await ltTabsContainer.boundingBox();
     assert.ok(ltTabsBox);
     for (const tabKey of ['about', 'settings', 'hints', 'create', 'saves']) {
@@ -17762,13 +17880,21 @@ async function runBrowserBasicsSuite() {
       );
     }
 
-    // Check Tab 0 action button height (>=44px) and Tab 3 (i) hint icon button size (>=32px)
+    // Check Tab 0 action button height (>=44px), Tab 3 (i) hint icon button size (>=32px), and Tab 4 Variant 3 switch knob containment
     await ltMobilePage.getByTestId('settings-tab-about').click();
     const replayTutBtnBox = await ltMobilePage.getByTestId('about-replay-tutorial-btn').boundingBox();
     assert.ok(replayTutBtnBox && replayTutBtnBox.height >= 44, `About CTA button must be >=44px tall in Large Text (got ${JSON.stringify(replayTutBtnBox)})`);
     await ltMobilePage.getByTestId('settings-tab-create').click();
     const hintToggleBox = await ltMobilePage.getByTestId('hint-toggle-daily-puzzle').boundingBox();
     assert.ok(hintToggleBox && hintToggleBox.width >= 31 && hintToggleBox.height >= 31, `(i) hint button must enlarge to ~32px in Large Text (got ${JSON.stringify(hintToggleBox)})`);
+    await ltMobilePage.getByTestId('settings-tab-saves').click();
+    const savesAutoReplayBtn = ltMobilePage.getByTestId('toggle-auto-replay-saves-btn');
+    await savesAutoReplayBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const savesInitial = (await savesAutoReplayBtn.getAttribute('aria-checked')) === 'true';
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', savesInitial, 'Large Text Variant 3 saves autoReplay initial');
+    await savesAutoReplayBtn.click();
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', !savesInitial, 'Large Text Variant 3 saves autoReplay toggled');
+    await savesAutoReplayBtn.click();
 
     // Enable Custom Color button for all puzzles so we can verify ColorPickerPopover in Large Text mode too
     await ltMobilePage.getByTestId('settings-tab-settings').click();
@@ -17778,6 +17904,29 @@ async function runBrowserBasicsSuite() {
     });
     await ltMobilePage.getByTestId('settings-modal-close').click();
     await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fix 4: Verify mid-dock active swatch (#8) stayed centered immediately after live Large Text toggle (before scrolling away)
+    await ltMobilePage.waitForTimeout(350);
+    const activeSwatchCenterCheck = await ltMobilePage.evaluate(() => {
+      const dock = document.querySelector('[data-testid="palette-dock"]');
+      const scroller = dock?.querySelector('.overflow-x-auto');
+      const active = dock?.querySelector('button[aria-pressed="true"]');
+      if (!scroller || !active) return null;
+      const sr = scroller.getBoundingClientRect();
+      const ar = active.getBoundingClientRect();
+      return {
+        activeTestId: active.getAttribute('data-testid'),
+        scrollable: scroller.scrollWidth > scroller.clientWidth + 1,
+        diff: Math.abs(ar.left + ar.width / 2 - (sr.left + sr.width / 2)),
+      };
+    });
+    if (activeSwatchCenterCheck?.scrollable) {
+      assert.equal(
+        activeSwatchCenterCheck.diff <= 8,
+        true,
+        `Mid-dock active swatch (${activeSwatchCenterCheck.activeTestId}) must stay centered immediately upon live Large Text toggle (diff=${activeSwatchCenterCheck.diff})`
+      );
+    }
 
     // Measure enlarged HUD controls at 360x780
     const largeMobileBoxes = {
@@ -17840,28 +17989,6 @@ async function runBrowserBasicsSuite() {
       true,
       `Large Text palette swatch number must enlarge to 16px (normal=${normalMobileBoxes.swatch1FontPx}, large=${largeMobileBoxes.swatch1FontPx})`
     );
-
-    // Verify 360x780 active swatch centering in PaletteDock after toggling Large Text
-    await ltMobilePage.waitForTimeout(350);
-    const activeSwatchCenterCheck = await ltMobilePage.evaluate(() => {
-      const dock = document.querySelector('[data-testid="palette-dock"]');
-      const scroller = dock?.querySelector('.overflow-x-auto');
-      const active = dock?.querySelector('button[aria-pressed="true"]');
-      if (!scroller || !active) return null;
-      const sr = scroller.getBoundingClientRect();
-      const ar = active.getBoundingClientRect();
-      return {
-        scrollable: scroller.scrollWidth > scroller.clientWidth + 1,
-        diff: Math.abs(ar.left + ar.width / 2 - (sr.left + sr.width / 2)),
-      };
-    });
-    if (activeSwatchCenterCheck?.scrollable) {
-      assert.equal(
-        activeSwatchCenterCheck.diff <= 8,
-        true,
-        `Active swatch must stay centered in Large Text PaletteDock (diff=${activeSwatchCenterCheck.diff})`
-      );
-    }
 
     // Verify 5-button Co-op TopBar fits cleanly within 360px in Large Text mode, and ColorPickerPopover quick swatches enlarge
     await ltMobilePage.evaluate(() => {
@@ -17992,6 +18119,155 @@ async function runBrowserBasicsSuite() {
     await ltMobilePage.close();
     await ltMobileCtx.close();
 
+    // 22c-landscape. 640x360 Short-Landscape Phone checks in Large Text mode (Fixes 6, 7, 8)
+    const landCtx = await browser.newContext({ viewport: { width: 640, height: 360 }, hasTouch: true });
+    await landCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+      localStorage.setItem(
+        'capy_user_settings_v8',
+        JSON.stringify({
+          largeText: true,
+          fatFingerAssist: true,
+          raisePaletteDock: true,
+          enableCustomColorForAllPuzzles: true,
+          autoReplayOnLoad: false,
+          showUndoButton: true,
+        })
+      );
+    });
+    const landPage = await landCtx.newPage();
+    attachErrorListeners(landPage, 'landPage');
+    await landPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(landPage);
+
+    // Fill 1 region and open Replay so replay_scrubber FeatureOfferBanner + raised dock + ReplayControls + FABs are all live simultaneously
+    await tapCanvasGrid(landPage, 0.5, 6, 60);
+    await landPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
+      { timeout: 5000 }
+    );
+    await landPage.evaluate(() => {
+      localStorage.removeItem('capy_feature_offers_v1');
+    });
+    const landUndoStart = await getStableBoundingBox(landPage.getByTestId('undo-btn'));
+    assert.ok(landUndoStart);
+    await landPage.mouse.move(landUndoStart.x + landUndoStart.width / 2, landUndoStart.y + landUndoStart.height / 2);
+    await landPage.mouse.down();
+    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
+    await landPage.mouse.up();
+    await landPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 4000 });
+    await landPage.waitForTimeout(250);
+
+    const [landHeaderBox, landUndoBox, landPaintBox, landReplayBox, landBannerBox] = await Promise.all([
+      landPage.locator('header').first().boundingBox(),
+      landPage.getByTestId('undo-btn').boundingBox(),
+      landPage.getByTestId('paint-mode-btn').boundingBox(),
+      landPage.getByTestId('replay-controls-window').boundingBox(),
+      landPage.getByTestId('feature-offer-banner').boundingBox(),
+    ]);
+    assert.ok(landHeaderBox && landUndoBox && landPaintBox && landReplayBox && landBannerBox);
+    assert.equal(
+      landUndoBox.y >= landHeaderBox.y + landHeaderBox.height - 1,
+      true,
+      `640x360 raised+replaying undo-btn top (${landUndoBox.y}) must clear GameTopBar bottom (${landHeaderBox.y + landHeaderBox.height})`
+    );
+    assert.equal(
+      landPaintBox.y + landPaintBox.height <= landReplayBox.y + 1,
+      true,
+      `640x360 raised+replaying paint-mode-btn bottom (${landPaintBox.y + landPaintBox.height}) must clear ReplayControls top (${landReplayBox.y})`
+    );
+    assert.equal(
+      landBannerBox.y >= landHeaderBox.y + landHeaderBox.height - 1,
+      true,
+      `640x360 FeatureOfferBanner top (${landBannerBox.y}) must clear GameTopBar bottom (${landHeaderBox.y + landHeaderBox.height})`
+    );
+    assert.equal(
+      landBannerBox.y + landBannerBox.height <= landReplayBox.y + 1,
+      true,
+      `640x360 FeatureOfferBanner bottom (${landBannerBox.y + landBannerBox.height}) must NOT overlap ReplayControls top (${landReplayBox.y})`
+    );
+    // Verify FeatureOfferBanner does not intercept clicks on replay-speed-btn
+    await landPage.getByTestId('replay-speed-btn').click({ timeout: 3000 });
+    await landPage.getByTestId('feature-offer-dismiss-btn').click();
+    await landPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+    await landPage.getByTestId('replay-exit-btn').click();
+    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fix 7: ColorPickerPopover must stay strictly inside [0, 360] vertically with clickable Close button on 640x360
+    const landCustomBtn = landPage.getByTestId('palette-custom-btn');
+    await landCustomBtn.scrollIntoViewIfNeeded();
+    await landCustomBtn.click();
+    const landPopoverClose = landPage.locator('button[title="Close"]').last();
+    await landPopoverClose.waitFor({ state: 'visible', timeout: 3000 });
+    await landPage.waitForTimeout(200);
+    const landPopoverMetrics = await landPopoverClose.evaluate((closeBtn) => {
+      const shell = closeBtn.closest('.rounded-2xl');
+      const sr = shell?.getBoundingClientRect();
+      const cr = closeBtn.getBoundingClientRect();
+      return {
+        shellTop: sr?.top ?? -999,
+        shellBottom: sr?.bottom ?? 999,
+        closeTop: cr.top,
+        closeBottom: cr.bottom,
+      };
+    });
+    assert.equal(
+      landPopoverMetrics.shellTop >= -0.5 &&
+        landPopoverMetrics.shellBottom <= 360.5 &&
+        landPopoverMetrics.closeTop >= -0.5 &&
+        landPopoverMetrics.closeBottom <= 360.5,
+      true,
+      `640x360 ColorPickerPopover and Close button must stay strictly inside [0, 360] (${JSON.stringify(landPopoverMetrics)})`
+    );
+    await landPopoverClose.click();
+    await landPopoverClose.waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fix 6: Completed + raised dock + replaying on 640x360 must clear BOTH GameTopBar and ReplayControls
+    await landPage.evaluate(async () => {
+      const active = window.capyStorage.loadActiveState();
+      const snaps = window.capyStorage.loadSnapshots();
+      const snapId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = snapId ? await window.capyStorage.loadPuzzleData(snapId) : null;
+      if (!puz || !active) return;
+      const allIds = puz.regions.map((r) => r.id);
+      active.filledRegionIds = allIds;
+      active.fillOrder = allIds;
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      const snap = snaps.find((s) => s.id === snapId);
+      if (snap) {
+        snap.filledRegionIds = allIds;
+        snap.fillOrder = allIds;
+        snap.filledCount = allIds.length;
+        snap.totalCount = allIds.length;
+        localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+      }
+    });
+    await landPage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(landPage);
+    await landPage.getByTestId('replay-btn').waitFor({ state: 'visible', timeout: 5000 });
+    await landPage.getByTestId('replay-btn').click();
+    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
+    await landPage.waitForTimeout(250);
+    const [compHeaderBox, compUndoBox, compPaintBox, compReplayBox] = await Promise.all([
+      landPage.locator('header').first().boundingBox(),
+      landPage.getByTestId('undo-btn').boundingBox(),
+      landPage.getByTestId('paint-mode-btn').boundingBox(),
+      landPage.getByTestId('replay-controls-window').boundingBox(),
+    ]);
+    assert.ok(compHeaderBox && compUndoBox && compPaintBox && compReplayBox);
+    assert.equal(
+      compUndoBox.y >= compHeaderBox.y + compHeaderBox.height - 1,
+      true,
+      `640x360 completed+raised+replaying undo-btn top (${compUndoBox.y}) must clear GameTopBar bottom (${compHeaderBox.y + compHeaderBox.height})`
+    );
+    assert.equal(
+      compPaintBox.y + compPaintBox.height <= compReplayBox.y + 1,
+      true,
+      `640x360 completed+raised+replaying paint-mode-btn bottom (${compPaintBox.y + compPaintBox.height}) must clear ReplayControls top (${compReplayBox.y})`
+    );
+    await landPage.close();
+    await landCtx.close();
+
     // 22d. OnboardingTutorial Large Text ON toggle must also enable fatFingerAssist
     const tutCoupleCtx = await browser.newContext({ viewport: { width: 412, height: 915 }, hasTouch: true });
     await tutCoupleCtx.addInitScript(() => {
@@ -18014,7 +18290,7 @@ async function runBrowserBasicsSuite() {
     await tutCouplePage.close();
     await tutCoupleCtx.close();
 
-    // 22e. #602 Regression Tests: Paint Mode single-tap no double-paint & Free Colour Mode repaint filled region
+    // 22e. #602 Regression Tests: Paint Mode single-tap & <12px micro-jitter no double-paint + Free Colour Mode repaint filled region
     const regCtx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
     await regCtx.addInitScript(() => {
       localStorage.setItem('capy_dev_debug', '1');
@@ -18034,7 +18310,7 @@ async function runBrowserBasicsSuite() {
     await regPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(regPage);
 
-    // Find an exact interior pixel of an unfilled region A that has a distinct adjacent unfilled neighbor B within <= 6 puzzle px
+    // Find an exact interior pixel of an unfilled region A that has an adjacent unfilled region B within 3-8 screen px (<12px) and another neighbor C within 24 screen px
     const adjacentTarget = await regPage.evaluate(async () => {
       const snaps = window.capyStorage.loadSnapshots();
       const active = window.capyStorage.loadActiveState();
@@ -18049,48 +18325,78 @@ async function runBrowserBasicsSuite() {
       const map = puz.regionMap;
       const w = puz.width;
       const h = puz.height;
-      for (let y = 10; y < h - 10; y += 2) {
-        for (let x = 10; x < w - 10; x += 2) {
+      const isInterior = (px, py, rid) =>
+        px > 1 &&
+        px < w - 2 &&
+        py > 1 &&
+        py < h - 2 &&
+        map[(py - 1) * w + px] === rid &&
+        map[(py + 1) * w + px] === rid &&
+        map[py * w + (px - 1)] === rid &&
+        map[py * w + (px + 1)] === rid;
+
+      for (let y = 12; y < h - 12; y += 2) {
+        for (let x = 12; x < w - 12; x += 2) {
           const rA = map[y * w + x];
-          if (rA <= 0) continue;
-          // Ensure (x, y) is safely inside rA (3x3 same region) so float rounding never lands on border
-          if (
-            map[(y - 1) * w + x] !== rA ||
-            map[(y + 1) * w + x] !== rA ||
-            map[y * w + (x - 1)] !== rA ||
-            map[y * w + (x + 1)] !== rA
-          ) {
-            continue;
-          }
-          // Ensure a distinct region rB exists within 6 puzzle px (well inside 34px screen reach)
-          let foundNeighbor = 0;
-          for (let d = 2; d <= 6 && !foundNeighbor; d++) {
-            const cands = [
-              map[y * w + (x + d)],
-              map[y * w + (x - d)],
-              map[(y + d) * w + x],
-              map[(y - d) * w + x],
-            ];
-            for (const c of cands) {
-              if (c > 0 && c !== rA) {
-                foundNeighbor = c;
-                break;
+          if (rA <= 0 || !isInterior(x, y, rA)) continue;
+          const clientX = rect.left + baseOffsetX + (x + 0.5) * baseScale;
+          const clientY = rect.top + baseOffsetY + (y + 0.5) * baseScale;
+          if (clientY <= 90 || clientY >= rect.height - 120) continue;
+
+          // Find neighbor B whose interior pixel is 3..8 screen px away from (clientX, clientY)
+          let foundB = null;
+          const dirs = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ];
+          for (const [dx, dy] of dirs) {
+            for (let step = 2; step <= 18; step++) {
+              const bx = x + dx * step;
+              const by = y + dy * step;
+              if (bx < 2 || bx >= w - 2 || by < 2 || by >= h - 2) break;
+              const rB = map[by * w + bx];
+              if (rB > 0 && rB !== rA && isInterior(bx, by, rB)) {
+                const screenDist = step * baseScale;
+                if (screenDist >= 3 && screenDist <= 8) {
+                  // Ensure B also has a 3rd distinct region C within <= 24 screen px so a bug would double-paint C
+                  let foundC = 0;
+                  const maxCStep = Math.max(2, Math.floor(24 / baseScale));
+                  for (const [cdx, cdy] of dirs) {
+                    for (let cs = 2; cs <= maxCStep && !foundC; cs++) {
+                      const cx = bx + cdx * cs;
+                      const cy = by + cdy * cs;
+                      if (cx < 0 || cx >= w || cy < 0 || cy >= h) break;
+                      const rC = map[cy * w + cx];
+                      if (rC > 0 && rC !== rA && rC !== rB) {
+                        foundC = rC;
+                      }
+                    }
+                  }
+                  if (foundC > 0) {
+                    foundB = {
+                      regionB: rB,
+                      regionC: foundC,
+                      bClientX: rect.left + baseOffsetX + (bx + 0.5) * baseScale,
+                      bClientY: rect.top + baseOffsetY + (by + 0.5) * baseScale,
+                      dragScreenPx: screenDist,
+                    };
+                    break;
+                  }
+                }
               }
             }
+            if (foundB) break;
           }
-          if (foundNeighbor > 0) {
-            const clientX = rect.left + baseOffsetX + (x + 0.5) * baseScale;
-            const clientY = rect.top + baseOffsetY + (y + 0.5) * baseScale;
-            // Ensure point is well away from top/bottom HUD overlays
-            if (clientY > 90 && clientY < rect.height - 120) {
-              return { regionA: rA, regionB: foundNeighbor, clientX, clientY };
-            }
+          if (foundB) {
+            return { regionA: rA, clientX, clientY, ...foundB };
           }
         }
       }
       return null;
     });
-    assert.ok(adjacentTarget, 'Expected to locate an interior pixel of region A adjacent to neighbor B');
+    assert.ok(adjacentTarget, 'Expected to locate interior pixels of region A -> neighbor B (3-8px) -> neighbor C');
 
     // Paint Mode single-tap: MUST fill EXACTLY 1 region (regionA), NOT double-paint neighbor regionB
     const filledBeforePaintTap = Number(
@@ -18118,7 +18424,38 @@ async function runBrowserBasicsSuite() {
       'Paint Mode single-tap must NOT double-paint adjacent neighbor regionB'
     );
 
-    // Free Colour Mode repaint: undo regionA, switch to Tap Mode & enable Free Colour Mode live, fill A with color 1, switch to color 2, tap A again -> A repaints, B stays unfilled
+    // Fix 5: Paint Mode <12px micro-jitter starting on already-filled regionA and sliding 3-8px into unfilled regionB (>=25ms hold) must paint ONLY regionB (+1, no neighbor C double-paint)
+    await regPage.waitForTimeout(450); // outside 350ms double-tap window
+    await regPage.mouse.move(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.mouse.down();
+    await regPage.mouse.move(adjacentTarget.bClientX, adjacentTarget.bClientY);
+    await regPage.waitForTimeout(40);
+    await regPage.mouse.up();
+    await regPage.waitForTimeout(200);
+    const activeAfterJitter = await regPage.evaluate(() => window.capyStorage.loadActiveState());
+    const filledAfterJitter = activeAfterJitter?.filledRegionIds ?? [];
+    assert.equal(
+      filledAfterJitter.length,
+      filledAfterPaintTap + 1,
+      `Paint Mode <12px micro-jitter (${adjacentTarget.dragScreenPx.toFixed(1)}px) from filled A into unfilled B must paint ONLY B (expected ${filledAfterPaintTap + 1}, got ${filledAfterJitter.length}: ${JSON.stringify(filledAfterJitter)})`
+    );
+    assert.equal(
+      filledAfterJitter.includes(adjacentTarget.regionB),
+      true,
+      'Paint Mode <12px micro-jitter must fill entered regionB'
+    );
+    assert.equal(
+      filledAfterJitter.includes(adjacentTarget.regionC),
+      false,
+      'Paint Mode <12px micro-jitter must NOT double-paint neighbor regionC on pointerup'
+    );
+
+    // Free Colour Mode repaint: undo regionB & regionA, switch to Tap Mode & enable Free Colour Mode live, fill A with color 1, switch to color 2, tap A again -> A repaints, B stays unfilled
+    await regPage.getByTestId('undo-btn').click();
+    await regPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 1,
+      { timeout: 3000 }
+    );
     await regPage.getByTestId('undo-btn').click();
     await regPage.waitForFunction(
       () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 0,
@@ -18168,7 +18505,7 @@ async function runBrowserBasicsSuite() {
 
     await regPage.close();
     await regCtx.close();
-    logE2ePass('Large Text button scaling (360x780/412x915/1280x720), Fat-Finger coupling & Paint/Free-Colour fixes verified.');
+    logE2ePass('Large Text button scaling (360x780/412x915/640x360/1280x720), switch/slider/tab/centering, Fat-Finger coupling & Paint micro-jitter/Free-Colour fixes verified.');
 
     assert.equal(
       e2eStep,

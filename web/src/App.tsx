@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import {
   DEFAULT_GENERATOR_CONFIG,
@@ -582,7 +582,7 @@ export const App: React.FC = () => {
   // Hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.dataset.largeText = settings.largeText ? 'true' : 'false';
   }, [settings.largeText]);
 

@@ -397,7 +397,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
                   ? ` (${badgeVal} painted)`
                   : ` (${badgeVal} remaining)`
               }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
-              className={`capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-all active:scale-95 shadow-md ${
+              className={`capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-[transform,opacity,box-shadow,background-color] active:scale-95 shadow-md ${
                 isActive
                   ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-xl opacity-100 z-10'
                   : isVisibleOnScreen && prioritizeOnScreen
@@ -431,7 +431,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
             data-testid="palette-custom-btn"
             onClick={onOpenPaletteOptions}
             title="Custom Colour & Palette Options"
-            className="capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+            className="capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-[transform,opacity,box-shadow,background-color]"
           >
             <Palette size={18} />
             <span className="text-[8.5px] font-bold text-slate-300 leading-none mt-0.5">

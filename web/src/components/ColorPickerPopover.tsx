@@ -152,11 +152,11 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200 select-none"
+        className="w-full max-w-sm max-h-[calc(100dvh-1.5rem)] flex flex-col rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200 select-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with Tabs */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-800 bg-slate-950/40">
+        <div className="shrink-0 flex items-center justify-between px-3.5 py-2.5 border-b border-slate-800 bg-slate-950/40">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -193,7 +193,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
 
         {/* Custom Colour Tab Content */}
         {activeTab === 'custom' && (
-          <div className="p-3.5 flex flex-col gap-3">
+          <div className="p-3.5 flex flex-col gap-3 overflow-y-auto min-h-0 flex-1">
             {/* Live Preview & Hex Input Row */}
             <div className="flex items-center gap-3">
               <div
@@ -336,7 +336,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
 
         {/* Themes Tab Content */}
         {activeTab === 'themes' && (
-          <div className="p-3.5 flex flex-col gap-2 max-h-80 overflow-y-auto no-scrollbar">
+          <div className="p-3.5 flex flex-col gap-2 max-h-80 min-h-0 flex-1 overflow-y-auto no-scrollbar">
             <span className="text-[11px] font-semibold text-slate-400 mb-1">
               Select a curated color theme:
             </span>

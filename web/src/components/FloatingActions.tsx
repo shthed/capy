@@ -75,7 +75,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
   };
   return (
     <div
-      className="fixed z-20 flex flex-col items-end gap-2.5 transition-all"
+      className="capy-fab-stack fixed z-20 flex flex-col items-end gap-2.5 transition-all"
       style={{
         bottom: `calc(${
           isReplaying

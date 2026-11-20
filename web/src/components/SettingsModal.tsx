@@ -1466,7 +1466,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         data-testid="setting-touch-reach-value"
                         className="text-amber-400 font-mono font-bold text-right"
                       >
-                        {settings.largeText && Math.round(settings.touchReachRadiusPx ?? 22) < 34
+                        {settings.fatFingerAssist &&
+                        settings.largeText &&
+                        Math.round(settings.touchReachRadiusPx ?? 22) < 34
                           ? `34px (Large UI • saved ${Math.round(settings.touchReachRadiusPx ?? 22)}px)`
                           : `${Math.round(settings.touchReachRadiusPx ?? 22)}px`}
                       </span>

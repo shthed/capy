@@ -169,6 +169,7 @@ export function resolveNearTapRegionId(params: ResolveNearTapParams): number {
 
   const lx = Math.floor(canvasX);
   const ly = Math.floor(canvasY);
+  if (!Number.isFinite(lx) || !Number.isFinite(ly)) return 0;
   const allowAnyColor = difficulty === 'EASY' || isFreeColorMode;
 
   if (lx >= 0 && lx < width && ly >= 0 && ly < height) {
@@ -469,7 +470,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Drag & Pinch interaction tracking
   const isDraggingRef = useRef(false);
-  const paintedOnDownRef = useRef(false);
+  const paintedInGestureRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const totalDragDistanceRef = useRef(0);
@@ -1479,10 +1480,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     [puzzle]
   );
 
-  // Bresenham line painting for smooth drag strokes
+  // Bresenham line painting for smooth drag strokes; returns true when at least one eligible region is dispatched
   const hitTestAndPaintLine = useCallback(
-    (x1: number, y1: number, x2: number, y2: number) => {
-      if (!puzzle) return;
+    (x1: number, y1: number, x2: number, y2: number): boolean => {
+      if (!puzzle) return false;
       const { width, height, regionMap } = puzzle;
 
       const dx = x2 - x1;
@@ -1491,6 +1492,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const steps = Math.max(1, Math.floor(dist * 0.8));
 
       const intersected = new Set<number>();
+      let didPaintEligible = false;
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const lx = Math.floor(x1 + t * dx);
@@ -1500,6 +1502,15 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           const rId = regionMap[ly * width + lx];
           if (rId > 0) {
             intersected.add(rId);
+            if (
+              !didPaintEligible &&
+              (isFreeColorMode ||
+                (!filledRegionIds.has(rId) &&
+                  (difficulty === 'EASY' ||
+                    regionByIdRef.current.get(rId)?.colorId === activeColorId)))
+            ) {
+              didPaintEligible = true;
+            }
           }
         }
       }
@@ -1507,8 +1518,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       if (intersected.size > 0) {
         onBatchRegionsClicked(intersected);
       }
+      return didPaintEligible;
     },
-    [puzzle, onBatchRegionsClicked]
+    [puzzle, onBatchRegionsClicked, isFreeColorMode, filledRegionIds, difficulty, activeColorId]
   );
 
   // Calculate visible regions/colors with debouncing
@@ -1992,7 +2004,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
-    paintedOnDownRef.current = false;
+    paintedInGestureRef.current = false;
     stopMomentum();
     refreshCanvasRect();
     resetPointerRing(e.clientX, e.clientY, performance.now());
@@ -2066,21 +2078,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // Only start continuous paint if touching inside the image region
     if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
-      const downLx = Math.floor(coords.x);
-      const downLy = Math.floor(coords.y);
-      const downExactId =
-        downLx >= 0 && downLx < puzzle.width && downLy >= 0 && downLy < puzzle.height
-          ? puzzle.regionMap[downLy * puzzle.width + downLx]
-          : 0;
-      const willPaintExactOnDown =
-        downExactId > 0 &&
-        (isFreeColorMode ||
-          (!filledRegionIds.has(downExactId) &&
-            (difficulty === 'EASY' ||
-              regionByIdRef.current.get(downExactId)?.colorId === activeColorId)));
-      paintedOnDownRef.current = willPaintExactOnDown;
       onPuzzleInteractionRef.current?.();
-      hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
+      if (hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y)) {
+        paintedInGestureRef.current = true;
+      }
       setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
     }
   };
@@ -2236,7 +2237,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // If touching outside the image region on the background canvas, drag always pans!
     if (!isPinchPanningRef.current && !isRightClick && !isTouchingOutsideImage && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
-      hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y);
+      if (hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y)) {
+        paintedInGestureRef.current = true;
+      }
       setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
     } else {
       const container = containerRef.current;
@@ -2302,6 +2305,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // If one-finger double-tap zoom or pan was active, finish cleanly without clicks
     if (isOneFingerZoomingRef.current || isDoubleTapPanningRef.current) {
+      paintedInGestureRef.current = false;
       isOneFingerZoomingRef.current = false;
       isDoubleTapPanningRef.current = false;
       isDoubleTapCandidateRef.current = false;
@@ -2316,6 +2320,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     isDoubleTapPanningRef.current = false;
 
     if (!isDraggingRef.current) {
+      paintedInGestureRef.current = false;
       if (touchPointerCountRef.current === 0) {
         wasPinchingRef.current = false;
         isPinchPanningRef.current = false;
@@ -2335,12 +2340,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     }
 
     if (wasRightClick || touchStartDistRef.current !== null) {
+      paintedInGestureRef.current = false;
       commitTransformState(true);
       return;
     }
 
     // Trigger smooth pan momentum if dragged sufficiently
     if (totalDragDistanceRef.current >= 12) {
+      paintedInGestureRef.current = false;
       commitTransformState(true);
       if (panMomentum && !reducedMotionRef.current && (!isPaintMode || isPreviewMode || wasPinchPan)) {
         const count = pointerRingCountRef.current;
@@ -2430,12 +2437,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       lastTapUpTimeRef.current = Date.now();
       lastTapUpPosRef.current = { x: e.clientX, y: e.clientY };
 
-      const alreadyPaintedOnDown = paintedOnDownRef.current;
-      paintedOnDownRef.current = false;
+      const alreadyPaintedInGesture = paintedInGestureRef.current;
+      paintedInGestureRef.current = false;
 
       if (isPreviewMode) {
         onTogglePreview();
-      } else if (!alreadyPaintedOnDown) {
+      } else if (!alreadyPaintedInGesture) {
         const coords = screenToCanvasCoords(e.clientX, e.clientY);
         if (coords && puzzle) {
           setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
@@ -2472,13 +2479,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           }
         }
       }
-    } else {
-      paintedOnDownRef.current = false;
     }
   };
 
   const handlePointerCancel = (e: React.PointerEvent) => {
-    paintedOnDownRef.current = false;
+    paintedInGestureRef.current = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
