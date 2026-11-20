@@ -748,7 +748,7 @@ export function runSanityChecks({
   );
 
   // 1b. Android @JavascriptInterface <-> NativeBridge.ts CapyAndroidInterface parity
-  const bridgeKtPath = path.join(root, 'app/src/main/java/com/capypaint/capy/CapyAndroidBridge.kt');
+  const bridgeKtPath = path.join(root, 'app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt');
   const nativeBridgeTsPath = path.join(root, 'web/src/services/NativeBridge.ts');
   if (fs.existsSync(bridgeKtPath) || fs.existsSync(nativeBridgeTsPath)) {
     assert.equal(fs.existsSync(bridgeKtPath), true, 'Missing CapyAndroidBridge.kt for bridge parity check');

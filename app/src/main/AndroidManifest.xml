@@ -38,7 +38,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.capypaint.capy.fileprovider"
+            android:authorities="com.capyboop.paint.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
@@ -47,7 +47,7 @@
         </provider>
 
         <activity
-            android:name="com.capypaint.capy.MainActivity"
+            android:name="com.capyboop.paint.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="density|smallestScreenSize|screenLayout|orientation|screenSize|keyboard|keyboardHidden|navigation|uiMode">

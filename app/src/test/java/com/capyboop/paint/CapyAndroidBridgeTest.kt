@@ -1,4 +1,4 @@
-package com.capypaint.capy
+package com.capyboop.paint
 
 import android.annotation.TargetApi
 import android.os.Build
@@ -401,7 +401,7 @@ class CapyAndroidBridgeTest {
         )
         assertEquals(
             CapyAndroidBridge.WebViewNavigationAction.BLOCK,
-            CapyAndroidBridge.classifyWebViewNavigation("file:///data/data/com.capypaint.capy/shared_prefs"),
+            CapyAndroidBridge.classifyWebViewNavigation("file:///data/data/com.capyboop.paint/shared_prefs"),
         )
         assertEquals(
             CapyAndroidBridge.WebViewNavigationAction.BLOCK,
