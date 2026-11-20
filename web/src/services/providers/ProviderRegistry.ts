@@ -349,8 +349,8 @@ class MultiProviderAuthManager implements AuthProvider {
     }
 
     const orderedProviderIds: CloudProviderId[] = NativeBridge.isAndroid
-      ? ['play_games_v2', 'google']
-      : ['google', 'steam', 'microsoft', 'apple'];
+      ? ['play_games_v2', 'google', 'microsoft']
+      : ['google', 'microsoft', 'apple', 'steam'];
 
     for (const providerId of orderedProviderIds) {
       const driver = this.drivers.get(providerId);
@@ -1258,6 +1258,7 @@ export function resolveCoopRoomWsUrl(
   if (
     hostname === 'capypaint.com' ||
     hostname === 'www.capypaint.com' ||
+    hostname === 'paint.capyboop.com' ||
     hostname.endsWith('.capypaint.com')
   ) {
     const wsProto = locationLike.protocol === 'http:' ? 'ws:' : 'wss:';

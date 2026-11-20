@@ -89,6 +89,10 @@ jobs:
         env:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_APPLE_CLIENT_ID: ${{ vars.VITE_APPLE_CLIENT_ID }}
+          VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
+          VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
           set -euo pipefail
@@ -120,6 +124,10 @@ jobs:
           TAG_NAME: ${{ steps.meta.outputs.tag }}
           IS_PRERELEASE: ${{ steps.meta.outputs.prerelease }}
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_APPLE_CLIENT_ID: ${{ vars.VITE_APPLE_CLIENT_ID }}
+          VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
+          VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
           CAPY_PLAY_GAMES_APP_ID: ${{ vars.CAPY_PLAY_GAMES_APP_ID }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
           CAPY_KEYSTORE_BASE64: ${{ secrets.CAPY_KEYSTORE_BASE64 }}

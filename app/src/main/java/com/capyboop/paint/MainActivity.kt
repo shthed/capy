@@ -1,4 +1,4 @@
-package com.capypaint.capy
+package com.capyboop.paint
 
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -279,6 +279,7 @@ class MainActivity : ComponentActivity() {
                     applySafeAreaInsetsToWebView()
                     deliverPendingSharedImageIfNeeded()
                     deliverPendingDeepLinkIfNeeded()
+                    deliverPendingOAuthCallbackIfNeeded()
                 }
 
                 override fun onReceivedError(
@@ -423,7 +424,13 @@ class MainActivity : ComponentActivity() {
 
         if (intent.action == Intent.ACTION_VIEW) {
             val dataUri = intent.data?.toString()
-            if (CapyAndroidBridge.isAllowedCapyDeepLink(dataUri) && (dataUri != null)) {
+            if (CapyAndroidBridge.isAllowedOAuthCallbackUrl(dataUri) && (dataUri != null)) {
+                Log.i(TAG, "Received verified OAuth PKCE callback URI")
+                bridge.pendingOAuthCallbackUrl = dataUri
+                if (isPageLoaded) {
+                    deliverPendingOAuthCallbackIfNeeded()
+                }
+            } else if (CapyAndroidBridge.isAllowedCapyDeepLink(dataUri) && (dataUri != null)) {
                 Log.i(TAG, "Received verified Capy deep link: $dataUri")
                 bridge.pendingDeepLinkUrl = dataUri
                 if (isPageLoaded) {
@@ -589,6 +596,23 @@ class MainActivity : ComponentActivity() {
                 try {
                     if (window.__capyReceiveDeepLink) {
                         window.__capyReceiveDeepLink("$escapedUrl");
+                    }
+                } catch (e) {}
+            })();
+            """.trimIndent(),
+        )
+    }
+
+    private fun deliverPendingOAuthCallbackIfNeeded() {
+        val pendingUrl = bridge.consumePendingOAuthCallbackInternal() ?: return
+        if (!CapyAndroidBridge.isAllowedOAuthCallbackUrl(pendingUrl)) return
+        val escapedUrl = CapyAndroidBridge.escapeJsString(pendingUrl)
+        evaluateOnTrustedPage(
+            """
+            (function() {
+                try {
+                    if (window.__capyReceiveOAuthCallback) {
+                        window.__capyReceiveOAuthCallback("$escapedUrl");
                     }
                 } catch (e) {}
             })();

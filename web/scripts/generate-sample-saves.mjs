@@ -411,10 +411,14 @@ async function generateAllSaves() {
         );
       }
 
-      const displayLabel = sample.isFreeColor ? 'Free Colour Line Art • Max Detail' : preset.label;
+      const displayLabel = sample.isFreeColor
+        ? 'Free Colour Line Art • Max Detail'
+        : preset.label === 'Max Detail (Auto)'
+          ? ''
+          : preset.label;
       const snapEntry = {
         id: dailyId,
-        title: `${sample.title} (${displayLabel})`,
+        title: displayLabel ? `${sample.title} (${displayLabel})` : sample.title,
         timestamp: DETERMINISTIC_EXPORT_DATE_MS - (comboIndex + 1) * 1000,
         lastOpened: DETERMINISTIC_EXPORT_DATE_MS - (comboIndex + 1) * 1000,
         filledCount: 0,

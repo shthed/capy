@@ -1,4 +1,4 @@
-package com.capypaint.capy
+package com.capyboop.paint
 
 import android.annotation.TargetApi
 import android.content.Context
@@ -215,6 +215,34 @@ class CapyAndroidBridge(
         val pending = pendingSharedImageJson
         pendingSharedImageJson = null
         return pending
+    }
+
+    @Volatile
+    var pendingOAuthCallbackUrl: String? = null
+
+    fun consumePendingOAuthCallbackInternal(): String? {
+        val pending = pendingOAuthCallbackUrl
+        pendingOAuthCallbackUrl = null
+        return pending
+    }
+
+    @JavascriptInterface
+    fun openExternalOAuth(authUrl: String): Boolean {
+        if (!originGuard()) return false
+        if (!isAllowedExternalOAuthUrl(authUrl)) {
+            Log.w(TAG, "Blocked untrusted external OAuth URL: $authUrl")
+            return false
+        }
+        return try {
+            val viewIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(authUrl.trim())).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(viewIntent)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to launch external OAuth browser", e)
+            false
+        }
     }
 
     @JavascriptInterface
@@ -1033,6 +1061,53 @@ class CapyAndroidBridge(
                 } else {
                     false
                 }
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        private val ALLOWED_EXTERNAL_OAUTH_HOSTS = setOf(
+            "accounts.google.com",
+            "login.microsoftonline.com",
+        )
+
+        private const val MAX_OAUTH_CALLBACK_URL_LENGTH = 4096
+
+        /**
+         * Strict HTTPS host allowlist for launching external browser OAuth PKCE sign-in.
+         */
+        fun isAllowedExternalOAuthUrl(rawUrl: String?): Boolean {
+            if (rawUrl.isNullOrBlank()) return false
+            val trimmed = rawUrl.trim()
+            if (trimmed.length > MAX_OAUTH_CALLBACK_URL_LENGTH) return false
+            if (trimmed.any { it.isWhitespace() || it.isISOControl() }) return false
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase()
+                val host = uri.host?.lowercase() ?: return false
+                if (scheme != "https") return false
+                if (uri.userInfo != null) return false
+                if (uri.port != -1 && uri.port != 443) return false
+                host in ALLOWED_EXTERNAL_OAUTH_HOSTS
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        /**
+         * Validates incoming `capypaint://oauth/callback` PKCE redirect URIs before forwarding to JS.
+         */
+        fun isAllowedOAuthCallbackUrl(rawUrl: String?): Boolean {
+            if (rawUrl.isNullOrBlank()) return false
+            val trimmed = rawUrl.trim()
+            if (trimmed.length > MAX_OAUTH_CALLBACK_URL_LENGTH) return false
+            if (trimmed.any { it.isWhitespace() || it.isISOControl() }) return false
+            return try {
+                val uri = URI(trimmed)
+                val scheme = uri.scheme?.lowercase()
+                val host = uri.host?.lowercase()
+                val path = uri.path ?: ""
+                scheme == "capypaint" && host == "oauth" && path == "/callback"
             } catch (_: Exception) {
                 false
             }

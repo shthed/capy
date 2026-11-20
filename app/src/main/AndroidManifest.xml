@@ -38,7 +38,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.capypaint.capy.fileprovider"
+            android:authorities="com.capyboop.paint.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
@@ -47,7 +47,7 @@
         </provider>
 
         <activity
-            android:name="com.capypaint.capy.MainActivity"
+            android:name="com.capyboop.paint.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="density|smallestScreenSize|screenLayout|orientation|screenSize|keyboard|keyboardHidden|navigation|uiMode">
@@ -75,6 +75,15 @@
                     android:scheme="https"
                     android:host="shthed.github.io"
                     android:pathPrefix="/capy" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="capypaint"
+                    android:host="oauth"
+                    android:path="/callback" />
             </intent-filter>
         </activity>
     </application>

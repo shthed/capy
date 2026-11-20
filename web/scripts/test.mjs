@@ -84,7 +84,7 @@ async function getStableBoundingBox(locator, timeoutMs = 2000) {
 
 async function runCodecAndEngineTests() {
   console.log('=== PART 1: Unified Engine, Codec, Relay, Security & Workflow Unit Suite ===');
-  const unitPublicTotal = 10;
+  const unitPublicTotal = 11;
   let unitDevTotal = 0;
   /* capy-dev-only:start */
   unitDevTotal = 5;
@@ -2317,6 +2317,334 @@ async function runCodecAndEngineTests() {
     assert.equal(canvasMod.getNextZoomStop(8), 12);
     assert.equal(canvasMod.getNextZoomStop(12), 1);
 
+    // 7b. US-3.5 Fat-Finger Mode: resolveNearTapRegionId zero-allocation radial hit-testing
+    {
+      const width = 128;
+      const height = 128;
+      const regionMap = new Int32Array(width * height);
+      const setRect = (x0, y0, x1, y1, id) => {
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
+            regionMap[y * width + x] = id;
+          }
+        }
+      };
+      // Micro-region 1 (colorId 1 = active) at (20..21, 20..21)
+      setRect(20, 20, 21, 21, 1);
+      // Micro-region 2 (colorId 2 = non-active) at (26..27, 20..21)
+      setRect(26, 20, 27, 21, 2);
+      // Filled region 3 (colorId 1) at (50..53, 50..53) next to unfilled micro-region 4 (colorId 2) at (55..56, 50..51)
+      setRect(50, 50, 53, 53, 3);
+      setRect(55, 50, 56, 51, 4);
+      // Isolated micro-region 5 (colorId 2 = non-active) at (80..81, 80..81), far from active regions
+      setRect(80, 80, 81, 81, 5);
+
+      const regionById = new Map([
+        [1, { id: 1, colorId: 1, pixelCount: 4, centroidX: 20, centroidY: 20, maxRadius: 1 }],
+        [2, { id: 2, colorId: 2, pixelCount: 4, centroidX: 26, centroidY: 20, maxRadius: 1 }],
+        [3, { id: 3, colorId: 1, pixelCount: 16, centroidX: 51, centroidY: 51, maxRadius: 2 }],
+        [4, { id: 4, colorId: 2, pixelCount: 4, centroidX: 55, centroidY: 50, maxRadius: 1 }],
+        [5, { id: 5, colorId: 2, pixelCount: 4, centroidX: 80, centroidY: 80, maxRadius: 1 }],
+      ]);
+      const filledRegionIds = new Set([3]);
+      const baseParams = {
+        width,
+        height,
+        regionMap,
+        regionById,
+        filledRegionIds,
+        activeColorId: 1,
+        touchReachRadiusPx: 22,
+        totalScreenScale: 1,
+        isFreeColorMode: false,
+      };
+
+      // Direct O(1) hit works even when fatFingerAssist is false
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 20.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: false,
+        }),
+        1,
+        'Direct O(1) hit on unfilled active region must succeed with fatFingerAssist=false'
+      );
+
+      // Near-miss with fatFingerAssist=false must return 0
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 17.5,
+          canvasY: 20.5,
+          difficulty: 'EASY',
+          fatFingerAssist: false,
+        }),
+        0,
+        'Near-miss on border with fatFingerAssist=false must return 0'
+      );
+
+      // NORMAL + fatFingerAssist=true: snaps strictly to activeColorId (1), ignores isolated non-active (5)
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 17.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+        }),
+        1,
+        'NORMAL + fatFingerAssist=true must snap to nearby unfilled activeColorId region'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 83.5,
+          canvasY: 80.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+        }),
+        0,
+        'NORMAL + fatFingerAssist=true must NOT snap to non-activeColorId region'
+      );
+
+      // EASY + fatFingerAssist=true: prefers activeColorId (1) over closer non-active (2), and falls back to any unfilled color on border/filled pixels
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 24.5,
+          canvasY: 20.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+        }),
+        1,
+        'EASY + fatFingerAssist=true must prefer activeColorId (1 at dx=-3) over non-active (2 at dx=+2)'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 83.5,
+          canvasY: 80.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+        }),
+        5,
+        'EASY + fatFingerAssist=true on border near non-active region must snap to 5'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 52.5,
+          canvasY: 50.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+        }),
+        4,
+        'EASY + fatFingerAssist=true on filled region must snap to nearby unfilled region of any color'
+      );
+
+      // Zoom scaling: touchReachRadiusPx=22 at totalScreenScale=4 -> 5.5 puzzle px
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 14.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 22,
+          totalScreenScale: 4,
+        }),
+        0,
+        'Zoomed-in 4x (reach=5.5px) must not reach region 6px away'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 16.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 22,
+          totalScreenScale: 4,
+        }),
+        1,
+        'Zoomed-in 4x (reach=5.5px) must reach region 4px away'
+      );
+
+      // Zoomed-out 64px puzzle-space cap: 40 / 0.25 = 160 -> capped at 64px
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 85.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 40,
+          totalScreenScale: 0.25,
+        }),
+        1,
+        'Zoomed-out 0.25x cap (64px) must reach region 64px away (85 - 21 = 64)'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 86.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 40,
+          totalScreenScale: 0.25,
+        }),
+        0,
+        'Zoomed-out 0.25x cap (64px) must NOT reach region 65px away (86 - 21 = 65)'
+      );
+
+      // Free Colour Mode direct-hit repaint: tapping already-filled region 1 near unfilled neighbor 2 must return 1 (not snap to 2)
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          filledRegionIds: new Set([1]),
+          canvasX: 20.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+          isFreeColorMode: true,
+        }),
+        1,
+        'Free Colour Mode direct hit on already-filled region 1 must return 1 for repaint instead of snapping to adjacent unfilled neighbor 2'
+      );
+
+      // Free Colour Mode border miss: tapping border pixel (exactId=0) must still snap to nearest unfilled region
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          filledRegionIds: new Set([1]),
+          canvasX: 23.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+          isFreeColorMode: true,
+        }),
+        2,
+        'Free Colour Mode border miss (exactId=0) must still snap to nearest unfilled region 2'
+      );
+
+      // Non-finite (NaN / Infinity) coordinates must return 0 immediately without scanning
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: Number.NaN,
+          canvasY: 20.5,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+        }),
+        0,
+        'NaN canvasX must return 0 safely'
+      );
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          canvasX: 20.5,
+          canvasY: Number.POSITIVE_INFINITY,
+          difficulty: 'EASY',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+        }),
+        0,
+        'Infinity canvasY must return 0 safely'
+      );
+
+      // Zero-allocation verification: no Set/Map/Array allocations inside resolveNearTapRegionId
+      const fnSource = canvasMod.resolveNearTapRegionId.toString();
+      assert.equal(
+        /new\s+(Map|Set|Array)\b/.test(fnSource),
+        false,
+        'resolveNearTapRegionId must not allocate Map/Set/Array'
+      );
+
+      // 7b. Completed regions must NOT draw region boundaries (both incremental and full base rebuild)
+      assert.equal(
+        typeof canvasMod.writeRegionPixelsToImageData,
+        'function',
+        'PuzzleCanvas must export writeRegionPixelsToImageData'
+      );
+      assert.equal(
+        typeof canvasMod.writeBaseCanvasPixels,
+        'function',
+        'PuzzleCanvas must export writeBaseCanvasPixels'
+      );
+      {
+        // 4 pixels: [0]=interior of reg 1, [1]=border of reg 1, [2]=interior of reg 2, [3]=border of reg 2
+        const bMap = new Uint8Array([0, 1, 0, 1]);
+        const rMap = new Int32Array([1, 1, 2, 2]);
+        const srcPx = new Uint8ClampedArray([
+          11, 22, 33, 255,
+          44, 55, 66, 255,
+          77, 88, 99, 255,
+          101, 112, 123, 255,
+        ]);
+        const reg1 = { id: 1, colorId: 1, pixels: new Int32Array([0, 1]) };
+        const reg2 = { id: 2, colorId: 2, pixels: new Int32Array([2, 3]) };
+        const rById = new Map([
+          [1, reg1],
+          [2, reg2],
+        ]);
+        const pById = new Map([
+          [1, { id: 1, r: 200, g: 150, b: 100 }],
+          [2, { id: 2, r: 60, g: 120, b: 180 }],
+        ]);
+
+        // Incremental write: DETAIL mode filled region uses exact srcPixels on border pixel (no 0.72 darkening)
+        const incDetail = new Uint8ClampedArray(16);
+        canvasMod.writeRegionPixelsToImageData(incDetail, bMap, reg1.pixels, 200, 150, 100, true, true, srcPx, false);
+        assert.deepEqual(Array.from(incDetail.slice(0, 8)), [11, 22, 33, 255, 44, 55, 66, 255], 'Filled DETAIL region must render exact source pixels even on borderMap=1');
+
+        // Incremental write: FLAT mode filled region uses exact palette RGB on border pixel (no 0.72 darkening)
+        const incFlat = new Uint8ClampedArray(16);
+        canvasMod.writeRegionPixelsToImageData(incFlat, bMap, reg1.pixels, 200, 150, 100, true, false, srcPx, false);
+        assert.deepEqual(Array.from(incFlat.slice(0, 8)), [200, 150, 100, 255, 200, 150, 100, 255], 'Filled FLAT region must render exact palette color without border darkening');
+
+        // Incremental write: Unfilled standard region still draws 1px slate (51,65,85) border and white interior
+        const incUnfilled = new Uint8ClampedArray(16);
+        canvasMod.writeRegionPixelsToImageData(incUnfilled, bMap, reg2.pixels, 60, 120, 180, false, true, srcPx, false);
+        assert.deepEqual(Array.from(incUnfilled.slice(8, 16)), [255, 255, 255, 255, 51, 65, 85, 255], 'Unfilled region must keep white interior and slate border');
+
+        // Full base rebuild: reg 1 filled (no border), reg 2 unfilled (slate border preserved)
+        const fullDetail = new Uint8ClampedArray(16);
+        canvasMod.writeBaseCanvasPixels(fullDetail, rMap, bMap, new Set([1]), rById, pById, undefined, true, srcPx, false);
+        assert.deepEqual(
+          Array.from(fullDetail),
+          [11, 22, 33, 255, 44, 55, 66, 255, 255, 255, 255, 255, 51, 65, 85, 255],
+          'Full DETAIL base rebuild must omit borders on completed reg 1 while keeping borders on unfilled reg 2'
+        );
+
+        const fullFlat = new Uint8ClampedArray(16);
+        canvasMod.writeBaseCanvasPixels(fullFlat, rMap, bMap, new Set([1]), rById, pById, undefined, false, srcPx, false);
+        assert.deepEqual(
+          Array.from(fullFlat),
+          [200, 150, 100, 255, 200, 150, 100, 255, 255, 255, 255, 255, 51, 65, 85, 255],
+          'Full FLAT base rebuild must omit borders on completed reg 1 while keeping borders on unfilled reg 2'
+        );
+
+        // Free Colour mode: unfilled region has pure white everywhere (no slate border)
+        const fullFree = new Uint8ClampedArray(16);
+        canvasMod.writeBaseCanvasPixels(fullFree, rMap, bMap, new Set([1]), rById, pById, new Map([[1, 2]]), true, srcPx, true);
+        assert.deepEqual(
+          Array.from(fullFree),
+          [60, 120, 180, 255, 60, 120, 180, 255, 255, 255, 255, 255, 255, 255, 255, 255],
+          'Free Colour base rebuild must paint custom palette color seamlessly on filled reg 1 and pure white on unfilled reg 2'
+        );
+      }
+    }
+
     // 8. DailyPuzzleService deterministic UTC date seeding & consecutive-date variation
     const dailyMod = await vite.ssrLoadModule('/src/services/DailyPuzzleService.ts');
     const dailyA = dailyMod.getDailyFeaturedPuzzle('2026-11-11');
@@ -2426,7 +2754,7 @@ async function runCodecAndEngineTests() {
         `Daily '${dSnap.id}' must have 1..2000 regions (got ${dSnap.totalCount})`
       );
       assert.equal(
-        !/Cozy Quick|Balanced Classic/i.test(dSnap.title),
+        !/Cozy Quick|Balanced Classic|Max Detail \(Auto\)/i.test(dSnap.title),
         true,
         `Daily snapshot title must not leak stale label: '${dSnap.title}'`
       );
@@ -2438,6 +2766,16 @@ async function runCodecAndEngineTests() {
         `Daily '${dSnap.id}' decoded regionMeta rows must stay <= 2000`
       );
     }
+
+    const storageTitleMod = await vite.ssrLoadModule('/src/services/StorageService.ts');
+    assert.equal(
+      storageTitleMod.StorageService.normalizeSnapshotTitle('Capy Forest (Max Detail (Auto))'),
+      'Capy Forest'
+    );
+    assert.equal(
+      storageTitleMod.StorageService.normalizeSnapshotTitle('Capy Forest (Crisp Posterized (Max Detail))'),
+      'Capy Forest (Crisp Posterized (Max Detail))'
+    );
 
     // 9. PlayerStatsService SSR load, increment, clamping, persistence & monotonic mergeLifetimeStats
     const statsMod = await vite.ssrLoadModule('/src/services/PlayerStatsService.ts');
@@ -2649,6 +2987,14 @@ async function runCodecAndEngineTests() {
     assert.equal(
       providerMod.resolveCoopRoomWsUrl(undefined, {
         protocol: 'https:',
+        host: 'paint.capyboop.com',
+        hostname: 'paint.capyboop.com',
+      }),
+      'wss://paint.capyboop.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
         host: 'capy-paint.example.workers.dev',
         hostname: 'capy-paint.example.workers.dev',
       }),
@@ -2808,6 +3154,7 @@ async function runCodecAndEngineTests() {
     assert.equal(relayProtoMod.isAllowedRelayOrigin('   '), false);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capypaint.com'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://www.capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://paint.capyboop.com'), true);
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capyboop.github.io'), true);
     /* capy-dev-only:start */
     assert.equal(relayProtoMod.isAllowedRelayOrigin('https://shthed.github.io'), true);
@@ -3120,6 +3467,288 @@ async function runCodecAndEngineTests() {
         'Built dist/sw.js must use Network-First cache:no-cache routing for .capy archives'
       );
     }
+    // Anonymous In-Game Feedback protocol (worker/feedbackProtocol.ts) & client service (FeedbackService.ts)
+    {
+      const feedbackProtoMod = await vite.ssrLoadModule(
+        path.resolve(projectRoot, '../worker/feedbackProtocol.ts')
+      );
+      const feedbackSvcMod = await vite.ssrLoadModule('/src/services/FeedbackService.ts');
+
+      // Valid payload + @mention neutralization + triple-backtick sanitization + label mapping
+      const validResult = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'puzzle_idea',
+          title: '  Capybara\u0007 in Space @admin  ',
+          details: 'Please add a cozy astronaut capybara!\n```js\nalert(1)\n```\ncc @everyone',
+          website: '',
+          context: {
+            appVersion: 'v3.0.45',
+            channel: 'beta',
+            platform: 'Web',
+            viewport: '390x844',
+          },
+        })
+      );
+      assert.equal(validResult.ok, true, 'Valid feedback payload must pass validation');
+      assert.equal(validResult.payload.category, 'puzzle_idea');
+      assert.equal(validResult.payload.title.includes('@admin'), false, 'Title must not contain raw @admin mention');
+      assert.equal(
+        validResult.payload.title.includes('@\u200Badmin'),
+        true,
+        'Title must neutralize @mentions with zero-width space'
+      );
+      assert.equal(validResult.payload.details.includes('```'), false, 'Details must sanitize triple backticks');
+      assert.equal(
+        validResult.payload.details.includes('@everyone'),
+        false,
+        'Details must not contain raw @everyone mention'
+      );
+      assert.equal(
+        validResult.payload.details.includes('@\u200Beveryone'),
+        true,
+        'Details must neutralize @mentions with zero-width space'
+      );
+
+      // Adversarial @mention bypasses + email preservation
+      for (const adversarialMention of [
+        '**@shthed**',
+        '>@shthed',
+        '"@shthed"',
+        '[@shthed]',
+        ',@shthed',
+        ':@shthed',
+        '/@shthed',
+        '`@shthed',
+      ]) {
+        const sanitized = feedbackProtoMod.sanitizeFeedbackText(adversarialMention, true);
+        assert.equal(
+          sanitized.includes('@shthed'),
+          false,
+          `Adversarial mention ${adversarialMention} must be neutralized (got ${sanitized})`
+        );
+        assert.equal(
+          sanitized.includes('@\u200Bshthed'),
+          true,
+          `Adversarial mention ${adversarialMention} must insert zero-width space (got ${sanitized})`
+        );
+      }
+      assert.equal(
+        feedbackProtoMod.sanitizeFeedbackText('Contact a@b.com or foo.bar@example.com for help', true),
+        'Contact a@b.com or foo.bar@example.com for help',
+        'Email addresses must be preserved untouched'
+      );
+
+      // resolveFeedbackRepo path traversal protection
+      for (const badRepo of ['../..', '../evil', 'evil/..', './.', 'foo/.', './bar', '-bad/repo', 'a/b/c']) {
+        assert.equal(
+          feedbackProtoMod.resolveFeedbackRepo(badRepo),
+          'capyboop/paint',
+          `Invalid/traversal repo "${badRepo}" must fall back to capyboop/paint`
+        );
+      }
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('capyboop/paint'), 'capyboop/paint');
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('shthed/capy'), 'shthed/capy');
+
+      const issuePayload = feedbackProtoMod.buildGitHubIssuePayload(validResult.payload);
+      assert.equal(issuePayload.title.startsWith('[Puzzle Idea]: '), true);
+      assert.deepEqual(issuePayload.labels, ['enhancement']);
+      assert.equal(issuePayload.body.includes('Anonymous in-game feedback'), true);
+      assert.equal(issuePayload.body.includes('v3.0.45'), true);
+
+      // Category label mapping for bug, feature, general
+      for (const [cat, expectedPrefix, expectedLabels] of [
+        ['bug', '[Bug]: ', ['bug']],
+        ['feature', '[Feature]: ', ['enhancement']],
+        ['general', '[Feedback]: ', ['question']],
+      ]) {
+        const res = feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({
+            category: cat,
+            title: 'Sample headline',
+            details: 'Detailed description of more than ten characters.',
+          })
+        );
+        assert.equal(res.ok, true, `Category ${cat} must validate`);
+        const built = feedbackProtoMod.buildGitHubIssuePayload(res.payload);
+        assert.equal(built.title.startsWith(expectedPrefix), true);
+        assert.deepEqual(built.labels, expectedLabels);
+      }
+
+      // Honeypot detection
+      const honey = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'bug',
+          title: 'Bot title',
+          details: 'Bot spam message content here.',
+          website: 'https://spam.example',
+        })
+      );
+      assert.equal(honey.ok, false);
+      assert.equal(honey.honeypot, true, 'Non-empty website field must trigger honeypot');
+
+      // Invalid payloads: malformed JSON, invalid category, short title, short details, > 8192 bytes
+      assert.equal(feedbackProtoMod.validateFeedbackPayload('{bad-json').ok, false);
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'unknown', title: 'Valid title', details: 'Long enough details.' })
+        ).ok,
+        false
+      );
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'bug', title: 'Hi', details: 'Long enough details.' })
+        ).ok,
+        false
+      );
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'bug', title: 'Valid title', details: 'short' })
+        ).ok,
+        false
+      );
+      const oversized = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'bug',
+          title: 'Oversized payload test',
+          details: 'A'.repeat(9000),
+        })
+      );
+      assert.equal(oversized.ok, false);
+      assert.equal(oversized.status, 413, 'Payload > 8192 bytes must return status 413');
+
+      // CORS allow/deny including paint.capyboop.com and path-suffixed origin rejection
+      const capyCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://capypaint.com', undefined, false);
+      assert.equal(capyCors['Access-Control-Allow-Origin'], 'https://capypaint.com');
+      const paintBoopCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://paint.capyboop.com',
+        undefined,
+        false
+      );
+      assert.equal(paintBoopCors['Access-Control-Allow-Origin'], 'https://paint.capyboop.com');
+      const androidCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://appassets.androidplatform.net',
+        undefined,
+        false
+      );
+      assert.equal(androidCors['Access-Control-Allow-Origin'], 'https://appassets.androidplatform.net');
+      const evilCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://evil.example', undefined, false);
+      assert.equal(evilCors['Access-Control-Allow-Origin'], undefined, 'Disallowed origin must not receive ACAO');
+      const pathSuffixedCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://capypaint.com/evil',
+        undefined,
+        false
+      );
+      assert.equal(
+        pathSuffixedCors['Access-Control-Allow-Origin'],
+        undefined,
+        'Path-suffixed origin must not receive ACAO'
+      );
+
+      // Worker buildFallbackIssueUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const workerCjkFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'bug',
+        title: '漢'.repeat(120),
+        details: '漢'.repeat(1200),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerCjkFallback.length <= 4000,
+        true,
+        `Worker CJK fallback URL must be <= 4000 chars (got ${workerCjkFallback.length})`
+      );
+      assert.equal(workerCjkFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      const workerEmojiFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'feature',
+        title: '😀'.repeat(60),
+        details: '😀'.repeat(600),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerEmojiFallback.length <= 4000,
+        true,
+        `Worker emoji fallback URL must be <= 4000 chars (got ${workerEmojiFallback.length})`
+      );
+      assert.equal(workerEmojiFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      // FeedbackService URL resolution & fallback URL
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'capypaint.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'paint.capyboop.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'beta.capypaint.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'www.capypaint.com' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'localhost' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'appassets.androidplatform.net' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'capyboop.github.io' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl('https://custom.example/api/feedback', { hostname: 'localhost' }),
+        'https://custom.example/api/feedback'
+      );
+
+      const fallbackUrl = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: 'Zoom stutter', details: 'Pinch zoom stutters on tablet.' },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(fallbackUrl.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+      assert.equal(fallbackUrl.includes('template=bug_report.yml'), true);
+      assert.equal(fallbackUrl.includes('Zoom+stutter'), true);
+
+      // Client buildGitHubIssueFallbackUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const clientCjkFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: '漢'.repeat(120), details: '漢'.repeat(1200) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientCjkFallback.length <= 4000,
+        true,
+        `Client CJK fallback URL must be <= 4000 chars (got ${clientCjkFallback.length})`
+      );
+      const clientEmojiFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'feature', title: '😀'.repeat(60), details: '😀'.repeat(600) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientEmojiFallback.length <= 4000,
+        true,
+        `Client emoji fallback URL must be <= 4000 chars (got ${clientEmojiFallback.length})`
+      );
+
+      // Prototype-key category lookup falls back safely to 'general' ([Feedback])
+      for (const protoCat of ['toString', 'constructor', '__proto__']) {
+        const protoFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl({
+          category: protoCat,
+          title: 'Proto test',
+          details: 'Prototype lookup should safely fall back to general.',
+        });
+        const parsedProto = new URL(protoFallback);
+        assert.equal(
+          parsedProto.searchParams.get('title'),
+          '[Feedback]: Proto test',
+          `Prototype category "${protoCat}" must fall back to general [Feedback] prefix`
+        );
+      }
+    }
+
     logUnitPass('ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService verified.');
 
     // --- Sprint 2: F8 CRDT resetEpoch & F9 >180KB Play Games Chunks ---
@@ -3573,7 +4202,7 @@ async function runCodecAndEngineTests() {
           }
           const mainActivityPath = path.resolve(
             projectRoot,
-            '../app/src/main/java/com/capypaint/capy/MainActivity.kt'
+            '../app/src/main/java/com/capyboop/paint/MainActivity.kt'
           );
           if (fs.existsSync(mainActivityPath)) {
             const mainActivitySrc = fs.readFileSync(mainActivityPath, 'utf8');
@@ -8078,7 +8707,7 @@ async function runCodecAndEngineTests() {
             'root = ET.parse(sys.argv[1]).getroot()',
             'features = {el.attrib.get(ns + "name"): el.attrib.get(ns + "required") for el in root.findall("uses-feature")}',
             'app = root.find("application")',
-            'main_act = next(a for a in app.findall("activity") if a.attrib.get(ns + "name") == "com.capypaint.capy.MainActivity")',
+            'main_act = next(a for a in app.findall("activity") if a.attrib.get(ns + "name") == "com.capyboop.paint.MainActivity")',
             'filters = []',
             'for flt in main_act.findall("intent-filter"):',
             '    filters.append({',
@@ -8680,16 +9309,48 @@ async function runCodecAndEngineTests() {
     try {
       assert.equal(storageMod.DEFAULT_SETTINGS.regionColorMode, 'DETAIL');
       assert.equal(storageMod.DEFAULT_SETTINGS.paletteSort, 'HUE');
+      assert.equal(storageMod.DEFAULT_SETTINGS.fatFingerAssist, true);
+      assert.equal(storageMod.DEFAULT_SETTINGS.touchReachRadiusPx, 22);
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
         difficulty: 'NORMAL',
         paletteSort: 'HUE',
         highlightStyle: 'CENTROID_GLOW',
+        fatFingerAssist: false,
+        touchReachRadiusPx: 34,
       });
       const loadedNormalHue = storageMod.StorageService.loadSettings();
       assert.equal(loadedNormalHue.difficulty, 'NORMAL');
       assert.equal(loadedNormalHue.paletteSort, 'HUE');
       assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
+      assert.equal(loadedNormalHue.fatFingerAssist, false);
+      assert.equal(loadedNormalHue.touchReachRadiusPx, 34);
+
+      // Verify [8, 40] clamping and absent fatFingerAssist fallback to DEFAULT_SETTINGS.fatFingerAssist (true) across both NORMAL & EASY
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'NORMAL', touchReachRadiusPx: 99 })
+      );
+      const clampedHighNormal = storageMod.StorageService.loadSettings();
+      assert.equal(clampedHighNormal.touchReachRadiusPx, 40);
+      assert.equal(clampedHighNormal.fatFingerAssist, true);
+
+      // Verify explicit fatFingerAssist: false opt-out is preserved across reloads in NORMAL mode
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'NORMAL', fatFingerAssist: false })
+      );
+      const explicitOptOutNormal = storageMod.StorageService.loadSettings();
+      assert.equal(explicitOptOutNormal.difficulty, 'NORMAL');
+      assert.equal(explicitOptOutNormal.fatFingerAssist, false);
+
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'EASY', touchReachRadiusPx: 2 })
+      );
+      const clampedLowEasy = storageMod.StorageService.loadSettings();
+      assert.equal(clampedLowEasy.touchReachRadiusPx, 8);
+      assert.equal(clampedLowEasy.fatFingerAssist, true);
 
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
@@ -11589,6 +12250,272 @@ async function runCodecAndEngineTests() {
 
     await runReleaseSafetyHardeningTests(vite);
     logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService & M1 release safety hardening verified.');
+
+    // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
+    // createAutoCloudSyncScheduler & Cross-Provider CRDT Merge Parity
+    logUnitStart('M4 $0 BYOC Cloud Sync (PKCE S256, Microsoft OneDrive, Apple CloudKit, Auto-Sync Scheduler & Cross-Provider CRDT)');
+    {
+      const pkceMod = await vite.ssrLoadModule('/src/services/providers/OAuthPkceHelper.ts');
+      const msClientMod = await vite.ssrLoadModule('/src/services/providers/MicrosoftCloudSyncClient.ts');
+      const appleClientMod = await vite.ssrLoadModule('/src/services/providers/AppleCloudSyncClient.ts');
+      const driversMod = await vite.ssrLoadModule('/src/services/providers/CloudProviderDrivers.ts');
+      const coordMod = await vite.ssrLoadModule('/src/services/cloudSyncCoordinator.ts');
+      const codecMod = await vite.ssrLoadModule('/src/services/CapyCodec.ts');
+
+      // 1. PKCE S256 verifier/challenge (RFC 7636 known vector) + state CSRF validation
+      const rfcVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+      const rfcChallenge = await pkceMod.derivePkceCodeChallenge(rfcVerifier);
+      assert.equal(
+        rfcChallenge,
+        'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+        'PKCE S256 challenge must match RFC 7636 Appendix B test vector'
+      );
+      const genVerifier = pkceMod.generatePkceCodeVerifier(32);
+      assert.equal(genVerifier.length >= 43 && genVerifier.length <= 128, true, 'PKCE verifier length must be 43..128');
+      const genState = pkceMod.generateOAuthState(24);
+      assert.equal(pkceMod.validateOAuthCallbackState(genState, genState), true);
+      assert.equal(pkceMod.validateOAuthCallbackState(genState, `${genState}_tampered`), false);
+      const authUrl = pkceMod.buildOAuthAuthorizeUrl({
+        authorizeEndpoint: msClientMod.MICROSOFT_AUTHORIZE_ENDPOINT,
+        clientId: 'ms-client-id-123',
+        redirectUri: pkceMod.ANDROID_OAUTH_REDIRECT_URI,
+        scope: msClientMod.MICROSOFT_OAUTH_SCOPES,
+        state: genState,
+        codeChallenge: rfcChallenge,
+      });
+      const parsedAuth = new URL(authUrl);
+      assert.equal(parsedAuth.searchParams.get('code_challenge_method'), 'S256');
+      assert.equal(parsedAuth.searchParams.get('code_challenge'), rfcChallenge);
+      assert.equal(parsedAuth.searchParams.get('redirect_uri'), 'capypaint://oauth/callback');
+      const parsedCb = pkceMod.parseOAuthCallbackUrl(
+        `capypaint://oauth/callback?code=auth_999&state=${encodeURIComponent(genState)}`
+      );
+      assert.equal(parsedCb?.code, 'auth_999');
+      assert.equal(parsedCb?.state, genState);
+
+      // 2. MicrosoftCloudDriver CRUD, per-filename write mutex, and path traversal rejection
+      const prevWin = globalThis.window;
+      const prevSession = globalThis.sessionStorage;
+      const prevLocal = globalThis.localStorage;
+      const memSession = new Map();
+      const memLocal = new Map();
+      globalThis.sessionStorage = {
+        getItem: (k) => memSession.get(k) ?? null,
+        setItem: (k, v) => memSession.set(k, String(v)),
+        removeItem: (k) => memSession.delete(k),
+        clear: () => memSession.clear(),
+      };
+      globalThis.localStorage = {
+        getItem: (k) => memLocal.get(k) ?? null,
+        setItem: (k, v) => memLocal.set(k, String(v)),
+        removeItem: (k) => memLocal.delete(k),
+        clear: () => memLocal.clear(),
+      };
+      globalThis.window = {
+        location: { hostname: 'localhost', search: '?debug=1', origin: 'http://localhost:3000', pathname: '/' },
+        __capyMockMicrosoftOAuthToken: 'mock_ms_token_unit_123',
+        __capyMockAppleCloudSession: {
+          userId: 'apple_unit_001',
+          displayName: 'Apple Unit Tester',
+          email: 'apple.unit@example.com',
+        },
+      };
+
+      try {
+        const oneDriveFiles = new Map();
+        const writeOrder = [];
+        const mockGraphFetch = async (url, init = {}) => {
+          const urlStr = String(url);
+          const match = /\/special\/approot:\/([^:/]+):\/content$/.exec(urlStr);
+          if (!match) {
+            return { ok: false, status: 404, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) };
+          }
+          const fileName = decodeURIComponent(match[1]);
+          if (init.method === 'PUT') {
+            writeOrder.push(`start:${fileName}:${oneDriveFiles.size}`);
+            await new Promise((r) => setTimeout(r, 10));
+            const rawBody = init.body;
+            if (typeof rawBody === 'string') {
+              oneDriveFiles.set(fileName, rawBody);
+            } else {
+              oneDriveFiles.set(fileName, new Uint8Array(rawBody));
+            }
+            writeOrder.push(`end:${fileName}`);
+            return { ok: true, status: 200, json: async () => ({ id: fileName }) };
+          }
+          if (!oneDriveFiles.has(fileName)) {
+            return { ok: false, status: 404, json: async () => ({}), arrayBuffer: async () => new ArrayBuffer(0) };
+          }
+          const stored = oneDriveFiles.get(fileName);
+          if (typeof stored === 'string') {
+            return { ok: true, status: 200, json: async () => JSON.parse(stored) };
+          }
+          return { ok: true, status: 200, arrayBuffer: async () => stored.buffer.slice(stored.byteOffset, stored.byteOffset + stored.byteLength) };
+        };
+
+        const msDriver = new driversMod.MicrosoftCloudDriver({ fetchImpl: mockGraphFetch });
+        assert.equal(msDriver.getDescriptor().isSupported, true);
+        assert.equal(msDriver.getDescriptor().isConfigured, true);
+        const msProfile = await msDriver.signIn();
+        assert.equal(msProfile.provider, 'microsoft');
+        assert.equal(msProfile.email, 'capy.ms@example.com');
+        assert.equal(msDriver.hasActiveSession(), true);
+
+        // Traversal filenames strictly rejected
+        assert.equal(msClientMod.isValidOneDriveFileName('../secret.json'), false);
+        assert.equal(msClientMod.isValidOneDriveFileName('dir/file.json'), false);
+        assert.equal(msClientMod.isValidOneDriveFileName('foo:bar.json'), false);
+        assert.equal(await msDriver.readBinaryBlob('../secret.capy'), null);
+        assert.equal(await msDriver.writeBinaryBlob('slot1', '../evil.capy', new Uint8Array([1, 2])), null);
+
+        // Per-filename write mutex serializes overlapping manifest writes
+        const manifest1 = { version: 2, updatedAt: 1000, devicePlayerId: 'dev_a', providerId: 'microsoft', entries: {} };
+        const manifest2 = { version: 2, updatedAt: 2000, devicePlayerId: 'dev_b', providerId: 'microsoft', entries: {} };
+        const [w1, w2] = await Promise.all([
+          msDriver.writeManifest(manifest1),
+          msDriver.writeManifest(manifest2),
+        ]);
+        assert.equal(w1, true);
+        assert.equal(w2, true);
+        assert.equal(writeOrder[0].startsWith('start:capy_cloud_manifest_v2.json'), true);
+        assert.equal(writeOrder[1], 'end:capy_cloud_manifest_v2.json');
+        assert.equal(writeOrder[2].startsWith('start:capy_cloud_manifest_v2.json'), true);
+        const readBackManifest = await msDriver.readManifest();
+        assert.equal(readBackManifest?.updatedAt, 2000);
+
+        // Slot envelope + binary blob CRUD
+        const slotEnv = {
+          slotKey: 'sample_capybara',
+          title: 'Capybara',
+          deltaToken: 'tok_ms',
+          filledCount: 3,
+          totalCount: 10,
+          updatedAt: 2500,
+          devicePlayerId: 'dev_b',
+        };
+        assert.equal(await msDriver.writeSlotEnvelope(slotEnv), true);
+        const readSlot = await msDriver.readSlotEnvelope('sample_capybara');
+        assert.equal(readSlot?.deltaToken, 'tok_ms');
+        const blobBytes = new Uint8Array([67, 65, 80, 89, 2, 1, 9, 8]);
+        const blobRef = await msDriver.writeBinaryBlob('slot1', 'capy_save_slot1.capy', blobBytes);
+        assert.equal(blobRef, 'capy_save_slot1.capy');
+        const readBlob = await msDriver.readBinaryBlob('capy_save_slot1.capy');
+        assert.deepEqual(Array.from(readBlob || []), Array.from(blobBytes));
+        await msDriver.signOut();
+        assert.equal(msDriver.hasActiveSession(), false);
+
+        // 3. AppleCloudDriver CRUD, mock session & traversal rejection
+        appleClientMod.clearMockAppleRecordStore();
+        const appleDriver = new driversMod.AppleCloudDriver();
+        assert.equal(appleDriver.getDescriptor().isSupported, true);
+        assert.equal(appleDriver.getDescriptor().isConfigured, true);
+        const appleProfile = await appleDriver.signIn();
+        assert.equal(appleProfile.provider, 'apple');
+        assert.equal(appleProfile.email, 'apple.unit@example.com');
+        assert.equal(appleDriver.hasActiveSession(), true);
+        assert.equal(appleClientMod.isValidCloudKitRecordName('../evil.json'), false);
+        assert.equal(await appleDriver.writeBinaryBlob('s1', '../evil.capy', blobBytes), null);
+        assert.equal(await appleDriver.writeManifest(manifest2), true);
+        const appleManifest = await appleDriver.readManifest();
+        assert.equal(appleManifest?.updatedAt, 2000);
+        const appleBlobRef = await appleDriver.writeBinaryBlob('s1', 'capy_save_apple.capy', blobBytes);
+        assert.equal(appleBlobRef, 'capy_save_apple.capy');
+        const readAppleBlob = await appleDriver.readBinaryBlob('capy_save_apple.capy');
+        assert.deepEqual(Array.from(readAppleBlob || []), Array.from(blobBytes));
+        await appleDriver.signOut();
+        assert.equal(appleDriver.hasActiveSession(), false);
+
+        // 4. createAutoCloudSyncScheduler debounce, visibilitychange, online & unauthenticated no-op
+        let fakeNow = 100_000;
+        let nextTimerId = 1;
+        const timers = new Map();
+        let canSyncFlag = false;
+        let syncCalls = 0;
+        const scheduler = coordMod.createAutoCloudSyncScheduler({
+          sync: async () => {
+            syncCalls += 1;
+          },
+          canSync: () => canSyncFlag,
+          debounceMs: 15_000,
+          staleVisibilityMs: 30_000,
+          now: () => fakeNow,
+          setTimer: (cb, ms) => {
+            const id = nextTimerId++;
+            timers.set(id, { cb, fireAt: fakeNow + ms });
+            return id;
+          },
+          clearTimer: (id) => {
+            timers.delete(id);
+          },
+        });
+        // Strictly no-op when unauthenticated / offline
+        scheduler.notifyLocalMutation();
+        scheduler.notifyVisibilityVisible();
+        scheduler.notifyOnline();
+        assert.equal(timers.size, 0, 'Unauthenticated scheduler must not arm timers');
+        assert.equal(syncCalls, 0, 'Unauthenticated scheduler must not trigger sync');
+
+        // Authenticated: 3 rapid mutations coalesce into a single 15s debounced sync
+        canSyncFlag = true;
+        scheduler.notifyLocalMutation();
+        scheduler.notifyLocalMutation();
+        scheduler.notifyLocalMutation();
+        assert.equal(timers.size, 1, 'Rapid local mutations must coalesce into 1 debounce timer');
+        const firstEntry = [...timers.values()][0];
+        fakeNow = firstEntry.fireAt;
+        timers.clear();
+        firstEntry.cb();
+        await Promise.resolve();
+        assert.equal(syncCalls, 1, 'Debounced mutation must trigger exactly 1 sync');
+
+        // Visibility visible before 30s stale window -> no-op; after 30s -> triggers sync
+        fakeNow += 10_000;
+        scheduler.notifyVisibilityVisible();
+        await Promise.resolve();
+        assert.equal(syncCalls, 1, 'Visibility change within 30s stale threshold must not re-sync');
+        fakeNow += 25_000;
+        scheduler.notifyVisibilityVisible();
+        await Promise.resolve();
+        assert.equal(syncCalls, 2, 'Visibility change after 30s stale threshold must trigger sync');
+
+        // Online reconnect triggers immediate sync & cancels pending debounce
+        scheduler.notifyLocalMutation();
+        assert.equal(timers.size, 1);
+        scheduler.notifyOnline();
+        await Promise.resolve();
+        assert.equal(timers.size, 0, 'Online reconnect must cancel pending debounce timer');
+        assert.equal(syncCalls, 3, 'Online reconnect must trigger immediate sync');
+
+        scheduler.dispose();
+        scheduler.notifyLocalMutation();
+        assert.equal(timers.size, 0, 'Disposed scheduler must never schedule new timers');
+
+        // 5. Cross-provider CRDT merge parity (Google Drive <-> Microsoft OneDrive <-> Apple iCloud)
+        const googleDelta = {
+          filledRegionIds: [1, 2, 5],
+          paintedRegionColors: { 5: 0xffff0000 },
+          updatedAt: 1000,
+          resetEpoch: 1,
+        };
+        const msDelta = {
+          filledRegionIds: [2, 3, 6],
+          paintedRegionColors: { 5: 0xff00ff00, 6: 0xff0000ff },
+          updatedAt: 2000,
+          resetEpoch: 1,
+        };
+        const mergedAB = codecMod.mergeProgressDeltas(googleDelta, msDelta);
+        const mergedBA = codecMod.mergeProgressDeltas(msDelta, googleDelta);
+        assert.deepEqual([...mergedAB.filledRegionIds].sort((a, b) => a - b), [1, 2, 3, 5, 6]);
+        assert.deepEqual([...mergedBA.filledRegionIds].sort((a, b) => a - b), [1, 2, 3, 5, 6]);
+        assert.equal(mergedAB.paintedRegionColors[5], 0xff00ff00, 'Newer updatedAt must win LWW custom color');
+        assert.equal(mergedBA.paintedRegionColors[5], 0xff00ff00, 'CRDT merge must be commutative across providers');
+      } finally {
+        globalThis.window = prevWin;
+        globalThis.sessionStorage = prevSession;
+        globalThis.localStorage = prevLocal;
+      }
+    }
+    logUnitPass('M4 $0 BYOC Cloud Sync (PKCE S256, MicrosoftCloudDriver, AppleCloudDriver, Auto-Sync Scheduler & Cross-Provider CRDT) verified.');
     assert.equal(
       unitStep,
       unitTotal,
@@ -11650,7 +12577,7 @@ async function runBrowserBasicsSuite() {
     const page = await context.newPage();
     attachErrorListeners(page, 'main');
 
-    const e2eTotal = 21;
+    const e2eTotal = 23;
     const padE2e = (n) => String(n).padStart(2, '0');
     let e2eStep = 0;
     const logE2eStart = (label) => {
@@ -11674,7 +12601,7 @@ async function runBrowserBasicsSuite() {
     const assetLinksRes = await page.goto(`${BASE_URL}/.well-known/assetlinks.json`);
     assert.equal(assetLinksRes?.status(), 200);
     const assetLinksJson = JSON.parse(await assetLinksRes.text());
-    assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capypaint.capy');
+    assert.equal(assetLinksJson[0]?.target?.package_name, 'com.capyboop.paint');
     assert.equal(Array.isArray(assetLinksJson[0]?.target?.sha256_cert_fingerprints), true);
     assert.equal(
       assetLinksJson[0].target.sha256_cert_fingerprints.includes(
@@ -12685,6 +13612,66 @@ async function runBrowserBasicsSuite() {
     const startX = box.x + box.width / 2;
     const startY = box.y + box.height / 2;
 
+    // Verify US-3.5 Fat-Finger near-miss tap assist on artwork margin (exact pixel out of bounds, within 34px reach)
+    {
+      const edgeY = box.y + box.height * 0.5;
+      // Locate an x-coordinate just outside the left artwork edge (within 0.04 * box.width margin)
+      const nearMissX = box.x + Math.max(2, box.width * 0.04 - 4);
+      const beforeMiss = await page.evaluate(() => {
+        const s = window.capyStorage.loadSettings();
+        s.difficulty = 'EASY';
+        s.fatFingerAssist = false;
+        s.touchReachRadiusPx = 34;
+        window.capyStorage.saveSettings(s);
+        return JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0;
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(page);
+      await page.mouse.click(nearMissX, edgeY);
+      await page.waitForTimeout(150);
+      const afterAssistOff = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0
+      );
+      assert.equal(
+        afterAssistOff,
+        beforeMiss,
+        'Near-miss tap outside artwork edge with fatFingerAssist=false must not fill any region'
+      );
+
+      // Enable fatFingerAssist=true with Large 34px reach and tap the same near-miss coordinate
+      await page.evaluate(() => {
+        const s = window.capyStorage.loadSettings();
+        s.difficulty = 'EASY';
+        s.fatFingerAssist = true;
+        s.touchReachRadiusPx = 34;
+        window.capyStorage.saveSettings(s);
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(page);
+      await page.mouse.click(nearMissX, edgeY);
+      await page.waitForTimeout(200);
+      const afterAssistOn = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0
+      );
+      assert.equal(
+        afterAssistOn >= beforeMiss,
+        true,
+        'Near-miss tap with fatFingerAssist=true must not regress filledCount'
+      );
+      // Also verify an inner-margin tap 3px off the left artwork edge at 1x fit view snaps to an edge region
+      const marginTapX = box.x + Math.max(2, box.width * 0.04 - 2);
+      await page.mouse.click(marginTapX, box.y + box.height * 0.45);
+      await page.waitForTimeout(200);
+      const afterSecondNearTap = await page.evaluate(
+        () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0
+      );
+      assert.equal(
+        afterSecondNearTap > beforeMiss,
+        true,
+        `Near-miss tap with fatFingerAssist=true (34px) must snap and fill an adjacent unfilled region (before=${beforeMiss}, after=${afterSecondNearTap})`
+      );
+    }
+
     // One-finger double-tap-and-drag zoom + inertial flick + zero-latency cancel + background drag
     await page.evaluate(
       async ({ x, y }) => {
@@ -12792,6 +13779,119 @@ async function runBrowserBasicsSuite() {
       `Free Colour Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
     );
 
+    // Tab 0 Anonymous In-Game Feedback form (validation, 201 created, 503 fallback preserving draft, 429 rate-limit)
+    assert.equal(
+      await page.getByTestId('about-open-feedback-btn').isVisible(),
+      true,
+      'About tab must render about-open-feedback-btn'
+    );
+    await page.getByTestId('about-open-feedback-btn').click();
+    await page.getByTestId('in-game-feedback-card').waitFor({ state: 'visible', timeout: 3000 });
+
+    // Client-side validation rejects empty/short title without hitting network
+    let interceptedFeedbackCalls = 0;
+    let lastFeedbackRequestBody = null;
+    let feedbackMockMode = '201';
+    await page.route('**/api/feedback', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      interceptedFeedbackCalls += 1;
+      lastFeedbackRequestBody = route.request().postDataJSON();
+      if (feedbackMockMode === '201') {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            issueNumber: 99,
+            issueUrl: 'https://github.com/capyboop/paint/issues/99',
+          }),
+        });
+      } else if (feedbackMockMode === '503') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: false,
+            code: 'feedback_unconfigured',
+            error: 'In-app feedback relay is not configured yet. You can submit directly on GitHub.',
+            fallbackUrl: 'https://github.com/capyboop/paint/issues/new?template=bug_report.yml&title=%5BBug%5D%3A+Zoom+lag',
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: { 'Retry-After': '60' },
+          body: JSON.stringify({ ok: false, error: 'Too many requests' }),
+        });
+      }
+    });
+
+    try {
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.getByTestId('feedback-status-banner').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(interceptedFeedbackCalls, 0, 'Client validation must prevent network call on empty feedback');
+
+      // 201 Created: Puzzle Idea submission
+      feedbackMockMode = '201';
+      await page.getByTestId('feedback-category-puzzle_idea').click();
+      await page.getByTestId('feedback-title-input').fill('Capybara Astronaut');
+      await page.getByTestId('feedback-details-input').fill('A cozy capybara floating among pastel stars.');
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.getByTestId('feedback-issue-link').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(interceptedFeedbackCalls, 1, 'Expected 1 POST /api/feedback request');
+      assert.equal(lastFeedbackRequestBody?.category, 'puzzle_idea');
+      assert.equal(lastFeedbackRequestBody?.title, 'Capybara Astronaut');
+      assert.equal(
+        await page.getByTestId('feedback-issue-link').getAttribute('href'),
+        'https://github.com/capyboop/paint/issues/99'
+      );
+      assert.equal(
+        await page.getByTestId('feedback-title-input').inputValue(),
+        '',
+        'Title input must reset after 201 submission'
+      );
+
+      // 503 Unconfigured: fallback link renders and user draft is preserved
+      feedbackMockMode = '503';
+      await page.getByTestId('feedback-category-bug').click();
+      await page.getByTestId('feedback-title-input').fill('Zoom lag');
+      await page.getByTestId('feedback-details-input').fill('Pinch zoom feels slightly sluggish on older phones.');
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.getByTestId('feedback-fallback-link').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await page.getByTestId('feedback-fallback-link').getAttribute('href'))?.startsWith(
+          'https://github.com/capyboop/paint/issues/new?'
+        ),
+        true,
+        '503 response must surface prefilled GitHub fallback link'
+      );
+      assert.equal(
+        await page.getByTestId('feedback-title-input').inputValue(),
+        'Zoom lag',
+        '503 fallback must preserve typed title draft'
+      );
+      assert.equal(
+        await page.getByTestId('feedback-details-input').inputValue(),
+        'Pinch zoom feels slightly sluggish on older phones.',
+        '503 fallback must preserve typed details draft'
+      );
+
+      // 429 Rate Limit: inline rate-limit notice renders cleanly
+      feedbackMockMode = '429';
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.waitForFunction(
+        () => /wait a minute|too many/i.test(document.querySelector('[data-testid="feedback-status-banner"]')?.textContent || ''),
+        { timeout: 3000 }
+      );
+    } finally {
+      await page.unroute('**/api/feedback');
+      await page.getByTestId('about-open-feedback-btn').click();
+    }
+
     // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await page.getByText('Canvas Background').waitFor({ state: 'visible', timeout: 3000 });
@@ -12827,6 +13927,36 @@ async function runBrowserBasicsSuite() {
     await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
     await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo must reappear when toggled back on');
+
+    // Verify Fat-Finger Tap Assist toggle and Finger Reach Radius presets in Tab 1
+    await page.getByTestId('setting-fat-finger-assist').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('setting-touch-reach-radius').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('setting-touch-reach-preset-12').click();
+    assert.equal(
+      await page.getByTestId('setting-touch-reach-radius').inputValue(),
+      '12',
+      'Compact 12px preset must update touchReachRadiusPx slider to 12'
+    );
+    await page.getByTestId('setting-touch-reach-preset-34').click();
+    assert.equal(
+      await page.getByTestId('setting-touch-reach-radius').inputValue(),
+      '34',
+      'Large 34px preset must update touchReachRadiusPx slider to 34'
+    );
+    await page.getByTestId('setting-touch-reach-preset-22').click();
+    assert.equal(
+      await page.getByTestId('setting-touch-reach-radius').inputValue(),
+      '22',
+      'Standard 22px preset must restore touchReachRadiusPx slider to 22'
+    );
+    const prevFatFingerChecked = await page.getByTestId('setting-fat-finger-assist').getAttribute('aria-checked');
+    await page.getByTestId('setting-fat-finger-assist').click();
+    assert.equal(
+      await page.getByTestId('setting-fat-finger-assist').getAttribute('aria-checked'),
+      prevFatFingerChecked === 'true' ? 'false' : 'true',
+      'Fat-Finger Tap Assist toggle must flip aria-checked'
+    );
+    await page.getByTestId('setting-fat-finger-assist').click();
 
     // Tab 2: Hints
     await page.getByRole('button', { name: 'Hints', exact: true }).click();
@@ -16274,6 +17404,14 @@ async function runBrowserBasicsSuite() {
     attachErrorListeners(tapStarvePage, 'tapStarvePage');
     await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(tapStarvePage);
+    await tapStarvePage.evaluate(() => {
+      const raw = localStorage.getItem('capy_user_settings_v8');
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.fatFingerAssist = false;
+      localStorage.setItem('capy_user_settings_v8', JSON.stringify(parsed));
+    });
+    await tapStarvePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(tapStarvePage);
     const tapStarveBox = await tapStarvePage.getByTestId('puzzle-canvas').boundingBox();
     assert.ok(tapStarveBox, 'Expected puzzle-canvas boundingBox for tap-starvation regression');
     const tapX = tapStarveBox.x + tapStarveBox.width / 2;
@@ -16612,6 +17750,8 @@ async function runBrowserBasicsSuite() {
       s.difficulty = 'NORMAL';
       s.paletteSort = 'HUE';
       s.highlightStyle = 'CENTROID_GLOW';
+      s.fatFingerAssist = false;
+      s.touchReachRadiusPx = 34;
       window.capyStorage.saveSettings(s);
     });
     await page.reload({ waitUntil: 'networkidle' });
@@ -16622,12 +17762,16 @@ async function runBrowserBasicsSuite() {
         difficulty: s.difficulty,
         paletteSort: s.paletteSort,
         highlightStyle: s.highlightStyle,
+        fatFingerAssist: s.fatFingerAssist,
+        touchReachRadiusPx: s.touchReachRadiusPx,
       };
     });
     assert.deepEqual(persistedEnums, {
       difficulty: 'NORMAL',
       paletteSort: 'HUE',
       highlightStyle: 'CENTROID_GLOW',
+      fatFingerAssist: false,
+      touchReachRadiusPx: 34,
     });
 
     const sandboxBetaPage = await context.newPage();
@@ -16858,6 +18002,980 @@ async function runBrowserBasicsSuite() {
     await syncRacePage.close();
     await syncRaceContext.close();
     logE2ePass('IndexedDB preview offload, storage quota toast & async cloud sync stroke preservation verified.');
+
+    // -------------------------------------------------------------------------
+    // 22. Large Text Button Scaling (360x780 / 412x915 / 1280x720), Fat-Finger Coupling & #602 Regression Fixes
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying Large Text full UI button scaling (360x780, 412x915, 1280x720), Fat-Finger coupling & Paint/Free-Colour fixes...');
+
+    // 22a. 360x780 Mobile: Normal vs Large Text button dimensions, 5-button Co-op containment, Replay wrap/stacking, Palette centering, Settings & ColorPicker
+    const ltMobileCtx = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await ltMobileCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+    });
+    const ltMobilePage = await ltMobileCtx.newPage();
+    attachErrorListeners(ltMobilePage, 'ltMobilePage');
+    await ltMobilePage.goto(`${BASE_URL}/?capy_channel=alpha&capy_pr=520&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(ltMobilePage);
+
+    const normalMobileBoxes = {
+      settingsBtn: await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
+      previewBtn: await ltMobilePage.getByTestId('topbar-preview-btn').boundingBox(),
+      savesBtn: await ltMobilePage.getByTestId('topbar-saves-btn').boundingBox(),
+      paintBtn: await ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+      undoBtn: await ltMobilePage.getByTestId('undo-btn').boundingBox(),
+      swatch1: await ltMobilePage.getByTestId('palette-swatch-1').boundingBox(),
+      swatch1FontPx: await ltMobilePage
+        .getByTestId('palette-swatch-1')
+        .locator('span')
+        .first()
+        .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    };
+    assert.ok(
+      normalMobileBoxes.settingsBtn &&
+        normalMobileBoxes.previewBtn &&
+        normalMobileBoxes.savesBtn &&
+        normalMobileBoxes.paintBtn &&
+        normalMobileBoxes.undoBtn &&
+        normalMobileBoxes.swatch1
+    );
+
+    // Select a mid-dock swatch (#8) before toggling Large Text so live useLayoutEffect centering is exercised
+    const midDockSwatchId = await ltMobilePage.evaluate(() => {
+      const swatches = Array.from(document.querySelectorAll('[data-testid^="palette-swatch-"]'));
+      if (swatches.length === 0) return null;
+      const target = swatches[Math.min(7, swatches.length - 1)];
+      return target.getAttribute('data-testid');
+    });
+    if (midDockSwatchId) {
+      const midSwatchBtn = ltMobilePage.getByTestId(midDockSwatchId);
+      await midSwatchBtn.scrollIntoViewIfNeeded();
+      await midSwatchBtn.click();
+      await ltMobilePage.waitForTimeout(250);
+    }
+
+    const assertSwitchKnobContained = async (page, testId, expectedChecked, label) => {
+      const sw = page.getByTestId(testId);
+      await sw.scrollIntoViewIfNeeded();
+      assert.equal(
+        await sw.getAttribute('aria-checked'),
+        String(expectedChecked),
+        `${label}: expected aria-checked=${expectedChecked}`
+      );
+      await page.waitForTimeout(220);
+      const swBox = await sw.boundingBox();
+      const knobBox = await sw.locator('.capy-switch-knob').boundingBox();
+      assert.ok(swBox && knobBox, `${label}: expected visible switch and knob boxes`);
+      assert.equal(
+        knobBox.x >= swBox.x - 0.5 &&
+          knobBox.x + knobBox.width <= swBox.x + swBox.width + 0.5 &&
+          knobBox.y >= swBox.y - 0.5 &&
+          knobBox.y + knobBox.height <= swBox.y + swBox.height + 0.5,
+        true,
+        `${label}: knob ${JSON.stringify(knobBox)} must stay strictly inside switch track ${JSON.stringify(swBox)}`
+      );
+      const isLargeText = await page.evaluate(() => document.documentElement.dataset.largeText === 'true');
+      if (isLargeText) {
+        if (expectedChecked) {
+          const rightGap = swBox.x + swBox.width - (knobBox.x + knobBox.width);
+          assert.equal(
+            rightGap <= 4.5,
+            true,
+            `${label}: checked knob must align flush near right track edge (rightGap=${rightGap.toFixed(2)}px, sw=${JSON.stringify(swBox)}, knob=${JSON.stringify(knobBox)})`
+          );
+        } else {
+          const leftGap = knobBox.x - swBox.x;
+          assert.equal(
+            leftGap <= 4.5,
+            true,
+            `${label}: unchecked knob must align flush near left track edge (leftGap=${leftGap.toFixed(2)}px, sw=${JSON.stringify(swBox)}, knob=${JSON.stringify(knobBox)})`
+          );
+        }
+      }
+    };
+
+    // Open SettingsModal, verify normal switch size & knob containment, test Fat-Finger preset auto-enable & Large Text coupling
+    await ltMobilePage.getByTestId('topbar-settings-btn').click();
+    await ltMobilePage.getByTestId('settings-tab-settings').click();
+    const ltSwitch = ltMobilePage.getByTestId('setting-large-text');
+    const ffSwitch = ltMobilePage.getByTestId('setting-fat-finger-assist');
+    await ltSwitch.waitFor({ state: 'visible', timeout: 5000 });
+    const normalSwitchBox = await ltSwitch.boundingBox();
+    const normalCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
+    assert.ok(normalSwitchBox && normalCloseBox);
+
+    // Verify Normal-mode switch knob containment (checked & unchecked) remains unaffected
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Normal mode fatFinger ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', false, 'Normal mode largeText OFF');
+
+    // Verify default fatFingerAssist is enabled on fresh load, then turn OFF to verify dim + preset auto-enable
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'true', 'Fresh install must default fatFingerAssist to true');
+    await ffSwitch.click();
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'false');
+    const reachControlsDimmed = await ltMobilePage
+      .getByTestId('setting-touch-reach-controls')
+      .evaluate((el) => el.classList.contains('opacity-50'));
+    assert.equal(reachControlsDimmed, true, 'Reach radius controls must be visually dimmed when fatFingerAssist is off');
+
+    // Clicking a preset while fatFingerAssist is OFF must auto-enable fatFingerAssist
+    await ltMobilePage.getByTestId('setting-touch-reach-preset-34').click();
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'true', 'Clicking a reach preset must auto-enable fatFingerAssist');
+    assert.equal(await ltMobilePage.getByTestId('setting-touch-reach-radius').inputValue(), '34');
+
+    // Set saved radius to 22px, turn fatFingerAssist OFF, then toggle Large Text ON -> must enable fatFingerAssist & show 34px Large UI boost
+    await ltMobilePage.getByTestId('setting-touch-reach-preset-22').click();
+    await ffSwitch.click();
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'false');
+    await ltSwitch.click();
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+    assert.equal(
+      await ffSwitch.getAttribute('aria-checked'),
+      'true',
+      'Enabling Large Text in SettingsModal must also enable fatFingerAssist'
+    );
+    const largeUiReachLabel = await ltMobilePage.getByTestId('setting-touch-reach-value').innerText();
+    assert.equal(
+      largeUiReachLabel.includes('34px') && largeUiReachLabel.includes('Large UI'),
+      true,
+      `Expected effective 34px Large UI reach label while saved radius is 22px (got '${largeUiReachLabel}')`
+    );
+    assert.equal(
+      await ltMobilePage.getByTestId('setting-touch-reach-radius').inputValue(),
+      '22',
+      'Large Text effective reach boost must not mutate saved touchReachRadiusPx slider value'
+    );
+
+    // Fix 8: Toggling fatFingerAssist OFF while largeText stays ON must drop the "(Large UI ...)" boost readout
+    await ffSwitch.click();
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', false, 'Large Text Variant 1 fatFinger OFF');
+    const disabledReachLabel = (await ltMobilePage.getByTestId('setting-touch-reach-value').innerText()).trim();
+    assert.equal(
+      disabledReachLabel,
+      '22px',
+      `Disabling fatFingerAssist while largeText=true must drop Large UI boost readout (got '${disabledReachLabel}')`
+    );
+    await ffSwitch.click();
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Large Text Variant 1 fatFinger ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'Large Text Variant 1 largeText ON');
+
+    // Fix 1: Verify Variant 2 switch (w-11 h-6 + translate-x-5) knob containment in both checked & unchecked states
+    const followInitial = (await ltMobilePage.getByTestId('toggle-replay-follow-btn').getAttribute('aria-checked')) === 'true';
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', followInitial, 'Large Text Variant 2 follow initial');
+    await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', !followInitial, 'Large Text Variant 2 follow toggled');
+    await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
+
+    // Fix 2: Enlarged range slider must compute appearance === 'none' so 24px custom thumb renders on Chromium/WebView
+    const sliderAppearance = await ltMobilePage
+      .getByTestId('setting-touch-reach-radius')
+      .evaluate((el) => getComputedStyle(el).appearance);
+    assert.equal(
+      sliderAppearance,
+      'none',
+      `Large Text setting-touch-reach-radius must compute appearance: none (got '${sliderAppearance}')`
+    );
+
+    // Measure enlarged SettingsModal controls & verify tabs zero-overflow and 40px/16px specificity at 360x780
+    const largeSwitchBox = await ltSwitch.boundingBox();
+    const largeFfSwitchBox = await ffSwitch.boundingBox();
+    const largeCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
+    assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox);
+    assert.equal(
+      largeSwitchBox.width >= 50 && largeSwitchBox.height >= 28 && largeSwitchBox.width > normalSwitchBox.width,
+      true,
+      `Large Text switch must enlarge to ~52x30px (normal=${JSON.stringify(normalSwitchBox)}, large=${JSON.stringify(largeSwitchBox)})`
+    );
+    assert.equal(
+      largeFfSwitchBox.width >= 50 && largeFfSwitchBox.height >= 28,
+      true,
+      `Fat-Finger switch must enlarge to ~52x30px (got ${JSON.stringify(largeFfSwitchBox)})`
+    );
+    assert.equal(
+      largeCloseBox.width >= 40 && largeCloseBox.height >= 40 && largeCloseBox.width > normalCloseBox.width,
+      true,
+      `Settings close button must enlarge to >=40px (got ${JSON.stringify(largeCloseBox)})`
+    );
+
+    const ltTabsContainer = ltMobilePage.getByTestId('settings-modal-tabs');
+    const ltTabsOverflow = await ltTabsContainer.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.equal(
+      ltTabsOverflow.scrollWidth <= ltTabsOverflow.clientWidth,
+      true,
+      `Large Text SettingsModal tabs must not overflow at 360x780 (${JSON.stringify(ltTabsOverflow)})`
+    );
+    // Fix 3: Catch-all :where() must allow settings-tab-about 40px min-height and 16px SVG at 360x780
+    const tabAboutComputed = await ltMobilePage.getByTestId('settings-tab-about').evaluate((btn) => {
+      const svg = btn.querySelector('svg');
+      return {
+        minHeight: getComputedStyle(btn).minHeight,
+        svgW: svg ? getComputedStyle(svg).width : null,
+        svgH: svg ? getComputedStyle(svg).height : null,
+      };
+    });
+    assert.equal(
+      tabAboutComputed.minHeight,
+      '40px',
+      `360x780 settings-tab-about must compute minHeight=40px (got ${JSON.stringify(tabAboutComputed)})`
+    );
+    assert.equal(
+      tabAboutComputed.svgW === '16px' && tabAboutComputed.svgH === '16px',
+      true,
+      `360x780 settings-tab-about SVG must compute 16px x 16px (got ${JSON.stringify(tabAboutComputed)})`
+    );
+
+    const ltTabsBox = await ltTabsContainer.boundingBox();
+    assert.ok(ltTabsBox);
+    for (const tabKey of ['about', 'settings', 'hints', 'create', 'saves']) {
+      const tb = await ltMobilePage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
+      assert.ok(tb);
+      assert.equal(
+        tb.x >= ltTabsBox.x - 1 && tb.x + tb.width <= largeCloseBox.x + 1,
+        true,
+        `Large Text settings-tab-${tabKey} (${tb.x}..${tb.x + tb.width}) must fit inside tabsBox (${ltTabsBox.x}) left of close (${largeCloseBox.x})`
+      );
+    }
+
+    // Check Tab 0 action button height (>=44px), Tab 3 (i) hint icon button size (>=32px), and Tab 4 Variant 3 switch knob containment
+    await ltMobilePage.getByTestId('settings-tab-about').click();
+    const replayTutBtnBox = await ltMobilePage.getByTestId('about-replay-tutorial-btn').boundingBox();
+    assert.ok(replayTutBtnBox && replayTutBtnBox.height >= 44, `About CTA button must be >=44px tall in Large Text (got ${JSON.stringify(replayTutBtnBox)})`);
+    await ltMobilePage.getByTestId('settings-tab-create').click();
+    const hintToggleBox = await ltMobilePage.getByTestId('hint-toggle-daily-puzzle').boundingBox();
+    assert.ok(hintToggleBox && hintToggleBox.width >= 31 && hintToggleBox.height >= 31, `(i) hint button must enlarge to ~32px in Large Text (got ${JSON.stringify(hintToggleBox)})`);
+    await ltMobilePage.getByTestId('settings-tab-saves').click();
+    const savesAutoReplayBtn = ltMobilePage.getByTestId('toggle-auto-replay-saves-btn');
+    await savesAutoReplayBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const savesInitial = (await savesAutoReplayBtn.getAttribute('aria-checked')) === 'true';
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', savesInitial, 'Large Text Variant 3 saves autoReplay initial');
+    await savesAutoReplayBtn.click();
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', !savesInitial, 'Large Text Variant 3 saves autoReplay toggled');
+    await savesAutoReplayBtn.click();
+
+    // Enable Custom Color button for all puzzles so we can verify ColorPickerPopover in Large Text mode too
+    await ltMobilePage.getByTestId('settings-tab-settings').click();
+    await ltMobilePage.evaluate(() => {
+      const cur = window.capyStorage.loadSettings();
+      window.capyStorage.saveSettings({ ...cur, enableCustomColorForAllPuzzles: true, largeText: true, fatFingerAssist: true });
+    });
+    await ltMobilePage.getByTestId('settings-modal-close').click();
+    await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fix 4: Verify mid-dock active swatch (#8) stayed centered immediately after live Large Text toggle (before scrolling away)
+    await ltMobilePage.waitForTimeout(350);
+    const activeSwatchCenterCheck = await ltMobilePage.evaluate(() => {
+      const dock = document.querySelector('[data-testid="palette-dock"]');
+      const scroller = dock?.querySelector('.overflow-x-auto');
+      const active = dock?.querySelector('button[aria-pressed="true"]');
+      if (!scroller || !active) return null;
+      const sr = scroller.getBoundingClientRect();
+      const ar = active.getBoundingClientRect();
+      return {
+        activeTestId: active.getAttribute('data-testid'),
+        scrollable: scroller.scrollWidth > scroller.clientWidth + 1,
+        diff: Math.abs(ar.left + ar.width / 2 - (sr.left + sr.width / 2)),
+      };
+    });
+    if (activeSwatchCenterCheck?.scrollable) {
+      assert.equal(
+        activeSwatchCenterCheck.diff <= 8,
+        true,
+        `Mid-dock active swatch (${activeSwatchCenterCheck.activeTestId}) must stay centered immediately upon live Large Text toggle (diff=${activeSwatchCenterCheck.diff})`
+      );
+    }
+
+    // Measure enlarged HUD controls at 360x780
+    const largeMobileBoxes = {
+      settingsBtn: await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
+      previewBtn: await ltMobilePage.getByTestId('topbar-preview-btn').boundingBox(),
+      savesBtn: await ltMobilePage.getByTestId('topbar-saves-btn').boundingBox(),
+      paintBtn: await ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+      undoBtn: await ltMobilePage.getByTestId('undo-btn').boundingBox(),
+      swatch1: await ltMobilePage.getByTestId('palette-swatch-1').boundingBox(),
+      swatch1FontPx: await ltMobilePage
+        .getByTestId('palette-swatch-1')
+        .locator('span')
+        .first()
+        .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    };
+    assert.ok(
+      largeMobileBoxes.settingsBtn &&
+        largeMobileBoxes.previewBtn &&
+        largeMobileBoxes.savesBtn &&
+        largeMobileBoxes.paintBtn &&
+        largeMobileBoxes.undoBtn &&
+        largeMobileBoxes.swatch1
+    );
+    assert.equal(
+      largeMobileBoxes.settingsBtn.width >= 36 &&
+        largeMobileBoxes.settingsBtn.height >= 36 &&
+        largeMobileBoxes.settingsBtn.width > normalMobileBoxes.settingsBtn.width,
+      true,
+      `360px Large Text topbar-settings-btn must enlarge to >=36px (normal=${normalMobileBoxes.settingsBtn.width}, large=${largeMobileBoxes.settingsBtn.width})`
+    );
+    assert.equal(
+      largeMobileBoxes.previewBtn.width >= 36 && largeMobileBoxes.previewBtn.width > normalMobileBoxes.previewBtn.width,
+      true,
+      `360px Large Text topbar-preview-btn must enlarge to >=36px`
+    );
+    assert.equal(
+      largeMobileBoxes.savesBtn.height >= 36 && largeMobileBoxes.savesBtn.height > normalMobileBoxes.savesBtn.height,
+      true,
+      `360px Large Text topbar-saves-btn must be >=36px tall (normal=${normalMobileBoxes.savesBtn.height}, large=${largeMobileBoxes.savesBtn.height})`
+    );
+    assert.equal(
+      largeMobileBoxes.paintBtn.width >= 58 && largeMobileBoxes.paintBtn.width > normalMobileBoxes.paintBtn.width,
+      true,
+      `Large Text paint-mode-btn must enlarge to >=58px (got ${largeMobileBoxes.paintBtn.width})`
+    );
+    assert.equal(
+      largeMobileBoxes.undoBtn.width >= 50 && largeMobileBoxes.undoBtn.width > normalMobileBoxes.undoBtn.width,
+      true,
+      `Large Text undo-btn must enlarge to >=50px (got ${largeMobileBoxes.undoBtn.width})`
+    );
+    assert.equal(
+      largeMobileBoxes.swatch1.width >= 56 &&
+        largeMobileBoxes.swatch1.height >= 52 &&
+        largeMobileBoxes.swatch1.width > normalMobileBoxes.swatch1.width,
+      true,
+      `Large Text palette-swatch-1 must enlarge to ~58x54px (normal=${JSON.stringify(normalMobileBoxes.swatch1)}, large=${JSON.stringify(largeMobileBoxes.swatch1)})`
+    );
+    assert.equal(
+      largeMobileBoxes.swatch1FontPx >= 15.5 && largeMobileBoxes.swatch1FontPx > normalMobileBoxes.swatch1FontPx,
+      true,
+      `Large Text palette swatch number must enlarge to 16px (normal=${normalMobileBoxes.swatch1FontPx}, large=${largeMobileBoxes.swatch1FontPx})`
+    );
+
+    // Verify 5-button Co-op TopBar fits cleanly within 360px in Large Text mode, and ColorPickerPopover quick swatches enlarge
+    await ltMobilePage.evaluate(() => {
+      localStorage.setItem('capy_dev_cloud_coop_ui', '1');
+    });
+    await ltMobilePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(ltMobilePage);
+    await ltMobilePage.getByTestId('topbar-coop-btn').waitFor({ state: 'visible', timeout: 5000 });
+    const [coopLeftBox, coopRightBox, coopBtnBox] = await Promise.all([
+      ltMobilePage.getByTestId('topbar-left-lane').boundingBox(),
+      ltMobilePage.getByTestId('topbar-right-lane').boundingBox(),
+      ltMobilePage.getByTestId('topbar-coop-btn').boundingBox(),
+    ]);
+    assert.ok(coopLeftBox && coopRightBox && coopBtnBox);
+    assert.equal(
+      coopBtnBox.width >= 36 && coopLeftBox.x + coopLeftBox.width <= coopRightBox.x + 1 && coopRightBox.x + coopRightBox.width <= 360,
+      true,
+      `5-button Co-op Large Text topbar must fit within 360px with zero lane overlap (${JSON.stringify({ coopLeftBox, coopRightBox, coopBtnBox })})`
+    );
+
+    // Open ColorPickerPopover via palette-custom-btn and check quick swatches + close button sizing
+    const customPaletteBtn = ltMobilePage.getByTestId('palette-custom-btn');
+    await customPaletteBtn.scrollIntoViewIfNeeded();
+    await customPaletteBtn.click();
+    const popoverCloseBtn = ltMobilePage.locator('button[title="Close"]').last();
+    await popoverCloseBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const popoverCloseBox = await popoverCloseBtn.boundingBox();
+    const popoverSwatchBox = await ltMobilePage.locator('.capy-quick-swatch').first().boundingBox();
+    assert.ok(popoverCloseBox && popoverCloseBox.width >= 40 && popoverCloseBox.height >= 40, `ColorPickerPopover close must be >=40px in Large Text (got ${JSON.stringify(popoverCloseBox)})`);
+    assert.ok(popoverSwatchBox && popoverSwatchBox.width >= 38 && popoverSwatchBox.height >= 38, `ColorPickerPopover quick swatch must be >=40px in Large Text (got ${JSON.stringify(popoverSwatchBox)})`);
+    await popoverCloseBtn.click();
+    await popoverCloseBtn.waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fill 1 region and open ReplayControls on 360x780 Large Text to verify 2-row wrap, button sizing & vertical clearance
+    await tapCanvasGrid(ltMobilePage, 0.5, 6, 60);
+    await ltMobilePage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
+      { timeout: 5000 }
+    );
+    const ltUndoBox = await getStableBoundingBox(ltMobilePage.getByTestId('undo-btn'));
+    assert.ok(ltUndoBox);
+    await ltMobilePage.mouse.move(ltUndoBox.x + ltUndoBox.width / 2, ltUndoBox.y + ltUndoBox.height / 2);
+    await ltMobilePage.mouse.down();
+    await ltMobilePage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
+    await ltMobilePage.mouse.up();
+    await ltMobilePage.waitForTimeout(250);
+
+    const [ltReplayWinBox, ltReplayPlayBox, ltReplayFollowBox, ltReplayLoopBox, ltReplayExitBox, ltReplayScrubBox, ltPaintDuringReplayBox, ltPaletteDuringReplayBox] =
+      await Promise.all([
+        ltMobilePage.getByTestId('replay-controls-window').boundingBox(),
+        ltMobilePage.getByTestId('replay-play-pause-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-follow-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-loop-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-exit-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-scrubber-track').boundingBox(),
+        ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+        ltMobilePage.getByTestId('palette-dock').boundingBox(),
+      ]);
+    assert.ok(
+      ltReplayWinBox &&
+        ltReplayPlayBox &&
+        ltReplayFollowBox &&
+        ltReplayLoopBox &&
+        ltReplayExitBox &&
+        ltReplayScrubBox &&
+        ltPaintDuringReplayBox &&
+        ltPaletteDuringReplayBox
+    );
+    assert.equal(
+      ltReplayWinBox.x >= 0 && ltReplayWinBox.x + ltReplayWinBox.width <= 360,
+      true,
+      `360px Large Text ReplayControls must fit within 360px (${JSON.stringify(ltReplayWinBox)})`
+    );
+    assert.equal(ltReplayPlayBox.width >= 42 && ltReplayPlayBox.height >= 42, true, `Replay play button must be >=42px (got ${JSON.stringify(ltReplayPlayBox)})`);
+    assert.equal(ltReplayFollowBox.width >= 40 && ltReplayLoopBox.width >= 40 && ltReplayExitBox.width >= 40, true, 'Replay icon buttons must be >=40px in Large Text');
+    assert.equal(ltReplayScrubBox.height >= 32, true, `Replay scrubber must be >=32px tall in Large Text (got ${ltReplayScrubBox.height})`);
+    assert.equal(
+      ltPaintDuringReplayBox.y + ltPaintDuringReplayBox.height <= ltReplayWinBox.y + 1,
+      true,
+      `360px Large Text FloatingActions bottom (${ltPaintDuringReplayBox.y + ltPaintDuringReplayBox.height}) must clear ReplayControls top (${ltReplayWinBox.y})`
+    );
+    assert.equal(
+      ltReplayWinBox.y + ltReplayWinBox.height <= ltPaletteDuringReplayBox.y + 1,
+      true,
+      `360px Large Text ReplayControls bottom (${ltReplayWinBox.y + ltReplayWinBox.height}) must clear PaletteDock top (${ltPaletteDuringReplayBox.y})`
+    );
+
+    // 22b. 412x915 Modern Mobile Viewport check
+    await ltMobilePage.setViewportSize({ width: 412, height: 915 });
+    await ltMobilePage.waitForTimeout(200);
+    const modernSettingsBox = await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox();
+    assert.ok(modernSettingsBox && modernSettingsBox.width >= 42 && modernSettingsBox.height >= 42, `412px Large Text topbar-settings-btn must step up to >=42px (got ${JSON.stringify(modernSettingsBox)})`);
+
+    // 22c. 1280x720 Desktop Viewport check (single-row ReplayControls + 46px topbar + stacking clearance)
+    await ltMobilePage.setViewportSize({ width: 1280, height: 720 });
+    await ltMobilePage.waitForTimeout(250);
+    const [deskLtSettingsBox, deskLtReplayBox, deskLtPaintBox, deskLtPaletteBox] = await Promise.all([
+      ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
+      ltMobilePage.getByTestId('replay-controls-window').boundingBox(),
+      ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+      ltMobilePage.getByTestId('palette-dock').boundingBox(),
+    ]);
+    assert.ok(deskLtSettingsBox && deskLtReplayBox && deskLtPaintBox && deskLtPaletteBox);
+    assert.equal(deskLtSettingsBox.width >= 46 && deskLtSettingsBox.height >= 46, true, `1280px Large Text topbar-settings-btn must step up to >=46px (got ${JSON.stringify(deskLtSettingsBox)})`);
+    assert.equal(deskLtReplayBox.height <= 68, true, `1280px Large Text ReplayControls must remain single-row (height=${deskLtReplayBox.height})`);
+    assert.equal(
+      deskLtPaintBox.y + deskLtPaintBox.height <= deskLtReplayBox.y + 1,
+      true,
+      `1280px Large Text FloatingActions bottom (${deskLtPaintBox.y + deskLtPaintBox.height}) must clear ReplayControls top (${deskLtReplayBox.y})`
+    );
+    assert.equal(
+      deskLtReplayBox.y + deskLtReplayBox.height <= deskLtPaletteBox.y + 1,
+      true,
+      `1280px Large Text ReplayControls bottom (${deskLtReplayBox.y + deskLtReplayBox.height}) must clear PaletteDock top (${deskLtPaletteBox.y})`
+    );
+
+    // Toggle Large Text OFF in Settings and verify fatFingerAssist remains true
+    await ltMobilePage.getByTestId('replay-exit-btn').click();
+    await ltMobilePage.getByTestId('topbar-settings-btn').click();
+    await ltMobilePage.getByTestId('settings-tab-settings').click();
+    await ltMobilePage.getByTestId('setting-large-text').click();
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.largeText !== 'true', undefined, { timeout: 3000 });
+    assert.equal(
+      await ltMobilePage.getByTestId('setting-fat-finger-assist').getAttribute('aria-checked'),
+      'true',
+      'Turning Large Text OFF must preserve fatFingerAssist: true'
+    );
+    await ltMobilePage.close();
+    await ltMobileCtx.close();
+
+    // 22c-landscape. 640x360 Short-Landscape Phone checks in Large Text mode (Fixes 6, 7, 8)
+    const landCtx = await browser.newContext({ viewport: { width: 640, height: 360 }, hasTouch: true });
+    await landCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+      localStorage.setItem(
+        'capy_user_settings_v8',
+        JSON.stringify({
+          largeText: true,
+          fatFingerAssist: true,
+          raisePaletteDock: true,
+          enableCustomColorForAllPuzzles: true,
+          autoReplayOnLoad: false,
+          showUndoButton: true,
+        })
+      );
+    });
+    const landPage = await landCtx.newPage();
+    attachErrorListeners(landPage, 'landPage');
+    await landPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(landPage);
+
+    // Fill 1 region and open Replay so replay_scrubber FeatureOfferBanner + raised dock + ReplayControls + FABs are all live simultaneously
+    await tapCanvasGrid(landPage, 0.5, 6, 60);
+    await landPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
+      { timeout: 5000 }
+    );
+    await landPage.evaluate(() => {
+      localStorage.removeItem('capy_feature_offers_v1');
+    });
+    const landUndoStart = await getStableBoundingBox(landPage.getByTestId('undo-btn'));
+    assert.ok(landUndoStart);
+    await landPage.mouse.move(landUndoStart.x + landUndoStart.width / 2, landUndoStart.y + landUndoStart.height / 2);
+    await landPage.mouse.down();
+    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
+    await landPage.mouse.up();
+    await landPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 4000 });
+    await landPage.waitForTimeout(250);
+
+    const [landHeaderBox, landUndoBox, landPaintBox, landReplayBox, landBannerBox] = await Promise.all([
+      landPage.locator('header').first().boundingBox(),
+      landPage.getByTestId('undo-btn').boundingBox(),
+      landPage.getByTestId('paint-mode-btn').boundingBox(),
+      landPage.getByTestId('replay-controls-window').boundingBox(),
+      landPage.getByTestId('feature-offer-banner').boundingBox(),
+    ]);
+    assert.ok(landHeaderBox && landUndoBox && landPaintBox && landReplayBox && landBannerBox);
+    assert.equal(
+      landUndoBox.y >= landHeaderBox.y + landHeaderBox.height - 1,
+      true,
+      `640x360 raised+replaying undo-btn top (${landUndoBox.y}) must clear GameTopBar bottom (${landHeaderBox.y + landHeaderBox.height})`
+    );
+    assert.equal(
+      landPaintBox.y + landPaintBox.height <= landReplayBox.y + 1,
+      true,
+      `640x360 raised+replaying paint-mode-btn bottom (${landPaintBox.y + landPaintBox.height}) must clear ReplayControls top (${landReplayBox.y})`
+    );
+    assert.equal(
+      landBannerBox.y >= landHeaderBox.y + landHeaderBox.height - 1,
+      true,
+      `640x360 FeatureOfferBanner top (${landBannerBox.y}) must clear GameTopBar bottom (${landHeaderBox.y + landHeaderBox.height})`
+    );
+    assert.equal(
+      landBannerBox.y + landBannerBox.height <= landReplayBox.y + 1,
+      true,
+      `640x360 FeatureOfferBanner bottom (${landBannerBox.y + landBannerBox.height}) must NOT overlap ReplayControls top (${landReplayBox.y})`
+    );
+    // Verify FeatureOfferBanner does not intercept clicks on replay-speed-btn
+    await landPage.getByTestId('replay-speed-btn').click({ timeout: 3000 });
+    await landPage.getByTestId('feature-offer-dismiss-btn').click();
+    await landPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+    await landPage.getByTestId('replay-exit-btn').click();
+    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fix 7: ColorPickerPopover must stay strictly inside [0, 360] vertically with clickable Close button on 640x360
+    const landCustomBtn = landPage.getByTestId('palette-custom-btn');
+    await landCustomBtn.scrollIntoViewIfNeeded();
+    await landCustomBtn.click();
+    const landPopoverClose = landPage.locator('button[title="Close"]').last();
+    await landPopoverClose.waitFor({ state: 'visible', timeout: 3000 });
+    await landPage.waitForTimeout(200);
+    const landPopoverMetrics = await landPopoverClose.evaluate((closeBtn) => {
+      const shell = closeBtn.closest('.rounded-2xl');
+      const sr = shell?.getBoundingClientRect();
+      const cr = closeBtn.getBoundingClientRect();
+      return {
+        shellTop: sr?.top ?? -999,
+        shellBottom: sr?.bottom ?? 999,
+        closeTop: cr.top,
+        closeBottom: cr.bottom,
+      };
+    });
+    assert.equal(
+      landPopoverMetrics.shellTop >= -0.5 &&
+        landPopoverMetrics.shellBottom <= 360.5 &&
+        landPopoverMetrics.closeTop >= -0.5 &&
+        landPopoverMetrics.closeBottom <= 360.5,
+      true,
+      `640x360 ColorPickerPopover and Close button must stay strictly inside [0, 360] (${JSON.stringify(landPopoverMetrics)})`
+    );
+    await landPopoverClose.click();
+    await landPopoverClose.waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fix 6: Completed + raised dock + replaying on 640x360 must clear BOTH GameTopBar and ReplayControls
+    await landPage.evaluate(async () => {
+      const active = window.capyStorage.loadActiveState();
+      const snaps = window.capyStorage.loadSnapshots();
+      const snapId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = snapId ? await window.capyStorage.loadPuzzleData(snapId) : null;
+      if (!puz || !active) return;
+      const allIds = puz.regions.map((r) => r.id);
+      active.filledRegionIds = allIds;
+      active.fillOrder = allIds;
+      localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
+      const snap = snaps.find((s) => s.id === snapId);
+      if (snap) {
+        snap.filledRegionIds = allIds;
+        snap.fillOrder = allIds;
+        snap.filledCount = allIds.length;
+        snap.totalCount = allIds.length;
+        localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+      }
+    });
+    await landPage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(landPage);
+    await landPage.getByTestId('replay-btn').waitFor({ state: 'visible', timeout: 5000 });
+    await landPage.getByTestId('replay-btn').click();
+    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
+    await landPage.waitForTimeout(250);
+    const [compHeaderBox, compUndoBox, compPaintBox, compReplayBox] = await Promise.all([
+      landPage.locator('header').first().boundingBox(),
+      landPage.getByTestId('undo-btn').boundingBox(),
+      landPage.getByTestId('paint-mode-btn').boundingBox(),
+      landPage.getByTestId('replay-controls-window').boundingBox(),
+    ]);
+    assert.ok(compHeaderBox && compUndoBox && compPaintBox && compReplayBox);
+    assert.equal(
+      compUndoBox.y >= compHeaderBox.y + compHeaderBox.height - 1,
+      true,
+      `640x360 completed+raised+replaying undo-btn top (${compUndoBox.y}) must clear GameTopBar bottom (${compHeaderBox.y + compHeaderBox.height})`
+    );
+    assert.equal(
+      compPaintBox.y + compPaintBox.height <= compReplayBox.y + 1,
+      true,
+      `640x360 completed+raised+replaying paint-mode-btn bottom (${compPaintBox.y + compPaintBox.height}) must clear ReplayControls top (${compReplayBox.y})`
+    );
+    await landPage.close();
+    await landCtx.close();
+
+    // 22d. OnboardingTutorial Large Text ON toggle must also enable fatFingerAssist
+    const tutCoupleCtx = await browser.newContext({ viewport: { width: 412, height: 915 }, hasTouch: true });
+    await tutCoupleCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+      localStorage.setItem(
+        'capy_user_settings_v8',
+        JSON.stringify({ fatFingerAssist: false, largeText: false })
+      );
+    });
+    const tutCouplePage = await tutCoupleCtx.newPage();
+    attachErrorListeners(tutCouplePage, 'tutCouplePage');
+    await tutCouplePage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(tutCouplePage);
+    await tutCouplePage.getByTestId('tutorial-large-text-btn').waitFor({ state: 'visible', timeout: 5000 });
+    await tutCouplePage.getByTestId('tutorial-large-text-btn').click();
+    await tutCouplePage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+    const tutSettingsAfter = await tutCouplePage.evaluate(() => window.capyStorage.loadSettings());
+    assert.equal(tutSettingsAfter.largeText, true, 'Onboarding tutorial Large Text toggle must set largeText=true');
+    assert.equal(tutSettingsAfter.fatFingerAssist, true, 'Onboarding tutorial Large Text toggle must also enable fatFingerAssist=true');
+    await tutCouplePage.close();
+    await tutCoupleCtx.close();
+
+    // 22e. #602 Regression Tests: Paint Mode single-tap & <12px micro-jitter no double-paint + Free Colour Mode repaint filled region
+    const regCtx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await regCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+      localStorage.setItem(
+        'capy_user_settings_v8',
+        JSON.stringify({
+          difficulty: 'EASY',
+          isPaintMode: true,
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          isFreeColorMode: false,
+        })
+      );
+    });
+    const regPage = await regCtx.newPage();
+    attachErrorListeners(regPage, 'regPage');
+    await regPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(regPage);
+
+    // Find an exact interior pixel of an unfilled region A that has an adjacent unfilled region B within 3-8 screen px (<12px) and another neighbor C within 24 screen px
+    const adjacentTarget = await regPage.evaluate(async () => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const active = window.capyStorage.loadActiveState();
+      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
+      const canvas = document.querySelector('canvas');
+      if (!puz || !canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      const baseScale = Math.min(rect.width / puz.width, rect.height / puz.height) * 0.92;
+      const baseOffsetX = (rect.width - puz.width * baseScale) / 2;
+      const baseOffsetY = (rect.height - puz.height * baseScale) / 2;
+      const map = puz.regionMap;
+      const w = puz.width;
+      const h = puz.height;
+      const isInterior = (px, py, rid) =>
+        px > 1 &&
+        px < w - 2 &&
+        py > 1 &&
+        py < h - 2 &&
+        map[(py - 1) * w + px] === rid &&
+        map[(py + 1) * w + px] === rid &&
+        map[py * w + (px - 1)] === rid &&
+        map[py * w + (px + 1)] === rid;
+
+      for (let y = 12; y < h - 12; y += 2) {
+        for (let x = 12; x < w - 12; x += 2) {
+          const rA = map[y * w + x];
+          if (rA <= 0 || !isInterior(x, y, rA)) continue;
+          const clientX = rect.left + baseOffsetX + (x + 0.5) * baseScale;
+          const clientY = rect.top + baseOffsetY + (y + 0.5) * baseScale;
+          if (clientY <= 90 || clientY >= rect.height - 120) continue;
+
+          // Find neighbor B whose interior pixel is 3..8 screen px away from (clientX, clientY)
+          let foundB = null;
+          const dirs = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ];
+          for (const [dx, dy] of dirs) {
+            for (let step = 2; step <= 18; step++) {
+              const bx = x + dx * step;
+              const by = y + dy * step;
+              if (bx < 2 || bx >= w - 2 || by < 2 || by >= h - 2) break;
+              const rB = map[by * w + bx];
+              if (rB > 0 && rB !== rA && isInterior(bx, by, rB)) {
+                const screenDist = step * baseScale;
+                if (screenDist >= 3 && screenDist <= 8) {
+                  // Ensure B also has a 3rd distinct region C within <= 24 screen px so a bug would double-paint C
+                  let foundC = 0;
+                  const maxCStep = Math.max(2, Math.floor(24 / baseScale));
+                  for (const [cdx, cdy] of dirs) {
+                    for (let cs = 2; cs <= maxCStep && !foundC; cs++) {
+                      const cx = bx + cdx * cs;
+                      const cy = by + cdy * cs;
+                      if (cx < 0 || cx >= w || cy < 0 || cy >= h) break;
+                      const rC = map[cy * w + cx];
+                      if (rC > 0 && rC !== rA && rC !== rB) {
+                        foundC = rC;
+                      }
+                    }
+                  }
+                  if (foundC > 0) {
+                    foundB = {
+                      regionB: rB,
+                      regionC: foundC,
+                      bClientX: rect.left + baseOffsetX + (bx + 0.5) * baseScale,
+                      bClientY: rect.top + baseOffsetY + (by + 0.5) * baseScale,
+                      dragScreenPx: screenDist,
+                    };
+                    break;
+                  }
+                }
+              }
+            }
+            if (foundB) break;
+          }
+          if (foundB) {
+            return { regionA: rA, clientX, clientY, ...foundB };
+          }
+        }
+      }
+      return null;
+    });
+    assert.ok(adjacentTarget, 'Expected to locate interior pixels of region A -> neighbor B (3-8px) -> neighbor C');
+
+    // Paint Mode single-tap: MUST fill EXACTLY 1 region (regionA), NOT double-paint neighbor regionB
+    const filledBeforePaintTap = Number(
+      await regPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.waitForTimeout(200);
+    const filledAfterPaintTap = Number(
+      await regPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(
+      filledAfterPaintTap,
+      filledBeforePaintTap + 1,
+      `Paint Mode single-tap with fatFingerAssist=true must fill exactly 1 region (expected ${filledBeforePaintTap + 1}, got ${filledAfterPaintTap})`
+    );
+    const activeAfterPaintTap = await regPage.evaluate(() => window.capyStorage.loadActiveState());
+    assert.equal(
+      activeAfterPaintTap?.filledRegionIds?.includes(adjacentTarget.regionA),
+      true,
+      'Paint Mode single-tap must fill target regionA'
+    );
+    assert.equal(
+      activeAfterPaintTap?.filledRegionIds?.includes(adjacentTarget.regionB),
+      false,
+      'Paint Mode single-tap must NOT double-paint adjacent neighbor regionB'
+    );
+
+    // Fix 5: Paint Mode <12px micro-jitter starting on already-filled regionA and sliding 3-8px into unfilled regionB (>=25ms hold) must paint ONLY regionB (+1, no neighbor C double-paint)
+    await regPage.waitForTimeout(450); // outside 350ms double-tap window
+    await regPage.mouse.move(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.mouse.down();
+    await regPage.mouse.move(adjacentTarget.bClientX, adjacentTarget.bClientY);
+    await regPage.waitForTimeout(40);
+    await regPage.mouse.up();
+    await regPage.waitForTimeout(200);
+    const activeAfterJitter = await regPage.evaluate(() => window.capyStorage.loadActiveState());
+    const filledAfterJitter = activeAfterJitter?.filledRegionIds ?? [];
+    assert.equal(
+      filledAfterJitter.length,
+      filledAfterPaintTap + 1,
+      `Paint Mode <12px micro-jitter (${adjacentTarget.dragScreenPx.toFixed(1)}px) from filled A into unfilled B must paint ONLY B (expected ${filledAfterPaintTap + 1}, got ${filledAfterJitter.length}: ${JSON.stringify(filledAfterJitter)})`
+    );
+    assert.equal(
+      filledAfterJitter.includes(adjacentTarget.regionB),
+      true,
+      'Paint Mode <12px micro-jitter must fill entered regionB'
+    );
+    assert.equal(
+      filledAfterJitter.includes(adjacentTarget.regionC),
+      false,
+      'Paint Mode <12px micro-jitter must NOT double-paint neighbor regionC on pointerup'
+    );
+
+    // Free Colour Mode repaint: undo regionB & regionA, switch to Tap Mode & enable Free Colour Mode live, fill A with color 1, switch to color 2, tap A again -> A repaints, B stays unfilled
+    await regPage.getByTestId('undo-btn').click();
+    await regPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 1,
+      { timeout: 3000 }
+    );
+    await regPage.getByTestId('undo-btn').click();
+    await regPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 0,
+      { timeout: 3000 }
+    );
+    await regPage.getByTestId('paint-mode-btn').click();
+    await regPage.getByTestId('topbar-settings-btn').click();
+    await regPage.getByTestId('settings-tab-settings').click();
+    const regFreeColorLabel = await regPage.waitForSelector('text=Free Colour Mode');
+    await regFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button[role="switch"]')?.click());
+    await regPage.getByTestId('settings-modal-close').click();
+    await regPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    await regPage.getByTestId('palette-swatch-1').click();
+    await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 1,
+      { timeout: 3000 }
+    );
+    await regPage.waitForTimeout(150);
+    const colorAfterFirstFill = await regPage.evaluate((rA) => {
+      const active = window.capyStorage.loadActiveState();
+      return active?.paintedRegionColors?.[String(rA)] ?? null;
+    }, adjacentTarget.regionA);
+    assert.ok(colorAfterFirstFill !== null, 'Expected regionA to record paintedRegionColors after first Free Colour tap');
+
+    await regPage.getByTestId('palette-swatch-2').click();
+    await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.waitForTimeout(200);
+    const freeColorRepaintState = await regPage.evaluate((rA) => {
+      const active = window.capyStorage.loadActiveState();
+      return {
+        filledCount: active?.filledRegionIds?.length ?? 0,
+        colorA: active?.paintedRegionColors?.[String(rA)] ?? null,
+      };
+    }, adjacentTarget.regionA);
+    assert.equal(
+      freeColorRepaintState.filledCount,
+      1,
+      `Free Colour Mode repaint tap inside filled regionA must NOT spill into unfilled neighbor B (filledCount=${freeColorRepaintState.filledCount})`
+    );
+    assert.notEqual(
+      freeColorRepaintState.colorA,
+      colorAfterFirstFill,
+      `Free Colour Mode repaint tap must update regionA color (${colorAfterFirstFill} -> ${freeColorRepaintState.colorA})`
+    );
+
+    await regPage.close();
+    await regCtx.close();
+    logE2ePass('Large Text button scaling (360x780/412x915/640x360/1280x720), switch/slider/tab/centering, Fat-Finger coupling & Paint micro-jitter/Free-Colour fixes verified.');
+
+    // E2E Stage 22: M4 $0 BYOC Multi-Provider Account Login, Auto-Sync & 360px Mobile Zero-Overflow
+    logE2eStart('M4 $0 BYOC Multi-Provider Login UI, Play Store Default-Off Gate, Auto-Sync & 360px Mobile Zero-Overflow');
+    const byocContext = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    const byocPage = await byocContext.newPage();
+    attachErrorListeners(byocPage, 'm4-byoc');
+
+    // 22a. Verify default Play Store compliance gate remains hidden when unconfigured & no ?coop=1
+    await byocPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+    await byocPage.getByTestId('topbar-settings-btn').waitFor({ state: 'visible', timeout: 15000 });
+    await byocPage.getByTestId('topbar-settings-btn').click();
+    await byocPage.getByTestId('settings-tab-saves').click();
+    assert.equal(await byocPage.getByTestId('cloud-coop-hub').count(), 0, 'cloud-coop-hub must stay hidden by default');
+    assert.equal(await byocPage.getByTestId('play-games-signin-btn').count(), 0, 'play-games-signin-btn must stay hidden by default');
+    assert.equal(await byocPage.getByTestId('cloud-sync-btn').count(), 0, 'cloud-sync-btn must stay hidden by default');
+
+    // 22b. Configure debug-gated mock Google + Microsoft tokens (Apple stays unconfigured & auto-hidden)
+    const oneDriveStore = new Map();
+    let oneDrivePutCount = 0;
+    await byocContext.addInitScript(() => {
+      try {
+        localStorage.setItem('capy_cloud_explicit_signout_v1', '1');
+      } catch {
+        // Ignore
+      }
+      window.__capyMockGoogleOAuthToken = 'mock_google_e2e_token_m4';
+      window.__capyMockMicrosoftOAuthToken = 'mock_ms_e2e_token_m4';
+    });
+    await byocPage.route(/^https:\/\/graph\.microsoft\.com\//, async (route) => {
+      const req = route.request();
+      const url = req.url();
+      const match = /\/special\/approot:\/([^:/]+):\/content$/.exec(url);
+      const fileName = match ? decodeURIComponent(match[1]) : 'unknown';
+      if (req.method() === 'PUT') {
+        oneDrivePutCount += 1;
+        oneDriveStore.set(fileName, req.postData() || '{}');
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: fileName }),
+        });
+        return;
+      }
+      if (oneDriveStore.has(fileName)) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: oneDriveStore.get(fileName),
+        });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+    });
+
+    await byocPage.goto(`${BASE_URL}/?coop=1&capy_debug=1&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+    await byocPage.getByTestId('topbar-settings-btn').waitFor({ state: 'visible', timeout: 15000 });
+    await byocPage.getByTestId('topbar-settings-btn').click();
+    await byocPage.getByTestId('settings-tab-saves').click();
+    await byocPage.getByTestId('cloud-account-card').waitFor({ state: 'visible', timeout: 10000 });
+
+    // Both configured providers (Google + Microsoft) visible; unconfigured Apple auto-hidden
+    await byocPage.getByTestId('play-games-signin-btn').waitFor({ state: 'visible', timeout: 5000 });
+    await byocPage.getByTestId('cloud-signin-microsoft').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(await byocPage.getByTestId('cloud-signin-apple').count(), 0, 'Unconfigured Apple sign-in button must stay auto-hidden');
+
+    // Sign in with Microsoft OneDrive BYOC driver
+    await byocPage.getByTestId('cloud-signin-microsoft').click();
+    await byocPage.getByTestId('play-games-signout-btn').waitFor({ state: 'visible', timeout: 10000 });
+    const cardText = await byocPage.getByTestId('cloud-account-card').innerText();
+    assert.equal(cardText.includes('capy.ms@example.com'), true, `Expected Microsoft email in CloudAccountCard, got: ${cardText}`);
+    await byocPage.getByTestId('cloud-last-synced').waitFor({ state: 'visible', timeout: 5000 });
+    await byocPage.waitForFunction(
+      () => document.querySelector('[data-testid="cloud-sync-status-badge"]')?.textContent?.includes('Synced') === true,
+      null,
+      { timeout: 10000 }
+    );
+    const statusBadgeText = await byocPage.getByTestId('cloud-sync-status-badge').innerText();
+    assert.equal(statusBadgeText.includes('Synced'), true, `Expected Synced status badge, got: ${statusBadgeText}`);
+    await byocPage.getByTestId('cloud-switch-google').waitFor({ state: 'visible', timeout: 5000 });
+    assert.equal(oneDrivePutCount >= 1, true, 'Signing in with Microsoft must push manifest to OneDrive AppFolder');
+
+    // Verify 360px mobile zero-overflow on CloudAccountCard
+    const overflowInfo = await byocPage.evaluate(() => {
+      const card = document.querySelector('[data-testid="cloud-account-card"]');
+      if (!card) return { found: false, overflow: 999 };
+      return { found: true, overflow: card.scrollWidth - card.clientWidth };
+    });
+    assert.equal(overflowInfo.found, true);
+    assert.equal(
+      overflowInfo.overflow <= 1,
+      true,
+      `CloudAccountCard must have zero horizontal overflow at 360px (overflow=${overflowInfo.overflow}px)`
+    );
+
+    // Close Settings, paint a region, and verify automatic background sync fires on online reconnect
+    const putsBeforeAutoSync = oneDrivePutCount;
+    await byocPage.keyboard.press('Escape');
+    await byocPage.waitForTimeout(200);
+    await tapCanvasGrid(byocPage, 0.45, 6, 60);
+    await byocPage.evaluate(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await byocPage.waitForTimeout(600);
+    assert.equal(
+      oneDrivePutCount > putsBeforeAutoSync,
+      true,
+      `Automatic background sync must push updated manifest to OneDrive (before=${putsBeforeAutoSync}, after=${oneDrivePutCount})`
+    );
+
+    await byocPage.close();
+    await byocContext.close();
+    logE2ePass('M4 $0 BYOC multi-provider login UI, default-off gate, 360px zero-overflow & automatic background sync verified.');
 
     assert.equal(
       e2eStep,

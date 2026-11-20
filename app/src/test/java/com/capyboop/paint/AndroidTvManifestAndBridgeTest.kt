@@ -1,4 +1,4 @@
-package com.capypaint.capy
+package com.capyboop.paint
 
 import java.io.File
 import javax.imageio.ImageIO
@@ -74,7 +74,7 @@ class AndroidTvManifestAndBridgeTest {
         val doc = docFactory.newDocumentBuilder().parse(manifestFile)
         val appEl = directChildElements(doc.documentElement, "application").single()
         val mainActivity = directChildElements(appEl, "activity").firstOrNull { el ->
-            androidAttr(el, "name") == "com.capypaint.capy.MainActivity"
+            androidAttr(el, "name") == "com.capyboop.paint.MainActivity"
         }
         assertNotNull(mainActivity)
         val activity = mainActivity!!
@@ -177,7 +177,7 @@ class AndroidTvManifestAndBridgeTest {
         assertEquals("@string/game_services_project_id", metaDataMap["com.google.android.gms.games.APP_ID"])
         assertEquals("true", metaDataMap["com.google.android.gms.games.SUPPRESS_GAME_PROFILE_CREATION"])
 
-        val mainActivitySrc = resolveRepoFile("app/src/main/java/com/capypaint/capy/MainActivity.kt").readText()
+        val mainActivitySrc = resolveRepoFile("app/src/main/java/com/capyboop/paint/MainActivity.kt").readText()
         val initMatch = Regex("""private fun initializePlayGamesIfConfigured\(\)\s*\{[\s\S]*?\n    \}""")
             .find(mainActivitySrc)
         assertNotNull("MainActivity must define initializePlayGamesIfConfigured()", initMatch)
