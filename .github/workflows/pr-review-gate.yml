@@ -1019,7 +1019,10 @@ jobs:
                     );
                   } catch (err) {
                     const msg = String(err?.message || err || '');
-                    if (/clean status|stacked pull requests/i.test(msg)) {
+                    if (
+                      /clean status|stacked pull requests/i.test(msg) ||
+                      (/unstable status/i.test(msg) && (await headChecksGreen()))
+                    ) {
                       await directMergeWithFallback();
                     } else {
                       core.warning(
