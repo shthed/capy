@@ -87,6 +87,7 @@ interface ReadableStream<R = unknown> {
 interface RequestInit {
   method?: string;
   headers?: Record<string, string> | Headers;
+  body?: string | ArrayBuffer | Uint8Array | null;
 }
 
 declare class Request {
@@ -94,6 +95,8 @@ declare class Request {
   readonly method: string;
   readonly headers: Headers;
   constructor(input: string | Request, init?: RequestInit);
+  text(): Promise<string>;
+  json<T = unknown>(): Promise<T>;
 }
 
 interface ResponseInit {
@@ -113,9 +116,13 @@ declare class Response {
     body?: ReadableStream<Uint8Array> | string | ArrayBuffer | Uint8Array | null,
     init?: ResponseInit
   );
+  text(): Promise<string>;
+  json<T = unknown>(): Promise<T>;
   static json(data: unknown, init?: ResponseInit): Response;
   static redirect(url: string, status?: number): Response;
 }
+
+declare function fetch(input: Request | string, init?: RequestInit): Promise<Response>;
 
 declare class URLSearchParams {
   constructor(init?: string | Record<string, string>);
@@ -183,4 +190,7 @@ interface Env {
   ALLOWED_EXTRA_ORIGINS?: string;
   ALLOW_LOCALHOST_ORIGINS?: string;
   API_RATE_LIMITER?: RateLimitBinding;
+  FEEDBACK_RATE_LIMITER?: RateLimitBinding;
+  CAPYBOOP_FEEDBACK_TOKEN?: string;
+  CAPYBOOP_FEEDBACK_REPO?: string;
 }

@@ -3331,6 +3331,288 @@ async function runCodecAndEngineTests() {
         'Built dist/sw.js must use Network-First cache:no-cache routing for .capy archives'
       );
     }
+    // Anonymous In-Game Feedback protocol (worker/feedbackProtocol.ts) & client service (FeedbackService.ts)
+    {
+      const feedbackProtoMod = await vite.ssrLoadModule(
+        path.resolve(projectRoot, '../worker/feedbackProtocol.ts')
+      );
+      const feedbackSvcMod = await vite.ssrLoadModule('/src/services/FeedbackService.ts');
+
+      // Valid payload + @mention neutralization + triple-backtick sanitization + label mapping
+      const validResult = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'puzzle_idea',
+          title: '  Capybara\u0007 in Space @admin  ',
+          details: 'Please add a cozy astronaut capybara!\n```js\nalert(1)\n```\ncc @everyone',
+          website: '',
+          context: {
+            appVersion: 'v3.0.45',
+            channel: 'beta',
+            platform: 'Web',
+            viewport: '390x844',
+          },
+        })
+      );
+      assert.equal(validResult.ok, true, 'Valid feedback payload must pass validation');
+      assert.equal(validResult.payload.category, 'puzzle_idea');
+      assert.equal(validResult.payload.title.includes('@admin'), false, 'Title must not contain raw @admin mention');
+      assert.equal(
+        validResult.payload.title.includes('@\u200Badmin'),
+        true,
+        'Title must neutralize @mentions with zero-width space'
+      );
+      assert.equal(validResult.payload.details.includes('```'), false, 'Details must sanitize triple backticks');
+      assert.equal(
+        validResult.payload.details.includes('@everyone'),
+        false,
+        'Details must not contain raw @everyone mention'
+      );
+      assert.equal(
+        validResult.payload.details.includes('@\u200Beveryone'),
+        true,
+        'Details must neutralize @mentions with zero-width space'
+      );
+
+      // Adversarial @mention bypasses + email preservation
+      for (const adversarialMention of [
+        '**@shthed**',
+        '>@shthed',
+        '"@shthed"',
+        '[@shthed]',
+        ',@shthed',
+        ':@shthed',
+        '/@shthed',
+        '`@shthed',
+      ]) {
+        const sanitized = feedbackProtoMod.sanitizeFeedbackText(adversarialMention, true);
+        assert.equal(
+          sanitized.includes('@shthed'),
+          false,
+          `Adversarial mention ${adversarialMention} must be neutralized (got ${sanitized})`
+        );
+        assert.equal(
+          sanitized.includes('@\u200Bshthed'),
+          true,
+          `Adversarial mention ${adversarialMention} must insert zero-width space (got ${sanitized})`
+        );
+      }
+      assert.equal(
+        feedbackProtoMod.sanitizeFeedbackText('Contact a@b.com or foo.bar@example.com for help', true),
+        'Contact a@b.com or foo.bar@example.com for help',
+        'Email addresses must be preserved untouched'
+      );
+
+      // resolveFeedbackRepo path traversal protection
+      for (const badRepo of ['../..', '../evil', 'evil/..', './.', 'foo/.', './bar', '-bad/repo', 'a/b/c']) {
+        assert.equal(
+          feedbackProtoMod.resolveFeedbackRepo(badRepo),
+          'capyboop/paint',
+          `Invalid/traversal repo "${badRepo}" must fall back to capyboop/paint`
+        );
+      }
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('capyboop/paint'), 'capyboop/paint');
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('shthed/capy'), 'shthed/capy');
+
+      const issuePayload = feedbackProtoMod.buildGitHubIssuePayload(validResult.payload);
+      assert.equal(issuePayload.title.startsWith('[Puzzle Idea]: '), true);
+      assert.deepEqual(issuePayload.labels, ['enhancement']);
+      assert.equal(issuePayload.body.includes('Anonymous in-game feedback'), true);
+      assert.equal(issuePayload.body.includes('v3.0.45'), true);
+
+      // Category label mapping for bug, feature, general
+      for (const [cat, expectedPrefix, expectedLabels] of [
+        ['bug', '[Bug]: ', ['bug']],
+        ['feature', '[Feature]: ', ['enhancement']],
+        ['general', '[Feedback]: ', ['question']],
+      ]) {
+        const res = feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({
+            category: cat,
+            title: 'Sample headline',
+            details: 'Detailed description of more than ten characters.',
+          })
+        );
+        assert.equal(res.ok, true, `Category ${cat} must validate`);
+        const built = feedbackProtoMod.buildGitHubIssuePayload(res.payload);
+        assert.equal(built.title.startsWith(expectedPrefix), true);
+        assert.deepEqual(built.labels, expectedLabels);
+      }
+
+      // Honeypot detection
+      const honey = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'bug',
+          title: 'Bot title',
+          details: 'Bot spam message content here.',
+          website: 'https://spam.example',
+        })
+      );
+      assert.equal(honey.ok, false);
+      assert.equal(honey.honeypot, true, 'Non-empty website field must trigger honeypot');
+
+      // Invalid payloads: malformed JSON, invalid category, short title, short details, > 8192 bytes
+      assert.equal(feedbackProtoMod.validateFeedbackPayload('{bad-json').ok, false);
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'unknown', title: 'Valid title', details: 'Long enough details.' })
+        ).ok,
+        false
+      );
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'bug', title: 'Hi', details: 'Long enough details.' })
+        ).ok,
+        false
+      );
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'bug', title: 'Valid title', details: 'short' })
+        ).ok,
+        false
+      );
+      const oversized = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'bug',
+          title: 'Oversized payload test',
+          details: 'A'.repeat(9000),
+        })
+      );
+      assert.equal(oversized.ok, false);
+      assert.equal(oversized.status, 413, 'Payload > 8192 bytes must return status 413');
+
+      // CORS allow/deny including paint.capyboop.com and path-suffixed origin rejection
+      const capyCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://capypaint.com', undefined, false);
+      assert.equal(capyCors['Access-Control-Allow-Origin'], 'https://capypaint.com');
+      const paintBoopCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://paint.capyboop.com',
+        undefined,
+        false
+      );
+      assert.equal(paintBoopCors['Access-Control-Allow-Origin'], 'https://paint.capyboop.com');
+      const androidCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://appassets.androidplatform.net',
+        undefined,
+        false
+      );
+      assert.equal(androidCors['Access-Control-Allow-Origin'], 'https://appassets.androidplatform.net');
+      const evilCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://evil.example', undefined, false);
+      assert.equal(evilCors['Access-Control-Allow-Origin'], undefined, 'Disallowed origin must not receive ACAO');
+      const pathSuffixedCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://capypaint.com/evil',
+        undefined,
+        false
+      );
+      assert.equal(
+        pathSuffixedCors['Access-Control-Allow-Origin'],
+        undefined,
+        'Path-suffixed origin must not receive ACAO'
+      );
+
+      // Worker buildFallbackIssueUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const workerCjkFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'bug',
+        title: '漢'.repeat(120),
+        details: '漢'.repeat(1200),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerCjkFallback.length <= 4000,
+        true,
+        `Worker CJK fallback URL must be <= 4000 chars (got ${workerCjkFallback.length})`
+      );
+      assert.equal(workerCjkFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      const workerEmojiFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'feature',
+        title: '😀'.repeat(60),
+        details: '😀'.repeat(600),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerEmojiFallback.length <= 4000,
+        true,
+        `Worker emoji fallback URL must be <= 4000 chars (got ${workerEmojiFallback.length})`
+      );
+      assert.equal(workerEmojiFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      // FeedbackService URL resolution & fallback URL
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'capypaint.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'paint.capyboop.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'beta.capypaint.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'www.capypaint.com' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'localhost' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'appassets.androidplatform.net' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'capyboop.github.io' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl('https://custom.example/api/feedback', { hostname: 'localhost' }),
+        'https://custom.example/api/feedback'
+      );
+
+      const fallbackUrl = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: 'Zoom stutter', details: 'Pinch zoom stutters on tablet.' },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(fallbackUrl.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+      assert.equal(fallbackUrl.includes('template=bug_report.yml'), true);
+      assert.equal(fallbackUrl.includes('Zoom+stutter'), true);
+
+      // Client buildGitHubIssueFallbackUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const clientCjkFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: '漢'.repeat(120), details: '漢'.repeat(1200) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientCjkFallback.length <= 4000,
+        true,
+        `Client CJK fallback URL must be <= 4000 chars (got ${clientCjkFallback.length})`
+      );
+      const clientEmojiFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'feature', title: '😀'.repeat(60), details: '😀'.repeat(600) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientEmojiFallback.length <= 4000,
+        true,
+        `Client emoji fallback URL must be <= 4000 chars (got ${clientEmojiFallback.length})`
+      );
+
+      // Prototype-key category lookup falls back safely to 'general' ([Feedback])
+      for (const protoCat of ['toString', 'constructor', '__proto__']) {
+        const protoFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl({
+          category: protoCat,
+          title: 'Proto test',
+          details: 'Prototype lookup should safely fall back to general.',
+        });
+        const parsedProto = new URL(protoFallback);
+        assert.equal(
+          parsedProto.searchParams.get('title'),
+          '[Feedback]: Proto test',
+          `Prototype category "${protoCat}" must fall back to general [Feedback] prefix`
+        );
+      }
+    }
+
     logUnitPass('ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService verified.');
 
     // --- Sprint 2: F8 CRDT resetEpoch & F9 >180KB Play Games Chunks ---
@@ -13085,6 +13367,119 @@ async function runBrowserBasicsSuite() {
       true,
       `Free Colour Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
     );
+
+    // Tab 0 Anonymous In-Game Feedback form (validation, 201 created, 503 fallback preserving draft, 429 rate-limit)
+    assert.equal(
+      await page.getByTestId('about-open-feedback-btn').isVisible(),
+      true,
+      'About tab must render about-open-feedback-btn'
+    );
+    await page.getByTestId('about-open-feedback-btn').click();
+    await page.getByTestId('in-game-feedback-card').waitFor({ state: 'visible', timeout: 3000 });
+
+    // Client-side validation rejects empty/short title without hitting network
+    let interceptedFeedbackCalls = 0;
+    let lastFeedbackRequestBody = null;
+    let feedbackMockMode = '201';
+    await page.route('**/api/feedback', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      interceptedFeedbackCalls += 1;
+      lastFeedbackRequestBody = route.request().postDataJSON();
+      if (feedbackMockMode === '201') {
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            issueNumber: 99,
+            issueUrl: 'https://github.com/capyboop/paint/issues/99',
+          }),
+        });
+      } else if (feedbackMockMode === '503') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: false,
+            code: 'feedback_unconfigured',
+            error: 'In-app feedback relay is not configured yet. You can submit directly on GitHub.',
+            fallbackUrl: 'https://github.com/capyboop/paint/issues/new?template=bug_report.yml&title=%5BBug%5D%3A+Zoom+lag',
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 429,
+          contentType: 'application/json',
+          headers: { 'Retry-After': '60' },
+          body: JSON.stringify({ ok: false, error: 'Too many requests' }),
+        });
+      }
+    });
+
+    try {
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.getByTestId('feedback-status-banner').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(interceptedFeedbackCalls, 0, 'Client validation must prevent network call on empty feedback');
+
+      // 201 Created: Puzzle Idea submission
+      feedbackMockMode = '201';
+      await page.getByTestId('feedback-category-puzzle_idea').click();
+      await page.getByTestId('feedback-title-input').fill('Capybara Astronaut');
+      await page.getByTestId('feedback-details-input').fill('A cozy capybara floating among pastel stars.');
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.getByTestId('feedback-issue-link').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(interceptedFeedbackCalls, 1, 'Expected 1 POST /api/feedback request');
+      assert.equal(lastFeedbackRequestBody?.category, 'puzzle_idea');
+      assert.equal(lastFeedbackRequestBody?.title, 'Capybara Astronaut');
+      assert.equal(
+        await page.getByTestId('feedback-issue-link').getAttribute('href'),
+        'https://github.com/capyboop/paint/issues/99'
+      );
+      assert.equal(
+        await page.getByTestId('feedback-title-input').inputValue(),
+        '',
+        'Title input must reset after 201 submission'
+      );
+
+      // 503 Unconfigured: fallback link renders and user draft is preserved
+      feedbackMockMode = '503';
+      await page.getByTestId('feedback-category-bug').click();
+      await page.getByTestId('feedback-title-input').fill('Zoom lag');
+      await page.getByTestId('feedback-details-input').fill('Pinch zoom feels slightly sluggish on older phones.');
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.getByTestId('feedback-fallback-link').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await page.getByTestId('feedback-fallback-link').getAttribute('href'))?.startsWith(
+          'https://github.com/capyboop/paint/issues/new?'
+        ),
+        true,
+        '503 response must surface prefilled GitHub fallback link'
+      );
+      assert.equal(
+        await page.getByTestId('feedback-title-input').inputValue(),
+        'Zoom lag',
+        '503 fallback must preserve typed title draft'
+      );
+      assert.equal(
+        await page.getByTestId('feedback-details-input').inputValue(),
+        'Pinch zoom feels slightly sluggish on older phones.',
+        '503 fallback must preserve typed details draft'
+      );
+
+      // 429 Rate Limit: inline rate-limit notice renders cleanly
+      feedbackMockMode = '429';
+      await page.getByTestId('feedback-submit-btn').click();
+      await page.waitForFunction(
+        () => /wait a minute|too many/i.test(document.querySelector('[data-testid="feedback-status-banner"]')?.textContent || ''),
+        { timeout: 3000 }
+      );
+    } finally {
+      await page.unroute('**/api/feedback');
+      await page.getByTestId('about-open-feedback-btn').click();
+    }
 
     // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

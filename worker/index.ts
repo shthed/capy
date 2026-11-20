@@ -14,6 +14,15 @@ import {
   validateCoopFrame,
 } from './coopRoomProtocol';
 
+import {
+  buildFallbackIssueUrl,
+  buildFeedbackCorsHeaders,
+  buildGitHubIssuePayload,
+  MAX_FEEDBACK_BODY_BYTES,
+  resolveFeedbackRepo,
+  validateFeedbackPayload,
+} from './feedbackProtocol';
+
 interface SocketAttachment {
   roomCode: string;
   boundPlayerId?: string | null;
@@ -69,18 +78,22 @@ function apiJsonResponse(
 async function checkApiRateLimit(
   request: Request,
   env: Env,
-  bucket: string
+  bucket: string,
+  limiterOverride?: RateLimitBinding,
+  extraHeaders?: Record<string, string>
 ): Promise<Response | null> {
-  if (!env.API_RATE_LIMITER) return null;
+  const limiter = limiterOverride ?? env.API_RATE_LIMITER;
+  if (!limiter) return null;
   const clientIp =
     (
       request.headers.get('CF-Connecting-IP') ||
       request.headers.get('X-Forwarded-For')?.split(',')[0] ||
       ''
     ).trim() || 'unknown';
-  const rl = await env.API_RATE_LIMITER.limit({ key: `${bucket}:${clientIp}` });
+  const rl = await limiter.limit({ key: `${bucket}:${clientIp}` });
   if (!rl.success) {
-    return apiJsonResponse({ error: 'Too many requests' }, 429, {
+    return apiJsonResponse({ ok: false, error: 'Too many requests' }, 429, {
+      ...extraHeaders,
       'Retry-After': '60',
     });
   }
@@ -827,6 +840,181 @@ export default {
         const roomStub = env.COOP_ROOMS.get(roomId);
         const roomRes = await roomStub.fetch(request);
         return roomRes.status === 101 ? roomRes : withApiSecurityHeaders(roomRes);
+      }
+
+      if (url.pathname === '/api/feedback') {
+        const origin = request.headers.get('Origin');
+        const allowLocalhost = env.ALLOW_LOCALHOST_ORIGINS === 'true';
+        const originAllowed = isAllowedRelayOrigin(
+          origin,
+          env.ALLOWED_EXTRA_ORIGINS,
+          allowLocalhost
+        );
+        const corsHeaders = buildFeedbackCorsHeaders(
+          origin,
+          env.ALLOWED_EXTRA_ORIGINS,
+          allowLocalhost
+        );
+
+        if (!originAllowed) {
+          console.error(
+            JSON.stringify({
+              event: 'feedback_origin_rejected',
+              origin,
+            })
+          );
+          return apiJsonResponse({ ok: false, error: 'Forbidden origin' }, 403, corsHeaders);
+        }
+
+        if (request.method === 'OPTIONS') {
+          return withApiSecurityHeaders(
+            new Response(null, {
+              status: 204,
+              headers: corsHeaders,
+            })
+          );
+        }
+
+        if (request.method !== 'POST') {
+          return apiJsonResponse({ ok: false, error: 'Method not allowed' }, 405, {
+            ...corsHeaders,
+            Allow: 'POST, OPTIONS',
+          });
+        }
+
+        const rateLimited = await checkApiRateLimit(
+          request,
+          env,
+          'feedback',
+          env.FEEDBACK_RATE_LIMITER ?? env.API_RATE_LIMITER,
+          corsHeaders
+        );
+        if (rateLimited) return rateLimited;
+
+        const contentType = request.headers.get('Content-Type') || '';
+        if (!contentType.toLowerCase().includes('application/json')) {
+          return apiJsonResponse(
+            { ok: false, error: 'Expected application/json content type.' },
+            415,
+            corsHeaders
+          );
+        }
+
+        const rawContentLength = request.headers.get('Content-Length');
+        if (rawContentLength !== null) {
+          const parsedLength = Number(rawContentLength);
+          if (Number.isFinite(parsedLength) && parsedLength > MAX_FEEDBACK_BODY_BYTES) {
+            return apiJsonResponse(
+              {
+                ok: false,
+                error: `Feedback payload exceeds the ${MAX_FEEDBACK_BODY_BYTES}-byte limit.`,
+              },
+              413,
+              corsHeaders
+            );
+          }
+        }
+
+        const rawBody = await request.text();
+        const validation = validateFeedbackPayload(rawBody);
+        if (!validation.ok) {
+          if (validation.honeypot) {
+            return apiJsonResponse({ ok: true, accepted: true }, 202, corsHeaders);
+          }
+          return apiJsonResponse(
+            { ok: false, error: validation.error },
+            validation.status ?? 400,
+            corsHeaders
+          );
+        }
+
+        const repo = resolveFeedbackRepo(env.CAPYBOOP_FEEDBACK_REPO);
+        const fallbackUrl = buildFallbackIssueUrl(validation.payload, repo);
+        const token = env.CAPYBOOP_FEEDBACK_TOKEN?.trim();
+        if (!token) {
+          return apiJsonResponse(
+            {
+              ok: false,
+              code: 'feedback_unconfigured',
+              error:
+                'In-app feedback relay is not configured yet. You can submit directly on GitHub.',
+              fallbackUrl,
+            },
+            503,
+            corsHeaders
+          );
+        }
+
+        const issuePayload = buildGitHubIssuePayload(validation.payload);
+        try {
+          const ghRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'Capy-Paint-Feedback-Relay',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(issuePayload),
+          });
+
+          if (!ghRes.ok) {
+            console.error(
+              JSON.stringify({
+                event: 'feedback_github_error',
+                status: ghRes.status,
+              })
+            );
+            return apiJsonResponse(
+              {
+                ok: false,
+                code: 'upstream_error',
+                error:
+                  'Could not reach GitHub right now. Please try again or use the GitHub link.',
+                fallbackUrl,
+              },
+              502,
+              corsHeaders
+            );
+          }
+
+          const created = await ghRes.json<{ number?: number; html_url?: string }>();
+          const issueNumber = typeof created?.number === 'number' ? created.number : undefined;
+          const issueUrl =
+            typeof created?.html_url === 'string' && created.html_url.startsWith('https://')
+              ? created.html_url
+              : `https://github.com/${repo}/issues`;
+
+          return apiJsonResponse(
+            {
+              ok: true,
+              issueNumber,
+              issueUrl,
+            },
+            201,
+            corsHeaders
+          );
+        } catch (ghErr) {
+          console.error(
+            JSON.stringify({
+              event: 'feedback_github_error',
+              status: 'network_exception',
+              message: ghErr instanceof Error ? ghErr.name : 'unknown',
+            })
+          );
+          return apiJsonResponse(
+            {
+              ok: false,
+              code: 'upstream_error',
+              error:
+                'Could not reach GitHub right now. Please try again or use the GitHub link.',
+              fallbackUrl,
+            },
+            502,
+            corsHeaders
+          );
+        }
       }
 
       if (url.pathname.startsWith('/api/')) {
