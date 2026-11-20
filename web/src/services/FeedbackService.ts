@@ -43,6 +43,7 @@ export const FEEDBACK_MIN_TITLE_CHARS = 3;
 export const FEEDBACK_MAX_TITLE_CHARS = 120;
 export const FEEDBACK_MIN_DETAILS_CHARS = 10;
 export const FEEDBACK_MAX_DETAILS_CHARS = 2000;
+export const FEEDBACK_MAX_FALLBACK_URL_CHARS = 4000;
 export const PUBLIC_ISSUES_URL = 'https://github.com/capyboop/paint/issues';
 export const CANONICAL_FEEDBACK_API_URL = 'https://capypaint.com/api/feedback';
 
@@ -143,34 +144,106 @@ export function resolveFeedbackApiUrl(
   return CANONICAL_FEEDBACK_API_URL;
 }
 
+function sliceWithoutBrokenSurrogate(text: string, maxUnits: number): string {
+  if (text.length <= maxUnits) return text;
+  const sliced = text.slice(0, maxUnits);
+  const lastCode = sliced.charCodeAt(sliced.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    return sliced.slice(0, -1);
+  }
+  return sliced;
+}
+
 export function buildGitHubIssueFallbackUrl(
   draft: Partial<FeedbackDraft>,
   context?: FeedbackContext
 ): string {
   const category: FeedbackCategory =
-    draft.category && draft.category in CATEGORY_CONFIG ? draft.category : 'general';
+    typeof draft.category === 'string' &&
+    Object.prototype.hasOwnProperty.call(CATEGORY_CONFIG, draft.category)
+      ? (draft.category as FeedbackCategory)
+      : 'general';
   const cfg = CATEGORY_CONFIG[category];
 
-  const params = new URLSearchParams();
-  if (cfg.template) {
-    params.set('template', cfg.template);
-  }
-  const trimmedTitle = (draft.title || '').trim().slice(0, FEEDBACK_MAX_TITLE_CHARS);
-  if (trimmedTitle) {
-    params.set('title', `${cfg.prefix}: ${trimmedTitle}`);
-  }
-  const trimmedDetails = (draft.details || '').trim().slice(0, 1200);
+  const assembleUrl = (titleValue: string, bodyValue: string): string => {
+    const params = new URLSearchParams();
+    if (cfg.template) {
+      params.set('template', cfg.template);
+    }
+    if (titleValue) {
+      params.set('title', `${cfg.prefix}: ${titleValue}`);
+    }
+    if (bodyValue) {
+      params.set('body', bodyValue);
+    }
+    const query = params.toString();
+    return query ? `${PUBLIC_ISSUES_URL}/new?${query}` : `${PUBLIC_ISSUES_URL}/new/choose`;
+  };
+
+  let effectiveTitle = sliceWithoutBrokenSurrogate((draft.title || '').trim(), FEEDBACK_MAX_TITLE_CHARS);
+  const trimmedDetails = sliceWithoutBrokenSurrogate((draft.details || '').trim(), 1200);
+
+  let suffix = '';
   if (trimmedDetails) {
     const metaParts: string[] = [];
     if (context?.appVersion) metaParts.push(`Version: ${context.appVersion}`);
     if (context?.channel) metaParts.push(`Channel: ${context.channel}`);
     if (context?.platform) metaParts.push(`Platform: ${context.platform}`);
-    const suffix = metaParts.length > 0 ? `\n\n---\n${metaParts.join(' | ')}` : '';
-    params.set('body', `${trimmedDetails}${suffix}`);
+    suffix = metaParts.length > 0 ? `\n\n---\n${metaParts.join(' | ')}` : '';
   }
 
-  const query = params.toString();
-  return query ? `${PUBLIC_ISSUES_URL}/new?${query}` : `${PUBLIC_ISSUES_URL}/new/choose`;
+  const initialBody = trimmedDetails ? `${trimmedDetails}${suffix}` : '';
+  const initialUrl = assembleUrl(effectiveTitle, initialBody);
+  if (initialUrl.length <= FEEDBACK_MAX_FALLBACK_URL_CHARS) {
+    return initialUrl;
+  }
+
+  // Ensure the title itself fits within the URL cap before fitting details
+  if (effectiveTitle && assembleUrl(effectiveTitle, '').length > FEEDBACK_MAX_FALLBACK_URL_CHARS) {
+    const titleChars = Array.from(effectiveTitle);
+    let lo = 0;
+    let hi = titleChars.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      const candidate = titleChars.slice(0, mid).join('');
+      if (assembleUrl(candidate, '').length <= FEEDBACK_MAX_FALLBACK_URL_CHARS) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    effectiveTitle = titleChars.slice(0, lo).join('');
+  }
+
+  if (!trimmedDetails) {
+    return assembleUrl(effectiveTitle, '');
+  }
+
+  const detailChars = Array.from(trimmedDetails);
+  let lo = 0;
+  let hi = detailChars.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const candidateDetails =
+      mid < detailChars.length ? `${detailChars.slice(0, mid).join('')}...` : trimmedDetails;
+    if (assembleUrl(effectiveTitle, `${candidateDetails}${suffix}`).length <= FEEDBACK_MAX_FALLBACK_URL_CHARS) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  if (lo > 0) {
+    const finalDetails =
+      lo < detailChars.length ? `${detailChars.slice(0, lo).join('')}...` : trimmedDetails;
+    return assembleUrl(effectiveTitle, `${finalDetails}${suffix}`);
+  }
+
+  const suffixOnlyUrl = suffix ? assembleUrl(effectiveTitle, suffix.trimStart()) : '';
+  if (suffixOnlyUrl && suffixOnlyUrl.length <= FEEDBACK_MAX_FALLBACK_URL_CHARS) {
+    return suffixOnlyUrl;
+  }
+  return assembleUrl(effectiveTitle, '');
 }
 
 export function validateFeedbackDraft(

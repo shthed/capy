@@ -3355,10 +3355,63 @@ async function runCodecAndEngineTests() {
       );
       assert.equal(validResult.ok, true, 'Valid feedback payload must pass validation');
       assert.equal(validResult.payload.category, 'puzzle_idea');
-      assert.equal(validResult.payload.title.includes('@admin'), true);
-      assert.equal(validResult.payload.title.includes('`@admin`'), true, 'Title must neutralize @mentions');
+      assert.equal(validResult.payload.title.includes('@admin'), false, 'Title must not contain raw @admin mention');
+      assert.equal(
+        validResult.payload.title.includes('@\u200Badmin'),
+        true,
+        'Title must neutralize @mentions with zero-width space'
+      );
       assert.equal(validResult.payload.details.includes('```'), false, 'Details must sanitize triple backticks');
-      assert.equal(validResult.payload.details.includes('`@everyone`'), true, 'Details must neutralize @mentions');
+      assert.equal(
+        validResult.payload.details.includes('@everyone'),
+        false,
+        'Details must not contain raw @everyone mention'
+      );
+      assert.equal(
+        validResult.payload.details.includes('@\u200Beveryone'),
+        true,
+        'Details must neutralize @mentions with zero-width space'
+      );
+
+      // Adversarial @mention bypasses + email preservation
+      for (const adversarialMention of [
+        '**@shthed**',
+        '>@shthed',
+        '"@shthed"',
+        '[@shthed]',
+        ',@shthed',
+        ':@shthed',
+        '/@shthed',
+        '`@shthed',
+      ]) {
+        const sanitized = feedbackProtoMod.sanitizeFeedbackText(adversarialMention, true);
+        assert.equal(
+          sanitized.includes('@shthed'),
+          false,
+          `Adversarial mention ${adversarialMention} must be neutralized (got ${sanitized})`
+        );
+        assert.equal(
+          sanitized.includes('@\u200Bshthed'),
+          true,
+          `Adversarial mention ${adversarialMention} must insert zero-width space (got ${sanitized})`
+        );
+      }
+      assert.equal(
+        feedbackProtoMod.sanitizeFeedbackText('Contact a@b.com or foo.bar@example.com for help', true),
+        'Contact a@b.com or foo.bar@example.com for help',
+        'Email addresses must be preserved untouched'
+      );
+
+      // resolveFeedbackRepo path traversal protection
+      for (const badRepo of ['../..', '../evil', 'evil/..', './.', 'foo/.', './bar', '-bad/repo', 'a/b/c']) {
+        assert.equal(
+          feedbackProtoMod.resolveFeedbackRepo(badRepo),
+          'capyboop/paint',
+          `Invalid/traversal repo "${badRepo}" must fall back to capyboop/paint`
+        );
+      }
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('capyboop/paint'), 'capyboop/paint');
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('shthed/capy'), 'shthed/capy');
 
       const issuePayload = feedbackProtoMod.buildGitHubIssuePayload(validResult.payload);
       assert.equal(issuePayload.title.startsWith('[Puzzle Idea]: '), true);
@@ -3427,7 +3480,7 @@ async function runCodecAndEngineTests() {
       assert.equal(oversized.ok, false);
       assert.equal(oversized.status, 413, 'Payload > 8192 bytes must return status 413');
 
-      // CORS allow/deny including paint.capyboop.com
+      // CORS allow/deny including paint.capyboop.com and path-suffixed origin rejection
       const capyCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://capypaint.com', undefined, false);
       assert.equal(capyCors['Access-Control-Allow-Origin'], 'https://capypaint.com');
       const paintBoopCors = feedbackProtoMod.buildFeedbackCorsHeaders(
@@ -3444,6 +3497,43 @@ async function runCodecAndEngineTests() {
       assert.equal(androidCors['Access-Control-Allow-Origin'], 'https://appassets.androidplatform.net');
       const evilCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://evil.example', undefined, false);
       assert.equal(evilCors['Access-Control-Allow-Origin'], undefined, 'Disallowed origin must not receive ACAO');
+      const pathSuffixedCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://capypaint.com/evil',
+        undefined,
+        false
+      );
+      assert.equal(
+        pathSuffixedCors['Access-Control-Allow-Origin'],
+        undefined,
+        'Path-suffixed origin must not receive ACAO'
+      );
+
+      // Worker buildFallbackIssueUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const workerCjkFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'bug',
+        title: '漢'.repeat(120),
+        details: '漢'.repeat(1200),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerCjkFallback.length <= 4000,
+        true,
+        `Worker CJK fallback URL must be <= 4000 chars (got ${workerCjkFallback.length})`
+      );
+      assert.equal(workerCjkFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      const workerEmojiFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'feature',
+        title: '😀'.repeat(60),
+        details: '😀'.repeat(600),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerEmojiFallback.length <= 4000,
+        true,
+        `Worker emoji fallback URL must be <= 4000 chars (got ${workerEmojiFallback.length})`
+      );
+      assert.equal(workerEmojiFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
 
       // FeedbackService URL resolution & fallback URL
       assert.equal(
@@ -3486,6 +3576,41 @@ async function runCodecAndEngineTests() {
       assert.equal(fallbackUrl.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
       assert.equal(fallbackUrl.includes('template=bug_report.yml'), true);
       assert.equal(fallbackUrl.includes('Zoom+stutter'), true);
+
+      // Client buildGitHubIssueFallbackUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const clientCjkFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: '漢'.repeat(120), details: '漢'.repeat(1200) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientCjkFallback.length <= 4000,
+        true,
+        `Client CJK fallback URL must be <= 4000 chars (got ${clientCjkFallback.length})`
+      );
+      const clientEmojiFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'feature', title: '😀'.repeat(60), details: '😀'.repeat(600) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientEmojiFallback.length <= 4000,
+        true,
+        `Client emoji fallback URL must be <= 4000 chars (got ${clientEmojiFallback.length})`
+      );
+
+      // Prototype-key category lookup falls back safely to 'general' ([Feedback])
+      for (const protoCat of ['toString', 'constructor', '__proto__']) {
+        const protoFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl({
+          category: protoCat,
+          title: 'Proto test',
+          details: 'Prototype lookup should safely fall back to general.',
+        });
+        const parsedProto = new URL(protoFallback);
+        assert.equal(
+          parsedProto.searchParams.get('title'),
+          '[Feedback]: Proto test',
+          `Prototype category "${protoCat}" must fall back to general [Feedback] prefix`
+        );
+      }
     }
 
     logUnitPass('ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService verified.');
