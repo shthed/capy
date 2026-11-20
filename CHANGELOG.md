@@ -1,6 +1,6 @@
 ### 3.0.45 - 2026-11-20 (Alpha)
 
-- Implement anonymous in-game feedback (`capyboop/paint#3`): add `FEEDBACK_RATE_LIMITER` (`5` req / `60s`) in `wrangler.jsonc`, pure-TS `worker/feedbackProtocol.ts` validation/sanitization/CORS/GitHub issue formatting, rate-limited `POST` / `OPTIONS /api/feedback` relay in `worker/index.ts` with `CAPYBOOP_FEEDBACK_TOKEN` and graceful `503` prefilled fallback, `web/src/services/FeedbackService.ts`, a collapsible mobile-first Anonymous Feedback card in `SettingsModal.tsx` Tab 0 (preserving `about-report-issue-link`), unit and Playwright E2E tests in `web/scripts/test.mjs`, and docs in `CLOUD.md` and `WEB.md`
+- Implement anonymous in-game feedback (`capyboop/paint#3`): add `FEEDBACK_RATE_LIMITER` (`5` req / `60s`) in `wrangler.jsonc`, pure-TS `worker/feedbackProtocol.ts` validation/sanitization/CORS/GitHub issue formatting, rate-limited `POST` / `OPTIONS /api/feedback` relay in `worker/index.ts` with `CAPYBOOP_FEEDBACK_TOKEN` and graceful `503` prefilled fallback, `web/src/services/FeedbackService.ts`, a collapsible mobile-first Anonymous Feedback card in `SettingsModal.tsx` Tab 0 (preserving `about-report-issue-link`), unit and Playwright E2E tests in `web/scripts/test.mjs`, and docs in `CLOUD.md` and `WEB.md` [#603](https://github.com/shthed/capy/pull/603)
 
 ### 3.0.44 - 2026-11-20 (Beta)
 
