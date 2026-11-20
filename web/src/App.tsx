@@ -36,9 +36,13 @@ import {
   ProgressDeltaV2,
 } from './services/CapyCodec';
 import {
+  AutoCloudSyncScheduler,
+  createAutoCloudSyncScheduler,
   createCoalescedSyncController,
   isManifestCloudSnapshotSlot,
 } from './services/cloudSyncCoordinator';
+import { handlePotentialWebOAuthPopupCallback } from './services/providers/OAuthPkceHelper';
+import { CloudSyncLiveStatus } from './components/CloudAccountCard';
 import {
   resolveSafeSampleAssetPath,
   resolveSafeSnapshotPreviewUrl,
@@ -4735,6 +4739,11 @@ export const App: React.FC = () => {
   const cloudSyncControllerRef = useRef<ReturnType<
     typeof createCoalescedSyncController<CloudSyncUiSummary>
   > | null>(null);
+  const autoCloudSyncSchedulerRef = useRef<AutoCloudSyncScheduler | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncLiveStatus>(() =>
+    typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'idle'
+  );
+  const [lastCloudSyncError, setLastCloudSyncError] = useState<string | null>(null);
 
   const handleSyncCloudProgress = useCallback(async (): Promise<CloudSyncUiSummary | null> => {
     const controller =
@@ -5001,7 +5010,32 @@ export const App: React.FC = () => {
       };
     };
 
-    return controller.run(executeSingleSyncPass);
+    setCloudSyncStatus('syncing');
+    setLastCloudSyncError(null);
+    try {
+      const result = await controller.run(executeSingleSyncPass);
+      if (result) {
+        autoCloudSyncSchedulerRef.current?.markSynced(result.syncedAt);
+        setCloudSyncStatus('synced');
+      } else {
+        setCloudSyncStatus(
+          typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'idle'
+        );
+      }
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to reach cloud storage.';
+      setLastCloudSyncError(msg);
+      setCloudSyncStatus(
+        typeof navigator !== 'undefined' && navigator.onLine === false ? 'offline' : 'error'
+      );
+      throw err;
+    }
+  }, []);
+
+  // Forward Web OAuth PKCE popup callbacks immediately if this window is an OAuth redirect popup
+  useEffect(() => {
+    handlePotentialWebOAuthPopupCallback();
   }, []);
 
   // Automatically sync when Android Play Games SnapshotsClient delivers a non-blob remote cloud snapshot
@@ -5015,7 +5049,76 @@ export const App: React.FC = () => {
     );
   }, [showCloudCoopUi, handleSyncCloudProgress]);
 
-  // Automatically attempt Google / Play Games sign-in on startup and sync saves once puzzle is ready
+  // Automatic background cross-device BYOC cloud sync:
+  // - Debounced push (15s) after local paint/save mutations
+  // - Pull + merge on tab visibilitychange -> visible when stale (> 30s)
+  // - Reconnect sync on window `online` event
+  useEffect(() => {
+    if (!showCloudCoopUi) {
+      autoCloudSyncSchedulerRef.current?.dispose();
+      autoCloudSyncSchedulerRef.current = null;
+      return;
+    }
+
+    let isOnline = typeof navigator === 'undefined' || navigator.onLine !== false;
+    const scheduler = createAutoCloudSyncScheduler({
+      sync: () => handleSyncCloudProgress(),
+      canSync: () => {
+        if (!isOnline) return false;
+        const id = ProviderRegistry.auth.getCurrentIdentity();
+        return id.isAuthenticated && ProviderRegistry.auth.hasActiveCloudToken();
+      },
+      debounceMs: 15_000,
+      staleVisibilityMs: 30_000,
+    });
+    autoCloudSyncSchedulerRef.current = scheduler;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        scheduler.notifyVisibilityVisible();
+      }
+    };
+    const handleOnline = () => {
+      isOnline = true;
+      setCloudSyncStatus((prev) => (prev === 'offline' ? 'idle' : prev));
+      scheduler.notifyOnline();
+    };
+    const handleOffline = () => {
+      isOnline = false;
+      setCloudSyncStatus('offline');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      scheduler.dispose();
+      if (autoCloudSyncSchedulerRef.current === scheduler) {
+        autoCloudSyncSchedulerRef.current = null;
+      }
+    };
+  }, [showCloudCoopUi, handleSyncCloudProgress]);
+
+  // Notify debounced auto-sync scheduler whenever local puzzle progress mutates
+  const lastAutoSyncProgressKeyRef = useRef<string>('');
+  useEffect(() => {
+    if (!showCloudCoopUi || isLoading || !activeSnapshotId) return;
+    const progressKey = `${activeSnapshotId}:${filledRegionIds.size}:${paintedRegionColors.size}`;
+    if (!lastAutoSyncProgressKeyRef.current) {
+      lastAutoSyncProgressKeyRef.current = progressKey;
+      return;
+    }
+    if (lastAutoSyncProgressKeyRef.current !== progressKey) {
+      lastAutoSyncProgressKeyRef.current = progressKey;
+      autoCloudSyncSchedulerRef.current?.notifyLocalMutation();
+    }
+  }, [showCloudCoopUi, isLoading, activeSnapshotId, filledRegionIds.size, paintedRegionColors.size]);
+
+  // Automatically attempt Google / Play Games / Microsoft / Apple sign-in on startup and sync saves once puzzle is ready
   const hasAttemptedStartupSignInRef = useRef(false);
   const lastAutoSyncedPlayerIdRef = useRef<string | null>(null);
 
@@ -6112,6 +6215,8 @@ export const App: React.FC = () => {
           onShareProgressLink={handleShareProgressLink}
           onCopyCoopInviteLink={handleCopyCoopInviteLink}
           onSyncCloudProgress={handleSyncCloudProgress}
+          cloudSyncStatus={cloudSyncStatus}
+          lastCloudSyncError={lastCloudSyncError}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
           onTabOpened={(tabId) => {

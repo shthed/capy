@@ -163,7 +163,8 @@ flowchart TD
    - Add test accounts under **Audience -> Test users** while in Testing mode, or click **Publish App** for public Google sign-in.
 4. **Create the Web OAuth 2.0 Client ID**:
    - Navigate to **APIs & Services -> Credentials -> + Create Credentials -> OAuth client ID** (`Web application`).
-   - Add **Authorized JavaScript origins**: `https://capypaint.com`, `https://www.capypaint.com`, `https://shthed.github.io`, `http://localhost:3000`, and `http://localhost:4173`.
+   - Add **Authorized JavaScript origins**: `https://capypaint.com`, `https://www.capypaint.com`, `https://paint.capyboop.com`, `https://shthed.github.io`, `http://localhost:3000`, and `http://localhost:4173`.
+   - For Android cross-device Google Drive PKCE sync (`capypaint://oauth/callback`), register an Android/PKCE redirect URI matching `capypaint://oauth/callback`.
    - Copy the generated Client ID (`1234567890-xxxxxxxx.apps.googleusercontent.com`).
 5. **Save `VITE_GOOGLE_CLIENT_ID` in GitHub Repository Variables**:
    - Open `https://github.com/shthed/capy/settings/variables/actions` (**Settings -> Secrets and variables -> Actions -> Variables**) and create `VITE_GOOGLE_CLIENT_ID` (or set it in `web/.env.local` for local dev).
@@ -175,9 +176,39 @@ flowchart TD
 2. **Register Android Signing Certificate SHA-1 Fingerprints**:
    - Under **Credentials -> Add credential** (`Android`, `com.capyboop.paint`), register the SHA-1 fingerprint for both your debug/upload keystore and your Play App Signing certificate.
 3. **Save `CAPY_PLAY_GAMES_APP_ID` in GitHub Repository Variables**:
-   - Add `CAPY_PLAY_GAMES_APP_ID` (`<your-12-digit-play-games-app-id>`) in `https://github.com/shthed/capy/settings/variables/actions`. [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml), [`release.yml`](./.github/workflows/release.yml), and [`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml) automatically inject `${{ vars.VITE_GOOGLE_CLIENT_ID }}`, `${{ vars.CAPY_PLAY_GAMES_APP_ID }}`, and `${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}` into Web and Android builds (auto-hiding Web `Google Login` cleanly when `VITE_GOOGLE_CLIENT_ID` is unset).
+   - Add `CAPY_PLAY_GAMES_APP_ID` (`<your-12-digit-play-games-app-id>`) in `https://github.com/shthed/capy/settings/variables/actions`. [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml), [`release.yml`](./.github/workflows/release.yml), and [`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml) automatically inject `${{ vars.VITE_GOOGLE_CLIENT_ID }}`, `${{ vars.VITE_MICROSOFT_CLIENT_ID }}`, `${{ vars.VITE_APPLE_CLIENT_ID }}`, `${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}`, `${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}`, `${{ vars.CAPY_PLAY_GAMES_APP_ID }}`, and `${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}` into Web and Android builds (auto-hiding unconfigured provider login buttons cleanly in `CloudAccountCard.tsx`).
 4. **Android App Links (`CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`) on `capypaint.com`**:
    - Cloudflare Workers Static Assets serves `dist/.well-known/assetlinks.json` at `https://capypaint.com/.well-known/assetlinks.json` (`web/public/.well-known/assetlinks.json` defaults to `"sha256_cert_fingerprints": []`). Add `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` (your Google Play App Signing SHA-256 certificate fingerprint) in GitHub Repository Variables so [`web/vite.config.ts`](./web/vite.config.ts) stamps `assetlinks.json` and [`app/build.gradle.kts`](./app/build.gradle.kts) (`CapyAndroidBridge.isAppLinksCertConfigured`) enables `android:autoVerify="true"` automatically.
+
+### Part C: Microsoft OneDrive `AppFolder` BYOC Sync (`VITE_MICROSOFT_CLIENT_ID`, `$0` Backend Cost)
+1. **Create an App Registration in Microsoft Entra ID (Azure Portal, Free)**:
+   - Open `https://portal.azure.com/` -> **Microsoft Entra ID -> App registrations -> New registration**.
+   - Set **Supported account types** to **Personal Microsoft accounts only** (or **Accounts in any organizational directory and personal Microsoft accounts**).
+2. **Configure SPA Redirect URIs (Zero Client Secret / PKCE `S256`)**:
+   - Under **Authentication -> Add a platform -> Single-page application (SPA)**, add:
+     - `https://capypaint.com/`
+     - `https://paint.capyboop.com/`
+     - `https://shthed.github.io/capy/`
+     - `http://localhost:3000/`
+   - Under **Mobile and desktop applications**, add `capypaint://oauth/callback` for Android external-browser PKCE sync.
+3. **Grant Delegated Microsoft Graph Permissions**:
+   - Under **API permissions -> Microsoft Graph -> Delegated permissions**, add `openid`, `profile`, `email`, `User.Read`, and `Files.ReadWrite.AppFolder`.
+4. **Save `VITE_MICROSOFT_CLIENT_ID` in GitHub Repository Variables**:
+   - Copy the **Application (client) ID** and save it as `VITE_MICROSOFT_CLIENT_ID` in `https://github.com/shthed/capy/settings/variables/actions`.
+
+### Part D: Apple Sign-In + CloudKit `privateCloudDatabase` BYOC Sync (`VITE_APPLE_*`, `$0` Backend Cost)
+1. **Register a Services ID in Apple Developer Console**:
+   - Open `https://developer.apple.com/account/resources/identifiers/list/serviceId` and create a **Services ID** with **Sign in with Apple** enabled.
+   - Add Domains: `capypaint.com` and `paint.capyboop.com`; add Return URLs: `https://capypaint.com/` and `https://paint.capyboop.com/`.
+2. **Configure CloudKit Container & JS API Token**:
+   - Open `https://icloud.developer.apple.com/dashboard/`, create a container (for example, `iCloud.com.capyboop.paint`), define record type `CapyCloudSaveRecord` (`payload` String, `updatedAt` Int64) in the **Private Database**, and generate a **CloudKit JS API Token**.
+3. **Save `VITE_APPLE_*` in GitHub Repository Variables**:
+   - Add `VITE_APPLE_CLIENT_ID`, `VITE_APPLE_CLOUDKIT_CONTAINER`, and `VITE_APPLE_CLOUDKIT_API_TOKEN` in `https://github.com/shthed/capy/settings/variables/actions`.
+
+### Part E: Automatic Background Cross-Device Sync (`createAutoCloudSyncScheduler`)
+- Capy Paint remains **100% serverless Bring-Your-Own-Cloud (BYOC)** with **zero** central Cloudflare Durable Object / D1 / KV save database so it scales to millions of players at `$0` backend cost.
+- [`createAutoCloudSyncScheduler`](./web/src/services/cloudSyncCoordinator.ts) wired in [`App.tsx`](./web/src/App.tsx) automatically pushes local paint/save mutations after a `15s` debounce, pulls + merges on `visibilitychange -> visible` when stale (`> 30s`), and syncs immediately on `window` `online` reconnect—all funneled through `createCoalescedSyncController` and strictly no-op when unauthenticated or offline.
+- Accountless fallback (`< 2 KB` `#s=` progress links and `.capy` v2 binary export/import) remains always available without signing in.
 
 ---
 
