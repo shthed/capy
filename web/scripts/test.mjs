@@ -2500,6 +2500,40 @@ async function runCodecAndEngineTests() {
         'Zoomed-out 0.25x cap (64px) must NOT reach region 65px away (86 - 21 = 65)'
       );
 
+      // Free Colour Mode direct-hit repaint: tapping already-filled region 1 near unfilled neighbor 2 must return 1 (not snap to 2)
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          filledRegionIds: new Set([1]),
+          canvasX: 20.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+          isFreeColorMode: true,
+        }),
+        1,
+        'Free Colour Mode direct hit on already-filled region 1 must return 1 for repaint instead of snapping to adjacent unfilled neighbor 2'
+      );
+
+      // Free Colour Mode border miss: tapping border pixel (exactId=0) must still snap to nearest unfilled region
+      assert.equal(
+        canvasMod.resolveNearTapRegionId({
+          ...baseParams,
+          filledRegionIds: new Set([1]),
+          canvasX: 23.5,
+          canvasY: 20.5,
+          difficulty: 'NORMAL',
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          totalScreenScale: 1.0,
+          isFreeColorMode: true,
+        }),
+        2,
+        'Free Colour Mode border miss (exactId=0) must still snap to nearest unfilled region 2'
+      );
+
       // Zero-allocation verification: no Set/Map/Array allocations inside resolveNearTapRegionId
       const fnSource = canvasMod.resolveNearTapRegionId.toString();
       assert.equal(
@@ -9190,14 +9224,23 @@ async function runCodecAndEngineTests() {
       assert.equal(loadedNormalHue.fatFingerAssist, false);
       assert.equal(loadedNormalHue.touchReachRadiusPx, 34);
 
-      // Verify [8, 40] clamping and absent fatFingerAssist fallback to resolvedDifficulty === 'EASY'
+      // Verify [8, 40] clamping and absent fatFingerAssist fallback to DEFAULT_SETTINGS.fatFingerAssist (true) across both NORMAL & EASY
       mockStorage.set(
         'capy_user_settings_v8',
         JSON.stringify({ difficulty: 'NORMAL', touchReachRadiusPx: 99 })
       );
       const clampedHighNormal = storageMod.StorageService.loadSettings();
       assert.equal(clampedHighNormal.touchReachRadiusPx, 40);
-      assert.equal(clampedHighNormal.fatFingerAssist, false);
+      assert.equal(clampedHighNormal.fatFingerAssist, true);
+
+      // Verify explicit fatFingerAssist: false opt-out is preserved across reloads in NORMAL mode
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ difficulty: 'NORMAL', fatFingerAssist: false })
+      );
+      const explicitOptOutNormal = storageMod.StorageService.loadSettings();
+      assert.equal(explicitOptOutNormal.difficulty, 'NORMAL');
+      assert.equal(explicitOptOutNormal.fatFingerAssist, false);
 
       mockStorage.set(
         'capy_user_settings_v8',
@@ -12166,7 +12209,7 @@ async function runBrowserBasicsSuite() {
     const page = await context.newPage();
     attachErrorListeners(page, 'main');
 
-    const e2eTotal = 21;
+    const e2eTotal = 22;
     const padE2e = (n) => String(n).padStart(2, '0');
     let e2eStep = 0;
     const logE2eStart = (label) => {
@@ -17591,6 +17634,541 @@ async function runBrowserBasicsSuite() {
     await syncRacePage.close();
     await syncRaceContext.close();
     logE2ePass('IndexedDB preview offload, storage quota toast & async cloud sync stroke preservation verified.');
+
+    // -------------------------------------------------------------------------
+    // 22. Large Text Button Scaling (360x780 / 412x915 / 1280x720), Fat-Finger Coupling & #602 Regression Fixes
+    // -------------------------------------------------------------------------
+    logE2eStart('Verifying Large Text full UI button scaling (360x780, 412x915, 1280x720), Fat-Finger coupling & Paint/Free-Colour fixes...');
+
+    // 22a. 360x780 Mobile: Normal vs Large Text button dimensions, 5-button Co-op containment, Replay wrap/stacking, Palette centering, Settings & ColorPicker
+    const ltMobileCtx = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await ltMobileCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+    });
+    const ltMobilePage = await ltMobileCtx.newPage();
+    attachErrorListeners(ltMobilePage, 'ltMobilePage');
+    await ltMobilePage.goto(`${BASE_URL}/?capy_channel=alpha&capy_pr=520&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(ltMobilePage);
+
+    const normalMobileBoxes = {
+      settingsBtn: await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
+      previewBtn: await ltMobilePage.getByTestId('topbar-preview-btn').boundingBox(),
+      savesBtn: await ltMobilePage.getByTestId('topbar-saves-btn').boundingBox(),
+      paintBtn: await ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+      undoBtn: await ltMobilePage.getByTestId('undo-btn').boundingBox(),
+      swatch1: await ltMobilePage.getByTestId('palette-swatch-1').boundingBox(),
+      swatch1FontPx: await ltMobilePage
+        .getByTestId('palette-swatch-1')
+        .locator('span')
+        .first()
+        .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    };
+    assert.ok(
+      normalMobileBoxes.settingsBtn &&
+        normalMobileBoxes.previewBtn &&
+        normalMobileBoxes.savesBtn &&
+        normalMobileBoxes.paintBtn &&
+        normalMobileBoxes.undoBtn &&
+        normalMobileBoxes.swatch1
+    );
+
+    // Open SettingsModal, verify normal switch size, test Fat-Finger preset auto-enable & Large Text coupling
+    await ltMobilePage.getByTestId('topbar-settings-btn').click();
+    await ltMobilePage.getByTestId('settings-tab-settings').click();
+    const ltSwitch = ltMobilePage.getByTestId('setting-large-text');
+    const ffSwitch = ltMobilePage.getByTestId('setting-fat-finger-assist');
+    await ltSwitch.waitFor({ state: 'visible', timeout: 5000 });
+    const normalSwitchBox = await ltSwitch.boundingBox();
+    const normalCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
+    assert.ok(normalSwitchBox && normalCloseBox);
+
+    // Verify default fatFingerAssist is enabled on fresh load, then turn OFF to verify dim + preset auto-enable
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'true', 'Fresh install must default fatFingerAssist to true');
+    await ffSwitch.click();
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'false');
+    const reachControlsDimmed = await ltMobilePage
+      .getByTestId('setting-touch-reach-controls')
+      .evaluate((el) => el.classList.contains('opacity-50'));
+    assert.equal(reachControlsDimmed, true, 'Reach radius controls must be visually dimmed when fatFingerAssist is off');
+
+    // Clicking a preset while fatFingerAssist is OFF must auto-enable fatFingerAssist
+    await ltMobilePage.getByTestId('setting-touch-reach-preset-34').click();
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'true', 'Clicking a reach preset must auto-enable fatFingerAssist');
+    assert.equal(await ltMobilePage.getByTestId('setting-touch-reach-radius').inputValue(), '34');
+
+    // Set saved radius to 22px, turn fatFingerAssist OFF, then toggle Large Text ON -> must enable fatFingerAssist & show 34px Large UI boost
+    await ltMobilePage.getByTestId('setting-touch-reach-preset-22').click();
+    await ffSwitch.click();
+    assert.equal(await ffSwitch.getAttribute('aria-checked'), 'false');
+    await ltSwitch.click();
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+    assert.equal(
+      await ffSwitch.getAttribute('aria-checked'),
+      'true',
+      'Enabling Large Text in SettingsModal must also enable fatFingerAssist'
+    );
+    const largeUiReachLabel = await ltMobilePage.getByTestId('setting-touch-reach-value').innerText();
+    assert.equal(
+      largeUiReachLabel.includes('34px') && largeUiReachLabel.includes('Large UI'),
+      true,
+      `Expected effective 34px Large UI reach label while saved radius is 22px (got '${largeUiReachLabel}')`
+    );
+    assert.equal(
+      await ltMobilePage.getByTestId('setting-touch-reach-radius').inputValue(),
+      '22',
+      'Large Text effective reach boost must not mutate saved touchReachRadiusPx slider value'
+    );
+
+    // Measure enlarged SettingsModal controls & verify tabs zero-overflow at 360x780
+    const largeSwitchBox = await ltSwitch.boundingBox();
+    const largeFfSwitchBox = await ffSwitch.boundingBox();
+    const largeCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
+    assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox);
+    assert.equal(
+      largeSwitchBox.width >= 50 && largeSwitchBox.height >= 28 && largeSwitchBox.width > normalSwitchBox.width,
+      true,
+      `Large Text switch must enlarge to ~52x30px (normal=${JSON.stringify(normalSwitchBox)}, large=${JSON.stringify(largeSwitchBox)})`
+    );
+    assert.equal(
+      largeFfSwitchBox.width >= 50 && largeFfSwitchBox.height >= 28,
+      true,
+      `Fat-Finger switch must enlarge to ~52x30px (got ${JSON.stringify(largeFfSwitchBox)})`
+    );
+    assert.equal(
+      largeCloseBox.width >= 40 && largeCloseBox.height >= 40 && largeCloseBox.width > normalCloseBox.width,
+      true,
+      `Settings close button must enlarge to >=40px (got ${JSON.stringify(largeCloseBox)})`
+    );
+
+    const ltTabsContainer = ltMobilePage.getByTestId('settings-modal-tabs');
+    const ltTabsOverflow = await ltTabsContainer.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.equal(
+      ltTabsOverflow.scrollWidth <= ltTabsOverflow.clientWidth,
+      true,
+      `Large Text SettingsModal tabs must not overflow at 360x780 (${JSON.stringify(ltTabsOverflow)})`
+    );
+    const ltTabsBox = await ltTabsContainer.boundingBox();
+    assert.ok(ltTabsBox);
+    for (const tabKey of ['about', 'settings', 'hints', 'create', 'saves']) {
+      const tb = await ltMobilePage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
+      assert.ok(tb);
+      assert.equal(
+        tb.x >= ltTabsBox.x - 1 && tb.x + tb.width <= largeCloseBox.x + 1,
+        true,
+        `Large Text settings-tab-${tabKey} (${tb.x}..${tb.x + tb.width}) must fit inside tabsBox (${ltTabsBox.x}) left of close (${largeCloseBox.x})`
+      );
+    }
+
+    // Check Tab 0 action button height (>=44px) and Tab 3 (i) hint icon button size (>=32px)
+    await ltMobilePage.getByTestId('settings-tab-about').click();
+    const replayTutBtnBox = await ltMobilePage.getByTestId('about-replay-tutorial-btn').boundingBox();
+    assert.ok(replayTutBtnBox && replayTutBtnBox.height >= 44, `About CTA button must be >=44px tall in Large Text (got ${JSON.stringify(replayTutBtnBox)})`);
+    await ltMobilePage.getByTestId('settings-tab-create').click();
+    const hintToggleBox = await ltMobilePage.getByTestId('hint-toggle-daily-puzzle').boundingBox();
+    assert.ok(hintToggleBox && hintToggleBox.width >= 31 && hintToggleBox.height >= 31, `(i) hint button must enlarge to ~32px in Large Text (got ${JSON.stringify(hintToggleBox)})`);
+
+    // Enable Custom Color button for all puzzles so we can verify ColorPickerPopover in Large Text mode too
+    await ltMobilePage.getByTestId('settings-tab-settings').click();
+    await ltMobilePage.evaluate(() => {
+      const cur = window.capyStorage.loadSettings();
+      window.capyStorage.saveSettings({ ...cur, enableCustomColorForAllPuzzles: true, largeText: true, fatFingerAssist: true });
+    });
+    await ltMobilePage.getByTestId('settings-modal-close').click();
+    await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Measure enlarged HUD controls at 360x780
+    const largeMobileBoxes = {
+      settingsBtn: await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
+      previewBtn: await ltMobilePage.getByTestId('topbar-preview-btn').boundingBox(),
+      savesBtn: await ltMobilePage.getByTestId('topbar-saves-btn').boundingBox(),
+      paintBtn: await ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+      undoBtn: await ltMobilePage.getByTestId('undo-btn').boundingBox(),
+      swatch1: await ltMobilePage.getByTestId('palette-swatch-1').boundingBox(),
+      swatch1FontPx: await ltMobilePage
+        .getByTestId('palette-swatch-1')
+        .locator('span')
+        .first()
+        .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    };
+    assert.ok(
+      largeMobileBoxes.settingsBtn &&
+        largeMobileBoxes.previewBtn &&
+        largeMobileBoxes.savesBtn &&
+        largeMobileBoxes.paintBtn &&
+        largeMobileBoxes.undoBtn &&
+        largeMobileBoxes.swatch1
+    );
+    assert.equal(
+      largeMobileBoxes.settingsBtn.width >= 36 &&
+        largeMobileBoxes.settingsBtn.height >= 36 &&
+        largeMobileBoxes.settingsBtn.width > normalMobileBoxes.settingsBtn.width,
+      true,
+      `360px Large Text topbar-settings-btn must enlarge to >=36px (normal=${normalMobileBoxes.settingsBtn.width}, large=${largeMobileBoxes.settingsBtn.width})`
+    );
+    assert.equal(
+      largeMobileBoxes.previewBtn.width >= 36 && largeMobileBoxes.previewBtn.width > normalMobileBoxes.previewBtn.width,
+      true,
+      `360px Large Text topbar-preview-btn must enlarge to >=36px`
+    );
+    assert.equal(
+      largeMobileBoxes.savesBtn.height >= 36 && largeMobileBoxes.savesBtn.height > normalMobileBoxes.savesBtn.height,
+      true,
+      `360px Large Text topbar-saves-btn must be >=36px tall (normal=${normalMobileBoxes.savesBtn.height}, large=${largeMobileBoxes.savesBtn.height})`
+    );
+    assert.equal(
+      largeMobileBoxes.paintBtn.width >= 58 && largeMobileBoxes.paintBtn.width > normalMobileBoxes.paintBtn.width,
+      true,
+      `Large Text paint-mode-btn must enlarge to >=58px (got ${largeMobileBoxes.paintBtn.width})`
+    );
+    assert.equal(
+      largeMobileBoxes.undoBtn.width >= 50 && largeMobileBoxes.undoBtn.width > normalMobileBoxes.undoBtn.width,
+      true,
+      `Large Text undo-btn must enlarge to >=50px (got ${largeMobileBoxes.undoBtn.width})`
+    );
+    assert.equal(
+      largeMobileBoxes.swatch1.width >= 56 &&
+        largeMobileBoxes.swatch1.height >= 52 &&
+        largeMobileBoxes.swatch1.width > normalMobileBoxes.swatch1.width,
+      true,
+      `Large Text palette-swatch-1 must enlarge to ~58x54px (normal=${JSON.stringify(normalMobileBoxes.swatch1)}, large=${JSON.stringify(largeMobileBoxes.swatch1)})`
+    );
+    assert.equal(
+      largeMobileBoxes.swatch1FontPx >= 15.5 && largeMobileBoxes.swatch1FontPx > normalMobileBoxes.swatch1FontPx,
+      true,
+      `Large Text palette swatch number must enlarge to 16px (normal=${normalMobileBoxes.swatch1FontPx}, large=${largeMobileBoxes.swatch1FontPx})`
+    );
+
+    // Verify 360x780 active swatch centering in PaletteDock after toggling Large Text
+    await ltMobilePage.waitForTimeout(350);
+    const activeSwatchCenterCheck = await ltMobilePage.evaluate(() => {
+      const dock = document.querySelector('[data-testid="palette-dock"]');
+      const scroller = dock?.querySelector('.overflow-x-auto');
+      const active = dock?.querySelector('button[aria-pressed="true"]');
+      if (!scroller || !active) return null;
+      const sr = scroller.getBoundingClientRect();
+      const ar = active.getBoundingClientRect();
+      return {
+        scrollable: scroller.scrollWidth > scroller.clientWidth + 1,
+        diff: Math.abs(ar.left + ar.width / 2 - (sr.left + sr.width / 2)),
+      };
+    });
+    if (activeSwatchCenterCheck?.scrollable) {
+      assert.equal(
+        activeSwatchCenterCheck.diff <= 8,
+        true,
+        `Active swatch must stay centered in Large Text PaletteDock (diff=${activeSwatchCenterCheck.diff})`
+      );
+    }
+
+    // Verify 5-button Co-op TopBar fits cleanly within 360px in Large Text mode, and ColorPickerPopover quick swatches enlarge
+    await ltMobilePage.evaluate(() => {
+      localStorage.setItem('capy_dev_cloud_coop_ui', '1');
+    });
+    await ltMobilePage.reload({ waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(ltMobilePage);
+    await ltMobilePage.getByTestId('topbar-coop-btn').waitFor({ state: 'visible', timeout: 5000 });
+    const [coopLeftBox, coopRightBox, coopBtnBox] = await Promise.all([
+      ltMobilePage.getByTestId('topbar-left-lane').boundingBox(),
+      ltMobilePage.getByTestId('topbar-right-lane').boundingBox(),
+      ltMobilePage.getByTestId('topbar-coop-btn').boundingBox(),
+    ]);
+    assert.ok(coopLeftBox && coopRightBox && coopBtnBox);
+    assert.equal(
+      coopBtnBox.width >= 36 && coopLeftBox.x + coopLeftBox.width <= coopRightBox.x + 1 && coopRightBox.x + coopRightBox.width <= 360,
+      true,
+      `5-button Co-op Large Text topbar must fit within 360px with zero lane overlap (${JSON.stringify({ coopLeftBox, coopRightBox, coopBtnBox })})`
+    );
+
+    // Open ColorPickerPopover via palette-custom-btn and check quick swatches + close button sizing
+    const customPaletteBtn = ltMobilePage.getByTestId('palette-custom-btn');
+    await customPaletteBtn.scrollIntoViewIfNeeded();
+    await customPaletteBtn.click();
+    const popoverCloseBtn = ltMobilePage.locator('button[title="Close"]').last();
+    await popoverCloseBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const popoverCloseBox = await popoverCloseBtn.boundingBox();
+    const popoverSwatchBox = await ltMobilePage.locator('.capy-quick-swatch').first().boundingBox();
+    assert.ok(popoverCloseBox && popoverCloseBox.width >= 40 && popoverCloseBox.height >= 40, `ColorPickerPopover close must be >=40px in Large Text (got ${JSON.stringify(popoverCloseBox)})`);
+    assert.ok(popoverSwatchBox && popoverSwatchBox.width >= 38 && popoverSwatchBox.height >= 38, `ColorPickerPopover quick swatch must be >=40px in Large Text (got ${JSON.stringify(popoverSwatchBox)})`);
+    await popoverCloseBtn.click();
+    await popoverCloseBtn.waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fill 1 region and open ReplayControls on 360x780 Large Text to verify 2-row wrap, button sizing & vertical clearance
+    await tapCanvasGrid(ltMobilePage, 0.5, 6, 60);
+    await ltMobilePage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
+      { timeout: 5000 }
+    );
+    const ltUndoBox = await getStableBoundingBox(ltMobilePage.getByTestId('undo-btn'));
+    assert.ok(ltUndoBox);
+    await ltMobilePage.mouse.move(ltUndoBox.x + ltUndoBox.width / 2, ltUndoBox.y + ltUndoBox.height / 2);
+    await ltMobilePage.mouse.down();
+    await ltMobilePage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
+    await ltMobilePage.mouse.up();
+    await ltMobilePage.waitForTimeout(250);
+
+    const [ltReplayWinBox, ltReplayPlayBox, ltReplayFollowBox, ltReplayLoopBox, ltReplayExitBox, ltReplayScrubBox, ltPaintDuringReplayBox, ltPaletteDuringReplayBox] =
+      await Promise.all([
+        ltMobilePage.getByTestId('replay-controls-window').boundingBox(),
+        ltMobilePage.getByTestId('replay-play-pause-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-follow-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-loop-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-exit-btn').boundingBox(),
+        ltMobilePage.getByTestId('replay-scrubber-track').boundingBox(),
+        ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+        ltMobilePage.getByTestId('palette-dock').boundingBox(),
+      ]);
+    assert.ok(
+      ltReplayWinBox &&
+        ltReplayPlayBox &&
+        ltReplayFollowBox &&
+        ltReplayLoopBox &&
+        ltReplayExitBox &&
+        ltReplayScrubBox &&
+        ltPaintDuringReplayBox &&
+        ltPaletteDuringReplayBox
+    );
+    assert.equal(
+      ltReplayWinBox.x >= 0 && ltReplayWinBox.x + ltReplayWinBox.width <= 360,
+      true,
+      `360px Large Text ReplayControls must fit within 360px (${JSON.stringify(ltReplayWinBox)})`
+    );
+    assert.equal(ltReplayPlayBox.width >= 42 && ltReplayPlayBox.height >= 42, true, `Replay play button must be >=42px (got ${JSON.stringify(ltReplayPlayBox)})`);
+    assert.equal(ltReplayFollowBox.width >= 40 && ltReplayLoopBox.width >= 40 && ltReplayExitBox.width >= 40, true, 'Replay icon buttons must be >=40px in Large Text');
+    assert.equal(ltReplayScrubBox.height >= 32, true, `Replay scrubber must be >=32px tall in Large Text (got ${ltReplayScrubBox.height})`);
+    assert.equal(
+      ltPaintDuringReplayBox.y + ltPaintDuringReplayBox.height <= ltReplayWinBox.y + 1,
+      true,
+      `360px Large Text FloatingActions bottom (${ltPaintDuringReplayBox.y + ltPaintDuringReplayBox.height}) must clear ReplayControls top (${ltReplayWinBox.y})`
+    );
+    assert.equal(
+      ltReplayWinBox.y + ltReplayWinBox.height <= ltPaletteDuringReplayBox.y + 1,
+      true,
+      `360px Large Text ReplayControls bottom (${ltReplayWinBox.y + ltReplayWinBox.height}) must clear PaletteDock top (${ltPaletteDuringReplayBox.y})`
+    );
+
+    // 22b. 412x915 Modern Mobile Viewport check
+    await ltMobilePage.setViewportSize({ width: 412, height: 915 });
+    await ltMobilePage.waitForTimeout(200);
+    const modernSettingsBox = await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox();
+    assert.ok(modernSettingsBox && modernSettingsBox.width >= 42 && modernSettingsBox.height >= 42, `412px Large Text topbar-settings-btn must step up to >=42px (got ${JSON.stringify(modernSettingsBox)})`);
+
+    // 22c. 1280x720 Desktop Viewport check (single-row ReplayControls + 46px topbar + stacking clearance)
+    await ltMobilePage.setViewportSize({ width: 1280, height: 720 });
+    await ltMobilePage.waitForTimeout(250);
+    const [deskLtSettingsBox, deskLtReplayBox, deskLtPaintBox, deskLtPaletteBox] = await Promise.all([
+      ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
+      ltMobilePage.getByTestId('replay-controls-window').boundingBox(),
+      ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
+      ltMobilePage.getByTestId('palette-dock').boundingBox(),
+    ]);
+    assert.ok(deskLtSettingsBox && deskLtReplayBox && deskLtPaintBox && deskLtPaletteBox);
+    assert.equal(deskLtSettingsBox.width >= 46 && deskLtSettingsBox.height >= 46, true, `1280px Large Text topbar-settings-btn must step up to >=46px (got ${JSON.stringify(deskLtSettingsBox)})`);
+    assert.equal(deskLtReplayBox.height <= 68, true, `1280px Large Text ReplayControls must remain single-row (height=${deskLtReplayBox.height})`);
+    assert.equal(
+      deskLtPaintBox.y + deskLtPaintBox.height <= deskLtReplayBox.y + 1,
+      true,
+      `1280px Large Text FloatingActions bottom (${deskLtPaintBox.y + deskLtPaintBox.height}) must clear ReplayControls top (${deskLtReplayBox.y})`
+    );
+    assert.equal(
+      deskLtReplayBox.y + deskLtReplayBox.height <= deskLtPaletteBox.y + 1,
+      true,
+      `1280px Large Text ReplayControls bottom (${deskLtReplayBox.y + deskLtReplayBox.height}) must clear PaletteDock top (${deskLtPaletteBox.y})`
+    );
+
+    // Toggle Large Text OFF in Settings and verify fatFingerAssist remains true
+    await ltMobilePage.getByTestId('replay-exit-btn').click();
+    await ltMobilePage.getByTestId('topbar-settings-btn').click();
+    await ltMobilePage.getByTestId('settings-tab-settings').click();
+    await ltMobilePage.getByTestId('setting-large-text').click();
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.largeText !== 'true', undefined, { timeout: 3000 });
+    assert.equal(
+      await ltMobilePage.getByTestId('setting-fat-finger-assist').getAttribute('aria-checked'),
+      'true',
+      'Turning Large Text OFF must preserve fatFingerAssist: true'
+    );
+    await ltMobilePage.close();
+    await ltMobileCtx.close();
+
+    // 22d. OnboardingTutorial Large Text ON toggle must also enable fatFingerAssist
+    const tutCoupleCtx = await browser.newContext({ viewport: { width: 412, height: 915 }, hasTouch: true });
+    await tutCoupleCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+      localStorage.setItem(
+        'capy_user_settings_v8',
+        JSON.stringify({ fatFingerAssist: false, largeText: false })
+      );
+    });
+    const tutCouplePage = await tutCoupleCtx.newPage();
+    attachErrorListeners(tutCouplePage, 'tutCouplePage');
+    await tutCouplePage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(tutCouplePage);
+    await tutCouplePage.getByTestId('tutorial-large-text-btn').waitFor({ state: 'visible', timeout: 5000 });
+    await tutCouplePage.getByTestId('tutorial-large-text-btn').click();
+    await tutCouplePage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+    const tutSettingsAfter = await tutCouplePage.evaluate(() => window.capyStorage.loadSettings());
+    assert.equal(tutSettingsAfter.largeText, true, 'Onboarding tutorial Large Text toggle must set largeText=true');
+    assert.equal(tutSettingsAfter.fatFingerAssist, true, 'Onboarding tutorial Large Text toggle must also enable fatFingerAssist=true');
+    await tutCouplePage.close();
+    await tutCoupleCtx.close();
+
+    // 22e. #602 Regression Tests: Paint Mode single-tap no double-paint & Free Colour Mode repaint filled region
+    const regCtx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await regCtx.addInitScript(() => {
+      localStorage.setItem('capy_dev_debug', '1');
+      localStorage.setItem(
+        'capy_user_settings_v8',
+        JSON.stringify({
+          difficulty: 'EASY',
+          isPaintMode: true,
+          fatFingerAssist: true,
+          touchReachRadiusPx: 34,
+          isFreeColorMode: false,
+        })
+      );
+    });
+    const regPage = await regCtx.newPage();
+    attachErrorListeners(regPage, 'regPage');
+    await regPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await waitForPuzzleLoaded(regPage);
+
+    // Find an exact interior pixel of an unfilled region A that has a distinct adjacent unfilled neighbor B within <= 6 puzzle px
+    const adjacentTarget = await regPage.evaluate(async () => {
+      const snaps = window.capyStorage.loadSnapshots();
+      const active = window.capyStorage.loadActiveState();
+      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
+      const canvas = document.querySelector('canvas');
+      if (!puz || !canvas) return null;
+      const rect = canvas.getBoundingClientRect();
+      const baseScale = Math.min(rect.width / puz.width, rect.height / puz.height) * 0.92;
+      const baseOffsetX = (rect.width - puz.width * baseScale) / 2;
+      const baseOffsetY = (rect.height - puz.height * baseScale) / 2;
+      const map = puz.regionMap;
+      const w = puz.width;
+      const h = puz.height;
+      for (let y = 10; y < h - 10; y += 2) {
+        for (let x = 10; x < w - 10; x += 2) {
+          const rA = map[y * w + x];
+          if (rA <= 0) continue;
+          // Ensure (x, y) is safely inside rA (3x3 same region) so float rounding never lands on border
+          if (
+            map[(y - 1) * w + x] !== rA ||
+            map[(y + 1) * w + x] !== rA ||
+            map[y * w + (x - 1)] !== rA ||
+            map[y * w + (x + 1)] !== rA
+          ) {
+            continue;
+          }
+          // Ensure a distinct region rB exists within 6 puzzle px (well inside 34px screen reach)
+          let foundNeighbor = 0;
+          for (let d = 2; d <= 6 && !foundNeighbor; d++) {
+            const cands = [
+              map[y * w + (x + d)],
+              map[y * w + (x - d)],
+              map[(y + d) * w + x],
+              map[(y - d) * w + x],
+            ];
+            for (const c of cands) {
+              if (c > 0 && c !== rA) {
+                foundNeighbor = c;
+                break;
+              }
+            }
+          }
+          if (foundNeighbor > 0) {
+            const clientX = rect.left + baseOffsetX + (x + 0.5) * baseScale;
+            const clientY = rect.top + baseOffsetY + (y + 0.5) * baseScale;
+            // Ensure point is well away from top/bottom HUD overlays
+            if (clientY > 90 && clientY < rect.height - 120) {
+              return { regionA: rA, regionB: foundNeighbor, clientX, clientY };
+            }
+          }
+        }
+      }
+      return null;
+    });
+    assert.ok(adjacentTarget, 'Expected to locate an interior pixel of region A adjacent to neighbor B');
+
+    // Paint Mode single-tap: MUST fill EXACTLY 1 region (regionA), NOT double-paint neighbor regionB
+    const filledBeforePaintTap = Number(
+      await regPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.waitForTimeout(200);
+    const filledAfterPaintTap = Number(
+      await regPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(
+      filledAfterPaintTap,
+      filledBeforePaintTap + 1,
+      `Paint Mode single-tap with fatFingerAssist=true must fill exactly 1 region (expected ${filledBeforePaintTap + 1}, got ${filledAfterPaintTap})`
+    );
+    const activeAfterPaintTap = await regPage.evaluate(() => window.capyStorage.loadActiveState());
+    assert.equal(
+      activeAfterPaintTap?.filledRegionIds?.includes(adjacentTarget.regionA),
+      true,
+      'Paint Mode single-tap must fill target regionA'
+    );
+    assert.equal(
+      activeAfterPaintTap?.filledRegionIds?.includes(adjacentTarget.regionB),
+      false,
+      'Paint Mode single-tap must NOT double-paint adjacent neighbor regionB'
+    );
+
+    // Free Colour Mode repaint: undo regionA, switch to Tap Mode & enable Free Colour Mode live, fill A with color 1, switch to color 2, tap A again -> A repaints, B stays unfilled
+    await regPage.getByTestId('undo-btn').click();
+    await regPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 0,
+      { timeout: 3000 }
+    );
+    await regPage.getByTestId('paint-mode-btn').click();
+    await regPage.getByTestId('topbar-settings-btn').click();
+    await regPage.getByTestId('settings-tab-settings').click();
+    const regFreeColorLabel = await regPage.waitForSelector('text=Free Colour Mode');
+    await regFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button[role="switch"]')?.click());
+    await regPage.getByTestId('settings-modal-close').click();
+    await regPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    await regPage.getByTestId('palette-swatch-1').click();
+    await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.waitForFunction(
+      () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) === 1,
+      { timeout: 3000 }
+    );
+    await regPage.waitForTimeout(150);
+    const colorAfterFirstFill = await regPage.evaluate((rA) => {
+      const active = window.capyStorage.loadActiveState();
+      return active?.paintedRegionColors?.[String(rA)] ?? null;
+    }, adjacentTarget.regionA);
+    assert.ok(colorAfterFirstFill !== null, 'Expected regionA to record paintedRegionColors after first Free Colour tap');
+
+    await regPage.getByTestId('palette-swatch-2').click();
+    await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
+    await regPage.waitForTimeout(200);
+    const freeColorRepaintState = await regPage.evaluate((rA) => {
+      const active = window.capyStorage.loadActiveState();
+      return {
+        filledCount: active?.filledRegionIds?.length ?? 0,
+        colorA: active?.paintedRegionColors?.[String(rA)] ?? null,
+      };
+    }, adjacentTarget.regionA);
+    assert.equal(
+      freeColorRepaintState.filledCount,
+      1,
+      `Free Colour Mode repaint tap inside filled regionA must NOT spill into unfilled neighbor B (filledCount=${freeColorRepaintState.filledCount})`
+    );
+    assert.notEqual(
+      freeColorRepaintState.colorA,
+      colorAfterFirstFill,
+      `Free Colour Mode repaint tap must update regionA color (${colorAfterFirstFill} -> ${freeColorRepaintState.colorA})`
+    );
+
+    await regPage.close();
+    await regCtx.close();
+    logE2ePass('Large Text button scaling (360x780/412x915/1280x720), Fat-Finger coupling & Paint/Free-Colour fixes verified.');
 
     assert.equal(
       e2eStep,

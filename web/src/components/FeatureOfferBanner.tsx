@@ -62,7 +62,7 @@ export const FeatureOfferBanner: React.FC<FeatureOfferBannerProps> = ({
             data-testid="feature-offer-close-btn"
             aria-label="Dismiss Feature Tip"
             onClick={onDismiss}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
+            className="capy-icon-btn p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
           >
             <X size={14} />
           </button>

@@ -437,7 +437,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           e.stopPropagation();
           setOpenHintId((prev) => (prev === id ? null : id));
         }}
-        className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold transition-colors cursor-pointer flex-shrink-0 ${
+        className={`capy-hint-icon-btn inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-bold transition-colors cursor-pointer flex-shrink-0 ${
           isExpanded
             ? 'bg-amber-400 text-slate-950 border-amber-300'
             : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-400/60 hover:text-amber-300'
@@ -732,7 +732,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             data-testid="settings-modal-close"
             onClick={onClose}
-            className="p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
+            className="capy-icon-btn p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
             title="Close"
           >
             <X size={20} />
@@ -789,7 +789,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="about-privacy-policy-link"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                    className="capy-link-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
                   >
                     <ShieldCheck size={13} className="text-emerald-400" />
                     <span>Privacy Policy</span>
@@ -799,7 +799,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="about-report-issue-link"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                    className="capy-link-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
                   >
                     <ExternalLink size={13} className="text-sky-400" />
                     <span>Report Bug / Ideas</span>
@@ -1194,7 +1194,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       href="capy.apk"
                       download="capy.apk"
                       data-testid="android-apk-download-link"
-                      className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
+                      className="capy-link-btn flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-800/40 text-slate-200 transition-all text-xs font-semibold cursor-pointer"
                     >
                       <Smartphone size={16} className="text-amber-400 flex-shrink-0" />
                       <div className="min-w-0">
@@ -1259,7 +1259,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <a
                           href={primaryTargetUrl}
                           data-testid="toggle-beta-channel-btn"
-                          className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          className={`capy-link-btn flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                             isBeta
                               ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
                               : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-200 border-violet-400/50'
@@ -1273,7 +1273,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             href={channelInfo.betaApkUrl}
                             download="capy-beta.apk"
                             data-testid="beta-apk-download-link"
-                            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
+                            className="capy-link-btn flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700/80 hover:border-violet-400/50 transition-all cursor-pointer"
                           >
                             <Smartphone size={13} className="text-violet-300 flex-shrink-0" />
                             <span>Beta Android APK</span>
@@ -1312,7 +1312,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => {
                           updateSettings({ canvasBgColor: key, canvasBgArgb: item.argb });
                         }}
-                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                        className={`capy-color-dot w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                           isSelected
                             ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
                             : 'border-slate-700/80 hover:scale-105'
@@ -1334,7 +1334,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Custom Background Colour Picker */}
                   <label
                     title="Custom Background Colour"
-                    className={`relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
+                    className={`capy-color-dot relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
                       settings.canvasBgColor === 'CUSTOM'
                         ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
                         : 'border-slate-700/80 hover:border-slate-500'
@@ -1442,23 +1442,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       data-testid="setting-fat-finger-assist"
                       aria-checked={Boolean(settings.fatFingerAssist)}
                       onClick={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
-                      className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                      className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                         settings.fatFingerAssist ? 'bg-amber-500' : 'bg-slate-700'
                       }`}
                     >
                       <div
-                        className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                        className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                           settings.fatFingerAssist ? 'translate-x-4.5' : 'translate-x-0'
                         }`}
                       />
                     </button>
                   </div>
 
-                  <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
-                    <div className="flex justify-between items-center text-xs">
+                  <div
+                    data-testid="setting-touch-reach-controls"
+                    className={`space-y-1.5 pt-2 border-t border-slate-800/60 transition-opacity ${
+                      settings.fatFingerAssist ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-xs gap-2">
                       <span className="text-slate-300 font-semibold">Finger Reach Radius</span>
-                      <span className="text-amber-400 font-mono font-bold">
-                        {Math.round(settings.touchReachRadiusPx ?? 22)}px
+                      <span
+                        data-testid="setting-touch-reach-value"
+                        className="text-amber-400 font-mono font-bold text-right"
+                      >
+                        {settings.largeText && Math.round(settings.touchReachRadiusPx ?? 22) < 34
+                          ? `34px (Large UI • saved ${Math.round(settings.touchReachRadiusPx ?? 22)}px)`
+                          : `${Math.round(settings.touchReachRadiusPx ?? 22)}px`}
                       </span>
                     </div>
                     <input
@@ -1469,10 +1479,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       data-testid="setting-touch-reach-radius"
                       value={Math.round(settings.touchReachRadiusPx ?? 22)}
                       onChange={(e) =>
-                        updateSetting(
-                          'touchReachRadiusPx',
-                          Math.round(Math.min(40, Math.max(8, parseInt(e.target.value, 10) || 22)))
-                        )
+                        updateSettings({
+                          fatFingerAssist: true,
+                          touchReachRadiusPx: Math.round(
+                            Math.min(40, Math.max(8, parseInt(e.target.value, 10) || 22))
+                          ),
+                        })
                       }
                       className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                     />
@@ -1488,7 +1500,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           key={preset.px}
                           type="button"
                           data-testid={`setting-touch-reach-preset-${preset.px}`}
-                          onClick={() => updateSetting('touchReachRadiusPx', preset.px)}
+                          onClick={() =>
+                            updateSettings({
+                              fatFingerAssist: true,
+                              touchReachRadiusPx: preset.px,
+                            })
+                          }
                           className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all ${
                             Math.round(settings.touchReachRadiusPx ?? 22) === preset.px
                               ? 'border-amber-400 bg-slate-800/80 text-amber-300 ring-1 ring-amber-400'
@@ -1558,14 +1575,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={Boolean(isFullscreen)}
                         onClick={onToggleFullscreen}
-                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
                           isFullscreen ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
                         title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
                       >
                         <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                             isFullscreen ? 'translate-x-4.5' : 'translate-x-0'
                           }`}
                         />
@@ -1649,13 +1668,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={Boolean(settings[item.key])}
                         onClick={() => updateSetting(item.key, !settings[item.key])}
-                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
                           settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
                       >
                         <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                             settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
                           }`}
                         />
@@ -1715,12 +1736,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="setting-snap-zoom-levels"
                     aria-checked={Boolean(settings.snapZoomLevels)}
                     onClick={() => updateSetting('snapZoomLevels', !settings.snapZoomLevels)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.snapZoomLevels ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.snapZoomLevels ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1745,12 +1766,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() =>
                       updateSetting('soundEnabled', !(settings.soundEnabled !== false))
                     }
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.soundEnabled !== false ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.soundEnabled !== false ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1779,14 +1800,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                 </div>
 
-                {/* Large Text (Low-Vision) */}
+                {/* Large Text & Buttons (Low-Vision) */}
                 <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
                   <div className="pr-3 min-w-0">
                     <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Large Text (Low-Vision)
+                      Large Text &amp; Buttons (Low-Vision)
                     </div>
                     <div className="text-[11px] text-slate-400 leading-tight">
-                      Enlarges UI copy and canvas region numbers for easier reading
+                      Enlarges text, buttons, icons, and canvas region numbers, and enables Fat-Finger Tap Assist
                     </div>
                   </div>
                   <button
@@ -1794,13 +1815,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     role="switch"
                     data-testid="setting-large-text"
                     aria-checked={Boolean(settings.largeText)}
-                    onClick={() => updateSetting('largeText', !settings.largeText)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    onClick={() => {
+                      const nextLargeText = !settings.largeText;
+                      if (nextLargeText) {
+                        updateSettings({ largeText: true, fatFingerAssist: true });
+                      } else {
+                        updateSetting('largeText', false);
+                      }
+                    }}
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.largeText ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.largeText ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1823,12 +1851,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="setting-reduced-motion"
                     aria-checked={Boolean(settings.reducedMotion)}
                     onClick={() => updateSetting('reducedMotion', !settings.reducedMotion)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
                       settings.reducedMotion ? 'bg-amber-500' : 'bg-slate-700'
                     }`}
                   >
                     <div
-                      className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                         settings.reducedMotion ? 'translate-x-4.5' : 'translate-x-0'
                       }`}
                     />
@@ -1966,12 +1994,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() =>
                       updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
                     }
-                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                       settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
                         settings.autoReplayOnLoad !== false ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -1993,12 +2021,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="toggle-replay-follow-btn"
                     aria-checked={Boolean(settings.replayFollow)}
                     onClick={() => updateSetting('replayFollow', !settings.replayFollow)}
-                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                       settings.replayFollow ? 'bg-amber-400' : 'bg-slate-700'
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
                         settings.replayFollow ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -2020,12 +2048,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     data-testid="toggle-replay-loop-btn"
                     aria-checked={Boolean(settings.replayLoop)}
                     onClick={() => updateSetting('replayLoop', !settings.replayLoop)}
-                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                       settings.replayLoop ? 'bg-amber-400' : 'bg-slate-700'
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
+                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
                         settings.replayLoop ? 'translate-x-5' : 'translate-x-0'
                       }`}
                     />
@@ -2102,7 +2130,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         title={col.label}
                         onClick={() => updateSetting('hintColorArgb', hexToArgb(col.hex))}
-                        className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                        className={`capy-color-dot w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
                           isSelected
                             ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
                             : 'border-slate-700/80 hover:scale-105'
@@ -2124,7 +2152,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Custom Hint Colour Picker */}
                   <label
                     title="Custom Hint Colour"
-                    className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
+                    className="capy-color-dot relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
                   >
                     <input
                       type="color"
@@ -2223,13 +2251,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <button
                         type="button"
+                        role="switch"
+                        aria-checked={Boolean(settings[item.key])}
                         onClick={() => updateSetting(item.key, !settings[item.key])}
-                        className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
+                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
                           settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
                         }`}
                       >
                         <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
                             settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
                           }`}
                         />
@@ -3449,12 +3479,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() =>
                           updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
                         }
-                        className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
+                        className={`capy-switch w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
                           settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
                         }`}
                       >
                         <span
-                          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
+                          className={`capy-switch-knob absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
                             settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
                           }`}
                         />
@@ -3767,7 +3797,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setConfirmClearAll(true)}
-                          className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                          className="px-2 py-1 rounded-lg text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors cursor-pointer"
                         >
                           Delete All Saves
                         </button>
@@ -3793,7 +3823,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="button"
                     aria-label="Dismiss import message"
                     onClick={() => setImportNotice(null)}
-                    className="p-0.5 rounded hover:bg-white/10 cursor-pointer"
+                    className="capy-icon-btn p-0.5 rounded hover:bg-white/10 cursor-pointer"
                   >
                     <X size={13} />
                   </button>
@@ -3833,7 +3863,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             nextColor
                           );
                         }}
-                        className="w-6 h-6 rounded-full ring-2 ring-slate-700 flex-shrink-0 cursor-pointer"
+                        className="capy-color-dot w-6 h-6 rounded-full ring-2 ring-slate-700 flex-shrink-0 cursor-pointer"
                         style={{ backgroundColor: playerIdentity.avatarColorHex }}
                       />
                     )}
@@ -3867,7 +3897,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             type="button"
                             onClick={() => setEditingProfileName(true)}
                             title="Edit Display Name"
-                            className="text-slate-400 hover:text-amber-300 cursor-pointer"
+                            className="capy-icon-btn text-slate-400 hover:text-amber-300 cursor-pointer"
                           >
                             <Edit2 size={11} />
                           </button>

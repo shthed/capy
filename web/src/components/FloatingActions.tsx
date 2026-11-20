@@ -80,11 +80,19 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
         bottom: `calc(${
           isReplaying
             ? !isCompleted
-              ? (raiseDock ? '9.75rem' : '8.125rem')
-              : (raiseDock ? '12.5rem' : '10.5rem')
+              ? raiseDock
+                ? 'var(--capy-fab-bottom-replaying-raised, 9.75rem)'
+                : 'var(--capy-fab-bottom-replaying, 8.125rem)'
+              : raiseDock
+              ? 'var(--capy-fab-bottom-completed-replaying-raised, 12.5rem)'
+              : 'var(--capy-fab-bottom-completed-replaying, 10.5rem)'
             : isCompleted
-            ? (raiseDock ? '2.5rem' : '1.25rem')
-            : (raiseDock ? '6.25rem' : '4.625rem')
+            ? raiseDock
+              ? '2.5rem'
+              : '1.25rem'
+            : raiseDock
+            ? 'var(--capy-fab-bottom-raised, 6.25rem)'
+            : 'var(--capy-fab-bottom, 4.625rem)'
         } + var(--sab, 0px))`,
         right: 'calc(1rem + var(--sar, 0px))',
       }}
@@ -96,7 +104,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
           onClick={onResetView}
           title="Fit to Screen (Reset View)"
           data-testid="reset-view-btn"
-          className="p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-amber-400/50 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
+          className="capy-fab-btn p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-amber-400/50 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
         >
           <Maximize2 size={18} />
         </button>
@@ -110,7 +118,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
             onClick={onZoomIn}
             title="Zoom In"
             data-testid="zoom-in-btn"
-            className="p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+            className="capy-fab-btn p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             <Plus size={18} />
           </button>
@@ -119,7 +127,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
             onClick={onZoomOut}
             title="Zoom Out"
             data-testid="zoom-out-btn"
-            className="p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+            className="capy-fab-btn p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             <Minus size={18} />
           </button>
@@ -133,7 +141,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
           onClick={onStartReplay}
           title="Watch Puzzle Replay"
           data-testid="replay-btn"
-          className="p-2.5 rounded-full bg-amber-400 text-slate-950 border border-amber-300 shadow-xl backdrop-blur-md hover:bg-amber-300 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
+          className="capy-fab-btn p-2.5 rounded-full bg-amber-400 text-slate-950 border border-amber-300 shadow-xl backdrop-blur-md hover:bg-amber-300 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
         >
           <Play size={18} />
         </button>
@@ -149,7 +157,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
               aria-label="Redo Action"
               title="Redo Action (Ctrl+Y / Ctrl+Shift+Z)"
               data-testid="redo-btn"
-              className="p-2.5 rounded-full shadow-xl backdrop-blur-md border border-slate-700/60 bg-slate-900/90 text-slate-200 hover:bg-slate-800 active:scale-95 transition-all select-none cursor-pointer animate-in fade-in zoom-in-90 duration-150"
+              className="capy-fab-btn p-2.5 rounded-full shadow-xl backdrop-blur-md border border-slate-700/60 bg-slate-900/90 text-slate-200 hover:bg-slate-800 active:scale-95 transition-all select-none cursor-pointer animate-in fade-in zoom-in-90 duration-150"
             >
               <Redo2 size={18} />
             </button>
@@ -171,7 +179,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
                   : 'Nothing to Undo'
               }
               data-testid="undo-btn"
-              className={`p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all select-none ${
+              className={`capy-fab-btn p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all select-none ${
                 canUndo
                   ? 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800 active:scale-95 cursor-pointer'
                   : 'bg-slate-900/40 text-slate-600 border-slate-800/40 cursor-not-allowed'
@@ -190,7 +198,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
         onClick={onTogglePaintMode}
         aria-label="Toggle Paint Mode"
         title={isPaintMode ? 'Paint Mode Active (Click to Switch to Tap Mode)' : 'Tap Mode Active (Click to Enable Paint Mode)'}
-        className={`p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+        className={`capy-fab-primary p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
           isPaintMode
             ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 scale-105'
             : 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800'

@@ -21,6 +21,7 @@ interface PaletteDockProps {
   isFreeColorMode?: boolean;
   isReplaying?: boolean;
   reducedMotion?: boolean;
+  largeText?: boolean;
   showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
   onSyncActiveColor?: (colorId: number) => void;
@@ -156,6 +157,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   isFreeColorMode = false,
   isReplaying = false,
   reducedMotion = false,
+  largeText = false,
   showCustomColorButton = false,
   onColorSelected,
   onSyncActiveColor,
@@ -257,8 +259,10 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     const measure = () => {
       const clientW = container.clientWidth;
       if (clientW <= 0) return;
+      const swatchW = largeText ? 58 : 46;
+      const swatchGap = largeText ? 10 : 8;
       const naturalWidth =
-        itemCount * 46 + Math.max(0, itemCount - 1) * 8 + 24;
+        itemCount * swatchW + Math.max(0, itemCount - 1) * swatchGap + 24;
       setIsScrollable(naturalWidth > clientW);
     };
 
@@ -270,7 +274,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [itemCount]);
+  }, [itemCount, largeText]);
 
   // Smoothly center the active color in view when activeColorId or dock layout changes
   useEffect(() => {
@@ -293,7 +297,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     } else {
       container.scrollLeft = targetLeft;
     }
-  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length]);
+  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length, largeText]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -359,14 +363,14 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
           className="flex items-center mx-auto min-w-max"
           style={{
             paddingLeft: isScrollable
-              ? 'max(calc(50% - 23px), calc(var(--sal, 0px) + 0.75rem))'
+              ? 'max(calc(50% - var(--capy-swatch-half, 23px)), calc(var(--sal, 0px) + 0.75rem))'
               : 'max(0.75rem, calc(var(--sal, 0px) + 0.75rem))',
             paddingRight: isScrollable
-              ? 'max(calc(50% - 23px), calc(var(--sar, 0px) + 0.75rem))'
+              ? 'max(calc(50% - var(--capy-swatch-half, 23px)), calc(var(--sar, 0px) + 0.75rem))'
               : 'max(0.75rem, calc(var(--sar, 0px) + 0.75rem))',
           }}
         >
-        <div data-testid="palette-dock-tray" className="flex items-center gap-2">
+        <div data-testid="palette-dock-tray" className="capy-palette-tray flex items-center gap-2">
         {dockPalette.map((color) => {
           const isActive = color.id === activeColorId;
           const isVisibleOnScreen = visibleColorIds.has(color.id);
@@ -393,7 +397,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
                   ? ` (${badgeVal} painted)`
                   : ` (${badgeVal} remaining)`
               }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
-              className={`flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-all active:scale-95 shadow-md ${
+              className={`capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-all active:scale-95 shadow-md ${
                 isActive
                   ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-xl opacity-100 z-10'
                   : isVisibleOnScreen && prioritizeOnScreen
@@ -427,7 +431,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
             data-testid="palette-custom-btn"
             onClick={onOpenPaletteOptions}
             title="Custom Colour & Palette Options"
-            className="flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
+            className="capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all"
           >
             <Palette size={18} />
             <span className="text-[8.5px] font-bold text-slate-300 leading-none mt-0.5">

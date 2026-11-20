@@ -5323,7 +5323,11 @@ export const App: React.FC = () => {
         isFreeColorMode={isFreeColorMode}
         difficulty={settings.difficulty}
         fatFingerAssist={settings.fatFingerAssist}
-        touchReachRadiusPx={settings.touchReachRadiusPx}
+        touchReachRadiusPx={
+          settings.largeText
+            ? Math.max(settings.touchReachRadiusPx, 34)
+            : settings.touchReachRadiusPx
+        }
         isPaintMode={settings.isPaintMode && (!isReplaying || (!isCompleted && isPostLoadReplay))}
         canvasBgColor={settings.canvasBgColor}
         canvasBgArgb={settings.canvasBgArgb}
@@ -5623,6 +5627,7 @@ export const App: React.FC = () => {
           raiseDock={settings.raisePaletteDock}
           isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}
+          largeText={Boolean(settings.largeText)}
           isFreeColorMode={isFreeColorMode}
           showCustomColorButton={Boolean(
             isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
@@ -6133,7 +6138,12 @@ export const App: React.FC = () => {
         triedInCurrentVisit={tutorialStepTriedInVisit}
         largeText={Boolean(settings.largeText)}
         onToggleLargeText={() => {
-          handleUpdateSettings((prev) => ({ ...prev, largeText: !prev.largeText }));
+          handleUpdateSettings((prev) => {
+            const nextLargeText = !prev.largeText;
+            return nextLargeText
+              ? { ...prev, largeText: true, fatFingerAssist: true }
+              : { ...prev, largeText: false };
+          });
           if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings_a11y') {
             markTutorialActionTried('settings_a11y');
           }

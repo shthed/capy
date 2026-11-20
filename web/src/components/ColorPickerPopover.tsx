@@ -184,7 +184,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="capy-icon-btn p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title="Close"
           >
             <X size={16} />
@@ -214,7 +214,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                   {/* System native eyedropper trigger */}
                   <label
                     title="System Eyedropper / Color Picker"
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 cursor-pointer flex items-center justify-center transition-colors active:scale-95"
+                    className="capy-icon-btn p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 cursor-pointer flex items-center justify-center transition-colors active:scale-95"
                   >
                     <Pipette size={14} />
                     <input
@@ -286,7 +286,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
             {/* Quick Palette Swatches */}
             <div className="flex flex-col gap-1.5 pt-1">
               <span className="text-[11px] font-semibold text-slate-400">Quick Swatches</span>
-              <div className="grid grid-cols-7 gap-1.5 max-h-24 overflow-y-auto no-scrollbar py-0.5">
+              <div className="capy-quick-swatch-grid grid grid-cols-7 gap-1.5 max-h-24 overflow-y-auto no-scrollbar py-0.5">
                 {QUICK_SWATCHES.map((hex, i) => (
                   <button
                     key={i}
@@ -294,7 +294,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                     onClick={() => selectSwatch(hex)}
                     style={{ backgroundColor: hex }}
                     title={hex}
-                    className={`w-7 h-7 rounded-md border shadow-xs transition-all active:scale-90 hover:scale-110 ${
+                    className={`capy-quick-swatch w-7 h-7 rounded-md border shadow-xs transition-all active:scale-90 hover:scale-110 ${
                       currentHex === hex ? 'border-amber-400 ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 scale-105' : 'border-black/30'
                     }`}
                   />

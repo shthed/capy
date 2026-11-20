@@ -173,10 +173,13 @@ export function resolveNearTapRegionId(params: ResolveNearTapParams): number {
 
   if (lx >= 0 && lx < width && ly >= 0 && ly < height) {
     const exactId = regionMap[ly * width + lx];
-    if (exactId > 0 && !filledRegionIds.has(exactId)) {
-      if (allowAnyColor) return exactId;
-      const exactReg = regionById.get(exactId);
-      if (exactReg && exactReg.colorId === activeColorId) return exactId;
+    if (exactId > 0) {
+      if (isFreeColorMode) return exactId;
+      if (!filledRegionIds.has(exactId)) {
+        if (difficulty === 'EASY') return exactId;
+        const exactReg = regionById.get(exactId);
+        if (exactReg && exactReg.colorId === activeColorId) return exactId;
+      }
     }
   }
 
@@ -306,7 +309,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   isPaintMode,
   isFreeColorMode = false,
   difficulty = 'EASY',
-  fatFingerAssist = difficulty === 'EASY',
+  fatFingerAssist = true,
   touchReachRadiusPx = TOUCH_REACH_RADIUS_DEFAULT,
   paintedRegionColors,
   canvasBgColor,
@@ -466,6 +469,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Drag & Pinch interaction tracking
   const isDraggingRef = useRef(false);
+  const paintedOnDownRef = useRef(false);
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const lastPointerPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const totalDragDistanceRef = useRef(0);
@@ -1988,6 +1992,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Pointer event handlers for touch/mouse
   const handlePointerDown = (e: React.PointerEvent) => {
+    paintedOnDownRef.current = false;
     stopMomentum();
     refreshCanvasRect();
     resetPointerRing(e.clientX, e.clientY, performance.now());
@@ -2061,6 +2066,19 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // Only start continuous paint if touching inside the image region
     if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
+      const downLx = Math.floor(coords.x);
+      const downLy = Math.floor(coords.y);
+      const downExactId =
+        downLx >= 0 && downLx < puzzle.width && downLy >= 0 && downLy < puzzle.height
+          ? puzzle.regionMap[downLy * puzzle.width + downLx]
+          : 0;
+      const willPaintExactOnDown =
+        downExactId > 0 &&
+        (isFreeColorMode ||
+          (!filledRegionIds.has(downExactId) &&
+            (difficulty === 'EASY' ||
+              regionByIdRef.current.get(downExactId)?.colorId === activeColorId)));
+      paintedOnDownRef.current = willPaintExactOnDown;
       onPuzzleInteractionRef.current?.();
       hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
       setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
@@ -2412,16 +2430,19 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       lastTapUpTimeRef.current = Date.now();
       lastTapUpPosRef.current = { x: e.clientX, y: e.clientY };
 
+      const alreadyPaintedOnDown = paintedOnDownRef.current;
+      paintedOnDownRef.current = false;
+
       if (isPreviewMode) {
         onTogglePreview();
-      } else {
+      } else if (!alreadyPaintedOnDown) {
         const coords = screenToCanvasCoords(e.clientX, e.clientY);
         if (coords && puzzle) {
           setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
           const lx = Math.floor(coords.x);
           const ly = Math.floor(coords.y);
           onPuzzleInteractionRef.current?.();
-          let rId = resolveNearTapRegionId({
+          const rId = resolveNearTapRegionId({
             width: puzzle.width,
             height: puzzle.height,
             regionMap: puzzle.regionMap,
@@ -2438,9 +2459,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           });
           const inBounds = lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height;
           const exactId = inBounds ? puzzle.regionMap[ly * puzzle.width + lx] : 0;
-          if (rId === 0 && isFreeColorMode && exactId > 0) {
-            rId = exactId;
-          }
           if (rId > 0) {
             if (isPaintMode) {
               if (inBounds && exactId === rId) {
@@ -2454,10 +2472,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           }
         }
       }
+    } else {
+      paintedOnDownRef.current = false;
     }
   };
 
   const handlePointerCancel = (e: React.PointerEvent) => {
+    paintedOnDownRef.current = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {

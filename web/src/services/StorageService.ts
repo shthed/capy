@@ -1234,7 +1234,7 @@ export class StorageService {
         parsed.difficulty === 'EASY' || parsed.difficulty === 'NORMAL'
           ? parsed.difficulty
           : DEFAULT_SETTINGS.difficulty;
-      const fatFingerAssist = pickBool('fatFingerAssist', difficulty === 'EASY');
+      const fatFingerAssist = pickBool('fatFingerAssist', DEFAULT_SETTINGS.fatFingerAssist);
       const touchReachRadiusPx = Math.round(
         Math.min(40, Math.max(8, pickFinite('touchReachRadiusPx', DEFAULT_SETTINGS.touchReachRadiusPx)))
       );
