@@ -1,4 +1,4 @@
-package com.capypaint.capy
+package com.capyboop.paint
 
 import android.annotation.TargetApi
 import android.content.Context

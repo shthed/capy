@@ -2,4 +2,4 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 -keepattributes JavascriptInterface
--keep class com.capypaint.capy.CapyAndroidBridge { *; }
+-keep class com.capyboop.paint.CapyAndroidBridge { *; }

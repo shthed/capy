@@ -2425,7 +2425,7 @@ export async function runReleaseSafetyHardeningTests(vite) {
 
         // MainActivity.kt onPageStarted must call bridge.setModalOpen(false) before updating isTrustedPageLoaded
         const mainActivitySrc = fs.readFileSync(
-          path.join(REPO_ROOT, 'app/src/main/java/com/capypaint/capy/MainActivity.kt'),
+          path.join(REPO_ROOT, 'app/src/main/java/com/capyboop/paint/MainActivity.kt'),
           'utf8'
         );
         assert.match(
