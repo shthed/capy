@@ -1,5 +1,6 @@
 ### 3.0.8 - 2026-11-20 (Production, Beta)
 
+- [#612](../../pull/612) Reorganize repository documentation and harden CI workflow checks
 - [#610](../../pull/610) Standardize changelog formatting with sequential daily versions (`3.0.2`--`3.0.8`), leading PR links, and concise 1--2 sentence bullets, plus tooling, GitHub Releases gating, `SECURITY.md`, and project documentation sync
 - [#608](../../pull/608) Omit region boundary lines on completed regions so finished artwork renders seamlessly while unpainted regions keep crisp borders
 - [#604](../../pull/604) Add Bring-Your-Own-Cloud account login and automatic cross-device sync for Microsoft OneDrive, Apple CloudKit, and Google Drive with Android OAuth PKCE support
