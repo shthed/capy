@@ -233,7 +233,7 @@ flowchart TD
 - **Never Enable Both Auto-Deploy Paths Simultaneously**: Pick **either** Option 1 (Workers Builds) **or** Option 2 (GitHub Actions `CLOUDFLARE_API_TOKEN`) for [capypaint.com](https://capypaint.com/)—never both at once, or every push to `main` will trigger duplicate racing deployments.
 
 ### Connecting to Cloudflare Workers ([capypaint.com](https://capypaint.com/))
-Choose either native Cloudflare Git builds (Option 1, zero GitHub secrets) or GitHub Actions deployment (Option 2, per [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](https://github.com/shthed/capy/issues/543)):
+Choose either native Cloudflare Git builds (Option 1, zero GitHub secrets) or GitHub Actions deployment (Option 2, per [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543)):
 
 - **Option 1 -- Cloudflare Workers Builds Git Integration (Recommended, Zero Token)**:
   1. Add [capypaint.com](https://capypaint.com/) as a zone in [Cloudflare Dashboard](https://dash.cloudflare.com/), verify registrar nameservers (`guy.ns.cloudflare.com` and `maleah.ns.cloudflare.com`), and delete legacy Squarespace `A`/`AAAA`/`CNAME` records on `@` and `www` so `wrangler.jsonc` `custom_domain: true` can attach cleanly.
@@ -251,7 +251,7 @@ Choose either native Cloudflare Git builds (Option 1, zero GitHub secrets) or Gi
   6. **Canonical `www` & HTTPS edge redirects (`capypaint.com`)**: Because [`wrangler.jsonc`](./wrangler.jsonc) uses `"run_worker_first": ["/api/*"]` so static page hits never consume Worker requests, add a **Rules -> Redirect Rules -> Single Redirect** (`www.capypaint.com/*` -> `https://capypaint.com/$1`, `301`, Preserve query string) and enable **SSL/TLS -> Edge Certificates -> Always Use HTTPS** in [Cloudflare Dashboard](https://dash.cloudflare.com/).
 
 ### Companion Studio Domain ([capyboop.com](https://capyboop.com/)) -- Deferred
-- **Status**: Deferred out of active Sprint 1 scope per Project Owner directive while prioritizing [capypaint.com](https://capypaint.com/) and [capyboop/paint](https://github.com/capyboop/paint/issues).
+- **Status**: Deferred out of active Sprint 1 scope while prioritizing [capypaint.com](https://capypaint.com/) and [capyboop/paint](https://github.com/capyboop/paint/issues).
 - **Target Architecture**: [capypaint.com](https://capypaint.com/) hosts **Capy Paint** (`capy-paint` Worker + `CoopRoomDurableObject`), while [capyboop.com](https://capyboop.com/) is reserved for **CapyGame** ([shthed/capygame](https://github.com/shthed/capygame) / [CapyGame GitHub Pages](https://shthed.github.io/capygame/)) using Cloudflare Workers Static Assets + `public/_headers` (`COOP`/`COEP` headers for `SharedArrayBuffer`) when revisited.
 <!-- capy-dev-only:start -->
 

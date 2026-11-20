@@ -8,7 +8,7 @@
 
 Security fixes are applied to the latest production release:
 
-- **Production (`main` / [`https://capypaint.com/`](https://capypaint.com/))**: Supported
+- **Production (`main` / [`https://capypaint.com/`](https://capypaint.com/) / [`https://paint.capyboop.com/`](https://paint.capyboop.com/))**: Supported
 - **Older Releases (prior Git tags)**: Not supported
 
 ---
@@ -17,9 +17,10 @@ Security fixes are applied to the latest production release:
 
 Please **do not** report security vulnerabilities through public GitHub Issues or Pull Requests.
 
-Instead, report vulnerabilities privately using **GitHub Private Vulnerability Reporting**:
+Instead, report vulnerabilities privately using either of these channels:
 
-- [Open a Private Security Advisory](https://github.com/shthed/capy/security/advisories/new)
+- **GitHub Private Vulnerability Reporting**: [Open a Private Security Advisory](https://github.com/shthed/capy/security/advisories/new)
+- **Private Email**: [capyboop@gmail.com](mailto:capyboop@gmail.com)
 
 Please include:
 
@@ -34,5 +35,5 @@ We will acknowledge receipt, investigate, and coordinate a fix before public dis
 ## Security Architecture Notes
 
 - **Local-First Processing**: All image segmentation and coloring run locally in a Web Worker; photos are not uploaded to backend servers.
-- **Cloud Sync**: Optional Google Drive `appDataFolder` OAuth and Android Play Games Services sync store only your own encrypted-in-transit `.capy` save payloads.
-- **Co-op Relay (`worker/`)**: Room state uses ephemeral 6-character room codes in Cloudflare Durable Objects with origin validation.
+- **Cloud Sync**: Optional Bring-Your-Own-Cloud (BYOC) sync (Google Drive, Microsoft OneDrive, Apple CloudKit, and Android Play Games Services) stores only the player's own encrypted-in-transit `.capy` save payloads.
+- **Co-op Relay & Feedback (`worker/`)**: Room state uses ephemeral `4`--`8`-character room codes in Cloudflare Durable Objects with origin validation, and anonymous in-game feedback uses a rate-limited `/api/feedback` relay in `worker/`.

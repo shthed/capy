@@ -1,4 +1,4 @@
-name: Cleanup stale codex branches
+name: Cleanup stale branches
 
 on:
   schedule:
@@ -70,7 +70,7 @@ jobs:
       - name: Run branch cleanup
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_CLEANUP_PREFIXES: 'automation/,feature/,fix/,chore/,ci/,deps/,docs/,codex/,dependabot/,sync/'
+          BRANCH_CLEANUP_PREFIXES: 'automation/,feature/,fix/,chore/,ci/,deps/,docs/,dependabot/,sync/'
           BRANCH_CLEANUP_MIN_AGE_DAYS: '1'
           BRANCH_CLEANUP_UNMERGED_MIN_AGE_DAYS: '7'
         run: |
