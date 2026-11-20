@@ -4409,6 +4409,18 @@ async function runCodecAndEngineTests() {
         'WHITEBOARD.md',
         '/grill-me',
         '/teamwork',
+        '/goal',
+        '/plan',
+        'WHITEBOARD',
+        '.agents',
+        'PR_READINESS',
+        'PrReadiness',
+        'clean-room',
+        'regenerate-puzzles',
+        'automation/sprint-1',
+        'AI Contributors',
+        'bot-authored',
+        'Owner directive',
         'review:ai-approved',
         'ai-agent',
         'capyboop/capy',
@@ -4423,6 +4435,9 @@ async function runCodecAndEngineTests() {
         'AiArtworkProvider',
         'AiCreditLedger',
         'Starter free AI generation credits',
+        'AI Credits',
+        'EPIC-5',
+        'project owner (capyboop)',
         'User-Agent: capy-paint',
         'github-actions[bot]',
       ]) {
@@ -4440,6 +4455,63 @@ async function runCodecAndEngineTests() {
         sanitizeCommitMessage('Update AGENTS.md, Gemini 4, codex/, and open-issue.yml (#607)'),
         'Update project docs, CI, feature/, and GitHub workflow'
       );
+      for (const [rawMsg, expectedOut] of [
+        ['Add /goal and /plan workflow support for AI Contributors', 'Add workflow and workflow workflow support for contributors'],
+        ['Update WHITEBOARD and Project Owner directive for bot-authored PRs', 'Update status notes and Project project guideline for automated PRs'],
+        ['Sync .agents directory and PR_READINESS check', 'Sync dev environment config directory and PR checklist check'],
+        ['Fix automation/sprint-12 branch cleanup and clean-room regenerate-puzzles.yml', 'Fix feature/sprint-12 branch cleanup and public asset generation'],
+      ]) {
+        const cleaned = sanitizeCommitMessage(rawMsg);
+        assert.equal(cleaned, expectedOut);
+        assert.equal(FORBIDDEN_PERSONA_REGEX.test(cleaned), false, `Sanitized output leaked: ${cleaned}`);
+      }
+      // Verify multi-line scrub() contract used by publish-capyboop.yml (strips multi-line capy-dev-only blocks and preserves list indentation)
+      const publishYmlText = fs.readFileSync(
+        path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
+        'utf8'
+      );
+      assert.equal(
+        publishYmlText.includes("transformPersonaContent(String(text || ''))\n              .split(/\\r?\\n/)"),
+        true,
+        'publish-capyboop.yml scrub() must run transformPersonaContent on full multi-line string before splitting'
+      );
+      const scrubEpic = (text) =>
+        transformPersonaContent(String(text || ''))
+          .split(/\r?\n/)
+          .map((line) => {
+            if (!line.trim()) return '';
+            const [, indent = '', rest = ''] = line.match(/^(\s*)(.*)$/) || [];
+            return `${indent}${sanitizeCommitMessage(rest, { fallback: rest })}`;
+          })
+          .join('\n');
+      const scrubbedEpic = scrubEpic(
+        [
+          '# EPIC-2',
+          'Public line',
+          '<!-- capy-dev-only:start -->',
+          'Secret private roadmap note mentioning internal workflow',
+          '<!-- capy-dev-only:end -->',
+          '  - Indented sub-bullet',
+          '    - Nested sub-bullet',
+        ].join('\n')
+      );
+      assert.equal(scrubbedEpic.includes('Secret private roadmap note'), false);
+      assert.equal(scrubbedEpic.includes('internal-only'), false);
+      assert.equal(scrubbedEpic.includes('  - Indented sub-bullet'), true);
+      assert.equal(scrubbedEpic.includes('    - Nested sub-bullet'), true);
+
+      // Verify assertZeroSourcePersonaLeak rejects forbidden relative file paths
+      const badPathFile = path.join(tmpCleanStage, 'clean-room-leak.md');
+      fs.writeFileSync(badPathFile, 'Harmless public text\n', 'utf8');
+      try {
+        assert.throws(
+          () => assertZeroSourcePersonaLeak(tmpCleanStage),
+          /Forbidden persona token "clean-room" leaked in path clean-room-leak\.md/
+        );
+      } finally {
+        fs.rmSync(badPathFile, { force: true });
+      }
+
       const tmpVerifyLog = path.join(tmpCleanStage, 'verify-log-clean.txt');
       const tmpVerifyLeak = path.join(tmpCleanStage, 'verify-log-leak.txt');
       fs.writeFileSync(tmpVerifyLog, 'capyboop Update Capy Paint AiArtworkProvider\x00', 'utf8');
@@ -4461,6 +4533,19 @@ async function runCodecAndEngineTests() {
           leakRc = Number(err.status || 1);
         }
         assert.equal(leakRc, 2, '--verify-log must exit 2 on forbidden persona token');
+        for (const badVerifyArgs of [['--verify-log'], ['--verify-log', '--dry-run']]) {
+          let missingArgRc = 0;
+          try {
+            execFileSync(
+              process.execPath,
+              [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), ...badVerifyArgs],
+              { stdio: 'pipe' }
+            );
+          } catch (err) {
+            missingArgRc = Number(err.status || 0);
+          }
+          assert.equal(missingArgRc, 1, `--verify-log missing arg (${badVerifyArgs.join(' ')}) must exit 1`);
+        }
       } finally {
         fs.rmSync(tmpVerifyLog, { force: true });
         fs.rmSync(tmpVerifyLeak, { force: true });
@@ -8271,8 +8356,22 @@ async function runCodecAndEngineTests() {
         ghContains,
         ghFromJson
       ),
+      true,
+      'Human PR title edit must trigger review-gate for cross-ref guardrail'
+    );
+    assert.equal(
+      evalReviewGateIf(
+        {
+          repository: 'shthed/capy',
+          event_name: 'pull_request',
+          actor: 'shthed',
+          event: { action: 'edited', changes: {} },
+        },
+        ghContains,
+        ghFromJson
+      ),
       false,
-      'Human PR title-only edit must not trigger review-gate'
+      'Human PR edit without base/body/title changes must not trigger review-gate'
     );
     assert.equal(
       evalReviewGateIf(
@@ -9152,6 +9251,7 @@ async function runCodecAndEngineTests() {
       );
     }
 
+    /* capy-dev-only:start */
     // Verify regenerate-puzzles.yml triggers only on workflow_dispatch or path-filtered pushes to beta (no schedule).
     // Note: regenerate-puzzles.yml is a dev-only workflow stripped from clean-room capyboop/paint exports.
     const regenWorkflowPath = path.resolve(projectRoot, '../.github/workflows/regenerate-puzzles.yml');
@@ -9201,6 +9301,7 @@ async function runCodecAndEngineTests() {
         );
       }
     }
+    /* capy-dev-only:end */
     logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs & upload-pages-artifact dotfiles verified.');
 
     // Verify .github/scripts/compile-changelog.mjs & release.yml wiring

@@ -84,7 +84,7 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 export const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|docs\/ai(?:\/|$|\b)|\.agents\/|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr\s+readiness|WHITEBOARD\.md|\/grill-me\b|\/teamwork\b|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|capyboop\/capy/i;
+  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|capyboop\/capy/i;
 
 export function stripDevOnlyBlocks(content) {
   return content
@@ -139,12 +139,13 @@ export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
     .replace(/open-pr\.yml|open-issue\.yml/gi, 'GitHub workflow')
     .replace(/sync-beta-from-main/gi, 'branch sync')
     .replace(/sync-agile-tracker/gi, 'roadmap sync')
+    .replace(/regenerate-puzzles(?:\.yml)?/gi, 'asset generation')
     .replace(/persona:capyboop/gi, 'export check')
     .replace(/capy-dev-only/gi, 'internal-only')
     .replace(/dependabot\.ya?ml/gi, 'dependency config')
     .replace(/CAPYBOOP_SYNC_TOKEN/gi, 'mirror token')
     .replace(/AGENTS\.md|CAPYBOOP\.md|docs\/ai(?:\/[^\s,)]*)?/gi, 'project docs')
-    .replace(/\.agents\/environment\.json|\.agents\/[^\s,)]*|\.agents\//gi, 'dev environment config')
+    .replace(/\.agents\/environment\.json|\.agents\/[^\s,)]*|\.agents\b/gi, 'dev environment config')
     .replace(/antigravity/gi, 'dev environment')
     .replace(/conversation:\/\/[^\s)]*/gi, 'session link')
     .replace(/MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API/gi, 'legacy capability')
@@ -153,12 +154,17 @@ export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
     .replace(/\bclaude(?:\s+(?:opus|sonnet|haiku)(?:\s+[\d.]+)?)?\b/gi, 'automation')
     .replace(/\bcodex\//gi, 'feature/')
     .replace(/\bcodex\b/gi, 'feature')
+    .replace(/automation\//gi, 'feature/')
     .replace(/\bchatgpt\b/gi, 'prompt')
     .replace(/\bgithub\s+copilot\b/gi, 'contributor')
     .replace(/\bcopilot\b/gi, 'contributor')
-    .replace(/pr\s+readiness(?:\s+(?:score|checklist))?/gi, 'PR checklist')
-    .replace(/WHITEBOARD\.md/gi, 'status notes')
-    .replace(/\/grill-me\b|\/teamwork\b/gi, 'workflow')
+    .replace(/pr[_ -]?readiness(?:\s+(?:score|checklist))?/gi, 'PR checklist')
+    .replace(/clean[- ]room/gi, 'public')
+    .replace(/\bWHITEBOARD(?:\.md)?\b/gi, 'status notes')
+    .replace(/\/(?:grill-me|teamwork|goal|plan)\b/gi, 'workflow')
+    .replace(/ai\s+contributors?/gi, 'contributors')
+    .replace(/bot[- ]authored/gi, 'automated')
+    .replace(/owner\s+directive/gi, 'project guideline')
     .replace(/review:ai-approved|ai[- ]approved/gi, 'CI-approved')
     .replace(/ai[- ]agent|coding[- ]agent/gi, 'contributor')
     .replace(/hairy[\s_-]*dog[\s_-]*trumpet|381055\+/gi, 'capyboop')
@@ -204,6 +210,11 @@ export function assertZeroSourcePersonaLeak(stageDir) {
     for (const entry of entries) {
       if (SKIP_COPY_DIR_NAMES.has(entry.name)) continue;
       const fullPath = path.join(currentDir, entry.name);
+      const rel = path.relative(stageDir, fullPath).replace(/\\/g, '/');
+      const pathMatch = rel.match(FORBIDDEN_PERSONA_REGEX);
+      if (pathMatch) {
+        throw new Error(`Forbidden persona token "${pathMatch[0]}" leaked in path ${rel}`);
+      }
       if (entry.isDirectory()) {
         walk(fullPath);
         continue;
@@ -214,7 +225,6 @@ export function assertZeroSourcePersonaLeak(stageDir) {
       const latin1 = rawBytes.toString('latin1');
       const match = latin1.match(FORBIDDEN_PERSONA_REGEX);
       if (match) {
-        const rel = path.relative(stageDir, fullPath).replace(/\\/g, '/');
         throw new Error(`Forbidden persona token "${match[0]}" leaked in ${rel}`);
       }
     }
@@ -318,8 +328,13 @@ if (isCliEntrypoint) {
   }
 
   const verifyLogIdx = args.indexOf('--verify-log');
-  if (verifyLogIdx !== -1 && args[verifyLogIdx + 1]) {
-    const res = verifyLogFile(args[verifyLogIdx + 1]);
+  if (verifyLogIdx !== -1) {
+    const logArg = args[verifyLogIdx + 1];
+    if (!logArg || logArg.startsWith('--')) {
+      console.error('--verify-log requires a file path argument.');
+      process.exit(1);
+    }
+    const res = verifyLogFile(logArg);
     if (!res.clean) {
       console.error(`Forbidden persona token "${res.match}" detected in log file.`);
       process.exit(2);

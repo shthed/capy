@@ -19,7 +19,9 @@ const DEFAULT_REPO_ROOT = path.resolve(__dirname, '../..');
 
 const SKIP_DIRS = new Set([
   '.git',
+  /* capy-dev-only:start */
   '.agents',
+  /* capy-dev-only:end */
   '.kotlin',
   '.artifacts',
   '.idea',
@@ -35,16 +37,12 @@ const SKIP_DIRS = new Set([
 
 // M3B strict defaults:
 const DEFAULT_REQUIRE_PROJECT_MD = true;
-let DEFAULT_REQUIRE_AGENTS_MD = false;
 /* capy-dev-only:start */
-DEFAULT_REQUIRE_AGENTS_MD = true;
+const DEFAULT_REQUIRE_AGENTS_MD = true;
+const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
 /* capy-dev-only:end */
 const DEFAULT_ENFORCE_CHANNEL_ORDER = true;
 const DEFAULT_ENFORCE_EPIC_NAMING = true;
-let DEFAULT_ENFORCE_PR_READINESS_SPEC = false;
-/* capy-dev-only:start */
-DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
-/* capy-dev-only:end */
 
 function collectMarkdownFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -739,7 +737,9 @@ export function runSanityChecks({
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
   enforceChannelOrder = DEFAULT_ENFORCE_CHANNEL_ORDER,
   enforceEpicNaming = DEFAULT_ENFORCE_EPIC_NAMING,
+  /* capy-dev-only:start */
   enforcePrReadinessSpec = DEFAULT_ENFORCE_PR_READINESS_SPEC,
+  /* capy-dev-only:end */
 } = {}) {
   const t0 = performance.now();
   const root = path.resolve(repoRoot);

@@ -387,9 +387,13 @@ jobs:
           const existingTitles = new Set(Array.isArray(dstIssues) ? dstIssues.map((i) => i.title.trim()) : []);
 
           const scrub = (text) =>
-            String(text || '')
+            transformPersonaContent(String(text || ''))
               .split(/\r?\n/)
-              .map((line) => (line.trim() ? sanitizeCommitMessage(line, { fallback: transformPersonaContent(line) }) : ''))
+              .map((line) => {
+                if (!line.trim()) return '';
+                const [, indent = '', rest = ''] = line.match(/^(\s*)(.*)$/) || [];
+                return `${indent}${sanitizeCommitMessage(rest, { fallback: rest })}`;
+              })
               .join('\n');
 
           for (const num of [477, 478, 479, 480]) {
