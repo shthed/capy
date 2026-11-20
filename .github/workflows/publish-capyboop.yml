@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       reset_clean_root:
@@ -64,14 +66,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Verify tag push targets origin/main
+        id: check_ref
         if: steps.check_secret.outputs.enabled == 'true'
+        env:
+          TRIGGER_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "${TRIGGER_REF}" == refs/tags/* ]]; then
+            HEAD_SHA="$(git rev-parse HEAD)"
+            MAIN_SHA="$(git rev-parse -q --verify refs/remotes/origin/main || true)"
+            if [ -z "${MAIN_SHA}" ] || [ "${HEAD_SHA}" != "${MAIN_SHA}" ]; then
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              echo "Tag ${TRIGGER_REF} (${HEAD_SHA}) does not match origin/main (${MAIN_SHA:-missing}); skipping capyboop/paint publish."
+              exit 0
+            fi
+          fi
+          echo "should_publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.check_ref.outputs.should_publish == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
 
       - name: Export clean-room capyboop workspace and verify zero leaks
-        if: steps.check_secret.outputs.enabled == 'true'
+        if: steps.check_ref.outputs.should_publish == 'true'
         run: |
           set -euo pipefail
           node web/scripts/rebrand-persona.mjs --stage-dir /tmp/capyboop-stage
@@ -88,7 +108,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Commit as capyboop, push main, and sync release tag on capyboop/paint
-        if: steps.check_secret.outputs.enabled == 'true'
+        if: steps.check_ref.outputs.should_publish == 'true'
         env:
           CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
           RESET_CLEAN_ROOT: ${{ inputs.reset_clean_root == true }}
@@ -297,7 +317,11 @@ jobs:
           if [ -d /tmp/capyboop-hist-dst/.git ]; then
             TAG_REPO_DIR="/tmp/capyboop-hist-dst"
           fi
-          if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
+          TAG_COMMIT="$(git -C "${SOURCE_REPO_DIR}" rev-parse -q --verify "refs/tags/${TAG_NAME}^{commit}" || true)"
+          HEAD_COMMIT="$(git -C "${SOURCE_REPO_DIR}" rev-parse HEAD)"
+          if [ -z "${TAG_COMMIT}" ] || [ "${TAG_COMMIT}" != "${HEAD_COMMIT}" ]; then
+            echo "Tag ${TAG_NAME} does not point to HEAD (${HEAD_COMMIT}) on source repository; skipping tag push to capyboop/paint."
+          elif [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
             echo "Force-syncing release tag ${TAG_NAME} (${PUSHED_COMMIT_SHA}) onto clean root..."
             git -C "${TAG_REPO_DIR}" tag -f "${TAG_NAME}" "${PUSHED_COMMIT_SHA}"
             git -C "${TAG_REPO_DIR}" push --force target "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
