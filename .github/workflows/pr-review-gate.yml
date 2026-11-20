@@ -1012,7 +1012,10 @@ jobs:
                     );
                   } catch (err) {
                     const msg = String(err?.message || err || '');
-                    if (/clean status|stacked pull requests/i.test(msg)) {
+                    if (
+                      /clean status|stacked pull requests/i.test(msg) ||
+                      (/unstable status/i.test(msg) && (await headChecksGreen()))
+                    ) {
                       await directMergeWithFallback();
                     } else {
                       core.warning(
@@ -1037,7 +1040,7 @@ jobs:
                     !livePr.draft &&
                     livePr.head?.sha === headSha &&
                     livePr.mergeable !== false &&
-                    ['blocked', 'unstable'].includes(livePr.mergeable_state) &&
+                    livePr.mergeable_state === 'blocked' &&
                     (await headChecksGreen())
                   ) {
                     await directMergeWithFallback();
