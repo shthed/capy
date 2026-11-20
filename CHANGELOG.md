@@ -1,5 +1,6 @@
 ### 3.0.48 - 2026-11-20 (Production, Beta)
 
+- [#610](https://github.com/shthed/capy/pull/610) Consolidate recent changelog releases into one version per day, condense recent descriptions to 1--2 sentences, move clickable PR links to the start of every bullet, and update the changelog compiler, sanity checks, and `.changelog/README.md`.
 - [#608](https://github.com/shthed/capy/pull/608) Omit region boundary lines on completed regions so finished artwork renders seamlessly while unpainted regions keep crisp borders.
 - [#604](https://github.com/shthed/capy/pull/604) Add Bring-Your-Own-Cloud account login and automatic cross-device sync for Microsoft OneDrive, Apple CloudKit, and Google Drive with Android OAuth PKCE support.
 - [#605](https://github.com/shthed/capy/pull/605) Scale interactive buttons, icons, sliders, and palette swatches in Large Text mode, enable Fat-Finger assist by default, and fix single-tap double-paint and free-colour repaint regressions.
