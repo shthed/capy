@@ -233,7 +233,7 @@ flowchart TD
 - **Never Enable Both Auto-Deploy Paths Simultaneously**: Pick **either** Option 1 (Workers Builds) **or** Option 2 (GitHub Actions `CLOUDFLARE_API_TOKEN`) for [capypaint.com](https://capypaint.com/)—never both at once, or every push to `main` will trigger duplicate racing deployments.
 
 ### Connecting to Cloudflare Workers ([capypaint.com](https://capypaint.com/))
-Choose either native Cloudflare Git builds (Option 1, zero GitHub secrets) or GitHub Actions deployment (Option 2, per [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](https://github.com/shthed/capy/issues/543)):
+Choose either native Cloudflare Git builds (Option 1, zero GitHub secrets) or GitHub Actions deployment (Option 2, per [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543)):
 
 - **Option 1 -- Cloudflare Workers Builds Git Integration (Recommended, Zero Token)**:
   1. Add [capypaint.com](https://capypaint.com/) as a zone in [Cloudflare Dashboard](https://dash.cloudflare.com/), verify registrar nameservers (`guy.ns.cloudflare.com` and `maleah.ns.cloudflare.com`), and delete legacy Squarespace `A`/`AAAA`/`CNAME` records on `@` and `www` so `wrangler.jsonc` `custom_domain: true` can attach cleanly.

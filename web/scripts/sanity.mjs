@@ -221,10 +221,10 @@ export function validateChangelogChannelOrder(
 }
 
 export function validateEpicNaming(markdownText, relFile = 'markdown.md') {
-  const hint = `Use [EPIC-N](https://github.com/<owner>/capy/issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
+  const hint = `Use [EPIC-N](../../issues/<num>) instead of #NNN for Epic issues in ${relFile}`;
   assert.equal(/#47[6-9]\b|#480\b/.test(markdownText), false, hint);
   assert.equal(
-    /\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/issues\/\d+/.test(markdownText),
+    /\[#\d+\]\((?:https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/|(?:\.\.\/){2,})issues\/\d+/.test(markdownText),
     false,
     hint
   );

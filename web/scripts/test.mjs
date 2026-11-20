@@ -830,6 +830,11 @@ async function runCodecAndEngineTests() {
     }
     const badIssueLink = '[' + '#481](' + 'https://github.com/' + 'capyboop/paint/issues/481)';
     assert.throws(() => validateEpicNaming(`Link ${badIssueLink}`, 'ROADMAP.md'), /EPIC-N/);
+    const badRelIssueLink = '[' + '#500](' + '../../' + 'issues/500)';
+    assert.throws(
+      () => validateEpicNaming(badRelIssueLink, 'test.md'),
+      /\[EPIC-N\]\(\.\.\/\.\.\/issues\/<num>\)/
+    );
     const badCombinedEpic = '[EPIC-2 (' + '#477)](' + validEpicUrl + ')';
     assert.throws(() => validateEpicNaming(`Combined ${badCombinedEpic}`, 'AGENTS.md'), /EPIC-N/);
     const badUnlinkedCombinedEpic = '[EPIC-6 (#' + '481)]';
@@ -8231,6 +8236,16 @@ async function runCodecAndEngineTests() {
     assert.equal(publishScript.includes('>/dev/null 2>&1'), false);
     assert.equal(publishScript.includes('MAIN_LS_RC'), true);
     assert.equal(publishScript.includes('TAG_LS_RC'), true);
+    const publishOn = parsedPublishCapyboop?.on || parsedPublishCapyboop?.true;
+    assert.equal(
+      Array.isArray(publishOn?.push?.tags) && publishOn.push.tags.includes('v*.*.*'),
+      true,
+      'publish-capyboop.yml must trigger on v*.*.* tag pushes'
+    );
+    assert.equal(publishScript.includes('TAG_COMMIT'), true);
+    assert.equal(publishScript.includes('HEAD_COMMIT'), true);
+    const checkRefStep = (parsedPublishCapyboop?.jobs?.publish?.steps || []).find((s) => s?.id === 'check_ref');
+    assert.ok(checkRefStep && String(checkRefStep.run || '').includes('refs/remotes/origin/main'));
 
     // Behavioral verification: temp-file grep -iaqzE detects leaked early commit across 80+ commits without SIGPIPE, and ls-remote differentiates 0 / 2 / fatal errors
     const tmpPublishRepoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-publish-check-'));
@@ -9274,17 +9289,76 @@ async function runCodecAndEngineTests() {
         /\n- \[#499\]\(\.\.\/\.\.\/pull\/499\) Polish palette swatch contrast\n- \[#496\]\(\.\.\/\.\.\/pull\/496\)/
       );
 
+      // Same-day Beta compile with minor bump cuts a new version instead of appending into existing (Beta)
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/04-same-day-minor.md'),
+        '---\nbump: minor\npr: 500\n---\nAdd custom brush presets\n',
+        'utf8'
+      );
+      const sameDayMinorRes = compileMod.compileChangelog({
+        repoRoot: tmpCompileRepo,
+        dateStr: '2026-11-13',
+      });
+      assert.equal(sameDayMinorRes.version, '3.2.0');
+      assert.equal(sameDayMinorRes.compiledCount, 1);
+      assert.equal(sameDayMinorRes.appendedSameDay, false);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(tmpCompileRepo, 'web/package.json'), 'utf8')).version, '3.2.0');
+      const sameDayMinorCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
+      assert.equal(sameDayMinorCl.startsWith('### 3.2.0 - 2026-11-13 (Beta)\n'), true);
+      assert.equal(sameDayMinorCl.includes('### 3.1.0 - 2026-11-13\n'), true);
+
       // Promote to Production, Beta
       const promoRes = compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true });
       assert.equal(promoRes.promoted, true);
       const promotedCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
-      assert.equal(promotedCl.startsWith('### 3.1.0 - 2026-11-13 (Production, Beta)\n'), true);
+      assert.equal(promotedCl.startsWith('### 3.2.0 - 2026-11-13 (Production, Beta)\n'), true);
       assert.equal(promotedCl.includes('### 3.0.1 - 2026-11-10\n'), true);
+
+      // Same-day compile after --promote must cut a new (Beta) version and leave (Production) untouched
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/05-post-promote.md'),
+        '---\nbump: patch\npr: 501\n---\nFix post-release tooltip alignment\n',
+        'utf8'
+      );
+      const postPromoteRes = compileMod.compileChangelog({
+        repoRoot: tmpCompileRepo,
+        dateStr: '2026-11-13',
+      });
+      assert.equal(postPromoteRes.version, '3.2.1');
+      assert.equal(postPromoteRes.compiledCount, 1);
+      assert.equal(postPromoteRes.appendedSameDay, false);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(tmpCompileRepo, 'web/package.json'), 'utf8')).version, '3.2.1');
+      const postPromoteCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');
+      assert.equal(postPromoteCl.startsWith('### 3.2.1 - 2026-11-13 (Beta)\n'), true);
+      assert.equal(postPromoteCl.includes('### 3.2.0 - 2026-11-13 (Production)\n'), true);
+
+      // Malformed web/package-lock.json must fail cleanly before mutating web/package.json
+      fs.writeFileSync(path.join(tmpCompileRepo, 'web/package-lock.json'), '{ broken json', 'utf8');
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, '.changelog/06-bad-lock.md'),
+        '---\nbump: patch\npr: 502\n---\nGuard lockfile write order\n',
+        'utf8'
+      );
+      assert.throws(
+        () => compileMod.compileChangelog({ repoRoot: tmpCompileRepo, dateStr: '2026-11-14' }),
+        SyntaxError
+      );
+      assert.equal(
+        JSON.parse(fs.readFileSync(path.join(tmpCompileRepo, 'web/package.json'), 'utf8')).version,
+        '3.2.1',
+        'web/package.json must remain unmodified when web/package-lock.json fails to parse'
+      );
+      fs.rmSync(path.join(tmpCompileRepo, '.changelog/06-bad-lock.md'), { force: true });
+      fs.writeFileSync(
+        path.join(tmpCompileRepo, 'web/package-lock.json'),
+        `${JSON.stringify({ name: 'capy-web', version: '3.2.1', lockfileVersion: 3, packages: { '': { version: '3.2.1' } } }, null, 2)}\n`,
+        'utf8'
+      );
 
       // Refuse promoting an (Alpha) top heading
       fs.writeFileSync(
         path.join(tmpCompileRepo, 'CHANGELOG.md'),
-        `### 3.1.0 - 2026-11-13 (Alpha)\n\n- [#498](../../pull/498) Alpha preview\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- [#488](../../pull/488) Prod\n`,
+        `### 3.2.1 - 2026-11-13 (Alpha)\n\n- [#498](../../pull/498) Alpha preview\n\n### 3.2.0 - 2026-11-13 (Production)\n\n- [#488](../../pull/488) Prod\n`,
         'utf8'
       );
       assert.throws(() => compileMod.compileChangelog({ repoRoot: tmpCompileRepo, promote: true }));

@@ -219,10 +219,12 @@ export function compileChangelog({
 
     const existingLines = changelogText.split('\n');
     const topHeading = existingLines[0] || '';
-    const sameDayBetaMatch = /^### (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}) \((?:Production, )?Beta\)$/.exec(
+    const highestBump = pickHighestBump(parsedFragments.map((f) => f.bump));
+    const sameDayBetaMatch = /^### (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}) \(Beta\)$/.exec(
       topHeading
     );
     const canAppendSameDay =
+      highestBump === 'patch' &&
       Boolean(sameDayBetaMatch) &&
       sameDayBetaMatch[1] === activeVersion &&
       sameDayBetaMatch[2] === dateStr;
@@ -235,7 +237,6 @@ export function compileChangelog({
         ? `${topHeading}\n\n${bullets.join('\n')}${joiner}${rest}`
         : `${topHeading}\n\n${bullets.join('\n')}\n`;
     } else {
-      const highestBump = pickHighestBump(parsedFragments.map((f) => f.bump));
       nextVerInfo = computeNextSemVer(activeVersion, highestBump);
       activeVersion = nextVerInfo.version;
 
@@ -277,12 +278,16 @@ export function compileChangelog({
 
   if (!dryRun) {
     if (nextVerInfo) {
+      const pkgLockPath = path.join(root, 'web/package-lock.json');
+      let pkgLock = null;
+      if (fs.existsSync(pkgLockPath)) {
+        pkgLock = JSON.parse(fs.readFileSync(pkgLockPath, 'utf8'));
+      }
+
       pkg.version = activeVersion;
       fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
 
-      const pkgLockPath = path.join(root, 'web/package-lock.json');
-      if (fs.existsSync(pkgLockPath)) {
-        const pkgLock = JSON.parse(fs.readFileSync(pkgLockPath, 'utf8'));
+      if (pkgLock !== null) {
         pkgLock.version = activeVersion;
         if (pkgLock.packages && pkgLock.packages['']) {
           pkgLock.packages[''].version = activeVersion;
