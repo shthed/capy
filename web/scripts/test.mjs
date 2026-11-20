@@ -17734,6 +17734,24 @@ async function runBrowserBasicsSuite() {
         true,
         `${label}: knob ${JSON.stringify(knobBox)} must stay strictly inside switch track ${JSON.stringify(swBox)}`
       );
+      const isLargeText = await page.evaluate(() => document.documentElement.dataset.largeText === 'true');
+      if (isLargeText) {
+        if (expectedChecked) {
+          const rightGap = swBox.x + swBox.width - (knobBox.x + knobBox.width);
+          assert.equal(
+            rightGap <= 4.5,
+            true,
+            `${label}: checked knob must align flush near right track edge (rightGap=${rightGap.toFixed(2)}px, sw=${JSON.stringify(swBox)}, knob=${JSON.stringify(knobBox)})`
+          );
+        } else {
+          const leftGap = knobBox.x - swBox.x;
+          assert.equal(
+            leftGap <= 4.5,
+            true,
+            `${label}: unchecked knob must align flush near left track edge (leftGap=${leftGap.toFixed(2)}px, sw=${JSON.stringify(swBox)}, knob=${JSON.stringify(knobBox)})`
+          );
+        }
+      }
     };
 
     // Open SettingsModal, verify normal switch size & knob containment, test Fat-Finger preset auto-enable & Large Text coupling

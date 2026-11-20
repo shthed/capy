@@ -326,12 +326,10 @@
   width: 1.5rem;
   height: 1.5rem;
   translate: 0 0;
-  transform: none;
 }
 [data-large-text="true"] .capy-switch[aria-checked="true"] .capy-switch-knob,
 [data-large-text="true"] .capy-switch[data-checked="true"] .capy-switch-knob {
   translate: 1.375rem 0;
-  transform: none;
 }
 
 /* Enlarged Range Sliders (excluding invisible replay-scrubber overlay) */
@@ -456,8 +454,6 @@
 @media (max-height: 440px) {
   [data-large-text="true"] {
     --capy-tutorial-top: 4.125rem;
-    --capy-fab-bottom-replaying: 9.5rem;
-    --capy-fab-bottom-replaying-raised: 11.125rem;
   }
   [data-large-text="true"] header {
     padding-bottom: 0.25rem;
@@ -499,6 +495,12 @@
     min-width: 2rem;
     min-height: 2rem;
     padding: 0.25rem;
+  }
+}
+@media (min-width: 640px) and (max-height: 440px) {
+  [data-large-text="true"] {
+    --capy-fab-bottom-replaying: 9.5rem;
+    --capy-fab-bottom-replaying-raised: 11.125rem;
   }
 }
 
