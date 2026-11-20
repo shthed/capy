@@ -152,11 +152,11 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200 select-none"
+        className="w-full max-w-sm max-h-[calc(100dvh-1.5rem)] flex flex-col rounded-2xl bg-slate-900 border border-slate-700/80 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 text-slate-200 select-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with Tabs */}
-        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-slate-800 bg-slate-950/40">
+        <div className="shrink-0 flex items-center justify-between px-3.5 py-2.5 border-b border-slate-800 bg-slate-950/40">
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -184,7 +184,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="capy-icon-btn p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title="Close"
           >
             <X size={16} />
@@ -193,7 +193,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
 
         {/* Custom Colour Tab Content */}
         {activeTab === 'custom' && (
-          <div className="p-3.5 flex flex-col gap-3">
+          <div className="p-3.5 flex flex-col gap-3 overflow-y-auto min-h-0 flex-1">
             {/* Live Preview & Hex Input Row */}
             <div className="flex items-center gap-3">
               <div
@@ -214,7 +214,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                   {/* System native eyedropper trigger */}
                   <label
                     title="System Eyedropper / Color Picker"
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 cursor-pointer flex items-center justify-center transition-colors active:scale-95"
+                    className="capy-icon-btn p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 cursor-pointer flex items-center justify-center transition-colors active:scale-95"
                   >
                     <Pipette size={14} />
                     <input
@@ -286,7 +286,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
             {/* Quick Palette Swatches */}
             <div className="flex flex-col gap-1.5 pt-1">
               <span className="text-[11px] font-semibold text-slate-400">Quick Swatches</span>
-              <div className="grid grid-cols-7 gap-1.5 max-h-24 overflow-y-auto no-scrollbar py-0.5">
+              <div className="capy-quick-swatch-grid grid grid-cols-7 gap-1.5 max-h-24 overflow-y-auto no-scrollbar py-0.5">
                 {QUICK_SWATCHES.map((hex, i) => (
                   <button
                     key={i}
@@ -294,7 +294,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                     onClick={() => selectSwatch(hex)}
                     style={{ backgroundColor: hex }}
                     title={hex}
-                    className={`w-7 h-7 rounded-md border shadow-xs transition-all active:scale-90 hover:scale-110 ${
+                    className={`capy-quick-swatch w-7 h-7 rounded-md border shadow-xs transition-all active:scale-90 hover:scale-110 ${
                       currentHex === hex ? 'border-amber-400 ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 scale-105' : 'border-black/30'
                     }`}
                   />
@@ -336,7 +336,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
 
         {/* Themes Tab Content */}
         {activeTab === 'themes' && (
-          <div className="p-3.5 flex flex-col gap-2 max-h-80 overflow-y-auto no-scrollbar">
+          <div className="p-3.5 flex flex-col gap-2 max-h-80 min-h-0 flex-1 overflow-y-auto no-scrollbar">
             <span className="text-[11px] font-semibold text-slate-400 mb-1">
               Select a curated color theme:
             </span>
