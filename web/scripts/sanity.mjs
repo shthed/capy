@@ -540,6 +540,8 @@ export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIR
   return { rootMdFiles, hasProjectMd };
 }
 
+export const MAX_CHANGELOG_FRAGMENT_LENGTH = 320;
+
 export function parseChangelogFragment(rawContent, relFile = '.changelog/fragment.md') {
   const normalized = String(rawContent || '').replace(/\r\n/g, '\n');
   const fmMatch = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(normalized);
@@ -585,6 +587,11 @@ export function parseChangelogFragment(rawContent, relFile = '.changelog/fragmen
     /^#{1,6}\s|^-\s/.test(body),
     false,
     `Changelog fragment ${relFile} summary must be plain text without headings or list prefixes`
+  );
+  assert.equal(
+    body.length <= MAX_CHANGELOG_FRAGMENT_LENGTH,
+    true,
+    `Changelog fragment ${relFile} summary is too long (${body.length} chars > ${MAX_CHANGELOG_FRAGMENT_LENGTH} max); keep each bullet to 1--2 concise sentences`
   );
 
   return {
@@ -814,9 +821,9 @@ export function runSanityChecks({
 
   const bulletLines = changelogText.split('\n').filter((line) => line.startsWith('- '));
   assert.equal(bulletLines.length >= 398, true, `Expected >= 398 bullets, got ${bulletLines.length}`);
-  let bulletRe = /^- (?:\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)|#\d+)\s+\S/;
+  let bulletRe = /^- (?:\[#\d+\]\(\.\.\/\.\.\/pull\/\d+\)|#\d+)\s+\S/;
   /* capy-dev-only:start */
-  bulletRe = /^- \[#\d+\]\(https:\/\/github\.com\/shthed\/capy\/pull\/\d+\)\s+\S/;
+  bulletRe = /^- \[#\d+\]\(\.\.\/\.\.\/pull\/\d+\)\s+\S/;
   /* capy-dev-only:end */
   for (const b of bulletLines) {
     assert.match(b, bulletRe, `Invalid CHANGELOG bullet prefix: ${b}`);
@@ -890,7 +897,8 @@ export function runSanityChecks({
         cleanTarget.startsWith('mailto:') ||
         cleanTarget.startsWith('tel:') ||
         cleanTarget.startsWith('data:') ||
-        cleanTarget.startsWith('#')
+        cleanTarget.startsWith('#') ||
+        /^(?:\.\.\/){2,}(?:pull|issues|milestone)\/\d+(?:[/?#].*)?$/.test(cleanTarget)
       ) {
         continue;
       }

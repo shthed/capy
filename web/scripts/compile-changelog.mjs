@@ -15,7 +15,6 @@ import { parseChangelogFragment, validateChangelogChannelOrder } from './sanity.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '../..');
 const BUMP_RANK = { patch: 1, minor: 2, major: 3 };
-const REPO_URL = 'https://github.com/shthed/capy';
 
 function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -204,26 +203,46 @@ export function compileChangelog({
   });
 
   let nextVerInfo = null;
+  let appendedSameDay = false;
   const removedTasks = [];
 
   if (parsedFragments.length > 0) {
-    const highestBump = pickHighestBump(parsedFragments.map((f) => f.bump));
-    nextVerInfo = computeNextSemVer(activeVersion, highestBump);
-    activeVersion = nextVerInfo.version;
-
     const bullets = parsedFragments.map((f) => {
       const cleanedSummary = f.summary
-        .replace(/^\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)\s+/, '')
+        .replace(/^\[#\d+\]\((?:https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+|\.\.\/\.\.\/pull\/\d+)\)\s+/, '')
         .replace(/^#\d+\s+/, '')
-        .replace(/\s+\[#\d+\]\(https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+\)$/, '')
+        .replace(/\s+\[#\d+\]\((?:https:\/\/github\.com\/[^/\s]+\/(?:capy|paint)\/pull\/\d+|\.\.\/\.\.\/pull\/\d+)\)$/, '')
         .replace(/\s+#\d+$/, '')
         .trim();
-      return `- [#${f.pr}](${REPO_URL}/pull/${f.pr}) ${cleanedSummary}`;
+      return `- [#${f.pr}](../../pull/${f.pr}) ${cleanedSummary}`;
     });
 
-    const linesWithoutPriorBeta = changelogText.split('\n').map(stripBetaTagFromLine);
-    const newSection = `### ${activeVersion} - ${dateStr} (Beta)\n\n${bullets.join('\n')}\n\n`;
-    changelogText = `${newSection}${linesWithoutPriorBeta.join('\n').replace(/^\n+/, '')}`;
+    const existingLines = changelogText.split('\n');
+    const topHeading = existingLines[0] || '';
+    const sameDayBetaMatch = /^### (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2}) \((?:Production, )?Beta\)$/.exec(
+      topHeading
+    );
+    const canAppendSameDay =
+      Boolean(sameDayBetaMatch) &&
+      sameDayBetaMatch[1] === activeVersion &&
+      sameDayBetaMatch[2] === dateStr;
+
+    if (canAppendSameDay) {
+      appendedSameDay = true;
+      const rest = existingLines.slice(1).join('\n').replace(/^\n+/, '');
+      const joiner = rest.startsWith('- ') ? '\n' : '\n\n';
+      changelogText = rest
+        ? `${topHeading}\n\n${bullets.join('\n')}${joiner}${rest}`
+        : `${topHeading}\n\n${bullets.join('\n')}\n`;
+    } else {
+      const highestBump = pickHighestBump(parsedFragments.map((f) => f.bump));
+      nextVerInfo = computeNextSemVer(activeVersion, highestBump);
+      activeVersion = nextVerInfo.version;
+
+      const linesWithoutPriorBeta = existingLines.map(stripBetaTagFromLine);
+      const newSection = `### ${activeVersion} - ${dateStr} (Beta)\n\n${bullets.join('\n')}\n\n`;
+      changelogText = `${newSection}${linesWithoutPriorBeta.join('\n').replace(/^\n+/, '')}`;
+    }
 
     for (const f of parsedFragments) {
       if (f.task) removedTasks.push(f.task);
@@ -260,6 +279,16 @@ export function compileChangelog({
     if (nextVerInfo) {
       pkg.version = activeVersion;
       fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf8');
+
+      const pkgLockPath = path.join(root, 'web/package-lock.json');
+      if (fs.existsSync(pkgLockPath)) {
+        const pkgLock = JSON.parse(fs.readFileSync(pkgLockPath, 'utf8'));
+        pkgLock.version = activeVersion;
+        if (pkgLock.packages && pkgLock.packages['']) {
+          pkgLock.packages[''].version = activeVersion;
+        }
+        fs.writeFileSync(pkgLockPath, `${JSON.stringify(pkgLock, null, 2)}\n`, 'utf8');
+      }
 
       const versionTsPath = path.join(root, 'web/src/version.ts');
       if (fs.existsSync(versionTsPath)) {
@@ -309,6 +338,7 @@ export function compileChangelog({
   return {
     version: activeVersion,
     compiledCount: parsedFragments.length,
+    appendedSameDay,
     promoted: Boolean(promote),
     removedTasks,
     changelogText,

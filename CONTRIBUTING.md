@@ -44,8 +44,8 @@ Run the full verification suite inside `web/`:
 npm run test:sanity && npm run lint && npm run build && npm test
 ```
 
-- `npm run test:sanity`: Verifies SemVer parity, `CHANGELOG.md` formatting, relative links, zero emojis, zero box-drawing characters, and mobile-first Markdown formatting (no `>= 3`-column tables).
-- `npm run lint`: Runs strict TypeScript typechecking for both `web/` and `worker/`.
+- `npm run test:sanity`: Verifies SemVer parity, `CHANGELOG.md` and `.changelog/` fragment formatting, relative links, zero emojis, zero box-drawing characters, and mobile-first Markdown formatting (no `>= 3`-column tables).
+- `npm run lint`: Runs strict TypeScript typechecking for `web/` and `worker/` plus `oxlint` static checks (`web/.oxlintrc.json`).
 - `npm run build`: Builds the production Vite bundle.
 - `npm test`: Runs the unit and Playwright E2E test suite.
 
@@ -56,6 +56,7 @@ For documentation-only changes (`**.md`, `docs/**`), `npm run test:sanity` is su
 ## Pull Request Guidelines
 
 - Keep changes focused on a single bugfix, feature, or documentation improvement.
+- For feature or bugfix PRs, add a concise 1--2 sentence (`<= 320`-char) fragment under [`.changelog/`](./.changelog/README.md) instead of editing `CHANGELOG.md` or bumping `web/package.json` directly.
 - Add or update tests in [`web/scripts/test.mjs`](./web/scripts/test.mjs) when changing engine, UI, storage, or worker behavior.
 - Keep relevant documentation in sync (`README.md`, `WEB.md`, `PUZZLE.md`, `APP.md`, `CLOUD.md`, `TESTING.md`).
 - Never commit secrets, API tokens, or personal data.

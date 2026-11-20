@@ -96,7 +96,7 @@ export function transformPersonaContent(content) {
     .replace(/\[`?(?:AGENTS|CAPYBOOP)\.md`?\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)\s*\|\s*/g, '')
     .replace(/\[([^\[\]\r\n]+)\]\(\.\/(?:AGENTS|CAPYBOOP)\.md(?:#[^)\s]*)?\)/g, '$1')
     .replace(
-      /\[([^\[\]\r\n]+)\]\(https:\/\/github\.com\/(?:shthed\/capy\/(?:pull|issues|milestone)\/\d+|capyboop\/(?:capy|paint)\/(?:(?:pull|milestone)\/\d+|issues\/(?!(?:2|3|4|5)(?:[/?#)]|$))\d+))(?:[/?#][^\s)]*)?\)/g,
+      /\[([^\[\]\r\n]+)\]\((?:https:\/\/github\.com\/(?:shthed\/capy\/(?:pull|issues|milestone)\/\d+|capyboop\/(?:capy|paint)\/(?:(?:pull|milestone)\/\d+|issues\/(?!(?:2|3|4|5)(?:[/?#)]|$))\d+))|(?:\.\.\/){2,}(?:pull|issues|milestone)\/\d+)(?:[/?#][^\s)]*)?\)/g,
       '$1'
     )
     .replace(
