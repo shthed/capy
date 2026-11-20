@@ -1,25 +1,21 @@
 # Development & Maintenance Guide -- Capy Monorepo (`web/`, `app/`, `worker/`)
 
-This guide defines the end-to-end human and AI co-development workflow, shared architectural guardrails, model selection strategy, session hygiene, CI/CD architecture, and ongoing maintenance playbooks for **Capy** ([`https://github.com/capyboop/paint`](https://github.com/capyboop/paint) public production repository accepting external issues and PRs, live at [`https://capypaint.com/`](https://capypaint.com/)<!-- capy-dev-only:start -->; developed in the private [`https://github.com/shthed/capy`](https://github.com/shthed/capy) AI Dev environment with PR previews at [`https://shthed.github.io/capy/`](https://shthed.github.io/capy/)<!-- capy-dev-only:end -->).
+This guide defines the engineering workflow, shared architectural guardrails, CI/CD architecture, and ongoing maintenance playbooks for **Capy** ([`https://github.com/capyboop/paint`](https://github.com/capyboop/paint), live at [`https://capypaint.com/`](https://capypaint.com/)<!-- capy-dev-only:start -->; developed in [`https://github.com/shthed/capy`](https://github.com/shthed/capy) with PR previews at [`https://shthed.github.io/capy/`](https://shthed.github.io/capy/) and private AI operational guides in [`docs/ai/workflow-and-models.md`](./docs/ai/workflow-and-models.md)<!-- capy-dev-only:end -->).
 
-**Related Guides**: [`README.md`](./README.md) | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | [`SUPPORT.md`](./SUPPORT.md) | [`SECURITY.md`](./SECURITY.md) | [`CAPYBOOP.md`](./CAPYBOOP.md) | [`PROJECT.md`](./PROJECT.md) | [`ROADMAP.md`](./ROADMAP.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
+**Related Guides**: [`README.md`](./README.md) | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | [`SUPPORT.md`](./SUPPORT.md) | [`SECURITY.md`](./SECURITY.md) | [`PROJECT.md`](./PROJECT.md) | [`ROADMAP.md`](./ROADMAP.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
 
 **Table of Contents**:
 1. [Documentation Map & Architecture](#1-documentation-map--architecture)
-2. [Human + AI Co-Development Philosophy & PM Handoff](#2-human--ai-co-development-philosophy--pm-handoff)
-3. [Choosing the Right AI Model, Capability Tier & Workflow](#3-choosing-the-right-ai-model-capability-tier--workflow)
-4. [Antigravity Session, Chat Naming & Pinning Hygiene](#4-antigravity-session-chat-naming--pinning-hygiene)
-5. [Core Technical Guardrails (`web/` & `app/`)](#5-core-technical-guardrails-web--app)
-6. [Git Branching, Local Verification & Release Workflow (`Alpha -> Beta -> Production`)](#6-git-branching-local-verification--release-workflow-alpha---beta---production)
-7. [CI/CD Pipeline & Automated Cleanup Architecture](#7-cicd-pipeline--automated-cleanup-architecture)
-8. [Versioning, Dependency Maintenance & Asset Playbooks](#8-versioning-dependency-maintenance--asset-playbooks)
-9. [Environment Self-Healing & Troubleshooting Recipes](#9-environment-self-healing--troubleshooting-recipes)
+2. [Core Technical Guardrails (`web/` & `app/`)](#2-core-technical-guardrails-web--app)
+3. [Git Branching, Local Verification & Release Workflow (`Alpha -> Beta -> Production`)](#3-git-branching-local-verification--release-workflow-alpha---beta---production)
+4. [CI/CD Pipeline & Automated Cleanup Architecture](#4-cicd-pipeline--automated-cleanup-architecture)
+5. [Versioning, Dependency Maintenance & Asset Playbooks](#5-versioning-dependency-maintenance--asset-playbooks)
+6. [Environment Self-Healing & Troubleshooting Recipes](#6-environment-self-healing--troubleshooting-recipes)
 
 > [!IMPORTANT]
-> **Division Between `PROJECT.md`, `DEV.md`, and `AGENTS.md`**:
-> - [`AGENTS.md`](./AGENTS.md) is the **auto-loaded AI operational contract** injected into every agent turn. Keep `AGENTS.md` strictly AI-specific and free of human-only tutorials, while letting it grow to whatever size is needed for optimal agent performance and reliability over raw token savings.
-> - [`PROJECT.md`](./PROJECT.md) is the **canonical Project Management manual** owning backlog governance, Epic triage, PR sync and readiness gates, release promotion, `CHANGELOG.md` channel governance, and the retro log.
-> - [`DEV.md`](./DEV.md) (this file) is the **engineering & co-development manual** consulted by humans and agents for Gemini model selection, session hygiene, shared technical guardrails, local build/test CLI, CI/CD architecture, and troubleshooting.
+> **Division Between `PROJECT.md` and `DEV.md`**:
+> - [`PROJECT.md`](./PROJECT.md) is the **canonical Project Management manual** owning backlog governance, Epic triage, PR sync, release promotion, `CHANGELOG.md` channel governance, and the retro log.
+> - [`DEV.md`](./DEV.md) (this file) is the **engineering manual** covering shared technical guardrails, local build/test CLI, CI/CD architecture, SemVer/dependencies/assets, and troubleshooting.
 
 ---
 
@@ -27,10 +23,6 @@ This guide defines the end-to-end human and AI co-development workflow, shared a
 
 ```mermaid
 flowchart TD
-    subgraph AutoLoaded["Auto-Loaded Every Agent Turn"]
-        AGENTS["AGENTS.md (AI Invariants, Context Discipline & PR Readiness)"]
-    end
-
     subgraph GovernanceAndPlanning["PM Governance, Roadmap, GitHub Agile & Sprint Queue"]
         PROJECT["PROJECT.md (Agile Triad, PR Sync, Release Promotion & Retro)"]
         DEV["DEV.md (Engineering Workflow, Guardrails, CI/CD & Maintenance)"]
@@ -40,7 +32,7 @@ flowchart TD
         CHANGELOG["CHANGELOG.md (SemVer Rules, Channel Markers & History)"]
     end
 
-    subgraph SubsystemSpecs["Subsystem Technical Specifications (Load On Demand)"]
+    subgraph SubsystemSpecs["Subsystem Technical Specifications"]
         WEB["WEB.md (React 19, 2D Canvas, Gestures & Settings)"]
         PUZZLE["PUZZLE.md (Web Worker, K-Means, Sobel & Watershed)"]
         APP["APP.md (Kotlin WebView Launcher, Haptics & Disk Backups)"]
@@ -48,147 +40,49 @@ flowchart TD
         TESTING["TESTING.md (Unified Vite SSR + Playwright E2E & JUnit4)"]
     end
 
-    AGENTS --> PROJECT
-    AGENTS --> DEV
     ROADMAP <--> GH_AGILE
     ROADMAP --> TODO
     GH_AGILE <--> TODO
     PROJECT --> TODO
     PROJECT --> CHANGELOG
-    AGENTS --> WEB
-    AGENTS --> PUZZLE
-    AGENTS --> APP
-    AGENTS --> CLOUD
-    AGENTS --> TESTING
+    DEV --> WEB
+    DEV --> PUZZLE
+    DEV --> APP
+    DEV --> CLOUD
+    DEV --> TESTING
 ```
 
 ### Repository Documentation Index
 
-- **[`README.md`](./README.md)** (*Players & Contributors*): Product showcase, controls cheat sheet, Stable/Beta play links, developer quick start, privacy policy link, and documentation index.
-- **[`CAPYBOOP.md`](./CAPYBOOP.md)** (*Studio Structure & AI Agent Onboarding*): CapyBoop Games organizational chart, standing AI agent chat roles and kickoff prompts for instance recovery, human-only authorities, and cross-chat coordination rules.
-- **[`PROJECT.md`](./PROJECT.md)** (*Project Management & Maintainers*): Canonical Lean Agile triad ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), sprint cadence, Epic triage, PR sync and readiness gates, release promotion, `CHANGELOG.md` channel governance, and continuous improvement retro log.
-- **[`ROADMAP.md`](./ROADMAP.md)** (*Humans & AI Agents*): Strategic product Epics ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), User Stories (`US-*`), external dependency readiness gates, Platform Icebox (`ICE-*`), and collapsed Shipped Epics & Stories.
-- **[`TODO.md`](./TODO.md)** (*Humans & AI Agents*): Focused **1-Sprint Execution Queue** containing only active sprint `BUG-*` and `TASK-*` items under the active GitHub Sprint Milestone.
-- **[`DEV.md`](./DEV.md)** (*Humans & AI Agents*): Co-development workflow, Gemini 4 model selection, `#NNN` session hygiene, shared technical guardrails, 3-tier CI/CD, SemVer/dependencies/assets, and troubleshooting.
-- **[`AGENTS.md`](./AGENTS.md)** (*AI Agents — Auto-Loaded*): AI-specific guardrails, mobile-first formatting rule, context discipline, task routing, and PR readiness contract.
-- **[`WEB.md`](./WEB.md)** (*Humans & AI Agents*): React 19 UI hierarchy, `PuzzleCanvas.tsx` 3-tier offscreen caching, 6-mode touch gesture engine, Worker IPC, `NativeBridge`, storage keys, and `UserSettings` dictionary.
-- **[`PUZZLE.md`](./PUZZLE.md)** (*Humans & AI Agents*): `puzzle.worker.ts` 5-strategy computer-vision pipeline, Red-Mean K-Means++ clustering, adaptive Otsu/Sobel contours, watershed absorption, and 6-stage telemetry.
-- **[`APP.md`](./APP.md)** (*Humans & AI Agents*): Unified Android `:app` launcher (`MainActivity.kt`, `CapyAndroidBridge.kt`), `WebViewAssetLoader`, Pixel API 33+ LRA touch haptics, `SnapshotsClient` sync, and disk backups.
-- **[`CLOUD.md`](./CLOUD.md)** (*Humans & AI Agents*): Modular `CloudProviderDriver` backends, Google OAuth 2.0 `appDataFolder` & Play Games Services v2 sign-in, CRDT `mergeProgressDeltas`, `#s=<token>` share links, Co-op rooms, and Cloudflare Workers edge hosting (`capypaint.com`).
-- **[`TESTING.md`](./TESTING.md)** (*Humans & AI Agents*): Unified `web/scripts/test.mjs` runner (Vite SSR unit/codec checks + Playwright multi-touch E2E suite) and Android JUnit4 verification.
-- **[`CHANGELOG.md`](./CHANGELOG.md)** (*Humans & AI Agents*): Chronological `MAJOR.MINOR.PATCH` release history and `(Alpha)`/`(Beta)`/`(Production)` channel markers synchronized with `web/package.json` and Android `versionCode`.
+- **[`README.md`](./README.md)** (*Players & Contributors*): Product showcase, controls cheat sheet, play links, developer quick start, privacy policy link, and documentation index.
+<!-- capy-dev-only:start -->
+- **[`CAPYBOOP.md`](./CAPYBOOP.md)** (*Studio Structure & AI Onboarding*): CapyBoop Games organizational chart, standing AI chat roles, and cross-chat coordination rules.
+- **[`AGENTS.md`](./AGENTS.md)** (*Auto-Loaded AI Playbook*): AI-specific guardrails, context discipline, task routing, and links to [`docs/ai/`](./docs/ai/workflow-and-models.md).
+<!-- capy-dev-only:end -->
+- **[`PROJECT.md`](./PROJECT.md)** (*Project Management & Maintainers*): Canonical Lean Agile triad ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), sprint cadence, Epic triage, PR sync, release promotion, `CHANGELOG.md` channel governance, and continuous improvement retro log.
+- **[`ROADMAP.md`](./ROADMAP.md)** (*Contributors & Maintainers*): Strategic product Epics ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), User Stories (`US-*`), external dependency readiness gates, Platform Icebox (`ICE-*`), and collapsed Shipped Epics & Stories.
+- **[`TODO.md`](./TODO.md)** (*Contributors & Maintainers*): Focused **1-Sprint Execution Queue** containing only active sprint `BUG-*` and `TASK-*` items under the active GitHub Sprint Milestone.
+- **[`DEV.md`](./DEV.md)** (*Contributors & Maintainers*): Engineering workflow, shared technical guardrails, 3-tier CI/CD, SemVer/dependencies/assets, and troubleshooting.
+- **[`WEB.md`](./WEB.md)** (*Engineering Reference*): React 19 UI hierarchy, `PuzzleCanvas.tsx` 3-tier offscreen caching, 6-mode touch gesture engine, Worker IPC, `NativeBridge`, storage keys, and `UserSettings` dictionary.
+- **[`PUZZLE.md`](./PUZZLE.md)** (*Engineering Reference*): `puzzle.worker.ts` 5-strategy computer-vision pipeline, Red-Mean K-Means++ clustering, adaptive Otsu/Sobel contours, watershed absorption, and 6-stage telemetry.
+- **[`APP.md`](./APP.md)** (*Engineering Reference*): Unified Android `:app` launcher (`MainActivity.kt`, `CapyAndroidBridge.kt`), `WebViewAssetLoader`, Pixel API 33+ LRA touch haptics, `SnapshotsClient` sync, and disk backups.
+- **[`CLOUD.md`](./CLOUD.md)** (*Engineering Reference*): Modular `CloudProviderDriver` backends, Google OAuth 2.0 `appDataFolder` & Play Games Services v2 sign-in, CRDT `mergeProgressDeltas`, `#s=<token>` share links, Co-op rooms, and Cloudflare Workers edge hosting (`capypaint.com`).
+- **[`TESTING.md`](./TESTING.md)** (*Engineering Reference*): Unified `web/scripts/test.mjs` runner (Vite SSR unit/codec checks + Playwright multi-touch E2E suite) and Android JUnit4 verification.
+- **[`CHANGELOG.md`](./CHANGELOG.md)** (*Release History*): Chronological `MAJOR.MINOR.PATCH` release history and `(Alpha)`/`(Beta)`/`(Production)` channel markers synchronized with `web/package.json` and Android `versionCode`.
 - **[`LICENSE.md`](./LICENSE.md)** (*Contributors*): Capybara Chill Preamble and CC BY-NC-SA 4.0 licensing terms.
 - **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)** (*Players & Storefronts*): Published Privacy Policy and Google Play Data Safety disclosures (`https://capypaint.com/privacy-policy.html`).
 
 ### Documentation Formatting Standards (Mobile-First & Zero-Clutter)
 
-1. **Mobile-First Readability (No Wide Prose Tables)**: Contributors review documentation, pull requests, and Antigravity chats on mobile devices. Never author wide multi-column Markdown tables or put multi-sentence prose inside table cells (which overflow horizontally and stretch narrow columns into tall blocks of empty whitespace). Use structured bullet lists instead; reserve Markdown tables strictly for 2 short-value columns that fit narrow mobile screens without scrolling.
+1. **Mobile-First Readability (No Wide Prose Tables)**: Contributors review documentation and pull requests on mobile devices. Never author wide multi-column Markdown tables or put multi-sentence prose inside table cells (which overflow horizontally and stretch narrow columns into tall blocks of empty whitespace). Use structured bullet lists instead; reserve Markdown tables strictly for 2 short-value columns that fit narrow mobile screens without scrolling.
 2. **Zero Emojis & Zero ASCII Box-Drawing Art**: Never use unicode emojis or box-drawing characters (`U+2500`--`U+257F`, `+---+`) in `.md` files. Use GFM alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`), Mermaid diagrams, and structured bullet lists.
-3. **Portable Relative Intra-Repo Links**: Always link repository files using relative paths (`./web/src/...`)—never machine-local `file:///...` URIs—avoid brittle unpinned `#L...` line numbers inside `.md` guides, and pin line-specific references in PR bodies and comments to immutable commit SHAs (`https://github.com/shthed/capy/blob/<sha>/<path>#L<start>-L<end>`).
+3. **Portable Relative Intra-Repo Links**: Always link repository files using relative paths (`./web/src/...`)—never machine-local `file:///...` URIs—avoid brittle unpinned `#L...` line numbers inside `.md` guides, and pin line-specific references in PR bodies and comments to immutable commit SHAs (`blob/<sha>/<path>#L<start>-L<end>`).
 
 ---
 
-## 2. Human + AI Co-Development Philosophy & PM Handoff
+## 2. Core Technical Guardrails (`web/` & `app/`)
 
-Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vision, binary RLE/CRDT codecs, and a native Kotlin Android wrapper. Human developers and AI agents have complementary strengths across these layers.
-
-### Optimal Goals for the Human Developer
-
-1. **Product Vision & Sprint Pull Governance**: Curate Epics and Stories in [`ROADMAP.md`](./ROADMAP.md) ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480); governance in [`PROJECT.md`](./PROJECT.md)) and promote only unblocked, high-impact tasks into [`TODO.md`](./TODO.md) for the active sprint.
-2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness on `/capy/alpha/<number>/` and `/capy/beta/`.
-3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve `implementation_plan.md` artifacts *before* code generation begins. Five minutes spent aligning on a plan saves tens of thousands of tokens of rework.
-4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/teamwork`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
-5. **Final Merge Gatekeeping**: Verify the live preview link and the **PR Readiness Score (`100%`)** with its **`PR Readiness Checklist`** before approving any merge to `main`.
-
-### Optimal Goals for the AI Agent
-
-1. **Token-Efficient Precision**: Locate exact symbols via targeted search and line-sliced file reads rather than loading entire multi-thousand-line files, batch independent tool calls in parallel, and keep diffs minimal.
-2. **Transparent Live Reasoning**: Continuously surface clear, high-level working status updates explaining *what* file or system is being inspected, *why* each step is being taken, and *what* was learned from the prior tool output.
-3. **Invariant-First Engineering**: Enforce zero per-frame heap allocations in `requestAnimationFrame` hot paths, strict Web Worker isolation in `puzzle.worker.ts`, relative `./assets/...` paths, and defensive `NativeBridge` fallbacks without needing reminders.
-4. **Thorough Local VM Verification (Fast-CI Partner)**: Run the complete verification suite (`npm run lint && npm run build && npm test`, plus `./gradlew app:testDebugUnitTest` when available) inside the Antigravity VM before pushing, keeping GitHub Actions ultra-fast and lightweight so PR preview deployments never bottleneck the dev/test/release loop.
-5. **Zero-Drift Documentation & Traceability**: Synchronize subsystem `.md` files, [`TODO.md`](./TODO.md), and [`ROADMAP.md`](./ROADMAP.md) in the same PR as the code change, drop a concise `.changelog/<slug>.md` fragment on feature/bugfix PRs targeting `beta` (compiled daily / on `beta -> main` promotion into [`CHANGELOG.md`](./CHANGELOG.md)), and pin every code reference to an immutable commit SHA (`blob/<sha>/<path>#L<start>-L<end>`).
-
-### Project Management, Agile Triad & Backlog Governance
-
-All Lean Agile backlog rules, terminology glossary, the 3-artefact triad ([`ROADMAP.md`](./ROADMAP.md) <-> [EPIC-1](../../issues/476)--[EPIC-5](../../issues/480) & Milestones <-> [`TODO.md`](./TODO.md)), Definition of Ready/Done, Epic triage (`EPIC-2` vs. `EPIC-3`--`EPIC-5`), clickable `[#NNN](../../pull/NNN)` / `[EPIC-N](../../issues/<num>)` link conventions, mobile-first `<details>` card templates, and `gh` CLI playbooks live canonically in [`PROJECT.md` Section 2](./PROJECT.md#2-lean-agile-lifecycle-and-backlog-governance) (with Sprint Cadence in [`PROJECT.md` Section 3](./PROJECT.md#3-sprint-cadence-and-hybrid-automated-execution) and Multi-Session Coordination in [`PROJECT.md` Section 1](./PROJECT.md#1-roles-ownership-and-multi-session-coordination)).
-
----
-
-## 3. Choosing the Right AI Model, Capability Tier & Workflow
-
-Selecting the right Gemini 4 / 3.8 capability tier and slash workflow maximizes code quality on hard algorithmic problems while preserving rolling Antigravity quota and keeping interactive turns fast.
-
-### A. Capability Tiers & Named Frontier Models
-
-- **Deep-Verification Frontier (`Carbon` -- ~15% of Capy PRs)**:
-  - *Antigravity Selection / Subagent Tier*: **Gemini 4 Carbon** (`gemini-4-carbon`, default `medium` thinking; `high` only for hardest math/security specs) or **Claude Opus 5.5 (Thinking)** (`pro` subagent tier).
-  - *Ideal Capy Use Cases*: `/grill-me` + `/plan` architecture interviews, zero-allocation 2D affine & circular-clip rendering math in `PuzzleCanvas.tsx` (`US-2.1`), `puzzle.worker.ts` segmentation invariants, CRDT/concurrency race audits, and `EPIC-5` OAuth/WebCrypto security specs.
-  - *Token & Latency Profile*: Shares Argon's `1M` unified context window and per-token API rate, but spends `~2x--4x` more thinking tokens per turn to explore hypotheses and run extended verification loops (`0%` reward-hacking on Terminal-Bench 4.0). Reserve for high-complexity reasoning rather than routine UI edits.
-- **Efficient Frontier Daily Driver (`Argon` -- ~65--70% of Capy PRs)**:
-  - *Antigravity Selection / Subagent Tier*: **Gemini 4 Argon** (`gemini-4-argon`, `pro` / `inherit` subagent tier).
-  - *Ideal Capy Use Cases*: Default daily driver for multi-file feature stories (`SoundService.ts` `US-2.3`, `ReplayVideoExporter.ts` `US-3.3`, Infinite Zoom `US-4.1`, `SvgPrintExporter.ts` `US-4.2`), `/goal` and `/teamwork` sprint execution, Co-op/IndexedDB bugfixes (`BUG-1`), and Android Kotlin + `NativeBridge.ts` integration.
-  - *Token & Latency Profile*: Delivers Gemini 4 frontier coding and `1M`-context cross-repo synthesis with significantly faster responses and lower thinking-token spend per turn than Carbon.
-- **Fast Frontier Workhorse (`Flash` -- ~15--20% of Capy PRs)**:
-  - *Antigravity Selection / Subagent Tier*: **Gemini 3.8 Flash** (`gemini-3.8-flash`, `flash` subagent tier) or **Claude Sonnet / Haiku**.
-  - *Ideal Capy Use Cases*: Executing `[quick-win]` tasks in [`TODO.md`](./TODO.md), React 19 modal/settings controls (`SettingsModal.tsx`), CI workflow wiring, parallel `research` subagent codebase sweeps, and `.md` / `ROADMAP.md` / `CHANGELOG.md` synchronization.
-  - *Token & Latency Profile*: Low latency and minimal quota burn once architectural ambiguity is already resolved.
-- **Ultra-Light (`Flash-Lite`)**:
-  - *Antigravity Subagent Tier*: `flash_lite` (**Gemini 3.5 Flash-Lite**).
-  - *Ideal Capy Use Cases*: Mechanical log extraction, PR label/title audits, link checks, and copy tweaks; never use for canvas math or concurrency logic.
-
-#### Nuances Across Named Model Families on Capy Tasks
-- **Gemini 4 Carbon (`gemini-4-carbon`)**: Built directly on Gemini 4 Argon with extended RL verification loops; strongest choice when subtle coordinate edge cases, memory-allocation invariants, or security boundaries must be proven right on the first pass.
-- **Gemini 4 Argon (`gemini-4-argon`)**: Optimal everyday frontier coder—holds `App.tsx`, `PuzzleCanvas.tsx`, `NativeBridge.ts`, and `CapyAndroidBridge.kt` together across its `1M` context window without Carbon's extra thinking latency.
-- **Claude Opus 5.5 / Sonnet (Thinking)**: Excels at surgical multi-hunk refactoring (`replace_file_content`), nuanced CSS/UI polish, and strict formatting compliance.
-- **Gemini 3.8 Flash (`gemini-3.8-flash`)**: Fast workhorse for well-specified `[quick-win]` tasks, `research` subagent sweeps, and sprint backlog replenishment.
-
-### B. Task-to-Model & Slash-Command Routing
-
-- **Ambiguous New Feature, UX Redesign, or Sprint Charter**: Use **Gemini 4 Carbon** (or **Argon**) with `/grill-me` + `/plan` to resolve design trade-offs one question at a time and approve `implementation_plan.md` before coding.
-- **Canvas Gestures, Zero-Alloc Ring Buffers, or Security/Crypto**: Use **Gemini 4 Carbon** (`medium` thinking) with `/plan` to protect coordinate invariants and zero-allocation `requestAnimationFrame` paths.
-- **Cohesive Story or P0 Bug Batch (`2--4` Sprint Tasks)**: Use **Gemini 4 Argon** with `/goal` (sequential self-healing loop) or `/teamwork` (parallel file-scoped workers + verifier running `npm test`) onto one `automation/sprint-*` or `feature/*` PR branch.
-- **Large Multi-Subsystem Campaign (`web/` + `app/` + `worker/`)**: Use **Gemini 4 Carbon** or **Argon** with `/teamwork` for milestone-gated proposer + adversarial verifier execution.
-- **Single Ready `TASK-*` or `BUG-*` from `TODO.md`**: Use **Gemini 4 Argon** (or **Gemini 3.8 Flash** for `[quick-win]` items) in a fresh `#NNN` chat.
-- **Documentation Sync, Sprint Replenishment, or Link Audit**: Use **Gemini 3.8 Flash** (or `Flash-Lite`) via `npm run test:sanity` and the `< 2s` docs-only CI fast-path.
-
-### C. Subagent Delegation Rules
-
-When working inside Antigravity:
-- **Default Model Inheritance**: Always pass `Model: 'inherit'` when invoking subagents via `invoke_subagent` unless the human explicitly requests a specific tier (`pro`, `flash`, `flash_lite`).
-- **Workspace Mode**: Always use `Workspace: 'inherit'` (branched/worktree subagent workspaces are unsupported in the container sandbox).
-- **When to Spawn a `research` Subagent**: Delegate broad read-only codebase surveys (e.g., auditing `TODO.md` readiness across 10+ files) to `research` so raw search output stays out of the main implementation context window. Perform quick 1--3 file lookups directly in the main agent.
-
----
-
-## 4. Antigravity Session, Chat Naming & Pinning Hygiene
-
-### How Chat Titles & Bookmarks Work Under the Hood
-
-1. **First-Prompt Auto-Titling**: Antigravity generates the left-sidebar conversation title **once** from your very first message in a new thread. Sidebar thread titles and pin states live in the host web application's database outside the Linux VM sandbox, so the agent inside the VM cannot rename or pin/unpin sidebar threads via shell commands.
-2. **Shared Brain Storage (`/shared/user/.gemini/jetski/brain/`)**: Markdown artifacts (`implementation_plan.md`, `walkthrough.md`) and URL bookmark cards (`*.url.json`) live inside `/home/antigravity/.gemini/jetski/brain/v1/default/jetski_remote_agents_3p/<conversation-id>/` and *can* be created, updated, and cleaned up directly by the agent.
-
-### Mandatory Human + AI Session Conventions
-
-1. **Start Every New PR Chat With `#NNN` (`First-Prompt Rule`)**:
-   - Check the latest PR number on GitHub and start your opening prompt in a new chat with the upcoming PR number:
-     ```text
-     #474 Fix Co-op welcome persistence and replay rewind UNFILL sync (BUG-1)
-     ```
-   - Because the auto-titler summarizes the opening prompt, your chat thread will automatically begin with `#474` without manual renaming.
-2. **Pin While Open, Unpin When Merged (`Sidebar Pinning Policy`)**:
-   - **Pin** any conversation whose pull request(s) are still **open** or actively under review so in-flight work stays anchored at the top of the sidebar.
-   - **Unpin** the conversation as soon as its pull request is **merged** or **closed**.
-3. **One PR (or Cohesive Story/Sprint Slice) Per Chat (`Quota & Context Freshness`)**:
-   - Bundling 3--4 unrelated sequential PRs into a single chat forces frontier models to re-attend over tens of thousands of historical tool outputs on every turn, multiplying thinking-token spend. Start a fresh `#NNN` chat for each new PR so rolling 5-hour/weekly Antigravity quotas stretch much further.
-4. **Canonical `.url.json` Bookmark Cards**:
-   - When the agent opens a PR, it bookmarks the PR using `PR_<number>.url.json` (`UserFacing: true`) with `"title": "#<number> <Canonical GitHub PR Title>"`.
-   - Once a PR is merged and its `/alpha/<number>/` preview is cleaned up, stale preview `.url.json` cards should not be left pointing to `404` URLs.
-
----
-
-## 5. Core Technical Guardrails (`web/` & `app/`)
-
-All human and AI contributors modifying Web (`web/`) or Android (`app/`) code must preserve these core architectural invariants:
+All contributors modifying Web (`web/`) or Android (`app/`) code must preserve these core architectural invariants:
 
 ### A. Web & Puzzle Engine Conventions (`web/`)
 
@@ -225,16 +119,16 @@ All human and AI contributors modifying Web (`web/`) or Android (`app/`) code mu
 
 ---
 
-## 6. Git Branching, Local Verification & Release Workflow (`Alpha -> Beta -> Production`)
+## 3. Git Branching, Local Verification & Release Workflow (`Alpha -> Beta -> Production`)
 
-### Step 1: Session Kick-Off & Linear Branch Creation Off `origin/beta`
+### Step 1: Linear Branch Creation
 
-All daily AI feature, bugfix, and Sprint work branches off **`origin/beta`** and merges back into **`beta`** (`--base beta`) so live players on `https://shthed.github.io/capy/` (`main`) are protected from in-flight changes:
+Feature, bugfix, and documentation work branches cleanly from the target integration branch (`beta` for active development, `main` for release):
 
 ```bash
 git fetch --all --prune
 git checkout -b feature/<short-topic> origin/beta
-# Allowed prefixes: feature/, automation/ (incl. automation/sprint-*), fix/, docs/, ci/, deps/, chore/
+# Allowed prefixes: feature/, fix/, docs/, ci/, deps/, chore/
 ```
 
 If `origin/beta` advances while a PR is open, rebase cleanly:
@@ -244,7 +138,7 @@ git fetch origin beta
 git rebase origin/beta
 ```
 
-When a Sprint or Beta cycle has been play-tested on [Capy Beta](https://shthed.github.io/capy/beta/) and approved for Production + Play Store release, follow the complete Release Promotion workflow in [`PROJECT.md` Section 5](./PROJECT.md#5-release-promotion-and-changelog-governance): split/promote [`CHANGELOG.md`](./CHANGELOG.md) channel headings cleanly, open a `beta -> main` PR and mark ready so `Playwright E2E` runs in CI, tag `vX.Y.Z` on `origin/main` after Owner-approved merge, and re-align `origin/beta` to `origin/main` when appropriate.
+When a release cycle has been tested and approved for Production, follow the Release Promotion workflow in [`PROJECT.md` Section 5](./PROJECT.md#5-release-promotion-and-changelog-governance): compile [`CHANGELOG.md`](./CHANGELOG.md) channel headings cleanly, open a `beta -> main` PR so `Playwright E2E` runs in CI, tag `vX.Y.Z` on `origin/main` after merge, and re-align `origin/beta` to `origin/main` when appropriate.
 
 ### Step 2: Local Development & Verification
 
@@ -270,29 +164,27 @@ npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when buil
 ./gradlew app:testDebugUnitTest # JUnit4 unit tests (CapyAndroidBridgeTest.kt)
 ./gradlew app:assembleDebug     # Syncs web/dist/ into assets/www/ and builds debug APK
 ./gradlew app:bundleRelease     # Builds Play Store Android App Bundle (.aab)
-# NEVER run ./gradlew app:installDebug unless explicitly requested by the user.
 ```
 
-### Step 3: PR Sync-on-Push, Link Standards & Merge Readiness
+### Step 3: PR Sync & Link Standards
 
-All PR title/label/Milestone rules, top-of-PR live preview templates, **`PR Readiness Score` & `PR Readiness Checklist` (`100%`)**, and closed-PR recovery commands live canonically in [`PROJECT.md` Section 4](./PROJECT.md#4-pull-request-lifecycle-and-readiness-gates). Preserve these engineering invariants on every PR:
+All PR title, label, and milestone conventions live in [`PROJECT.md` Section 4](./PROJECT.md#4-pull-request-lifecycle-and-review-standards). Preserve these engineering conventions on every PR:
 
-- **PR Preview Paths vs. GitHub PR URLs**: Alpha GitHub Pages previews deploy to `https://shthed.github.io/capy/alpha/<number>/` (and `/alpha/<number>/capy.apk`), whereas repository docs use relative links (`../../pull/<number>`, `../../issues/<number>`), GitHub diff links use `/pull/<number>/files#diff-...`, and git recovery refs (`refs/pull/<number>/head`) keep GitHub's native `/pull/` path. Pin code links in PR bodies and comments to exact commit SHAs (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
-- **PR Description Sync-on-Push Rule**: Immediately update PR title, overview bullets, target version, SHA-pinned line links, labels, Milestone, and `gh pr view <num> --json mergeable,mergeStateStatus` (`MERGEABLE` / `CLEAN`) whenever follow-up commits or rebases alter scope or state.
+- **PR Preview Paths vs. GitHub PR URLs**: Alpha GitHub Pages previews deploy to `/alpha/<number>/` (and `/alpha/<number>/capy.apk`), whereas repository docs use relative links (`../../pull/<number>`, `../../issues/<number>`), GitHub diff links use `/pull/<number>/files#diff-...`, and git recovery refs (`refs/pull/<number>/head`) keep GitHub's native `/pull/` path. Pin code links in PR bodies and comments to exact commit SHAs (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
+- **PR Description Sync-on-Push**: Keep PR title, overview bullets, target version, SHA-pinned line links, labels, Milestone, and mergeability up to date whenever follow-up commits or rebases alter scope or state.
 - **Clickable Link Standard**: Format PR references in repository docs as relative clickable `[#NNN](../../pull/NNN)` links and Epic references as `[EPIC-N](../../issues/<num>)` (never bare/backticked `#<epic-issue>` or `[#<epic-issue>](../../issues/...)`).
-- **Wait for Explicit Approval & Close Reports Clearly**: Never merge a code/workflow PR or push product code/workflows directly to `main` or `beta` without explicit Owner confirmation (document-owner-approved living-document updates push directly to `main` without PR noise or `EPIC-*` tags per [`AGENTS.md` Rule 11](./AGENTS.md#1-ai-golden-invariants-non-negotiable-agent-guardrails) while keeping the Owner informed). Always close status reports, handoffs, and review updates with an explicit **Needs Your Testing / Approval** summary listing any clickable PRs or preview/Beta links awaiting Project Owner action (noting any holds), or explicitly confirming when none is needed yet.
 
 ---
 
-## 7. CI/CD Pipeline & Automated Cleanup Architecture
+## 4. CI/CD Pipeline & Automated Cleanup Architecture
 
 Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github/workflows):
 <!-- capy-dev-only:start -->
-*(On `shthed/capy` `beta` and `main`, six additional repository-specific automation workflows—[`open-pr.yml`](./.github/workflows/open-pr.yml), [`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml), [`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml), [`regenerate-puzzles.yml`](./.github/workflows/regenerate-puzzles.yml), [`sync-beta-from-main.yml`](./.github/workflows/sync-beta-from-main.yml), and [`sync-agile-tracker.yml`](./.github/workflows/sync-agile-tracker.yml)—bring the total to **11** workflows (**5** core + **6** dev-only).)*
+*(On `shthed/capy` `beta` and `main`, seven additional repository-specific automation workflows—[`open-pr.yml`](./.github/workflows/open-pr.yml), [`open-issue.yml`](./.github/workflows/open-issue.yml), [`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml), [`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml), [`regenerate-puzzles.yml`](./.github/workflows/regenerate-puzzles.yml), [`sync-beta-from-main.yml`](./.github/workflows/sync-beta-from-main.yml), and [`sync-agile-tracker.yml`](./.github/workflows/sync-agile-tracker.yml)—bring the total to **12** workflows (**5** core + **7** dev-only).)*
 <!-- capy-dev-only:end -->
 
 ### 1. Unified 3-Tier Fast Build Gate, Async E2E/Android & Pages Deployment ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
-- **Fast Blocking Gate + Async Heavy Jobs**: Required branch ruleset checks (`Build & Test` + `capy/review-gate`) complete in `< 30s` using cached `web/node_modules`, `< 2s` sanity checks, TypeScript + `oxlint` lint, Web build, and headless `--unit` tests (`node scripts/test.mjs --unit`, zero Chromium). **`Android APK`**, **`Playwright E2E`**, and **`Deploy Pages`** run asynchronously without blocking PR approval or auto-merge (nor holding Pages deploys behind Playwright E2E flakes).
+- **Fast Blocking Gate + Async Heavy Jobs**: Required branch checks (`Build & Test`) complete in `< 30s` using cached `web/node_modules`, `< 2s` sanity checks, TypeScript + `oxlint` lint, Web build, and headless `--unit` tests (`node scripts/test.mjs --unit`, zero Chromium). **`Android APK`**, **`Playwright E2E`**, and **`Deploy Pages`** run asynchronously without blocking PR checks (nor holding Pages deploys behind Playwright E2E flakes).
 - **Fast Sanity Paths (`isDocsOnlyPr` & `is_main_sync`)**: Pull requests that exclusively touch `**.md`, `docs/**`, `notes/**`, `.gitignore`, or `LICENSE`, or verified `sync/beta-from-main -> beta` ancestry syncs whose `HEAD` tree is byte-identical to `origin/main`, run the `< 2s` `npm run test:sanity` check in `Build & Test` while skipping redundant Web/Android builds, E2E re-runs, and Alpha Pages deployment.
 - **Job 0 -- `prepare` (`Target`, `contents: read`, `pull-requests: read`)**:
   - Resolves `target_dir` (`/alpha/<number>/`, `/beta/`, or `/`), `checkout_ref`, `is_docs_only`, `is_main_sync`, `is_draft`, and `skip` flags once before downstream fan-out.
@@ -307,8 +199,8 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
   - Runs as soon as `build` and `android_build` finish (never blocked by `e2e_release_gate`), guarded by `github.event.repository.has_pages == true` and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
   - Uploads the Pages artifact with `include-hidden-files: true` (and inspects hidden directories via `ls -lah`) so `.well-known/assetlinks.json` is preserved alongside `/alpha/<number>/`, `/beta/`, and `/` deployments.
   - Publishes open Alpha PR builds to `/alpha/<number>/` and `/alpha/<number>/capy.apk`, regenerates `/alpha/index.html` + `/alpha/manifest.json` via [`.github/scripts/generate-pr-manifest.mjs`](./.github/scripts/generate-pr-manifest.mjs) (seeding root `404.html` from [`web/public/404.html`](./web/public/404.html) when missing), and posts or updates the zero-emoji PR preview comment.
-  - Publishes `beta` branch pushes to `/beta/` ([Capy Beta](https://shthed.github.io/capy/beta/)) and `/beta/capy.apk` without modifying production `/`, refreshing root `404.html` via `--refresh-404`.
-  - Publishes `main` branch pushes to `/` ([Capy Production](https://shthed.github.io/capy/)) and `/capy.apk` (excluding `/alpha/` and `/beta/` during `rsync`), refreshing root `404.html` via `--refresh-404`.
+  - Publishes `beta` branch pushes to `/beta/` and `/beta/capy.apk` without modifying production `/`, refreshing root `404.html` via `--refresh-404`.
+  - Publishes `main` branch pushes to `/` and `/capy.apk` (excluding `/alpha/` and `/beta/` during `rsync`), refreshing root `404.html` via `--refresh-404`.
   - Squashes `gh-pages` into a single **orphan commit** on every push so binary `.apk` artifacts never bloat Git history.
 
 ### 2. Automated GitHub Release & Play Store Bundle Publisher ([`release.yml`](./.github/workflows/release.yml))
@@ -321,22 +213,22 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
 
 ### 4. Scheduled Stale Branch & Orphan Sweep ([`cleanup-branches.yml`](./.github/workflows/cleanup-branches.yml))
 - Runs daily at `06:00 UTC` (`cron: '0 6 * * *'`) or manually via `workflow_dispatch`.
-- Invokes `.github/scripts/cleanup-branches.mjs` to prune merged/stale branches (`>= 1` day old) matching `automation/`, `feature/`, `fix/`, `chore/`, `ci/`, `deps/`, `docs/`, or `codex/` (never touching `main` or `beta`), followed by `cleanup-gh-pages-previews.mjs` to remove any orphaned `/alpha/` directories while preserving `/beta/` and re-uploading the Pages artifact with `include-hidden-files: true`.
+- Invokes `.github/scripts/cleanup-branches.mjs` to prune merged/stale branches (`>= 1` day old) matching `feature/`, `fix/`, `chore/`, `ci/`, `deps/`, or `docs/` (never touching `main` or `beta`), followed by `cleanup-gh-pages-previews.mjs` to remove any orphaned `/alpha/` directories while preserving `/beta/` and re-uploading the Pages artifact with `include-hidden-files: true`.
 
 ### 5. Production Cloudflare Workers Deployment ([`deploy-cloudflare.yml`](./.github/workflows/deploy-cloudflare.yml))
 - Triggered on `push` to `main` (touching `web/**`, `worker/**`, `wrangler.jsonc`, or the workflow file) and `workflow_dispatch`.
 - When `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets are configured (or via Cloudflare Workers Builds native Git integration), runs `npm run test:sanity && npm run lint && npm run build`, deploys [`wrangler.jsonc`](./wrangler.jsonc) + [`worker/index.ts`](./worker/index.ts) (`CoopRoomDurableObject`) to `https://capypaint.com/` via `cloudflare/wrangler-action@v4` (`wranglerVersion: '4.160.1'`), and verifies `https://capypaint.com/api/health`. Repositories without Cloudflare secrets skip cleanly in `< 2s`.
 <!-- capy-dev-only:start -->
-- **Bot-Authored Draft PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)) & CI Triggers**: Opens and updates idempotent `github-actions[bot]`-authored PRs targeting `beta` or `main` via `workflow_dispatch` (`gh workflow run open-pr.yml`; AI agents MUST NEVER run `gh pr create` as `shthed`). Opening with `draft=true` pairs with `gh pr ready <num>` (`pull_request: ready_for_review`), follow-up pushes (`synchronize`), or `gh workflow run deploy-branch.yml` to trigger `Build & Test`, async `Playwright E2E`, and Pages previews.
-- **Strict `100%` AI Approval & Auto-Merge Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml)) & Direct `main -> beta` Sync ([`sync-beta-from-main.yml`](./.github/workflows/sync-beta-from-main.yml))**: Runs `ai-review` via `$0` `workflow_dispatch` (`gh workflow run pr-review-gate.yml -f pr_number=<num> -f head_sha=<sha> -f ai_verdict=APPROVED|CHANGES_REQUESTED -f ai_score=100 -f ai_summary="..."`) to post `github-actions[bot]` reviews and `review:ai-approved` / `review:changes-requested` labels with zero paid API dependency before `review-gate` (`needs: [ai-review]`, `always()`). Evaluates `github-actions[bot]` `pull_request` lifecycle events (`opened`, `synchronize`, `reopened`, `ready_for_review`, `converted_to_draft`) and `<!-- capy-review: -->` reviews/comments while preventing preview-comment/label loops, re-evaluates non-bot `pull_request: edited` events when `github.event.changes.base != null || github.event.changes.body != null`, rejects future-skewed `commitDate` timestamps alongside paginated `capy/review-gate` status timestamp anchoring, and enforces strict `100%` AI review (`review:ai-approved` backed by `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<HEAD_SHA> score=100% -->`, fail-closed `typeof pr.body !== 'string'` guard rejecting `null`/missing bodies, valid `## Summary`, `### PR Readiness Score: 100%`, zero `< 100%` checklist items, and zero unchecked `- [ ]` tasks—or strictly verified `sync/beta-from-main -> beta` `origin/main` ancestry parity) with zero active Owner holds (`CHANGES_REQUESTED`, `HOLD`, `DO NOT MERGE`, `review:changes-requested`). If a formerly approved/reviewed PR body is tampered with or loses `hasValidAiMarker`, stale `review:ai-approved` is stripped and active `auto_merge` is disarmed (`disablePullRequestAutoMerge`). Once verified on **either `beta` or `main`**, `pr-review-gate.yml` passes `capy/review-gate` and automatically enables GitHub auto-merge (or merges immediately if clean; `--merge` on `main`/`sync/beta-from-main`, `--squash` on standard `beta` PRs), disabling auto-merge immediately if a hold is posted. Meanwhile, `sync-beta-from-main.yml` attempts a direct `--no-ff` push onto `beta` on clean merges (closing stale sync PRs and dispatching `deploy-branch.yml` for `beta`), falling back to a `sync/beta-from-main -> beta` PR + auto-merge if blocked by `beta` ruleset `27162684` or opening/updating a `ci` conflict issue on merge conflicts.
-- **Automated Clean-Room Public Mirror & Two-Way PR Sync ([`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml))**: Every merge to `shthed/capy` `main` exports a clean-room copy via [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs) (`--stage-dir`), verifies zero `shthed` byte leaks across all files and commit messages, strips dev-only docs (`AGENTS.md`, `CAPYBOOP.md`) and mirror/review/bot-PR workflows, authenticates via an ephemeral `GIT_ASKPASS` helper with `credential.helper ""` (never writing `CAPYBOOP_SYNC_TOKEN` to `.git/config`), distinguishes `git ls-remote --exit-code` results (`0` exists, `2` missing ref, failing loudly on auth/network errors), scans `FETCH_HEAD` commit logs via `SIGPIPE`-safe temp-file `grep -iaqzE`, pushes a linear commit authored solely by `capyboop` to `https://github.com/capyboop/paint`, and pushes tag `v<version>` to `capyboop/paint` **only when a matching `v<version>` tag already exists on `shthed/capy`** (preventing accidental tags on doc-only `main` pushes; signed GitHub Releases on `capyboop/paint` remain deferred until Android signing secrets are configured there). Because `publish-capyboop.yml` builds `capyboop/paint` `main`'s tree from `shthed/capy` `main` via `git commit-tree`, any external PR merged on `capyboop/paint` must be fetched and back-ported into `shthed/capy` (`beta -> main`) before the next `shthed/capy` `main` push so public contributions are never overwritten.
+- **Bot-Authored Draft PRs ([`open-pr.yml`](./.github/workflows/open-pr.yml)), Bot-Authored Issues ([`open-issue.yml`](./.github/workflows/open-issue.yml)) & CI Triggers**: Opens and updates idempotent `github-actions[bot]`-authored PRs and issues via `workflow_dispatch`, enforcing the cross-repo guardrail in [`docs/ai/cross-repo-guardrail.md`](./docs/ai/cross-repo-guardrail.md).
+- **Strict `100%` AI Approval & Auto-Merge Gate ([`pr-review-gate.yml`](./.github/workflows/pr-review-gate.yml)) & Direct `main -> beta` Sync ([`sync-beta-from-main.yml`](./.github/workflows/sync-beta-from-main.yml))**: See [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md) for the full `$0` `workflow_dispatch` AI review protocol, fail-closed PR body validation, and auto-merge / `sync-beta-from-main.yml` ancestry sync rules.
+- **Automated Clean-Room Public Mirror & Two-Way PR Sync ([`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml))**: Every merge to `shthed/capy` `main` exports a clean-room copy via [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs) (`--stage-dir`), verifies zero persona/AI-dev leaks across all files and commit messages (`--verify-log`), strips dev-only docs (`AGENTS.md`, `CAPYBOOP.md`, `docs/ai/`) and mirror/review/bot-PR workflows, pushes a linear commit authored solely by `capyboop` to `https://github.com/capyboop/paint`, and pushes tag `v<version>` only when a matching tag exists on `shthed/capy`.
 - **Automated Epic Checklist Sync ([`sync-agile-tracker.yml`](./.github/workflows/sync-agile-tracker.yml))**: On merged `beta`/`main` PRs (`pull_request_target: closed`), pure `actions/github-script` (zero PR checkout) maps `epic:1`..`epic:5` labels or `**Agile Scope**` (`EPIC-1`..`EPIC-5`) to open Parent Epic Issues and checks off or appends `- [x] [#NNN — Title](...)` automatically.
 - **On-Demand & Path-Filtered Pre-Baked Puzzle Regeneration ([`regenerate-puzzles.yml`](./.github/workflows/regenerate-puzzles.yml))**: Runs only on manual `workflow_dispatch` or `push` to `beta` touching puzzle source assets (`web/public/assets/**` excluding `.capy` archives, `presets/**`, and app icons), `web/scripts/generate-sample-saves.mjs`, `web/src/engine/**`, `CapyCodec.ts`, `DailyPuzzleService.ts`, `PuzzleWorkerService.ts`, `StorageService.ts`, `web/src/types/index.ts`, or the workflow file itself (never on a daily cron schedule).
 <!-- capy-dev-only:end -->
 
 ---
 
-## 8. Versioning, Dependency Maintenance & Asset Playbooks
+## 5. Versioning, Dependency Maintenance & Asset Playbooks
 
 ### A. Single-Source-of-Truth Versioning (`MAJOR.MINOR.PATCH`) & Channel Markers
 
@@ -376,7 +268,7 @@ npm run test:sanity && npm run lint && npm run build && npm test
 
 ---
 
-## 9. Environment Self-Healing & Troubleshooting Recipes
+## 6. Environment Self-Healing & Troubleshooting Recipes
 
 - **`tsc: not found` or missing `node_modules`**:
   - *Cause*: Fresh container or worktree without installed npm packages.

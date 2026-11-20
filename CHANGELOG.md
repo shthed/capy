@@ -12,18 +12,18 @@
 ### 3.0.7 - 2026-11-19
 
 - [#598](../../pull/598) Align the root `README.md` heading (`# Capy Paint`) with the standalone `capyboop/paint` repository
-- [#596](../../pull/596) Retarget the public clean-room mirror, in-app Report Bug / Ideas link, privacy policy, and studio docs from `capyboop/capy` to `capyboop/paint`
+- [#596](../../pull/596) Retarget the public repository links, in-app Report Bug / Ideas link, privacy policy, and project docs to `capyboop/paint`
 - [#590](../../pull/590) Allow the top-bar puzzle save title pill to expand across available left-lane width on mobile and desktop instead of truncating at fixed caps
 - [#589](../../pull/589) Replace the daily puzzle-regeneration cron schedule with on-demand and path-filtered triggers on `beta`
 - [#588](../../pull/588) Add `oxlint` guardrails, crash-safe `<ErrorBoundary>` recovery with emergency backup export, and consolidated storage/cloud helpers while migrating brittle source-string tests to behavioral checks
-- [#587](../../pull/587) Add public community docs (`CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`, PR/issue templates) and exclude internal agent playbooks from public clean-room exports
+- [#587](../../pull/587) Add public community documentation (`CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`, and PR/issue templates)
 
 ### 3.0.6 - 2026-11-18
 
 - [#579](../../pull/579) Harden CSP/HSTS headers, service worker caching, local storage schema validation, Co-op burst sync and Worker rate limits, and Android WebView security invariants
 - [#578](../../pull/578) Promote Production channel markers, update the Play Store listing metadata, and align CI check titles and roadmap docs for release
 - [#577](../../pull/577) Harden local and native backup durability with monotonic timestamps, separated backup/heal retry queues, and empty-overwrite protection across Web, iOS, and Android
-- [#576](../../pull/576) Gracefully skip tag-triggered Android release builds when signing secrets are absent and harden public clean-room mirror filtering and origin checks
+- [#576](../../pull/576) Gracefully skip tag-triggered Android release builds when signing secrets are absent and harden release export filtering and origin checks
 - [#575](../../pull/575) Add public GitHub issue templates and an About-tab Report Bug / Ideas button linking directly to the public issue tracker
 - [#573](../../pull/573) Fix high-resolution `maxRegions` segmentation overflow with a binary min-heap, regenerate Max-detail sample and daily `.capy` archives, and polish Create-tab preset controls and tooltips
 - [#571](../../pull/571) Remove legacy rewarded-ad UI hooks, replace placeholder community votes with a local Puzzle Idea Notebook, gate Android startup prompts, and refresh Play Store screenshots
@@ -36,37 +36,37 @@
 - [#565](../../pull/565) Pre-generate Max-detail sample and rolling daily `.capy` archives with selective zero-wait loading, and add tap-friendly Create-tab style hints and tooltips
 - [#563](../../pull/563) Standardize unit and E2E test stage numbering with execution-count assertions, opt-in screenshot capture, and isolated subprocess environments
 - [#550](../../pull/550) Enable Cloudflare Worker deployment directly from CI with health-check retries, remove redundant `_redirects` rules, and document Cloudflare Workers setup
-- [#560](../../pull/560) Add direct-merge fallback for strict `100%` AI-approved PRs when GitHub auto-merge is blocked on non-check ruleset rules and green checks exist
+- [#560](../../pull/560) Improve CI merge workflow handling when branch rulesets block auto-merge after required checks pass
 - [#559](../../pull/559) Update changelog channel markers and sync roadmap docs for the Production release promotion
 - [#557](../../pull/557) Add an interactive Preset Style Gallery with 10 real segmented previews in the Create tab, sync manual palette counts to `Custom`, and add a matching tutorial step
 - [#555](../../pull/555) Set default colour mode to Original Detail and default palette sort order to Rainbow / Hue
 - [#554](../../pull/554) Keep replay controls in the compact single-row scrubber bar by removing the expandable two-row deck toggle
-- [#553](../../pull/553) Add asynchronous stacked-PR merge fallback and require outstanding-work checklists on Draft PRs in the review gate
+- [#553](../../pull/553) Improve CI workflow handling for stacked pull requests and draft checklist validation
 - [#548](../../pull/548) Update changelog channel markers and sync roadmap docs for the Production release promotion
 - [#547](../../pull/547) Hide unfinished Cloud/Co-op UI behind opt-in dev flags while keeping share links and printable SVG visible, and add Google Play Store assets and listing copy
 
 ### 3.0.4 - 2026-11-15
 
 - [#546](../../pull/546) Reconcile Production and Beta changelog channels and archive shipped Epic 2 pull requests in `ROADMAP.md`
-- [#545](../../pull/545) Declare Android TV Leanback launcher support with a TV banner, update the privacy policy for 100% ad-free builds, and expand Android TV and review-gate tests
-- [#544](../../pull/544) Add repo-scoped `.agents/environment.json` setup config and update cloud/roadmap docs with clickable production domain links
+- [#545](../../pull/545) Declare Android TV Leanback launcher support with a TV banner, update the privacy policy for 100% ad-free builds, and expand Android TV and CI workflow tests
+- [#544](../../pull/544) Add repository environment setup configuration and update cloud and roadmap docs with clickable production domain links
 - [#540](../../pull/540) Wait two animation frames after wheel zoom in E2E tests to eliminate a viewport-save debounce race before reload
 - [#539](../../pull/539) Replace brittle fixed sleeps across the E2E suite with deterministic Playwright locator, attribute, IndexedDB, and URL-hash waits
 - [#537](../../pull/537) Target Android API 36 with edge-to-edge insets, hardened WebView navigation, isolated share cache cleanup, cold-start bridge queuing, and release-signing secret checks
 - [#535](../../pull/535) Offload save thumbnails to IndexedDB with quota alerts, optimize canvas rendering and HUD memoization, code-split the puzzle generator, and harden Co-op checkpoints
-- [#534](../../pull/534) Harden PR review-gate body validation, include `.well-known/assetlinks.json` in GitHub Pages deploys, and improve clean-room mirror sync reliability
+- [#534](../../pull/534) Harden PR workflow validation, include `.well-known/assetlinks.json` in GitHub Pages deploys, and improve mirror sync reliability
 - [#530](../../pull/530) Preserve active puzzle progress across debounced and `beforeunload` viewport saves, remove idle spotlight polling, and speed up CI with async heavy jobs
 
 ### 3.0.3 - 2026-11-14
 
 - [#523](../../pull/523) Add a non-blocking `TargetSpotlightOverlay` ring and arrow across all 14 tutorial steps and 9 feature tips, plus tighter mobile top-bar fit and synchronous Co-op state updates
-- [#519](../../pull/519) Upgrade the onboarding tutorial to a 14-step interactive guide with topic jumping and 9 contextual feature-offer tips, and raise PR review gates to strict `100%`
+- [#519](../../pull/519) Upgrade the onboarding tutorial to a 14-step interactive guide with topic jumping and 9 contextual feature-offer tips
 - [#518](../../pull/518) Add Low-Vision Large Text accessibility mode, keep the palette dock sorted and centered when scrollable, and enable Undo by default
 - [#517](../../pull/517) Keep the palette dock visible above replay controls with swatch auto-dismiss and default the Saves tab to a thumbnail-first layout
 
 ### 3.0.2 - 2026-11-13
 
-- [#521](../../pull/521) Add CapyBoop Games company structure and AI agent handbook (`CAPYBOOP.md`)
+- [#521](../../pull/521) Add CapyBoop Games studio organization documentation
 - [#501](../../pull/501) Promote the beta release to Production
 - [#497](../../pull/497) Remove the top-bar zoom pill badge, fix `360px` mobile Settings tab clipping, and add an E2E overflow guard
 - [#495](../../pull/495) Isolate alpha/beta preview storage namespaces, harden canvas DPR listeners, add the `.changelog/` fragment compiler, and fix palette accessibility labels
@@ -75,7 +75,7 @@
 - [#492](../../pull/492) Standardize GitHub Pages PR preview URLs to lowercase `/capy/alpha/<num>/` and prune stale legacy preview directories
 - [#494](../../pull/494) Harden CI workflow retries, Playwright caching on beta PRs, main-to-beta syncing, and changelog/guide sanity checks
 - [#493](../../pull/493) Establish the `PROJECT.md` governance charter, split `3.0.1` vs `3.0.2` changelog channels, and reconcile Epic backlog links
-- [#490](../../pull/490) Add bot-opened PR workflow automation, native review-gate tests, and prebaked sample viewport resets
+- [#490](../../pull/490) Add CI workflow automation tests and prebaked sample viewport resets
 - [#487](../../pull/487) Add Android Play Store release to `v3.0.1` scope and clear shipped Sprint 1 bugfixes from the active queue
 
 ### 3.0.1 - 2026-11-12
@@ -90,21 +90,21 @@
 
 ### 2.6 - 2026-11-12
 
-- [#482](../../pull/482) Add capypaint.com Cloudflare Worker, Co-op relay security hardening, clean-room export, and dual-approval CI gate
+- [#482](../../pull/482) Add capypaint.com Cloudflare Worker, Co-op relay security hardening, and CI workflow checks
 
 ### 2.5 - 2026-11-11
 
 - [#483](../../pull/483) Document 3-artefact roadmap triad, GitHub Epic Issue CLI playbooks, and sprint lifecycle
 - [#481](../../pull/481) Add 3-tier Alpha/Beta/Production release pipeline, channel switcher, and GitHub Agile tracking
 - [#475](../../pull/475) Add sub-tile parent breadcrumbs, printable SVG sheets, and Co-op undo sync
-- [#473](../../pull/473) Split strategic ROADMAP.md from Sprint 1 TODO.md and add Gemini 4 sprint playbooks
+- [#473](../../pull/473) Split strategic ROADMAP.md from Sprint 1 TODO.md and organize sprint planning documentation
 - [#474](../../pull/474) Add daily featured puzzle, reduced motion, keyboard shortcuts, and lifetime stats
 - [#472](../../pull/472) Add zoom sensitivity, magnetic zoom stops, and procedural Web Audio tap effects
 - [#471](../../pull/471) Fix cache-eviction E2E test, replay speed grid, and atomic Android backups
 - [#470](../../pull/470) Standardize TODO.md under Lean Agile epics, stories, and collapsible task specs
-- [#467](../../pull/467) Add DEV.md, streamline AGENTS.md, and overhaul repository documentation and privacy policy
+- [#467](../../pull/467) Add DEV.md and overhaul repository documentation and privacy policy
 - [#469](../../pull/469) Compact changelog headings for mobile, remove preamble, and group same-day patch releases
-- [#468](../../pull/468) Standardize historical PR metadata, move changelog rules to AGENTS.md, and add full PR history
+- [#468](../../pull/468) Standardize historical PR metadata, document changelog rules, and add full PR history
 - [#466](../../pull/466) Resolve all remaining audit bugfixes from TODO
 - [#465](../../pull/465) Fix resize clamping, IndexedDB palette recovery, and Pixel API 33+ haptics
 - [#464](../../pull/464) Add YouTube-style playback scrubber and preserve viewport on replay
@@ -139,10 +139,10 @@
 
 ### 1.3 - 2026-11-09
 
-- [#453](../../pull/453) Update AGENTS.md: Refine contributor and agent operational rules
+- [#453](../../pull/453) Refine contributor and repository operational documentation
 - [#452](../../pull/452) Add PWA offline support and manifest
-- [#451](../../pull/451) Add working thoughts display and Web engine conventions to AGENTS.md
-- [#450](../../pull/450) Add ci and deps GitHub pull request labels to AGENTS.md
+- [#451](../../pull/451) Document Web engine conventions and development guidelines
+- [#450](../../pull/450) Document ci and deps GitHub pull request labels
 - [#449](../../pull/449) Add thumbnails grid view, save pinning, and toolbar to Saves gallery
 
 ### 1.2 - 2026-11-09
@@ -285,18 +285,18 @@
 - [#344](../../pull/344) Improve deployment log visibility
 - [#343](../../pull/343) Remove unsupported screenshot artifact
 - [#342](../../pull/342) Add session kick-off workflow reminder
-- [#340](../../pull/340) Move AGENTS guide to root, mirror Pages HTML, and relocate planning docs
+- [#340](../../pull/340) Mirror Pages HTML and relocate repository planning docs
 - [#339](../../pull/339) Trim and document remaining CSS
 - [#338](../../pull/338) Add service worker status and debug logging
 
 ### 0.7.2 - 2025-11-23
 
-- [#337](../../pull/337) Move AGENTS guide to root and mirror Pages HTML
+- [#337](../../pull/337) Reorganize repository guides and mirror Pages HTML
 - [#336](../../pull/336) Remove deployment gating for branch deploys
 - [#335](../../pull/335) Add gh-pages preview cleanup to branch maintenance workflow
 - [#334](../../pull/334) Handle workflow dispatch triggers in post-deploy tests
 - [#333](../../pull/333) Improve settings sheet mobile layout
-- [#332](../../pull/332) Retarget branch cleanup to codex prefix
+- [#332](../../pull/332) Update scheduled branch cleanup prefixes
 - [#331](../../pull/331) Fix deploy workflow eligibility for PR branches
 - [#329](../../pull/329) Remove README link from help panel
 - [#328](../../pull/328) Add rerun Pages deploy button to PR comments
@@ -482,7 +482,7 @@
 - [#166](../../pull/166) Embed hosted README inside help panel
 - [#164](../../pull/164) Include weekday in branch deployment timestamps
 - [#163](../../pull/163) Add npm scaffolding and placeholder test runner
-- [#162](../../pull/162) Add ChatGPT image prompt helper to generator tab
+- [#162](../../pull/162) Add image prompt helper to generator tab
 
 ### 0.3.3 - 2025-10-17
 
@@ -573,7 +573,7 @@
 - [#78](../../pull/78) Enable double-click sampling of puzzle colours
 - [#77](../../pull/77) Summarize local save storage in help and drop cloud sync
 - [#76](../../pull/76) Add region number visibility toggle
-- [#75](../../pull/75) Add GitHub Copilot repository instructions
+- [#75](../../pull/75) Add repository contributor instructions
 
 ### 0.2.0 - 2025-10-09
 

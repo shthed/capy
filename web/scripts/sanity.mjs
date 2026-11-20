@@ -19,7 +19,9 @@ const DEFAULT_REPO_ROOT = path.resolve(__dirname, '../..');
 
 const SKIP_DIRS = new Set([
   '.git',
+  /* capy-dev-only:start */
   '.agents',
+  /* capy-dev-only:end */
   '.kotlin',
   '.artifacts',
   '.idea',
@@ -35,13 +37,12 @@ const SKIP_DIRS = new Set([
 
 // M3B strict defaults:
 const DEFAULT_REQUIRE_PROJECT_MD = true;
-let DEFAULT_REQUIRE_AGENTS_MD = false;
 /* capy-dev-only:start */
-DEFAULT_REQUIRE_AGENTS_MD = true;
+const DEFAULT_REQUIRE_AGENTS_MD = true;
+const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
 /* capy-dev-only:end */
 const DEFAULT_ENFORCE_CHANNEL_ORDER = true;
 const DEFAULT_ENFORCE_EPIC_NAMING = true;
-const DEFAULT_ENFORCE_PR_READINESS_SPEC = true;
 
 function collectMarkdownFiles(dir, out = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -287,6 +288,7 @@ function extractNonThresholdPercentages(text) {
   ];
 }
 
+/* capy-dev-only:start */
 export function validateNoLegacyPrRubric(text, relFile = 'document.md') {
   const withoutUrls = String(text || '')
     .replace(/\r\n/g, '\n')
@@ -420,14 +422,24 @@ export function validatePrReadinessSpec(
   } = {}
 ) {
   const resolvedRoot = path.resolve(root);
-  const governanceRelFiles = ['AGENTS.md', 'PROJECT.md', 'DEV.md', 'TESTING.md', 'README.md'];
+  const governanceRelFiles = [
+    'AGENTS.md',
+    'docs/ai/pr-readiness.md',
+    'PROJECT.md',
+    'DEV.md',
+    'TESTING.md',
+    'README.md',
+  ];
   const scannedFiles = [];
 
   for (const relFile of governanceRelFiles) {
     const absPath = path.join(resolvedRoot, relFile);
     if (!fs.existsSync(absPath)) {
       if (relFile === 'PROJECT.md' && !requireProjectMd) continue;
-      if (relFile === 'AGENTS.md' && !requireAgentsMd) continue;
+      if ((relFile === 'AGENTS.md' || relFile === 'docs/ai/pr-readiness.md') && !requireAgentsMd) {
+        continue;
+      }
+      if (relFile === 'docs/ai/pr-readiness.md' && !enforcePrReadinessSpec) continue;
       assert.fail(`Required governance doc missing: ${relFile}`);
     }
     const raw = fs.readFileSync(absPath, 'utf8');
@@ -451,24 +463,21 @@ export function validatePrReadinessSpec(
         /(?:as many|flexible|variable|not (?:capped|limited|fixed)|any number|scope-relevant)/i,
         'AGENTS.md must allow variable PR Readiness checklist item counts'
       );
-    } else if (relFile === 'PROJECT.md') {
-      assert.match(publicText, /pr readiness/i, 'PROJECT.md must document PR Readiness format');
-      assert.match(publicText, /checklist/i, 'PROJECT.md must name PR Readiness Checklist');
-      assert.match(publicText, /<details>/i, 'PROJECT.md must document <details> PR Readiness block');
-      assert.match(publicText, /100%/, 'PROJECT.md must specify 100% PR Readiness threshold');
+    } else if (relFile === 'docs/ai/pr-readiness.md') {
+      assert.match(publicText, /pr readiness/i, 'docs/ai/pr-readiness.md must document PR Readiness format');
+      assert.match(publicText, /checklist/i, 'docs/ai/pr-readiness.md must name PR Readiness Checklist');
+      assert.match(publicText, /<details>/i, 'docs/ai/pr-readiness.md must document <details> PR Readiness block');
+      assert.match(publicText, /100%/, 'docs/ai/pr-readiness.md must specify 100% PR Readiness threshold');
       assert.match(
         publicText,
         /(?:start of each|at the start|%\s*-first)/i,
-        'PROJECT.md must specify putting % at the start of each checklist line'
+        'docs/ai/pr-readiness.md must specify putting % at the start of each checklist line'
       );
       assert.match(
         publicText,
         /(?:as many|flexible|variable|not (?:capped|limited|fixed)|any number|scope-relevant)/i,
-        'PROJECT.md must allow variable PR Readiness checklist item counts'
+        'docs/ai/pr-readiness.md must allow variable PR Readiness checklist item counts'
       );
-    } else if (relFile === 'DEV.md') {
-      assert.match(publicText, /pr readiness/i, 'DEV.md must reference PR Readiness');
-      assert.match(publicText, /100%/, 'DEV.md must reference 100% PR Readiness threshold');
     }
   }
 
@@ -480,8 +489,14 @@ export function validatePrReadinessSpec(
 
   return { scannedFiles };
 }
+/* capy-dev-only:end */
 
-const DEV_ONLY_ROOT_MD_FILES = new Set(['AGENTS.md', 'CAPYBOOP.md']);
+const DEV_ONLY_ROOT_MD_FILES = new Set([
+  /* capy-dev-only:start */
+  'AGENTS.md',
+  'CAPYBOOP.md',
+  /* capy-dev-only:end */
+]);
 
 export function validateRootGuideIndex(root, { requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD } = {}) {
   const resolvedRoot = path.resolve(root);
@@ -722,7 +737,9 @@ export function runSanityChecks({
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
   enforceChannelOrder = DEFAULT_ENFORCE_CHANNEL_ORDER,
   enforceEpicNaming = DEFAULT_ENFORCE_EPIC_NAMING,
+  /* capy-dev-only:start */
   enforcePrReadinessSpec = DEFAULT_ENFORCE_PR_READINESS_SPEC,
+  /* capy-dev-only:end */
 } = {}) {
   const t0 = performance.now();
   const root = path.resolve(repoRoot);
@@ -831,7 +848,9 @@ export function runSanityChecks({
 
   // 3. Markdown hygiene & portable relative links across all .md files
   validateRootGuideIndex(root, { requireProjectMd });
+  /* capy-dev-only:start */
   validatePrReadinessSpec(root, { requireProjectMd, enforcePrReadinessSpec });
+  /* capy-dev-only:end */
 
   const mdFiles = collectMarkdownFiles(root);
   assert.equal(mdFiles.length >= 10, true, 'Expected >= 10 repository .md files');
