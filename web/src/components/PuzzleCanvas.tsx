@@ -232,6 +232,115 @@ export function resolveNearTapRegionId(params: ResolveNearTapParams): number {
 }
 
 /**
+ * Writes a single region's pixels into a base RGBA ImageData buffer.
+ * Completed (filled) regions never draw region boundaries so finished artwork
+ * renders seamlessly; unfilled regions keep 1px slate borders in standard mode.
+ */
+export function writeRegionPixelsToImageData(
+  data: Uint8ClampedArray,
+  borderMap: Uint8Array,
+  pixels: Int32Array | number[],
+  r: number,
+  g: number,
+  b: number,
+  isFilled: boolean,
+  isDetailMode: boolean,
+  srcPixels: Uint8ClampedArray | null,
+  isColoring: boolean
+): void {
+  for (let i = 0; i < pixels.length; i++) {
+    const pIndex = pixels[i];
+    const idx = pIndex * 4;
+
+    if (isFilled) {
+      if (isColoring) {
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      } else if (isDetailMode && srcPixels) {
+        data[idx] = srcPixels[idx];
+        data[idx + 1] = srcPixels[idx + 1];
+        data[idx + 2] = srcPixels[idx + 2];
+        data[idx + 3] = 255;
+      } else {
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      }
+    } else if (!isColoring && borderMap[pIndex] === 1) {
+      data[idx] = 51;
+      data[idx + 1] = 65;
+      data[idx + 2] = 85;
+      data[idx + 3] = 255;
+    } else {
+      data[idx] = 255;
+      data[idx + 1] = 255;
+      data[idx + 2] = 255;
+      data[idx + 3] = 255;
+    }
+  }
+}
+
+/**
+ * Populates the full base RGBA ImageData buffer for a puzzle.
+ * Completed (filled) regions omit boundary lines; unfilled regions retain 1px
+ * slate borders in standard mode.
+ */
+export function writeBaseCanvasPixels(
+  data: Uint8ClampedArray,
+  regionMap: Int32Array,
+  borderMap: Uint8Array,
+  filledRegionIds: Set<number>,
+  regMap: Map<number, Region>,
+  palMap: Map<number, PaletteColor>,
+  paintedRegionColors: Map<number, number> | undefined,
+  isDetailMode: boolean,
+  srcPixels: Uint8ClampedArray | null,
+  isColoring: boolean
+): void {
+  const total = regionMap.length;
+  for (let i = 0; i < total; i++) {
+    const rId = regionMap[i];
+    const isFilled = filledRegionIds.has(rId);
+    const idx = i * 4;
+
+    if (isFilled) {
+      const reg = regMap.get(rId);
+      const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
+      const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
+      if (isColoring) {
+        data[idx] = col ? col.r : 255;
+        data[idx + 1] = col ? col.g : 255;
+        data[idx + 2] = col ? col.b : 255;
+        data[idx + 3] = 255;
+      } else if (isDetailMode && srcPixels) {
+        data[idx] = srcPixels[idx];
+        data[idx + 1] = srcPixels[idx + 1];
+        data[idx + 2] = srcPixels[idx + 2];
+        data[idx + 3] = 255;
+      } else {
+        data[idx] = col ? col.r : 255;
+        data[idx + 1] = col ? col.g : 255;
+        data[idx + 2] = col ? col.b : 255;
+        data[idx + 3] = 255;
+      }
+    } else if (!isColoring && borderMap[i] === 1) {
+      data[idx] = 51;
+      data[idx + 1] = 65;
+      data[idx + 2] = 85;
+      data[idx + 3] = 255;
+    } else {
+      data[idx] = 255;
+      data[idx + 1] = 255;
+      data[idx + 2] = 255;
+      data[idx + 3] = 255;
+    }
+  }
+}
+
+/**
  * Strict viewport bounding for pan/zoom offsets.
  * Guarantees that the artwork cannot be panned away into empty void
  * while allowing full edge-to-edge navigation when zoomed in.
@@ -1012,64 +1121,25 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       customColors?: Map<number, number>,
       isFreeColor?: boolean
     ) => {
-      const { borderMap } = puzzleData;
       const targetColorId = customColors?.get(region.id) ?? region.colorId;
       const col = paletteMap.get(targetColorId);
       const r = col?.r ?? 71;
       const g = col?.g ?? 85;
       const b = col?.b ?? 105;
-      const borderR = Math.floor(r * 0.72);
-      const borderG = Math.floor(g * 0.72);
-      const borderB = Math.floor(b * 0.72);
-
       const isColoring = Boolean(isFreeColor || puzzleData.isFreeColor);
-      const pixels = region.pixels;
-      for (let i = 0; i < pixels.length; i++) {
-        const pIndex = pixels[i];
-        const idx = pIndex * 4;
-        const isBorder = borderMap[pIndex] === 1;
 
-        if (isFilled) {
-          if (isColoring) {
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = borderR;
-            data[idx + 1] = borderG;
-            data[idx + 2] = borderB;
-            data[idx + 3] = 255;
-          } else if (isDetailMode && srcPixels) {
-            data[idx] = srcPixels[idx];
-            data[idx + 1] = srcPixels[idx + 1];
-            data[idx + 2] = srcPixels[idx + 2];
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = r;
-            data[idx + 1] = g;
-            data[idx + 2] = b;
-            data[idx + 3] = 255;
-          }
-        } else {
-          if (isColoring) {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = 51;
-            data[idx + 1] = 65;
-            data[idx + 2] = 85;
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          }
-        }
-      }
+      writeRegionPixelsToImageData(
+        data,
+        puzzleData.borderMap,
+        region.pixels,
+        r,
+        g,
+        b,
+        isFilled,
+        isDetailMode,
+        srcPixels,
+        isColoring
+      );
     },
     []
   );
@@ -1129,60 +1199,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const imgData = baseCtx.createImageData(width, height);
       const data = imgData.data;
       const srcPixels = sourcePixelsRef.current;
-      const total = width * height;
 
       const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
-      // Initialize background & unfilled pixels
-      for (let i = 0; i < total; i++) {
-        const rId = regionMap[i];
-        const isFilled = filledRegionIds.has(rId);
-        const isBorder = borderMap[i] === 1;
-        const idx = i * 4;
-
-        if (isFilled) {
-          const reg = regMap.get(rId);
-          const targetColorId = reg ? (paintedRegionColors?.get(rId) ?? reg.colorId) : undefined;
-          const col = targetColorId !== undefined ? palMap.get(targetColorId) : undefined;
-          if (isColoring) {
-            data[idx] = col ? col.r : 255;
-            data[idx + 1] = col ? col.g : 255;
-            data[idx + 2] = col ? col.b : 255;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = col ? Math.floor(col.r * 0.72) : 71;
-            data[idx + 1] = col ? Math.floor(col.g * 0.72) : 85;
-            data[idx + 2] = col ? Math.floor(col.b * 0.72) : 105;
-            data[idx + 3] = 255;
-          } else if (isDetailMode && srcPixels) {
-            data[idx] = srcPixels[idx];
-            data[idx + 1] = srcPixels[idx + 1];
-            data[idx + 2] = srcPixels[idx + 2];
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = col ? col.r : 255;
-            data[idx + 1] = col ? col.g : 255;
-            data[idx + 2] = col ? col.b : 255;
-            data[idx + 3] = 255;
-          }
-        } else {
-          if (isColoring) {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          } else if (isBorder) {
-            data[idx] = 51;
-            data[idx + 1] = 65;
-            data[idx + 2] = 85;
-            data[idx + 3] = 255;
-          } else {
-            data[idx] = 255;
-            data[idx + 1] = 255;
-            data[idx + 2] = 255;
-            data[idx + 3] = 255;
-          }
-        }
-      }
+      writeBaseCanvasPixels(
+        data,
+        regionMap,
+        borderMap,
+        filledRegionIds,
+        regMap,
+        palMap,
+        paintedRegionColors,
+        isDetailMode,
+        srcPixels,
+        isColoring
+      );
 
       baseCtx.putImageData(imgData, 0, 0);
       baseImageDataRef.current = imgData;

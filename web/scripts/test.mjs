@@ -2569,6 +2569,80 @@ async function runCodecAndEngineTests() {
         false,
         'resolveNearTapRegionId must not allocate Map/Set/Array'
       );
+
+      // 7b. Completed regions must NOT draw region boundaries (both incremental and full base rebuild)
+      assert.equal(
+        typeof canvasMod.writeRegionPixelsToImageData,
+        'function',
+        'PuzzleCanvas must export writeRegionPixelsToImageData'
+      );
+      assert.equal(
+        typeof canvasMod.writeBaseCanvasPixels,
+        'function',
+        'PuzzleCanvas must export writeBaseCanvasPixels'
+      );
+      {
+        // 4 pixels: [0]=interior of reg 1, [1]=border of reg 1, [2]=interior of reg 2, [3]=border of reg 2
+        const bMap = new Uint8Array([0, 1, 0, 1]);
+        const rMap = new Int32Array([1, 1, 2, 2]);
+        const srcPx = new Uint8ClampedArray([
+          11, 22, 33, 255,
+          44, 55, 66, 255,
+          77, 88, 99, 255,
+          101, 112, 123, 255,
+        ]);
+        const reg1 = { id: 1, colorId: 1, pixels: new Int32Array([0, 1]) };
+        const reg2 = { id: 2, colorId: 2, pixels: new Int32Array([2, 3]) };
+        const rById = new Map([
+          [1, reg1],
+          [2, reg2],
+        ]);
+        const pById = new Map([
+          [1, { id: 1, r: 200, g: 150, b: 100 }],
+          [2, { id: 2, r: 60, g: 120, b: 180 }],
+        ]);
+
+        // Incremental write: DETAIL mode filled region uses exact srcPixels on border pixel (no 0.72 darkening)
+        const incDetail = new Uint8ClampedArray(16);
+        canvasMod.writeRegionPixelsToImageData(incDetail, bMap, reg1.pixels, 200, 150, 100, true, true, srcPx, false);
+        assert.deepEqual(Array.from(incDetail.slice(0, 8)), [11, 22, 33, 255, 44, 55, 66, 255], 'Filled DETAIL region must render exact source pixels even on borderMap=1');
+
+        // Incremental write: FLAT mode filled region uses exact palette RGB on border pixel (no 0.72 darkening)
+        const incFlat = new Uint8ClampedArray(16);
+        canvasMod.writeRegionPixelsToImageData(incFlat, bMap, reg1.pixels, 200, 150, 100, true, false, srcPx, false);
+        assert.deepEqual(Array.from(incFlat.slice(0, 8)), [200, 150, 100, 255, 200, 150, 100, 255], 'Filled FLAT region must render exact palette color without border darkening');
+
+        // Incremental write: Unfilled standard region still draws 1px slate (51,65,85) border and white interior
+        const incUnfilled = new Uint8ClampedArray(16);
+        canvasMod.writeRegionPixelsToImageData(incUnfilled, bMap, reg2.pixels, 60, 120, 180, false, true, srcPx, false);
+        assert.deepEqual(Array.from(incUnfilled.slice(8, 16)), [255, 255, 255, 255, 51, 65, 85, 255], 'Unfilled region must keep white interior and slate border');
+
+        // Full base rebuild: reg 1 filled (no border), reg 2 unfilled (slate border preserved)
+        const fullDetail = new Uint8ClampedArray(16);
+        canvasMod.writeBaseCanvasPixels(fullDetail, rMap, bMap, new Set([1]), rById, pById, undefined, true, srcPx, false);
+        assert.deepEqual(
+          Array.from(fullDetail),
+          [11, 22, 33, 255, 44, 55, 66, 255, 255, 255, 255, 255, 51, 65, 85, 255],
+          'Full DETAIL base rebuild must omit borders on completed reg 1 while keeping borders on unfilled reg 2'
+        );
+
+        const fullFlat = new Uint8ClampedArray(16);
+        canvasMod.writeBaseCanvasPixels(fullFlat, rMap, bMap, new Set([1]), rById, pById, undefined, false, srcPx, false);
+        assert.deepEqual(
+          Array.from(fullFlat),
+          [200, 150, 100, 255, 200, 150, 100, 255, 255, 255, 255, 255, 51, 65, 85, 255],
+          'Full FLAT base rebuild must omit borders on completed reg 1 while keeping borders on unfilled reg 2'
+        );
+
+        // Free Colour mode: unfilled region has pure white everywhere (no slate border)
+        const fullFree = new Uint8ClampedArray(16);
+        canvasMod.writeBaseCanvasPixels(fullFree, rMap, bMap, new Set([1]), rById, pById, new Map([[1, 2]]), true, srcPx, true);
+        assert.deepEqual(
+          Array.from(fullFree),
+          [60, 120, 180, 255, 60, 120, 180, 255, 255, 255, 255, 255, 255, 255, 255, 255],
+          'Free Colour base rebuild must paint custom palette color seamlessly on filled reg 1 and pure white on unfilled reg 2'
+        );
+      }
     }
 
     // 8. DailyPuzzleService deterministic UTC date seeding & consecutive-date variation
