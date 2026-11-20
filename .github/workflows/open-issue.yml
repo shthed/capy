@@ -1,0 +1,144 @@
+name: Open Bot Issue
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Optional existing issue number to update or comment on (leave empty to create a new issue)'
+        required: false
+        type: string
+        default: ''
+      title:
+        description: 'Issue title (required when creating a new issue)'
+        required: false
+        type: string
+        default: ''
+      body:
+        description: 'Issue body or comment markdown'
+        required: true
+        type: string
+      comment_only:
+        description: 'If true and issue_number is set, post body as a comment instead of updating the issue body'
+        required: false
+        type: boolean
+        default: false
+      labels:
+        description: 'Optional comma-separated GitHub label names'
+        required: false
+        type: string
+        default: ''
+      milestone:
+        description: 'Optional milestone number or title'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: open-issue-${{ inputs.issue_number || inputs.title }}
+  cancel-in-progress: false
+
+jobs:
+  open-issue:
+    name: Open or Update Bot Issue
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.open_issue.outputs.issue_number }}
+      issue_url: ${{ steps.open_issue.outputs.issue_url }}
+      action: ${{ steps.open_issue.outputs.action }}
+    steps:
+      - name: Create, update, or comment on bot-authored issue
+        id: open_issue
+        uses: actions/github-script@v9
+        env:
+          INPUT_ISSUE_NUMBER: ${{ inputs.issue_number }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_BODY: ${{ inputs.body }}
+          INPUT_COMMENT_ONLY: ${{ inputs.comment_only }}
+          INPUT_LABELS: ${{ inputs.labels }}
+          INPUT_MILESTONE: ${{ inputs.milestone }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const rawNum = String(process.env.INPUT_ISSUE_NUMBER || '').trim();
+            const title = String(process.env.INPUT_TITLE || '').trim();
+            const body = String(process.env.INPUT_BODY || '').trim();
+            const commentOnly = String(process.env.INPUT_COMMENT_ONLY || '').toLowerCase() === 'true';
+            const rawLabels = String(process.env.INPUT_LABELS || '').trim();
+            const rawMilestone = String(process.env.INPUT_MILESTONE || '').trim();
+
+            if (!body) {
+              core.setFailed('Input "body" is required.');
+              return;
+            }
+
+            const labels = rawLabels
+              ? rawLabels.split(',').map((s) => s.trim()).filter(Boolean)
+              : [];
+
+            let milestoneNumber;
+            if (rawMilestone) {
+              if (/^\d+$/.test(rawMilestone)) {
+                milestoneNumber = Number(rawMilestone);
+              } else {
+                const { data: milestones } = await github.rest.issues.listMilestones({
+                  owner,
+                  repo,
+                  state: 'open',
+                  per_page: 100,
+                });
+                const found = milestones.find((m) => m.title.toLowerCase() === rawMilestone.toLowerCase());
+                if (found) milestoneNumber = found.number;
+              }
+            }
+
+            let issueNumber;
+            let issueUrl;
+            let action;
+
+            if (rawNum) {
+              if (!/^\d+$/.test(rawNum)) {
+                core.setFailed(`Invalid issue_number "${rawNum}". Expected a positive integer.`);
+                return;
+              }
+              issueNumber = Number(rawNum);
+              if (commentOnly) {
+                const { data: comment } = await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body,
+                });
+                issueUrl = comment.html_url;
+                action = 'commented';
+              } else {
+                const updateParams = { owner, repo, issue_number: issueNumber, body };
+                if (title) updateParams.title = title;
+                if (labels.length > 0) updateParams.labels = labels;
+                if (milestoneNumber !== undefined) updateParams.milestone = milestoneNumber;
+                const { data: updated } = await github.rest.issues.update(updateParams);
+                issueUrl = updated.html_url;
+                action = 'updated';
+              }
+            } else {
+              if (!title) {
+                core.setFailed('Input "title" is required when creating a new issue.');
+                return;
+              }
+              const createParams = { owner, repo, title, body };
+              if (labels.length > 0) createParams.labels = labels;
+              if (milestoneNumber !== undefined) createParams.milestone = milestoneNumber;
+              const { data: created } = await github.rest.issues.create(createParams);
+              issueNumber = created.number;
+              issueUrl = created.html_url;
+              action = 'created';
+            }
+
+            core.setOutput('issue_number', String(issueNumber));
+            core.setOutput('issue_url', issueUrl);
+            core.setOutput('action', action);
+            core.info(`Bot issue ${action}: #${issueNumber} (${issueUrl})`);
