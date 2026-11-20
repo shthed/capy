@@ -1186,6 +1186,83 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {/* Fat-Finger Tap Assist & Finger Reach Radius */}
+                <div className="mt-2 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="pr-3 min-w-0">
+                      <div className="text-xs sm:text-sm font-semibold text-slate-200">
+                        Fat-Finger Tap Assist
+                      </div>
+                      <div className="text-[11px] text-slate-400 leading-tight">
+                        Snaps near-miss taps onto nearby unfilled micro-regions (prefers active colour; Easy mode falls back to any colour)
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      data-testid="setting-fat-finger-assist"
+                      aria-checked={Boolean(settings.fatFingerAssist)}
+                      onClick={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
+                      className={`w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
+                        settings.fatFingerAssist ? 'bg-amber-500' : 'bg-slate-700'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
+                          settings.fatFingerAssist ? 'translate-x-4.5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-300 font-semibold">Finger Reach Radius</span>
+                      <span className="text-amber-400 font-mono font-bold">
+                        {Math.round(settings.touchReachRadiusPx ?? 22)}px
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="8"
+                      max="40"
+                      step="1"
+                      data-testid="setting-touch-reach-radius"
+                      value={Math.round(settings.touchReachRadiusPx ?? 22)}
+                      onChange={(e) =>
+                        updateSetting(
+                          'touchReachRadiusPx',
+                          Math.round(Math.min(40, Math.max(8, parseInt(e.target.value, 10) || 22)))
+                        )
+                      }
+                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                      {(
+                        [
+                          { px: 12, label: 'Compact 12px' },
+                          { px: 22, label: 'Standard 22px' },
+                          { px: 34, label: 'Large 34px' },
+                        ] as const
+                      ).map((preset) => (
+                        <button
+                          key={preset.px}
+                          type="button"
+                          data-testid={`setting-touch-reach-preset-${preset.px}`}
+                          onClick={() => updateSetting('touchReachRadiusPx', preset.px)}
+                          className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all ${
+                            Math.round(settings.touchReachRadiusPx ?? 22) === preset.px
+                              ? 'border-amber-400 bg-slate-800/80 text-amber-300 ring-1 ring-amber-400'
+                              : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Palette Order */}

@@ -49,6 +49,8 @@ const STORE_IMAGES = 'images';
 export const DEFAULT_SETTINGS: UserSettings = {
   autoAdvance: true,
   difficulty: 'EASY',
+  fatFingerAssist: true,
+  touchReachRadiusPx: 22,
   isPaintMode: false,
   isFreeColorMode: false,
   raisePaletteDock: true,
@@ -95,6 +97,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
 const SETTINGS_BOOLEAN_KEYS = [
   'autoAdvance',
+  'fatFingerAssist',
   'isPaintMode',
   'isFreeColorMode',
   'raisePaletteDock',
@@ -124,6 +127,7 @@ const SETTINGS_BOOLEAN_KEYS = [
 ] as const;
 
 const SETTINGS_NUMBER_KEYS = [
+  'touchReachRadiusPx',
   'canvasBgArgb',
   'hintColorArgb',
   'hintIntensity',
@@ -1230,6 +1234,10 @@ export class StorageService {
         parsed.difficulty === 'EASY' || parsed.difficulty === 'NORMAL'
           ? parsed.difficulty
           : DEFAULT_SETTINGS.difficulty;
+      const fatFingerAssist = pickBool('fatFingerAssist', difficulty === 'EASY');
+      const touchReachRadiusPx = Math.round(
+        Math.min(40, Math.max(8, pickFinite('touchReachRadiusPx', DEFAULT_SETTINGS.touchReachRadiusPx)))
+      );
       const canvasBgColor =
         typeof parsed.canvasBgColor === 'string' &&
         SETTINGS_ENUM_VALUES.canvasBgColor.includes(parsed.canvasBgColor)
@@ -1277,6 +1285,8 @@ export class StorageService {
       const resolved: UserSettings = {
         autoAdvance: pickBool('autoAdvance', DEFAULT_SETTINGS.autoAdvance),
         difficulty,
+        fatFingerAssist,
+        touchReachRadiusPx,
         isPaintMode: pickBool('isPaintMode', DEFAULT_SETTINGS.isPaintMode),
         isFreeColorMode: pickBool('isFreeColorMode', DEFAULT_SETTINGS.isFreeColorMode),
         raisePaletteDock: pickBool('raisePaletteDock', DEFAULT_SETTINGS.raisePaletteDock),

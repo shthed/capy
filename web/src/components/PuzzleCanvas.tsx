@@ -12,6 +12,7 @@ import {
   HintFillStyle,
   PaletteColor,
   PaletteSortOrder,
+  Difficulty,
   PuzzleData,
   Region,
   RegionColorMode,
@@ -27,6 +28,9 @@ interface PuzzleCanvasProps {
   isPreviewMode: boolean;
   isPaintMode: boolean;
   isFreeColorMode?: boolean;
+  difficulty?: Difficulty;
+  fatFingerAssist?: boolean;
+  touchReachRadiusPx?: number;
   paintedRegionColors?: Map<number, number>;
   canvasBgColor: CanvasBgColor;
   canvasBgArgb: number;
@@ -118,6 +122,111 @@ export function getNextZoomStop(currentScale: number): number {
   return ZOOM_DETENT_STOPS[0];
 }
 
+export const TOUCH_REACH_RADIUS_MIN = 8;
+export const TOUCH_REACH_RADIUS_MAX = 40;
+export const TOUCH_REACH_RADIUS_DEFAULT = 22;
+export const TOUCH_REACH_RADIUS_PRESETS = [12, 22, 34] as const;
+
+export interface ResolveNearTapParams {
+  width: number;
+  height: number;
+  regionMap: Int32Array;
+  regionById: Map<number, Region>;
+  filledRegionIds: Set<number>;
+  canvasX: number;
+  canvasY: number;
+  activeColorId: number;
+  difficulty: Difficulty;
+  fatFingerAssist: boolean;
+  touchReachRadiusPx: number;
+  totalScreenScale: number;
+  isFreeColorMode?: boolean;
+}
+
+/**
+ * Zero-allocation radial near-tap hit-testing.
+ * - O(1) fast-path when (floor(canvasX), floor(canvasY)) lands on a playable unfilled region.
+ * - When fatFingerAssist is enabled and direct hit misses (border/filled/wrong-color),
+ *   scans integer offsets inside Math.min(64, touchReachRadiusPx / totalScreenScale)
+ *   using scalar distance registers with zero heap allocations.
+ */
+export function resolveNearTapRegionId(params: ResolveNearTapParams): number {
+  const {
+    width,
+    height,
+    regionMap,
+    regionById,
+    filledRegionIds,
+    canvasX,
+    canvasY,
+    activeColorId,
+    difficulty,
+    fatFingerAssist,
+    touchReachRadiusPx,
+    totalScreenScale,
+    isFreeColorMode = false,
+  } = params;
+
+  const lx = Math.floor(canvasX);
+  const ly = Math.floor(canvasY);
+  const allowAnyColor = difficulty === 'EASY' || isFreeColorMode;
+
+  if (lx >= 0 && lx < width && ly >= 0 && ly < height) {
+    const exactId = regionMap[ly * width + lx];
+    if (exactId > 0 && !filledRegionIds.has(exactId)) {
+      if (allowAnyColor) return exactId;
+      const exactReg = regionById.get(exactId);
+      if (exactReg && exactReg.colorId === activeColorId) return exactId;
+    }
+  }
+
+  if (!fatFingerAssist || !(totalScreenScale > 0) || !(touchReachRadiusPx > 0)) {
+    return 0;
+  }
+
+  const rawRadius = touchReachRadiusPx / totalScreenScale;
+  const maxRFloat = rawRadius > 64 ? 64 : rawRadius;
+  if (!(maxRFloat > 0)) return 0;
+
+  const maxR = Math.ceil(maxRFloat);
+  const maxRSq = maxRFloat * maxRFloat;
+
+  let bestActiveId = 0;
+  let bestActiveDistSq = Infinity;
+  let bestAnyId = 0;
+  let bestAnyDistSq = Infinity;
+
+  for (let dy = -maxR; dy <= maxR; dy++) {
+    const ny = ly + dy;
+    if (ny < 0 || ny >= height) continue;
+    const dySq = dy * dy;
+    const rowOffset = ny * width;
+    for (let dx = -maxR; dx <= maxR; dx++) {
+      const distSq = dx * dx + dySq;
+      if (distSq > maxRSq) continue;
+      const nx = lx + dx;
+      if (nx < 0 || nx >= width) continue;
+      const candId = regionMap[rowOffset + nx];
+      if (candId <= 0 || filledRegionIds.has(candId)) continue;
+      const reg = regionById.get(candId);
+      if (!reg) continue;
+      if (reg.colorId === activeColorId) {
+        if (distSq < bestActiveDistSq) {
+          bestActiveDistSq = distSq;
+          bestActiveId = candId;
+        }
+      } else if (allowAnyColor) {
+        if (distSq < bestAnyDistSq) {
+          bestAnyDistSq = distSq;
+          bestAnyId = candId;
+        }
+      }
+    }
+  }
+
+  return bestActiveId > 0 ? bestActiveId : allowAnyColor ? bestAnyId : 0;
+}
+
 /**
  * Strict viewport bounding for pan/zoom offsets.
  * Guarantees that the artwork cannot be panned away into empty void
@@ -196,6 +305,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   isPreviewMode,
   isPaintMode,
   isFreeColorMode = false,
+  difficulty = 'EASY',
+  fatFingerAssist = difficulty === 'EASY',
+  touchReachRadiusPx = TOUCH_REACH_RADIUS_DEFAULT,
   paintedRegionColors,
   canvasBgColor,
   canvasBgArgb,
@@ -1358,7 +1470,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const canvasX = (screenX - offsetRef.current.x - baseOffsetX) / effScale;
       const canvasY = (screenY - offsetRef.current.y - baseOffsetY) / effScale;
 
-      return { x: canvasX, y: canvasY, screenX, screenY };
+      return { x: canvasX, y: canvasY, screenX, screenY, effScale };
     },
     [puzzle]
   );
@@ -2309,14 +2421,35 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           const lx = Math.floor(coords.x);
           const ly = Math.floor(coords.y);
           onPuzzleInteractionRef.current?.();
-          if (lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height) {
-            const rId = puzzle.regionMap[ly * puzzle.width + lx];
-            if (rId > 0) {
-              if (isPaintMode) {
+          let rId = resolveNearTapRegionId({
+            width: puzzle.width,
+            height: puzzle.height,
+            regionMap: puzzle.regionMap,
+            regionById: regionByIdRef.current,
+            filledRegionIds,
+            canvasX: coords.x,
+            canvasY: coords.y,
+            activeColorId,
+            difficulty,
+            fatFingerAssist,
+            touchReachRadiusPx,
+            totalScreenScale: coords.effScale,
+            isFreeColorMode,
+          });
+          const inBounds = lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height;
+          const exactId = inBounds ? puzzle.regionMap[ly * puzzle.width + lx] : 0;
+          if (rId === 0 && isFreeColorMode && exactId > 0) {
+            rId = exactId;
+          }
+          if (rId > 0) {
+            if (isPaintMode) {
+              if (inBounds && exactId === rId) {
                 hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
               } else {
                 onRegionClicked(rId);
               }
+            } else {
+              onRegionClicked(rId);
             }
           }
         }

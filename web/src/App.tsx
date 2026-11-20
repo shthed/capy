@@ -5321,6 +5321,9 @@ export const App: React.FC = () => {
         hintRegionId={isCompleted || isReplaying ? null : hintRegionId}
         isPreviewMode={isPreviewMode}
         isFreeColorMode={isFreeColorMode}
+        difficulty={settings.difficulty}
+        fatFingerAssist={settings.fatFingerAssist}
+        touchReachRadiusPx={settings.touchReachRadiusPx}
         isPaintMode={settings.isPaintMode && (!isReplaying || (!isCompleted && isPostLoadReplay))}
         canvasBgColor={settings.canvasBgColor}
         canvasBgArgb={settings.canvasBgArgb}
