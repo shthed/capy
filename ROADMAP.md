@@ -2,11 +2,11 @@
 
 Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). **Role split**: `ROADMAP.md` owns Epics (`EPIC-*`), User Stories (`US-*`), external blockers, Platform Icebox (`ICE-*`), and shipped archives; **GitHub Issues ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480))** hold live `- [x]` / `- [ ]` progress checklists; and [`TODO.md`](./TODO.md) holds the active sprint's `BUG-*` / `TASK-*` execution specs (governance & CLI rules in [`PROJECT.md`](./PROJECT.md#2-lean-agile-lifecycle-and-backlog-governance)).
 
-**Related Guides**: [`README.md`](./README.md) | [`PROJECT.md`](./PROJECT.md) | [`DEV.md`](./DEV.md) | [`AGENTS.md`](./AGENTS.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
+**Related Guides**: [`README.md`](./README.md) | [`PROJECT.md`](./PROJECT.md) | [`DEV.md`](./DEV.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md)
 
 **Table of Contents**:
 1. [`EPIC-2`: `v3.0.x` Critical Bugfixes & Stabilization (`Active in Sprint 1`)](#1-epic-2-v30x-critical-bugfixes--stabilization-active-in-sprint-1)
-2. [`EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Owner Review & Approval`)](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval)
+2. [`EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Review & Approval`)](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-review--approval)
 3. [`EPIC-4`: Serverless Infinite Zoom, Printable Art & Local Co-op Polish (`Ready After EPIC-3`)](#3-epic-4-serverless-infinite-zoom-printable-art--local-co-op-polish-ready-after-epic-3)
 4. [`EPIC-5`: Production Cloud Auth, Cross-Network Co-op & Optional AI Creation (`Blocked on External Infra`)](#4-epic-5-production-cloud-auth-cross-network-co-op--optional-ai-creation-blocked-on-external-infra)
 5. [Unscheduled Platform Icebox (`ICE-1`--`ICE-3`)](#5-unscheduled-platform-icebox-ice-1--ice-3)
@@ -16,10 +16,9 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 <summary>Roadmap Rollup (`17` Stories + `TASK-2.5` & Active `v3.0.x` Queue across `4` Epics)</summary>
 
 - [EPIC-2](../../issues/477) (*`v3.0.x` Stabilization & Live Cutover -- [Sprint 1 (`#2`)](../../milestone/2)*): `US-3.5` (Fat-Finger Mode & Finger Reach Radius, shipped in `v3.0.8` via [#602](../../pull/602), [#605](../../pull/605)), [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543) (`ops` Human Cloudflare & DNS Cutover in [`TODO.md`](./TODO.md)), and [#561 — Harden Cloudflare](../../issues/561) (`ops` / security hardening under [EPIC-2](../../issues/477)); all Sprint 1 stabilization, onboarding, Play Store launch prep, Preset Style Gallery, Cloudflare Workers deploy, pre-generated Max sample/daily archives, public [capyboop/paint](https://github.com/capyboop/paint/issues) tracker/mirror, BYOC Cloud Sync, anonymous feedback, and borderless completed-region slices (`v3.0.2`--`v3.0.8`) are promoted to `main` (see [Section 6](#6-shipped-epics--stories-epic-1--completed-stories) and [`CHANGELOG.md`](./CHANGELOG.md))
-- [EPIC-3](../../issues/478) (*8 Stories + `TASK-2.5` -- [Sprint 2 (`#3`)](../../milestone/3), Awaiting Owner Review*): `~276k tokens` (`~131--189 min agent`)
-- [EPIC-4](../../issues/479) (*4 Stories -- [Sprint 3 (`#4`)](../../milestone/4), Ready After [EPIC-3](../../issues/478)*): `~113k tokens` (`~52--76 min agent`)
-- [EPIC-5](../../issues/480) (*5 Stories -- Blocked on External Infra*): `~245k tokens` (`~113--165 min agent`)
-- **Total Strategic Horizon**: `~634k tokens` (`~4.9--7.2 hrs agent` | `~89--129 hrs human`; agent totals exclude [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543) `ops`)
+- [EPIC-3](../../issues/478) (*8 Stories + `TASK-2.5` -- [Sprint 2 (`#3`)](../../milestone/3), Awaiting Review*)
+- [EPIC-4](../../issues/479) (*4 Stories -- [Sprint 3 (`#4`)](../../milestone/4), Ready After [EPIC-3](../../issues/478)*)
+- [EPIC-5](../../issues/480) (*5 Stories -- Blocked on External Infra*)
 
 </details>
 
@@ -27,32 +26,32 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ## 1. `EPIC-2`: `v3.0.x` Critical Bugfixes & Stabilization (`Active in Sprint 1`)
 
-**Epic Goal**: Stabilize `v3.0.x` with critical reliability fixes, explicitly Owner-approved UX polish, and [capypaint.com](https://capypaint.com/) live cutover plus [capyboop/paint](https://github.com/capyboop/paint/issues) public issue tracker setup ([#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543)). Unapproved feature stories (`US-2.1`, `US-2.3b`, `US-2.4`) and Play Store release ops (`TASK-2.5`) live in [EPIC-3](../../issues/478); [capyboop.com](https://capyboop.com/) cutover is explicitly deferred out of active Sprint 1 scope. *(Tracking: [EPIC-2](../../issues/477) | [Sprint 1 (`#2`)](../../milestone/2)).*
+**Epic Goal**: Stabilize `v3.0.x` with critical reliability fixes, approved UX polish, and [capypaint.com](https://capypaint.com/) live cutover plus [capyboop/paint](https://github.com/capyboop/paint/issues) public issue tracker setup ([#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543)). Unapproved feature stories (`US-2.1`, `US-2.3b`, `US-2.4`) and Play Store release ops (`TASK-2.5`) live in [EPIC-3](../../issues/478); [capyboop.com](https://capyboop.com/) cutover is explicitly deferred out of active Sprint 1 scope. *(Tracking: [EPIC-2](../../issues/477) | [Sprint 1 (`#2`)](../../milestone/2)).*
 
-- **Active Execution Queue**: See [`TODO.md`](./TODO.md) for [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543) ([capypaint.com](https://capypaint.com/) apex and [paint.capyboop.com](https://paint.capyboop.com/) are live; remaining Human Ops cover `www` `301` edge redirect and HTTPS enforcement; live Pages channel at [Capy Production](https://shthed.github.io/capy/)) while [#561 — Harden Cloudflare](../../issues/561) remains open under [EPIC-2](../../issues/477). **Owner-Approved Sprint 1 Feature**: `US-3.5` (Fat-Finger Mode & Finger Reach Radius -- `fatFingerAssist`, `touchReachRadiusPx` `8px`--`40px` with `Compact 12px` / `Standard 22px` / `Large 34px` presets, and zero-allocation `resolveNearTapRegionId` radial hit-testing, [#602 — Add Fat-Finger Mode near-miss tap assist and reach radius](../../pull/602), [#605](../../pull/605)) moved from [EPIC-3](../../issues/478) into [EPIC-2](../../issues/477) and shipped in `v3.0.8`. All `v3.0.2`--`v3.0.8` stabilization, Play Store launch prep, Preset Style Gallery, Detail/Hue colour defaults, compact replay scrubber, Leanback manifest/banner, ad-free privacy policy, Cloudflare Worker deployment, pre-generated Max sample/daily archives, `lintVitalRelease` Android Fragment fix, BYOC Cloud Sync, anonymous feedback, and borderless completed-region slices are promoted to `main`; zero active agent dev tasks remain in [`TODO.md`](./TODO.md).
+- **Active Execution Queue**: See [`TODO.md`](./TODO.md) for [#543 — Production capypaint.com DNS, Cloudflare Worker & /env-setup cutover](../../issues/543) ([capypaint.com](https://capypaint.com/) apex and [paint.capyboop.com](https://paint.capyboop.com/) are live; remaining Ops cover `www` `301` edge redirect and HTTPS enforcement; live Pages channel at [Capy Production](https://shthed.github.io/capy/)) while [#561 — Harden Cloudflare](../../issues/561) remains open under [EPIC-2](../../issues/477). **Sprint 1 Feature**: `US-3.5` (Fat-Finger Mode & Finger Reach Radius -- `fatFingerAssist`, `touchReachRadiusPx` `8px`--`40px` with `Compact 12px` / `Standard 22px` / `Large 34px` presets, and zero-allocation `resolveNearTapRegionId` radial hit-testing, [#602 — Add Fat-Finger Mode near-miss tap assist and reach radius](../../pull/602), [#605](../../pull/605)) moved from [EPIC-3](../../issues/478) into [EPIC-2](../../issues/477) and shipped in `v3.0.8`. All `v3.0.2`--`v3.0.8` stabilization, Play Store launch prep, Preset Style Gallery, Detail/Hue colour defaults, compact replay scrubber, Leanback manifest/banner, ad-free privacy policy, Cloudflare Worker deployment, pre-generated Max sample/daily archives, `lintVitalRelease` Android Fragment fix, BYOC Cloud Sync, anonymous feedback, and borderless completed-region slices are promoted to `main`; zero active dev tasks remain in [`TODO.md`](./TODO.md).
 <!-- capy-dev-only:start -->
   - **Beta Channel & Mirror Sync Ops**: Live Beta Pages channel at [Capy Beta](https://shthed.github.io/capy/beta/); automated clean-room [capyboop/paint](https://github.com/capyboop/paint/issues) mirror sync via [`.github/workflows/publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml) is live on `main` (matching [`TODO.md`](./TODO.md)).
 <!-- capy-dev-only:end -->
 - **Shipped & Re-Scoped History**:
   - **Promoted to `main` (`v3.0.8`, 2026-11-20)**: Changelog standardization & project doc sync ([#610](../../pull/610)), borderless completed regions ([#608](../../pull/608)), BYOC OneDrive/CloudKit/Google Drive sync ([#604](../../pull/604)), Large Text scaling & default Fat-Finger assist ([#605](../../pull/605)), anonymous in-game feedback card & Worker relay ([#603](../../pull/603)), `paint.capyboop.com` Worker domain ([#595](../../pull/595)), Android package `com.capyboop.paint` ([#601](../../pull/601)), and Fat-Finger Mode touch reach presets ([#602](../../pull/602)).
   - **Promoted to `main` (`v3.0.7`, 2026-11-19)**: `capyboop/paint` community docs & mirror retargeting ([#598](../../pull/598), [#596](../../pull/596), [#587](../../pull/587)), top-bar save title pill width ([#590](../../pull/590)), on-demand puzzle regeneration ([#589](../../pull/589)), and `oxlint` guardrails + `<ErrorBoundary>` crash recovery ([#588](../../pull/588)).
-  - **Promoted to `main` (`v3.0.6`, 2026-11-18)**: Release safety, Worker/Android/storage invariants ([#579](../../pull/579)), Production channel retag & Play Store guide sync ([#578](../../pull/578)), `StorageService.ts` backup recency & empty-overwrite durability ([#577](../../pull/577)), clean-room export, release workflow signing guard & dual-origin Co-op hardening ([#576](../../pull/576)), public [capyboop/paint](https://github.com/capyboop/paint/issues) issue templates & About **Report Bug / Ideas** button ([#575](../../pull/575)), `O(R log R)` `maxRegions <= 2000` cap & Network-First `.capy` SW caching ([#573](../../pull/573)), and Google Play Store remediation removing Android ad hooks, fake idea votes & startup Play Games sign-in leaks ([#571](../../pull/571)).
+  - **Promoted to `main` (`v3.0.6`, 2026-11-18)**: Release safety, Worker/Android/storage invariants ([#579](../../pull/579)), Production channel retag & Play Store guide sync ([#578](../../pull/578)), `StorageService.ts` backup recency & empty-overwrite durability ([#577](../../pull/577)), release export filtering, release workflow signing guard & dual-origin Co-op hardening ([#576](../../pull/576)), public [capyboop/paint](https://github.com/capyboop/paint/issues) issue templates & About **Report Bug / Ideas** button ([#575](../../pull/575)), `O(R log R)` `maxRegions <= 2000` cap & Network-First `.capy` SW caching ([#573](../../pull/573)), and Google Play Store remediation removing Android ad hooks, fake idea votes & startup Play Games sign-in leaks ([#571](../../pull/571)).
   - **Promoted to `main` (`v3.0.5`, 2026-11-16)**: Play Daily snapshot race fix ([#569](../../pull/569)), release notes retag ([#568](../../pull/568)), `androidx.fragment:fragment-ktx` `1.8.9` pin fixing signed Android `lintVitalRelease` ([#566](../../pull/566)), pre-generated `2048p` Max-settings `sample_saves.capy` & `daily_saves.capy` ([#565](../../pull/565)), standardized sequential `[Unit]`/`[E2E]` test logging ([#563](../../pull/563)), direct Cloudflare Workers deploy ([#550](../../pull/550)) and direct blocked-PR merge fallback ([#560](../../pull/560)), visual Preset Style Gallery & Puzzle Styles tutorial step ([#557](../../pull/557)), Original Detail colour mode & Rainbow / Hue sort defaults ([#555](../../pull/555)), compact single-row replay scrubber ([#554](../../pull/554)), stacked-PR merge-async fallback & Draft checklist gate ([#553](../../pull/553)), and Google Play Store launch prep gating unfinished Cloud/Co-op hub UI behind opt-in `isCloudCoopUiEnabled()` plus [`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md) ([#547](../../pull/547)).
-  - **Promoted to `main` (`v3.0.4`, 2026-11-15)**: Android TV Leanback manifest/banner & ad-free `privacy-policy.html` ([#545](../../pull/545)), `.agents/environment.json` & cutover tracking ([#544](../../pull/544)), viewport-save reload race fix ([#540](../../pull/540)), deterministic Playwright E2E waits ([#539](../../pull/539)), Android API 36 edge-to-edge/IME insets & WebView allowlisting ([#537](../../pull/537)), web storage IndexedDB thumbnail offload & Co-op Worker SQLite checkpointing ([#535](../../pull/535)), fail-closed PR review-gate & clean-room mirror hardening ([#534](../../pull/534)), and async Android/E2E/Pages CI speedup ([#530](../../pull/530)).
+  - **Promoted to `main` (`v3.0.4`, 2026-11-15)**: Android TV Leanback manifest/banner & ad-free `privacy-policy.html` ([#545](../../pull/545)), environment setup & cutover tracking ([#544](../../pull/544)), viewport-save reload race fix ([#540](../../pull/540)), deterministic Playwright E2E waits ([#539](../../pull/539)), Android API 36 edge-to-edge/IME insets & WebView allowlisting ([#537](../../pull/537)), web storage IndexedDB thumbnail offload & Co-op Worker SQLite checkpointing ([#535](../../pull/535)), CI workflow & mirror sync hardening ([#534](../../pull/534)), and async Android/E2E/Pages CI speedup ([#530](../../pull/530)).
   - **Promoted to `main` (`v3.0.3`, 2026-11-14)**: Tutorial target spotlight ring, replay auto-dismissal & mobile badge polish ([#523](../../pull/523)), 14-step `OnboardingTutorial` & 9 `FeatureOfferBanner` quick tips ([#519](../../pull/519)), Low-Vision Large Text mode, sorted/centered `PaletteDock` & default Undo ([#518](../../pull/518)), and `PaletteDock` replay visibility & `Saves` tab `Thumbnails` list-first layout ([#517](../../pull/517)).
-  - **Promoted to `main` (`v3.0.2`, 2026-11-13)**: CapyBoop handbook ([#521](../../pull/521)), zoom pill badge removal & 360px `SettingsModal` tab clipping fix ([#497](../../pull/497)), storage sandbox isolation, fractional DPR & `.changelog/` compiler ([#495](../../pull/495)), `TASK-2.6` post-load replay controls, `Capy Forest` default, first-run tutorial & `About` tab ([#489](../../pull/489)), CI/CD & governance hardening ([#491](../../pull/491)--[#494](../../pull/494)), prebaked sample `1x` viewport reset & bot PR workflow ([#490](../../pull/490)), and prior `TASK-2.5` Play Store backlog sync ([#487](../../pull/487), later moved to [EPIC-3](../../issues/478)).
+  - **Promoted to `main` (`v3.0.2`, 2026-11-13)**: zoom pill badge removal & 360px `SettingsModal` tab clipping fix ([#497](../../pull/497)), storage sandbox isolation, fractional DPR & `.changelog/` compiler ([#495](../../pull/495)), `TASK-2.6` post-load replay controls, `Capy Forest` default, first-run tutorial & `About` tab ([#489](../../pull/489)), CI/CD & governance hardening ([#491](../../pull/491)--[#494](../../pull/494)), prebaked sample `1x` viewport reset & workflow automation ([#490](../../pull/490)), and prior `TASK-2.5` Play Store backlog sync ([#487](../../pull/487), later moved to [EPIC-3](../../issues/478)).
   - **Shipped to `main` (`v3.0.0`--`v3.0.1`, 2026-11-12)**: `BUG-1` & `BUG-3` ([#484](../../pull/484), [#485](../../pull/485)), `BUG-2` ([#485](../../pull/485)), and `BUG-5` mobile `GameTopBar` overlap & `99%` progress cap ([#486](../../pull/486), promoted to `main` in [#488](../../pull/488)).
-  - **Moved to [EPIC-3](../../issues/478)**: Shipped pre-re-scope touch/audio slices `US-2.2` & `TASK-2.3a` ([#472](../../pull/472), archived under [EPIC-3](../../issues/478) in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories)), unapproved feature stories `US-2.1`, `US-2.3b`, and `US-2.4`, and deferred Android Play deployment `TASK-2.5` ([Section 2](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-owner-review--approval)).
+  - **Moved to [EPIC-3](../../issues/478)**: Shipped pre-re-scope touch/audio slices `US-2.2` & `TASK-2.3a` ([#472](../../pull/472), archived under [EPIC-3](../../issues/478) in [Section 6](#6-shipped-epics--stories-epic-1--completed-stories)), unapproved feature stories `US-2.1`, `US-2.3b`, and `US-2.4`, and deferred Android Play deployment `TASK-2.5` ([Section 2](#2-epic-3-touch-assist-sensory-polish-retention-accessibility--replays-awaiting-review--approval)).
 
 ---
 
-## 2. `EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Owner Review & Approval`)
+## 2. `EPIC-3`: Touch Assist, Sensory Polish, Retention, Accessibility & Replays (`Awaiting Review & Approval`)
 
-**Epic Goal**: Forgive near-miss mobile taps, deliver owner-approved tactile/audio/loupe polish, build daily return habits, ensure colorblind accessibility, and enable shareable video replays—`100%` client-side with zero backend. *(GitHub Tracking Issue: [EPIC-3](../../issues/478) | Milestone: [Sprint 2](../../milestone/3) | All unshipped feature stories below await explicit Owner review and approval before entering [`TODO.md`](./TODO.md)).*
+**Epic Goal**: Forgive near-miss mobile taps, deliver owner-approved tactile/audio/loupe polish, build daily return habits, ensure colorblind accessibility, and enable shareable video replays—`100%` client-side with zero backend. *(GitHub Tracking Issue: [EPIC-3](../../issues/478) | Milestone: [Sprint 2](../../milestone/3) | All unshipped feature stories below await review and approval before entering [`TODO.md`](./TODO.md)).*
 
 ### US-3.1: Daily Featured Puzzle Streak & Completion Medals
 
-- **Readiness**: `Awaiting Owner Review & Approval` *(base UTC `DailyPuzzleService.ts` & **Create** hero card `TASK-3.1a` shipped in [#474](../../pull/474))*
+- **Readiness**: `Awaiting Review & Approval` *(base UTC `DailyPuzzleService.ts` & **Create** hero card `TASK-3.1a` shipped in [#474](../../pull/474))*
 - **Description**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint completion medals on top of `DailyPuzzleService.ts`.
 - **Value**: Turns one-off daily puzzle launches into a rewarding consecutive-day coloring habit completely offline.
 - **Why Now**: `DailyPuzzleService.ts` ([#474](../../pull/474)) already rotates featured artworks deterministically by UTC date; adding streak persistence completes the retention loop once approved.
@@ -60,11 +59,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-3.1b**: Persist daily completion history (`capy_daily_streak_v1`), consecutive-day streak counter, and Relaxed vs. Zero-Hint medal badges.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: high` | `domain: ui`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~20,000 tokens` | `~9--13 min agent` (`~2.5--3.5 hrs human`)
+- **Complexity**: `medium` / `moderate`
 - **Target Files**: [`web/src/services/DailyPuzzleService.ts`](./web/src/services/DailyPuzzleService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Consecutive UTC-day completions increment streak accurately while preserving Relaxed vs. Zero-Hint medal badges offline, covered by Playwright E2E assertions.
@@ -73,7 +71,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-3.2: Inclusive Accessibility -- Colorblind Geometric Region Patterns
 
-- **Readiness**: `Awaiting Owner Review & Approval` *(base `reducedMotion` `TASK-3.2a` & desktop keyboard shortcuts `TASK-3.2b` shipped in [#474](../../pull/474))*
+- **Readiness**: `Awaiting Review & Approval` *(base `reducedMotion` `TASK-3.2a` & desktop keyboard shortcuts `TASK-3.2b` shipped in [#474](../../pull/474))*
 - **Description**: Add geometric `CanvasPattern` hatch overlays (`colorblindPatternMode`) for active and hinted regions alongside existing `reducedMotion` and desktop keyboard gameplay shortcuts.
 - **Value**: Ensures players with deuteranopia, protanopia, or tritanopia can distinguish similar palette shades comfortably without relying solely on hue contrast.
 - **Why Now**: `reducedMotion` and desktop keyboard shortcuts (`1`--`9`, `+`/`-`, `0`, Arrow/WASD) are live ([#474](../../pull/474)); adding cached `CanvasPattern` textures finishes full visual accessibility once approved.
@@ -81,11 +79,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-3.2c**: Add `colorblindPatternMode: boolean` rendering cached `CanvasPattern` geometric textures (dots, stripes, crosshatch, checkerboard) over active and hinted regions.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: high` | `domain: a11y, canvas, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~17,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - `CanvasPattern` tiles are generated once at setup/theme change—zero per-frame pattern creation inside `requestAnimationFrame`.
@@ -94,7 +91,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-3.3: Shareable Timelapse Replay Video (`.mp4` / `.webm`) Export
 
-- **Readiness**: `Awaiting Owner Review & Approval`
+- **Readiness**: `Awaiting Review & Approval`
 - **Description**: Add an "Export Timelapse Video" button in `ReplayControls.tsx` recording the puzzle's chronological fill animation via `HTMLCanvasElement.captureStream(60)` + `MediaRecorder` and sharing via `NativeBridge.exportOrShareFile`.
 - **Value**: Turns Capy's YouTube-style replay scrubber into a one-tap shareable timelapse video for friends and social feeds, driving organic word-of-mouth discovery.
 - **Why Now**: Chronological `replaySequence` playback and `NativeBridge.exportOrShareFile` binary sharing already exist; adding `MediaRecorder` export unlocks sharing with zero server encoding cost once approved.
@@ -103,11 +100,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-3.3b**: Wire an Export Video button in `ReplayControls.tsx` and completion banner to `NativeBridge.exportOrShareFile` with feature-detection fallback.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: high` | `domain: export, canvas`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~45,000 tokens` | `~22--30 min agent` (`~6--9 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: `web/src/services/ReplayVideoExporter.ts`, [`web/src/components/ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Prefers `video/mp4;codecs=avc1` where supported with automatic `video/webm;codecs=vp9` fallback, releasing all `MediaStreamTrack` handles on finish or cancel.
@@ -116,7 +112,7 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-3.4: Milestone Achievement Toasts & CRDT Lifetime Stats Sync
 
-- **Readiness**: `Awaiting Owner Review & Approval` *(local `PlayerStatsService.ts` & Settings **Lifetime Stats** card `TASK-3.4a` shipped in [#474](../../pull/474))*
+- **Readiness**: `Awaiting Review & Approval` *(local `PlayerStatsService.ts` & Settings **Lifetime Stats** card `TASK-3.4a` shipped in [#474](../../pull/474))*
 - **Description**: Layer non-blocking milestone achievement unlock toasts, monotonic CRDT cloud stat sync, and optional Play Games hooks onto `PlayerStatsService.ts` (`capy_player_stats_v1`).
 - **Value**: Rewards long-term mastery across Easy, Hard, Free Colour, and Co-op modes and keeps lifetime totals synced monotonically across devices.
 - **Why Now**: Local `PlayerStatsService.ts` (`mergeLifetimeStats`) and the Settings **Lifetime Stats** card are live ([#474](../../pull/474)); wiring milestone unlock toasts and cloud/Play Games bridges completes cross-device progression once approved.
@@ -124,11 +120,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-3.4b**: Add milestone achievement unlock toasts, monotonic CRDT stat merging in `ProviderRegistry.ts` / `CloudProviderDrivers.ts`, and defensive no-op `NativeBridge.unlockAchievement` hooks.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: high` | `domain: ui, cloud, android`
-- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~32,000 tokens` | `~14--20 min agent` (`~4--6 hrs human`)
+- **Complexity**: `high` / `moderate`
 - **Target Files**: [`web/src/services/PlayerStatsService.ts`](./web/src/services/PlayerStatsService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/services/providers/CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Stat counters merge monotonically (`Math.max` / set-count union) across devices so syncing an older offline tab never decrements lifetime totals.
@@ -137,20 +132,19 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-2.1: Floating Precision Loupe Magnifier for Micro-Regions *(Moved from [EPIC-2](../../issues/477))*
 
-- **Readiness**: `Awaiting Owner Review & Approval`
+- **Readiness**: `Awaiting Review & Approval`
 - **Description**: Render an optional floating circular `2.5x` magnifier cutout with center crosshair (`showMagnifierLoupe`) offset `72px` above the active finger during press-and-hold or Paint Mode drags on [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), flipping cleanly below near top HUD edges.
 - **Value**: Eliminates mobile thumb occlusion on tiny `< 50px` micro-regions without forcing repeated manual zooming to `12x` and back out.
-- **Why Pushed to [EPIC-3](../../issues/478)**: Held out of `v3.0.1` (bugfixes only) so the Project Owner can review visual cutout styling, crosshair ergonomics, horizontal edge clamping, and hold-vs-pan gesture thresholds prior to implementation.
+- **Why Pushed to [EPIC-3](../../issues/478)**: Held out of `v3.0.1` (bugfixes only) pending review of visual cutout styling, crosshair ergonomics, horizontal edge clamping, and hold-vs-pan gesture thresholds prior to implementation.
 - **Planned Sprint Slices**:
   - **TASK-2.1a**: Render a zero-allocation `2.5x` magnified `baseCanvasRef` cutout + crosshair lens in `PuzzleCanvas.tsx`.
   - **TASK-2.1b** `[quick-win]`: Add `showMagnifierLoupe: boolean` setting toggle in `SettingsModal.tsx` Controls and Playwright E2E touch-hold verification.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: medium` | `domain: canvas, gestures, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon` (`2.1b`)
-- **Effort Estimate**: `~40,000 tokens` | `~18--26 min agent` (`~5--7 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/StorageService.ts`](./web/src/services/StorageService.ts), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Reuses existing offscreen `baseCanvasRef` (plus `highlightCanvasRef` / `borderCanvasRef`) via `ctx.drawImage` circular clip with zero per-frame `OffscreenCanvas` or heap allocations inside `requestAnimationFrame`, scaling cleanly for `devicePixelRatio`.
@@ -160,19 +154,18 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-2.3: Zero-Asset Procedural ASMR Web Audio Engine -- Melodic Layer *(Moved from [EPIC-2](../../issues/477))*
 
-- **Readiness**: `Awaiting Owner Review & Approval` *(base woodblock tap synth `TASK-2.3a` shipped in [#472](../../pull/472))*
+- **Readiness**: `Awaiting Review & Approval` *(base woodblock tap synth `TASK-2.3a` shipped in [#472](../../pull/472))*
 - **Description**: Extend [`SoundService.ts`](./web/src/services/SoundService.ts) with rising pentatonic Paint Mode streak notes, warm swatch-completion chord arpeggios, and `100%` puzzle-completion chimes.
 - **Value**: Adds zero-KB offline harmonic reward to continuous painting and color completions while pairing cleanly with LRA haptics.
-- **Why Pushed to [EPIC-3](../../issues/478)**: Held out of `v3.0.1` (bugfixes only) for Project Owner review of musical scale, instrument tone, voice-polyphony limits, and completion chime pacing.
+- **Why Pushed to [EPIC-3](../../issues/478)**: Held out of `v3.0.1` (bugfixes only) pending review of musical scale, instrument tone, voice-polyphony limits, and completion chime pacing.
 - **Planned Sprint Slices**:
   - **TASK-2.3b** `[quick-win]`: Layer harmonic pentatonic streak progression during Paint Mode drags, warm swatch-clear arpeggios, and `100%` puzzle completion chimes into `SoundService.ts` and `App.tsx`.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: medium` | `domain: audio, ui`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~22,000 tokens` | `~10--15 min agent` (`~2.5--3.5 hrs human`)
+- **Complexity**: `medium` / `moderate`
 - **Target Files**: [`web/src/services/SoundService.ts`](./web/src/services/SoundService.ts), [`web/src/App.tsx`](./web/src/App.tsx), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Zero bundled audio assets (`0 KB`), streak resets cleanly after gesture idle (`> 450ms`), does not advance on `UNFILL` / Undo, caps simultaneous oscillators (max 3--4 voices) during fast drags, and respects `soundEnabled`, `soundVolume`, and `document.hidden` auto-suspend.
@@ -181,20 +174,19 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-2.4: Zero-Allocation Region Fill Bloom & Swatch Shimmer *(Moved from [EPIC-2](../../issues/477))*
 
-- **Readiness**: `Awaiting Owner Review & Approval`
+- **Readiness**: `Awaiting Review & Approval`
 - **Description**: Animate region fills with a `180ms` radial ink-bloom and highlight newly completed palette swatches with a `400ms` shimmer wave across matching regions in [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx).
 - **Value**: Gives clear, tactile visual feedback on fills and color completions using a zero-allocation typed-array ring buffer.
-- **Why Pushed to [EPIC-3](../../issues/478)**: Held out of `v3.0.1` (bugfixes only) so the Project Owner can review visual subtlety, `reducedMotion` behavior, and battery impact before implementation.
+- **Why Pushed to [EPIC-3](../../issues/478)**: Held out of `v3.0.1` (bugfixes only) pending review of visual subtlety, `reducedMotion` behavior, and battery impact before implementation.
 - **Planned Sprint Slices**:
   - **TASK-2.4a**: Create a pre-allocated typed-array fill-animation ring buffer (mirroring `CoopRippleBuffer.ts`) driving a `180ms` radial clip bloom in `PuzzleCanvas.tsx`.
   - **TASK-2.4b**: Trigger a `400ms` celebratory highlight pulse across completed-swatch centroids when a palette color reaches `0` remaining regions.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: medium` | `domain: canvas`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`2.4a`), `Gemini 4 Argon` (`2.4b`)
-- **Effort Estimate**: `~42,000 tokens` | `~20--28 min agent` (`~5--7 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/engine/CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Zero heap allocations (`Float32Array` / `Int32Array` fixed ring buffer) during `requestAnimationFrame`, overwriting the oldest slot cleanly on overflow, bypassing bloom/shimmer when `reducedMotion` is enabled, and returning to `0%` CPU idle once the `180ms` / `400ms` window expires.
@@ -206,14 +198,13 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Readiness**: `Ready for Release Ops (Store-Clean v3.0.8 Build, Phone/Tablet Store Listing, Graphics & Privacy Policy Staged; Keystore Secrets Configured, Awaiting Tag & Play Console Upload)`
 - **Description**: Verify release signing secrets (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`, already configured in repository Actions secrets), verify `./gradlew app:testDebugUnitTest app:assembleRelease app:bundleRelease` (plus `MainActivity` `onPause`/`onResume` lifecycle & hardware back navigation), tag `v3.0.8` (matching [`web/package.json`](./web/package.json)) from `main` to trigger [`.github/workflows/release.yml`](./.github/workflows/release.yml), and publish the Play-signed `.aab` to Google Play Console using [`docs/play-store/PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md) (Phone & Tablet form factors only; Android TV form factor remains unchecked until `US-3.6` ships post-launch).
 - **Value**: Ships the unified Android wrapper (`com.capyboop.paint`) to Google Play Store alongside the web release.
-- **Why Pushed to [EPIC-3](../../issues/478)**: Moved out of [EPIC-2](../../issues/477) (`v3.0.x` bugfixes & stabilization) by the Project Owner so Play Store signing and release operations track alongside Sprint 2 readiness.
+- **Why Pushed to [EPIC-3](../../issues/478)**: Moved out of [EPIC-2](../../issues/477) (`v3.0.x` bugfixes & stabilization) so Play Store signing and release operations track alongside Sprint 2 readiness.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Task` | [EPIC-3](../../issues/478) ([Milestone #3](../../milestone/3)) | `priority: high` | `domain: android, ci`
-- **Complexity & Model**: `medium` | **Recommended Model**: `Gemini 4 Argon` + Owner Play Console / Keystore Setup
-- **Effort Estimate**: `~18,000 tokens` | `~10--15 min agent`
+- **Complexity**: `medium`
 - **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/java/com/capyboop/paint/MainActivity.kt`](./app/src/main/java/com/capyboop/paint/MainActivity.kt), [`.github/workflows/release.yml`](./.github/workflows/release.yml), [`APP.md`](./APP.md), [`docs/play-store/PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md)
 - **Acceptance Criteria**:
   - `release.yml` builds a Play-signed `.aab` and `.apk` matching [`web/package.json`](./web/package.json) SemVer and `versionCode` cleanly.
@@ -223,20 +214,19 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 
 ### US-3.6: Android TV `1920x1080` Overscan Layout, D-Pad Focus & Reticle Fill
 
-- **Readiness**: `Deferred Until Post-Play-Store Launch (Per Owner Directive)` *(Dormant `LEANBACK_LAUNCHER` manifest & `320x180` `tv_banner.png` staged in `v3.0.4`; do NOT opt into Android TV form factor in Play Console yet)*
+- **Readiness**: `Deferred Until Post-Play-Store Launch` *(Dormant `LEANBACK_LAUNCHER` manifest & `320x180` `tv_banner.png` staged in `v3.0.4`; do NOT opt into Android TV form factor in Play Console yet)*
 - **Description**: Add `1920x1080` television `5%` overscan-safe HUD margins, visible `focus-visible` D-pad arrow traversal without canvas focus traps, and a virtual TV canvas reticle supporting `DPAD_CENTER` / `Enter` region fills across Web and Android TV.
 - **Value**: Turns big-screen Android TV and living-room browser play into a comfortable couch-ready experience with a standard TV remote.
-- **Why Deferred**: Deferred by the Project Owner until after the initial Phone & Tablet Google Play Store release (`TASK-2.5` / `v3.0.8`) is live.
+- **Why Deferred**: Deferred until after the initial Phone & Tablet Google Play Store release (`TASK-2.5` / `v3.0.8`) is live.
 - **Planned Sprint Slices**:
   - **TASK-3.6a**: Add `1920x1080` TV overscan-safe inset CSS + additive native safe-area variables and D-pad arrow focus traversal across `GameTopBar`, `PaletteDock`, `FloatingActions`, and `SettingsModal`.
   - **TASK-3.6b**: Add virtual TV canvas reticle (`DPAD_CENTER` / `Enter` / `Space` tap-to-fill) and `MainActivity.kt` D-pad key forwarding with `1920x1080` Playwright E2E coverage.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-3](../../issues/478) | `priority: medium-high` | `domain: tv, ui, android`
-- **Complexity & Model**: `high` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~40,000 tokens` | `~20--28 min agent` (`~5--7 hrs human`)
+- **Complexity**: `high` / `moderate`
 - **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/index.css`](./web/src/index.css), [`app/src/main/java/com/capyboop/paint/MainActivity.kt`](./app/src/main/java/com/capyboop/paint/MainActivity.kt), [`web/scripts/test.mjs`](./web/scripts/test.mjs), [`APP.md`](./APP.md)
 - **Acceptance Criteria**:
   - Interactive HUD controls stay within `1920x1080` `5%` TV overscan safe bounds without regressing `360x780` mobile layout, and D-pad arrow keys traverse HUD controls and canvas reticle without focus traps.
@@ -259,11 +249,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-4.1b**: Upgrade `handleZoomIntoDetailTile` to crop around the active `(focusX, focusY)` viewport center with persisted `subTileBounds` for multi-depth navigation.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-4](../../issues/479) | `priority: medium-high` | `domain: canvas, engine, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon` (`4.1b`)
-- **Effort Estimate**: `~26,000 tokens` | `~12--18 min agent` (`~3.5--5 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`web/src/App.tsx`](./web/src/App.tsx), [`web/src/components/GameTopBar.tsx`](./web/src/components/GameTopBar.tsx), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`web/src/types/index.ts`](./web/src/types/index.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - Cropping around arbitrary `(focusX, focusY)` clamps cleanly inside source image bounds across repeated `2x` sub-tile depths while preserving parent breadcrumb restoration.
@@ -280,11 +269,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-4.2b**: Add print sheet layout options in `SettingsModal.tsx` (A4 vs. Letter aspect framing, line thickness, optional number hiding for freehand coloring, and browser Print/PDF trigger).
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-4](../../issues/479) | `priority: medium-high` | `domain: export, engine`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~22,000 tokens` | `~12--16 min agent` (`~3.5--5.5 hrs human`)
+- **Complexity**: `medium` / `moderate`
 - **Target Files**: [`web/src/services/SvgPrintExporter.ts`](./web/src/services/SvgPrintExporter.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/services/NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`WEB.md`](./WEB.md)
 - **Acceptance Criteria**:
   - A4 and US Letter aspect framing, configurable stroke widths, and optional number hiding render cleanly in Chrome/Firefox/Safari print preview without dark UI backgrounds.
@@ -301,11 +289,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
   - **TASK-4.3b**: Add `'PING'` wire message to `CoopMessageType` (`web/src/services/providers/types.ts`), relay via `HybridCoopRoomAdapter`, and render expanding dual-ring beacons in `CoopRippleBuffer.ts` and `PuzzleCanvas.tsx`.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-4](../../issues/479) | `priority: medium-high` | `domain: multiplayer, canvas`
-- **Complexity & Model**: `medium` / `moderate` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~20,000 tokens` | `~8--12 min agent` (`~2--3 hrs human`)
+- **Complexity**: `medium` / `moderate`
 - **Target Files**: [`web/src/services/providers/types.ts`](./web/src/services/providers/types.ts), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/engine/CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts), [`web/src/components/PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Zero per-frame heap allocations in `CoopRippleBuffer.ts`, verified by a 2-peer Playwright `BroadcastChannel` ping E2E test.
@@ -317,17 +304,16 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Readiness**: `Deferred Until Post-Play-Store Launch (Depends on US-3.6 & EPIC-3/EPIC-5 Cloud/Co-op Hub Promotion)`
 - **Description**: Add `REMOTE_CURSOR` and `REMOTE_ACTION` frames in `worker/coopRoomProtocol.ts`, zero-dependency inline SVG QR pairing (`#room=<CODE>&ctrl=1`) alongside 6-char room codes, and a mobile touchpad/palette controller view driving the TV canvas in real time once TV support ships after Google Play Store deployment (`cloud-coop-hub` remains gated behind `isCloudCoopUiEnabled()` in `v3.0.8`).
 - **Value**: Lets family and friends turn any smartphone into a responsive wireless painting controller for a living-room TV without installing a separate companion app.
-- **Why Deferred**: Deferred by Owner directive until after Google Play Store launch (`TASK-2.5` / `v3.0.8`); `CoopRoomDurableObject` (`worker/`) and `HybridCoopRoomAdapter` stay ready underneath `isCloudCoopUiEnabled()` (`?coop=1` / `?room=...`).
+- **Why Deferred**: Deferred until after Google Play Store launch (`TASK-2.5` / `v3.0.8`); `CoopRoomDurableObject` (`worker/`) and `HybridCoopRoomAdapter` stay ready underneath `isCloudCoopUiEnabled()` (`?coop=1` / `?room=...`).
 - **Planned Sprint Slices**:
   - **TASK-4.4a**: Extend `worker/coopRoomProtocol.ts` and `worker/index.ts` with validated `REMOTE_CURSOR` / `REMOTE_ACTION` frames and rate limits, and clean up unconfigured OAuth clutter in `SettingsModal.tsx` `Saves`.
   - **TASK-4.4b**: Add inline SVG QR pairing (`#room=<CODE>&ctrl=1`) and dedicated phone touchpad controller UI with 2-context Playwright E2E cursor, paint, and undo verification.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-4](../../issues/479) | `priority: medium-high` | `domain: multiplayer, tv, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
-- **Effort Estimate**: `~45,000 tokens` | `~20--30 min agent` (`~6--8 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts), [`worker/index.ts`](./worker/index.ts), [`web/src/services/ShareLinkService.ts`](./web/src/services/ShareLinkService.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Ephemeral `REMOTE_CURSOR` moves broadcast cleanly without overwriting SQLite `room_state` or starving `PAINT_EVENT` / `UNFILL_EVENT` frames, and `#room=<CODE>&ctrl=1` pairs from phone to `1920x1080` TV with `0px` mobile horizontal overflow.
@@ -349,11 +335,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Why Now**: Client drivers (`GoogleCloudDriver`, `PlayGamesAndroidDriver`, `privacy-policy.html`) are already complete; CI variable wiring from [EPIC-2](../../issues/477) (`BUG-2`) shipped to `main` in [#485](../../pull/485).
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-5](../../issues/480) | `priority: medium` | `domain: android, cloud`
-- **Complexity & Model**: `low` / `easy` | **Recommended Model**: `Gemini 3.8 Flash` + Human Console Setup
-- **Effort Estimate**: `~20,000 tokens` | `~10--15 min agent` (`~2--4 hrs human`)
+- **Complexity**: `low` / `easy`
 - **Target Files**: [`app/build.gradle.kts`](./app/build.gradle.kts), [`app/src/main/AndroidManifest.xml`](./app/src/main/AndroidManifest.xml), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - `https://shthed.github.io/.well-known/assetlinks.json` (or custom domain) validates against `pm get-app-links com.capyboop.paint` and Google OAuth sign-in succeeds without sandbox overrides.
@@ -369,11 +354,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Why Now**: `HybridCoopRoomAdapter` already implements the full WebSocket room protocol (`HELLO`, `WELCOME_STATE`, `PAINT_EVENT`, `HEARTBEAT`, `LEAVE`).
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-5](../../issues/480) | `priority: medium` | `domain: multiplayer, cloud`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
-- **Effort Estimate**: `~50,000 tokens` | `~25--35 min agent` (`~8--12 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`worker/index.ts`](./worker/index.ts), [`worker/coopRoomProtocol.ts`](./worker/coopRoomProtocol.ts), [`wrangler.jsonc`](./wrangler.jsonc), [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Hibernates between strokes (`0` billable CPU ms while idle via C++ `PING`/`PONG`), enforces `<= 6 KB` frame caps, strict `Origin` validation, `40 frames / 5s` rate limiting, and write-once initial `seed_token` persistence, and automatically falls back to `BroadcastChannel` when offline or on `localhost`/`github.io`.
@@ -389,11 +373,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Why Now**: Custom photo puzzles (`45--95 KB` `.capy` v2) exceed `< 2 KB` URL hash limits; an encrypted ephemeral relay completes universal link sharing privately.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-5](../../issues/480) | `priority: medium` | `domain: cloud, security`
-- **Complexity & Model**: `medium` / `hard` | **Recommended Model**: `Gemini 4 Carbon`
-- **Effort Estimate**: `~40,000 tokens` | `~18--26 min agent` (`~6--8 hrs human`)
+- **Complexity**: `medium` / `hard`
 - **Target Files**: [`web/src/services/ShareLinkService.ts`](./web/src/services/ShareLinkService.ts), [`web/public/privacy-policy.html`](./web/public/privacy-policy.html), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Decryption key stays strictly inside `#s=...` (never transmitted in HTTP requests), and built-in Gallery `#s=` links continue using zero network calls.
@@ -409,11 +392,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Why Now**: Sequenced behind zero-cost client features because live image synthesis incurs per-request API cost (`AiCreditLedger`).
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-5](../../issues/480) | `priority: medium-low` | `domain: ai, engine, ui`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Carbon` (`/plan`) + `Gemini 4 Argon`
-- **Effort Estimate**: `~90,000 tokens` (`~42k` + `~48k`) | `~40--60 min agent` (`~12--18 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`web/src/components/SettingsModal.tsx`](./web/src/components/SettingsModal.tsx), [`web/src/App.tsx`](./web/src/App.tsx), [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Enforces family-friendly prompt moderation prior to API dispatch and degrades cleanly when offline or unconfigured.
@@ -429,11 +411,10 @@ Strategic product horizon for **Capy** ([`web/`](./web/) and [`app/`](./app/)). 
 - **Why Now**: Sequenced last in [EPIC-5](../../issues/480) because automated pack publishing builds directly on `US-5.4`.
 
 <details>
-<summary>Engineering Metadata, Estimates, Files & Acceptance Criteria</summary>
+<summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
 - **Type & Priority**: `Story` | [EPIC-5](../../issues/480) | `priority: medium-low` | `domain: cloud, engine`
-- **Complexity & Model**: `high` / `hard` | **Recommended Model**: `Gemini 4 Argon`
-- **Effort Estimate**: `~45,000 tokens` | `~20--30 min agent` (`~6--8 hrs human`)
+- **Complexity**: `high` / `hard`
 - **Target Files**: [`web/src/services/providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), `.github/workflows/`, [`CLOUD.md`](./CLOUD.md)
 - **Acceptance Criteria**:
   - Client continues working 100% offline with bundled + cached catalog entries if the community API is unreachable.
@@ -451,13 +432,13 @@ Parked native desktop/mobile store wrappers awaiting completion of [EPIC-2](../.
 
 - **`ICE-1`: Steam Desktop Wrapper (`desktop/` Tauri v2) & `SteamCloudDriver` Bindings**:
   - *Value*: Packages `web/dist/` for Windows/macOS/Linux Steam Deck & desktop players with `ISteamRemoteStorage` Cloud Saves, Steam Achievements, and Steam Overlay (`SteamCloudDriver` in [`CloudProviderDrivers.ts`](./web/src/services/providers/CloudProviderDrivers.ts) is already modularly stubbed).
-  - *Activation Trigger*: Promote to an active Epic after [EPIC-2](../../issues/477)--[EPIC-4](../../issues/479) desktop keyboard, audio, and achievement contracts stabilize (`~60k tokens`, `Gemini 4 Argon`).
+  - *Activation Trigger*: Promote to an active Epic after [EPIC-2](../../issues/477)--[EPIC-4](../../issues/479) desktop keyboard, audio, and achievement contracts stabilize.
 - **`ICE-2`: iOS & iPadOS Native Wrapper (`ios/` Swift `WKWebView`) & `AppleCloudDriver` Bindings**:
   - *Value*: Delivers App Store distribution with Apple Pencil hover/tilt ergonomics, CoreHaptics, GameKit (`GKLocalPlayer`), and CloudKit save sync (`window.webkit.messageHandlers.CapyIOS` + `AppleCloudDriver`).
-  - *Activation Trigger*: Promote when Apple Developer Storefront distribution and macOS Xcode signing are scheduled (`~65k tokens`, `Gemini 4 Argon`).
+  - *Activation Trigger*: Promote when Apple Developer Storefront distribution and macOS Xcode signing are scheduled.
 - **`ICE-3`: Microsoft Store / Xbox Wrapper & `MicrosoftCloudDriver` Bindings**:
   - *Value*: Connects `MicrosoftCloudDriver` to live Entra ID / MSA OAuth 2.0 PKCE credentials for OneDrive `special/approot` and Xbox Connected Storage sync.
-  - *Activation Trigger*: Promote alongside desktop/console storefront packaging (`~45k tokens`, `Gemini 4 Argon`).
+  - *Activation Trigger*: Promote alongside desktop/console storefront packaging.
 
 </details>
 
@@ -476,12 +457,12 @@ Completed Epics and User Stories archived upon merge to `main` (full granular PR
 
 - **Sprint 1 `v3.0.0`--`v3.0.8` Bugfix, Onboarding, Mobile UI, Durability, BYOC Sync & Play Store Launch Prep Slices (`BUG-1`--`BUG-3`, `BUG-5`, `TASK-2.6`, `US-3.5`, PR Workflows & Governance)**:
   - **`v3.0.8` (2026-11-20) Changelog Standardization, Borderless Completed Regions, BYOC Cloud Sync, Large Text / Fat-Finger Mode, Anonymous Feedback & `paint.capyboop.com`** -- [#610 — Standardize changelog formatting, daily releases, and project docs](../../pull/610), [#608 — Omit region boundary lines on completed regions](../../pull/608), [#604 — Add BYOC OneDrive, CloudKit, and Google Drive sync](../../pull/604), [#605 — Scale Large Text UI and enable Fat-Finger assist by default](../../pull/605), [#603 — Add anonymous in-game feedback card and Worker relay](../../pull/603), [#595 — Bind paint.capyboop.com custom domain on Cloudflare Workers](../../pull/595), [#601 — Rename Android package to com.capyboop.paint](../../pull/601), [#602 — Add Fat-Finger Mode touch reach presets](../../pull/602)
-  - **`v3.0.7` (2026-11-19) `capyboop/paint` Community Docs, `oxlint` Guardrails, `<ErrorBoundary>` & On-Demand Puzzle Regeneration** -- [#598 — Align root README heading with capyboop/paint](../../pull/598), [#596 — Retarget public clean-room mirror to capyboop/paint](../../pull/596), [#590 — Expand top-bar puzzle save title pill width](../../pull/590), [#589 — Switch puzzle regeneration to on-demand and path-filtered triggers](../../pull/589), [#588 — Add oxlint guardrails and crash-safe ErrorBoundary recovery](../../pull/588), [#587 — Add public community docs and templates](../../pull/587)
-  - **`v3.0.6` (2026-11-18) Release Safety, Backup Durability, Public Issue Tracker, `O(R log R)` `maxRegions` Cap & Play Store Remediation** -- [#579 — Harden release safety, Cloudflare Worker, Android bridge, and storage invariants](../../pull/579), [#578 — Promote Production channel markers and sync Play Store guide](../../pull/578), [#577 — Harden local save backup recency and empty-overwrite protection](../../pull/577), [#576 — Harden clean-room export, release workflow, and Co-op origins](../../pull/576), [#575 — Wire public capyboop/paint issue tracker and templates](../../pull/575), [#573 — Fix Max-detail region limits and offline caching](../../pull/573), [#571 — Remove Android ad hooks, fake idea votes, and default login leaks](../../pull/571)
+  - **`v3.0.7` (2026-11-19) `capyboop/paint` Community Docs, `oxlint` Guardrails, `<ErrorBoundary>` & On-Demand Puzzle Regeneration** -- [#598 — Align root README heading with capyboop/paint](../../pull/598), [#596 — Retarget public mirror to capyboop/paint](../../pull/596), [#590 — Expand top-bar puzzle save title pill width](../../pull/590), [#589 — Switch puzzle regeneration to on-demand and path-filtered triggers](../../pull/589), [#588 — Add oxlint guardrails and crash-safe ErrorBoundary recovery](../../pull/588), [#587 — Add public community docs and templates](../../pull/587)
+  - **`v3.0.6` (2026-11-18) Release Safety, Backup Durability, Public Issue Tracker, `O(R log R)` `maxRegions` Cap & Play Store Remediation** -- [#579 — Harden release safety, Cloudflare Worker, Android bridge, and storage invariants](../../pull/579), [#578 — Promote Production channel markers and sync Play Store guide](../../pull/578), [#577 — Harden local save backup recency and empty-overwrite protection](../../pull/577), [#576 — Harden release export, release workflow, and Co-op origins](../../pull/576), [#575 — Wire public capyboop/paint issue tracker and templates](../../pull/575), [#573 — Fix Max-detail region limits and offline caching](../../pull/573), [#571 — Remove Android ad hooks, fake idea votes, and default login leaks](../../pull/571)
   - **`v3.0.5` (2026-11-16) Cloudflare Workers CI, Pre-Baked Max Dailies, Preset Style Gallery, Compact Replay & Play Store Listing Prep** -- [#569](../../pull/569), [#568](../../pull/568), [#566](../../pull/566), [#565](../../pull/565), [#563](../../pull/563), [#550](../../pull/550), [#560](../../pull/560), [#559](../../pull/559), [#557](../../pull/557), [#555](../../pull/555), [#554](../../pull/554), [#553](../../pull/553), [#548](../../pull/548), [#547](../../pull/547)
   - **`v3.0.4` (2026-11-15) Android TV Leanback Banner, API 36 Security, Deterministic E2E Waits, IndexedDB Thumbnails & Async CI** -- [#546](../../pull/546), [#545](../../pull/545), [#544](../../pull/544), [#540](../../pull/540), [#539](../../pull/539), [#537](../../pull/537), [#535](../../pull/535), [#534](../../pull/534), [#530](../../pull/530)
   - **`v3.0.3` (2026-11-14) 14-Step Interactive `OnboardingTutorial`, `TargetSpotlightOverlay`, Low-Vision Large Text & Thumbnail-First Saves** -- [#523](../../pull/523), [#519](../../pull/519), [#518](../../pull/518), [#517](../../pull/517)
-  - **`v3.0.2` (2026-11-13) `CAPYBOOP.md`, Channel Storage Sandbox, `.changelog/` Compiler, `TASK-2.6` Onboarding & `PROJECT.md` Charter** -- [#521](../../pull/521), [#501](../../pull/501), [#497](../../pull/497), [#495](../../pull/495), [#489](../../pull/489), [#491](../../pull/491), [#492](../../pull/492), [#494](../../pull/494), [#493](../../pull/493), [#490](../../pull/490), [#487](../../pull/487)
+  - **`v3.0.2` (2026-11-13) Channel Storage Sandbox, `.changelog/` Compiler, `TASK-2.6` Onboarding & `PROJECT.md` Charter** -- [#521](../../pull/521), [#501](../../pull/501), [#497](../../pull/497), [#495](../../pull/495), [#489](../../pull/489), [#491](../../pull/491), [#492](../../pull/492), [#494](../../pull/494), [#493](../../pull/493), [#490](../../pull/490), [#487](../../pull/487)
   - **`v3.0.1` (2026-11-12) Production Promotion (`BUG-5` Mobile `GameTopBar` Two-Lane Layout & `99%` Incomplete Progress Cap)** -- [#486](../../pull/486), [#488](../../pull/488)
   - **`v3.0.0` Production Promotion (`BUG-2` CI Cloud Variable Injection & `< 2s` `sanity.mjs` Gate + Sprint 1 Bundle)** -- [#485](../../pull/485)
   - **Co-op `WELCOME_STATE` Reload Persistence, Replay Scrubber `Resume Here` & `Reset Progress` `'UNFILL_EVENT'` Sync, Compact Mobile `ReplayControls` Pill Fit, Monotonic CRDT `resetEpoch`, `> 180 KB` Chunked Play Games Binary Sync, and Android `MainActivity` WebView Lifecycle Guard** -- [#484](../../pull/484)

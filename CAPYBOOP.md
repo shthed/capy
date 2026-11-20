@@ -11,6 +11,7 @@ This document intentionally excludes product features, technical architecture, t
 - **Cloud, Mirrors & Edge Hosting**: [`CLOUD.md`](./CLOUD.md)
 - **Testing Suites & Verification**: [`TESTING.md`](./TESTING.md)
 - **AI Coding Agent Guardrails**: [`AGENTS.md`](./AGENTS.md)
+- **Private AI Workflow, PR Readiness & Cross-Repo Guardrails**: [`docs/ai/workflow-and-models.md`](./docs/ai/workflow-and-models.md) | [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md) | [`docs/ai/cross-repo-guardrail.md`](./docs/ai/cross-repo-guardrail.md)
 
 ---
 

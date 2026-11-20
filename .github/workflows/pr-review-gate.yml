@@ -707,8 +707,14 @@ jobs:
               }
             }
 
+            const FORBIDDEN_PUBLIC_CROSS_REF_RE =
+              /(?:https?:\/\/github\.com\/capyboop\/paint\/(?:issues|pull)\/\d+|(?<![A-Za-z0-9_.-])capyboop\/paint#\d+)/i;
+            const hasForbiddenCrossRef =
+              FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.title || '')) ||
+              FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.body || ''));
+
             const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
-            const strictAiReady = !isDraft && !changesRequested && aiOrSyncReady;
+            const strictAiReady = !isDraft && !changesRequested && !hasForbiddenCrossRef && aiOrSyncReady;
             const gatePassed = strictAiReady;
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
@@ -734,6 +740,7 @@ jobs:
 
             // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars) & upsert gate status comment
             const blockers = [];
+            if (hasForbiddenCrossRef) blockers.push('Forbidden capyboop/paint cross-ref');
             if (changesRequested) blockers.push('Changes requested / hold');
             if (isDraft) {
               blockers.push('Draft PR');
@@ -755,7 +762,7 @@ jobs:
 
             let state = 'pending';
             let description = `${targetScope}: Blocked by ${blockers.join(', ') || 'Pending checks'}`;
-            if (changesRequested) {
+            if (changesRequested || hasForbiddenCrossRef) {
               state = 'failure';
             } else if (gatePassed) {
               state = 'success';
@@ -1205,6 +1212,16 @@ jobs:
                 core.warning(`Invalid AI review JSON response; awaiting $0 workflow_dispatch bot review.`);
                 return;
               }
+            }
+
+            const FORBIDDEN_PUBLIC_CROSS_REF_RE =
+              /(?:https?:\/\/github\.com\/capyboop\/paint\/(?:issues|pull)\/\d+|(?<![A-Za-z0-9_.-])capyboop\/paint#\d+)/i;
+            const summaryCrossRefMatch = summary.match(FORBIDDEN_PUBLIC_CROSS_REF_RE);
+            if (summaryCrossRefMatch) {
+              core.setFailed(
+                `Forbidden public mirror cross-reference "${summaryCrossRefMatch[0]}" in AI review summary. Use plain text (e.g. \`capyboop/paint\` public issue N) instead of live URLs or #N shorthand.`
+              );
+              return;
             }
 
             const markerRegex = new RegExp(

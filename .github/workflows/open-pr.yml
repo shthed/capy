@@ -141,6 +141,17 @@ jobs:
             }
 
             const bodyInput = String(process.env.INPUT_BODY ?? '');
+            const FORBIDDEN_PUBLIC_CROSS_REF_RE =
+              /(?:https?:\/\/github\.com\/capyboop\/paint\/(?:issues|pull)\/\d+|(?<![A-Za-z0-9_.-])capyboop\/paint#\d+)/i;
+            const crossRefMatch =
+              title.match(FORBIDDEN_PUBLIC_CROSS_REF_RE) ||
+              bodyInput.match(FORBIDDEN_PUBLIC_CROSS_REF_RE);
+            if (crossRefMatch) {
+              core.setFailed(
+                `Forbidden public mirror cross-reference "${crossRefMatch[0]}" in PR title or body. Use plain text (e.g. \`capyboop/paint\` public issue N) instead of live URLs or #N shorthand.`
+              );
+              return;
+            }
             const labels = [
               ...new Set(
                 String(process.env.INPUT_LABELS ?? '')
