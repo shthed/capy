@@ -15,6 +15,25 @@ import {
   signInWithGoogleOAuthPopup,
 } from './GoogleCloudSyncClient';
 import {
+  clearCachedMicrosoftSession,
+  getAllowedMockMicrosoftOAuthToken,
+  getConfiguredMicrosoftClientId,
+  isValidOneDriveFileName,
+  loadCachedMicrosoftSession,
+  OneDriveAppFolderClient,
+  setConfiguredMicrosoftClientId,
+  signInWithMicrosoftOAuthPkce,
+} from './MicrosoftCloudSyncClient';
+import {
+  AppleCloudKitClient,
+  clearCachedAppleSession,
+  getAllowedMockAppleCloudSession,
+  isAppleCloudConfigured,
+  isValidCloudKitRecordName,
+  loadCachedAppleSession,
+  signInWithAppleCloud,
+} from './AppleCloudSyncClient';
+import {
   CloudLibraryManifestV2,
   CloudProviderDescriptor,
   CloudProviderDriver,
@@ -832,110 +851,277 @@ export class SteamCloudDriver implements CloudProviderDriver {
 }
 
 /**
- * Microsoft / Xbox Cloud Driver (MSAL OAuth 2.0 + OneDrive Special `approot` / Xbox Connected Storage).
+ * Microsoft Cloud Driver (OAuth 2.0 PKCE + Microsoft Graph OneDrive `special/approot`).
+ * 100% client-direct BYOC ($0 backend cost) supporting Web and Android cross-device sync.
  */
 export class MicrosoftCloudDriver implements CloudProviderDriver {
   readonly id = 'microsoft' as const;
+  private writeLocks = new Map<string, Promise<unknown>>();
+  private readonly fetchImpl?: typeof fetch;
+
+  constructor(options?: { fetchImpl?: typeof fetch }) {
+    this.fetchImpl = options?.fetchImpl;
+  }
+
+  private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
+    const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(task);
+    const tracked = next.catch(() => undefined).finally(() => {
+      if (this.writeLocks.get(lockKey) === tracked) {
+        this.writeLocks.delete(lockKey);
+      }
+    });
+    this.writeLocks.set(lockKey, tracked);
+    return next;
+  }
+
+  private getClient(): OneDriveAppFolderClient | null {
+    const session = loadCachedMicrosoftSession();
+    if (!session?.accessToken) return null;
+    return new OneDriveAppFolderClient(session.accessToken, this.fetchImpl);
+  }
 
   getDescriptor(): CloudProviderDescriptor {
+    const clientId = getConfiguredMicrosoftClientId();
+    const hasMock = Boolean(getAllowedMockMicrosoftOAuthToken());
     return {
       id: 'microsoft',
-      displayName: 'Microsoft / Xbox',
-      storageName: 'OneDrive AppFolder & Xbox Cloud',
-      isSupported: false,
-      isConfigured: false,
-      comingSoon: true,
+      displayName: 'Microsoft Account',
+      storageName: 'OneDrive (AppFolder)',
+      isSupported: true,
+      isConfigured: Boolean(clientId || hasMock),
     };
   }
 
   hasActiveSession(): boolean {
-    return false;
+    return Boolean(loadCachedMicrosoftSession()?.accessToken);
   }
 
   restoreSession(): Partial<PlayerIdentity> | null {
-    return null;
+    const session = loadCachedMicrosoftSession();
+    if (!session) return null;
+    return {
+      playerId: `ms_${session.sub}`,
+      displayName: session.displayName,
+      email: session.email,
+      provider: 'microsoft',
+      isAuthenticated: true,
+    };
   }
 
   async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
+    if (isExplicitlySignedOut()) return null;
+    const restored = this.restoreSession();
+    if (restored) return restored;
     return null;
   }
 
-  async signIn(): Promise<Partial<PlayerIdentity>> {
-    throw new Error('Microsoft / Xbox Cloud sync is coming in a future update.');
+  async signIn(options?: { clientId?: string }): Promise<Partial<PlayerIdentity>> {
+    setExplicitlySignedOut(false);
+    if (options?.clientId !== undefined) {
+      setConfiguredMicrosoftClientId(options.clientId);
+    }
+    const clientId = options?.clientId?.trim() || getConfiguredMicrosoftClientId();
+    const session = await signInWithMicrosoftOAuthPkce(clientId, {
+      fetchImpl: this.fetchImpl,
+    });
+    return {
+      playerId: `ms_${session.sub}`,
+      displayName: session.displayName.slice(0, 32),
+      email: session.email,
+      provider: 'microsoft',
+      isAuthenticated: true,
+      lastSyncedAt: Date.now(),
+    };
   }
 
-  async signOut(): Promise<void> {}
+  async signOut(): Promise<void> {
+    setExplicitlySignedOut(true);
+    clearCachedMicrosoftSession();
+    this.writeLocks.clear();
+  }
+
   async readManifest(): Promise<CloudLibraryManifestV2 | null> {
-    return null;
+    const client = this.getClient();
+    if (!client) return null;
+    return client.downloadJsonFile<CloudLibraryManifestV2>(CLOUD_MANIFEST_FILE_NAME);
   }
-  async writeManifest(): Promise<boolean> {
-    return false;
+
+  async writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean> {
+    return this.enqueueWrite(CLOUD_MANIFEST_FILE_NAME, async () => {
+      const client = this.getClient();
+      if (!client) return false;
+      return client.uploadJsonFile(CLOUD_MANIFEST_FILE_NAME, manifest);
+    });
   }
-  async readSlotEnvelope(): Promise<CloudSaveEnvelope | null> {
-    return null;
+
+  async readSlotEnvelope(slotKey: string): Promise<CloudSaveEnvelope | null> {
+    const fileName = `capy_slot_${slotKey}.json`;
+    if (!isValidOneDriveFileName(fileName)) return null;
+    const client = this.getClient();
+    if (!client) return null;
+    return client.downloadJsonFile<CloudSaveEnvelope>(fileName);
   }
-  async writeSlotEnvelope(): Promise<boolean> {
-    return false;
+
+  async writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean> {
+    const fileName = `capy_slot_${envelope.slotKey}.json`;
+    if (!isValidOneDriveFileName(fileName)) return false;
+    return this.enqueueWrite(fileName, async () => {
+      const client = this.getClient();
+      if (!client) return false;
+      return client.uploadJsonFile(fileName, envelope);
+    });
   }
-  async readBinaryBlob(): Promise<Uint8Array | null> {
-    return null;
+
+  async readBinaryBlob(blobRef: string): Promise<Uint8Array | null> {
+    if (!isValidOneDriveFileName(blobRef)) return null;
+    const client = this.getClient();
+    if (!client) return null;
+    return client.downloadBinaryFile(blobRef);
   }
-  async writeBinaryBlob(): Promise<string | null> {
-    return null;
+
+  async writeBinaryBlob(
+    _slotKey: string,
+    fileName: string,
+    bytes: Uint8Array
+  ): Promise<string | null> {
+    if (!isValidOneDriveFileName(fileName)) return null;
+    return this.enqueueWrite(fileName, async () => {
+      const client = this.getClient();
+      if (!client) return null;
+      return client.uploadBinaryFile(fileName, bytes);
+    });
   }
 }
 
 /**
- * Apple / Game Center Cloud Driver (Sign in with Apple + CloudKit / iCloud Key-Value Store).
+ * Apple / iCloud Cloud Driver (Sign in with Apple JS + CloudKit JS `privateCloudDatabase`,
+ * plus native iOS `window.webkit.messageHandlers.CapyIOS` bridge).
+ * 100% client-direct BYOC ($0 backend cost).
  */
 export class AppleCloudDriver implements CloudProviderDriver {
   readonly id = 'apple' as const;
+  private writeLocks = new Map<string, Promise<unknown>>();
+
+  private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
+    const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(task);
+    const tracked = next.catch(() => undefined).finally(() => {
+      if (this.writeLocks.get(lockKey) === tracked) {
+        this.writeLocks.delete(lockKey);
+      }
+    });
+    this.writeLocks.set(lockKey, tracked);
+    return next;
+  }
+
+  private getClient(): AppleCloudKitClient | null {
+    const session = loadCachedAppleSession();
+    if (!session) return null;
+    return new AppleCloudKitClient(session);
+  }
 
   getDescriptor(): CloudProviderDescriptor {
-    const isIosShell = NativeBridge.platform === 'ios';
+    const configured = isAppleCloudConfigured();
+    const hasMock = Boolean(getAllowedMockAppleCloudSession());
     return {
       id: 'apple',
       displayName: 'Apple / iCloud',
-      storageName: 'iCloud & Game Center CloudKit',
-      isSupported: isIosShell,
-      isConfigured: false,
-      comingSoon: true,
+      storageName: 'iCloud Private Database (CloudKit)',
+      isSupported: true,
+      isConfigured: configured || hasMock,
     };
   }
 
   hasActiveSession(): boolean {
-    return false;
+    return Boolean(loadCachedAppleSession());
   }
 
   restoreSession(): Partial<PlayerIdentity> | null {
-    return null;
+    const session = loadCachedAppleSession();
+    if (!session) return null;
+    return {
+      playerId: `apple_${session.userId}`,
+      displayName: session.displayName,
+      email: session.email,
+      provider: 'apple',
+      isAuthenticated: true,
+    };
   }
 
   async attemptAutoSignIn(): Promise<Partial<PlayerIdentity> | null> {
-    return null;
+    if (isExplicitlySignedOut()) return null;
+    return this.restoreSession();
   }
 
   async signIn(): Promise<Partial<PlayerIdentity>> {
-    throw new Error('Apple / iCloud sync is coming in a future update.');
+    setExplicitlySignedOut(false);
+    const session = await signInWithAppleCloud();
+    return {
+      playerId: `apple_${session.userId}`,
+      displayName: session.displayName.slice(0, 32),
+      email: session.email,
+      provider: 'apple',
+      isAuthenticated: true,
+      lastSyncedAt: Date.now(),
+    };
   }
 
-  async signOut(): Promise<void> {}
+  async signOut(): Promise<void> {
+    setExplicitlySignedOut(true);
+    clearCachedAppleSession();
+    this.writeLocks.clear();
+  }
+
   async readManifest(): Promise<CloudLibraryManifestV2 | null> {
-    return null;
+    const client = this.getClient();
+    if (!client) return null;
+    return client.readJsonRecord<CloudLibraryManifestV2>(CLOUD_MANIFEST_FILE_NAME);
   }
-  async writeManifest(): Promise<boolean> {
-    return false;
+
+  async writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean> {
+    return this.enqueueWrite(CLOUD_MANIFEST_FILE_NAME, async () => {
+      const client = this.getClient();
+      if (!client) return false;
+      return client.writeJsonRecord(CLOUD_MANIFEST_FILE_NAME, manifest);
+    });
   }
-  async readSlotEnvelope(): Promise<CloudSaveEnvelope | null> {
-    return null;
+
+  async readSlotEnvelope(slotKey: string): Promise<CloudSaveEnvelope | null> {
+    const recordName = `capy_slot_${slotKey}.json`;
+    if (!isValidCloudKitRecordName(recordName)) return null;
+    const client = this.getClient();
+    if (!client) return null;
+    return client.readJsonRecord<CloudSaveEnvelope>(recordName);
   }
-  async writeSlotEnvelope(): Promise<boolean> {
-    return false;
+
+  async writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean> {
+    const recordName = `capy_slot_${envelope.slotKey}.json`;
+    if (!isValidCloudKitRecordName(recordName)) return false;
+    return this.enqueueWrite(recordName, async () => {
+      const client = this.getClient();
+      if (!client) return false;
+      return client.writeJsonRecord(recordName, envelope);
+    });
   }
-  async readBinaryBlob(): Promise<Uint8Array | null> {
-    return null;
+
+  async readBinaryBlob(blobRef: string): Promise<Uint8Array | null> {
+    if (!isValidCloudKitRecordName(blobRef)) return null;
+    const client = this.getClient();
+    if (!client) return null;
+    return client.readBinaryRecord(blobRef);
   }
-  async writeBinaryBlob(): Promise<string | null> {
-    return null;
+
+  async writeBinaryBlob(
+    _slotKey: string,
+    fileName: string,
+    bytes: Uint8Array
+  ): Promise<string | null> {
+    if (!isValidCloudKitRecordName(fileName)) return null;
+    return this.enqueueWrite(fileName, async () => {
+      const client = this.getClient();
+      if (!client) return null;
+      return client.writeBinaryRecord(fileName, bytes);
+    });
   }
 }

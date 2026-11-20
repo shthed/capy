@@ -65,6 +65,10 @@ jobs:
         working-directory: web
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_APPLE_CLIENT_ID: ${{ vars.VITE_APPLE_CLIENT_ID }}
+          VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
+          VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: |
           npm ci --prefer-offline --no-audit --no-fund

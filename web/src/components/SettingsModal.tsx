@@ -23,7 +23,6 @@ import {
   Search,
   Users,
   Share2,
-  Cloud,
   Lightbulb,
   ZoomIn,
   Copy,
@@ -37,12 +36,9 @@ import { NativeBridge } from '../services/NativeBridge';
 import { resolveSafeSnapshotThumbnail } from '../utils/snapshotPaths';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
 import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
-import {
-  COLLABORATOR_AVATAR_COLORS,
-  ProviderRegistry,
-} from '../services/providers/ProviderRegistry';
-import { getAllowedMockGoogleOAuthToken } from '../services/providers/GoogleCloudSyncClient';
+import { ProviderRegistry } from '../services/providers/ProviderRegistry';
 import { CoopParticipant, PlayerIdentity } from '../services/providers/types';
+import { CloudAccountCard, CloudSyncLiveStatus } from './CloudAccountCard';
 import {
   CANVAS_BG_MAP,
   CanvasBgColor,
@@ -132,6 +128,8 @@ interface SettingsModalProps {
     downloadedCount?: number;
     backend?: string;
   } | null>;
+  cloudSyncStatus?: CloudSyncLiveStatus;
+  lastCloudSyncError?: string | null;
   onZoomIntoDetailTile?: () => void;
   onStartTutorial?: () => void;
   onTabOpened?: (tabId: number) => void;
@@ -337,6 +335,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onShareProgressLink,
   onCopyCoopInviteLink,
   onSyncCloudProgress,
+  cloudSyncStatus,
+  lastCloudSyncError,
   onZoomIntoDetailTile,
   onStartTutorial,
   onTabOpened,
@@ -473,8 +473,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [playerIdentity, setPlayerIdentity] = useState<PlayerIdentity>(() =>
     ProviderRegistry.auth.getCurrentIdentity()
   );
-  const [editingProfileName, setEditingProfileName] = useState(false);
-  const [profileNameDraft, setProfileNameDraft] = useState(playerIdentity.displayName);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [hubNotice, setHubNotice] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<{ ok: boolean; message: string } | null>(null);
@@ -488,7 +486,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     return ProviderRegistry.auth.subscribe((id) => {
       setPlayerIdentity(id);
-      setProfileNameDraft(id.displayName);
     });
   }, []);
 
@@ -3838,236 +3835,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 data-testid="cloud-coop-hub"
                 className="p-3 rounded-xl bg-slate-950/75 border border-slate-800 space-y-3"
               >
-                {/* Row A: Player Identity, Modular Cloud Providers (Google / Steam / Microsoft / Apple) & CRDT Cloud Sync */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {playerIdentity.avatarUrl ? (
-                      <img
-                        src={playerIdentity.avatarUrl}
-                        alt={playerIdentity.displayName}
-                        className="w-7 h-7 rounded-full ring-2 ring-emerald-500/60 flex-shrink-0 object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        title="Cycle Avatar Color"
-                        onClick={() => {
-                          const idx = COLLABORATOR_AVATAR_COLORS.indexOf(
-                            playerIdentity.avatarColorHex
-                          );
-                          const nextColor =
-                            COLLABORATOR_AVATAR_COLORS[
-                              (idx + 1) % COLLABORATOR_AVATAR_COLORS.length
-                            ];
-                          ProviderRegistry.auth.updateGuestProfile(
-                            playerIdentity.displayName,
-                            nextColor
-                          );
-                        }}
-                        className="capy-color-dot w-6 h-6 rounded-full ring-2 ring-slate-700 flex-shrink-0 cursor-pointer"
-                        style={{ backgroundColor: playerIdentity.avatarColorHex }}
-                      />
-                    )}
-                    {editingProfileName ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={profileNameDraft}
-                          onChange={(e) => setProfileNameDraft(e.target.value)}
-                          maxLength={24}
-                          className="px-2 py-0.5 rounded bg-slate-900 border border-amber-400 text-xs text-white w-32 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            ProviderRegistry.auth.updateGuestProfile(profileNameDraft);
-                            setEditingProfileName(false);
-                          }}
-                          className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-bold cursor-pointer"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-extrabold text-slate-100 truncate">
-                            {playerIdentity.displayName}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setEditingProfileName(true)}
-                            title="Edit Display Name"
-                            className="capy-icon-btn text-slate-400 hover:text-amber-300 cursor-pointer"
-                          >
-                            <Edit2 size={11} />
-                          </button>
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {playerIdentity.isAuthenticated
-                            ? `${
-                                playerIdentity.provider === 'play_games_v2'
-                                  ? 'Google Play Games'
-                                  : 'Google Account'
-                              } • ${playerIdentity.email || playerIdentity.displayName}`
-                            : NativeBridge.isAndroid ||
-                                Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                                Boolean(getAllowedMockGoogleOAuthToken())
-                              ? 'Local Profile • Sign in to sync saves across devices'
-                              : 'Local Profile • Saves stored locally on this device'}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {playerIdentity.isAuthenticated ? (
-                      <button
-                        type="button"
-                        data-testid="play-games-signout-btn"
-                        onClick={async () => {
-                          await ProviderRegistry.auth.signOut();
-                          setHubNotice('Signed out of cloud profile.');
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold border border-slate-700 cursor-pointer"
-                      >
-                        Sign Out
-                      </button>
-                    ) : NativeBridge.isAndroid ||
-                      Boolean(ProviderRegistry.auth.getGoogleClientId()) ||
-                      Boolean(getAllowedMockGoogleOAuthToken()) ? (
-                      <button
-                        type="button"
-                        data-testid="play-games-signin-btn"
-                        disabled={isSyncingCloud}
-                        onClick={async () => {
-                          try {
-                            setIsSyncingCloud(true);
-                            const signedIn = await ProviderRegistry.auth.signInWithPlayGames();
-                            const syncRes = onSyncCloudProgress
-                              ? await onSyncCloudProgress()
-                              : null;
-                            const syncDetail =
-                              syncRes &&
-                              ((syncRes.downloadedCount || 0) > 0 ||
-                                (syncRes.uploadedCount || 0) > 0 ||
-                                syncRes.addedFromCloud > 0)
-                                ? ` (${syncRes.downloadedCount || 0} pulled, ${syncRes.uploadedCount || 0} pushed)`
-                                : '';
-                            setHubNotice(
-                              `Signed in with ${
-                                signedIn.provider === 'play_games_v2' ? 'Play Games' : 'Google'
-                              } as ${signedIn.displayName}${
-                                signedIn.email ? ` (${signedIn.email})` : ''
-                              }! Cloud saves synced${syncDetail}.`
-                            );
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : String(err);
-                            if (
-                              msg === 'GOOGLE_CLIENT_ID_REQUIRED' ||
-                              msg === 'PLAY_GAMES_UNCONFIGURED'
-                            ) {
-                              setHubNotice(
-                                'Google Cloud Sign-In requires VITE_GOOGLE_CLIENT_ID (Web) or CAPY_PLAY_GAMES_APP_ID (Android) configured in repository build variables — see CLOUD.md.'
-                              );
-                            } else if (
-                              msg === 'PLAY_GAMES_UNAVAILABLE' ||
-                              msg === 'PLAY_GAMES_PROFILE_UNAVAILABLE'
-                            ) {
-                              setHubNotice(
-                                'Google Play Games Services is currently unavailable or offline on this device. Local saves remain safe.'
-                              );
-                            } else {
-                              setHubNotice(`Google Sign-In failed: ${msg}`);
-                            }
-                          } finally {
-                            setIsSyncingCloud(false);
-                          }
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 cursor-pointer"
-                      >
-                        {NativeBridge.isAndroid ? 'Play Games Login' : 'Google Login'}
-                      </button>
-                    ) : null}
-
-                    {onSyncCloudProgress && (
-                      <button
-                        type="button"
-                        data-testid="cloud-sync-btn"
-                        disabled={isSyncingCloud}
-                        onClick={async () => {
-                          setIsSyncingCloud(true);
-                          try {
-                            const res = await onSyncCloudProgress();
-                            if (res) {
-                              const parts: string[] = [];
-                              if (res.addedFromCloud > 0) {
-                                parts.push(`+${res.addedFromCloud} regions merged`);
-                              }
-                              if ((res.downloadedCount || 0) > 0) {
-                                parts.push(`${res.downloadedCount} saves pulled`);
-                              }
-                              if ((res.uploadedCount || 0) > 0) {
-                                parts.push(`${res.uploadedCount} saves pushed`);
-                              }
-                              setHubNotice(
-                                parts.length > 0
-                                  ? `Cloud Sync complete (${parts.join(', ')})!`
-                                  : `Cloud Sync up to date (${ProviderRegistry.cloudSave.providerName})!`
-                              );
-                            }
-                          } catch (err) {
-                            setHubNotice(
-                              `Cloud Sync failed: ${err instanceof Error ? err.message : 'Unable to reach cloud storage.'}`
-                            );
-                          } finally {
-                            setIsSyncingCloud(false);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 text-[11px] font-bold border border-sky-400/40 cursor-pointer"
-                      >
-                        <Cloud size={12} />
-                        <span>{isSyncingCloud ? 'Syncing...' : 'Cloud Sync'}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Modular Multi-Platform Cloud Provider Status Row (Google Active + Steam / Microsoft / Apple) */}
-                <div
-                  data-testid="cloud-providers-bar"
-                  className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-slate-400 pb-2 border-b border-slate-800/60"
-                >
-                  <span className="font-semibold text-slate-300">
-                    Cloud Backend: {ProviderRegistry.cloudSave.providerName}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {cloudProviders
-                      .filter((p) => p.id !== 'play_games_v2' || NativeBridge.isAndroid)
-                      .map((prov) => {
-                        const isCurrent =
-                          playerIdentity.isAuthenticated && playerIdentity.provider === prov.id;
-                        return (
-                          <span
-                            key={prov.id}
-                            data-testid={`cloud-provider-badge-${prov.id}`}
-                            title={prov.storageName}
-                            className={`px-1.5 py-0.5 rounded border text-[9px] font-bold ${
-                              isCurrent
-                                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                                : prov.isSupported
-                                  ? 'bg-slate-900 border-slate-700 text-slate-200'
-                                  : 'bg-slate-900/50 border-slate-800/80 text-slate-500'
-                            }`}
-                          >
-                            {prov.displayName}
-                            {isCurrent ? ' • Connected' : prov.comingSoon ? ' • Soon' : ''}
-                          </span>
-                        );
-                      })}
-                  </div>
-                </div>
+                <CloudAccountCard
+                  playerIdentity={playerIdentity}
+                  cloudProviders={cloudProviders}
+                  isSyncingCloud={isSyncingCloud}
+                  cloudSyncStatus={cloudSyncStatus}
+                  lastCloudSyncError={lastCloudSyncError}
+                  onSyncingChange={setIsSyncingCloud}
+                  onHubNotice={setHubNotice}
+                  onSyncCloudProgress={onSyncCloudProgress}
+                />
 
                 {/* Row B: Shareable Game Link & Simultaneous Co-op Room */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
