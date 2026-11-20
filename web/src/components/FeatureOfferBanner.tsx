@@ -40,7 +40,7 @@ export const FeatureOfferBanner: React.FC<FeatureOfferBannerProps> = ({
         aria-live="polite"
         data-testid="feature-offer-banner"
         data-offer-id={offer.id}
-        className="pointer-events-auto w-full max-w-md rounded-2xl bg-slate-900/95 border border-sky-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 text-slate-100 space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200"
+        className="pointer-events-auto w-full max-w-md max-h-[calc(100dvh-13rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border border-sky-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 text-slate-100 space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200"
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
@@ -62,7 +62,7 @@ export const FeatureOfferBanner: React.FC<FeatureOfferBannerProps> = ({
             data-testid="feature-offer-close-btn"
             aria-label="Dismiss Feature Tip"
             onClick={onDismiss}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
+            className="capy-icon-btn p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
           >
             <X size={14} />
           </button>
