@@ -18,11 +18,6 @@ on:
         required: false
         default: false
         type: boolean
-      migrate_issues:
-        description: 'Copy open issues from capyboop/capy to capyboop/paint as capyboop'
-        required: false
-        default: false
-        type: boolean
       migrate_public_epics:
         description: 'Copy sanitized EPIC-2..EPIC-5 from shthed/capy to capyboop/paint and close them on shthed/capy'
         required: false
@@ -394,44 +389,6 @@ jobs:
               fi
             done
           fi
-
-      - name: Migrate open issues from capyboop/capy to capyboop/paint
-        if: steps.check_secret.outputs.enabled == 'true' && inputs.migrate_issues == true
-        env:
-          CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
-        run: |
-          node - <<'NODE'
-          const token = process.env.CAPYBOOP_SYNC_TOKEN;
-          const headers = {
-            Accept: 'application/vnd.github+json',
-            Authorization: `Bearer ${token}`,
-            'User-Agent': 'capyboop-publish',
-          };
-          const [srcResp, dstResp] = await Promise.all([
-            fetch('https://api.github.com/repos/capyboop/capy/issues?state=open&per_page=100', { headers }),
-            fetch('https://api.github.com/repos/capyboop/paint/issues?state=all&per_page=100', { headers }),
-          ]);
-          const srcIssues = (await srcResp.json()).filter((i) => !i.pull_request).sort((a, b) => a.number - b.number);
-          const dstIssues = await dstResp.json();
-          const existingTitles = new Set(Array.isArray(dstIssues) ? dstIssues.map((i) => i.title.trim()) : []);
-          for (const issue of srcIssues) {
-            const title = issue.title.trim();
-            if (existingTitles.has(title)) {
-              console.log(`Skipping already-present issue: ${title}`);
-              continue;
-            }
-            const res = await fetch('https://api.github.com/repos/capyboop/paint/issues', {
-              method: 'POST',
-              headers: { ...headers, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ title, body: issue.body || '' }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-              throw new Error(`Failed creating "${title}" (${res.status}): ${JSON.stringify(data)}`);
-            }
-            console.log(`Created #${data.number}: ${data.html_url}`);
-          }
-          NODE
 
       - name: Migrate sanitized public Epics (EPIC-2..EPIC-5) to capyboop/paint
         if: steps.check_secret.outputs.enabled == 'true' && inputs.migrate_public_epics == true

@@ -5026,7 +5026,15 @@ async function runCodecAndEngineTests() {
           checks: {
             listForRef: async () => {
               calls.listForRef.push(true);
-              return { data: { check_runs: checkRuns || [] } };
+              const resolvedRuns =
+                checkRuns !== null
+                  ? checkRuns
+                  : [
+                      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+                      { name: 'Android APK', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+                      { name: 'Playwright E2E', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+                    ];
+              return { data: { check_runs: resolvedRuns } };
             },
           },
           repos: {
@@ -7037,15 +7045,21 @@ async function runCodecAndEngineTests() {
     }
 
     // Auto-merge stuck `blocked` by non-check ruleset requirements must merge directly once
-    // `Build & Test` is green on the exact head SHA (no Owner approval required per Owner directive)
-    const greenHeadRuns = [
+    // required checks are green on the exact head SHA (Build & Test for beta; Build & Test +
+    // Android APK + Playwright E2E for main).
+    const greenBetaHeadRuns = [
       { name: 'Build & Test', status: 'completed', conclusion: 'cancelled', started_at: '2026-11-13T01:00:00Z' },
       { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
       { name: 'Playwright E2E', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' },
     ];
-    for (const [targetBase, expectedMergeMethod] of [
-      ['beta', 'squash'],
-      ['main', 'merge'],
+    const greenMainHeadRuns = [
+      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Android APK', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Playwright E2E', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+    ];
+    for (const [targetBase, expectedMergeMethod, runsForBase] of [
+      ['beta', 'squash', greenBetaHeadRuns],
+      ['main', 'merge', greenMainHeadRuns],
     ]) {
       const gateBlockedDirectMergeRes = await runReviewGateCase({
         prAuthor: 'shthed',
@@ -7054,7 +7068,7 @@ async function runCodecAndEngineTests() {
         body: validStrictPrBody,
         reviews: [],
         mergeableState: 'blocked',
-        checkRuns: greenHeadRuns,
+        checkRuns: runsForBase,
       });
       assert.equal(gateBlockedDirectMergeRes.status.state, 'success');
       assert.equal(gateBlockedDirectMergeRes.calls.graphql.length, 1);
@@ -7062,6 +7076,56 @@ async function runCodecAndEngineTests() {
       assert.equal(gateBlockedDirectMergeRes.calls.merge[0].merge_method, expectedMergeMethod);
       assert.equal(gateBlockedDirectMergeRes.calls.merge[0].sha, gateHeadSha);
     }
+
+    // `main` release promotions must stay pending (never auto-merge or direct-merge) until
+    // Build & Test, Android APK, and Playwright E2E all succeed on HEAD.
+    for (const incompleteMainRuns of [
+      greenBetaHeadRuns,
+      [
+        { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Playwright E2E', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      ],
+      [
+        { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Android APK', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Playwright E2E', status: 'completed', conclusion: 'failure', started_at: '2026-11-13T01:01:00Z' },
+      ],
+    ]) {
+      const gateMainPendingReleaseChecksRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'main',
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        mergeableState: 'blocked',
+        checkRuns: incompleteMainRuns,
+      });
+      assert.equal(gateMainPendingReleaseChecksRes.status.state, 'pending');
+      assert.equal(
+        gateMainPendingReleaseChecksRes.status.description.includes('Playwright E2E / Android APK release checks'),
+        true
+      );
+      assert.equal(gateMainPendingReleaseChecksRes.calls.graphql.length, 0);
+      assert.equal(gateMainPendingReleaseChecksRes.calls.merge.length, 0);
+    }
+
+    // Stacked-PR fallback must NOT direct-merge or call /merge-async when Build & Test is not green
+    const gateStackedNotGreenRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      checkRuns: [{ name: 'Build & Test', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' }],
+      graphqlImpl: async () => {
+        throw new Error('Auto-merge is not supported for stacked pull requests.');
+      },
+    });
+    assert.equal(gateStackedNotGreenRes.status.state, 'success');
+    assert.equal(gateStackedNotGreenRes.calls.merge.length, 0);
+    assert.equal(gateStackedNotGreenRes.calls.request.length, 0);
+
+    const greenHeadRuns = greenBetaHeadRuns;
 
     for (const blockingRuns of [
       [],
@@ -8390,8 +8454,21 @@ async function runCodecAndEngineTests() {
     assert.equal(deployYaml.includes('node scripts/test.mjs --unit'), true);
     assert.equal(deployYaml.includes('include-hidden-files: true'), true);
     assert.equal(deployYaml.includes('cp -a web/dist/. staging/web/'), true);
-    assert.equal(deployYaml.includes('needs: [prepare, build, android_build]'), true);
+    assert.equal(deployYaml.includes('needs: [prepare, build, android_build, e2e_release_gate]'), true);
+    assert.equal(deployYaml.includes("needs.e2e_release_gate.result == 'success'"), true);
+    assert.equal(
+      /e2e_release_gate:[\s\S]*?VITE_GOOGLE_CLIENT_ID:\s*\$\{\{\s*vars\.VITE_GOOGLE_CLIENT_ID\s*\}\}/.test(
+        deployYaml
+      ),
+      true
+    );
     assert.equal(deployYaml.includes("--exclude 'alpha/'"), true);
+
+    const publishCapyboopYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
+      'utf8'
+    );
+    assert.equal(publishCapyboopYaml.includes('migrate_issues'), false);
 
     const cleanupClosedPrYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
