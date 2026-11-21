@@ -30,7 +30,21 @@ import {
   Info,
   ShieldCheck,
   MessageSquare,
+  HelpCircle,
+  Palette,
+  Gamepad2,
+  Hand,
+  Compass,
+  Volume2,
+  Type,
+  Film,
+  BookOpen,
 } from 'lucide-react';
+import {
+  CollapsibleSettingSection,
+  SettingSectionCard,
+  SettingSwitchRow,
+} from './SettingsControls';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { resolveSafeSnapshotThumbnail } from '../utils/snapshotPaths';
@@ -132,6 +146,7 @@ interface SettingsModalProps {
   lastCloudSyncError?: string | null;
   onZoomIntoDetailTile?: () => void;
   onStartTutorial?: () => void;
+  onStartTour?: () => void;
   onTabOpened?: (tabId: number) => void;
   onExplorePresetGallery?: () => void;
 }
@@ -339,6 +354,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   lastCloudSyncError,
   onZoomIntoDetailTile,
   onStartTutorial,
+  onStartTour,
   onTabOpened,
   onExplorePresetGallery,
 }) => {
@@ -359,7 +375,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     } catch {
       // Ignored
     }
-    return 0;
+    return 1;
   });
   const [localConfig, setLocalConfig] = useState<GeneratorConfig>(settings.generatorConfig);
   const prevIsOpenRef = useRef<boolean>(false);
@@ -677,10 +693,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer sm:cursor-default"
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings and Menu"
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full h-full sm:h-[88vh] sm:max-h-[860px] sm:max-w-2xl flex flex-col bg-slate-900 sm:border sm:border-slate-800 sm:rounded-2xl shadow-2xl overflow-hidden text-slate-100 cursor-auto"
+        className="relative w-full h-full sm:h-[88vh] sm:max-h-[860px] sm:max-w-2xl md:max-w-3xl flex flex-col bg-slate-900 sm:border sm:border-slate-800 sm:rounded-2xl shadow-2xl overflow-hidden text-slate-100 cursor-auto"
       >
-        {/* Top Tab Bar: Tab headings & close button directly at the top (no wasted space header) */}
+        {/* Top Tab Bar: Tab headings, tour button & close button */}
         <div
           className="flex items-center justify-between border-b border-slate-800 bg-slate-950/90 px-2 sm:px-3 flex-shrink-0"
           style={{
@@ -690,7 +709,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           }}
         >
           {/* Tab Navigation */}
-          <div data-testid="settings-modal-tabs" className="min-w-0 flex-1 flex flex-wrap sm:flex-nowrap items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-2">
+          <div
+            role="tablist"
+            aria-label="Settings sections"
+            data-testid="settings-modal-tabs"
+            className="min-w-0 flex-1 flex flex-wrap sm:flex-nowrap items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-1.5"
+          >
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -698,6 +722,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   key={tab.id}
                   type="button"
+                  role="tab"
+                  aria-selected={isActive}
                   data-testid={`settings-tab-${tab.label.toLowerCase()}`}
                   onClick={() => {
                     setActiveTab(tab.id);
@@ -711,7 +737,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       // Ignored
                     }
                   }}
-                  className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 px-1 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-all ${
+                  className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 min-h-[38px] sm:min-h-[40px] px-1.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -724,16 +750,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             })}
           </div>
 
-          {/* Close button */}
-          <button
-            type="button"
-            data-testid="settings-modal-close"
-            onClick={onClose}
-            className="capy-icon-btn p-1.5 ml-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors flex-shrink-0"
-            title="Close"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+            {(onStartTour || onStartTutorial) && (
+              <button
+                type="button"
+                data-testid="settings-tour-btn"
+                aria-label="Open interactive guide"
+                onClick={() => {
+                  if (onStartTour) {
+                    onStartTour();
+                  } else if (onStartTutorial) {
+                    onClose();
+                    onStartTutorial();
+                  }
+                }}
+                className="capy-icon-btn inline-flex items-center justify-center min-w-[38px] min-h-[38px] rounded-lg text-amber-300/90 hover:text-amber-200 hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Interactive Guide"
+              >
+                <HelpCircle size={19} />
+              </button>
+            )}
+
+            {/* Close button */}
+            <button
+              type="button"
+              data-testid="settings-modal-close"
+              aria-label="Close settings"
+              onClick={onClose}
+              className="capy-icon-btn inline-flex items-center justify-center min-w-[40px] min-h-[40px] rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Tab Contents */}
@@ -775,46 +824,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClose();
                         onStartTutorial();
                       }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer"
                     >
                       <Play size={13} className="fill-slate-950" />
                       <span>Replay Interactive Tutorial</span>
                     </button>
                   )}
-                  <a
-                    href="privacy-policy.html"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="about-privacy-policy-link"
-                    className="capy-link-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
-                  >
-                    <ShieldCheck size={13} className="text-emerald-400" />
-                    <span>Privacy Policy</span>
-                  </a>
-                  <a
-                    href="https://github.com/capyboop/paint/issues/new/choose"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="about-report-issue-link"
-                    className="capy-link-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
-                  >
-                    <ExternalLink size={13} className="text-sky-400" />
-                    <span>Report Bug / Ideas</span>
-                  </a>
                   <button
                     type="button"
                     data-testid="about-open-feedback-btn"
                     aria-expanded={isFeedbackOpen}
                     onClick={() => setIsFeedbackOpen((prev) => !prev)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                    className={`inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-extrabold border transition-colors cursor-pointer ${
                       isFeedbackOpen
-                        ? 'bg-sky-500/20 text-sky-200 border-sky-400/70'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-700/80'
+                        ? 'bg-sky-500/25 text-sky-100 border-sky-400/80'
+                        : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 border-sky-400/60'
                     }`}
                   >
-                    <MessageSquare size={13} className="text-sky-400" />
+                    <MessageSquare size={13} className="text-sky-300" />
                     <span>{isFeedbackOpen ? 'Hide Feedback Form' : 'Send Feedback'}</span>
                   </button>
+                  <a
+                    href={
+                      NativeBridge.isAndroid
+                        ? 'https://capypaint.com/privacy-policy.html'
+                        : 'privacy-policy.html'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="about-privacy-policy-link"
+                    className="capy-link-btn inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700/80 transition-colors cursor-pointer"
+                  >
+                    <ShieldCheck size={13} className="text-emerald-400" />
+                    <span>Privacy Policy</span>
+                  </a>
                 </div>
               </div>
 
@@ -1103,7 +1146,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}
                   >
                     <div className="text-[10px] text-slate-400 font-medium truncate">
-                      Free Colour Art
+                      Free Color Art
                     </div>
                     <div
                       data-testid="stat-free-color-creations"
@@ -1280,176 +1323,300 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   );
                 })()}
+
+                {/* Open Source Licenses & Secondary Footer */}
+                <div className="pt-2 border-t border-slate-800/80 space-y-2.5">
+                  <details
+                    data-testid="about-licenses-section"
+                    className="group rounded-xl bg-slate-950/60 border border-slate-800/80 overflow-hidden"
+                  >
+                    <summary className="list-none flex items-center justify-between gap-2 min-h-[40px] px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800/40 cursor-pointer select-none">
+                      <span className="inline-flex items-center gap-1.5">
+                        <BookOpen size={13} className="text-amber-400" />
+                        <span>Open Source Licenses</span>
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-400 group-open:hidden">
+                        View credits
+                      </span>
+                      <span className="text-[10px] font-semibold text-amber-300 hidden group-open:inline">
+                        Hide credits
+                      </span>
+                    </summary>
+                    <div className="px-3 pb-3 pt-1.5 border-t border-slate-800/70 text-[11px] text-slate-400 space-y-1.5">
+                      <p className="text-slate-300">
+                        Capy Paint is built with open-source libraries:
+                      </p>
+                      <ul className="space-y-1 pl-3 list-disc">
+                        <li>
+                          <span className="text-slate-200 font-semibold">React</span> — MIT License
+                        </li>
+                        <li>
+                          <span className="text-slate-200 font-semibold">Lucide React</span> — ISC License
+                        </li>
+                        <li>
+                          <span className="text-slate-200 font-semibold">Tailwind CSS</span> — MIT License
+                        </li>
+                        <li>
+                          <span className="text-slate-200 font-semibold">canvas-confetti</span> — ISC License
+                        </li>
+                        <li>
+                          <span className="text-slate-200 font-semibold">AndroidX &amp; WebKit</span> — Apache License 2.0
+                        </li>
+                      </ul>
+                    </div>
+                  </details>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-0.5 text-[11px] text-slate-400">
+                    <span>CapyBoop Games • 100% Ad-Free</span>
+                    <a
+                      href="https://github.com/capyboop/paint/issues/new/choose"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="about-report-issue-link"
+                      className="inline-flex items-center gap-1 text-slate-400 hover:text-sky-300 underline-offset-2 hover:underline transition-colors cursor-pointer"
+                    >
+                      <ExternalLink size={11} />
+                      <span>Report Bug / Ideas on GitHub</span>
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {/* TAB 1: SETTINGS */}
           {activeTab === 1 && (
-            <div className="space-y-4 sm:space-y-5">
-              {/* Canvas Background */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Canvas Background
-                  </label>
-                  <span className="text-[11px] font-mono font-semibold text-amber-400">
-                    {argbToHex(settings.canvasBgArgb).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {(Object.keys(CANVAS_BG_MAP) as PresetCanvasBgColor[]).map((key) => {
-                    const item = CANVAS_BG_MAP[key];
-                    const isSelected = settings.canvasBgColor === key;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        title={item.label}
-                        onClick={() => {
-                          updateSettings({ canvasBgColor: key, canvasBgArgb: item.argb });
+            <div className="space-y-4">
+              {/* 1. Appearance & Canvas */}
+              <SettingSectionCard
+                title="Appearance & Canvas"
+                icon={<Palette size={13} />}
+                testId="settings-section-appearance"
+              >
+                {/* Canvas Background */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">Canvas Background</span>
+                    <span className="text-[11px] font-mono font-semibold text-amber-400">
+                      {argbToHex(settings.canvasBgArgb).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(Object.keys(CANVAS_BG_MAP) as PresetCanvasBgColor[]).map((key) => {
+                      const item = CANVAS_BG_MAP[key];
+                      const isSelected = settings.canvasBgColor === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          title={item.label}
+                          aria-label={`Canvas background: ${item.label}`}
+                          onClick={() => {
+                            updateSettings({ canvasBgColor: key, canvasBgArgb: item.argb });
+                          }}
+                          className={`capy-color-dot w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 transition-all flex items-center justify-center cursor-pointer ${
+                            isSelected
+                              ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
+                              : 'border-slate-700/80 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: item.hex }}
+                        >
+                          {isSelected && (
+                            <Check
+                              className={`w-3.5 h-3.5 ${
+                                item.hex === '#ffffff' || item.hex === '#e2e8f0'
+                                  ? 'text-slate-900'
+                                  : 'text-white'
+                              }`}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                    {/* Custom Background Color Picker */}
+                    <label
+                      title="Custom Background Color"
+                      aria-label="Custom Background Color"
+                      className={`capy-color-dot relative w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
+                        settings.canvasBgColor === 'CUSTOM'
+                          ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
+                          : 'border-slate-700/80 hover:border-slate-500'
+                      }`}
+                    >
+                      <input
+                        type="color"
+                        aria-label="Choose custom background color"
+                        value={argbToHex(settings.canvasBgArgb)}
+                        onChange={(e) => {
+                          updateSettings({
+                            canvasBgColor: 'CUSTOM',
+                            canvasBgArgb: hexToArgb(e.target.value),
+                          });
                         }}
-                        className={`capy-color-dot w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
-                          isSelected
-                            ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
-                            : 'border-slate-700/80 hover:scale-105'
-                        }`}
-                        style={{ backgroundColor: item.hex }}
-                      >
-                        {isSelected && (
-                          <Check
-                            className={`w-3.5 h-3.5 ${
-                              item.hex === '#ffffff' || item.hex === '#e2e8f0'
-                                ? 'text-slate-900'
-                                : 'text-white'
-                            }`}
-                          />
-                        )}
-                      </button>
-                    );
-                  })}
-                  {/* Custom Background Colour Picker */}
-                  <label
-                    title="Custom Background Colour"
-                    className={`capy-color-dot relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all hover:scale-105 flex items-center justify-center cursor-pointer overflow-hidden bg-slate-800 ${
-                      settings.canvasBgColor === 'CUSTOM'
-                        ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
-                        : 'border-slate-700/80 hover:border-slate-500'
-                    }`}
-                  >
-                    <input
-                      type="color"
-                      value={argbToHex(settings.canvasBgArgb)}
-                      onChange={(e) => {
-                        updateSettings({
-                          canvasBgColor: 'CUSTOM',
-                          canvasBgArgb: hexToArgb(e.target.value),
-                        });
-                      }}
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                    />
-                    <div
-                      className="w-full h-full flex items-center justify-center"
-                      style={{ backgroundColor: argbToHex(settings.canvasBgArgb) }}
-                    >
-                      <Pipette
-                        className={`w-3.5 h-3.5 ${
-                          argbToHex(settings.canvasBgArgb).toLowerCase() === '#ffffff' ||
-                          argbToHex(settings.canvasBgArgb).toLowerCase() === '#e2e8f0'
-                            ? 'text-slate-900'
-                            : 'text-white'
-                        } drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]`}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
                       />
-                    </div>
-                  </label>
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ backgroundColor: argbToHex(settings.canvasBgArgb) }}
+                      >
+                        <Pipette
+                          className={`w-3.5 h-3.5 ${
+                            argbToHex(settings.canvasBgArgb).toLowerCase() === '#ffffff' ||
+                            argbToHex(settings.canvasBgArgb).toLowerCase() === '#e2e8f0'
+                              ? 'text-slate-900'
+                              : 'text-white'
+                          } drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]`}
+                        />
+                      </div>
+                    </label>
+                  </div>
                 </div>
-              </div>
 
-              {/* Region Color Mode */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Color Mode
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { key: 'DETAIL', label: 'Original Detail', desc: 'Reveals full photo/line detail' },
-                      { key: 'SOLID', label: 'Solid Palette', desc: 'Fills with uniform palette colour' },
-                    ] as const
-                  ).map((mode) => (
-                    <button
-                      key={mode.key}
-                      type="button"
-                      onClick={() => updateSetting('regionColorMode', mode.key as RegionColorMode)}
-                      className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
-                        settings.regionColorMode === mode.key
-                          ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <span className="text-xs sm:text-sm font-bold text-slate-100">{mode.label}</span>
-                      <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{mode.desc}</span>
-                    </button>
-                  ))}
+                {/* Color Mode */}
+                <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
+                  <span className="text-xs font-semibold text-slate-300">Color Mode</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: 'DETAIL',
+                          label: 'Original Detail',
+                          desc: 'Reveals full photo and line detail',
+                        },
+                        {
+                          key: 'SOLID',
+                          label: 'Solid Palette',
+                          desc: 'Fills with a uniform palette color',
+                        },
+                      ] as const
+                    ).map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        onClick={() =>
+                          updateSetting('regionColorMode', mode.key as RegionColorMode)
+                        }
+                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          settings.regionColorMode === mode.key
+                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span className="text-xs sm:text-sm font-bold text-slate-100">
+                          {mode.label}
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                          {mode.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Difficulty */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Difficulty (Tap Forgiveness)
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { key: 'EASY', label: 'Auto-Select Colour (Easy)', desc: 'Tapping selects & paints colour' },
-                      { key: 'NORMAL', label: 'Precise (Standard)', desc: 'Only fills matching active colour' },
-                    ] as const
-                  ).map((diff) => (
-                    <button
-                      key={diff.key}
-                      type="button"
-                      onClick={() => updateSetting('difficulty', diff.key as Difficulty)}
-                      className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
-                        settings.difficulty === diff.key
-                          ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <span className="text-xs sm:text-sm font-bold text-slate-100">{diff.label}</span>
-                      <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{diff.desc}</span>
-                    </button>
-                  ))}
+                {/* Palette Order */}
+                <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
+                  <span className="text-xs font-semibold text-slate-300">Palette Order</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                    {(
+                      [
+                        { key: 'NUMBER', label: 'By Number' },
+                        { key: 'REMAINING', label: 'Remaining' },
+                        { key: 'HUE', label: 'Rainbow' },
+                        { key: 'LIGHTNESS', label: 'Lightness' },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => updateSetting('paletteSort', item.key as PaletteSortOrder)}
+                        className={`min-h-[38px] py-2 px-1.5 rounded-lg border text-xs font-bold text-center transition-all cursor-pointer ${
+                          settings.paletteSort === item.key
+                            ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Appearance Toggles */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1 border-t border-slate-800/60">
+                  <SettingSwitchRow
+                    label="Show Numbers on Regions"
+                    description="Show number labels inside uncolored shapes"
+                    checked={Boolean(settings.showRegionLabels)}
+                    onToggle={() => updateSetting('showRegionLabels', !settings.showRegionLabels)}
+                    testId="setting-show-region-labels"
+                  />
+                  <SettingSwitchRow
+                    label="Show Borders in Preview"
+                    description="Keep thin outlines visible while peeking at artwork"
+                    checked={Boolean(settings.showPreviewBorders)}
+                    onToggle={() =>
+                      updateSetting('showPreviewBorders', !settings.showPreviewBorders)
+                    }
+                    testId="setting-show-preview-borders"
+                  />
+                </div>
+              </SettingSectionCard>
+
+              {/* 2. Gameplay */}
+              <SettingSectionCard
+                title="Gameplay"
+                icon={<Gamepad2 size={13} />}
+                testId="settings-section-gameplay"
+              >
+                {/* Tap Behavior / Difficulty */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-slate-300">Tap Behavior</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: 'EASY',
+                          label: 'Auto-Select Color (Easy)',
+                          desc: 'Tap any shape to select and paint its color',
+                        },
+                        {
+                          key: 'NORMAL',
+                          label: 'Precise (Standard)',
+                          desc: 'Only paints shapes matching your selected color',
+                        },
+                      ] as const
+                    ).map((diff) => (
+                      <button
+                        key={diff.key}
+                        type="button"
+                        onClick={() => updateSetting('difficulty', diff.key as Difficulty)}
+                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          settings.difficulty === diff.key
+                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span className="text-xs sm:text-sm font-bold text-slate-100">
+                          {diff.label}
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                          {diff.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Fat-Finger Tap Assist & Finger Reach Radius */}
-                <div className="mt-2 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="pr-3 min-w-0">
-                      <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                        Fat-Finger Tap Assist
-                      </div>
-                      <div className="text-[11px] text-slate-400 leading-tight">
-                        Snaps near-miss taps onto nearby unfilled micro-regions (prefers active colour; Easy mode falls back to any colour)
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      data-testid="setting-fat-finger-assist"
-                      aria-checked={Boolean(settings.fatFingerAssist)}
-                      onClick={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
-                      className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
-                        settings.fatFingerAssist ? 'bg-amber-500' : 'bg-slate-700'
-                      }`}
-                    >
-                      <div
-                        className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                          settings.fatFingerAssist ? 'translate-x-4.5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
+                <div className="p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75 space-y-2.5">
+                  <SettingSwitchRow
+                    label="Fat-Finger Tap Assist"
+                    description="Snaps near-miss taps to nearby unfilled shapes"
+                    checked={Boolean(settings.fatFingerAssist)}
+                    onToggle={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
+                    testId="setting-fat-finger-assist"
+                    className="!bg-transparent !border-0 !p-0 !min-h-0"
+                  />
 
                   <div
                     data-testid="setting-touch-reach-controls"
@@ -1475,6 +1642,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       min="8"
                       max="40"
                       step="1"
+                      aria-label="Finger Reach Radius"
                       data-testid="setting-touch-reach-radius"
                       value={Math.round(settings.touchReachRadiusPx ?? 22)}
                       onChange={(e) =>
@@ -1505,7 +1673,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               touchReachRadiusPx: preset.px,
                             })
                           }
-                          className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all ${
+                          className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all cursor-pointer ${
                             Math.round(settings.touchReachRadiusPx ?? 22) === preset.px
                               ? 'border-amber-400 bg-slate-800/80 text-amber-300 ring-1 ring-amber-400'
                               : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
@@ -1517,184 +1685,128 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Palette Order */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Palette Order
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-                  {(
-                    [
-                      { key: 'NUMBER', label: 'By Number' },
-                      { key: 'REMAINING', label: 'Remaining' },
-                      { key: 'HUE', label: 'Rainbow (Hue)' },
-                      { key: 'LIGHTNESS', label: 'Lightness' },
-                    ] as const
-                  ).map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => updateSetting('paletteSort', item.key as PaletteSortOrder)}
-                      className={`py-2 px-1.5 rounded-lg border text-xs font-bold text-center transition-all ${
-                        settings.paletteSort === item.key
-                          ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                {/* Gameplay Toggles */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <SettingSwitchRow
+                    label="Auto-Advance Color"
+                    description="Switch to the next unfinished color automatically"
+                    checked={Boolean(settings.autoAdvance)}
+                    onToggle={() => updateSetting('autoAdvance', !settings.autoAdvance)}
+                    testId="setting-auto-advance"
+                  />
+                  <SettingSwitchRow
+                    label="Free Color Mode"
+                    description="Pick any color freely and paint without number limits"
+                    checked={Boolean(settings.isFreeColorMode)}
+                    onToggle={() => updateSetting('isFreeColorMode', !settings.isFreeColorMode)}
+                    testId="setting-free-color-mode"
+                  />
+                  <SettingSwitchRow
+                    label="Custom Color Picker for All Puzzles"
+                    description="Allow custom colors on every puzzle, not just coloring pages"
+                    checked={Boolean(settings.enableCustomColorForAllPuzzles)}
+                    onToggle={() =>
+                      updateSetting(
+                        'enableCustomColorForAllPuzzles',
+                        !settings.enableCustomColorForAllPuzzles
+                      )
+                    }
+                    testId="setting-custom-color-all"
+                  />
                 </div>
-              </div>
+              </SettingSectionCard>
 
-              {/* Toggles List */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Preferences & Gameplay
-                </label>
-                <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 divide-y divide-slate-800/60 overflow-hidden">
-                  {onToggleFullscreen && (
-                    <div className="flex items-center justify-between p-2.5 sm:p-3 px-3 sm:px-3.5 hover:bg-slate-800/20 transition-colors">
-                      <div className="pr-3 min-w-0">
-                        <div className="text-xs sm:text-sm font-semibold text-slate-200 flex items-center gap-1.5">
-                          <span>Full Screen Mode</span>
-                          {isFullscreen && (
-                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
-                              Active
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-400 leading-tight">
-                          {isFullscreen
-                            ? 'Canvas occupies full display (tap to exit)'
-                            : 'Expand game to fill entire screen and hide browser chrome'}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={Boolean(isFullscreen)}
-                        onClick={onToggleFullscreen}
-                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
-                          isFullscreen ? 'bg-amber-500' : 'bg-slate-700'
-                        }`}
-                        title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
-                      >
-                        <div
-                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                            isFullscreen ? 'translate-x-4.5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  )}
-                  {[
-                    {
-                      key: 'isFreeColorMode' as const,
-                      label: 'Free Colour Mode',
-                      desc: 'Choose your own colours freely and paint any region without number restrictions',
-                    },
-                    {
-                      key: 'autoAdvance' as const,
-                      label: 'Auto-Advance When Completed',
-                      desc: 'Jumps to next remaining colour automatically',
-                    },
-                    {
-                      key: 'showRegionLabels' as const,
-                      label: 'Show Numbers on Regions',
-                      desc: 'Displays numbers inside region centroids',
-                    },
-                    {
-                      key: 'showPreviewBorders' as const,
-                      label: 'Show Borders in Preview Mode',
-                      desc: 'Keeps hairline vector outlines visible in preview',
-                    },
-                    {
-                      key: 'raisePaletteDock' as const,
-                      label: 'Raise Palette Dock',
-                      desc: 'Leaves extra gap at bottom for mobile gestures',
-                    },
-                    {
-                      key: 'showZoomButtons' as const,
-                      label: 'Show Zoom (+ / -) Buttons',
-                      desc: 'Floating zoom in and out buttons in the bottom right',
-                    },
-                    {
-                      key: 'showResetViewButton' as const,
-                      label: 'Show Reset View (Extent) Button',
-                      desc: 'Floating button with diagonal arrows to fit puzzle to screen (disabled by default)',
-                    },
-                    {
-                      key: 'enableCustomColorForAllPuzzles' as const,
-                      label: 'Enable Custom Colour Picker for All Puzzles',
-                      desc: 'Show the custom colour chooser button for all puzzles, not just black and white coloring pages',
-                    },
-                    {
-                      key: 'enableUndo' as const,
-                      label: 'Enable Undo Action',
-                      desc: 'Show Undo button above palette dock to revert painted regions (Ctrl+Z). Enabled by default; turn off to hide',
-                    },
-                    {
-                      key: 'panMomentum' as const,
-                      label: 'Smooth Pan Momentum',
-                      desc: 'Flicking the canvas glides smoothly with momentum, like Google Maps',
-                    },
-                    {
-                      key: 'reverseDoubleTapZoom' as const,
-                      label: 'Invert Double-Tap Zoom Direction',
-                      desc: 'By default, dragging down zooms in and dragging up zooms out. Turn on to drag up to zoom in',
-                    },
-                    {
-                      key: 'detailedLoadingProgress' as const,
-                      label: 'Detailed Generation Progress',
-                      desc: 'Show real-time pipeline stages, inspection metrics, and live palette swatches while generating. Off by default for maximum generation speed (Fast Mode)',
-                    },
-                    {
-                      key: 'hapticsEnabled' as const,
-                      label: 'Haptic Vibration Feedback',
-                      desc: 'Tactile vibration ticks when painting and completing colours',
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.key}
-                      className="flex items-center justify-between p-2.5 sm:p-3 px-3 sm:px-3.5 hover:bg-slate-800/20 transition-colors"
-                    >
-                      <div className="pr-3 min-w-0">
-                        <div className="text-xs sm:text-sm font-semibold text-slate-200">{item.label}</div>
-                        <div className="text-[11px] text-slate-400 leading-tight">{item.desc}</div>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={Boolean(settings[item.key])}
-                        onClick={() => updateSetting(item.key, !settings[item.key])}
-                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
-                          settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
-                        }`}
-                      >
-                        <div
-                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                            settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* 3. Controls & On-Screen Buttons */}
+              <SettingSectionCard
+                title="Controls & On-Screen Buttons"
+                icon={<Hand size={13} />}
+                testId="settings-section-controls"
+                columns={2}
+              >
+                <SettingSwitchRow
+                  label="Raise Palette Dock"
+                  description="Add extra bottom spacing for mobile gesture bars"
+                  checked={Boolean(settings.raisePaletteDock)}
+                  onToggle={() => updateSetting('raisePaletteDock', !settings.raisePaletteDock)}
+                  testId="setting-raise-palette-dock"
+                />
+                <SettingSwitchRow
+                  label="Undo Button"
+                  description="Show an Undo button above the palette to step back"
+                  checked={Boolean(settings.enableUndo)}
+                  onToggle={() => updateSetting('enableUndo', !settings.enableUndo)}
+                  testId="setting-enable-undo"
+                />
+                <SettingSwitchRow
+                  label="Zoom (+ / -) Buttons"
+                  description="Show floating zoom in and out buttons on screen"
+                  checked={Boolean(settings.showZoomButtons)}
+                  onToggle={() => updateSetting('showZoomButtons', !settings.showZoomButtons)}
+                  testId="setting-show-zoom-buttons"
+                />
+                <SettingSwitchRow
+                  label="Reset View Button"
+                  description="Show a quick button to fit the puzzle to your screen"
+                  checked={Boolean(settings.showResetViewButton)}
+                  onToggle={() =>
+                    updateSetting('showResetViewButton', !settings.showResetViewButton)
+                  }
+                  testId="setting-show-reset-view-button"
+                />
+                {!NativeBridge.isAndroid && onToggleFullscreen && (
+                  <SettingSwitchRow
+                    label="Full Screen Mode"
+                    badge={isFullscreen ? 'Active' : undefined}
+                    description={
+                      isFullscreen
+                        ? 'Tap to exit full screen'
+                        : 'Expand the canvas to fill your browser window'
+                    }
+                    checked={Boolean(isFullscreen)}
+                    onToggle={onToggleFullscreen}
+                    testId="setting-fullscreen"
+                    title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
+                  />
+                )}
+              </SettingSectionCard>
 
-              {/* Controls: Zoom & Procedural Audio */}
-              <div className="space-y-3 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-                  <span className="text-slate-200">Controls</span>
+              {/* 4. Navigation & Zoom */}
+              <SettingSectionCard
+                title="Navigation & Zoom"
+                icon={<Compass size={13} />}
+                testId="settings-section-navigation"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <SettingSwitchRow
+                    label="Smooth Pan Momentum"
+                    description="Let the canvas glide smoothly after a quick flick"
+                    checked={Boolean(settings.panMomentum)}
+                    onToggle={() => updateSetting('panMomentum', !settings.panMomentum)}
+                    testId="setting-pan-momentum"
+                  />
+                  <SettingSwitchRow
+                    label="Invert Double-Tap Zoom"
+                    description="Drag up to zoom in and drag down to zoom out"
+                    checked={Boolean(settings.reverseDoubleTapZoom)}
+                    onToggle={() =>
+                      updateSetting('reverseDoubleTapZoom', !settings.reverseDoubleTapZoom)
+                    }
+                    testId="setting-reverse-double-tap-zoom"
+                  />
+                  <SettingSwitchRow
+                    label="Snap to Zoom Stops"
+                    description="Gently snap to 1x, 2x, 4x, 8x, and 12x zoom levels"
+                    checked={Boolean(settings.snapZoomLevels)}
+                    onToggle={() => updateSetting('snapZoomLevels', !settings.snapZoomLevels)}
+                    testId="setting-snap-zoom-levels"
+                  />
                 </div>
 
                 {/* Zoom Sensitivity */}
-                <div className="space-y-1">
+                <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300">Zoom Sensitivity</span>
+                    <span className="text-slate-200 font-semibold">Zoom Sensitivity</span>
                     <span className="text-amber-400 font-mono font-bold">
                       {(settings.zoomSensitivity ?? 1.0).toFixed(1)}x
                     </span>
@@ -1704,6 +1816,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="0.5"
                     max="2.0"
                     step="0.1"
+                    aria-label="Zoom Sensitivity"
                     data-testid="setting-zoom-sensitivity"
                     value={settings.zoomSensitivity ?? 1.0}
                     onChange={(e) =>
@@ -1714,107 +1827,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
-                  <div className="text-[10px] text-slate-400">
-                    Scales wheel, pinch-to-zoom, and one-finger double-tap drag zoom speed
+                  <div className="text-[11px] text-slate-400">
+                    {NativeBridge.isAndroid
+                      ? 'Adjust pinch and double-tap drag zoom speed'
+                      : 'Adjust scroll, pinch, and double-tap drag zoom speed'}
                   </div>
                 </div>
+              </SettingSectionCard>
 
-                {/* Snap to Zoom Stops */}
-                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                  <div className="pr-3 min-w-0">
-                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Snap to Zoom Stops
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-tight">
-                      Magnetic detents at 1x, 2x, 4x, 8x, and 12x zoom levels
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="setting-snap-zoom-levels"
-                    aria-checked={Boolean(settings.snapZoomLevels)}
-                    onClick={() => updateSetting('snapZoomLevels', !settings.snapZoomLevels)}
-                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
-                      settings.snapZoomLevels ? 'bg-amber-500' : 'bg-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                        settings.snapZoomLevels ? 'translate-x-4.5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Sound Effects */}
-                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                  <div className="pr-3 min-w-0">
-                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Sound Effects
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-tight">
-                      Warm procedural woodblock and brush tap audio feedback
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="setting-sound-enabled"
-                    aria-checked={settings.soundEnabled !== false}
-                    onClick={() =>
+              {/* 5. Sound, Haptics & Accessibility */}
+              <SettingSectionCard
+                title="Sound, Haptics & Accessibility"
+                icon={<Volume2 size={13} />}
+                testId="settings-section-audio-a11y"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <SettingSwitchRow
+                    label="Sound Effects"
+                    description="Soft woodblock and brush tap sounds while painting"
+                    checked={settings.soundEnabled !== false}
+                    onToggle={() =>
                       updateSetting('soundEnabled', !(settings.soundEnabled !== false))
                     }
-                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
-                      settings.soundEnabled !== false ? 'bg-amber-500' : 'bg-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                        settings.soundEnabled !== false ? 'translate-x-4.5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                {/* Sound Volume */}
-                <div className="space-y-1 pt-1.5 border-t border-slate-800/60">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300">Sound Volume</span>
-                    <span className="text-amber-400 font-mono font-bold">
-                      {Math.round((settings.soundVolume ?? 0.7) * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    data-testid="setting-sound-volume"
-                    value={settings.soundVolume ?? 0.7}
-                    onChange={(e) =>
-                      updateSetting('soundVolume', Math.round(parseFloat(e.target.value) * 100) / 100)
-                    }
-                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    testId="setting-sound-enabled"
                   />
-                </div>
-
-                {/* Large Text & Buttons (Low-Vision) */}
-                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                  <div className="pr-3 min-w-0">
-                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Large Text &amp; Buttons (Low-Vision)
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-tight">
-                      Enlarges text, buttons, icons, and canvas region numbers, and enables Fat-Finger Tap Assist
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="setting-large-text"
-                    aria-checked={Boolean(settings.largeText)}
-                    onClick={() => {
+                  <SettingSwitchRow
+                    label="Haptic Feedback"
+                    description="Gentle vibration feedback when painting and finishing colors"
+                    checked={Boolean(settings.hapticsEnabled)}
+                    onToggle={() => updateSetting('hapticsEnabled', !settings.hapticsEnabled)}
+                    testId="setting-haptics"
+                  />
+                  <SettingSwitchRow
+                    label="Large Text & Buttons"
+                    description="Enlarge text, buttons, and numbers, and turn on Tap Assist"
+                    checked={Boolean(settings.largeText)}
+                    onToggle={() => {
                       const nextLargeText = !settings.largeText;
                       if (nextLargeText) {
                         updateSettings({ largeText: true, fatFingerAssist: true });
@@ -1822,57 +1870,123 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         updateSetting('largeText', false);
                       }
                     }}
-                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
-                      settings.largeText ? 'bg-amber-500' : 'bg-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                        settings.largeText ? 'translate-x-4.5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
+                    testId="setting-large-text"
+                  />
+                  <SettingSwitchRow
+                    label="Reduced Motion"
+                    description="Skip confetti bursts, camera glides, and pulsing hints"
+                    checked={Boolean(settings.reducedMotion)}
+                    onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)}
+                    testId="setting-reduced-motion"
+                  />
                 </div>
 
-                {/* Reduced Motion */}
-                <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                  <div className="pr-3 min-w-0">
-                    <div className="text-xs sm:text-sm font-semibold text-slate-200">
-                      Reduced Motion
-                    </div>
-                    <div className="text-[11px] text-slate-400 leading-tight">
-                      Skips confetti bursts, smooth camera glides, and breathing hint pulses
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="setting-reduced-motion"
-                    aria-checked={Boolean(settings.reducedMotion)}
-                    onClick={() => updateSetting('reducedMotion', !settings.reducedMotion)}
-                    className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors cursor-pointer ${
-                      settings.reducedMotion ? 'bg-amber-500' : 'bg-slate-700'
-                    }`}
-                  >
-                    <div
-                      className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                        settings.reducedMotion ? 'translate-x-4.5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
-              {/* Label Sizing & Constraints */}
-              <div className="space-y-3 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-                  <span className="text-slate-200">Label Sizing & Bounds</span>
-                </div>
-
-                {/* Min Size */}
-                <div className="space-y-1">
+                {/* Sound Volume */}
+                <div
+                  className={`space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75 transition-opacity ${
+                    settings.soundEnabled === false ? 'opacity-50' : 'opacity-100'
+                  }`}
+                >
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300">Minimum Label Size</span>
+                    <span className="text-slate-200 font-semibold">Sound Volume</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {settings.soundEnabled === false
+                        ? 'Muted'
+                        : `${Math.round((settings.soundVolume ?? 0.7) * 100)}%`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    aria-label="Sound Volume"
+                    disabled={settings.soundEnabled === false}
+                    data-testid="setting-sound-volume"
+                    value={settings.soundVolume ?? 0.7}
+                    onChange={(e) =>
+                      updateSetting(
+                        'soundVolume',
+                        Math.round(parseFloat(e.target.value) * 100) / 100
+                      )
+                    }
+                    className={`w-full accent-amber-400 h-1.5 bg-slate-800 rounded-lg ${
+                      settings.soundEnabled === false ? 'cursor-not-allowed' : 'cursor-pointer'
+                    }`}
+                  />
+                </div>
+              </SettingSectionCard>
+
+              {/* 6a. Collapsible Replay Settings */}
+              <CollapsibleSettingSection
+                title="Replay"
+                summary={`${settings.replaySpeed || 1}x • Auto-replay ${settings.autoReplayOnLoad ? 'On' : 'Off'}`}
+                icon={<Film size={14} />}
+                testId="settings-section-replay"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-300">Replay Speed</span>
+                    <span className="font-mono font-bold text-amber-400">
+                      {settings.replaySpeed || 1}x
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {REPLAY_SPEED_OPTIONS.map((spd) => (
+                      <button
+                        key={spd}
+                        type="button"
+                        onClick={() => updateSetting('replaySpeed', spd)}
+                        className={`min-h-[36px] py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          (settings.replaySpeed || 1) === spd
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow'
+                            : 'bg-slate-900/60 text-slate-300 border-slate-800 hover:bg-slate-800'
+                        }`}
+                      >
+                        {spd}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <SettingSwitchRow
+                    label="Replay on Load"
+                    description="Play back your painting progress when opening a save"
+                    checked={Boolean(settings.autoReplayOnLoad)}
+                    onToggle={() => updateSetting('autoReplayOnLoad', !settings.autoReplayOnLoad)}
+                    testId="toggle-auto-replay-btn"
+                  />
+                  <SettingSwitchRow
+                    label="Follow Painting"
+                    description="Pan the camera smoothly to follow each painted shape"
+                    checked={Boolean(settings.replayFollow)}
+                    onToggle={() => updateSetting('replayFollow', !settings.replayFollow)}
+                    testId="toggle-replay-follow-btn"
+                  />
+                  <SettingSwitchRow
+                    label="Auto-Loop Replay"
+                    description="Restart the replay automatically when it finishes"
+                    checked={Boolean(settings.replayLoop)}
+                    onToggle={() => updateSetting('replayLoop', !settings.replayLoop)}
+                    testId="toggle-replay-loop-btn"
+                  />
+                </div>
+              </CollapsibleSettingSection>
+
+              {/* 6b. Collapsible Number Label Sizing */}
+              <CollapsibleSettingSection
+                title="Number Label Sizing"
+                summary={`${settings.minLabelSize ?? 6}–${settings.maxLabelSize ?? 18}px • ${Math.round(settings.labelScale * 100)}%`}
+                icon={<Type size={14} />}
+                testId="settings-section-labels"
+                disabled={!settings.showRegionLabels}
+                disabledNote="Turn on Show Numbers on Regions in Appearance to adjust label sizing."
+              >
+                {/* Min Size */}
+                <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-200 font-semibold">Minimum Label Size</span>
                     <span className="text-amber-400 font-mono font-bold">
                       {settings.minLabelSize ?? 6} px
                     </span>
@@ -1882,6 +1996,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="2"
                     max="14"
                     step="1"
+                    aria-label="Minimum Label Size"
+                    disabled={!settings.showRegionLabels}
                     value={settings.minLabelSize ?? 6}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
@@ -1894,15 +2010,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
-                  <div className="text-[10px] text-slate-400">
-                    Lower values reveal tiny labels on high-resolution displays before zooming
+                  <div className="text-[11px] text-slate-400">
+                    Show tiny numbers earlier on high-res screens before zooming
                   </div>
                 </div>
 
                 {/* Max Size */}
-                <div className="space-y-1">
+                <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300">Maximum Label Size</span>
+                    <span className="text-slate-200 font-semibold">Maximum Label Size</span>
                     <span className="text-amber-400 font-mono font-bold">
                       {settings.maxLabelSize ?? 18} px
                     </span>
@@ -1912,6 +2028,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="10"
                     max="36"
                     step="1"
+                    aria-label="Maximum Label Size"
+                    disabled={!settings.showRegionLabels}
                     value={settings.maxLabelSize ?? 18}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
@@ -1924,15 +2042,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
-                  <div className="text-[10px] text-slate-400">
-                    Prevents numbers in large open regions from becoming oversized
+                  <div className="text-[11px] text-slate-400">
+                    Cap number size inside large open shapes
                   </div>
                 </div>
 
-                {/* Label Scale Slider */}
-                <div className="space-y-1">
+                {/* Overall Scale */}
+                <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-300">Overall Scale</span>
+                    <span className="text-slate-200 font-semibold">Overall Scale</span>
                     <span className="text-amber-400 font-mono font-bold">
                       {Math.round(settings.labelScale * 100)}%
                     </span>
@@ -1942,331 +2060,246 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     min="0.5"
                     max="2.0"
                     step="0.05"
+                    aria-label="Overall Label Scale"
+                    disabled={!settings.showRegionLabels}
                     value={settings.labelScale}
                     onChange={(e) => updateSetting('labelScale', parseFloat(e.target.value))}
                     className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
                   />
-                </div>
-              </div>
-
-              {/* Replay Speed & Auto-Replay on Load */}
-              <div className="space-y-2.5 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Puzzle Replay Speed
-                  </label>
-                  <span className="text-[11px] font-bold text-amber-400">
-                    {settings.replaySpeed || 1}x
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                  {REPLAY_SPEED_OPTIONS.map((spd) => (
-                    <button
-                      key={spd}
-                      type="button"
-                      onClick={() => updateSetting('replaySpeed', spd)}
-                      className={`py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                        (settings.replaySpeed || 1) === spd
-                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow'
-                          : 'bg-slate-950/60 text-slate-300 border-slate-800 hover:bg-slate-800'
-                      }`}
-                    >
-                      {spd}x
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                  <div className="pr-3">
-                    <div className="text-xs sm:text-sm font-bold text-slate-200">
-                      Replay on Load
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      Automatically replay region completion animation when opening a saved puzzle
-                    </div>
+                  <div className="text-[11px] text-slate-400">
+                    Scale all region numbers up or down together
                   </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="toggle-auto-replay-btn"
-                    aria-checked={settings.autoReplayOnLoad !== false}
-                    onClick={() =>
-                      updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
-                    }
-                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
-                      settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
-                        settings.autoReplayOnLoad !== false ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
                 </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                  <div className="pr-3">
-                    <div className="text-xs sm:text-sm font-bold text-slate-200">
-                      Follow Painting During Replay
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      Smoothly pan the camera to follow each region being painted without skipping offscreen steps
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="toggle-replay-follow-btn"
-                    aria-checked={Boolean(settings.replayFollow)}
-                    onClick={() => updateSetting('replayFollow', !settings.replayFollow)}
-                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
-                      settings.replayFollow ? 'bg-amber-400' : 'bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
-                        settings.replayFollow ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                  <div className="pr-3">
-                    <div className="text-xs sm:text-sm font-bold text-slate-200">
-                      Auto-Loop Replay
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      Automatically restart and loop the replay animation when it finishes
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    data-testid="toggle-replay-loop-btn"
-                    aria-checked={Boolean(settings.replayLoop)}
-                    onClick={() => updateSetting('replayLoop', !settings.replayLoop)}
-                    className={`capy-switch w-11 h-6 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
-                      settings.replayLoop ? 'bg-amber-400' : 'bg-slate-700'
-                    }`}
-                  >
-                    <span
-                      className={`capy-switch-knob absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-slate-950 transition-transform ${
-                        settings.replayLoop ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-
+              </CollapsibleSettingSection>
             </div>
           )}
 
           {/* TAB 2: HINTS */}
           {activeTab === 2 && (
-            <div className="space-y-4 sm:space-y-5">
-              {/* Highlight Style */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Highlight Style
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      { key: 'CENTROID_GLOW', label: 'Centroid Glow', desc: 'Pulsing circle at center' },
-                      { key: 'NUMBER_ONLY', label: 'Number Color', desc: 'Highlights matching label text colour' },
-                      { key: 'FULL_REGION', label: 'Entire Region Fill', desc: 'Fills matching pixels' },
-                      { key: 'BOUNDARY_ONLY', label: 'Boundary Outline', desc: 'Glowing perimeter outline' },
-                    ] as const
-                  ).map((style) => (
-                    <button
-                      key={style.key}
-                      type="button"
-                      onClick={() =>
-                        updateSetting('highlightStyle', style.key as RegionHighlightStyle)
-                      }
-                      className={`flex flex-col text-left p-2.5 rounded-lg border transition-all ${
-                        settings.highlightStyle === style.key
-                          ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      <span className="text-xs sm:text-sm font-bold text-slate-100">{style.label}</span>
-                      <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">{style.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Hint Highlight Colour */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                    Hint Highlight Colour
-                  </label>
-                  <span className="text-[11px] font-mono font-semibold text-amber-400">
-                    {argbToHex(settings.hintColorArgb).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {[
-                    { label: 'Amber', hex: '#f59e0b' },
-                    { label: 'Yellow', hex: '#eab308' },
-                    { label: 'Orange', hex: '#f97316' },
-                    { label: 'Cyan', hex: '#06b6d4' },
-                    { label: 'Emerald', hex: '#10b981' },
-                    { label: 'Rose', hex: '#ec4899' },
-                    { label: 'Purple', hex: '#a855f7' },
-                    { label: 'White', hex: '#ffffff' },
-                  ].map((col) => {
-                    const colHex = col.hex.toLowerCase();
-                    const currentHex = argbToHex(settings.hintColorArgb).toLowerCase();
-                    const isSelected = currentHex === colHex;
-                    return (
+            <div className="space-y-4">
+              <SettingSectionCard
+                title="Hint Appearance"
+                icon={<Sparkles size={13} />}
+                testId="hints-section-style"
+              >
+                {/* Highlight Style */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-slate-300">Highlight Style</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: 'CENTROID_GLOW',
+                          label: 'Center Glow',
+                          desc: 'Pulsing circle at the center',
+                        },
+                        {
+                          key: 'NUMBER_ONLY',
+                          label: 'Number Color',
+                          desc: 'Highlights matching number text',
+                        },
+                        {
+                          key: 'FULL_REGION',
+                          label: 'Entire Region Fill',
+                          desc: 'Highlights the whole region',
+                        },
+                        {
+                          key: 'BOUNDARY_ONLY',
+                          label: 'Boundary Outline',
+                          desc: 'Glowing outline around matching shapes',
+                        },
+                      ] as const
+                    ).map((style) => (
                       <button
-                        key={col.hex}
+                        key={style.key}
                         type="button"
-                        title={col.label}
-                        onClick={() => updateSetting('hintColorArgb', hexToArgb(col.hex))}
-                        className={`capy-color-dot w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 transition-all flex items-center justify-center ${
-                          isSelected
-                            ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
-                            : 'border-slate-700/80 hover:scale-105'
+                        onClick={() =>
+                          updateSetting('highlightStyle', style.key as RegionHighlightStyle)
+                        }
+                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          settings.highlightStyle === style.key
+                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
                         }`}
-                        style={{ backgroundColor: col.hex }}
                       >
-                        {isSelected && (
-                          <Check
-                            className={`w-3.5 h-3.5 ${
-                              col.hex === '#ffffff' || col.hex === '#eab308'
-                                ? 'text-slate-900'
-                                : 'text-white'
-                            }`}
-                          />
-                        )}
+                        <span className="text-xs sm:text-sm font-bold text-slate-100">
+                          {style.label}
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                          {style.desc}
+                        </span>
                       </button>
-                    );
-                  })}
-                  {/* Custom Hint Colour Picker */}
-                  <label
-                    title="Custom Hint Colour"
-                    className="capy-color-dot relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
-                  >
-                    <input
-                      type="color"
-                      value={argbToHex(settings.hintColorArgb)}
-                      onChange={(e) => updateSetting('hintColorArgb', hexToArgb(e.target.value))}
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                    />
-                    <div
-                      className="w-full h-full flex items-center justify-center"
-                      style={{ backgroundColor: argbToHex(settings.hintColorArgb) }}
-                    >
-                      <Pipette className="w-3.5 h-3.5 text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]" />
-                    </div>
-                  </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Hint Pattern (for Entire Region Fill) */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Hint Fill Pattern
-                </label>
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                  {(
-                    [
-                      { key: 'SOLID', label: 'Solid' },
-                      { key: 'CHECKER', label: 'Checker' },
-                      { key: 'STRIPES', label: 'Diagonal' },
-                    ] as const
-                  ).map((pat) => (
-                    <button
-                      key={pat.key}
-                      type="button"
-                      onClick={() => updateSetting('hintFillStyle', pat.key as HintFillStyle)}
-                      className={`py-2 px-1.5 rounded-lg border text-xs font-bold text-center transition-all ${
-                        settings.hintFillStyle === pat.key
-                          ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                      }`}
-                    >
-                      {pat.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Hint Intensity Slider */}
-              <div className="space-y-1.5 p-3 rounded-xl bg-slate-950/40 border border-slate-800/80">
-                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
-                  <span className="text-slate-200">Hint Intensity (Opacity)</span>
-                  <span className="text-amber-400 font-mono font-bold">
-                    {Math.round(settings.hintIntensity * 100)}%
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0.2"
-                  max="1.0"
-                  step="0.05"
-                  value={settings.hintIntensity}
-                  onChange={(e) => updateSetting('hintIntensity', parseFloat(e.target.value))}
-                  className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-              </div>
-
-              {/* Toggles */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Assistance & Animation
-                </label>
-                <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 divide-y divide-slate-800/60 overflow-hidden">
-                  {[
-                    {
-                      key: 'highlightMatching' as const,
-                      label: 'Highlight Every Matching Region',
-                      desc: 'Highlights all uncompleted regions of the active colour',
-                    },
-                    {
-                      key: 'animateHint' as const,
-                      label: 'Animate Hint Pulse',
-                      desc: 'Smooth breathing pulse effect on hints and active swatches',
-                    },
-                    {
-                      key: 'showNextRegionHint' as const,
-                      label: 'Pan to Center Region (Hint Assist)',
-                      desc: 'Automatically pans canvas when zoomed in to center hinted region',
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.key}
-                      className="flex items-center justify-between p-2.5 sm:p-3 px-3 sm:px-3.5 hover:bg-slate-800/20 transition-colors"
-                    >
-                      <div className="pr-3 min-w-0">
-                        <div className="text-xs sm:text-sm font-semibold text-slate-200">{item.label}</div>
-                        <div className="text-[11px] text-slate-400 leading-tight">{item.desc}</div>
-                      </div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={Boolean(settings[item.key])}
-                        onClick={() => updateSetting(item.key, !settings[item.key])}
-                        className={`capy-switch w-10 h-5.5 flex items-center rounded-full p-0.5 flex-shrink-0 transition-colors ${
-                          settings[item.key] ? 'bg-amber-500' : 'bg-slate-700'
-                        }`}
-                      >
-                        <div
-                          className={`capy-switch-knob bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform ${
-                            settings[item.key] ? 'translate-x-4.5' : 'translate-x-0'
+                {/* Hint Highlight Color */}
+                <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-300">
+                      Hint Highlight Color
+                    </span>
+                    <span className="text-[11px] font-mono font-semibold text-amber-400">
+                      {argbToHex(settings.hintColorArgb).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      { label: 'Amber', hex: '#f59e0b' },
+                      { label: 'Yellow', hex: '#eab308' },
+                      { label: 'Orange', hex: '#f97316' },
+                      { label: 'Cyan', hex: '#06b6d4' },
+                      { label: 'Emerald', hex: '#10b981' },
+                      { label: 'Rose', hex: '#ec4899' },
+                      { label: 'Purple', hex: '#a855f7' },
+                      { label: 'White', hex: '#ffffff' },
+                    ].map((col) => {
+                      const colHex = col.hex.toLowerCase();
+                      const currentHex = argbToHex(settings.hintColorArgb).toLowerCase();
+                      const isSelected = currentHex === colHex;
+                      return (
+                        <button
+                          key={col.hex}
+                          type="button"
+                          title={col.label}
+                          aria-label={`Hint color: ${col.label}`}
+                          onClick={() => updateSetting('hintColorArgb', hexToArgb(col.hex))}
+                          className={`capy-color-dot w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 transition-all flex items-center justify-center cursor-pointer ${
+                            isSelected
+                              ? 'border-white scale-110 shadow-lg ring-2 ring-amber-400'
+                              : 'border-slate-700/80 hover:scale-105'
                           }`}
-                        />
-                      </button>
-                    </div>
-                  ))}
+                          style={{ backgroundColor: col.hex }}
+                        >
+                          {isSelected && (
+                            <Check
+                              className={`w-3.5 h-3.5 ${
+                                col.hex === '#ffffff' || col.hex === '#eab308'
+                                  ? 'text-slate-900'
+                                  : 'text-white'
+                              }`}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                    {/* Custom Hint Color Picker */}
+                    <label
+                      title="Custom Hint Color"
+                      aria-label="Custom Hint Color"
+                      className="capy-color-dot relative w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-slate-700/80 hover:border-slate-500 flex items-center justify-center cursor-pointer transition-all hover:scale-105 overflow-hidden bg-slate-800"
+                    >
+                      <input
+                        type="color"
+                        aria-label="Choose custom hint color"
+                        value={argbToHex(settings.hintColorArgb)}
+                        onChange={(e) => updateSetting('hintColorArgb', hexToArgb(e.target.value))}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                      />
+                      <div
+                        className="w-full h-full flex items-center justify-center"
+                        style={{ backgroundColor: argbToHex(settings.hintColorArgb) }}
+                      >
+                        <Pipette className="w-3.5 h-3.5 text-slate-900 drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)]" />
+                      </div>
+                    </label>
+                  </div>
                 </div>
-              </div>
+
+                {/* Hint Fill Pattern (applies to Entire Region Fill) */}
+                <div
+                  className={`space-y-1.5 pt-1 border-t border-slate-800/60 transition-opacity ${
+                    settings.highlightStyle === 'FULL_REGION' ? 'opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span className="text-xs font-semibold text-slate-300">Hint Fill Pattern</span>
+                    {settings.highlightStyle !== 'FULL_REGION' && (
+                      <span className="text-[10px] text-slate-400">
+                        Applies when Entire Region Fill is selected
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                    {(
+                      [
+                        { key: 'SOLID', label: 'Solid' },
+                        { key: 'CHECKER', label: 'Checker' },
+                        { key: 'STRIPES', label: 'Diagonal' },
+                      ] as const
+                    ).map((pat) => (
+                      <button
+                        key={pat.key}
+                        type="button"
+                        disabled={settings.highlightStyle !== 'FULL_REGION'}
+                        onClick={() => updateSetting('hintFillStyle', pat.key as HintFillStyle)}
+                        className={`min-h-[38px] py-2 px-1.5 rounded-lg border text-xs font-bold text-center transition-all ${
+                          settings.highlightStyle !== 'FULL_REGION'
+                            ? 'cursor-not-allowed'
+                            : 'cursor-pointer'
+                        } ${
+                          settings.hintFillStyle === pat.key
+                            ? 'border-amber-400 bg-slate-800 text-amber-300 ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        {pat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Hint Intensity Slider */}
+                <div className="space-y-1.5 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
+                  <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
+                    <span className="text-slate-200">Hint Intensity</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {Math.round(settings.hintIntensity * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.2"
+                    max="1.0"
+                    step="0.05"
+                    aria-label="Hint Intensity"
+                    value={settings.hintIntensity}
+                    onChange={(e) => updateSetting('hintIntensity', parseFloat(e.target.value))}
+                    className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                  />
+                </div>
+              </SettingSectionCard>
+
+              <SettingSectionCard
+                title="Assistance & Animation"
+                icon={<Lightbulb size={13} />}
+                testId="hints-section-assist"
+                columns={2}
+              >
+                <SettingSwitchRow
+                  label="Highlight Every Matching Region"
+                  description="Highlight all unfinished shapes of the active color"
+                  checked={Boolean(settings.highlightMatching)}
+                  onToggle={() => updateSetting('highlightMatching', !settings.highlightMatching)}
+                  testId="setting-highlight-matching"
+                />
+                <SettingSwitchRow
+                  label="Animate Hint Pulse"
+                  description="Add a gentle breathing pulse to hints and active swatches"
+                  checked={Boolean(settings.animateHint)}
+                  onToggle={() => updateSetting('animateHint', !settings.animateHint)}
+                  testId="setting-animate-hint"
+                />
+                <SettingSwitchRow
+                  label="Pan to Center Region"
+                  description="Smoothly pan to the next hinted shape when zoomed in"
+                  checked={Boolean(settings.showNextRegionHint)}
+                  onToggle={() =>
+                    updateSetting('showNextRegionHint', !settings.showNextRegionHint)
+                  }
+                  testId="setting-show-next-region-hint"
+                />
+              </SettingSectionCard>
             </div>
           )}
 
@@ -2329,7 +2362,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 {renderHintCallout(
                   'daily-puzzle',
-                  'Deterministic daily challenge paired cleanly across every device by UTC date. All 20 daily combinations are pre-baked at Max Detail (2048p • up to 2000 pieces • 64 colours, or 20 colours in Free Colour mode) for instant zero-wait play.'
+                  'Deterministic daily challenge paired cleanly across every device by UTC date. All 20 daily combinations are pre-baked at Max Detail (2048p • up to 2000 pieces • 64 colors, or 20 colors in Free Color mode) for instant zero-wait play.'
                 )}
               </div>
 
@@ -2347,10 +2380,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="min-w-0 break-words">
                         <span className="font-bold text-slate-100">Active Mode:</span>{' '}
                         {isDefaultCfg
-                          ? 'Gallery: Max (2048p) • Uploads: Auto (16c, 1024p)'
+                          ? 'Built-in Gallery: Max Detail • Photo Uploads: Auto (16 colors)'
                           : isMaxCfg
-                            ? `Max Detail • ${localConfig.algorithm || 'AUTO'} (64c • 2000 pcs • 2048p)`
-                            : `Custom: ${localConfig.algorithm || 'AUTO'} • ${localConfig.paletteDetail} (${localConfig.colorCount}c • ${localConfig.maxRegions || 200} pcs • ${localConfig.resolution}p)`}
+                            ? `Max Detail (${localConfig.colorCount} colors • ${localConfig.maxRegions || 2000} pieces)`
+                            : `Custom (${localConfig.colorCount} colors • ${localConfig.maxRegions || 200} pieces • ${localConfig.resolution}p)`}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0">
@@ -2495,7 +2528,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             />
                             {sample.isFreeColor && (
                               <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-400 text-slate-950 shadow">
-                                Free Colour
+                                Free Color
                               </span>
                             )}
                           </div>
@@ -2567,7 +2600,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 {renderHintCallout(
                   'upload-photo',
-                  'Pick any JPG, PNG, or WebP artwork or photo from your device and segment it locally using your chosen algorithm, colours, piece count, and resolution below.'
+                  'Pick any JPG, PNG, or WebP artwork or photo from your device and segment it locally using your chosen algorithm, colors, piece count, and resolution below.'
                 )}
                 {onZoomIntoDetailTile &&
                   sourceImage &&
@@ -2815,7 +2848,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 {renderHintCallout(
                   'detail-preset',
-                  'Picks how many palette colours, max puzzle pieces, and minimum speckle sizes are extracted. Auto, Low, Medium, and High sync all three knobs; Custom keeps your manual slider adjustments.'
+                  'Picks how many palette colors, max puzzle pieces, and minimum speckle sizes are extracted. Auto, Low, Medium, and High sync all three knobs; Custom keeps your manual slider adjustments.'
                 )}
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {(
@@ -2888,18 +2921,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-1">
                   <div className="flex flex-wrap justify-between items-center gap-1 text-xs font-semibold">
                     <span className="inline-flex items-center gap-1.5 text-slate-300">
-                      <span>Target Palette Colours</span>
-                      {renderHintButton('color-count', 'Target Palette Colours')}
+                      <span>Target Palette Colors</span>
+                      {renderHintButton('color-count', 'Target Palette Colors')}
                     </span>
                     <span className="text-amber-400 font-mono font-bold">
                       {localConfig.paletteDetail === 'CUSTOM'
-                        ? `${localConfig.colorCount} colours (Custom)`
+                        ? `${localConfig.colorCount} colors (Custom)`
                         : `Auto-tuned (${localConfig.paletteDetail.toLowerCase()})`}
                     </span>
                   </div>
                   {renderHintCallout(
                     'color-count',
-                    'Sets the exact number of colour swatches (4 to 64). Moving this slider automatically switches Detail Level Preset to Custom.'
+                    'Sets the exact number of color swatches (4 to 64). Moving this slider automatically switches Detail Level Preset to Custom.'
                   )}
                   <input
                     type="range"
@@ -2918,7 +2951,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                   {localConfig.paletteDetail !== 'CUSTOM' && (
                     <p className="text-[10px] text-slate-400">
-                      Preset picks the best colour count for your artwork; drag slider to switch to Custom ({localConfig.colorCount}).
+                      Preset picks the best color count for your artwork; drag slider to switch to Custom ({localConfig.colorCount}).
                     </p>
                   )}
                 </div>
@@ -3121,6 +3154,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* Detailed Generation Progress (Relocated from Tab 1 Settings) */}
+                <div className="pt-2 border-t border-slate-800/70">
+                  <SettingSwitchRow
+                    label="Detailed Generation Progress"
+                    description="Show step-by-step progress while creating a puzzle (slightly slower)"
+                    checked={Boolean(settings.detailedLoadingProgress)}
+                    onToggle={() =>
+                      updateSetting('detailedLoadingProgress', !settings.detailedLoadingProgress)
+                    }
+                    testId="setting-detailed-progress"
+                  />
                 </div>
               </div>
 
@@ -3433,7 +3479,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   data-testid="saves-empty-recovery"
                   className="text-center py-8 px-4 space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-950/40 text-slate-400 text-sm"
                 >
-                  <p>No saved puzzles yet. Load an image, import a `.capy` save, or restore the starter artwork.</p>
+                  <p>No saved puzzles yet. Load an image, import a .capy save, or restore the starter artwork.</p>
                   {onRestoreStarterSample && (
                     <button
                       type="button"
@@ -3457,38 +3503,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 sm:gap-2.5">
                     <select
+                      aria-label="Sort saved puzzles"
                       value={settings.saveSortOrder}
                       onChange={(e) =>
                         updateSetting('saveSortOrder', e.target.value as SaveSortOrder)
                       }
-                      className="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 focus:outline-none cursor-pointer"
+                      className="bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-slate-700 cursor-pointer"
                     >
                       <option value="LAST_ACTIVE">Last Active</option>
                       <option value="DATE">Date Created</option>
                       <option value="PERCENT_COMPLETE">Completion</option>
                     </select>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-semibold text-slate-300">Replay on Load</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        data-testid="toggle-auto-replay-saves-btn"
-                        aria-checked={settings.autoReplayOnLoad !== false}
-                        onClick={() =>
-                          updateSetting('autoReplayOnLoad', !(settings.autoReplayOnLoad !== false))
-                        }
-                        className={`capy-switch w-9 h-5 rounded-full transition-colors relative flex-shrink-0 cursor-pointer ${
-                          settings.autoReplayOnLoad !== false ? 'bg-amber-400' : 'bg-slate-700'
-                        }`}
-                      >
-                        <span
-                          className={`capy-switch-knob absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-slate-950 transition-transform ${
-                            settings.autoReplayOnLoad !== false ? 'translate-x-4' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </div>
                   </div>
 
                   {/* Detail vs Thumbnails View Mode Toggle */}

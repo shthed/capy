@@ -111,7 +111,6 @@ export interface UserSettings {
   canvasBgColor: CanvasBgColor;
   canvasBgArgb: number;
   saveSortOrder: SaveSortOrder;
-  showSavePreviews: boolean;
   highlightStyle: RegionHighlightStyle;
   hintFillStyle: HintFillStyle;
   hintColorArgb: number;
