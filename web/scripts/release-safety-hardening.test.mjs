@@ -250,21 +250,28 @@ export async function runReleaseSafetyHardeningTests(vite) {
       const nbMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
 
       assert.equal(nbMod.isValidAndroidDeepLink('https://capypaint.com/#s=abc123'), true);
+      assert.equal(nbMod.isValidAndroidDeepLink('https://paint.capyboop.com/#s=abc123'), true);
+      assert.equal(nbMod.isValidAndroidDeepLink('https://paint.capyboop.com/?room=ABCD12'), true);
       assert.equal(nbMod.isValidAndroidDeepLink('https://www.capypaint.com/?room=ABCD12'), true);
       /* capy-dev-only:start */
       assert.equal(nbMod.isValidAndroidDeepLink('https://shthed.github.io/capy/#s=abc'), true);
       /* capy-dev-only:end */
       assert.equal(nbMod.isValidAndroidDeepLink('https://capyboop.github.io/capy/beta/#s=abc'), true);
+      assert.equal(nbMod.isValidAndroidDeepLink('https://capyboop.github.io/paint/#s=abc'), true);
 
       for (const badLink of [
         '',
         'http://capypaint.com/#s=abc',
+        'http://paint.capyboop.com/#s=abc',
         'javascript:alert(1)',
         'file:///etc/passwd',
         'https://evil.example/capy/#s=abc',
         'https://capypaint.com.evil.example/#s=abc',
+        'https://paint.capyboop.com.evil.example/#s=abc',
+        'https://evil@paint.capyboop.com/#s=abc',
         /* capy-dev-only:start */
         'https://shthed.github.io/other-repo/#s=abc',
+        'https://shthed.github.io/paint/#s=abc',
         /* capy-dev-only:end */
         'https://capyboop.github.io/other-repo/#s=abc',
         'https://evil@capypaint.com/#s=abc',

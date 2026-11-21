@@ -427,7 +427,7 @@ class CapyAndroidBridge(
         const val MAX_BACKUP_PAYLOAD_CHARS = 16 * 1024 * 1024
         const val MAX_SHARE_FILE_BYTES = 16 * 1024 * 1024
         const val MAX_SHARE_BASE64_CHARS = 24 * 1024 * 1024
-        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
+        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com", "paint.capyboop.com")
         val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io", "capyboop.github.io")
         private val FILE_IO_LOCK = Any()
         private val ALLOWED_EXPORT_MIME_TYPES = setOf(
@@ -1039,8 +1039,9 @@ class CapyAndroidBridge(
         }
 
         /**
-         * Validates incoming Android App Link URIs so only HTTPS URLs under capypaint.com
-         * (or verified GitHub Pages /capy paths) are forwarded into the WebView deep-link handler.
+         * Validates incoming Android App Link URIs so only HTTPS URLs under `ROOT_DEEP_LINK_HOSTS`
+         * (`capypaint.com`, `www.capypaint.com`, `paint.capyboop.com`) or verified GitHub Pages
+         * `/capy` (and `capyboop.github.io/paint`) paths are forwarded into the WebView deep-link handler.
          */
         fun isAllowedCapyDeepLink(rawUrl: String?): Boolean {
             if (rawUrl.isNullOrBlank()) return false
@@ -1057,7 +1058,8 @@ class CapyAndroidBridge(
                 if (host in ROOT_DEEP_LINK_HOSTS) {
                     path.isEmpty() || path.startsWith("/")
                 } else if (host in GITHUB_PAGES_DEEP_LINK_HOSTS) {
-                    (path == "/capy") || path.startsWith("/capy/")
+                    (path == "/capy") || path.startsWith("/capy/") ||
+                        (host == "capyboop.github.io" && ((path == "/paint") || path.startsWith("/paint/")))
                 } else {
                     false
                 }

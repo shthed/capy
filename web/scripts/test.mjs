@@ -9122,6 +9122,7 @@ async function runCodecAndEngineTests() {
             'filters = []',
             'for flt in main_act.findall("intent-filter"):',
             '    filters.append({',
+            '        "autoVerify": flt.attrib.get(ns + "autoVerify"),',
             '        "actions": [e.attrib.get(ns + "name") for e in flt.findall("action")],',
             '        "categories": [e.attrib.get(ns + "name") for e in flt.findall("category")],',
             '        "data": [{"scheme": d.attrib.get(ns + "scheme"), "host": d.attrib.get(ns + "host"), "mimeType": d.attrib.get(ns + "mimeType"), "pathPrefix": d.attrib.get(ns + "pathPrefix")} for d in flt.findall("data")],',
@@ -9129,6 +9130,7 @@ async function runCodecAndEngineTests() {
             'print(json.dumps({',
             '    "features": features,',
             '    "banner": app.attrib.get(ns + "banner"),',
+            '    "usesCleartextTraffic": app.attrib.get(ns + "usesCleartextTraffic"),',
             '    "exported": main_act.attrib.get(ns + "exported"),',
             '    "launchMode": main_act.attrib.get(ns + "launchMode"),',
             '    "configChanges": main_act.attrib.get(ns + "configChanges"),',
@@ -9143,6 +9145,7 @@ async function runCodecAndEngineTests() {
     assert.equal(tvManifestInfo.features['android.hardware.touchscreen'], 'false');
     assert.equal(tvManifestInfo.features['android.software.leanback'], 'false');
     assert.equal(tvManifestInfo.banner, '@drawable/tv_banner');
+    assert.equal(tvManifestInfo.usesCleartextTraffic, 'false');
     assert.equal(tvManifestInfo.exported, 'true');
     assert.equal(tvManifestInfo.launchMode, 'singleTask');
     for (const cfgFlag of ['uiMode', 'navigation', 'keyboard', 'keyboardHidden', 'screenSize']) {
@@ -9169,23 +9172,66 @@ async function runCodecAndEngineTests() {
       sendIntentFilter.data.some((d) => d.mimeType === 'image/*'),
       true
     );
-    const viewIntentFilter = tvManifestInfo.filters.find((f) =>
+    const viewIntentFilters = tvManifestInfo.filters.filter((f) =>
       f.actions.includes('android.intent.action.VIEW')
     );
-    assert.ok(viewIntentFilter, 'MainActivity must preserve ACTION_VIEW App Links intent-filter');
+    const autoVerifyFilter = viewIntentFilters.find(
+      (f) => f.autoVerify === '${appLinksAutoVerify}'
+    );
+    assert.ok(autoVerifyFilter, 'MainActivity must preserve dedicated autoVerify App Links intent-filter');
     assert.equal(
-      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'capypaint.com'),
+      autoVerifyFilter.data.some((d) => d.scheme === 'https' && d.host === 'capypaint.com'),
       true
     );
     assert.equal(
-      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'www.capypaint.com'),
+      autoVerifyFilter.data.some((d) => d.scheme === 'https' && d.host === 'paint.capyboop.com'),
       true
     );
     assert.equal(
-      viewIntentFilter.data.some(
+      autoVerifyFilter.data.some((d) => d.host === 'www.capypaint.com'),
+      false,
+      'autoVerify filter must exclude redirecting www.capypaint.com'
+    );
+    assert.equal(
+      autoVerifyFilter.data.some((d) => String(d.host || '').endsWith('.github.io')),
+      false,
+      'autoVerify filter must exclude GitHub Pages host'
+    );
+    const fallbackViewData = viewIntentFilters
+      .filter((f) => !f.autoVerify)
+      .flatMap((f) => f.data);
+    assert.equal(
+      fallbackViewData.some((d) => d.scheme === 'https' && d.host === 'www.capypaint.com'),
+      true
+    );
+    assert.equal(
+      fallbackViewData.some(
         (d) => d.scheme === 'https' && String(d.host || '').endsWith('.github.io') && d.pathPrefix === '/capy'
       ),
       true
+    );
+    const androidStringsXml = fs.readFileSync(
+      path.resolve(projectRoot, '../app/src/main/res/values/strings.xml'),
+      'utf8'
+    );
+    assert.equal(
+      androidStringsXml.includes('game_services_project_id'),
+      false,
+      'strings.xml must not statically declare game_services_project_id alongside Gradle resValue'
+    );
+    const androidBuildGradle = fs.readFileSync(
+      path.resolve(projectRoot, '../app/build.gradle.kts'),
+      'utf8'
+    );
+    assert.equal(
+      androidBuildGradle.includes('resValue("string", "game_services_project_id"'),
+      true,
+      'app/build.gradle.kts must emit resValue for game_services_project_id'
+    );
+    assert.equal(
+      /resValues\s*=\s*true/.test(androidBuildGradle),
+      true,
+      'app/build.gradle.kts must enable resValues = true for AGP 9+'
     );
 
     const parseTvBannerPng = (buf) => {

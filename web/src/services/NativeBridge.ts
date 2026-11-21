@@ -52,7 +52,11 @@ declare global {
   }
 }
 
-const ALLOWED_ROOT_DEEP_LINK_HOSTS = new Set(['capypaint.com', 'www.capypaint.com']);
+const ALLOWED_ROOT_DEEP_LINK_HOSTS = new Set([
+  'capypaint.com',
+  'www.capypaint.com',
+  'paint.capyboop.com',
+]);
 const ALLOWED_PAGES_DEEP_LINK_HOSTS = new Set(['shthed.github.io', 'capyboop.github.io']);
 
 export function isValidAndroidDeepLink(rawUrl: string): boolean {
@@ -72,7 +76,16 @@ export function isValidAndroidDeepLink(rawUrl: string): boolean {
       return true;
     }
     if (ALLOWED_PAGES_DEEP_LINK_HOSTS.has(host)) {
-      return parsed.pathname === '/capy' || parsed.pathname.startsWith('/capy/');
+      if (parsed.pathname === '/capy' || parsed.pathname.startsWith('/capy/')) {
+        return true;
+      }
+      if (
+        host === 'capyboop.github.io' &&
+        (parsed.pathname === '/paint' || parsed.pathname.startsWith('/paint/'))
+      ) {
+        return true;
+      }
+      return false;
     }
     return false;
   } catch {
