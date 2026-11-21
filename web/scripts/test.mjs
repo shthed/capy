@@ -14675,6 +14675,21 @@ async function runBrowserBasicsSuite() {
       true,
       `Expected instant pointer-drag scrub in compact mode (0..35% of ${totalSteps}), got ${valAfterDrag}`
     );
+    // Verify Skip to End stays mounted (disabled) when playback reaches the end so sibling controls never shift
+    const skipBtn = page.getByTestId('replay-skip-btn');
+    const speedBtn = page.getByTestId('replay-speed-btn');
+    assert.equal(await skipBtn.isVisible(), true, 'replay-skip-btn must be visible mid-replay');
+    assert.equal(await skipBtn.isDisabled(), false, 'replay-skip-btn must be enabled mid-replay');
+    const speedBoxMid = await getStableBoundingBox(speedBtn);
+    await skipBtn.click();
+    assert.equal(await skipBtn.isVisible(), true, 'replay-skip-btn must stay visible at replay end');
+    assert.equal(await skipBtn.isDisabled(), true, 'replay-skip-btn must be disabled at replay end');
+    const speedBoxEnd = await getStableBoundingBox(speedBtn);
+    assert.equal(
+      Math.abs(speedBoxEnd.x - speedBoxMid.x) <= 1,
+      true,
+      `Replay controls must not shift horizontally at replay end (${speedBoxMid.x} -> ${speedBoxEnd.x})`
+    );
     await page.locator('[data-testid="replay-exit-btn"]').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
 
