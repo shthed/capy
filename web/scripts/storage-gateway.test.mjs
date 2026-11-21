@@ -144,6 +144,9 @@ function createMockIndexedDb(behavior = {}) {
     open(_dbName, _version) {
       openCount += 1;
       const idx = openCount;
+      if (behavior.throwSyncOnOpenCall === idx && behavior.syncOpenError) {
+        throw behavior.syncOpenError;
+      }
       const req = {
         result: makeDbHandle(idx),
         error: null,
@@ -447,6 +450,37 @@ export async function runStorageGatewayTests(vite) {
         'Stale db1.onclose must not evict replacement handle #2 or force a 3rd open'
       );
       assert.equal(staleCloseMock.stores.puzzles.has('p-stale-close-2'), true);
+    }
+
+    // 4c. Probe 4B regression: synchronous indexedDB.open() throw must NOT permanently cache a rejected dbPromise
+    {
+      globalThis.localStorage = createMemoryLocalStorage();
+      globalThis.window = { location: { pathname: '/', search: '' } };
+      const syncSecurityErr = Object.assign(new Error('Transient SecurityError on open'), {
+        name: 'SecurityError',
+      });
+      const syncOpenMock = createMockIndexedDb({
+        throwSyncOnOpenCall: 1,
+        syncOpenError: syncSecurityErr,
+      });
+      const puzzle = makeMiniPuzzle();
+      syncOpenMock.stores.puzzles.set('p-sync-open-recovery', codecMod.compressPuzzleRecord(puzzle));
+      globalThis.indexedDB = syncOpenMock.mockIndexedDb;
+      idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+
+      await assert.rejects(
+        () => idbMod.runReadonly('puzzles', (s) => s.get('p-sync-open-recovery')),
+        (err) => err === syncSecurityErr
+      );
+      assert.equal(syncOpenMock.getOpenCount(), 1, 'First call must invoke indexedDB.open once');
+
+      const recovered = await idbMod.runReadonly('puzzles', (s) => s.get('p-sync-open-recovery'));
+      assert.equal(
+        syncOpenMock.getOpenCount(),
+        2,
+        'Second call after synchronous indexedDB.open() throw must invoke indexedDB.open a second time'
+      );
+      assert.ok(recovered, 'Second call must resolve cleanly with stored record');
     }
 
     // 5. Bounded LRU previewCache eviction behavior

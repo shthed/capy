@@ -107,7 +107,15 @@ function getDBWithHandle(): { dbName: string; dbPromise: Promise<IDBDatabase> } 
     }
   };
   openPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const req = indexedDB.open(dbName, DB_VERSION);
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.open(dbName, DB_VERSION);
+    } catch (err) {
+      openFailed = true;
+      deleteIfCurrent();
+      reject(err);
+      return;
+    }
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_PUZZLES)) {
