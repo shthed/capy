@@ -1,4 +1,8 @@
-### 3.0.8 - 2026-11-20 (Production, Beta)
+### 3.0.9 - 2026-11-21 (Beta)
+
+- [#619](../../pull/619) Eliminate the Android Play Games `game_services_project_id` AAPT2 duplicate-resource conflict, disable cleartext HTTP on Android 7--8, split App Links `autoVerify` onto `capypaint.com` and `paint.capyboop.com`, and redirect `/capy.apk` to the public `capyboop/paint` release
+
+### 3.0.8 - 2026-11-20 (Production)
 
 - [#612](../../pull/612) Reorganize repository documentation and harden CI workflow checks
 - [#610](../../pull/610) Standardize changelog formatting with sequential daily versions (`3.0.2`--`3.0.8`), leading PR links, and concise 1--2 sentence bullets, plus tooling, GitHub Releases gating, `SECURITY.md`, and project documentation sync
