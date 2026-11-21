@@ -1,10 +1,18 @@
 import { base64ToUint8, uint8ToBase64 } from '../CapyCodec';
-import { resolveScopedStorageKey } from '../StorageNamespace';
+import { SafeLocalStore } from '../storage/SafeLocalStore';
+import {
+  APPLE_CLIENT_ID_STORAGE_KEY,
+  APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY,
+  APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY,
+  resolveScopedStorageKey,
+} from '../storage/StorageKeys';
 import { isDebugEnvironmentEnabled } from '../../utils/debugEnvironment';
 
-export const APPLE_CLIENT_ID_STORAGE_KEY = 'capy_apple_client_id_v1';
-export const APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY = 'capy_apple_cloudkit_container_v1';
-export const APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY = 'capy_apple_cloudkit_api_token_v1';
+export {
+  APPLE_CLIENT_ID_STORAGE_KEY,
+  APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY,
+  APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY,
+};
 export const APPLE_SESSION_STORAGE_KEY = 'capy_apple_cloud_session_v1';
 export const APPLE_CLOUDKIT_RECORD_TYPE = 'CapyCloudSaveRecord';
 
@@ -134,14 +142,8 @@ export function hasNativeIosCapyBridge(): boolean {
 }
 
 function readConfigValue(storageKey: string, envKey: string): string {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem(resolveScopedStorageKey(storageKey))?.trim();
-      if (stored) return stored;
-    }
-  } catch {
-    // Ignore storage read errors
-  }
+  const stored = SafeLocalStore.getScopedItem(storageKey)?.trim();
+  if (stored) return stored;
   const envVal = (
     import.meta as unknown as { env?: Record<string, string | undefined> }
   ).env?.[envKey]?.trim();

@@ -26,6 +26,7 @@ const REGION_META_STRIDE = 5; // [id, colorId, centroidX, centroidY, maxRadius]
 
 export const MAX_PUZZLE_PIXELS = 16_777_216; // 4096 x 4096 ceiling
 export const MAX_BINARY_SAVE_DECOMPRESSED_BYTES = 16 * 1024 * 1024; // 16 MB
+export const MAX_BINARY_ARCHIVE_DECOMPRESSED_BYTES = 256 * 1024 * 1024; // 256 MB
 export const MAX_DELTA_DECOMPRESSED_BYTES = 256 * 1024; // 256 KB
 export const MAX_DELTA_SOURCE_REF_BYTES = 4096;
 export const MAX_DELTA_REGION_ENTRIES = 65_536;
@@ -655,6 +656,11 @@ function packFramedPayload(root: unknown): Uint8Array {
   const jsonText = JSON.stringify(root, (_key, value) => {
     if (value instanceof Uint8Array) {
       const idx = chunks.length;
+      if (idx >= MAX_FRAMED_BINARY_CHUNKS) {
+        throw new Error(
+          `Capy binary payload exceeds maximum chunk count of ${MAX_FRAMED_BINARY_CHUNKS}`
+        );
+      }
       chunks.push(value);
       return { __chunkIdx: idx, byteLength: value.byteLength } satisfies BinaryChunkRef;
     }
@@ -856,6 +862,11 @@ export async function encodeSingleSaveBinaryV2(
   };
 
   const framed = packFramedPayload(payload);
+  if (framed.byteLength > MAX_BINARY_SAVE_DECOMPRESSED_BYTES) {
+    throw new Error(
+      `Capy single save payload exceeds limit of ${MAX_BINARY_SAVE_DECOMPRESSED_BYTES} bytes`
+    );
+  }
   const { bytes: body, compressed } = await gzipCompress(framed);
   const flags = compressed ? FLAG_GZIP : 0;
 
@@ -906,6 +917,11 @@ export async function encodeArchiveSaveBinaryV2(
   };
 
   const framed = packFramedPayload(payload);
+  if (framed.byteLength > MAX_BINARY_ARCHIVE_DECOMPRESSED_BYTES) {
+    throw new Error(
+      `Capy archive payload exceeds limit of ${MAX_BINARY_ARCHIVE_DECOMPRESSED_BYTES} bytes`
+    );
+  }
   const { bytes: body, compressed } = await gzipCompress(framed);
   const flags = (compressed ? FLAG_GZIP : 0) | FLAG_ARCHIVE;
 
@@ -931,13 +947,17 @@ export async function decodeBinarySaveV2(
     throw new Error(`Unsupported Capy save binary version: ${version}`);
   }
   const flags = bytes[5];
+  const isArchive = (flags & FLAG_ARCHIVE) !== 0;
+  const maxDecompressedBytes = isArchive
+    ? MAX_BINARY_ARCHIVE_DECOMPRESSED_BYTES
+    : MAX_BINARY_SAVE_DECOMPRESSED_BYTES;
   const rawBody = bytes.subarray(6);
-  if ((flags & FLAG_GZIP) === 0 && rawBody.byteLength > MAX_BINARY_SAVE_DECOMPRESSED_BYTES) {
+  if ((flags & FLAG_GZIP) === 0 && rawBody.byteLength > maxDecompressedBytes) {
     throw new Error('Uncompressed Capy binary payload exceeds size limit');
   }
   const framed =
     (flags & FLAG_GZIP) !== 0
-      ? await gzipDecompress(rawBody, MAX_BINARY_SAVE_DECOMPRESSED_BYTES)
+      ? await gzipDecompress(rawBody, maxDecompressedBytes)
       : rawBody;
   const decoded = unpackFramedPayload<unknown>(framed);
   if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
@@ -952,6 +972,9 @@ export async function decodeBinarySaveV2(
   }
 
   if (payload.format === 'capy-single-save-v2') {
+    if (isArchive || framed.byteLength > MAX_BINARY_SAVE_DECOMPRESSED_BYTES) {
+      throw new Error('Single save payload cannot use archive flag or exceed single-save size limit');
+    }
     assertValidSavedSnapshot(payload.snapshot, { strictV2: true });
     if (payload.compactPuzzle !== null) {
       serializableToRecord(payload.compactPuzzle as SerializedCompactPuzzleV2);
@@ -966,6 +989,9 @@ export async function decodeBinarySaveV2(
   }
 
   if (payload.format === 'capy-archive-save-v2') {
+    if (!isArchive) {
+      throw new Error('Archive save payload is missing required archive header flag');
+    }
     if (!Array.isArray(payload.snapshots)) {
       throw new Error('Invalid Capy v2 archive snapshots list');
     }

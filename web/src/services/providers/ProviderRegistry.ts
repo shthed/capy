@@ -9,8 +9,18 @@ import {
 import { NativeBridge } from '../NativeBridge';
 import { normalizeCoopRoomCode } from '../ShareLinkService';
 import { resolveReleaseChannel } from '../../version';
-import { resolveScopedStorageKey, resolveStorageNamespace } from '../StorageNamespace';
+import { resolveStorageNamespace } from '../StorageNamespace';
 import { StorageService } from '../StorageService';
+import { SafeLocalStore } from '../storage/SafeLocalStore';
+import {
+  AI_CREDITS_STORAGE_KEY,
+  CLOUD_MANIFEST_STORAGE_KEY,
+  CLOUD_VAULT_STORAGE_KEY,
+  COMMUNITY_IDEAS_STORAGE_KEY,
+  IDENTITY_STORAGE_KEY,
+  resolveScopedStorageKey,
+} from '../storage/StorageKeys';
+import { reportSwallowed } from '../telemetry';
 import { base64ToUint8, uint8ToBase64 } from '../../utils/base64';
 import {
   AppleCloudDriver,
@@ -51,12 +61,7 @@ import {
   RealtimeRoomProvider,
 } from './types';
 
-const IDENTITY_STORAGE_KEY = 'capy_player_identity_v1';
 const TAB_SESSION_SUFFIX_KEY = 'capy_tab_peer_suffix_v1';
-const CLOUD_VAULT_STORAGE_KEY = 'capy_cloud_vault_v1';
-const CLOUD_MANIFEST_STORAGE_KEY = 'capy_cloud_library_manifest_v2';
-const COMMUNITY_IDEAS_STORAGE_KEY = 'capy_community_ideas_v1';
-const AI_CREDITS_STORAGE_KEY = 'capy_ai_credits_v1';
 
 export const COLLABORATOR_AVATAR_COLORS = [
   '#f59e0b',
@@ -217,7 +222,7 @@ class MultiProviderAuthManager implements AuthProvider {
     }
 
     try {
-      const raw = localStorage.getItem(resolveScopedStorageKey(IDENTITY_STORAGE_KEY));
+      const raw = SafeLocalStore.getScopedItem(IDENTITY_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as PlayerIdentity;
         if (parsed && parsed.playerId && parsed.displayName) {
@@ -256,8 +261,8 @@ class MultiProviderAuthManager implements AuthProvider {
           };
         }
       }
-    } catch {
-      // Ignore storage errors
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.loadIdentity', err);
     }
 
     const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
@@ -297,9 +302,9 @@ class MultiProviderAuthManager implements AuthProvider {
         ...id,
         playerId: id.provider === 'guest' ? id.playerId.split(':')[0] : id.playerId,
       };
-      localStorage.setItem(resolveScopedStorageKey(IDENTITY_STORAGE_KEY), JSON.stringify(stored));
-    } catch {
-      // Ignore
+      SafeLocalStore.setScopedItem(IDENTITY_STORAGE_KEY, JSON.stringify(stored));
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.persistBaseIdentity', err);
     }
   }
 
@@ -479,46 +484,40 @@ class CrdtCloudSaveAdapter implements CloudSaveProvider {
 
   private readLocalVault(): Record<string, CloudSaveEnvelope> {
     try {
-      const raw = localStorage.getItem(resolveScopedStorageKey(CLOUD_VAULT_STORAGE_KEY));
+      const raw = SafeLocalStore.getScopedItem(CLOUD_VAULT_STORAGE_KEY);
       if (raw) return JSON.parse(raw) as Record<string, CloudSaveEnvelope>;
-    } catch {
-      // Ignore
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.readLocalVault', err);
     }
     return {};
   }
 
   private writeLocalVault(vault: Record<string, CloudSaveEnvelope>): void {
     try {
-      localStorage.setItem(
-        resolveScopedStorageKey(CLOUD_VAULT_STORAGE_KEY),
-        JSON.stringify(vault)
-      );
-    } catch {
-      // Ignore
+      SafeLocalStore.setScopedItem(CLOUD_VAULT_STORAGE_KEY, JSON.stringify(vault));
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.writeLocalVault', err);
     }
   }
 
   private readLocalManifest(): CloudLibraryManifestV2 | null {
     try {
-      const raw = localStorage.getItem(resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY));
+      const raw = SafeLocalStore.getScopedItem(CLOUD_MANIFEST_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CloudLibraryManifestV2;
         if (parsed && parsed.version === 2 && parsed.entries) return parsed;
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.readLocalManifest', err);
     }
     return null;
   }
 
   private writeLocalManifest(manifest: CloudLibraryManifestV2): void {
     try {
-      localStorage.setItem(
-        resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY),
-        JSON.stringify(manifest)
-      );
-    } catch {
-      // Ignore
+      SafeLocalStore.setScopedItem(CLOUD_MANIFEST_STORAGE_KEY, JSON.stringify(manifest));
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.writeLocalManifest', err);
     }
   }
 
@@ -2001,7 +2000,7 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
 
   getCommunityIdeas(): CommunityPuzzleIdea[] {
     try {
-      const raw = localStorage.getItem(resolveScopedStorageKey(COMMUNITY_IDEAS_STORAGE_KEY));
+      const raw = SafeLocalStore.getScopedItem(COMMUNITY_IDEAS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as CommunityPuzzleIdea[];
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -2030,20 +2029,17 @@ class StaticAndCommunityCatalogAdapter implements CatalogStorageProvider {
           }
         }
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.getCommunityIdeas', err);
     }
     return [...SEED_COMMUNITY_IDEAS].sort((a, b) => b.createdAt - a.createdAt);
   }
 
   private saveIdeas(ideas: CommunityPuzzleIdea[]): void {
     try {
-      localStorage.setItem(
-        resolveScopedStorageKey(COMMUNITY_IDEAS_STORAGE_KEY),
-        JSON.stringify(ideas)
-      );
-    } catch {
-      // Ignore
+      SafeLocalStore.setScopedItem(COMMUNITY_IDEAS_STORAGE_KEY, JSON.stringify(ideas));
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.saveIdeas', err);
     }
   }
 
@@ -2129,7 +2125,7 @@ class DefaultAiArtworkAdapter implements AiArtworkProvider {
 class ConsentRewardedAdAdapter implements MonetizationProvider {
   getLedger(): AiCreditLedger {
     try {
-      const raw = localStorage.getItem(resolveScopedStorageKey(AI_CREDITS_STORAGE_KEY));
+      const raw = SafeLocalStore.getScopedItem(AI_CREDITS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<AiCreditLedger>;
         const nonNegInt = (v: unknown, fallback: number) =>
@@ -2142,8 +2138,8 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
           personalizedAdsConsent: false,
         };
       }
-    } catch {
-      // Ignore
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.getLedger', err);
     }
     return {
       availableCredits: 3, // Starter free AI generation credits
@@ -2156,12 +2152,9 @@ class ConsentRewardedAdAdapter implements MonetizationProvider {
 
   private saveLedger(ledger: AiCreditLedger): void {
     try {
-      localStorage.setItem(
-        resolveScopedStorageKey(AI_CREDITS_STORAGE_KEY),
-        JSON.stringify(ledger)
-      );
-    } catch {
-      // Ignore
+      SafeLocalStore.setScopedItem(AI_CREDITS_STORAGE_KEY, JSON.stringify(ledger));
+    } catch (err) {
+      reportSwallowed('ProviderRegistry.saveLedger', err);
     }
   }
 

@@ -20,8 +20,10 @@ import { DEFAULT_SETTINGS, QuotaWarning, StorageService } from './services/Stora
 import {
   isCloudCoopUiEnabled,
   resolveScopedBackupKey,
-  resolveScopedStorageKey,
 } from './services/StorageNamespace';
+import { SafeLocalStore } from './services/storage/SafeLocalStore';
+import { TUTORIAL_COMPLETED_KEY } from './services/storage/StorageKeys';
+import { reportSwallowed } from './services/telemetry';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
 import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
@@ -788,12 +790,8 @@ export const App: React.FC = () => {
     setTutorialStepTriedInVisit(false);
     hasCheckedSettingsTipRef.current = true;
     FeatureOffersService.markOfferSeen('settings_hints_tip');
-    try {
-      localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
-    } catch {
-      // Ignored
-    }
-    NativeBridge.saveBackup(resolveScopedBackupKey('capy_tutorial_completed_v1'), '1');
+    SafeLocalStore.setScopedItem(TUTORIAL_COMPLETED_KEY, '1');
+    NativeBridge.saveBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY), '1');
   }, [cleanupTutorialTransientModes]);
 
   useEffect(() => {
@@ -811,10 +809,10 @@ export const App: React.FC = () => {
     let tutorialCompleted = false;
     try {
       tutorialCompleted =
-        localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
-        NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
-    } catch {
-      // Ignored
+        SafeLocalStore.getScopedItem(TUTORIAL_COMPLETED_KEY) === '1' ||
+        NativeBridge.loadBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY)) === '1';
+    } catch (err) {
+      reportSwallowed('App.tutorialCompletedCheck', err);
     }
     if (tutorialCompleted) {
       triggerFeatureOffer('settings_hints_tip');
@@ -1424,8 +1422,10 @@ export const App: React.FC = () => {
           };
           setSnapshots(finalizedSnapshots);
 
-          // Persist puzzle in IndexedDB
-          await StorageService.savePuzzleData(snapId, puzzleData);
+          // Persist puzzle in IndexedDB (quota/IDB errors surface via onQuotaWarning toast)
+          await StorageService.savePuzzleData(snapId, puzzleData).catch((err) => {
+            reportSwallowed('App.savePuzzleData', err, { id: snapId });
+          });
 
           if (
             currentSeq !== generationSeqRef.current ||
@@ -2008,10 +2008,10 @@ export const App: React.FC = () => {
               let tutorialCompleted = false;
               try {
                 tutorialCompleted =
-                  localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
-                  NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
-              } catch {
-                // Ignored
+                  SafeLocalStore.getScopedItem(TUTORIAL_COMPLETED_KEY) === '1' ||
+                  NativeBridge.loadBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY)) === '1';
+              } catch (err) {
+                reportSwallowed('App.restoreSession.tutorialCheck', err);
               }
               if (!skipTutorial && !tutorialCompleted) {
                 setShowTutorial(true);
@@ -2048,10 +2048,10 @@ export const App: React.FC = () => {
       let tutorialCompletedFallback = false;
       try {
         tutorialCompletedFallback =
-          localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
-          NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
-      } catch {
-        // Ignored
+          SafeLocalStore.getScopedItem(TUTORIAL_COMPLETED_KEY) === '1' ||
+          NativeBridge.loadBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY)) === '1';
+      } catch (err) {
+        reportSwallowed('App.restoreSession.tutorialFallbackCheck', err);
       }
       if (!skipTutorialFallback && !tutorialCompletedFallback) {
         setShowTutorial(true);
@@ -3112,7 +3112,9 @@ export const App: React.FC = () => {
       NativeBridge.haptic('tick', curSettings.hapticsEnabled);
 
       if (curSnapshotId) {
-        StorageService.savePuzzleData(curSnapshotId, updatedPuzzle);
+        void StorageService.savePuzzleData(curSnapshotId, updatedPuzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: curSnapshotId });
+        });
         const updated = StorageService.updateSnapshotProgress(
           curSnapshotId,
           curFilled.size,
@@ -3174,7 +3176,9 @@ export const App: React.FC = () => {
       NativeBridge.haptic('tick', curSettings.hapticsEnabled);
 
       if (curSnapshotId) {
-        StorageService.savePuzzleData(curSnapshotId, updatedPuzzle);
+        void StorageService.savePuzzleData(curSnapshotId, updatedPuzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: curSnapshotId });
+        });
         const previewUrl = curSourceImage
           ? generatePreviewDataUrl(updatedPuzzle, curSourceImage, curFilled, curPainted)
           : undefined;
@@ -3236,7 +3240,9 @@ export const App: React.FC = () => {
       NativeBridge.haptic('success', curSettings.hapticsEnabled);
 
       if (curSnapshotId) {
-        StorageService.savePuzzleData(curSnapshotId, updatedPuzzle);
+        void StorageService.savePuzzleData(curSnapshotId, updatedPuzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: curSnapshotId });
+        });
         const previewUrl = curSourceImage
           ? generatePreviewDataUrl(updatedPuzzle, curSourceImage, curFilled, curPainted)
           : undefined;
@@ -5300,7 +5306,9 @@ export const App: React.FC = () => {
           puzzle.isFreeColor
         );
         setSnapshots(updatedParentList);
-        void StorageService.savePuzzleData(parentId, puzzle);
+        void StorageService.savePuzzleData(parentId, puzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: parentId });
+        });
       } else if (existingParent) {
         const updatedParentList = StorageService.updateSnapshotViewport(
           parentId,
@@ -5330,7 +5338,9 @@ export const App: React.FC = () => {
         };
         setSnapshots(StorageService.addSnapshot(parentSnapshot));
         if (puzzle) {
-          void StorageService.savePuzzleData(parentId, puzzle);
+          void StorageService.savePuzzleData(parentId, puzzle).catch((err) => {
+            reportSwallowed('App.savePuzzleData', err, { id: parentId });
+          });
         }
       }
 
