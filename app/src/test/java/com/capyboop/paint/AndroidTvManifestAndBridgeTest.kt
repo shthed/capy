@@ -168,6 +168,10 @@ class AndroidTvManifestAndBridgeTest {
             "app/build.gradle.kts must unconditionally emit resValue for game_services_project_id",
             buildGradle.contains("""resValue("string", "game_services_project_id"""")
         )
+        assertTrue(
+            "app/build.gradle.kts must enable buildFeatures.resValues = true for AGP 9+",
+            Regex("""resValues\s*=\s*true""").containsMatchIn(buildGradle)
+        )
     }
 
     @Test

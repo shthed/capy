@@ -1039,8 +1039,9 @@ class CapyAndroidBridge(
         }
 
         /**
-         * Validates incoming Android App Link URIs so only HTTPS URLs under capypaint.com
-         * (or verified GitHub Pages /capy paths) are forwarded into the WebView deep-link handler.
+         * Validates incoming Android App Link URIs so only HTTPS URLs under `ROOT_DEEP_LINK_HOSTS`
+         * (`capypaint.com`, `www.capypaint.com`, `paint.capyboop.com`) or verified GitHub Pages
+         * `/capy` (and `capyboop.github.io/paint`) paths are forwarded into the WebView deep-link handler.
          */
         fun isAllowedCapyDeepLink(rawUrl: String?): Boolean {
             if (rawUrl.isNullOrBlank()) return false
