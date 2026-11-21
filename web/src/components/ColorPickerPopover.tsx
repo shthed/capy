@@ -167,7 +167,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >
-              Custom Colour
+              Custom Color
             </button>
             <button
               type="button"
@@ -184,6 +184,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close color picker"
             className="capy-icon-btn p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             title="Close"
           >
@@ -191,7 +192,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
           </button>
         </div>
 
-        {/* Custom Colour Tab Content */}
+        {/* Custom Color Tab Content */}
         {activeTab === 'custom' && (
           <div className="p-3.5 flex flex-col gap-3 overflow-y-auto min-h-0 flex-1">
             {/* Live Preview & Hex Input Row */}
@@ -355,7 +356,7 @@ export const ColorPickerPopover: React.FC<ColorPickerPopoverProps> = ({
                     {preset.name}
                   </span>
                   <span className="text-[10px] text-slate-500 font-medium">
-                    {preset.colors.length} colours
+                    {preset.colors.length} colors
                   </span>
                 </div>
                 <div className="flex items-center gap-1 overflow-x-hidden">

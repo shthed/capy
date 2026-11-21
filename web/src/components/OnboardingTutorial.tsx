@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Camera,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -18,7 +17,6 @@ import {
   Undo2,
   X,
   ZoomIn,
-  ZoomOut,
 } from 'lucide-react';
 
 export type TutorialStepKey =
@@ -30,12 +28,10 @@ export type TutorialStepKey =
   | 'replay'
   | 'peek_fullscreen'
   | 'free_color'
-  | 'gallery_daily'
-  | 'custom_photo'
-  | 'puzzle_presets'
-  | 'infinite_zoom'
+  | 'create_gallery'
   | 'saves_export'
-  | 'settings_a11y';
+  | 'settings'
+  | 'hints';
 
 export type TutorialTriedActions = Record<TutorialStepKey, boolean>;
 
@@ -49,12 +45,10 @@ export function createInitialTutorialTried(): TutorialTriedActions {
     replay: false,
     peek_fullscreen: false,
     free_color: false,
-    gallery_daily: false,
-    custom_photo: false,
-    puzzle_presets: false,
-    infinite_zoom: false,
+    create_gallery: false,
     saves_export: false,
-    settings_a11y: false,
+    settings: false,
+    hints: false,
   };
 }
 
@@ -69,6 +63,7 @@ interface OnboardingTutorialProps {
   onToggleLargeText?: () => void;
   onStepChange: (nextStep: number) => void;
   onTriggerHint: () => void;
+  onOpenSettingsTab?: (tabIndex: number) => void;
   onComplete: () => void;
   onSkip: () => void;
 }
@@ -79,6 +74,9 @@ export interface TutorialStepDef {
   description: string;
   tryPrompt: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  modalTab?: number;
+  actionLabel?: string;
+  actionTestId?: string;
 }
 
 export const TUTORIAL_STEPS: TutorialStepDef[] = [
@@ -102,7 +100,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     title: 'Zoom & Move',
     description:
       'Pinch with two fingers to zoom in, or drag with one finger to look around.',
-    tryPrompt: 'Try it: Pinch or scroll to zoom in',
+    tryPrompt: 'Try it: Pinch or drag to zoom in',
     icon: ZoomIn,
   },
   {
@@ -131,67 +129,57 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
   },
   {
     key: 'peek_fullscreen',
-    title: 'Peek & Full Screen',
+    title: 'Peek at the Art',
     description:
-      'Tap the Eye icon to peek at the finished art, or Expand for extra room.',
-    tryPrompt: 'Try it: Tap Eye or Expand above',
+      'Tap the Eye icon at the top to peek at the finished artwork anytime.',
+    tryPrompt: 'Try it: Tap the Eye icon above',
     icon: Eye,
   },
   {
     key: 'free_color',
     title: 'Paint Any Color',
     description:
-      'Want your own shades? Turn on Free Colour Mode in Settings to paint any color you like.',
-    tryPrompt: 'Try it: Open the gear menu and check Settings',
+      'Want your own shades? Turn on Free Color Mode in Settings to paint any color you like.',
+    tryPrompt: 'Try it: Open Settings and turn on Free Color Mode',
     icon: Paintbrush,
   },
   {
-    key: 'gallery_daily',
-    title: 'Daily Puzzle & Gallery',
+    key: 'create_gallery',
+    title: 'Daily Puzzle, Gallery & Photos',
     description:
-      'Open the top-right menu and tap Create for today’s Daily Puzzle and extra pictures.',
-    tryPrompt: 'Try it: Tap Menu > Create',
+      'Tap Photo above for your own pictures, or open Menu > Create for the Daily Puzzle, Gallery, Styles, and Detail Tiles.',
+    tryPrompt: 'Try it: Tap Photo above or open Menu > Create',
     icon: Compass,
-  },
-  {
-    key: 'custom_photo',
-    title: 'Turn Photos Into Art',
-    description:
-      'Tap the Photo button at the top to turn your own photo or drawing into a puzzle.',
-    tryPrompt: 'Try it: Tap the Photo icon above',
-    icon: Camera,
-  },
-  {
-    key: 'puzzle_presets',
-    title: 'Puzzle Styles & Presets',
-    description:
-      'In Menu > Create, pick a style like Line Art, Painterly, or Mosaic, or open the Preset Gallery to compare how each looks.',
-    tryPrompt: 'Try it: Open Menu > Create and explore Preset Gallery',
-    icon: Sparkles,
-  },
-  {
-    key: 'infinite_zoom',
-    title: 'Zoom Into Tiny Details',
-    description:
-      'In Menu > Create, pick Detail Tile to zoom way into small parts of your picture.',
-    tryPrompt: 'Try it: Open Menu > Create > Detail Tile',
-    icon: ZoomOut,
   },
   {
     key: 'saves_export',
     title: 'Your Saved Art',
     description:
-      'Tap the top-left title pill anytime to switch pictures, save backups, or print pages.',
+      'Tap the top-left title pill anytime to switch pictures, save backups, or print coloring pages.',
     tryPrompt: 'Try it: Tap the title pill top-left',
     icon: Save,
   },
   {
-    key: 'settings_a11y',
-    title: 'Settings & Text Size',
+    key: 'settings',
+    title: 'Customize Settings',
     description:
-      'Tap the gear icon anytime for Large Text, sounds, easy tapping, and more.',
-    tryPrompt: 'Try it: Tap the gear icon above (or Large Text)',
+      'Adjust Appearance, Gameplay, Controls, Audio, and Accessibility—including Large Text and Tap Assist—in the Settings tab.',
+    tryPrompt: 'Try it: Open Settings and explore your options',
     icon: Sliders,
+    modalTab: 1,
+    actionLabel: 'Open Settings',
+    actionTestId: 'tutorial-open-settings-btn',
+  },
+  {
+    key: 'hints',
+    title: 'Customize Hints',
+    description:
+      'Pick your Hint Highlight Style, Color, Fill Pattern, and Auto-Pan behavior in the Hints tab.',
+    tryPrompt: 'Try it: Open Hints to customize your hint style',
+    icon: Sparkles,
+    modalTab: 2,
+    actionLabel: 'Open Hints',
+    actionTestId: 'tutorial-open-hints-btn',
   },
 ];
 
@@ -206,6 +194,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   onToggleLargeText,
   onStepChange,
   onTriggerHint,
+  onOpenSettingsTab,
   onComplete,
   onSkip,
 }) => {
@@ -216,6 +205,8 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   const currentStep = TUTORIAL_STEPS[clampedStep];
   const isCurrentTried = Boolean(triedActions[currentStep.key]);
   const isLastStep = clampedStep === TUTORIAL_STEPS.length - 1;
+  const isModalStep = currentStep.modalTab !== undefined;
+  const isDockedInModal = isModalOpen && isModalStep;
 
   useEffect(() => {
     if (!isOpen) {
@@ -283,14 +274,27 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
 
   return (
     <div
-      className="fixed inset-x-0 z-40 pointer-events-none flex justify-center px-3"
-      style={{
-        top: 'calc(var(--capy-tutorial-top, 4.75rem) + var(--sat, 0px))',
-      }}
+      className={`fixed inset-x-0 pointer-events-none flex justify-center ${
+        isDockedInModal ? 'z-[60] px-2.5 sm:px-3' : 'z-40 px-3'
+      }`}
+      style={
+        isDockedInModal
+          ? {
+              bottom: 'calc(0.5rem + var(--sab, 0px))',
+            }
+          : {
+              top: 'calc(var(--capy-tutorial-top, 4.75rem) + var(--sat, 0px))',
+            }
+      }
     >
       <div
         data-testid="onboarding-tutorial"
-        className="pointer-events-auto w-full max-w-md max-h-[calc(100dvh-6.5rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 sm:px-3.5 text-slate-100 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200"
+        data-modal-docked={isDockedInModal ? 'true' : undefined}
+        className={`pointer-events-auto w-full overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl text-slate-100 animate-in fade-in duration-200 ${
+          isDockedInModal
+            ? 'max-w-lg max-h-[42dvh] px-3 py-2 sm:px-3.5 space-y-1.5 slide-in-from-bottom-2'
+            : 'max-w-md max-h-[calc(100dvh-6.5rem)] px-3 py-2.5 sm:px-3.5 space-y-2 slide-in-from-top-2'
+        }`}
       >
         {onToggleLargeText && clampedStep === 0 && (
           <button
@@ -341,7 +345,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
-            {onToggleLargeText && clampedStep > 0 && (
+            {onToggleLargeText && clampedStep > 0 && !isDockedInModal && (
               <button
                 type="button"
                 data-testid="tutorial-large-text-btn"
@@ -429,6 +433,18 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
               Try Hint
             </button>
           )}
+          {currentStep.modalTab !== undefined &&
+            currentStep.actionLabel &&
+            onOpenSettingsTab && (
+              <button
+                type="button"
+                data-testid={currentStep.actionTestId}
+                onClick={() => onOpenSettingsTab(currentStep.modalTab!)}
+                className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0"
+              >
+                {currentStep.actionLabel}
+              </button>
+            )}
         </div>
 
         {/* Sleek Progress Bar */}

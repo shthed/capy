@@ -149,6 +149,8 @@ class CapyAndroidBridgeTest {
         /* capy-dev-only:start */
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/paint/#s=abc"))
         /* capy-dev-only:end */
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/privacy-policy.html"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://paint.capyboop.com/privacy-policy.html"))
     }
 
     @Test

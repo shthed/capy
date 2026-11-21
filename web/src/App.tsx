@@ -380,7 +380,13 @@ export const App: React.FC = () => {
     liveCoopRef.current = liveCoopSnapshot;
   }
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const showSettingsRef = useRef<boolean>(false);
+  showSettingsRef.current = showSettings;
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
+  const [settingsTabRequestKey, setSettingsTabRequestKey] = useState<number>(0);
+  const activeSettingsTabRef = useRef<number>(1);
+  const tutorialOpenedSettingsRef = useRef<boolean>(false);
+  const hasCheckedSettingsTipRef = useRef<boolean>(false);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
   const showTutorialRef = useRef<boolean>(false);
@@ -765,6 +771,13 @@ export const App: React.FC = () => {
         isPreviewModeRef.current = false;
         setIsPreviewMode(false);
       }
+      const nextStepDef = nextStepKey
+        ? TUTORIAL_STEPS.find((step) => step.key === nextStepKey)
+        : undefined;
+      if (tutorialOpenedSettingsRef.current && nextStepDef?.modalTab === undefined) {
+        tutorialOpenedSettingsRef.current = false;
+        setShowSettings(false);
+      }
     },
     [exitReplay]
   );
@@ -773,6 +786,8 @@ export const App: React.FC = () => {
     cleanupTutorialTransientModes(null);
     setShowTutorial(false);
     setTutorialStepTriedInVisit(false);
+    hasCheckedSettingsTipRef.current = true;
+    FeatureOffersService.markOfferSeen('settings_hints_tip');
     try {
       localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
     } catch {
@@ -786,10 +801,31 @@ export const App: React.FC = () => {
     return NativeBridge.pushBackHandler(completeTutorial);
   }, [showTutorial, completeTutorial]);
 
+  useEffect(() => {
+    if (isLoading || !puzzle || showTutorial || hasCheckedSettingsTipRef.current) return;
+    hasCheckedSettingsTipRef.current = true;
+    const skipTutorial =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).has('skipTutorial');
+    if (skipTutorial) return;
+    let tutorialCompleted = false;
+    try {
+      tutorialCompleted =
+        localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
+        NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
+    } catch {
+      // Ignored
+    }
+    if (tutorialCompleted) {
+      triggerFeatureOffer('settings_hints_tip');
+    }
+  }, [isLoading, puzzle, showTutorial, triggerFeatureOffer]);
+
   const handleStartTutorial = useCallback(() => {
     featureOfferQueueRef.current = [];
     activeFeatureOfferRef.current = null;
     setActiveFeatureOffer(null);
+    tutorialOpenedSettingsRef.current = false;
     cleanupTutorialTransientModes(TUTORIAL_STEPS[0]?.key ?? null);
     setTutorialStepTriedInVisit(false);
     setTutorialStep(0);
@@ -797,22 +833,67 @@ export const App: React.FC = () => {
     setShowTutorial(true);
   }, [cleanupTutorialTransientModes]);
 
+  const handleStartSettingsTour = useCallback(() => {
+    featureOfferQueueRef.current = [];
+    activeFeatureOfferRef.current = null;
+    setActiveFeatureOffer(null);
+    const targetKey: TutorialStepKey = activeSettingsTabRef.current === 2 ? 'hints' : 'settings';
+    const targetIdx = Math.max(
+      0,
+      TUTORIAL_STEPS.findIndex((step) => step.key === targetKey)
+    );
+    const targetTab = TUTORIAL_STEPS[targetIdx]?.modalTab ?? 1;
+    tutorialOpenedSettingsRef.current = false;
+    cleanupTutorialTransientModes(targetKey);
+    setSettingsInitialTab(targetTab);
+    setSettingsTabRequestKey((k) => k + 1);
+    setShowSettings(true);
+    setTutorialStepTriedInVisit(false);
+    setTutorialStep(targetIdx);
+    setShowTutorial(true);
+  }, [cleanupTutorialTransientModes]);
+
+  const handleOpenTutorialSettingsTab = useCallback((tabIndex: number) => {
+    if (!showSettingsRef.current) {
+      tutorialOpenedSettingsRef.current = true;
+    }
+    setSettingsInitialTab(tabIndex);
+    setSettingsTabRequestKey((k) => k + 1);
+    setShowSettings(true);
+  }, []);
+
   const handleJumpToTutorialStep = useCallback(
     (stepIdx: number) => {
+      const clampedIdx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, stepIdx));
+      const targetStep = TUTORIAL_STEPS[clampedIdx];
       advanceFeatureOffer();
-      cleanupTutorialTransientModes(TUTORIAL_STEPS[stepIdx]?.key ?? null);
+      cleanupTutorialTransientModes(targetStep?.key ?? null);
       setTutorialStepTriedInVisit(false);
-      setTutorialStep(stepIdx);
+      setTutorialStep(clampedIdx);
       setShowTutorial(true);
+      if (targetStep?.modalTab !== undefined) {
+        if (!showSettingsRef.current) {
+          tutorialOpenedSettingsRef.current = true;
+        }
+        setSettingsInitialTab(targetStep.modalTab);
+        setSettingsTabRequestKey((k) => k + 1);
+        setShowSettings(true);
+      }
     },
     [advanceFeatureOffer, cleanupTutorialTransientModes]
   );
 
   const handleTutorialStepChange = useCallback(
     (nextStep: number) => {
-      cleanupTutorialTransientModes(TUTORIAL_STEPS[nextStep]?.key ?? null);
+      const clampedIdx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, nextStep));
+      const nextStepDef = TUTORIAL_STEPS[clampedIdx];
+      cleanupTutorialTransientModes(nextStepDef?.key ?? null);
       setTutorialStepTriedInVisit(false);
-      setTutorialStep(nextStep);
+      setTutorialStep(clampedIdx);
+      if (showSettingsRef.current && nextStepDef?.modalTab !== undefined) {
+        setSettingsInitialTab(nextStepDef.modalTab);
+        setSettingsTabRequestKey((k) => k + 1);
+      }
     },
     [cleanupTutorialTransientModes]
   );
@@ -1961,6 +2042,20 @@ export const App: React.FC = () => {
         undefined,
         defaultSample.assetPath
       );
+      const skipTutorialFallback =
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).has('skipTutorial');
+      let tutorialCompletedFallback = false;
+      try {
+        tutorialCompletedFallback =
+          localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
+          NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
+      } catch {
+        // Ignored
+      }
+      if (!skipTutorialFallback && !tutorialCompletedFallback) {
+        setShowTutorial(true);
+      }
     };
 
     restoreSession();
@@ -3212,7 +3307,7 @@ export const App: React.FC = () => {
       };
       img.onload = () => {
         const title = file.name.replace(/\.[^/.]+$/, '');
-        markTutorialActionTried('custom_photo');
+        markTutorialActionTried('create_gallery');
         triggerFeatureOffer('photo_upload');
         loadArtworkFromImage(
           img,
@@ -5276,7 +5371,7 @@ export const App: React.FC = () => {
           const subTitle = activeTitle.includes('(2x Detail)')
             ? activeTitle
             : `${activeTitle} (2x Detail)`;
-          markTutorialActionTried('infinite_zoom');
+          markTutorialActionTried('create_gallery');
           triggerFeatureOffer('infinite_zoom');
           loadArtworkFromImage(
             detailImg,
@@ -5374,7 +5469,6 @@ export const App: React.FC = () => {
         }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
-          markTutorialActionTried('settings_a11y');
           setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
@@ -5801,6 +5895,7 @@ export const App: React.FC = () => {
         <SettingsModal
           isOpen={showSettings}
           initialTab={settingsInitialTab}
+          initialTabRequestKey={settingsTabRequestKey}
           settings={settings}
           lifetimeStats={lifetimeStats}
           snapshots={snapshots}
@@ -5818,14 +5913,24 @@ export const App: React.FC = () => {
             const toggledFreeColor =
               nextSettings.isFreeColorMode !== prev.isFreeColorMode ||
               nextSettings.enableCustomColorForAllPuzzles !== prev.enableCustomColorForAllPuzzles;
+            const changedHintSetting =
+              nextSettings.highlightStyle !== prev.highlightStyle ||
+              nextSettings.hintColorArgb !== prev.hintColorArgb ||
+              nextSettings.hintFillStyle !== prev.hintFillStyle ||
+              nextSettings.hintIntensity !== prev.hintIntensity ||
+              nextSettings.highlightMatching !== prev.highlightMatching ||
+              nextSettings.animateHint !== prev.animateHint ||
+              nextSettings.showNextRegionHint !== prev.showNextRegionHint;
             handleUpdateSettings(nextSettings);
             if (toggledFreeColor) {
               markTutorialActionTried('free_color');
               if (enablingFreeColor) {
                 triggerFeatureOffer('free_color');
               }
+            } else if (changedHintSetting) {
+              markTutorialActionTried('hints');
             } else {
-              markTutorialActionTried('settings_a11y');
+              markTutorialActionTried('settings');
             }
           }}
           onToggleFullscreen={handleToggleFullscreen}
@@ -6192,7 +6297,7 @@ export const App: React.FC = () => {
             cfg?: GeneratorConfig,
             prebakedSnapshotId?: string
           ) => {
-            markTutorialActionTried('gallery_daily');
+            markTutorialActionTried('create_gallery');
             void loadSampleFromPrebakedOrGenerate(
               sample,
               undefined,
@@ -6219,9 +6324,15 @@ export const App: React.FC = () => {
           lastCloudSyncError={lastCloudSyncError}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
+          onStartTour={handleStartSettingsTour}
           onTabOpened={(tabId) => {
-            if (tabId === 3) {
-              markTutorialActionTried('gallery_daily');
+            activeSettingsTabRef.current = tabId;
+            if (tabId === 1) {
+              markTutorialActionTried('settings');
+            } else if (tabId === 2) {
+              markTutorialActionTried('hints');
+            } else if (tabId === 3) {
+              markTutorialActionTried('create_gallery');
               triggerFeatureOffer('create_gallery');
             } else if (tabId === 4) {
               markTutorialActionTried('saves_export');
@@ -6229,7 +6340,7 @@ export const App: React.FC = () => {
             }
           }}
           onExplorePresetGallery={() => {
-            markTutorialActionTried('puzzle_presets');
+            markTutorialActionTried('create_gallery');
           }}
         />
       </Suspense>
@@ -6249,8 +6360,8 @@ export const App: React.FC = () => {
               ? { ...prev, largeText: true, fatFingerAssist: true }
               : { ...prev, largeText: false };
           });
-          if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings_a11y') {
-            markTutorialActionTried('settings_a11y');
+          if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings') {
+            markTutorialActionTried('settings');
           }
         }}
         onStepChange={handleTutorialStepChange}
@@ -6261,6 +6372,7 @@ export const App: React.FC = () => {
           triggerHint();
           markTutorialActionTried('hint');
         }}
+        onOpenSettingsTab={handleOpenTutorialSettingsTab}
         onComplete={completeTutorial}
         onSkip={completeTutorial}
       />
@@ -6272,31 +6384,42 @@ export const App: React.FC = () => {
         onDismiss={advanceFeatureOffer}
       />
 
-      <TargetSpotlightOverlay
-        isActive={
-          !isLoading &&
-          !showSettings &&
+      {(() => {
+        const activeTutorialStep =
+          TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))];
+        const isModalTutorialStep =
+          showTutorial &&
+          showSettings &&
           !showPaletteOptions &&
-          (!isPreviewMode ||
-            (showTutorial &&
-              TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ===
-                'peek_fullscreen')) &&
-          (showTutorial || Boolean(activeFeatureOffer && !isFeatureOfferSuppressed))
-        }
-        variant={showTutorial ? 'tutorial' : 'offer'}
-        targetKey={
-          showTutorial
-            ? TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ?? null
-            : activeFeatureOffer?.id ?? null
-        }
-        cardSelector={
-          showTutorial
-            ? '[data-testid="onboarding-tutorial"]'
-            : '[data-testid="feature-offer-banner"]'
-        }
-        reducedMotion={Boolean(settings.reducedMotion)}
-        largeText={Boolean(settings.largeText)}
-      />
+          activeTutorialStep?.modalTab !== undefined;
+        return (
+          <TargetSpotlightOverlay
+            isActive={
+              !isLoading &&
+              !showPaletteOptions &&
+              (!showSettings || isModalTutorialStep) &&
+              (!isPreviewMode ||
+                (showTutorial && activeTutorialStep?.key === 'peek_fullscreen')) &&
+              (showTutorial || Boolean(activeFeatureOffer && !isFeatureOfferSuppressed))
+            }
+            variant={showTutorial ? 'tutorial' : 'offer'}
+            targetKey={
+              showTutorial
+                ? activeTutorialStep?.key ?? null
+                : activeFeatureOffer?.id ?? null
+            }
+            cardSelector={
+              showTutorial
+                ? '[data-testid="onboarding-tutorial"]'
+                : '[data-testid="feature-offer-banner"]'
+            }
+            reducedMotion={Boolean(settings.reducedMotion)}
+            largeText={Boolean(settings.largeText)}
+            isModalSpotlight={isModalTutorialStep}
+            zIndexClass={isModalTutorialStep ? 'z-[58]' : 'z-[38]'}
+          />
+        );
+      })()}
 
       {storageQuotaWarning && (
         <div
@@ -6305,7 +6428,7 @@ export const App: React.FC = () => {
           className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-md w-[calc(100%-2rem)] bg-amber-950/95 border border-amber-500/70 text-amber-100 px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 text-sm backdrop-blur-md"
         >
           <div className="flex-1">
-            <p className="font-semibold text-amber-300">Browser Storage Full</p>
+            <p className="font-semibold text-amber-300">Storage Full</p>
             <p className="text-xs text-amber-100/90 mt-0.5">{storageQuotaWarning.message}</p>
           </div>
           <button

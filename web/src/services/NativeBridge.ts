@@ -71,6 +71,13 @@ export function isValidAndroidDeepLink(rawUrl: string): boolean {
     if (parsed.port !== '' || parsed.username !== '' || parsed.password !== '') {
       return false;
     }
+    const normalizedPath = parsed.pathname.toLowerCase();
+    if (
+      normalizedPath === '/privacy-policy.html' ||
+      normalizedPath.endsWith('/privacy-policy.html')
+    ) {
+      return false;
+    }
     const host = parsed.hostname.toLowerCase();
     if (ALLOWED_ROOT_DEEP_LINK_HOSTS.has(host)) {
       return true;

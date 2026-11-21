@@ -11,7 +11,8 @@ export type FeatureOfferId =
   | 'create_gallery'
   | 'photo_upload'
   | 'infinite_zoom'
-  | 'saves_export';
+  | 'saves_export'
+  | 'settings_hints_tip';
 
 export interface FeatureOfferDef {
   id: FeatureOfferId;
@@ -61,21 +62,28 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     title: 'Photo Styles',
     message:
       'Adjust puzzle style and detail level anytime under Create in the menu.',
-    tutorialStepIndex: 10,
+    tutorialStepIndex: 8,
   },
   infinite_zoom: {
     id: 'infinite_zoom',
     title: 'Detail View Created',
     message:
       'Tap the Parent button in the top-left corner anytime to go back to your full picture.',
-    tutorialStepIndex: 11,
+    tutorialStepIndex: 8,
   },
   saves_export: {
     id: 'saves_export',
     title: 'Saved Pictures',
     message:
       'Pin favorites, rename pictures, save backups, or print coloring pages here.',
-    tutorialStepIndex: 12,
+    tutorialStepIndex: 9,
+  },
+  settings_hints_tip: {
+    id: 'settings_hints_tip',
+    title: 'New Settings & Hints',
+    message:
+      'Settings are now grouped into clean sections, with a dedicated Hints tab to customize highlight style, color, and auto-pan.',
+    tutorialStepIndex: 10,
   },
 };
 

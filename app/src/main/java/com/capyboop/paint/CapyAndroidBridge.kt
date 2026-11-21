@@ -1055,6 +1055,10 @@ class CapyAndroidBridge(
                 if (scheme != "https") return false
                 if (uri.userInfo != null) return false
                 if (uri.port != -1 && uri.port != 443) return false
+                val normalizedPath = path.lowercase()
+                if (normalizedPath == "/privacy-policy.html" || normalizedPath.endsWith("/privacy-policy.html")) {
+                    return false
+                }
                 if (host in ROOT_DEEP_LINK_HOSTS) {
                     path.isEmpty() || path.startsWith("/")
                 } else if (host in GITHUB_PAGES_DEEP_LINK_HOSTS) {
