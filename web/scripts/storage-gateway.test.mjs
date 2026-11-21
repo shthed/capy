@@ -56,73 +56,89 @@ function createMockIndexedDb(behavior = {}) {
   let openCount = 0;
   let closedHandles = 0;
 
-  const makeDbHandle = (handleIndex) => ({
-    objectStoreNames: {
-      contains: (name) => name === 'puzzles' || name === 'images',
-    },
-    createObjectStore: () => {},
-    onversionchange: null,
-    onclose: null,
-    close() {
-      closedHandles += 1;
-    },
-    transaction(storeNames, mode) {
-      if (behavior.throwInvalidStateOnHandle === handleIndex) {
-        const err = new Error('The database connection is closing.');
-        err.name = 'InvalidStateError';
-        throw err;
-      }
+  const makeDbHandle = (handleIndex) => {
+    const handle = {
+      objectStoreNames: {
+        contains: (name) => name === 'puzzles' || name === 'images',
+      },
+      createObjectStore: () => {},
+      onversionchange: null,
+      onclose: null,
+      close() {
+        closedHandles += 1;
+        if (behavior.fireOnCloseOnClose && typeof handle.onclose === 'function') {
+          handle.onclose();
+        }
+      },
+      transaction(storeNames, mode) {
+        if (behavior.throwInvalidStateOnHandle === handleIndex) {
+          const err = new Error('The database connection is closing.');
+          err.name = 'InvalidStateError';
+          throw err;
+        }
 
-      const tx = {
-        error: null,
-        oncomplete: null,
-        onerror: null,
-        onabort: null,
-        objectStore(storeName) {
-          const map = stores[storeName] || new Map();
-          stores[storeName] = map;
-          return {
-            put(value, key) {
-              const req = { result: key, error: null, onsuccess: null, onerror: null };
-              if (behavior.failWriteWithError) {
-                tx.error = behavior.failWriteWithError;
+        const tx = {
+          error: null,
+          oncomplete: null,
+          onerror: null,
+          onabort: null,
+          objectStore(storeName) {
+            const map = stores[storeName] || new Map();
+            stores[storeName] = map;
+            return {
+              put(value, key) {
+                const req = { result: key, error: null, onsuccess: null, onerror: null };
+                if (behavior.failWriteWithError) {
+                  if (behavior.bubbleRequestErrorOnTx) {
+                    req.error = behavior.failWriteWithError;
+                    tx.error = null;
+                    queueMicrotask(() => {
+                      if (tx.onerror) tx.onerror({ target: req });
+                      tx.error = behavior.failWriteWithError;
+                      if (tx.onabort) tx.onabort({ target: tx });
+                    });
+                  } else {
+                    tx.error = behavior.failWriteWithError;
+                    queueMicrotask(() => {
+                      if (tx.onabort) tx.onabort();
+                      else if (tx.onerror) tx.onerror();
+                    });
+                  }
+                } else {
+                  map.set(key, value);
+                }
+                return req;
+              },
+              get(key) {
+                const req = { result: undefined, error: null, onsuccess: null, onerror: null };
                 queueMicrotask(() => {
-                  if (tx.onabort) tx.onabort();
-                  else if (tx.onerror) tx.onerror();
+                  req.result = map.has(key) ? map.get(key) : undefined;
+                  if (req.onsuccess) req.onsuccess();
                 });
-              } else {
-                map.set(key, value);
-              }
-              return req;
-            },
-            get(key) {
-              const req = { result: undefined, error: null, onsuccess: null, onerror: null };
-              queueMicrotask(() => {
-                req.result = map.has(key) ? map.get(key) : undefined;
-                if (req.onsuccess) req.onsuccess();
-              });
-              return req;
-            },
-            delete(key) {
-              map.delete(key);
-              return { onsuccess: null, onerror: null };
-            },
-            clear() {
-              map.clear();
-              return { onsuccess: null, onerror: null };
-            },
-          };
-        },
-      };
+                return req;
+              },
+              delete(key) {
+                map.delete(key);
+                return { onsuccess: null, onerror: null };
+              },
+              clear() {
+                map.clear();
+                return { onsuccess: null, onerror: null };
+              },
+            };
+          },
+        };
 
-      if (mode === 'readwrite' && !behavior.failWriteWithError) {
-        queueMicrotask(() => {
-          if (tx.oncomplete) tx.oncomplete();
-        });
-      }
-      return tx;
-    },
-  });
+        if (mode === 'readwrite' && !behavior.failWriteWithError) {
+          queueMicrotask(() => {
+            if (tx.oncomplete) tx.oncomplete();
+          });
+        }
+        return tx;
+      },
+    };
+    return handle;
+  };
 
   const mockIndexedDb = {
     open(_dbName, _version) {
@@ -339,6 +355,46 @@ export async function runStorageGatewayTests(vite) {
       );
     }
 
+    // 3b. Probe 1B regression: W3C bubbling tx.onerror(ev) where tx.error === null & ev.target.error === QuotaExceededError
+    {
+      globalThis.localStorage = createMemoryLocalStorage();
+      globalThis.window = { location: { pathname: '/', search: '' } };
+      const bubbleQuotaErr = Object.assign(new Error('The quota has been exceeded.'), {
+        name: 'QuotaExceededError',
+      });
+      const { mockIndexedDb } = createMockIndexedDb({
+        failWriteWithError: bubbleQuotaErr,
+        bubbleRequestErrorOnTx: true,
+      });
+      globalThis.indexedDB = mockIndexedDb;
+      idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+
+      const warnings = [];
+      const unsub = storageMod.StorageService.onQuotaWarning((w) => warnings.push(w));
+      const puzzle = makeMiniPuzzle();
+      await assert.rejects(
+        () => idbMod.savePuzzleData('p-bubble-quota-1', puzzle),
+        (err) => err === bubbleQuotaErr
+      );
+      await assert.rejects(
+        () => idbMod.saveImageBlob('p-bubble-quota-1', new Blob([new Uint8Array([1, 2, 3])])),
+        (err) => err === bubbleQuotaErr
+      );
+      await assert.rejects(
+        () =>
+          idbMod.saveMultipleCompactPuzzleRecords([
+            { id: 'p-bubble-quota-2', record: codecMod.compressPuzzleRecord(puzzle) },
+          ]),
+        (err) => err === bubbleQuotaErr
+      );
+      unsub();
+      assert.equal(
+        warnings.length,
+        3,
+        'Bubbling tx.onerror with tx.error===null must extract ev.target.error and emit quota warnings'
+      );
+    }
+
     // 4. IndexedDbStore P0 InvalidStateError handle eviction + single retry on write AND read
     {
       globalThis.localStorage = createMemoryLocalStorage();
@@ -364,6 +420,33 @@ export async function runStorageGatewayTests(vite) {
       assert.equal(readMock.getOpenCount(), 2, 'Read InvalidStateError must evict handle and reopen DB once');
       assert.ok(loaded, 'Read retry must return puzzle data');
       assert.equal(loaded.width, puzzle.width);
+    }
+
+    // 4b. Probe 2C regression: stale db1.onclose after eviction must NOT evict healthy replacement db2
+    {
+      globalThis.localStorage = createMemoryLocalStorage();
+      globalThis.window = { location: { pathname: '/', search: '' } };
+      const staleCloseMock = createMockIndexedDb({
+        throwInvalidStateOnHandle: 1,
+        fireOnCloseOnClose: true,
+      });
+      globalThis.indexedDB = staleCloseMock.mockIndexedDb;
+      idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+
+      const puzzle = makeMiniPuzzle();
+      await idbMod.savePuzzleData('p-stale-close-1', puzzle);
+      // Flush microtasks so evictDbHandle's deferred db1.close() -> db1.onclose() runs after db2 is cached
+      await Promise.resolve();
+      await Promise.resolve();
+      assert.equal(staleCloseMock.getClosedHandles(), 1, 'Evicted handle #1 must be closed');
+
+      await idbMod.savePuzzleData('p-stale-close-2', puzzle);
+      assert.equal(
+        staleCloseMock.getOpenCount(),
+        2,
+        'Stale db1.onclose must not evict replacement handle #2 or force a 3rd open'
+      );
+      assert.equal(staleCloseMock.stores.puzzles.has('p-stale-close-2'), true);
     }
 
     // 5. Bounded LRU previewCache eviction behavior
@@ -550,6 +633,36 @@ export async function runStorageGatewayTests(vite) {
       // Subsequent loadStats() (even with empty localStorage) must NOT resurrect old stats
       const afterReset = statsMod.PlayerStatsService.loadStats();
       assert.deepEqual(afterReset, statsMod.DEFAULT_PLAYER_STATS);
+    }
+
+    // 8b. Probe 5B regression: resetStats() must not resurrect stale native backup if saveBackup returns false
+    {
+      const nativeBackups = new Map();
+      let allowBackupWrite = true;
+      globalThis.localStorage = createMemoryLocalStorage();
+      globalThis.window = {
+        location: { pathname: '/', search: '' },
+        CapyAndroid: {
+          saveBackup: (k, data) => {
+            if (!allowBackupWrite) return false;
+            nativeBackups.set(k, data);
+            return true;
+          },
+          loadBackup: (k) => (nativeBackups.has(k) ? nativeBackups.get(k) : null),
+        },
+      };
+
+      statsMod.PlayerStatsService.recordRegionsColored(77, true);
+      assert.equal(statsMod.PlayerStatsService.loadStats().totalRegionsColored, 77);
+
+      allowBackupWrite = false;
+      statsMod.PlayerStatsService.resetStats();
+      const afterFailedBackupReset = statsMod.PlayerStatsService.loadStats();
+      assert.deepEqual(
+        afterFailedBackupReset,
+        statsMod.DEFAULT_PLAYER_STATS,
+        'resetStats() must shadow stale native backup in localStorage when NativeBridge.saveBackup returns false'
+      );
     }
 
     // 9. StorageService thin facade export parity & window.capyStorage gate

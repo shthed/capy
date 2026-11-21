@@ -698,13 +698,10 @@ function resolveBackupWhenLocalMissing(
   return { raw: backupVal, recoveredFromBackup: backupMetrics.nonEmpty };
 }
 
-export function loadRawWithBackupFallbackWithMeta(
+function readPendingAndNativeBackup(
   storageKey: string,
-  backupKey: string,
-  kind: BackupDataKind,
-  validator?: BackupCandidateValidator
-): { raw: string | null; recoveredFromBackup: boolean } {
-  const localVal = SafeLocalStore.getItem(storageKey);
+  backupKey: string
+): { pendingRaw: string | null; nativeRaw: string | null } {
   const pendingBackupVal = pendingBackupWrites.has(backupKey)
     ? (pendingBackupWrites.get(backupKey) ?? null)
     : null;
@@ -715,6 +712,56 @@ export function loadRawWithBackupFallbackWithMeta(
   const nativeRaw = staleNativeBackupKeys.has(backupKey)
     ? null
     : safeNativeLoadBackup(backupKey);
+  return { pendingRaw, nativeRaw };
+}
+
+function resolveCompetingCandidates(
+  storageKey: string,
+  backupKey: string,
+  kind: BackupDataKind,
+  localVal: string,
+  backupVal: string,
+  validator?: BackupCandidateValidator
+): { raw: string | null; recoveredFromBackup: boolean } {
+  const preferBackupOnTie = quotaFailedLocalKeys.has(storageKey);
+  const forceBackupWins =
+    preferBackupOnTie &&
+    (quotaFailedDeleteKeys.has(storageKey) || pendingForcedBackupKeys.has(backupKey));
+  const selected = pickWinner(
+    localVal,
+    backupVal,
+    kind,
+    preferBackupOnTie,
+    forceBackupWins,
+    validator
+  );
+  if (selected !== localVal) {
+    const shouldHeal =
+      isValidNonEmptyPayload(selected, kind, validator) ||
+      quotaFailedDeleteKeys.has(storageKey) ||
+      (kind === 'snapshots' &&
+        isEmptySnapshotsPayload(selected) &&
+        quotaFailedLocalKeys.has(storageKey));
+    if (shouldHeal) {
+      safeLocalHeal(storageKey, selected);
+    }
+    return { raw: selected, recoveredFromBackup: true };
+  }
+  if (!quotaFailedDeleteKeys.has(storageKey) && pendingLocalHealWrites.has(storageKey)) {
+    quotaFailedLocalKeys.delete(storageKey);
+    pendingLocalHealWrites.delete(storageKey);
+  }
+  return { raw: selected, recoveredFromBackup: false };
+}
+
+export function loadRawWithBackupFallbackWithMeta(
+  storageKey: string,
+  backupKey: string,
+  kind: BackupDataKind,
+  validator?: BackupCandidateValidator
+): { raw: string | null; recoveredFromBackup: boolean } {
+  const localVal = SafeLocalStore.getItem(storageKey);
+  const { pendingRaw, nativeRaw } = readPendingAndNativeBackup(storageKey, backupKey);
 
   if (isForcedEmptyActiveState(kind, storageKey, backupKey, pendingRaw)) {
     if (quotaFailedDeleteKeys.has(storageKey)) {
@@ -752,35 +799,7 @@ export function loadRawWithBackupFallbackWithMeta(
     return { raw: localVal, recoveredFromBackup: false };
   }
 
-  const preferBackupOnTie = quotaFailedLocalKeys.has(storageKey);
-  const forceBackupWins =
-    preferBackupOnTie &&
-    (quotaFailedDeleteKeys.has(storageKey) || pendingForcedBackupKeys.has(backupKey));
-  const selected = pickWinner(
-    localVal,
-    backupVal,
-    kind,
-    preferBackupOnTie,
-    forceBackupWins,
-    validator
-  );
-  if (selected !== localVal) {
-    const shouldHeal =
-      isValidNonEmptyPayload(selected, kind, validator) ||
-      quotaFailedDeleteKeys.has(storageKey) ||
-      (kind === 'snapshots' &&
-        isEmptySnapshotsPayload(selected) &&
-        quotaFailedLocalKeys.has(storageKey));
-    if (shouldHeal) {
-      safeLocalHeal(storageKey, selected);
-    }
-    return { raw: selected, recoveredFromBackup: true };
-  }
-  if (!quotaFailedDeleteKeys.has(storageKey) && pendingLocalHealWrites.has(storageKey)) {
-    quotaFailedLocalKeys.delete(storageKey);
-    pendingLocalHealWrites.delete(storageKey);
-  }
-  return { raw: selected, recoveredFromBackup: false };
+  return resolveCompetingCandidates(storageKey, backupKey, kind, localVal, backupVal, validator);
 }
 
 export function loadRawWithBackupFallback(

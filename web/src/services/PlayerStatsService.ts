@@ -138,12 +138,17 @@ export class PlayerStatsService {
 
   static resetStats(): PlayerLifetimeStats {
     this.memoryFallback = { ...DEFAULT_PLAYER_STATS };
+    const zeroedJson = JSON.stringify(DEFAULT_PLAYER_STATS);
+    const storageKey = resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY);
+    const backupKey = resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY);
     try {
-      SafeLocalStore.removeItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY));
-      NativeBridge.saveBackup(
-        resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY),
-        JSON.stringify(DEFAULT_PLAYER_STATS)
-      );
+      if (SafeLocalStore.hasLocalStorage()) {
+        const wroteLocal = SafeLocalStore.setItem(storageKey, zeroedJson);
+        if (!wroteLocal) {
+          SafeLocalStore.removeItem(storageKey);
+        }
+      }
+      NativeBridge.saveBackup(backupKey, zeroedJson);
     } catch (err) {
       reportSwallowed('PlayerStatsService.resetStats', err);
     }

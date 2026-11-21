@@ -95,46 +95,67 @@ export function evictDbHandle(dbName: string, expectedPromise?: Promise<IDBDatab
 
 function getDBWithHandle(): { dbName: string; dbPromise: Promise<IDBDatabase> } {
   const dbName = resolveScopedDbName();
-  let existing = dbPromises.get(dbName);
-  if (!existing) {
-    existing = new Promise((resolve, reject) => {
-      const req = indexedDB.open(dbName, DB_VERSION);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(STORE_PUZZLES)) {
-          db.createObjectStore(STORE_PUZZLES);
-        }
-        if (!db.objectStoreNames.contains(STORE_IMAGES)) {
-          db.createObjectStore(STORE_IMAGES);
-        }
-      };
-      req.onblocked = () => {
-        dbPromises.delete(dbName);
-        reject(new Error('IndexedDB open blocked'));
-      };
-      req.onsuccess = () => {
-        const db = req.result;
-        db.onversionchange = () => {
-          try {
-            db.close();
-          } catch (err) {
-            reportSwallowed('IndexedDbStore.onversionchangeClose', err, { dbName });
-          }
-          dbPromises.delete(dbName);
-        };
-        db.onclose = () => {
-          dbPromises.delete(dbName);
-        };
-        resolve(db);
-      };
-      req.onerror = () => {
-        dbPromises.delete(dbName);
-        reject(req.error);
-      };
-    });
-    dbPromises.set(dbName, existing);
+  const existing = dbPromises.get(dbName);
+  if (existing) {
+    return { dbName, dbPromise: existing };
   }
-  return { dbName, dbPromise: existing };
+  let openPromise: Promise<IDBDatabase> | null = null;
+  let openFailed = false;
+  const deleteIfCurrent = () => {
+    if (openPromise && dbPromises.get(dbName) === openPromise) {
+      dbPromises.delete(dbName);
+    }
+  };
+  openPromise = new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open(dbName, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_PUZZLES)) {
+        db.createObjectStore(STORE_PUZZLES);
+      }
+      if (!db.objectStoreNames.contains(STORE_IMAGES)) {
+        db.createObjectStore(STORE_IMAGES);
+      }
+    };
+    req.onblocked = () => {
+      openFailed = true;
+      deleteIfCurrent();
+      reject(new Error('IndexedDB open blocked'));
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => {
+        try {
+          db.close();
+        } catch (err) {
+          reportSwallowed('IndexedDbStore.onversionchangeClose', err, { dbName });
+        }
+        deleteIfCurrent();
+      };
+      db.onclose = () => {
+        deleteIfCurrent();
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      openFailed = true;
+      deleteIfCurrent();
+      reject(req.error);
+    };
+  });
+  if (!openFailed) {
+    dbPromises.set(dbName, openPromise);
+  }
+  return { dbName, dbPromise: openPromise };
+}
+
+function resolveIdbError(
+  primary: DOMException | null | undefined,
+  ev: Event | undefined,
+  fallbackMessage: string
+): Error {
+  const targetError = (ev?.target as { error?: DOMException | Error | null } | null)?.error;
+  return primary || targetError || new Error(fallbackMessage);
 }
 
 export async function runTransaction(
@@ -154,8 +175,8 @@ export async function runTransaction(
           return;
         }
         tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error || new Error('IndexedDB transaction failed'));
-        tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+        tx.onerror = (ev) => reject(resolveIdbError(tx.error, ev, 'IndexedDB transaction failed'));
+        tx.onabort = (ev) => reject(resolveIdbError(tx.error, ev, 'IndexedDB transaction aborted'));
         work(tx);
       });
       return;
@@ -187,8 +208,9 @@ export async function runReadonly<T>(
         }
         const req = work(tx.objectStore(storeName));
         req.onsuccess = () => resolve(req.result as T);
-        req.onerror = () => reject(req.error || new Error('IndexedDB read failed'));
-        tx.onabort = () => reject(tx.error || new Error('IndexedDB read aborted'));
+        req.onerror = (ev) => reject(resolveIdbError(req.error, ev, 'IndexedDB read failed'));
+        tx.onerror = (ev) => reject(resolveIdbError(tx.error, ev, 'IndexedDB read failed'));
+        tx.onabort = (ev) => reject(resolveIdbError(tx.error, ev, 'IndexedDB read aborted'));
       });
     } catch (err) {
       if (attempt === 0 && isInvalidStateError(err)) {
