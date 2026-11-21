@@ -832,7 +832,7 @@ jobs:
                     : 'Beta gate passed (no Owner approval needed): AI review (100%) verified';
               } else {
                 description =
-                  'Main gate passed (no Owner approval needed): AI review (100%) & E2E/APK verified';
+                  'Main gate passed (no Owner approval needed): AI review (100%) verified';
               }
             }
 

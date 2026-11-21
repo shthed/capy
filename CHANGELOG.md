@@ -1,4 +1,8 @@
-### 3.0.9 - 2026-11-21 (Beta)
+### 3.0.10 - 2026-11-21 (Beta)
+
+- [#622](../../pull/622) Pass OAuth build variables into `Playwright E2E`, gate `main` Production Pages deploys and `beta -> main` auto-merges on `Playwright E2E` and `Android APK`, guard stacked-PR merge fallbacks with `headChecksGreen()`, and retire the completed one-time issue migration step
+
+### 3.0.9 - 2026-11-21
 
 - [#619](../../pull/619) Eliminate the Android Play Games `game_services_project_id` AAPT2 duplicate-resource conflict, disable cleartext HTTP on Android 7--8, split App Links `autoVerify` onto `capypaint.com` and `paint.capyboop.com`, and redirect `/capy.apk` to the public `capyboop/paint` release
 
