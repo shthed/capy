@@ -713,16 +713,45 @@ jobs:
               FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.title || '')) ||
               FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.body || ''));
 
+            const isMainTarget = baseRef === 'main';
             // Blocking CI evidence on the exact head SHA:
             // - Always require latest `Build & Test` to be `success` and no latest check run failing.
-            // - For `main` release promotions (`baseRef === 'main'`), also require `Android APK` and
-            //   `Playwright E2E` to complete with `success` before passing `capy/review-gate` or merging.
+            // - For `main` release promotions (`isMainTarget`), also require `Android APK` and
+            //   `Playwright E2E` to complete with `success` unless the PR is strictly docs-only
+            //   (matching `deploy-branch.yml`'s fast-path predicate).
             let headChecksGreenPromise = null;
             const headChecksGreen = async () => {
               if (headChecksGreenPromise) return headChecksGreenPromise;
               headChecksGreenPromise = (async () => {
                 if (typeof github.rest.checks?.listForRef !== 'function') return false;
                 try {
+                  let isDocsOnlyMainPr = false;
+                  if (isMainTarget && typeof github.rest.pulls?.listFiles === 'function') {
+                    try {
+                      const prChangedFiles = await github.paginate(github.rest.pulls.listFiles, {
+                        owner,
+                        repo,
+                        pull_number: prNumber,
+                        per_page: 100,
+                      });
+                      isDocsOnlyMainPr =
+                        Array.isArray(prChangedFiles) &&
+                        prChangedFiles.length > 0 &&
+                        prChangedFiles.every(
+                          (f) =>
+                            typeof f?.filename === 'string' &&
+                            (f.filename.endsWith('.md') ||
+                              f.filename.startsWith('docs/') ||
+                              f.filename.startsWith('notes/') ||
+                              f.filename === '.gitignore' ||
+                              f.filename === 'LICENSE')
+                        );
+                    } catch (err) {
+                      core.warning(
+                        `Failed to inspect changed files for docs-only check on PR #${prNumber}: ${err.message}`
+                      );
+                    }
+                  }
                   const { data } = await github.rest.checks.listForRef({
                     owner,
                     repo,
@@ -737,7 +766,7 @@ jobs:
                     }
                   }
                   const requiredChecks =
-                    baseRef === 'main'
+                    isMainTarget && !isDocsOnlyMainPr
                       ? ['Build & Test', 'Android APK', 'Playwright E2E']
                       : ['Build & Test'];
                   for (const reqName of requiredChecks) {
@@ -770,7 +799,7 @@ jobs:
             const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
             const strictAiReady = !isDraft && !changesRequested && !hasForbiddenCrossRef && aiOrSyncReady;
             const mainReleaseChecksReady =
-              isBetaTarget || !strictAiReady ? true : await headChecksGreen();
+              !isMainTarget || !strictAiReady ? true : await headChecksGreen();
             const gatePassed = strictAiReady && mainReleaseChecksReady;
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
@@ -915,7 +944,7 @@ jobs:
               `- [${aiOrSyncReady ? 'x' : ' '}] **AI Review (100% + \`review:ai-approved\`)**${isBetaTarget && isVerifiedMainSync && !aiApproved ? ' (verified `origin/main` ancestry sync)' : ''}`,
               `- [${readinessValid ? 'x' : ' '}] **PR Description & Readiness** (\`## Summary\`, \`PR Readiness Score: 100%\`, zero unchecked tasks)`,
               `- [${!changesRequested ? 'x' : ' '}] **No Active Holds / Changes Requested**`,
-              ...(!isBetaTarget
+              ...(isMainTarget
                 ? [
                     `- [${mainReleaseChecksReady && strictAiReady ? 'x' : ' '}] **Production Release Checks** (\`Build & Test\`, \`Android APK\`, \`Playwright E2E\`)`,
                   ]
@@ -1043,7 +1072,7 @@ jobs:
                   } catch (err) {
                     const msg = String(err?.message || err || '');
                     if (
-                      (/clean status/i.test(msg) && (isBetaTarget || (await headChecksGreen()))) ||
+                      (/clean status/i.test(msg) && (!isMainTarget || (await headChecksGreen()))) ||
                       (/stacked pull requests|unstable status/i.test(msg) && (await headChecksGreen()))
                     ) {
                       await directMergeWithFallback();

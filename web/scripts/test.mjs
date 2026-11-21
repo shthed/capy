@@ -4928,6 +4928,7 @@ async function runCodecAndEngineTests() {
         requestImpl = null,
         mergeableState = undefined,
         checkRuns = null,
+        changedFiles = null,
         expectCommitStatus = true,
       } = options;
       const body = 'body' in options ? options.body : validStrictPrBody;
@@ -5007,6 +5008,7 @@ async function runCodecAndEngineTests() {
               },
             }),
             listReviews: async () => ({ data: reviews }),
+            ...(changedFiles !== null ? { listFiles: async () => ({ data: changedFiles }) } : {}),
             createReview: async (payload) => {
               calls.createReview.push(payload);
               return { data: { id: 9001 } };
@@ -7124,6 +7126,53 @@ async function runCodecAndEngineTests() {
     assert.equal(gateStackedNotGreenRes.status.state, 'success');
     assert.equal(gateStackedNotGreenRes.calls.merge.length, 0);
     assert.equal(gateStackedNotGreenRes.calls.request.length, 0);
+
+    // Docs-only PRs targeting `main` pass when Build & Test succeeds and E2E/APK are skipped,
+    // whereas code PRs targeting `main` must stay pending when E2E/APK are skipped.
+    const skippedReleaseRuns = [
+      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Android APK', status: 'completed', conclusion: 'skipped', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Playwright E2E', status: 'completed', conclusion: 'skipped', started_at: '2026-11-13T01:01:00Z' },
+    ];
+    const gateDocsOnlyMainRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      changedFiles: [{ filename: 'README.md' }, { filename: 'docs/guide.md' }],
+      checkRuns: skippedReleaseRuns,
+    });
+    assert.equal(gateDocsOnlyMainRes.status.state, 'success');
+
+    const gateCodeMainSkippedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      checkRuns: skippedReleaseRuns,
+    });
+    assert.equal(gateCodeMainSkippedRes.status.state, 'pending');
+    assert.equal(gateCodeMainSkippedRes.calls.graphql.length, 0);
+
+    // Non-main/non-beta stacked PRs (targeting a feature branch) must not require Production Release Checks
+    const gateStackedFeatureBaseRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'feature/parent-branch',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      checkRuns: [],
+    });
+    assert.equal(gateStackedFeatureBaseRes.status.state, 'success');
+    assert.equal(
+      gateStackedFeatureBaseRes.calls.createComment.some((c) =>
+        c.body.includes('Production Release Checks')
+      ),
+      false
+    );
 
     const greenHeadRuns = greenBetaHeadRuns;
 
