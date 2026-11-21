@@ -252,29 +252,31 @@ jobs:
 
           check_redirect() {
             local url="$1"
-            local expected_prefix="$2"
+            local expected_prefixes="$2"
             local required="${3:-true}"
-            local headers status location
+            local headers status location prefix
             for attempt in 1 2 3 4 5 6; do
               headers="$(curl -sSI --max-time 10 "${url}" | tr -d '\r' || true)"
               status="$(printf '%s\n' "${headers}" | awk 'NR==1 {print $2}')"
               location="$(printf '%s\n' "${headers}" | awk 'tolower($1)=="location:" {print $2; exit}')"
               if [ "${status}" = "301" ] || [ "${status}" = "308" ]; then
-                case "${location}" in
-                  "${expected_prefix}"*)
-                    echo "Verified ${url} -> ${status} ${location}"
-                    return 0
-                    ;;
-                esac
+                for prefix in ${expected_prefixes}; do
+                  case "${location}" in
+                    "${prefix}"*)
+                      echo "Verified ${url} -> ${status} ${location}"
+                      return 0
+                      ;;
+                  esac
+                done
               fi
               echo "Waiting for ${url} redirect propagation (attempt ${attempt}/6, got ${status:-none} -> ${location:-none})..."
               sleep 5
             done
             if [ "${required}" = "true" ]; then
-              echo "ERROR: ${url} did not redirect to ${expected_prefix}* (last: ${status:-none} -> ${location:-none})" >&2
+              echo "ERROR: ${url} did not redirect to ${expected_prefixes} (last: ${status:-none} -> ${location:-none})" >&2
               exit 1
             fi
-            echo "::warning::${url} did not redirect to ${expected_prefix}* yet (capyboop.com zone not active on token)."
+            echo "::warning::${url} did not redirect to ${expected_prefixes} yet (capyboop.com zone not active on token)."
           }
 
           check_health "https://capypaint.com/api/health" "true"
@@ -282,4 +284,4 @@ jobs:
           check_redirect "https://www.capypaint.com/" "https://capypaint.com/" "true"
 
           check_health "https://paint.capyboop.com/api/health" "${CAPYBOOP_ZONE_ACTIVE:-false}"
-          check_redirect "http://paint.capyboop.com/" "https://paint.capyboop.com/" "${CAPYBOOP_ZONE_ACTIVE:-false}"
+          check_redirect "http://paint.capyboop.com/" "https://paint.capyboop.com/ https://capypaint.com/" "${CAPYBOOP_ZONE_ACTIVE:-false}"
