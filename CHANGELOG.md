@@ -1,4 +1,8 @@
-### 3.0.10 - 2026-11-21 (Beta)
+### 3.0.11 - 2026-11-21 (Beta)
+
+- [#627](../../pull/627) Decompose the browser storage layer into focused modules, fail closed on IndexedDB quota and reclaimed-handle errors, lift the multi-puzzle `.capy` archive limit to 256 MiB, enforce legacy puzzle pixel bounds, centralize `localStorage` access, and clear Android stats backups on reset
+
+### 3.0.10 - 2026-11-21
 
 - [#622](../../pull/622) Pass OAuth build variables into `Playwright E2E`, gate `main` Production Pages deploys and `beta -> main` auto-merges on `Playwright E2E` and `Android APK`, guard stacked-PR merge fallbacks with `headChecksGreen()`, and retire the completed one-time issue migration step
 

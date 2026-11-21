@@ -49,7 +49,9 @@ import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { resolveSafeSnapshotThumbnail } from '../utils/snapshotPaths';
 import { APP_VERSION, resolveReleaseChannel } from '../version';
-import { resolveScopedStorageKey, resolveStorageNamespace } from '../services/StorageNamespace';
+import { resolveStorageNamespace } from '../services/StorageNamespace';
+import { SafeLocalStore } from '../services/storage/SafeLocalStore';
+import { LAST_SETTINGS_TAB_KEY, SAVES_VIEW_MODE_KEY } from '../services/storage/StorageKeys';
 import { ProviderRegistry } from '../services/providers/ProviderRegistry';
 import { CoopParticipant, PlayerIdentity } from '../services/providers/types';
 import { CloudAccountCard, CloudSyncLiveStatus } from './CloudAccountCard';
@@ -152,7 +154,6 @@ interface SettingsModalProps {
   onExplorePresetGallery?: () => void;
 }
 
-const LAST_SETTINGS_TAB_KEY = 'capy_last_settings_tab';
 const GALLERY_FILTER_TAGS = ['All', 'Animals', 'Coloring', 'Nature', 'Line Art', 'Detailed', 'Music'];
 
 interface PresetGalleryEntry {
@@ -368,14 +369,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
   const [activeTab, setActiveTab] = useState<number>(() => {
     if (initialTab !== undefined) return initialTab;
-    try {
-      const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
-      if (saved !== null) {
-        const parsed = parseInt(saved, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) return parsed;
-      }
-    } catch {
-      // Ignored
+    const saved = SafeLocalStore.getScopedItem(LAST_SETTINGS_TAB_KEY);
+    if (saved !== null) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) return parsed;
     }
     return 1;
   });
@@ -393,12 +390,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [confirmClearAll, setConfirmClearAll] = useState(false);
   const [selectedSaveId, setSelectedSaveId] = useState<string | null>(null);
   const [savesViewMode, setSavesViewMode] = useState<'DETAIL' | 'THUMBNAILS'>(() => {
-    try {
-      const stored = localStorage.getItem(resolveScopedStorageKey('capy_saves_view_mode'));
-      return stored === 'DETAIL' || stored === 'THUMBNAILS' ? stored : 'THUMBNAILS';
-    } catch {
-      return 'THUMBNAILS';
-    }
+    const stored = SafeLocalStore.getScopedItem(SAVES_VIEW_MODE_KEY);
+    return stored === 'DETAIL' || stored === 'THUMBNAILS' ? stored : 'THUMBNAILS';
   });
   const lastTapRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
 
@@ -520,11 +513,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSetViewMode = (mode: 'DETAIL' | 'THUMBNAILS') => {
     setSavesViewMode(mode);
-    try {
-      localStorage.setItem(resolveScopedStorageKey('capy_saves_view_mode'), mode);
-    } catch {
-      // Ignored
-    }
+    SafeLocalStore.setScopedItem(SAVES_VIEW_MODE_KEY, mode);
   };
 
   const onTabOpenedRef = useRef(onTabOpened);
@@ -537,23 +526,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (initialTab !== undefined) {
         resolvedTab = initialTab;
         setActiveTab(initialTab);
-        try {
-          localStorage.setItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY), String(initialTab));
-        } catch {
-          // Ignored
-        }
+        SafeLocalStore.setScopedItem(LAST_SETTINGS_TAB_KEY, String(initialTab));
       } else {
-        try {
-          const saved = localStorage.getItem(resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY));
-          if (saved !== null) {
-            const parsed = parseInt(saved, 10);
-            if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
-              resolvedTab = parsed;
-              setActiveTab(parsed);
-            }
+        const saved = SafeLocalStore.getScopedItem(LAST_SETTINGS_TAB_KEY);
+        if (saved !== null) {
+          const parsed = parseInt(saved, 10);
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= 4) {
+            resolvedTab = parsed;
+            setActiveTab(parsed);
           }
-        } catch {
-          // Ignored
         }
       }
       onTabOpenedRef.current?.(resolvedTab);
@@ -730,14 +711,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => {
                     setActiveTab(tab.id);
                     onTabOpenedRef.current?.(tab.id);
-                    try {
-                      localStorage.setItem(
-                        resolveScopedStorageKey(LAST_SETTINGS_TAB_KEY),
-                        String(tab.id)
-                      );
-                    } catch {
-                      // Ignored
-                    }
+                    SafeLocalStore.setScopedItem(LAST_SETTINGS_TAB_KEY, String(tab.id));
                   }}
                   className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 min-h-[38px] sm:min-h-[40px] px-1.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
                     isActive

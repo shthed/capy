@@ -20,6 +20,7 @@ import {
   validateRootGuideIndex,
 } from './sanity.mjs';
 import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
+import { runStorageGatewayTests } from './storage-gateway.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -12051,6 +12052,7 @@ async function runCodecAndEngineTests() {
       let coldReloadSeq = 0;
       const withColdStorage = async (fn) => {
         coldReloadSeq += 1;
+        coldGroupVite.moduleGraph.invalidateAll();
         const mod = await coldGroupVite.ssrLoadModule(`/src/services/StorageService.ts?cold=${coldReloadSeq}`);
         return await fn(mod);
       };
@@ -13020,7 +13022,8 @@ async function runCodecAndEngineTests() {
     }
 
     await runReleaseSafetyHardeningTests(vite);
-    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService & M1 release safety hardening verified.');
+    await runStorageGatewayTests(vite);
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway & M1 release safety hardening verified.');
 
     // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
     // createAutoCloudSyncScheduler & Cross-Provider CRDT Merge Parity
