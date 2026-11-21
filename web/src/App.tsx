@@ -785,6 +785,8 @@ export const App: React.FC = () => {
     cleanupTutorialTransientModes(null);
     setShowTutorial(false);
     setTutorialStepTriedInVisit(false);
+    hasCheckedSettingsTipRef.current = true;
+    FeatureOffersService.markOfferSeen('settings_hints_tip');
     try {
       localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
     } catch {

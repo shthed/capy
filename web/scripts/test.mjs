@@ -2685,7 +2685,7 @@ async function runCodecAndEngineTests() {
     assert.equal(dailyA.config.paletteDetail, 'CUSTOM', 'Daily puzzle config must use CUSTOM paletteDetail for 64 colors');
     assert.ok(
       dailyA.presetDescription.includes('Max Detail') &&
-        !/\b(10|16|18|24) colours\b/.test(dailyA.presetDescription),
+        !/\b(10|16|18|24) colou?rs\b/.test(dailyA.presetDescription),
       `Daily presetDescription must not show contradictory low/medium counts: '${dailyA.presetDescription}'`
     );
 
@@ -2708,7 +2708,7 @@ async function runCodecAndEngineTests() {
         `Expected honest Max Detail copy for ${utcDate}, got '${featured.presetLabel}' / '${featured.presetDescription}'`
       );
       if (featured.sample.isFreeColor) {
-        assert.equal(featured.presetLabel, 'Free Colour Line Art • Max Detail');
+        assert.equal(featured.presetLabel, 'Free Color Line Art • Max Detail');
         assert.equal(featured.config.algorithm, 'LINE_ART');
         assert.equal(featured.config.isFreeColor, true);
       }
@@ -9887,6 +9887,10 @@ async function runCodecAndEngineTests() {
       assert.equal(storageMod.DEFAULT_SETTINGS.paletteSort, 'HUE');
       assert.equal(storageMod.DEFAULT_SETTINGS.fatFingerAssist, true);
       assert.equal(storageMod.DEFAULT_SETTINGS.touchReachRadiusPx, 22);
+      assert.equal(storageMod.DEFAULT_SETTINGS.hintColorArgb, 0xfff59e0b);
+      assert.equal(storageMod.DEFAULT_SETTINGS.autoReplayOnLoad, false);
+      assert.equal(storageMod.DEFAULT_SETTINGS.raisePaletteDock, true);
+      assert.equal('showSavePreviews' in storageMod.DEFAULT_SETTINGS, false);
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
         difficulty: 'NORMAL',
@@ -9901,6 +9905,15 @@ async function runCodecAndEngineTests() {
       assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
       assert.equal(loadedNormalHue.fatFingerAssist, false);
       assert.equal(loadedNormalHue.touchReachRadiusPx, 34);
+
+      // Verify legacy showSavePreviews key in stored JSON is safely ignored on load
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ showSavePreviews: true, autoReplayOnLoad: true })
+      );
+      const legacyLoaded = storageMod.StorageService.loadSettings();
+      assert.equal('showSavePreviews' in legacyLoaded, false);
+      assert.equal(legacyLoaded.autoReplayOnLoad, true);
 
       // Verify [8, 40] clamping and absent fatFingerAssist fallback to DEFAULT_SETTINGS.fatFingerAssist (true) across both NORMAL & EASY
       mockStorage.set(
@@ -9937,8 +9950,13 @@ async function runCodecAndEngineTests() {
       // Verify FeatureOffersService persistence, NativeBridge backup fallback, channel sandboxing, and OnboardingTutorial step mapping
       const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
-      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 8);
-      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
+      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 9);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 12);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[10]?.key, 'settings');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[10]?.modalTab, 1);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[11]?.key, 'hints');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[11]?.modalTab, 2);
+      assert.equal(offersMod.FEATURE_OFFERS.settings_hints_tip?.tutorialStepIndex, 10);
       for (const id of offersMod.FEATURE_OFFER_IDS) {
         const offer = offersMod.FEATURE_OFFERS[id];
         assert.equal(
@@ -13228,7 +13246,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 12');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -13248,7 +13266,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 12',
       undefined,
       { timeout: 3000 }
     );
@@ -13263,7 +13281,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 12',
       undefined,
       { timeout: 3000 }
     );
@@ -13277,7 +13295,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 12',
       undefined,
       { timeout: 3000 }
     );
@@ -13286,11 +13304,11 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 12',
       undefined,
       { timeout: 3000 }
     );
-    // Skip remaining steps on main page to preserve clean Capy Forest state; full 14-step tour runs in dedicated tutContext below
+    // Skip remaining steps on main page to preserve clean Capy Forest state; full 12-step tour runs in dedicated tutContext below
     await page.getByTestId('tutorial-skip-btn').click();
     await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
     const tutorialCompletedFlag = await page.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1'));
@@ -13317,9 +13335,9 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(escTutPage);
     await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     await escTutPage.locator('button[title="Settings and Menu"]').click();
-    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'visible', timeout: 3000 });
+    await escTutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
     await escTutPage.keyboard.press('Escape');
-    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'hidden', timeout: 3000 });
+    await escTutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(
       await escTutPage.getByTestId('onboarding-tutorial').isVisible(),
       true,
@@ -13485,9 +13503,9 @@ async function runBrowserBasicsSuite() {
     };
 
     // -------------------------------------------------------------------------
-    // 2. Full 14-Step OnboardingTutorial Tour, Spotlight Alignment & Ctrl+Z Burst
+    // 2. Full 12-Step OnboardingTutorial Tour, Modal-Aware Settings/Hints & Spotlight Alignment
     // -------------------------------------------------------------------------
-    logE2eStart('Verifying 14-step OnboardingTutorial tour, TargetSpotlightOverlay alignment, [All Topics] drawer & rapid Ctrl+Z burst...');
+    logE2eStart('Verifying 12-step OnboardingTutorial tour, modal-docked Settings/Hints spotlight, [All Topics] drawer & rapid Ctrl+Z burst...');
     const tutContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     const tutPage = await tutContext.newPage();
     attachErrorListeners(tutPage, 'tutPage');
@@ -13498,7 +13516,7 @@ async function runBrowserBasicsSuite() {
       await tutPage.waitForFunction(
         (expected) =>
           document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
-          `STEP ${expected} OF 14`,
+          `STEP ${expected} OF 12`,
         stepNum,
         { timeout: 5000 }
       );
@@ -13554,13 +13572,13 @@ async function runBrowserBasicsSuite() {
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
-    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    // Back onto already-tried Step 4 (STEP 5 OF 12) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 5 OF 14',
+      'STEP 5 OF 12',
       'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
     );
     await tutPage.keyboard.press('Control+y');
@@ -13579,10 +13597,10 @@ async function runBrowserBasicsSuite() {
     assert.equal(step7Metrics.pointerSpan >= 10, true, `Step 7 topbar pointer must have clean arrow stem (${step7Metrics.pointerSpan}px)`);
     assert.equal(
       (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes(
-        'Try it: Tap Eye or Expand above'
+        'Try it: Tap the Eye icon above'
       ),
       true,
-      'Step 7 tryPrompt must cleanly explain Eye or Expand'
+      'Step 7 tryPrompt must cleanly explain tapping the Eye icon'
     );
     await captureV3012Screenshot(tutPage, 'desktop_1280x800_step7_spotlight.png');
     // Step 6 -> 7 (peek_fullscreen): leaving Step 7 via preview auto-advance must automatically exit tutorial-triggered preview!
@@ -13594,101 +13612,121 @@ async function runBrowserBasicsSuite() {
       0,
       'Leaving Step 7 must automatically reset tutorial-triggered isPreviewMode'
     );
-    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open and hide spotlight)
+    // Step 8 (free_color in Settings; must pause while SettingsModal is open and hide spotlight on non-modal step)
     await tutPage.locator('button[title="Settings and Menu"]').click();
     await tutPage.getByTestId('settings-tab-settings').click();
-    assert.equal(await tutPage.getByTestId('spotlight-overlay').count(), 0, 'Spotlight must hide while SettingsModal is open');
-    const tutFreeColorLabel = await tutPage.waitForSelector('text=Free Colour Mode');
-    await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    assert.equal(await tutPage.getByTestId('spotlight-overlay').count(), 0, 'Spotlight must hide while SettingsModal is open on non-modal step');
+    await tutPage.getByTestId('setting-free-color-mode').click();
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 8 OF 14',
+      'STEP 8 OF 12',
       'Auto-advance timer must stay paused while SettingsModal is open'
     );
-    await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await tutPage.getByTestId('setting-free-color-mode').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(9);
-    // Step 8 -> 9 (gallery_daily)
+    // Step 9 (create_gallery: Daily Puzzle, Gallery & Photos)
     await tutPage.locator('button[title="Settings and Menu"]').click();
     await tutPage.getByTestId('settings-tab-create').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(10);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 9 -> 10 (custom_photo)
-    const tutPngBytes = await tutPage.evaluate(async () => {
-      const c = document.createElement('canvas');
-      c.width = 160;
-      c.height = 120;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#ef4444';
-      ctx.fillRect(0, 0, 80, 120);
-      ctx.fillStyle = '#3b82f6';
-      ctx.fillRect(80, 0, 80, 120);
-      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-      return Array.from(new Uint8Array(await blob.arrayBuffer()));
-    });
-    const tutPhotoPath = path.join(os.tmpdir(), 'capy_tut_photo.png');
-    fs.writeFileSync(tutPhotoPath, Buffer.from(tutPngBytes));
-    try {
-      await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
-      await tutPage.waitForFunction(
-        () =>
-          document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_tut_photo') &&
-          !document.body.innerText.toLowerCase().includes('generating puzzle'),
-        undefined,
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(tutPage);
-    } finally {
-      fs.rmSync(tutPhotoPath, { force: true });
-    }
-    await expectTutStep(11);
-    // Step 11 -> 12 (puzzle_presets via Preset Style Gallery)
-    await tutPage.locator('button[title="Settings and Menu"]').click();
-    await tutPage.getByTestId('settings-tab-create').click();
-    await tutPage.getByTestId('preset-gallery-toggle').click();
-    await tutPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.getByTestId('preset-apply-algo-mosaic').click();
-    await tutPage.getByTestId('settings-modal-close').click();
-    await expectTutStep(12);
-    await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 12 -> 13 (infinite_zoom)
-    await tutPage.locator('button[title="Settings and Menu"]').click();
-    await tutPage.getByTestId('settings-tab-create').click();
-    await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
-    await waitForPuzzleLoaded(tutPage);
-    await expectTutStep(13);
-    await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 13 -> 14 (saves_export)
+    // Step 10 (saves_export)
     await tutPage.getByTestId('topbar-saves-btn').click();
     await tutPage.getByTestId('settings-modal-close').click();
-    await expectTutStep(14);
+    await expectTutStep(11);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
+    // Step 11 (settings, modalTab: 1): one-tap Open Settings button -> bottom-docked guide bar + in-modal spotlight
+    await tutPage.getByTestId('tutorial-open-settings-btn').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
+      'true',
+      'tutorial-open-settings-btn must open SettingsModal on Tab 1 (Settings)'
+    );
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock at bottom (data-modal-docked="true") on settings step'
+    );
+    await tutPage.getByTestId('spotlight-overlay').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal (data-modal-spotlight="true") on settings step'
+    );
+    // Step 11 -> 12 (hints, modalTab: 2): Next while modal is open automatically switches to Tab 2 (Hints)
+    await tutPage.getByTestId('tutorial-next-btn').click();
+    await expectTutStep(12);
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-hints').getAttribute('aria-selected'),
+      'true',
+      'Advancing to Step 12 (hints) while modal is open must switch to Tab 2 (Hints)'
+    );
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must remain docked at bottom on hints step'
+    );
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal on hints step'
+    );
+    // [All Topics] drawer lists all 12 topics; jumping to Step 1 closes tutorial-opened SettingsModal and waits for fresh action
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 12);
     await tutPage.getByTestId('tutorial-topic-item-0').click();
     await expectTutStep(1);
+    await tutPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 1 OF 14',
+      'STEP 1 OF 12',
       'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
     );
+    // Jump to Step 12 (hints), use one-tap Open Hints button, toggle a hint setting, close modal -> auto-completes tutorial
     await tutPage.getByTestId('tutorial-topics-btn').click();
-    await tutPage.getByTestId('tutorial-topic-item-13').click();
-    await expectTutStep(14);
-    // Step 14 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
-    await tutPage.getByTestId('tutorial-large-text-btn').click();
-    await tutPage.getByTestId('tutorial-large-text-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-11').click();
+    await expectTutStep(12);
+    await tutPage.getByTestId('tutorial-open-hints-btn').click();
+    await tutPage.getByTestId('hints-section-style').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-hints').getAttribute('aria-selected'),
+      'true',
+      'tutorial-open-hints-btn must open SettingsModal on Tab 2 (Hints)'
+    );
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'tutorial-open-hints-btn must dock OnboardingTutorial at bottom'
+    );
+    await tutPage.getByTestId('setting-animate-hint').click();
+    await tutPage.getByTestId('setting-animate-hint').click();
+    await tutPage.getByTestId('settings-modal-close').click();
     await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 4000 });
     assert.equal(
       await tutPage.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1')),
       '1',
-      'Step 13 auto-completion must persist capy_tutorial_completed_v1="1"'
+      'Step 12 auto-completion must persist capy_tutorial_completed_v1="1"'
     );
+
+    // Verify compact '?' tour button (settings-tour-btn) in SettingsModal header launches Settings/Hints tour directly
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-settings').click();
+    await tutPage.getByTestId('settings-tour-btn').click();
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+    await expectTutStep(11);
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'settings-tour-btn from Tab 1 must launch bottom-docked tour at STEP 11 OF 12'
+    );
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    await tutPage.getByTestId('settings-modal-close').click();
 
     // Verify Jump and Skip from Step 6 auto-dismiss tutorial-opened Replay, while pre-existing manual Replay stays open across Step 6->7
     const tapSampleAndOpenTutorialAtStep6 = async () => {
@@ -13801,7 +13839,7 @@ async function runBrowserBasicsSuite() {
 
     await tutPage.close();
     await tutContext.close();
-    logE2ePass('14-step OnboardingTutorial tour, TargetSpotlightOverlay geometry, reducedMotion, [All Topics] drawer & rapid Ctrl+Z burst verified.');
+    logE2ePass('12-step OnboardingTutorial tour, modal-docked Settings/Hints spotlight, reducedMotion, [All Topics] drawer & rapid Ctrl+Z burst verified.');
 
     // -------------------------------------------------------------------------
     // 3. FeatureOfferBanner Quick Tips, Channel Isolation, #s= DoS Resilience & Play Store Saves
@@ -13839,12 +13877,12 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`
+        `STEP ${expectedStepNum} OF 12`
       );
       await offerPage.waitForTimeout(950);
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`,
+        `STEP ${expectedStepNum} OF 12`,
         `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
       );
       await offerPage.getByTestId('tutorial-skip-btn').click();
@@ -13915,7 +13953,7 @@ async function runBrowserBasicsSuite() {
       await prefilledContext.close();
     }
     // 1) paint_mode -> Got it
-    const offerPaintBtn = offerPage.locator('button[aria-label="Toggle Paint Mode"]');
+    const offerPaintBtn = offerPage.locator('[data-testid="paint-mode-btn"]');
     await offerPaintBtn.click();
     await expectOfferBanner('paint_mode');
     await captureV3012Screenshot(offerPage, 'desktop_1280x800_offer_spotlight.png');
@@ -13938,8 +13976,8 @@ async function runBrowserBasicsSuite() {
     await expectOfferBanner('create_gallery');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await expectOfferBanner('saves_export');
-    await jumpFromOfferAndAssertStep(13);
-    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
+    await jumpFromOfferAndAssertStep(10);
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 12
     const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
       const xFrac = 0.42 + (attempt % 3) * 0.08;
@@ -13954,7 +13992,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('undo-btn').click();
     await expectOfferBanner('undo_replay');
     await jumpFromOfferAndAssertStep(5);
-    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 12
     await offerPage.getByTestId('redo-btn').click();
     const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
     assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
@@ -13965,11 +14003,10 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
-    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
+    // 6) free_color (Settings -> Free Color Mode ON) -> Jump to Guide STEP 8 OF 12
     await offerPage.locator('button[title="Settings and Menu"]').click();
     await offerPage.getByTestId('settings-tab-settings').click();
-    const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
-    await offerFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await offerPage.getByTestId('setting-free-color-mode').click();
     await offerPage.getByTestId('settings-modal-close').click();
     await expectOfferBanner('free_color');
     await jumpFromOfferAndAssertStep(8);
@@ -14020,7 +14057,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
 
-    // Verify all 8 offers persisted in both localStorage and NativeBridge.saveBackup spy
+    // Verify all 8 triggered offers persisted in both localStorage and NativeBridge.saveBackup spy
     const persistedOfferState = await offerPage.evaluate(() => ({
       ls: JSON.parse(localStorage.getItem('capy_feature_offers_v1') || '[]'),
       backup: JSON.parse(window.__capySavedBackups?.capy_feature_offers_v1 || '[]'),
@@ -14049,17 +14086,49 @@ async function runBrowserBasicsSuite() {
     // Seen offers persist across reload (toggling Paint Mode does not re-show paint_mode)
     await offerPage.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(offerPage);
-    await offerPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await offerPage.locator('[data-testid="paint-mode-btn"]').click();
     await offerPage.waitForTimeout(150);
     assert.equal(await offerPage.getByTestId('feature-offer-banner').count(), 0);
     await offerPage.close();
+
+    // 9) One-time settings_hints_tip offer for returning v1 tutorial completers (without ?skipTutorial)
+    {
+      const returningCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await returningCtx.addInitScript(() => {
+        localStorage.setItem('capy_tutorial_completed_v1', '1');
+      });
+      const returningPage = await returningCtx.newPage();
+      attachErrorListeners(returningPage, 'returningPage');
+      await returningPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(returningPage);
+      await returningPage.waitForFunction(
+        () => document.querySelector('[data-testid="feature-offer-banner"]')?.getAttribute('data-offer-id') === 'settings_hints_tip',
+        undefined,
+        { timeout: 5000 }
+      );
+      await returningPage.getByTestId('feature-offer-guide-btn').click();
+      await returningPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await returningPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+        'STEP 11 OF 12',
+        'settings_hints_tip Jump to Guide must open STEP 11 OF 12 (settings)'
+      );
+      await returningPage.getByTestId('tutorial-skip-btn').click();
+      // Reloading must NOT re-show settings_hints_tip
+      await returningPage.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(returningPage);
+      await returningPage.waitForTimeout(200);
+      assert.equal(await returningPage.getByTestId('feature-offer-banner').count(), 0, 'settings_hints_tip must only show once');
+      await returningPage.close();
+      await returningCtx.close();
+    }
 
     // Verify ?capy_channel=beta isolates capy_feature_offers_v1__sandbox_beta from root offers
     const betaOfferPage = await offerContext.newPage();
     attachErrorListeners(betaOfferPage, 'betaOfferPage');
     await betaOfferPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(betaOfferPage);
-    await betaOfferPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await betaOfferPage.locator('[data-testid="paint-mode-btn"]').click();
     await betaOfferPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await betaOfferPage.getByTestId('feature-offer-banner').getAttribute('data-offer-id'), 'paint_mode');
     const betaOfferState = await betaOfferPage.evaluate(() => ({
@@ -14122,8 +14191,25 @@ async function runBrowserBasicsSuite() {
       0,
       'Startup must NOT call signInPlayGames / attemptAutoSignIn when showCloudCoopUi === false'
     );
+    assert.equal(
+      await androidGatePage.getByTestId('topbar-fullscreen-btn').count(),
+      0,
+      'Android WebView must hide web-only topbar-fullscreen-btn'
+    );
     await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('settings-section-controls').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await androidGatePage.getByTestId('setting-fullscreen').count(),
+      0,
+      'Android WebView must hide web-only setting-fullscreen in Controls'
+    );
+    await androidGatePage.getByTestId('settings-tab-about').click();
     await androidGatePage.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await androidGatePage.getByTestId('about-privacy-policy-link').getAttribute('href'),
+      'https://capypaint.com/privacy-policy.html',
+      'Android About tab Privacy Policy link must point to https://capypaint.com/privacy-policy.html'
+    );
     assert.equal(
       await androidGatePage.getByTestId('release-channel-card').count(),
       0,
@@ -14142,6 +14228,7 @@ async function runBrowserBasicsSuite() {
     await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&capy_channel=beta`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(androidGatePage);
     await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('settings-tab-about').click();
     await androidGatePage.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
       await androidGatePage.getByTestId('release-channel-card').count(),
@@ -14284,7 +14371,7 @@ async function runBrowserBasicsSuite() {
       { x: startX, y: startY }
     );
 
-    const paintBtn = await page.waitForSelector('button[aria-label="Toggle Paint Mode"]');
+    const paintBtn = await page.waitForSelector('[data-testid="paint-mode-btn"]');
     await paintBtn.click();
     await paintBtn.click();
     logE2ePass('Palette selection, region tap coloring, double-tap zoom, pan momentum, and Paint Mode verified.');
@@ -14295,12 +14382,34 @@ async function runBrowserBasicsSuite() {
     logE2eStart('Verifying 5-tab SettingsModal (About, Settings, Hints, Create, Saves), Enable Undo toggle & tab persistence...');
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo visible by default for standard puzzles');
 
-    // Open Settings -> verify all 5 distinct tabs (About=0, Settings=1, Hints=2, Create=3, Saves=4), zero duplicates, and tab 4 persistence across reload
+    // Open Settings -> verify default first-time tab is Tab 1 (Settings), ARIA roles, all 5 distinct tabs, zero duplicates, and tab 4 persistence across reload
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
     await settingsBtn.click();
-    await page.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.locator('[role="dialog"][aria-modal="true"]').count(),
+      1,
+      'SettingsModal must expose role="dialog" aria-modal="true"'
+    );
+    assert.equal(
+      await page.getByTestId('settings-modal-tabs').getAttribute('role'),
+      'tablist',
+      'settings-modal-tabs must expose role="tablist"'
+    );
+    assert.equal(
+      await page.getByTestId('settings-tab-settings').getAttribute('role'),
+      'tab',
+      'Settings tab button must expose role="tab"'
+    );
+    assert.equal(
+      await page.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
+      'true',
+      'First-time gear icon tap must default to Tab 1 (Settings)'
+    );
 
     // Tab 0: About
+    await page.getByTestId('settings-tab-about').click();
+    await page.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
     const pkgVersion = JSON.parse(fs.readFileSync(path.resolve(projectRoot, 'package.json'), 'utf8')).version;
     const versionBadgeText = await page.locator('[data-testid="app-version-badge"]').textContent();
     assert.equal(versionBadgeText?.trim(), `v${pkgVersion}`, `Expected app-version-badge to equal v${pkgVersion}`);
@@ -14308,6 +14417,14 @@ async function runBrowserBasicsSuite() {
     assert.equal(await page.getByTestId('about-screen-card').isVisible(), true, 'About tab must render about-screen-card');
     assert.equal(await page.getByTestId('about-replay-tutorial-btn').isVisible(), true, 'About tab must render about-replay-tutorial-btn');
     assert.equal(await page.getByTestId('about-privacy-policy-link').isVisible(), true, 'About tab must render about-privacy-policy-link');
+    assert.equal(await page.getByTestId('about-licenses-section').isVisible(), true, 'About tab must render collapsible about-licenses-section');
+    await page.getByTestId('about-licenses-section').locator('summary').click();
+    assert.equal(
+      (await page.getByTestId('about-licenses-section').innerText()).includes('React'),
+      true,
+      'Expanded about-licenses-section must list Open Source Licenses (React, Tailwind, Lucide)'
+    );
+    await page.getByTestId('about-licenses-section').locator('summary').click();
     assert.equal(await page.getByTestId('about-report-issue-link').isVisible(), true, 'About tab must render about-report-issue-link');
     assert.equal(
       await page.getByTestId('about-report-issue-link').getAttribute('href'),
@@ -14348,11 +14465,11 @@ async function runBrowserBasicsSuite() {
       };
     });
     assert.ok(freeArtLayout, 'stat-free-color-creations tile and grid must exist');
-    assert.equal(freeArtLayout.hasColSpan2, true, 'Free Colour Art tile must apply col-span-2 when !showCloudCoopUi');
+    assert.equal(freeArtLayout.hasColSpan2, true, 'Free Color Art tile must apply col-span-2 when !showCloudCoopUi');
     assert.equal(
       Math.abs(freeArtLayout.tileWidth - freeArtLayout.gridWidth) <= 2,
       true,
-      `Free Colour Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
+      `Free Color Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
     );
 
     // Tab 0 Anonymous In-Game Feedback form (validation, 201 created, 503 fallback preserving draft, 429 rate-limit)
@@ -14468,26 +14585,41 @@ async function runBrowserBasicsSuite() {
       await page.getByTestId('about-open-feedback-btn').click();
     }
 
-    // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    // Tab 1: Settings (6 grouped sections, collapsible Replay & Labels headers with live summaries, no leaked About/Hints/Create content)
+    await page.getByTestId('settings-tab-settings').click();
     await page.getByText('Canvas Background').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.getByText('Canvas Background').isVisible(), true, 'Settings tab must render Canvas Background');
+    for (const secId of [
+      'settings-section-appearance',
+      'settings-section-gameplay',
+      'settings-section-controls',
+      'settings-section-navigation',
+      'settings-section-audio-a11y',
+      'settings-section-replay',
+      'settings-section-labels',
+    ]) {
+      assert.equal(await page.getByTestId(secId).isVisible(), true, `Settings tab must render grouped section ${secId}`);
+    }
+    const replaySummaryText = (await page.getByTestId('settings-section-replay-summary').innerText()).trim();
+    assert.equal(/x\s*•\s*Auto-replay (On|Off)/i.test(replaySummaryText), true, `Expected live Replay summary badge (got "${replaySummaryText}")`);
+    const labelsSummaryText = (await page.getByTestId('settings-section-labels-summary').innerText()).trim();
+    assert.equal(/\d+–\d+px\s*•\s*\d+%/i.test(labelsSummaryText), true, `Expected live Number Label Sizing summary badge (got "${labelsSummaryText}")`);
+    assert.equal(await page.getByTestId('setting-detailed-progress').count(), 0, 'Detailed Generation Progress must be relocated out of Tab 1 Settings to Tab 3 Create');
     assert.equal(await page.getByTestId('app-version-badge').count(), 0, 'Settings tab must not duplicate app-version-badge');
     assert.equal(await page.getByTestId('lifetime-stats-card').count(), 0, 'Settings tab must not duplicate lifetime-stats-card');
     assert.equal(await page.getByTestId('release-channel-card').count(), 0, 'Settings tab must not duplicate release-channel-card');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'Settings tab must not leak Hints content');
 
     await page.locator('button[title="Charcoal"]').first().click();
-    for (const labelText of [
-      'Show Zoom (+ / -) Buttons',
-      'Show Reset View (Extent) Button',
-    ]) {
-      const labelEl = await page.waitForSelector(`text=${labelText}`);
-      await labelEl.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    for (const switchTestId of ['setting-show-zoom-buttons', 'setting-show-reset-view-button']) {
+      const sw = page.getByTestId(switchTestId);
+      assert.equal(await sw.getAttribute('role'), 'switch', `${switchTestId} must expose role="switch"`);
+      await sw.click();
     }
-    // Verify toggling Enable Undo Action OFF hides undo-btn & persists, then toggle back ON for Undo/Redo suite
-    const undoToggleLabel = await page.waitForSelector('text=Enable Undo Action');
-    await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    // Verify toggling Undo Button OFF hides undo-btn & persists, then toggle back ON for Undo/Redo suite
+    const undoSwitch = page.getByTestId('setting-enable-undo');
+    assert.equal(await undoSwitch.getAttribute('role'), 'switch', 'setting-enable-undo must expose role="switch"');
+    await undoSwitch.click();
     await page.getByTestId('undo-btn').waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo must hide when toggled off');
     const undoPersistedOff = await page.evaluate(() => {
@@ -14500,7 +14632,7 @@ async function runBrowserBasicsSuite() {
       return false;
     });
     assert.equal(undoPersistedOff, true, 'Opting out of enableUndo must persist to localStorage');
-    await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await undoSwitch.click();
     await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo must reappear when toggled back on');
 
@@ -14534,23 +14666,36 @@ async function runBrowserBasicsSuite() {
     );
     await page.getByTestId('setting-fat-finger-assist').click();
 
-    // Tab 2: Hints
-    await page.getByRole('button', { name: 'Hints', exact: true }).click();
-    await page.getByText('Highlight Style').waitFor({ state: 'visible', timeout: 3000 });
+    // Tab 2: Hints (grouped sections + fresh install Amber swatch #f59e0b selected)
+    await page.getByTestId('settings-tab-hints').click();
+    await page.getByTestId('hints-section-style').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await page.getByTestId('hints-section-style').isVisible(), true, 'Hints tab must render hints-section-style');
+    assert.equal(await page.getByTestId('hints-section-assist').isVisible(), true, 'Hints tab must render hints-section-assist');
     assert.equal(await page.getByText('Highlight Style').isVisible(), true, 'Hints tab must render Highlight Style');
     assert.equal(await page.getByText('Hint Fill Pattern').isVisible(), true, 'Hints tab must render Hint Fill Pattern');
     assert.equal(await page.getByText('Canvas Background').count(), 0, 'Hints tab must not render Settings content');
+    const amberSwatchActive = await page.evaluate(() => {
+      const amberBtn = document.querySelector('[data-testid="hints-section-style"] button[title="Amber"]');
+      return Boolean(amberBtn && amberBtn.className.includes('scale-110'));
+    });
+    assert.equal(amberSwatchActive, true, 'Fresh install hintColorArgb (0xfff59e0b) must match first Amber preset swatch');
 
-    // Tab 3: Create
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    // Tab 3: Create (includes relocated Detailed Generation Progress)
+    await page.getByTestId('settings-tab-create').click();
     await page.getByTestId('daily-puzzle-card').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.getByTestId('daily-puzzle-card').isVisible(), true, 'Create tab must render daily-puzzle-card');
     assert.equal(await page.getByTestId('gallery-search-input').isVisible(), true, 'Create tab must render gallery-search-input');
+    assert.equal(await page.getByTestId('setting-detailed-progress').isVisible(), true, 'Create tab must render relocated setting-detailed-progress');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'Create tab must not render Hints content');
 
-    // Tab 4: Saves (persist tab 4 across full page reload; cold-start default must be THUMBNAILS with list first)
-    await page.getByRole('button', { name: 'Saves', exact: true }).click();
+    // Tab 4: Saves (no duplicate autoReplayOnLoad toggle; cold-start default must be THUMBNAILS with list first)
+    await page.getByTestId('settings-tab-saves').click();
     await page.getByTestId('saves-list-section').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.getByTestId('toggle-auto-replay-saves-btn').count(),
+      0,
+      'Saves tab must not render removed duplicate toggle-auto-replay-saves-btn'
+    );
     assert.equal(
       await page.evaluate(() => localStorage.getItem('capy_saves_view_mode')),
       null,
@@ -14612,7 +14757,7 @@ async function runBrowserBasicsSuite() {
     );
 
     // Switch to Hints tab and close -> verify capy_last_settings_tab === '2'
-    await page.getByRole('button', { name: 'Hints', exact: true }).click();
+    await page.getByTestId('settings-tab-hints').click();
     await page.getByText('Highlight Style').waitFor({ state: 'visible', timeout: 3000 });
     await page.keyboard.press('Escape');
     await page.getByText('Highlight Style').waitFor({ state: 'hidden', timeout: 3000 });
@@ -15009,7 +15154,7 @@ async function runBrowserBasicsSuite() {
     // -------------------------------------------------------------------------
     logE2eStart('Verifying Create tab gallery filters, category chips & Community Puzzle Ideas moderation...');
     await settingsBtn.click();
-    const createTabBtn = page.getByRole('button', { name: 'Create', exact: true });
+    const createTabBtn = page.getByTestId('settings-tab-create');
     await createTabBtn.waitFor({ state: 'visible', timeout: 3000 });
     await createTabBtn.click();
     await page.getByTestId('gallery-tag-music').waitFor({ state: 'visible', timeout: 3000 });
@@ -15187,11 +15332,10 @@ async function runBrowserBasicsSuite() {
 
     // BF-1: Verify Free Colour repaint of an already-filled region preserves chronological order and Undo syncs restored color to Co-op peer
     await settingsBtn.click();
-    const settingsTabBtn = page.getByRole('button', { name: 'Settings', exact: true });
+    const settingsTabBtn = page.getByTestId('settings-tab-settings');
     await settingsTabBtn.waitFor({ state: 'visible', timeout: 3000 });
     await settingsTabBtn.click();
-    const freeColorLabel = await page.waitForSelector('text=Free Colour Mode');
-    await freeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.getByTestId('setting-free-color-mode').click();
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -15400,8 +15544,7 @@ async function runBrowserBasicsSuite() {
 
     // Turn Free Colour Mode back off before running Normal Mode burst and closing pageB
     await settingsBtn.click();
-    const freeColorLabelOff = await page.waitForSelector('text=Free Colour Mode');
-    await freeColorLabelOff.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.getByTestId('setting-free-color-mode').click();
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -15786,7 +15929,7 @@ async function runBrowserBasicsSuite() {
     // ------------------------------------------------------------------
     logE2eStart('Verifying Controls settings persistence (zoom sensitivity, magnetic stops, sound) & topbar-zoom-badge removal...');
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('settings-tab-settings').click();
 
     const zoomSensSlider = page.getByTestId('setting-zoom-sensitivity');
     await zoomSensSlider.waitFor({ state: 'visible', timeout: 5000 });
@@ -15795,11 +15938,16 @@ async function runBrowserBasicsSuite() {
     const snapZoomToggle = page.getByTestId('setting-snap-zoom-levels');
     await snapZoomToggle.click();
 
-    const soundEnabledToggle = page.getByTestId('setting-sound-enabled');
-    await soundEnabledToggle.click();
-
     const soundVolumeSlider = page.getByTestId('setting-sound-volume');
     await soundVolumeSlider.fill('0.45');
+
+    const soundEnabledToggle = page.getByTestId('setting-sound-enabled');
+    await soundEnabledToggle.click();
+    assert.equal(
+      await soundVolumeSlider.isDisabled(),
+      true,
+      'Sound Volume slider must disable when Sound Effects is toggled off'
+    );
 
     const persistedControls = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
@@ -15845,7 +15993,7 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(page);
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').click();
     const snailCard = page.getByTestId('gallery-card-snail_guitar');
     await snailCard.waitFor({ state: 'visible', timeout: 5000 });
     await snailCard.getByRole('button', { name: 'Play', exact: true }).click();
@@ -15890,7 +16038,7 @@ async function runBrowserBasicsSuite() {
 
     // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').click();
 
     const dailyCard = page.getByTestId('daily-puzzle-card');
     await dailyCard.waitFor({ state: 'visible', timeout: 5000 });
@@ -15956,7 +16104,7 @@ async function runBrowserBasicsSuite() {
 
     // 10b. Reduced Motion toggle persistence in capy_user_settings_v8
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('settings-tab-settings').click();
     const reducedMotionToggle = page.getByTestId('setting-reduced-motion');
     await reducedMotionToggle.waitFor({ state: 'visible', timeout: 5000 });
     await reducedMotionToggle.click();
@@ -15987,7 +16135,7 @@ async function runBrowserBasicsSuite() {
 
     // Verify typing '2' inside Gallery search <input> does NOT change selected swatch
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').click();
     const gallerySearchInput = page.getByTestId('gallery-search-input');
     await gallerySearchInput.waitFor({ state: 'visible', timeout: 5000 });
     await gallerySearchInput.focus();
@@ -16110,7 +16258,7 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'About', exact: true }).click();
+    await page.getByTestId('settings-tab-about').click();
     const statsCard = page.getByTestId('lifetime-stats-card');
     await statsCard.waitFor({ state: 'visible', timeout: 5000 });
     const renderedTotalText = (await page.getByTestId('stat-total-regions').innerText()).replace(/,/g, '').trim();
@@ -16160,8 +16308,8 @@ async function runBrowserBasicsSuite() {
     assert.ok(parentSnapId, 'Parent puzzle must have an activeSnapshotId');
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-create').click();
     await page.getByTestId('infinite-zoom-subtile-btn').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('infinite-zoom-subtile-btn').click();
     await page.waitForFunction(
@@ -16272,19 +16420,17 @@ async function runBrowserBasicsSuite() {
 
     // Ensure Enable Undo Action is ON and Free Colour Mode is OFF on Peer A
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-settings').click();
     const currentSettings11c = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
     });
     await page.locator('button:has(span:text-is("Settings"))').click();
     if (currentSettings11c.isFreeColorMode) {
-      const fcLabel = await page.waitForSelector('text=Free Colour Mode');
-      await fcLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+      await page.getByTestId('setting-free-color-mode').click();
     }
     if (!currentSettings11c.enableUndo) {
-      const undoSettingLabel = await page.waitForSelector('text=Enable Undo Action');
-      await undoSettingLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+      await page.getByTestId('setting-enable-undo').click();
     }
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
@@ -16415,8 +16561,8 @@ async function runBrowserBasicsSuite() {
       'Default Stable/Dev root view must not display topbar-channel-badge clutter'
     );
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'About', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByRole('button', { name: 'About', exact: true }).click();
+    await page.getByTestId('settings-tab-about').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-about').click();
     const channelCard = page.getByTestId('release-channel-card');
     await channelCard.waitFor({ state: 'visible', timeout: 3000 });
     await channelCard.scrollIntoViewIfNeeded();
@@ -16722,10 +16868,15 @@ async function runBrowserBasicsSuite() {
     );
     await waitForPuzzleLoaded(page);
 
-    // Enable Auto-Loop Replay (true) + 0.5x speed in Settings Tab 0, and ensure Replay on Load is ON in Saves
+    // Enable Auto-Loop Replay (true), 0.5x speed, and Replay on Load (true) in Tab 1 collapsible Replay section
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.locator('button', { hasText: /^Settings$/ }).first().waitFor({ state: 'visible', timeout: 3000 });
-    await page.locator('button', { hasText: /^Settings$/ }).first().click();
+    await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-settings').click();
+    const replaySectionToggle = page.getByTestId('settings-section-replay-toggle');
+    await replaySectionToggle.scrollIntoViewIfNeeded();
+    if ((await replaySectionToggle.getAttribute('aria-expanded')) !== 'true') {
+      await replaySectionToggle.click();
+    }
     const settingsLoopToggle = page.getByTestId('toggle-replay-loop-btn');
     await settingsLoopToggle.scrollIntoViewIfNeeded();
     if ((await settingsLoopToggle.getAttribute('aria-checked')) !== 'true') {
@@ -16749,19 +16900,19 @@ async function runBrowserBasicsSuite() {
       undefined,
       { timeout: 3000 }
     );
-
-    // Switch to Saves tab, ensure Replay on Load is enabled, and load targetSnapId
-    await page.locator('button', { hasText: /^Saves$/ }).first().click();
-    const autoReplaySavesSwitch = page.getByTestId('toggle-auto-replay-saves-btn');
-    await autoReplaySavesSwitch.waitFor({ state: 'visible', timeout: 3000 });
-    if ((await autoReplaySavesSwitch.getAttribute('aria-checked')) !== 'true') {
-      await autoReplaySavesSwitch.click();
+    const autoReplaySwitch = page.getByTestId('toggle-auto-replay-btn');
+    await autoReplaySwitch.scrollIntoViewIfNeeded();
+    if ((await autoReplaySwitch.getAttribute('aria-checked')) !== 'true') {
+      await autoReplaySwitch.click();
       await page.waitForFunction(
-        () => document.querySelector('[data-testid="toggle-auto-replay-saves-btn"]')?.getAttribute('aria-checked') === 'true',
+        () => document.querySelector('[data-testid="toggle-auto-replay-btn"]')?.getAttribute('aria-checked') === 'true',
         undefined,
         { timeout: 3000 }
       );
     }
+
+    // Switch to Saves tab and load targetSnapId
+    await page.getByTestId('settings-tab-saves').click();
     await page.getByTestId(`save-card-${mobileReplaySetup.targetSnapId}`).click();
     await page.getByTestId('save-action-load').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('save-action-load').click();
@@ -16779,13 +16930,31 @@ async function runBrowserBasicsSuite() {
       'false',
       'Loading a puzzle save must immediately force replayLoop OFF (aria-pressed="false")'
     );
+    for (const replayBtnId of [
+      'replay-play-pause-btn',
+      'replay-follow-btn',
+      'replay-loop-btn',
+      'replay-skip-btn',
+      'replay-exit-btn',
+    ]) {
+      const rBtn = page.getByTestId(replayBtnId);
+      const rBox = await rBtn.boundingBox();
+      assert.ok(
+        rBox && rBox.width >= 38 && rBox.height >= 38,
+        `Mobile 360px ${replayBtnId} must be >=38x38px (got ${JSON.stringify(rBox)})`
+      );
+      assert.ok(
+        Boolean((await rBtn.getAttribute('aria-label'))?.trim()),
+        `Replay button ${replayBtnId} must expose descriptive aria-label`
+      );
+    }
 
     const windowBox360 = await mobileReplayWin.boundingBox();
     const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
     const headerBox360 = await page.locator('header').first().boundingBox();
     const zoomOutMin360 = await page.getByTestId('zoom-out-btn').boundingBox();
     const undoMin360 = await page.getByTestId('undo-btn').boundingBox();
-    const paintMin360 = await page.locator('[aria-label="Toggle Paint Mode"]').boundingBox();
+    const paintMin360 = await page.locator('[data-testid="paint-mode-btn"]').boundingBox();
     const paletteMin360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
     assert.ok(
       windowBox360 && exitBox360 && headerBox360 && zoomOutMin360 && undoMin360 && paintMin360 && paletteMin360,
@@ -16922,7 +17091,7 @@ async function runBrowserBasicsSuite() {
     await page.mouse.down();
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.mouse.up();
-    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await page.locator('[data-testid="paint-mode-btn"]').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(
       await mobileReplayWin.isVisible(),
@@ -16956,7 +17125,7 @@ async function runBrowserBasicsSuite() {
     assert.equal(await mobileReplayWin.isVisible(), false, 'First drag in Paint Mode after post-load replay must dismiss ReplayControls');
 
     // Flow 3: Post-load replay in Tap Mode -> 100% -> first tap dismisses ReplayControls
-    await page.locator('[aria-label="Toggle Paint Mode"]').click(); // Turn Paint Mode OFF -> Tap Mode
+    await page.locator('[data-testid="paint-mode-btn"]').click(); // Turn Paint Mode OFF -> Tap Mode
     await page.reload({ waitUntil: 'networkidle' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
@@ -16975,7 +17144,7 @@ async function runBrowserBasicsSuite() {
     await page.mouse.down();
     await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5 + 18, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5 + 12, { steps: 4 });
     await page.mouse.up();
-    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await page.locator('[data-testid="paint-mode-btn"]').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
 
@@ -17354,7 +17523,7 @@ async function runBrowserBasicsSuite() {
     await closeBtn.click();
     await mobileTopbarPage.getByTestId('tutorial-skip-btn').click();
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
-    await mobileTopbarPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await mobileTopbarPage.locator('[data-testid="paint-mode-btn"]').click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
     await assertSpotlightAligned(mobileTopbarPage, 'offer');
     const mobileOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
@@ -17470,7 +17639,7 @@ async function runBrowserBasicsSuite() {
     await mobileHintBar.waitFor({ state: 'visible', timeout: 3000 });
     const defaultHintBarText = await mobileHintBar.innerText();
     assert.equal(
-      defaultHintBarText.includes('Gallery: Max (2048p)') && defaultHintBarText.includes('Uploads: Auto'),
+      defaultHintBarText.includes('Built-in Gallery: Max Detail') && defaultHintBarText.includes('Photo Uploads: Auto'),
       true,
       `create-style-hint-bar must clearly show Gallery Max vs Custom Uploads default mode (got '${defaultHintBarText}')`
     );
@@ -17518,9 +17687,9 @@ async function runBrowserBasicsSuite() {
     await mobileHighPresetBtn.click();
     const afterHighHintText = await mobileHintBar.innerText();
     assert.equal(
-      afterHighHintText.includes('38c') && afterHighHintText.includes('500 pcs'),
+      afterHighHintText.includes('38 colors') && afterHighHintText.includes('500 pieces'),
       true,
-      `Detail Level Preset High must sync 38c and 500 pcs (got '${afterHighHintText}')`
+      `Detail Level Preset High must sync 38 colors and 500 pieces (got '${afterHighHintText}')`
     );
 
     // Quick Max Detail button must jump directly to 64c / 2000 pcs / 2048p
@@ -17529,9 +17698,11 @@ async function runBrowserBasicsSuite() {
     await mobileMaxPresetBtn.click();
     const afterMaxHintText = await mobileHintBar.innerText();
     assert.equal(
-      afterMaxHintText.includes('Max Detail') && afterMaxHintText.includes('2048p'),
+      afterMaxHintText.includes('Max Detail') &&
+        afterMaxHintText.includes('64 colors') &&
+        afterMaxHintText.includes('2000 pieces'),
       true,
-      `Max Detail preset button must apply 64c/2000/2048p Max Detail config (got '${afterMaxHintText}')`
+      `Max Detail preset button must apply 64 colors / 2000 pieces Max Detail config (got '${afterMaxHintText}')`
     );
 
     assert.equal(await mobileTopbarPage.getByText('Optional Ad').count(), 0, '360x780 Create tab must hide Optional Ad');
@@ -17553,7 +17724,7 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     const reopenedHintBarText = await mobileTopbarPage.getByTestId('create-style-hint-bar').innerText();
     assert.equal(
-      reopenedHintBarText.includes('Gallery: Max (2048p)'),
+      reopenedHintBarText.includes('Built-in Gallery: Max Detail'),
       true,
       `Reopening SettingsModal without regenerating must resync localConfig to persisted settings (got '${reopenedHintBarText}')`
     );
@@ -18685,6 +18856,20 @@ async function runBrowserBasicsSuite() {
       }
     };
 
+    // Verify 360x780 normal-mode mobile topbar icon buttons meet >=38px touch targets & carry descriptive aria-labels
+    for (const topbarId of ['topbar-preview-btn', 'topbar-upload-btn', 'topbar-settings-btn']) {
+      const btn = ltMobilePage.getByTestId(topbarId);
+      const box = await btn.boundingBox();
+      assert.ok(
+        box && box.width >= 38 && box.height >= 38,
+        `Mobile 360x780 ${topbarId} must be >=38x38px (got ${JSON.stringify(box)})`
+      );
+      assert.ok(
+        Boolean((await btn.getAttribute('aria-label'))?.trim()),
+        `Icon-only ${topbarId} must expose descriptive aria-label`
+      );
+    }
+
     // Open SettingsModal, verify normal switch size & knob containment, test Fat-Finger preset auto-enable & Large Text coupling
     await ltMobilePage.getByTestId('topbar-settings-btn').click();
     await ltMobilePage.getByTestId('settings-tab-settings').click();
@@ -18749,12 +18934,22 @@ async function runBrowserBasicsSuite() {
     await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Large Text Variant 1 fatFinger ON');
     await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'Large Text Variant 1 largeText ON');
 
-    // Fix 1: Verify Variant 2 switch (w-11 h-6 + translate-x-5) knob containment in both checked & unchecked states
+    // Fix 1: Expand collapsible Replay section and verify unified switch knob containment on follow & auto-replay toggles
+    const ltReplayToggle = ltMobilePage.getByTestId('settings-section-replay-toggle');
+    await ltReplayToggle.scrollIntoViewIfNeeded();
+    if ((await ltReplayToggle.getAttribute('aria-expanded')) !== 'true') {
+      await ltReplayToggle.click();
+    }
     const followInitial = (await ltMobilePage.getByTestId('toggle-replay-follow-btn').getAttribute('aria-checked')) === 'true';
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', followInitial, 'Large Text Variant 2 follow initial');
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', followInitial, 'Large Text follow initial');
     await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', !followInitial, 'Large Text Variant 2 follow toggled');
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', !followInitial, 'Large Text follow toggled');
     await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
+    const autoReplayInitial = (await ltMobilePage.getByTestId('toggle-auto-replay-btn').getAttribute('aria-checked')) === 'true';
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-btn', autoReplayInitial, 'Large Text autoReplay initial');
+    await ltMobilePage.getByTestId('toggle-auto-replay-btn').click();
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-btn', !autoReplayInitial, 'Large Text autoReplay toggled');
+    await ltMobilePage.getByTestId('toggle-auto-replay-btn').click();
 
     // Fix 2: Enlarged range slider must compute appearance === 'none' so 24px custom thumb renders on Chromium/WebView
     const sliderAppearance = await ltMobilePage
@@ -18766,11 +18961,12 @@ async function runBrowserBasicsSuite() {
       `Large Text setting-touch-reach-radius must compute appearance: none (got '${sliderAppearance}')`
     );
 
-    // Measure enlarged SettingsModal controls & verify tabs zero-overflow and 40px/16px specificity at 360x780
+    // Measure enlarged SettingsModal controls & verify tabs zero-overflow, >=38-40px touch targets & ARIA labels at 360x780
     const largeSwitchBox = await ltSwitch.boundingBox();
     const largeFfSwitchBox = await ffSwitch.boundingBox();
     const largeCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
-    assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox);
+    const largeTourBox = await ltMobilePage.getByTestId('settings-tour-btn').boundingBox();
+    assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox && largeTourBox);
     assert.equal(
       largeSwitchBox.width >= 50 && largeSwitchBox.height >= 28 && largeSwitchBox.width > normalSwitchBox.width,
       true,
@@ -18782,10 +18978,17 @@ async function runBrowserBasicsSuite() {
       `Fat-Finger switch must enlarge to ~52x30px (got ${JSON.stringify(largeFfSwitchBox)})`
     );
     assert.equal(
-      largeCloseBox.width >= 40 && largeCloseBox.height >= 40 && largeCloseBox.width > normalCloseBox.width,
+      normalCloseBox.width >= 40 && normalCloseBox.height >= 40 && largeCloseBox.width >= 40 && largeCloseBox.height >= 40,
       true,
-      `Settings close button must enlarge to >=40px (got ${JSON.stringify(largeCloseBox)})`
+      `Settings close button must be >=40px in both normal & Large Text (normal=${JSON.stringify(normalCloseBox)}, large=${JSON.stringify(largeCloseBox)})`
     );
+    assert.equal(
+      largeTourBox.width >= 38 && largeTourBox.height >= 38,
+      true,
+      `Settings header '?' tour button must be >=38px (got ${JSON.stringify(largeTourBox)})`
+    );
+    assert.ok(await ltMobilePage.getByTestId('settings-modal-close').getAttribute('aria-label'), 'settings-modal-close must have aria-label');
+    assert.ok(await ltMobilePage.getByTestId('settings-tour-btn').getAttribute('aria-label'), 'settings-tour-btn must have aria-label');
 
     const ltTabsContainer = ltMobilePage.getByTestId('settings-modal-tabs');
     const ltTabsOverflow = await ltTabsContainer.evaluate((el) => ({
@@ -18823,13 +19026,13 @@ async function runBrowserBasicsSuite() {
       const tb = await ltMobilePage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
       assert.ok(tb);
       assert.equal(
-        tb.x >= ltTabsBox.x - 1 && tb.x + tb.width <= largeCloseBox.x + 1,
+        tb.x >= ltTabsBox.x - 1 && tb.x + tb.width <= largeTourBox.x + 1,
         true,
-        `Large Text settings-tab-${tabKey} (${tb.x}..${tb.x + tb.width}) must fit inside tabsBox (${ltTabsBox.x}) left of close (${largeCloseBox.x})`
+        `Large Text settings-tab-${tabKey} (${tb.x}..${tb.x + tb.width}) must fit inside tabsBox (${ltTabsBox.x}) left of tour/close (${largeTourBox.x})`
       );
     }
 
-    // Check Tab 0 action button height (>=44px), Tab 3 (i) hint icon button size (>=32px), and Tab 4 Variant 3 switch knob containment
+    // Check Tab 0 action button height (>=44px), Tab 3 (i) hint icon button size (>=32px), and Tab 4 has no duplicate auto-replay switch
     await ltMobilePage.getByTestId('settings-tab-about').click();
     const replayTutBtnBox = await ltMobilePage.getByTestId('about-replay-tutorial-btn').boundingBox();
     assert.ok(replayTutBtnBox && replayTutBtnBox.height >= 44, `About CTA button must be >=44px tall in Large Text (got ${JSON.stringify(replayTutBtnBox)})`);
@@ -18837,13 +19040,11 @@ async function runBrowserBasicsSuite() {
     const hintToggleBox = await ltMobilePage.getByTestId('hint-toggle-daily-puzzle').boundingBox();
     assert.ok(hintToggleBox && hintToggleBox.width >= 31 && hintToggleBox.height >= 31, `(i) hint button must enlarge to ~32px in Large Text (got ${JSON.stringify(hintToggleBox)})`);
     await ltMobilePage.getByTestId('settings-tab-saves').click();
-    const savesAutoReplayBtn = ltMobilePage.getByTestId('toggle-auto-replay-saves-btn');
-    await savesAutoReplayBtn.waitFor({ state: 'visible', timeout: 3000 });
-    const savesInitial = (await savesAutoReplayBtn.getAttribute('aria-checked')) === 'true';
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', savesInitial, 'Large Text Variant 3 saves autoReplay initial');
-    await savesAutoReplayBtn.click();
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', !savesInitial, 'Large Text Variant 3 saves autoReplay toggled');
-    await savesAutoReplayBtn.click();
+    assert.equal(
+      await ltMobilePage.getByTestId('toggle-auto-replay-saves-btn').count(),
+      0,
+      'Large Text Tab 4 Saves must not render removed duplicate toggle-auto-replay-saves-btn'
+    );
 
     // Enable Custom Color button for all puzzles so we can verify ColorPickerPopover in Large Text mode too
     await ltMobilePage.getByTestId('settings-tab-settings').click();
@@ -18900,21 +19101,26 @@ async function runBrowserBasicsSuite() {
         largeMobileBoxes.swatch1
     );
     assert.equal(
-      largeMobileBoxes.settingsBtn.width >= 36 &&
-        largeMobileBoxes.settingsBtn.height >= 36 &&
-        largeMobileBoxes.settingsBtn.width > normalMobileBoxes.settingsBtn.width,
+      normalMobileBoxes.settingsBtn.width >= 38 &&
+        largeMobileBoxes.settingsBtn.width >= 38 &&
+        largeMobileBoxes.settingsBtn.height >= 38 &&
+        largeMobileBoxes.settingsBtn.width >= normalMobileBoxes.settingsBtn.width,
       true,
-      `360px Large Text topbar-settings-btn must enlarge to >=36px (normal=${normalMobileBoxes.settingsBtn.width}, large=${largeMobileBoxes.settingsBtn.width})`
+      `360px topbar-settings-btn must be >=38px in Normal & Large Text (normal=${normalMobileBoxes.settingsBtn.width}, large=${largeMobileBoxes.settingsBtn.width})`
     );
     assert.equal(
-      largeMobileBoxes.previewBtn.width >= 36 && largeMobileBoxes.previewBtn.width > normalMobileBoxes.previewBtn.width,
+      normalMobileBoxes.previewBtn.width >= 38 &&
+        largeMobileBoxes.previewBtn.width >= 38 &&
+        largeMobileBoxes.previewBtn.width >= normalMobileBoxes.previewBtn.width,
       true,
-      `360px Large Text topbar-preview-btn must enlarge to >=36px`
+      `360px topbar-preview-btn must be >=38px in Normal & Large Text (normal=${normalMobileBoxes.previewBtn.width}, large=${largeMobileBoxes.previewBtn.width})`
     );
     assert.equal(
-      largeMobileBoxes.savesBtn.height >= 36 && largeMobileBoxes.savesBtn.height > normalMobileBoxes.savesBtn.height,
+      normalMobileBoxes.savesBtn.height >= 36 &&
+        largeMobileBoxes.savesBtn.height >= 36 &&
+        largeMobileBoxes.savesBtn.height >= normalMobileBoxes.savesBtn.height,
       true,
-      `360px Large Text topbar-saves-btn must be >=36px tall (normal=${normalMobileBoxes.savesBtn.height}, large=${largeMobileBoxes.savesBtn.height})`
+      `360px topbar-saves-btn must be >=36px tall in Normal & Large Text (normal=${normalMobileBoxes.savesBtn.height}, large=${largeMobileBoxes.savesBtn.height})`
     );
     assert.equal(
       largeMobileBoxes.paintBtn.width >= 58 && largeMobileBoxes.paintBtn.width > normalMobileBoxes.paintBtn.width,
@@ -19413,8 +19619,7 @@ async function runBrowserBasicsSuite() {
     await regPage.getByTestId('paint-mode-btn').click();
     await regPage.getByTestId('topbar-settings-btn').click();
     await regPage.getByTestId('settings-tab-settings').click();
-    const regFreeColorLabel = await regPage.waitForSelector('text=Free Colour Mode');
-    await regFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button[role="switch"]')?.click());
+    await regPage.getByTestId('setting-free-color-mode').click();
     await regPage.getByTestId('settings-modal-close').click();
     await regPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
