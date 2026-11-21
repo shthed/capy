@@ -5541,7 +5541,7 @@ export const App: React.FC = () => {
         difficulty={settings.difficulty}
         fatFingerAssist={settings.fatFingerAssist}
         touchReachRadiusPx={
-          settings.uiScale > 1.0 || settings.largeText
+          (settings.uiScale ?? 1.0) > 1.0
             ? Math.max(settings.touchReachRadiusPx, 34)
             : settings.touchReachRadiusPx
         }

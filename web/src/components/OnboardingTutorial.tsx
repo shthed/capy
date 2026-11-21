@@ -150,7 +150,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     modalTab: 1,
     modalTabName: 'Settings',
     modalTabPrompt: 'Tap the Settings tab at the top',
-    modalControlPrompt: 'Turn on Free Color Mode below',
+    modalControlPrompt: 'Turn on Free Color Mode above',
     actionLabel: 'Open Settings',
     actionTestId: 'tutorial-open-free-color-btn',
   },
@@ -339,11 +339,11 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
       <div
         data-testid="onboarding-tutorial"
         data-modal-docked={isDockedInModal ? 'true' : undefined}
-        className={`pointer-events-auto w-full overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl text-slate-100 animate-in fade-in duration-200 ${
+        className={`pointer-events-auto w-full rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl text-slate-100 animate-in fade-in duration-200 ${
           isDockedInModal
-            ? 'max-w-lg max-h-[42dvh] px-3 py-2 sm:px-3.5 space-y-1.5 slide-in-from-bottom-2'
+            ? 'overflow-y-auto max-w-lg max-h-[42dvh] px-3 py-2 sm:px-3.5 space-y-1.5 slide-in-from-bottom-2'
             : `flex flex-col max-w-md max-h-[calc(100dvh-6.5rem)] px-3 py-2.5 sm:px-3.5 slide-in-from-top-2 ${
-                showTopics ? 'gap-2' : 'h-[11.75rem] sm:h-[11.25rem]'
+                showTopics ? 'overflow-y-auto gap-2' : 'overflow-hidden capy-tutorial-fixed-card'
               }`
         }`}
       >
@@ -448,41 +448,43 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
           className={
             isDockedInModal
               ? 'space-y-1'
-              : 'flex-1 flex flex-col justify-center gap-1.5 min-h-[4.25rem] py-1'
+              : 'flex-1 min-h-0 overflow-y-auto flex flex-col py-1'
           }
         >
-          <p className="text-[11px] sm:text-xs leading-snug text-slate-200">
-            {currentStep.description}
-          </p>
+          <div className={isDockedInModal ? 'space-y-1' : 'my-auto flex flex-col gap-1.5'}>
+            <p className="text-[11px] sm:text-xs leading-snug text-slate-200">
+              {currentStep.description}
+            </p>
 
-          {/* Lightweight Action Cue */}
-          <div
-            data-testid="tutorial-try-pill"
-            className={`flex items-center justify-between gap-2 min-h-[1.5rem] text-[11px] font-bold ${
-              isCurrentTried ? 'text-emerald-300' : 'text-amber-300'
-            }`}
-          >
-            <span className="min-w-0 leading-snug">{activePromptText}</span>
-            {currentStep.key === 'hint' && !isDockedInModal && (
-              <button
-                type="button"
-                data-testid="tutorial-try-hint-btn"
-                onClick={onTriggerHint}
-                className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
-              >
-                Try Hint
-              </button>
-            )}
-            {showOpenTabButton && (
-              <button
-                type="button"
-                data-testid={currentStep.actionTestId}
-                onClick={() => onOpenSettingsTab!(currentStep.modalTab!)}
-                className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
-              >
-                {currentStep.actionLabel}
-              </button>
-            )}
+            {/* Lightweight Action Cue */}
+            <div
+              data-testid="tutorial-try-pill"
+              className={`flex items-center justify-between gap-2 min-h-[1.5rem] text-[11px] font-bold ${
+                isCurrentTried ? 'text-emerald-300' : 'text-amber-300'
+              }`}
+            >
+              <span className="min-w-0 leading-snug">{activePromptText}</span>
+              {currentStep.key === 'hint' && !isDockedInModal && (
+                <button
+                  type="button"
+                  data-testid="tutorial-try-hint-btn"
+                  onClick={onTriggerHint}
+                  className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  Try Hint
+                </button>
+              )}
+              {showOpenTabButton && (
+                <button
+                  type="button"
+                  data-testid={currentStep.actionTestId}
+                  onClick={() => onOpenSettingsTab!(currentStep.modalTab!)}
+                  className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  {currentStep.actionLabel}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -495,7 +497,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
             />
           </div>
 
-          <div className="flex flex-nowrap items-center justify-between gap-2">
+          <div className="capy-tutorial-footer-row flex flex-nowrap items-center justify-between gap-2">
             <button
               type="button"
               data-testid="tutorial-topics-btn"

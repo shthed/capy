@@ -74,22 +74,23 @@
   --capy-swatch-gap: calc(8px * var(--capy-ui-scale, 1));
 }
 [data-ui-boosted="true"] {
+  --capy-ui-extra-bottom: calc(max(0, var(--capy-ui-scale, 1) - 1.25) * 48px);
   --capy-tutorial-top: 5.5rem;
-  --capy-replay-bottom: 5.5rem;
-  --capy-replay-bottom-raised: 7.125rem;
-  --capy-fab-bottom: 5.5rem;
-  --capy-fab-bottom-raised: 7.125rem;
-  --capy-fab-bottom-replaying: 12.25rem;
-  --capy-fab-bottom-replaying-raised: 13.875rem;
-  --capy-fab-bottom-completed-replaying: 11.5rem;
-  --capy-fab-bottom-completed-replaying-raised: 13.25rem;
+  --capy-replay-bottom: calc(5.5rem + var(--capy-ui-extra-bottom));
+  --capy-replay-bottom-raised: calc(7.125rem + var(--capy-ui-extra-bottom));
+  --capy-fab-bottom: calc(5.5rem + var(--capy-ui-extra-bottom));
+  --capy-fab-bottom-raised: calc(7.125rem + var(--capy-ui-extra-bottom));
+  --capy-fab-bottom-replaying: calc(12.25rem + var(--capy-ui-extra-bottom));
+  --capy-fab-bottom-replaying-raised: calc(13.875rem + var(--capy-ui-extra-bottom));
+  --capy-fab-bottom-completed-replaying: calc(11.5rem + var(--capy-ui-extra-bottom));
+  --capy-fab-bottom-completed-replaying-raised: calc(13.25rem + var(--capy-ui-extra-bottom));
 }
 @media (min-width: 640px) {
   [data-ui-boosted="true"] {
-    --capy-fab-bottom-replaying: 9.75rem;
-    --capy-fab-bottom-replaying-raised: 11.375rem;
-    --capy-fab-bottom-completed-replaying: 5.25rem;
-    --capy-fab-bottom-completed-replaying-raised: 5.75rem;
+    --capy-fab-bottom-replaying: calc(9.75rem + var(--capy-ui-extra-bottom));
+    --capy-fab-bottom-replaying-raised: calc(11.375rem + var(--capy-ui-extra-bottom));
+    --capy-fab-bottom-completed-replaying: calc(5.25rem + var(--capy-ui-extra-bottom));
+    --capy-fab-bottom-completed-replaying-raised: calc(5.75rem + var(--capy-ui-extra-bottom));
   }
 }
 
@@ -137,6 +138,50 @@
 [data-text-scaled="true"] .text-lg {
   font-size: calc(18px * var(--capy-text-scale, 1));
   line-height: 1.5;
+}
+@media (min-width: 640px) {
+  [data-text-scaled="true"] .sm\:text-\[10px\] {
+    font-size: calc(10px * var(--capy-text-scale, 1));
+    line-height: 1.3;
+  }
+  [data-text-scaled="true"] .sm\:text-\[11px\] {
+    font-size: calc(11px * var(--capy-text-scale, 1));
+    line-height: 1.35;
+  }
+  [data-text-scaled="true"] .sm\:text-xs {
+    font-size: calc(12px * var(--capy-text-scale, 1));
+    line-height: 1.4;
+  }
+  [data-text-scaled="true"] .sm\:text-sm {
+    font-size: calc(14px * var(--capy-text-scale, 1));
+    line-height: 1.45;
+  }
+  [data-text-scaled="true"] .sm\:text-base {
+    font-size: calc(16px * var(--capy-text-scale, 1));
+    line-height: 1.5;
+  }
+  [data-text-scaled="true"] .sm\:text-lg {
+    font-size: calc(18px * var(--capy-text-scale, 1));
+    line-height: 1.5;
+  }
+}
+@media (min-width: 768px) {
+  [data-text-scaled="true"] .md\:text-xs {
+    font-size: calc(12px * var(--capy-text-scale, 1));
+    line-height: 1.4;
+  }
+  [data-text-scaled="true"] .md\:text-sm {
+    font-size: calc(14px * var(--capy-text-scale, 1));
+    line-height: 1.45;
+  }
+  [data-text-scaled="true"] .md\:text-base {
+    font-size: calc(16px * var(--capy-text-scale, 1));
+    line-height: 1.5;
+  }
+  [data-text-scaled="true"] .md\:text-lg {
+    font-size: calc(18px * var(--capy-text-scale, 1));
+    line-height: 1.5;
+  }
 }
 
 /* GameTopBar responsive button scaling (preserves 360px ALPHA #520 + 100% & BETA containment) */
@@ -509,10 +554,41 @@
     padding: 0.25rem;
   }
 }
+/* OnboardingTutorial scaled fixed card height & narrow-screen footer compaction */
+.capy-tutorial-fixed-card {
+  height: calc(11.75rem * max(1, var(--capy-text-scale, 1), var(--capy-ui-scale, 1)));
+}
+@media (min-width: 640px) {
+  .capy-tutorial-fixed-card {
+    height: calc(11.25rem * max(1, var(--capy-text-scale, 1), var(--capy-ui-scale, 1)));
+  }
+}
+@media (max-width: 400px) {
+  [data-text-scaled="true"] .capy-tutorial-footer-row,
+  [data-ui-scaled="true"] .capy-tutorial-footer-row {
+    gap: 0.25rem;
+  }
+  [data-text-scaled="true"] .capy-tutorial-footer-row > div,
+  [data-ui-scaled="true"] .capy-tutorial-footer-row > div {
+    gap: 0.25rem;
+  }
+  [data-text-scaled="true"] .capy-tutorial-footer-row button,
+  [data-ui-scaled="true"] .capy-tutorial-footer-row button {
+    padding-left: 0.45rem;
+    padding-right: 0.45rem;
+    font-size: min(calc(12px * var(--capy-text-scale, 1)), 14px);
+  }
+  [data-text-scaled="true"] .capy-tutorial-footer-row button svg,
+  [data-ui-scaled="true"] .capy-tutorial-footer-row button svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
 @media (min-width: 640px) and (max-height: 440px) {
   [data-ui-boosted="true"] {
-    --capy-fab-bottom-replaying: 9.5rem;
-    --capy-fab-bottom-replaying-raised: 11.125rem;
+    --capy-fab-bottom-replaying: calc(9.5rem + var(--capy-ui-extra-bottom));
+    --capy-fab-bottom-replaying-raised: calc(11.125rem + var(--capy-ui-extra-bottom));
   }
 }
 

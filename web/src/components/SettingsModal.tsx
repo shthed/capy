@@ -698,7 +698,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             role="tablist"
             aria-label="Settings sections"
             data-testid="settings-modal-tabs"
-            className="min-w-0 flex-1 flex flex-wrap sm:flex-nowrap items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-1.5"
+            className="min-w-0 flex-1 flex flex-wrap md:flex-nowrap items-center gap-0.5 sm:gap-1.5 overflow-x-auto no-scrollbar py-1.5"
           >
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -715,7 +715,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onTabOpenedRef.current?.(tab.id);
                     SafeLocalStore.setScopedItem(LAST_SETTINGS_TAB_KEY, String(tab.id));
                   }}
-                  className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 min-h-[38px] sm:min-h-[40px] px-1.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`flex-shrink-0 flex items-center gap-0.5 sm:gap-2 min-h-[38px] sm:min-h-[40px] px-1.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-bold rounded-lg transition-colors cursor-pointer ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -768,7 +768,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 sm:space-y-5"
           style={{
             paddingBottom: hasDockedTutorial
-              ? 'max(12rem, calc(var(--sab, 0px) + 11rem))'
+              ? 'max(calc(13rem * max(1, var(--capy-text-scale, 1), var(--capy-ui-scale, 1))), calc(var(--sab, 0px) + 12rem * max(1, var(--capy-text-scale, 1), var(--capy-ui-scale, 1))))'
               : 'max(2.5rem, calc(var(--sab, 0px) + 1.75rem))',
             paddingLeft: 'max(0.875rem, calc(var(--sal, 0px) + 0.75rem))',
             paddingRight: 'max(0.875rem, calc(var(--sar, 0px) + 0.75rem))',
@@ -1509,7 +1509,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="text-amber-400 font-mono font-bold text-right"
                       >
                         {settings.fatFingerAssist &&
-                        ((settings.uiScale ?? 1.0) > 1.0 || settings.largeText) &&
+                        (settings.uiScale ?? 1.0) > 1.0 &&
                         Math.round(settings.touchReachRadiusPx ?? 22) < 34
                           ? `34px (Large UI • saved ${Math.round(settings.touchReachRadiusPx ?? 22)}px)`
                           : `${Math.round(settings.touchReachRadiusPx ?? 22)}px`}

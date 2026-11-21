@@ -980,11 +980,44 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
           break;
         }
       }
-      if (targetEl instanceof HTMLElement && typeof targetEl.scrollIntoView === 'function') {
-        targetEl.scrollIntoView({
-          block: 'center',
-          behavior: reducedMotion ? 'auto' : 'smooth',
-        });
+      if (targetEl instanceof HTMLElement) {
+        const scrollContainer = targetEl.closest('.overflow-y-auto');
+        const tutorialEl = document.querySelector('[data-testid="onboarding-tutorial"]');
+        if (scrollContainer instanceof HTMLElement) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const targetRect = targetEl.getBoundingClientRect();
+          const tutorialRect =
+            tutorialEl instanceof HTMLElement ? tutorialEl.getBoundingClientRect() : null;
+          const visibleTop = containerRect.top;
+          const visibleBottom =
+            tutorialRect && tutorialRect.height > 0
+              ? Math.min(
+                  containerRect.bottom,
+                  tutorialRect.top - 12,
+                  window.innerHeight - tutorialRect.height - 20
+                )
+              : containerRect.bottom;
+          const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+          const desiredTop =
+            visibleHeight >= targetRect.height + 24
+              ? visibleTop + (visibleHeight - targetRect.height) / 2
+              : visibleTop + Math.min(12, Math.max(0, (visibleHeight - targetRect.height) / 2));
+          const delta = targetRect.top - desiredTop;
+          const nextScrollTop = Math.max(0, scrollContainer.scrollTop + delta);
+          if (typeof scrollContainer.scrollTo === 'function') {
+            scrollContainer.scrollTo({
+              top: nextScrollTop,
+              behavior: reducedMotion ? 'auto' : 'smooth',
+            });
+          } else {
+            scrollContainer.scrollTop = nextScrollTop;
+          }
+        } else if (typeof targetEl.scrollIntoView === 'function') {
+          targetEl.scrollIntoView({
+            block: 'start',
+            behavior: reducedMotion ? 'auto' : 'smooth',
+          });
+        }
       }
       measure();
     });

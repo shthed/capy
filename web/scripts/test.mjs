@@ -13886,7 +13886,7 @@ async function runBrowserBasicsSuite() {
     // Switch to Tab 1 (Settings) -> prompt transitions to control guidance and hides redundant Open Settings button
     await tutPage.getByTestId('settings-tab-settings').click();
     assert.equal(
-      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Turn on Free Color Mode below'),
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Turn on Free Color Mode above'),
       true,
       'Step 8 on Settings tab must instruct user to turn on Free Color Mode'
     );
@@ -17666,6 +17666,72 @@ async function runBrowserBasicsSuite() {
         `Mobile 360x780 Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(mobileNextRefBox)}, got=${JSON.stringify(nextBox)})`
       );
     }
+    // Verify Next button stays unclipped and <=1px stable across Steps 1-7 at 125%/125% (Large Text) and 150%/140% (max scale)
+    const verifyScaledTutorialSteps1To7 = async (label) => {
+      await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+      await mobileTopbarPage.getByTestId('tutorial-topic-item-0').click();
+      await mobileTopbarPage.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+          'STEP 1 OF 12',
+        undefined,
+        { timeout: 3000 }
+      );
+      const refBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+      assert.ok(refBox, `Expected Step 1 tutorial-next-btn boundingBox (${label})`);
+      for (let stepNum = 1; stepNum <= 7; stepNum++) {
+        if (stepNum > 1) {
+          await mobileTopbarPage.getByTestId('tutorial-next-btn').click();
+          await mobileTopbarPage.waitForFunction(
+            (expected) =>
+              document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+              `STEP ${expected} OF 12`,
+            stepNum,
+            { timeout: 3000 }
+          );
+        }
+        const metrics = await mobileTopbarPage.evaluate(() => {
+          const card = document.querySelector('[data-testid="onboarding-tutorial"]');
+          const next = document.querySelector('[data-testid="tutorial-next-btn"]');
+          if (!card || !next) return null;
+          const cr = card.getBoundingClientRect();
+          const nr = next.getBoundingClientRect();
+          return {
+            vOver: card.scrollHeight - card.clientHeight,
+            nextBottom: nr.bottom,
+            cardBottom: cr.bottom,
+            x: nr.x,
+            y: nr.y,
+            width: nr.width,
+            height: nr.height,
+          };
+        });
+        assert.ok(metrics, `Expected tutorial metrics on Step ${stepNum} (${label})`);
+        assert.equal(
+          metrics.vOver <= 1 && metrics.nextBottom <= metrics.cardBottom + 1,
+          true,
+          `${label} Step ${stepNum} tutorial-next-btn clipped or card overflowed (${JSON.stringify(metrics)})`
+        );
+        assert.equal(
+          Math.abs(metrics.x - refBox.x) <= 1 &&
+            Math.abs(metrics.y - refBox.y) <= 1 &&
+            Math.abs(metrics.width - refBox.width) <= 1 &&
+            Math.abs(metrics.height - refBox.height) <= 1,
+          true,
+          `${label} Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(refBox)}, got=${JSON.stringify(metrics)})`
+        );
+      }
+    };
+    await mobileTopbarPage.getByTestId('tutorial-large-text-btn').click();
+    await mobileTopbarPage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+    await verifyScaledTutorialSteps1To7('360x780 Large Text 125%/125%');
+    await mobileTopbarPage.evaluate(() => {
+      document.documentElement.style.setProperty('--capy-text-scale', '1.5');
+      document.documentElement.style.setProperty('--capy-ui-scale', '1.4');
+    });
+    await verifyScaledTutorialSteps1To7('360x780 Max Scale 150%/140%');
+    await mobileTopbarPage.getByTestId('tutorial-large-text-btn').click();
+    await mobileTopbarPage.waitForFunction(() => document.documentElement.dataset.largeText === 'false', undefined, { timeout: 3000 });
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topic-item-0').click();
     await mobileTopbarPage.waitForFunction(
@@ -19326,11 +19392,17 @@ async function runBrowserBasicsSuite() {
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const baselineSwitchW = (await ltSwitch.boundingBox()).width;
 
-    // 1) Text Size 140%, UI Size 100%: font size grows, switch width unchanged
+    // 1) Text Size 140%, UI Size 100%: font size grows, switch width unchanged, and Finger Reach does NOT boost to Large UI 34px
     await setRangeSlider(ltMobilePage, 'setting-text-size', 1.4);
     await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'true', undefined, { timeout: 3000 });
     assert.equal((await ltMobilePage.getByTestId('setting-text-size-value').innerText()).trim(), '140%');
     assert.equal(await ltMobilePage.evaluate(() => document.documentElement.dataset.uiScaled), 'false');
+    const textOnlyReachLabel = (await ltMobilePage.getByTestId('setting-touch-reach-value').innerText()).trim();
+    assert.equal(
+      !textOnlyReachLabel.includes('Large UI') && textOnlyReachLabel === '22px',
+      true,
+      `Text Size 140% with UI Size 100% must not trigger 34px Large UI reach boost (got "${textOnlyReachLabel}")`
+    );
     const textOnlyFontSize = await ltMobilePage
       .locator('[data-testid="settings-section-accessibility"] .text-xs')
       .first()
@@ -19339,21 +19411,65 @@ async function runBrowserBasicsSuite() {
     assert.ok(textOnlyFontSize > baselineFontSize + 2, `Text Size 140% must enlarge font (${baselineFontSize} -> ${textOnlyFontSize})`);
     assert.ok(Math.abs(textOnlySwitchW - baselineSwitchW) <= 1, `Text Size 140% alone must not resize switch (${baselineSwitchW} vs ${textOnlySwitchW})`);
 
-    // 2) Text Size 100%, UI Size 135%: switch width grows & knob stays contained, font size back to baseline
+    // 1b) Desktop >=640px sm:text-* monotonic scaling: 100% (14px) < 105% (14.7px) < 125% (17.5px)
+    await ltMobilePage.setViewportSize({ width: 1280, height: 800 });
     await setRangeSlider(ltMobilePage, 'setting-text-size', 1.0);
-    await setRangeSlider(ltMobilePage, 'setting-ui-size', 1.35);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'false', undefined, { timeout: 3000 });
+    const desktopTabFont100 = await ltMobilePage
+      .getByTestId('settings-tab-settings')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.05);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'true', undefined, { timeout: 3000 });
+    const desktopTabFont105 = await ltMobilePage
+      .getByTestId('settings-tab-settings')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.25);
+    const desktopTabFont125 = await ltMobilePage
+      .getByTestId('settings-tab-settings')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    assert.equal(
+      desktopTabFont105 > desktopTabFont100 + 0.4 && desktopTabFont125 > desktopTabFont105 + 2.0,
+      true,
+      `Desktop >=640px sm:text-sm must scale monotonically across 100% -> 105% -> 125% (got ${desktopTabFont100} -> ${desktopTabFont105} -> ${desktopTabFont125})`
+    );
+    await ltMobilePage.setViewportSize({ width: 360, height: 780 });
+
+    // 2) Text Size 100%, UI Size 140%: switch width grows & knob stays contained, font size back to baseline, and FAB clears PaletteDock
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.0);
+    await setRangeSlider(ltMobilePage, 'setting-ui-size', 1.4);
     await ltMobilePage.waitForFunction(() => document.documentElement.dataset.uiScaled === 'true', undefined, { timeout: 3000 });
-    assert.equal((await ltMobilePage.getByTestId('setting-ui-size-value').innerText()).trim(), '135%');
+    assert.equal((await ltMobilePage.getByTestId('setting-ui-size-value').innerText()).trim(), '140%');
     assert.equal(await ltMobilePage.evaluate(() => document.documentElement.dataset.textScaled), 'false');
     const uiOnlyFontSize = await ltMobilePage
       .locator('[data-testid="settings-section-accessibility"] .text-xs')
       .first()
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     const uiOnlySwitchW = (await ltSwitch.boundingBox()).width;
-    assert.ok(Math.abs(uiOnlyFontSize - baselineFontSize) <= 1, `UI Size 135% alone must not enlarge font (${baselineFontSize} vs ${uiOnlyFontSize})`);
-    assert.ok(uiOnlySwitchW > baselineSwitchW + 6, `UI Size 135% must enlarge switch (${baselineSwitchW} -> ${uiOnlySwitchW})`);
-    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'UI Size 135% largeText ON');
-    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'UI Size 135% fatFinger ON');
+    assert.ok(Math.abs(uiOnlyFontSize - baselineFontSize) <= 1, `UI Size 140% alone must not enlarge font (${baselineFontSize} vs ${uiOnlyFontSize})`);
+    assert.ok(uiOnlySwitchW > baselineSwitchW + 6, `UI Size 140% must enlarge switch (${baselineSwitchW} -> ${uiOnlySwitchW})`);
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'UI Size 140% largeText ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'UI Size 140% fatFinger ON');
+
+    // Close Settings briefly at UI Size 140% to confirm FloatingActions clears PaletteDock without overlap
+    await ltMobilePage.getByTestId('settings-modal-close').click();
+    await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+    const ui140Clearance = await ltMobilePage.evaluate(() => {
+      const fab = document.querySelector('.capy-fab-stack');
+      const dock = document.querySelector('[data-testid="palette-dock"]');
+      if (!fab || !dock) return null;
+      return {
+        fabBottom: fab.getBoundingClientRect().bottom,
+        dockTop: dock.getBoundingClientRect().top,
+      };
+    });
+    assert.ok(ui140Clearance, 'Expected FloatingActions and PaletteDock bounding rects at UI Size 140%');
+    assert.equal(
+      ui140Clearance.fabBottom <= ui140Clearance.dockTop + 0.5,
+      true,
+      `FloatingActions must not overlap PaletteDock at UI Size 140% (${JSON.stringify(ui140Clearance)})`
+    );
+    await ltMobilePage.getByTestId('topbar-settings-btn').click();
+    await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
 
     // Restore Large Text preset (125% / 125%) for remaining E2E 22 checks
     await ltSwitch.click();
