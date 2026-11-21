@@ -427,7 +427,7 @@ class CapyAndroidBridge(
         const val MAX_BACKUP_PAYLOAD_CHARS = 16 * 1024 * 1024
         const val MAX_SHARE_FILE_BYTES = 16 * 1024 * 1024
         const val MAX_SHARE_BASE64_CHARS = 24 * 1024 * 1024
-        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
+        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com", "paint.capyboop.com")
         val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io", "capyboop.github.io")
         private val FILE_IO_LOCK = Any()
         private val ALLOWED_EXPORT_MIME_TYPES = setOf(
@@ -1057,7 +1057,8 @@ class CapyAndroidBridge(
                 if (host in ROOT_DEEP_LINK_HOSTS) {
                     path.isEmpty() || path.startsWith("/")
                 } else if (host in GITHUB_PAGES_DEEP_LINK_HOSTS) {
-                    (path == "/capy") || path.startsWith("/capy/")
+                    (path == "/capy") || path.startsWith("/capy/") ||
+                        (host == "capyboop.github.io" && ((path == "/paint") || path.startsWith("/paint/")))
                 } else {
                     false
                 }
