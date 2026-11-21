@@ -25,7 +25,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: regenerate-puzzles-${{ github.ref }}
+  group: regenerate-puzzles-beta
   cancel-in-progress: false
 
 jobs:
@@ -101,10 +101,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           BRANCH="automation/regenerate-puzzles"
+          REMOTE_SHA="$(git ls-remote --heads origin "refs/heads/${BRANCH}" | awk '{print $1}')"
           git checkout -B "$BRANCH"
           git add web/public/assets/sample_saves.capy web/public/assets/daily_saves.capy
           git commit -m "Regenerate Max-settings sample and daily .capy puzzles"
-          git push --force-with-lease origin "$BRANCH"
+          if [ -n "$REMOTE_SHA" ]; then
+            git push --force-with-lease="refs/heads/${BRANCH}:${REMOTE_SHA}" origin "$BRANCH"
+          else
+            git push origin "$BRANCH"
+          fi
 
           PR_BODY=$(cat <<'EOF'
           ## Summary
@@ -114,7 +119,7 @@ jobs:
           ### When the Job Runs
 
           - **Puzzle/Engine Updates**: Runs automatically when `beta` receives changes under `web/src/engine/**`, `web/scripts/generate-sample-saves.mjs`, `web/public/assets/*.webp`, or `.github/workflows/regenerate-puzzles.yml`.
-          - **Manual Trigger**: Can be run on demand via `workflow_dispatch` (serialized per ref via `regenerate-puzzles-${{ github.ref }}`).
+          - **Manual Trigger**: Can be run on demand via `workflow_dispatch` (serialized via `regenerate-puzzles-beta`).
 
           ### How It Works
 
