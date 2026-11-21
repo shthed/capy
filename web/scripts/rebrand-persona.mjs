@@ -23,8 +23,12 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 export const DEV_ONLY_RELATIVE_PATHS = new Set([
   'AGENTS.md',
   'CAPYBOOP.md',
+  'CLAUDE.md',
+  'GEMINI.md',
+  'capy.prompt.yml',
   'docs/ai',
   'web/scripts/rebrand-persona.mjs',
+  '.github/copilot-instructions.md',
   '.github/workflows/publish-capyboop.yml',
   '.github/workflows/pr-review-gate.yml',
   '.github/workflows/open-pr.yml',
@@ -84,7 +88,12 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 export const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|capyboop\/capy/i;
+  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|CLAUDE\.md|GEMINI\.md|capy\.prompt\.yml|copilot-instructions\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|ai[- ]?dev\b|ai\s+reviews?\b|ai\s+approvals?\b|ai\s+marker\b|ai\s+auto[- ]?merge\b|dual\s+ai\b|ai\s+studio\b|ai\s+github\s+actions\b|(?<!user-)\b(?:sub)?agents?\b|docs\(agents\)|update-agents|invoke_subagent|ci\(mirror\)|chore\(mirror\)|public\s+mirror|mirror\s+sync|mirror\s+retargeting|full\s+replay|open\s+bot\s+issue|free\s+bot|1-click\s+bot|bot\s+prs?\b|review[- ]gate|gate\s+readiness|\bpersonas?\b|issue\s*#607\b|capyboop\/capy/i;
+
+export const FORBIDDEN_COMMIT_LOG_REGEX =
+  /github-actions\[bot\]|#612\b|#607\b|during\s+replay|replay\s+full\b|readiness\s+checklist\b|ci\(gate\)|scrub\s+dev\s+tokens\s+in\s+historical\s+commit\s+messages/i;
+export const FORBIDDEN_COMMIT_LOG_CASE_SENSITIVE_REGEX =
+  /\bCAPYBOOP(?=\s*[,&]|\s+(?:and|doc|guide|playbook)\b)/;
 
 export function stripDevOnlyBlocks(content) {
   return content
@@ -124,17 +133,10 @@ export function transformPersonaContent(content) {
     );
 }
 
-export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
-  const firstLine =
-    String(rawMessage || '')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0) || 'Update Capy Paint';
-
-  const withoutPrSuffix = firstLine.replace(/\s*\(#\d+\)\s*$/, '').trim();
-  const scrubbed = transformPersonaContent(withoutPrSuffix)
+function applyForbiddenTextReplacements(text) {
+  return text
     .replace(/pr-review-gate/gi, 'review workflow')
-    .replace(/publish-capyboop/gi, 'release mirror')
+    .replace(/publish-capyboop/gi, 'release sync')
     .replace(/rebrand-persona/gi, 'export script')
     .replace(/open-pr\.yml|open-issue\.yml/gi, 'GitHub workflow')
     .replace(/sync-beta-from-main/gi, 'branch sync')
@@ -143,8 +145,10 @@ export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
     .replace(/persona:capyboop/gi, 'export check')
     .replace(/capy-dev-only/gi, 'internal-only')
     .replace(/dependabot\.ya?ml/gi, 'dependency config')
-    .replace(/CAPYBOOP_SYNC_TOKEN/gi, 'mirror token')
-    .replace(/AGENTS\.md|CAPYBOOP\.md|docs\/ai(?:\/[^\s,)]*)?/gi, 'project docs')
+    .replace(/CAPYBOOP_SYNC_TOKEN/gi, 'release token')
+    .replace(/\.github\/copilot-instructions\.md|copilot-instructions\.md/gi, 'project docs')
+    .replace(/\bcapy\.prompt\.yml\b/gi, 'workflow config')
+    .replace(/AGENTS\.md|CAPYBOOP\.md|CLAUDE\.md|GEMINI\.md|docs\/ai(?:\/[^\s,)]*)?/gi, 'project docs')
     .replace(/\.agents\/environment\.json|\.agents\/[^\s,)]*|\.agents\b/gi, 'dev environment config')
     .replace(/antigravity/gi, 'dev environment')
     .replace(/conversation:\/\/[^\s)]*/gi, 'session link')
@@ -167,13 +171,96 @@ export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
     .replace(/owner\s+directive/gi, 'project guideline')
     .replace(/review:ai-approved|ai[- ]approved/gi, 'CI-approved')
     .replace(/ai[- ]agent|coding[- ]agent/gi, 'contributor')
-    .replace(/hairy[\s_-]*dog[\s_-]*trumpet|381055\+/gi, 'capyboop')
+    .replace(/ai\s+github\s+actions\b/gi, 'automated GitHub Actions')
+    .replace(/ai[- ]?dev\b/gi, 'internal dev')
+    .replace(/ai\s+reviews?\b/gi, 'CI review')
+    .replace(/ai\s+approvals?\b/gi, (m) => (m.toLowerCase().endsWith('s') ? 'CI approvals' : 'CI approval'))
+    .replace(/ai\s+marker\b/gi, 'CI marker')
+    .replace(/ai\s+auto[- ]?merge\b/gi, 'CI auto-merge')
+    .replace(/dual\s+ai\b/gi, 'automated')
+    .replace(/ai\s+studio\b/gi, 'studio')
+    .replace(/docs\(agents\)/gi, 'docs')
+    .replace(/update-agents/gi, 'update-docs')
+    .replace(/invoke_subagent/gi, 'background task')
+    .replace(/(?<!user-)\b(?:sub)?agents?\b/gi, 'contributor')
+    .replace(/ci\(mirror\)/gi, 'ci(release)')
+    .replace(/chore\(mirror\)/gi, 'chore(release)')
+    .replace(/public\s+mirror/gi, 'public repository')
+    .replace(/mirror\s+sync/gi, 'release sync')
+    .replace(/mirror\s+retargeting/gi, 'repository alignment')
+    .replace(/during\s+full\s+replay/gi, 'during release sync')
+    .replace(/full\s+replay/gi, 'history sync')
+    .replace(/open\s+bot\s+issue/gi, 'issue automation')
+    .replace(/free\s+bot/gi, 'automated')
+    .replace(/1-click\s+bot/gi, 'one-click')
+    .replace(/bot\s+prs?\b/gi, (m) => (m.toLowerCase().endsWith('s') ? 'automated PRs' : 'automated PR'))
+    .replace(/review[- ]gate/gi, 'review workflow')
+    .replace(/gate\s+readiness/gi, 'PR checks')
+    .replace(/\bpersonas?\b/gi, (m) => (m.toLowerCase().endsWith('s') ? 'releases' : 'release'))
+    .replace(/\s*\(\s*issue\s*#607\s*\)/gi, '')
+    .replace(/\bissue\s*#607\b/gi, 'cleanup')
+    .replace(/hairy[\s_-]*dog[\s_-]*trumpet|381055\+/gi, 'capyboop');
+}
+
+function scrubHistoricalContent(content, relPath) {
+  let out = content;
+  if (relPath === 'web/metadata.json') {
+    try {
+      const parsed = JSON.parse(out);
+      if (Array.isArray(parsed.majorCapabilities)) {
+        parsed.majorCapabilities = parsed.majorCapabilities.filter(
+          (cap) => cap !== 'MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API'
+        );
+      }
+      out = `${JSON.stringify(parsed, null, 2)}\n`;
+    } catch {
+      // Fall through to text-level scrub if historical JSON is malformed
+    }
+  }
+  out = applyForbiddenTextReplacements(out);
+  if (FORBIDDEN_PERSONA_REGEX.test(out)) {
+    out = out.replace(new RegExp(FORBIDDEN_PERSONA_REGEX.source, 'gi'), 'redacted');
+  }
+  return out;
+}
+
+function findForbiddenLogToken(text) {
+  const personaMatch = text.match(FORBIDDEN_PERSONA_REGEX);
+  if (personaMatch) return personaMatch[0];
+  const logMatch = text.match(FORBIDDEN_COMMIT_LOG_REGEX);
+  if (logMatch) return logMatch[0];
+  const caseMatch = text.match(FORBIDDEN_COMMIT_LOG_CASE_SENSITIVE_REGEX);
+  if (caseMatch) return caseMatch[0];
+  return null;
+}
+
+export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
+  const firstLine =
+    String(rawMessage || '')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0) || 'Update Capy Paint';
+
+  const withoutPrSuffix = firstLine.replace(/\s*\(#\d+\)\s*$/, '').trim();
+  const scrubbed = applyForbiddenTextReplacements(transformPersonaContent(withoutPrSuffix))
+    .replace(new RegExp(FORBIDDEN_COMMIT_LOG_CASE_SENSITIVE_REGEX.source, 'g'), 'project docs')
+    .replace(/github-actions\[bot\]/gi, 'CI automation')
+    .replace(/replay\s+full(?:\s+(?:public|clean[- ]room))?\s+commit\s+history/gi, 'sync public release history')
+    .replace(/replay\s+full\b/gi, 'sync')
+    .replace(/during\s+replay/gi, 'during sync')
+    .replace(/\bcompile\s+#612\b/gi, 'Compile')
+    .replace(/#612\b/gi, 'release')
+    .replace(/\s*\(\s*#607\s*\)/gi, '')
+    .replace(/#607\b/gi, 'cleanup')
+    .replace(/readiness\s+checklist\b/gi, 'PR checklist')
+    .replace(/ci\(gate\)/gi, 'ci(checks)')
+    .replace(/scrub\s+dev\s+tokens\s+in\s+historical\s+commit\s+messages/gi, 'normalize release commit history')
     .replace(/\s+/g, ' ')
     .trim();
   const result = scrubbed.length > 0 ? scrubbed : 'Update Capy Paint';
 
-  if (FORBIDDEN_PERSONA_REGEX.test(result)) {
-    if (typeof fallback === 'string' && fallback.length > 0 && !FORBIDDEN_PERSONA_REGEX.test(fallback)) {
+  if (findForbiddenLogToken(result)) {
+    if (typeof fallback === 'string' && fallback.length > 0 && !findForbiddenLogToken(fallback)) {
       return fallback;
     }
     throw new Error(`Sanitized commit message still contains forbidden persona identifier: ${result}`);
@@ -183,9 +270,9 @@ export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
 
 export function verifyLogFile(logPath) {
   const raw = fs.readFileSync(path.resolve(logPath)).toString('latin1');
-  const match = raw.match(FORBIDDEN_PERSONA_REGEX);
+  const match = findForbiddenLogToken(raw);
   if (match) {
-    return { clean: false, match: match[0] };
+    return { clean: false, match };
   }
   return { clean: true, match: null };
 }
@@ -234,7 +321,7 @@ export function assertZeroSourcePersonaLeak(stageDir) {
   return scannedFiles;
 }
 
-export function exportCleanPersonaStage({ repoRoot = REPO_ROOT, stageDir }) {
+export function exportCleanPersonaStage({ repoRoot = REPO_ROOT, stageDir, historicalScrub = false }) {
   if (!stageDir) {
     throw new Error('exportCleanPersonaStage requires a target stageDir');
   }
@@ -258,6 +345,7 @@ export function exportCleanPersonaStage({ repoRoot = REPO_ROOT, stageDir }) {
       const srcPath = path.join(srcDir, entry.name);
       const relPath = path.relative(resolvedRoot, srcPath).replace(/\\/g, '/');
       if (DEV_ONLY_RELATIVE_PATHS.has(relPath)) continue;
+      if (historicalScrub && FORBIDDEN_PERSONA_REGEX.test(relPath)) continue;
 
       const dstPath = path.join(dstDir, entry.name);
       if (entry.isDirectory()) {
@@ -272,7 +360,10 @@ export function exportCleanPersonaStage({ repoRoot = REPO_ROOT, stageDir }) {
         if (pkg.scripts && 'persona:capyboop' in pkg.scripts) {
           delete pkg.scripts['persona:capyboop'];
         }
-        const serialized = transformPersonaContent(`${JSON.stringify(pkg, null, 2)}\n`);
+        let serialized = transformPersonaContent(`${JSON.stringify(pkg, null, 2)}\n`);
+        if (historicalScrub) {
+          serialized = scrubHistoricalContent(serialized, relPath);
+        }
         fs.writeFileSync(dstPath, serialized, 'utf8');
         filesTransformed++;
         continue;
@@ -295,6 +386,9 @@ export function exportCleanPersonaStage({ repoRoot = REPO_ROOT, stageDir }) {
                 .filter((p) => p !== 'codex/' && p !== 'automation/')
                 .join(',')}${post}`
           );
+        }
+        if (historicalScrub) {
+          after = scrubHistoricalContent(after, relPath);
         }
         fs.writeFileSync(dstPath, after, { encoding: 'utf8', mode: fs.statSync(srcPath).mode });
         if (after !== before) filesTransformed++;
