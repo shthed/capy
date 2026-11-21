@@ -797,10 +797,16 @@ jobs:
             };
 
             const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
+            const ownerApprovalRequired = activeLabels.has('review:owner-required');
+            const ownerApprovedHead =
+              effectiveOwnerApprovals.length > 0 || activeLabels.has('review:owner-approved');
             const strictAiReady = !isDraft && !changesRequested && !hasForbiddenCrossRef && aiOrSyncReady;
             const mainReleaseChecksReady =
               !isMainTarget || !strictAiReady ? true : await headChecksGreen();
-            const gatePassed = strictAiReady && mainReleaseChecksReady;
+            const gatePassed =
+              strictAiReady &&
+              mainReleaseChecksReady &&
+              (!ownerApprovalRequired || ownerApprovedHead);
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
             const botReviews = reviews.filter(
@@ -840,13 +846,22 @@ jobs:
                 blockers.push('AI review');
               }
             }
+<<<<<<< HEAD
             if (!mainReleaseChecksReady) {
               blockers.push('Playwright E2E / Android APK release checks');
+=======
+            if (ownerApprovalRequired && !ownerApprovedHead) {
+              blockers.push('Project Owner approval (review:owner-required)');
+>>>>>>> origin/main
             }
 
-            const targetScope = isBetaTarget
-              ? 'Beta (no Owner approval needed)'
-              : 'Main (no Owner approval needed)';
+            const targetScope = ownerApprovalRequired
+              ? isBetaTarget
+                ? 'Beta (Owner approval required)'
+                : 'Main (Owner approval required)'
+              : isBetaTarget
+                ? 'Beta (no Owner approval needed)'
+                : 'Main (no Owner approval needed)';
 
             let state = 'pending';
             let description = `${targetScope}: Blocked by ${blockers.join(', ') || 'Pending checks'}`;
@@ -854,7 +869,11 @@ jobs:
               state = 'failure';
             } else if (gatePassed) {
               state = 'success';
-              if (isBetaTarget) {
+              if (ownerApprovalRequired) {
+                description = isBetaTarget
+                  ? 'Beta gate passed: AI review (100%) + Owner approval verified'
+                  : 'Main gate passed: AI review (100%) + Owner approval verified';
+              } else if (isBetaTarget) {
                 description =
                   isVerifiedMainSync && !aiApproved
                     ? 'Beta gate passed (no Owner approval needed): verified origin/main sync'
