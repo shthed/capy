@@ -846,13 +846,11 @@ jobs:
                 blockers.push('AI review');
               }
             }
-<<<<<<< HEAD
             if (!mainReleaseChecksReady) {
               blockers.push('Playwright E2E / Android APK release checks');
-=======
+            }
             if (ownerApprovalRequired && !ownerApprovedHead) {
               blockers.push('Project Owner approval (review:owner-required)');
->>>>>>> origin/main
             }
 
             const targetScope = ownerApprovalRequired
