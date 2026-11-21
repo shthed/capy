@@ -317,19 +317,22 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
           </button>
         )}
 
-        {/* Skip to End */}
-        {!isFinished && (
-          <button
-            type="button"
-            onClick={onSkipToEnd}
-            aria-label="Skip to Completed Artwork"
-            title="Skip to Completed Artwork"
-            data-testid="replay-skip-btn"
-            className="capy-replay-icon-btn p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
-          >
-            <SkipForward size={12} />
-          </button>
-        )}
+        {/* Skip to End (kept mounted when finished so replay controls never shift horizontally) */}
+        <button
+          type="button"
+          disabled={isFinished}
+          onClick={onSkipToEnd}
+          aria-label="Skip to Completed Artwork"
+          title="Skip to Completed Artwork"
+          data-testid="replay-skip-btn"
+          className={`capy-replay-icon-btn p-1.5 rounded-full border transition-colors flex-shrink-0 ${
+            isFinished
+              ? 'bg-slate-800/50 text-slate-600 border-slate-800 opacity-45 cursor-not-allowed'
+              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 cursor-pointer'
+          }`}
+        >
+          <SkipForward size={12} />
+        </button>
 
         {/* Exit Replay */}
         <button
