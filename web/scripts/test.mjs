@@ -4093,6 +4093,21 @@ async function runCodecAndEngineTests() {
             }
           }
           assert.equal(
+            nativeBridgeMod.isValidAndroidDeepLink('https://paint.capyboop.com/#s=test'),
+            true,
+            'isValidAndroidDeepLink must allow paint.capyboop.com share links'
+          );
+          assert.equal(
+            nativeBridgeMod.isValidAndroidDeepLink('https://capypaint.com/privacy-policy.html'),
+            false,
+            'isValidAndroidDeepLink must exclude static /privacy-policy.html legal page'
+          );
+          assert.equal(
+            nativeBridgeMod.isValidAndroidDeepLink('https://paint.capyboop.com/privacy-policy.html'),
+            false,
+            'isValidAndroidDeepLink must exclude paint.capyboop.com /privacy-policy.html legal page'
+          );
+          assert.equal(
             typeof nativeBridgeMod.NativeBridge.showRewardedAd,
             'undefined',
             'NativeBridge.showRewardedAd must be removed for 100% ad-free Play Store parity'
@@ -9234,6 +9249,42 @@ async function runCodecAndEngineTests() {
       'app/build.gradle.kts must enable resValues = true for AGP 9+'
     );
 
+    const capyBridgeKt = fs.readFileSync(
+      path.resolve(projectRoot, '../app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt'),
+      'utf8'
+    );
+    const rootHostsMatch = capyBridgeKt.match(/val\s+ROOT_DEEP_LINK_HOSTS\s*=\s*setOf\(([^)]+)\)/);
+    assert.ok(rootHostsMatch, 'CapyAndroidBridge.kt must define ROOT_DEEP_LINK_HOSTS');
+    assert.equal(
+      rootHostsMatch[1].includes('"paint.capyboop.com"'),
+      true,
+      'CapyAndroidBridge.kt ROOT_DEEP_LINK_HOSTS must include "paint.capyboop.com"'
+    );
+    assert.equal(
+      capyBridgeKt.includes('"/privacy-policy.html"'),
+      true,
+      'CapyAndroidBridge.kt isAllowedCapyDeepLink must exclude static /privacy-policy.html'
+    );
+
+    const mainActivityKt = fs.readFileSync(
+      path.resolve(projectRoot, '../app/src/main/java/com/capyboop/paint/MainActivity.kt'),
+      'utf8'
+    );
+    assert.equal(
+      mainActivityKt.includes('openExternalBrowserUrl(') &&
+        mainActivityKt.includes('queryIntentActivities(') &&
+        mainActivityKt.includes('it != packageName') &&
+        mainActivityKt.includes('setPackage(externalBrowserPkg)'),
+      true,
+      'MainActivity.kt must resolve an external browser package excluding packageName for OPEN_EXTERNAL URLs'
+    );
+    const rawManifestXml = fs.readFileSync(androidManifestPath, 'utf8');
+    assert.equal(
+      rawManifestXml.includes('<queries>') && rawManifestXml.includes('android.intent.category.BROWSABLE'),
+      true,
+      'AndroidManifest.xml must declare <queries> for HTTPS BROWSABLE external browser resolution'
+    );
+
     const parseTvBannerPng = (buf) => {
       const pngMagic = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
       if (!Buffer.isBuffer(buf) || buf.length < 26) return null;
@@ -13655,6 +13706,20 @@ async function runBrowserBasicsSuite() {
       await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
       'true',
       'TargetSpotlightOverlay must stay active inside SettingsModal (data-modal-spotlight="true") on settings step'
+    );
+    // Manually switch to Tab 0 (About) while SettingsModal stays open, then tap Open Settings -> must switch back to Tab 1 via initialTabRequestKey
+    await tutPage.getByTestId('settings-tab-about').click();
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-about').getAttribute('aria-selected'),
+      'true',
+      'Manual tab click must switch to Tab 0 (About)'
+    );
+    await tutPage.getByTestId('tutorial-open-settings-btn').click();
+    await tutPage.getByTestId('settings-section-appearance').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
+      'true',
+      'Clicking tutorial-open-settings-btn while modal is already open must re-switch back to Tab 1 (Settings)'
     );
     // Step 11 -> 12 (hints, modalTab: 2): Next while modal is open automatically switches to Tab 2 (Hints)
     await tutPage.getByTestId('tutorial-next-btn').click();

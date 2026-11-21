@@ -99,6 +99,7 @@ import {
 interface SettingsModalProps {
   isOpen: boolean;
   initialTab?: number;
+  initialTabRequestKey?: number;
   settings: UserSettings;
   lifetimeStats?: PlayerLifetimeStats;
   snapshots: SavedSnapshot[];
@@ -315,6 +316,7 @@ const PRESET_GALLERY_ITEMS: PresetGalleryEntry[] = [
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   initialTab,
+  initialTabRequestKey,
   settings,
   lifetimeStats,
   snapshots,
@@ -557,7 +559,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       onTabOpenedRef.current?.(resolvedTab);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, initialTabRequestKey]);
 
   // Close on Escape key (cancel inline rename first if active)
   useEffect(() => {
@@ -1059,7 +1061,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">
                     <div className="font-bold text-slate-200">Zoom &amp; Pan</div>
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      Pinch, scroll, or double-tap &amp; drag to inspect fine details.
+                      {NativeBridge.isAndroid
+                        ? 'Pinch or double-tap & drag to inspect fine details.'
+                        : 'Pinch, scroll, or double-tap & drag to inspect fine details.'}
                     </div>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-950/50 border border-slate-800/80">

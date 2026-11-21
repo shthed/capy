@@ -383,6 +383,7 @@ export const App: React.FC = () => {
   const showSettingsRef = useRef<boolean>(false);
   showSettingsRef.current = showSettings;
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
+  const [settingsTabRequestKey, setSettingsTabRequestKey] = useState<number>(0);
   const activeSettingsTabRef = useRef<number>(1);
   const tutorialOpenedSettingsRef = useRef<boolean>(false);
   const hasCheckedSettingsTipRef = useRef<boolean>(false);
@@ -845,6 +846,7 @@ export const App: React.FC = () => {
     tutorialOpenedSettingsRef.current = false;
     cleanupTutorialTransientModes(targetKey);
     setSettingsInitialTab(targetTab);
+    setSettingsTabRequestKey((k) => k + 1);
     setShowSettings(true);
     setTutorialStepTriedInVisit(false);
     setTutorialStep(targetIdx);
@@ -856,6 +858,7 @@ export const App: React.FC = () => {
       tutorialOpenedSettingsRef.current = true;
     }
     setSettingsInitialTab(tabIndex);
+    setSettingsTabRequestKey((k) => k + 1);
     setShowSettings(true);
   }, []);
 
@@ -873,6 +876,7 @@ export const App: React.FC = () => {
           tutorialOpenedSettingsRef.current = true;
         }
         setSettingsInitialTab(targetStep.modalTab);
+        setSettingsTabRequestKey((k) => k + 1);
         setShowSettings(true);
       }
     },
@@ -888,6 +892,7 @@ export const App: React.FC = () => {
       setTutorialStep(clampedIdx);
       if (showSettingsRef.current && nextStepDef?.modalTab !== undefined) {
         setSettingsInitialTab(nextStepDef.modalTab);
+        setSettingsTabRequestKey((k) => k + 1);
       }
     },
     [cleanupTutorialTransientModes]
@@ -5890,6 +5895,7 @@ export const App: React.FC = () => {
         <SettingsModal
           isOpen={showSettings}
           initialTab={settingsInitialTab}
+          initialTabRequestKey={settingsTabRequestKey}
           settings={settings}
           lifetimeStats={lifetimeStats}
           snapshots={snapshots}
