@@ -97,14 +97,15 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
         right: 'calc(1rem + var(--sar, 0px))',
       }}
     >
-      {/* Fit to Screen (Reset View / Extent) Button */}
+      {/* Fit to Screen (Reset View) Button */}
       {showResetViewButton && isZoomedOrPanned && onResetView && (
         <button
           type="button"
           onClick={onResetView}
-          title="Fit to Screen (Reset View)"
+          aria-label="Fit to Screen"
+          title="Fit to Screen"
           data-testid="reset-view-btn"
-          className="capy-fab-btn p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-amber-400/50 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
+          className="capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full bg-slate-900/90 text-amber-400 border border-amber-400/50 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
         >
           <Maximize2 size={18} />
         </button>
@@ -116,18 +117,20 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
           <button
             type="button"
             onClick={onZoomIn}
+            aria-label="Zoom In"
             title="Zoom In"
             data-testid="zoom-in-btn"
-            className="capy-fab-btn p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+            className="capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             <Plus size={18} />
           </button>
           <button
             type="button"
             onClick={onZoomOut}
+            aria-label="Zoom Out"
             title="Zoom Out"
             data-testid="zoom-out-btn"
-            className="capy-fab-btn p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
+            className="capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full bg-slate-900/85 text-slate-200 border border-slate-700/60 shadow-xl backdrop-blur-md hover:bg-slate-800 transition-all active:scale-95 cursor-pointer"
           >
             <Minus size={18} />
           </button>
@@ -139,9 +142,10 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
         <button
           type="button"
           onClick={onStartReplay}
+          aria-label="Watch Puzzle Replay"
           title="Watch Puzzle Replay"
           data-testid="replay-btn"
-          className="capy-fab-btn p-2.5 rounded-full bg-amber-400 text-slate-950 border border-amber-300 shadow-xl backdrop-blur-md hover:bg-amber-300 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
+          className="capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full bg-amber-400 text-slate-950 border border-amber-300 shadow-xl backdrop-blur-md hover:bg-amber-300 transition-all active:scale-95 animate-in fade-in zoom-in-90 duration-200 cursor-pointer"
         >
           <Play size={18} />
         </button>
@@ -155,9 +159,9 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
               type="button"
               onClick={onRedo}
               aria-label="Redo Action"
-              title="Redo Action (Ctrl+Y / Ctrl+Shift+Z)"
+              title="Redo Action"
               data-testid="redo-btn"
-              className="capy-fab-btn p-2.5 rounded-full shadow-xl backdrop-blur-md border border-slate-700/60 bg-slate-900/90 text-slate-200 hover:bg-slate-800 active:scale-95 transition-all select-none cursor-pointer animate-in fade-in zoom-in-90 duration-150"
+              className="capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full shadow-xl backdrop-blur-md border border-slate-700/60 bg-slate-900/90 text-slate-200 hover:bg-slate-800 active:scale-95 transition-all select-none cursor-pointer animate-in fade-in zoom-in-90 duration-150"
             >
               <Redo2 size={18} />
             </button>
@@ -175,11 +179,11 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
               aria-label="Undo Region"
               title={
                 canUndo
-                  ? 'Undo (Ctrl+Z) • Long press to open Replay Scrubber'
+                  ? 'Undo • Long press to open Replay'
                   : 'Nothing to Undo'
               }
               data-testid="undo-btn"
-              className={`capy-fab-btn p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all select-none ${
+              className={`capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all select-none ${
                 canUndo
                   ? 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800 active:scale-95 cursor-pointer'
                   : 'bg-slate-900/40 text-slate-600 border-slate-800/40 cursor-not-allowed'
@@ -196,9 +200,9 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
         type="button"
         data-testid="paint-mode-btn"
         onClick={onTogglePaintMode}
-        aria-label="Toggle Paint Mode"
-        title={isPaintMode ? 'Paint Mode Active (Click to Switch to Tap Mode)' : 'Tap Mode Active (Click to Enable Paint Mode)'}
-        className={`capy-fab-primary p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
+        aria-label={isPaintMode ? 'Paint Mode Active (Switch to Tap Mode)' : 'Tap Mode Active (Switch to Paint Mode)'}
+        title={isPaintMode ? 'Paint Mode Active (Tap to Switch to Tap Mode)' : 'Tap Mode Active (Tap to Enable Paint Mode)'}
+        className={`capy-fab-primary inline-flex items-center justify-center min-w-[48px] min-h-[48px] p-3 rounded-full shadow-xl backdrop-blur-md border transition-all active:scale-95 cursor-pointer ${
           isPaintMode
             ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-400/50 scale-105'
             : 'bg-slate-900/90 text-slate-200 border-slate-700/60 hover:bg-slate-800'

@@ -50,9 +50,12 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
   zoom: [
     {
       selector: '[data-testid="zoom-in-btn"]',
-      optional: true,
+      fallbackSelectors: [
+        '[data-testid="reset-view-btn"]',
+        '[data-testid="puzzle-canvas"]',
+      ],
       padding: 4,
-      borderRadius: 9999,
+      borderRadius: 16,
     },
     {
       selector: '[data-testid="zoom-out-btn"]',
@@ -119,31 +122,16 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       borderRadius: 14,
     },
   ],
-  gallery_daily: [
-    {
-      selector: '[data-testid="topbar-settings-btn"]',
-      padding: 3,
-      borderRadius: 9999,
-    },
-  ],
-  custom_photo: [
+  create_gallery: [
     {
       selector: '[data-testid="topbar-upload-btn"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
       padding: 3,
       borderRadius: 9999,
     },
-  ],
-  puzzle_presets: [
     {
       selector: '[data-testid="topbar-settings-btn"]',
-      padding: 3,
-      borderRadius: 9999,
-    },
-  ],
-  infinite_zoom: [
-    {
-      selector: '[data-testid="topbar-parent-puzzle-btn"]',
-      fallbackSelector: '[data-testid="topbar-settings-btn"]',
+      optional: true,
       padding: 3,
       borderRadius: 9999,
     },
@@ -155,11 +143,32 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       borderRadius: 9999,
     },
   ],
-  settings_a11y: [
+  settings: [
     {
-      selector: '[data-testid="topbar-settings-btn"]',
+      selector: '[data-testid="settings-tab-settings"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
       padding: 3,
-      borderRadius: 9999,
+      borderRadius: 10,
+    },
+    {
+      selector: '[data-testid="settings-section-gameplay"]',
+      optional: true,
+      padding: 4,
+      borderRadius: 14,
+    },
+  ],
+  hints: [
+    {
+      selector: '[data-testid="settings-tab-hints"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    {
+      selector: '[data-testid="hints-section-style"]',
+      optional: true,
+      padding: 4,
+      borderRadius: 14,
     },
   ],
 };
@@ -231,6 +240,13 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
   saves_export: [
     {
       selector: '[data-testid="topbar-saves-btn"]',
+      padding: 3,
+      borderRadius: 9999,
+    },
+  ],
+  settings_hints_tip: [
+    {
+      selector: '[data-testid="topbar-settings-btn"]',
       padding: 3,
       borderRadius: 9999,
     },
@@ -457,6 +473,8 @@ export interface TargetSpotlightOverlayProps {
   cardSelector: string;
   reducedMotion?: boolean;
   largeText?: boolean;
+  isModalSpotlight?: boolean;
+  zIndexClass?: string;
 }
 
 interface ClipBounds {
@@ -542,6 +560,8 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
   cardSelector,
   reducedMotion = false,
   largeText = false,
+  isModalSpotlight = false,
+  zIndexClass,
 }) => {
   const [layout, setLayout] = useState<ResolvedLayout>({ rings: [], connector: null });
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -822,6 +842,33 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
     };
   }, [isActive, targetKey, cardSelector, largeText, measure]);
 
+  useEffect(() => {
+    if (!isActive || !isModalSpotlight || !targetKey || typeof document === 'undefined') {
+      return;
+    }
+    const specs =
+      variant === 'tutorial'
+        ? TUTORIAL_STEP_TARGETS[targetKey as TutorialStepKey]
+        : FEATURE_OFFER_TARGETS[targetKey as FeatureOfferId];
+    if (!specs || specs.length < 2) return;
+
+    const rafId = window.requestAnimationFrame(() => {
+      const sectionSpec = specs[1];
+      const targetEl = document.querySelector(sectionSpec.selector);
+      if (targetEl instanceof HTMLElement && typeof targetEl.scrollIntoView === 'function') {
+        targetEl.scrollIntoView({
+          block: 'nearest',
+          behavior: reducedMotion ? 'auto' : 'smooth',
+        });
+      }
+      measure();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isActive, isModalSpotlight, variant, targetKey, reducedMotion, measure]);
+
   if (!isActive || !targetKey || layout.rings.length === 0) return null;
 
   const accentStroke = variant === 'tutorial' ? 'rgba(251, 191, 36, 0.95)' : 'rgba(56, 189, 248, 0.95)';
@@ -829,13 +876,15 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
     variant === 'tutorial'
       ? '0 0 0 1px rgba(251, 191, 36, 0.25), 0 0 12px rgba(251, 191, 36, 0.35)'
       : '0 0 0 1px rgba(56, 189, 248, 0.25), 0 0 12px rgba(56, 189, 248, 0.35)';
+  const resolvedZIndex = zIndexClass || (isModalSpotlight ? 'z-[58]' : 'z-[38]');
 
   return (
     <div
       data-testid="spotlight-overlay"
       data-variant={variant}
+      data-modal-spotlight={isModalSpotlight ? 'true' : undefined}
       aria-hidden="true"
-      className="fixed inset-0 z-[38] pointer-events-none overflow-hidden"
+      className={`fixed inset-0 ${resolvedZIndex} pointer-events-none overflow-hidden`}
     >
       {layout.rings.map((ring, idx) => (
         <div
