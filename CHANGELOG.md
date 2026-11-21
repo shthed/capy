@@ -55,7 +55,7 @@
 - [#539](../../pull/539) Replace brittle fixed sleeps across the E2E suite with deterministic Playwright locator, attribute, IndexedDB, and URL-hash waits
 - [#537](../../pull/537) Target Android API 36 with edge-to-edge insets, hardened WebView navigation, isolated share cache cleanup, cold-start bridge queuing, and release-signing secret checks
 - [#535](../../pull/535) Offload save thumbnails to IndexedDB with quota alerts, optimize canvas rendering and HUD memoization, code-split the puzzle generator, and harden Co-op checkpoints
-- [#534](../../pull/534) Harden PR workflow validation, include `.well-known/assetlinks.json` in GitHub Pages deploys, and improve mirror sync reliability
+- [#534](../../pull/534) Harden PR workflow validation, include `.well-known/assetlinks.json` in GitHub Pages deploys, and improve deployment sync reliability
 - [#530](../../pull/530) Preserve active puzzle progress across debounced and `beforeunload` viewport saves, remove idle spotlight polling, and speed up CI with async heavy jobs
 
 ### 3.0.3 - 2026-11-14

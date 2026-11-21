@@ -4424,6 +4424,38 @@ async function runCodecAndEngineTests() {
         'review:ai-approved',
         'ai-agent',
         'capyboop/capy',
+        'AI-dev',
+        'AI review',
+        'AI reviews',
+        'AI approval',
+        'AI Studio',
+        'AI GitHub actions',
+        'agent',
+        'agents',
+        'subagent',
+        'AGENTS',
+        'docs(agents)',
+        'update-agents',
+        'invoke_subagent',
+        'ci(mirror)',
+        'chore(mirror)',
+        'public mirror',
+        'mirror sync',
+        'mirror retargeting',
+        'full replay',
+        'Open Bot Issue',
+        'free bot',
+        '1-click bot',
+        'bot PR',
+        'review-gate',
+        'review gate',
+        'gate readiness',
+        'persona',
+        'Issue #607',
+        '.github/copilot-instructions.md',
+        'capy.prompt.yml',
+        'CLAUDE.md',
+        'GEMINI.md',
       ]) {
         assert.equal(
           FORBIDDEN_PERSONA_REGEX.test(badToken),
@@ -4440,6 +4472,9 @@ async function runCodecAndEngineTests() {
         'project owner (capyboop)',
         'User-Agent: capy-paint',
         'github-actions[bot]',
+        'personal',
+        'personalized',
+        'during replay',
       ]) {
         assert.equal(
           FORBIDDEN_PERSONA_REGEX.test(safeToken),
@@ -4460,12 +4495,26 @@ async function runCodecAndEngineTests() {
         ['Update WHITEBOARD and Project Owner directive for bot-authored PRs', 'Update status notes and Project project guideline for automated PRs'],
         ['Sync .agents directory and PR_READINESS check', 'Sync dev environment config directory and PR checklist check'],
         ['Fix automation/sprint-12 branch cleanup and clean-room regenerate-puzzles.yml', 'Fix feature/sprint-12 branch cleanup and public asset generation'],
+        ['Scrub AI-dev & agent traces from public mirror (Issue #607) (#612)', 'Scrub internal dev & contributor traces from public repository'],
+        ['docs(agents): align CAPYBOOP, AGENTS, DEV with free bot AI reviews', 'docs: align project docs, contributor, DEV with automated CI review'],
+        ['ci(mirror): tag pushed commit during full replay and mirror sync', 'ci(release): tag pushed commit during release sync and release sync'],
+        ['Add 1-click bot PR approval and Open Bot Issue for github-actions[bot]', 'Add one-click PR approval and issue automation for CI automation'],
+        ['Compile #612 changelog and fix review-gate gate readiness persona check', 'Compile changelog and fix review workflow PR checks release check'],
+        ['Add personalized theme and personal gallery with AiArtworkProvider', 'Add personalized theme and personal gallery with AiArtworkProvider'],
+        ['ci: preserve valid review:ai-approved and reconcile labels after AI marker evaluation', 'ci: preserve valid CI-approved and reconcile labels after CI marker evaluation'],
+        ['Speed up CI gate with async E2E/Android/Pages and strict 100% AI auto-merge', 'Speed up CI gate with async E2E/Android/Pages and strict 100% CI auto-merge'],
+        ['Add Dual AI and Owner PR review gate, sub-2s sanity check, and clean-room tag sync', 'Add automated and Owner PR review workflow, sub-2s sanity check, and public tag sync'],
+        ['ci(mirror): replay full clean-room commit history onto capyboop/paint', 'ci(release): sync public release history onto capyboop/paint'],
+        ['Update CAPYBOOP, AGENTS and CAPYBOOP guide', 'Update project docs, contributor and project docs guide'],
+        ['Allow bot PRs and AI approvals for public personas (#607)', 'Allow automated PRs and CI approvals for public releases'],
+        ['Close #607 with readiness checklist in ci(gate)', 'Close cleanup with PR checklist in ci(checks)'],
+        ['ci(mirror): scrub dev tokens in historical commit messages during replay', 'ci(release): normalize release commit history during sync'],
       ]) {
         const cleaned = sanitizeCommitMessage(rawMsg);
         assert.equal(cleaned, expectedOut);
         assert.equal(FORBIDDEN_PERSONA_REGEX.test(cleaned), false, `Sanitized output leaked: ${cleaned}`);
       }
-      // Verify multi-line scrub() contract used by publish-capyboop.yml (strips multi-line capy-dev-only blocks and preserves list indentation)
+      // Verify multi-line scrub() contract and fail-closed historical replay in publish-capyboop.yml
       const publishYmlText = fs.readFileSync(
         path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
         'utf8'
@@ -4474,6 +4523,45 @@ async function runCodecAndEngineTests() {
         publishYmlText.includes("transformPersonaContent(String(text || ''))\n              .split(/\\r?\\n/)"),
         true,
         'publish-capyboop.yml scrub() must run transformPersonaContent on full multi-line string before splitting'
+      );
+      assert.equal(
+        publishYmlText.includes('timeout-minutes: 30'),
+        true,
+        'publish-capyboop.yml must allocate timeout-minutes: 30 for full historical replay'
+      );
+      assert.equal(
+        publishYmlText.includes('historicalScrub: origSha !== headSha'),
+        true,
+        'publish-capyboop.yml must enable historicalScrub for historical commits while keeping HEAD strict'
+      );
+      assert.equal(
+        publishYmlText.includes('} catch {'),
+        false,
+        'publish-capyboop.yml must not silently swallow exportCleanPersonaStage errors'
+      );
+      assert.equal(
+        publishYmlText.includes('verify_clean_history_repo'),
+        true,
+        'publish-capyboop.yml must verify replayed history logs and blobs before pushing'
+      );
+      assert.equal(
+        publishYmlText.includes('log --all -i -S'),
+        true,
+        'publish-capyboop.yml must scan historical blobs case-insensitively with log --all -i -S'
+      );
+      assert.equal(
+        publishYmlText.includes("'docs/ai'") &&
+          publishYmlText.includes("'web/scripts/rebrand-persona.mjs'") &&
+          publishYmlText.includes("'.github/workflows/publish-capyboop.yml'"),
+        true,
+        'publish-capyboop.yml legacy_hits must include docs/ai, rebrand-persona.mjs, and publish-capyboop.yml'
+      );
+      assert.equal(
+        publishYmlText.includes('REMOTE_TAGS="$(git -C "${TAG_REPO_DIR}" ls-remote --tags target)"') &&
+          publishYmlText.includes('declare -A tag_sha=()') &&
+          publishYmlText.includes(':refs/tags/${remote_tag}'),
+        true,
+        'publish-capyboop.yml must fail-closed on ls-remote and resolve peeled ^{} tags before pruning'
       );
       const scrubEpic = (text) =>
         transformPersonaContent(String(text || ''))
@@ -4500,6 +4588,81 @@ async function runCodecAndEngineTests() {
       assert.equal(scrubbedEpic.includes('  - Indented sub-bullet'), true);
       assert.equal(scrubbedEpic.includes('    - Nested sub-bullet'), true);
 
+      // Verify historicalScrub: true excludes legacy AI files, scrubs historical blobs, and preserves product-AI terms & UI copy
+      const tmpHistFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-hist-fixture-'));
+      const tmpHistStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-hist-stage-'));
+      try {
+        fs.mkdirSync(path.join(tmpHistFixture, '.github'), { recursive: true });
+        fs.mkdirSync(path.join(tmpHistFixture, 'web'), { recursive: true });
+        fs.writeFileSync(path.join(tmpHistFixture, '.github/copilot-instructions.md'), 'Copilot rules\n', 'utf8');
+        fs.writeFileSync(path.join(tmpHistFixture, 'capy.prompt.yml'), 'prompt: test\n', 'utf8');
+        fs.writeFileSync(path.join(tmpHistFixture, 'CLAUDE.md'), 'Claude rules\n', 'utf8');
+        fs.writeFileSync(path.join(tmpHistFixture, 'GEMINI.md'), 'Gemini rules\n', 'utf8');
+        fs.writeFileSync(
+          path.join(tmpHistFixture, 'web/metadata.json'),
+          JSON.stringify(
+            {
+              name: 'Capy',
+              majorCapabilities: ['MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API'],
+            },
+            null,
+            2
+          ),
+          'utf8'
+        );
+        fs.writeFileSync(
+          path.join(tmpHistFixture, 'README.md'),
+          [
+            '# Capy Paint',
+            'Legacy Antigravity and AGENTS.md and PR Readiness and Gemini 3 and Codex and Claude and WHITEBOARD.md and conversation://abc and invoke_subagent.',
+            'Keep personal and personalized settings, User-Agent, AiArtworkProvider, AiCreditLedger, AI Credits, and EPIC-5.',
+            'Follow Painting During Replay and changelog entry #612 remain intact.',
+          ].join('\n'),
+          'utf8'
+        );
+
+        assert.throws(
+          () => exportCleanPersonaStage({ repoRoot: tmpHistFixture, stageDir: tmpHistStage }),
+          /Forbidden persona token/,
+          'Default historicalScrub: false must fail closed on un-scrubbed tokens'
+        );
+        const histStats = exportCleanPersonaStage({
+          repoRoot: tmpHistFixture,
+          stageDir: tmpHistStage,
+          historicalScrub: true,
+        });
+        assert.equal(histStats.verifiedFiles, 2);
+        for (const excludedLegacy of [
+          '.github/copilot-instructions.md',
+          'capy.prompt.yml',
+          'CLAUDE.md',
+          'GEMINI.md',
+        ]) {
+          assert.equal(
+            fs.existsSync(path.join(tmpHistStage, excludedLegacy)),
+            false,
+            `historicalScrub must exclude ${excludedLegacy}`
+          );
+        }
+        const scrubbedMeta = JSON.parse(
+          fs.readFileSync(path.join(tmpHistStage, 'web/metadata.json'), 'utf8')
+        );
+        assert.deepEqual(scrubbedMeta.majorCapabilities, []);
+        const scrubbedHistReadme = fs.readFileSync(path.join(tmpHistStage, 'README.md'), 'utf8');
+        assert.equal(FORBIDDEN_PERSONA_REGEX.test(scrubbedHistReadme), false);
+        assert.equal(scrubbedHistReadme.includes('personal and personalized'), true);
+        assert.equal(scrubbedHistReadme.includes('User-Agent'), true);
+        assert.equal(scrubbedHistReadme.includes('AiArtworkProvider'), true);
+        assert.equal(scrubbedHistReadme.includes('AiCreditLedger'), true);
+        assert.equal(scrubbedHistReadme.includes('AI Credits'), true);
+        assert.equal(scrubbedHistReadme.includes('EPIC-5'), true);
+        assert.equal(scrubbedHistReadme.includes('Follow Painting During Replay'), true);
+        assert.equal(scrubbedHistReadme.includes('#612'), true);
+      } finally {
+        fs.rmSync(tmpHistFixture, { recursive: true, force: true });
+        fs.rmSync(tmpHistStage, { recursive: true, force: true });
+      }
+
       // Verify assertZeroSourcePersonaLeak rejects forbidden relative file paths
       const badPathFile = path.join(tmpCleanStage, 'clean-room-leak.md');
       fs.writeFileSync(badPathFile, 'Harmless public text\n', 'utf8');
@@ -4514,25 +4677,29 @@ async function runCodecAndEngineTests() {
 
       const tmpVerifyLog = path.join(tmpCleanStage, 'verify-log-clean.txt');
       const tmpVerifyLeak = path.join(tmpCleanStage, 'verify-log-leak.txt');
-      fs.writeFileSync(tmpVerifyLog, 'capyboop Update Capy Paint AiArtworkProvider\x00', 'utf8');
+      const tmpVerifyBotLeak = path.join(tmpCleanStage, 'verify-log-bot-leak.txt');
+      fs.writeFileSync(tmpVerifyLog, 'capyboop Update Capy Paint personalized AiArtworkProvider\x00', 'utf8');
       fs.writeFileSync(tmpVerifyLeak, 'capyboop Update AGENTS.md for Antigravity\x00', 'utf8');
+      fs.writeFileSync(tmpVerifyBotLeak, 'capyboop Mandate github-actions[bot] for #612\x00', 'utf8');
       try {
         execFileSync(
           process.execPath,
           [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), '--verify-log', tmpVerifyLog],
           { stdio: 'pipe' }
         );
-        let leakRc = 0;
-        try {
-          execFileSync(
-            process.execPath,
-            [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), '--verify-log', tmpVerifyLeak],
-            { stdio: 'pipe' }
-          );
-        } catch (err) {
-          leakRc = Number(err.status || 1);
+        for (const leakFile of [tmpVerifyLeak, tmpVerifyBotLeak]) {
+          let leakRc = 0;
+          try {
+            execFileSync(
+              process.execPath,
+              [path.resolve(projectRoot, 'scripts/rebrand-persona.mjs'), '--verify-log', leakFile],
+              { stdio: 'pipe' }
+            );
+          } catch (err) {
+            leakRc = Number(err.status || 1);
+          }
+          assert.equal(leakRc, 2, `--verify-log must exit 2 on forbidden token in ${path.basename(leakFile)}`);
         }
-        assert.equal(leakRc, 2, '--verify-log must exit 2 on forbidden persona token');
         for (const badVerifyArgs of [['--verify-log'], ['--verify-log', '--dry-run']]) {
           let missingArgRc = 0;
           try {
@@ -4549,6 +4716,7 @@ async function runCodecAndEngineTests() {
       } finally {
         fs.rmSync(tmpVerifyLog, { force: true });
         fs.rmSync(tmpVerifyLeak, { force: true });
+        fs.rmSync(tmpVerifyBotLeak, { force: true });
       }
       const stagedGitignore = fs.readFileSync(path.join(tmpCleanStage, '.gitignore'), 'utf8');
       assert.equal(stagedGitignore.includes('.agents/'), false);
