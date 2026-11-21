@@ -4501,6 +4501,14 @@ async function runCodecAndEngineTests() {
         ['Add 1-click bot PR approval and Open Bot Issue for github-actions[bot]', 'Add one-click PR approval and issue automation for CI automation'],
         ['Compile #612 changelog and fix review-gate gate readiness persona check', 'Compile changelog and fix review workflow PR checks release check'],
         ['Add personalized theme and personal gallery with AiArtworkProvider', 'Add personalized theme and personal gallery with AiArtworkProvider'],
+        ['ci: preserve valid review:ai-approved and reconcile labels after AI marker evaluation', 'ci: preserve valid CI-approved and reconcile labels after CI marker evaluation'],
+        ['Speed up CI gate with async E2E/Android/Pages and strict 100% AI auto-merge', 'Speed up CI gate with async E2E/Android/Pages and strict 100% CI auto-merge'],
+        ['Add Dual AI and Owner PR review gate, sub-2s sanity check, and clean-room tag sync', 'Add automated and Owner PR review workflow, sub-2s sanity check, and public tag sync'],
+        ['ci(mirror): replay full clean-room commit history onto capyboop/paint', 'ci(release): sync public release history onto capyboop/paint'],
+        ['Update CAPYBOOP, AGENTS and CAPYBOOP guide', 'Update project docs, contributor and project docs guide'],
+        ['Allow bot PRs and AI approvals for public personas (#607)', 'Allow automated PRs and CI approvals for public releases'],
+        ['Close #607 with readiness checklist in ci(gate)', 'Close cleanup with PR checklist in ci(checks)'],
+        ['ci(mirror): scrub dev tokens in historical commit messages during replay', 'ci(release): normalize release commit history during sync'],
       ]) {
         const cleaned = sanitizeCommitMessage(rawMsg);
         assert.equal(cleaned, expectedOut);
@@ -4517,9 +4525,14 @@ async function runCodecAndEngineTests() {
         'publish-capyboop.yml scrub() must run transformPersonaContent on full multi-line string before splitting'
       );
       assert.equal(
-        publishYmlText.includes('historicalScrub: true'),
+        publishYmlText.includes('timeout-minutes: 30'),
         true,
-        'publish-capyboop.yml must enable historicalScrub: true during full replay'
+        'publish-capyboop.yml must allocate timeout-minutes: 30 for full historical replay'
+      );
+      assert.equal(
+        publishYmlText.includes('historicalScrub: origSha !== headSha'),
+        true,
+        'publish-capyboop.yml must enable historicalScrub for historical commits while keeping HEAD strict'
       );
       assert.equal(
         publishYmlText.includes('} catch {'),
@@ -4532,9 +4545,23 @@ async function runCodecAndEngineTests() {
         'publish-capyboop.yml must verify replayed history logs and blobs before pushing'
       );
       assert.equal(
-        publishYmlText.includes(':refs/tags/${remote_tag}'),
+        publishYmlText.includes('log --all -i -S'),
         true,
-        'publish-capyboop.yml must prune orphaned remote tags during NEEDS_CLEAN_RESET=true'
+        'publish-capyboop.yml must scan historical blobs case-insensitively with log --all -i -S'
+      );
+      assert.equal(
+        publishYmlText.includes("'docs/ai'") &&
+          publishYmlText.includes("'web/scripts/rebrand-persona.mjs'") &&
+          publishYmlText.includes("'.github/workflows/publish-capyboop.yml'"),
+        true,
+        'publish-capyboop.yml legacy_hits must include docs/ai, rebrand-persona.mjs, and publish-capyboop.yml'
+      );
+      assert.equal(
+        publishYmlText.includes('REMOTE_TAGS="$(git -C "${TAG_REPO_DIR}" ls-remote --tags target)"') &&
+          publishYmlText.includes('declare -A tag_sha=()') &&
+          publishYmlText.includes(':refs/tags/${remote_tag}'),
+        true,
+        'publish-capyboop.yml must fail-closed on ls-remote and resolve peeled ^{} tags before pruning'
       );
       const scrubEpic = (text) =>
         transformPersonaContent(String(text || ''))
@@ -4561,7 +4588,7 @@ async function runCodecAndEngineTests() {
       assert.equal(scrubbedEpic.includes('  - Indented sub-bullet'), true);
       assert.equal(scrubbedEpic.includes('    - Nested sub-bullet'), true);
 
-      // Verify historicalScrub: true excludes legacy AI files, scrubs historical blobs, and preserves product-AI terms
+      // Verify historicalScrub: true excludes legacy AI files, scrubs historical blobs, and preserves product-AI terms & UI copy
       const tmpHistFixture = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-hist-fixture-'));
       const tmpHistStage = fs.mkdtempSync(path.join(os.tmpdir(), 'capy-hist-stage-'));
       try {
@@ -4588,7 +4615,8 @@ async function runCodecAndEngineTests() {
           [
             '# Capy Paint',
             'Legacy Antigravity and AGENTS.md and PR Readiness and Gemini 3 and Codex and Claude and WHITEBOARD.md and conversation://abc and invoke_subagent.',
-            'Keep personal and personalized settings, AiArtworkProvider, AiCreditLedger, AI Credits, and EPIC-5.',
+            'Keep personal and personalized settings, User-Agent, AiArtworkProvider, AiCreditLedger, AI Credits, and EPIC-5.',
+            'Follow Painting During Replay and changelog entry #612 remain intact.',
           ].join('\n'),
           'utf8'
         );
@@ -4623,10 +4651,13 @@ async function runCodecAndEngineTests() {
         const scrubbedHistReadme = fs.readFileSync(path.join(tmpHistStage, 'README.md'), 'utf8');
         assert.equal(FORBIDDEN_PERSONA_REGEX.test(scrubbedHistReadme), false);
         assert.equal(scrubbedHistReadme.includes('personal and personalized'), true);
+        assert.equal(scrubbedHistReadme.includes('User-Agent'), true);
         assert.equal(scrubbedHistReadme.includes('AiArtworkProvider'), true);
         assert.equal(scrubbedHistReadme.includes('AiCreditLedger'), true);
         assert.equal(scrubbedHistReadme.includes('AI Credits'), true);
         assert.equal(scrubbedHistReadme.includes('EPIC-5'), true);
+        assert.equal(scrubbedHistReadme.includes('Follow Painting During Replay'), true);
+        assert.equal(scrubbedHistReadme.includes('#612'), true);
       } finally {
         fs.rmSync(tmpHistFixture, { recursive: true, force: true });
         fs.rmSync(tmpHistStage, { recursive: true, force: true });

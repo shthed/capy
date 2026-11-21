@@ -88,9 +88,10 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 export const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|CLAUDE\.md|GEMINI\.md|capy\.prompt\.yml|copilot-instructions\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|ai[- ]?dev\b|ai\s+reviews?\b|ai\s+approval\b|ai\s+studio\b|ai\s+github\s+actions\b|(?<!user-)\b(?:sub)?agents?\b|docs\(agents\)|update-agents|invoke_subagent|ci\(mirror\)|chore\(mirror\)|public\s+mirror|mirror\s+sync|mirror\s+retargeting|full\s+replay|open\s+bot\s+issue|free\s+bot|1-click\s+bot|bot\s+pr\b|review[- ]gate|gate\s+readiness|\bpersona\b|issue\s*#607\b|capyboop\/capy/i;
+  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|CLAUDE\.md|GEMINI\.md|capy\.prompt\.yml|copilot-instructions\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|ai[- ]?dev\b|ai\s+reviews?\b|ai\s+approvals?\b|ai\s+marker\b|ai\s+auto[- ]?merge\b|dual\s+ai\b|ai\s+studio\b|ai\s+github\s+actions\b|(?<!user-)\b(?:sub)?agents?\b|docs\(agents\)|update-agents|invoke_subagent|ci\(mirror\)|chore\(mirror\)|public\s+mirror|mirror\s+sync|mirror\s+retargeting|full\s+replay|open\s+bot\s+issue|free\s+bot|1-click\s+bot|bot\s+prs?\b|review[- ]gate|gate\s+readiness|\bpersonas?\b|issue\s*#607\b|capyboop\/capy/i;
 
-export const FORBIDDEN_COMMIT_LOG_REGEX = /github-actions\[bot\]|#612\b|during\s+replay/i;
+export const FORBIDDEN_COMMIT_LOG_REGEX =
+  /github-actions\[bot\]|#612\b|#607\b|during\s+replay|replay\s+full\b|readiness\s+checklist\b|ci\(gate\)|scrub\s+dev\s+tokens\s+in\s+historical\s+commit\s+messages/i;
 export const FORBIDDEN_COMMIT_LOG_CASE_SENSITIVE_REGEX =
   /\bCAPYBOOP(?=\s*[,&]|\s+(?:and|doc|guide|playbook)\b)/;
 
@@ -173,7 +174,10 @@ function applyForbiddenTextReplacements(text) {
     .replace(/ai\s+github\s+actions\b/gi, 'automated GitHub Actions')
     .replace(/ai[- ]?dev\b/gi, 'internal dev')
     .replace(/ai\s+reviews?\b/gi, 'CI review')
-    .replace(/ai\s+approval\b/gi, 'CI approval')
+    .replace(/ai\s+approvals?\b/gi, (m) => (m.toLowerCase().endsWith('s') ? 'CI approvals' : 'CI approval'))
+    .replace(/ai\s+marker\b/gi, 'CI marker')
+    .replace(/ai\s+auto[- ]?merge\b/gi, 'CI auto-merge')
+    .replace(/dual\s+ai\b/gi, 'automated')
     .replace(/ai\s+studio\b/gi, 'studio')
     .replace(/docs\(agents\)/gi, 'docs')
     .replace(/update-agents/gi, 'update-docs')
@@ -186,18 +190,15 @@ function applyForbiddenTextReplacements(text) {
     .replace(/mirror\s+retargeting/gi, 'repository alignment')
     .replace(/during\s+full\s+replay/gi, 'during release sync')
     .replace(/full\s+replay/gi, 'history sync')
-    .replace(/during\s+replay/gi, 'during sync')
     .replace(/open\s+bot\s+issue/gi, 'issue automation')
     .replace(/free\s+bot/gi, 'automated')
     .replace(/1-click\s+bot/gi, 'one-click')
-    .replace(/bot\s+pr\b/gi, 'automated PR')
+    .replace(/bot\s+prs?\b/gi, (m) => (m.toLowerCase().endsWith('s') ? 'automated PRs' : 'automated PR'))
     .replace(/review[- ]gate/gi, 'review workflow')
     .replace(/gate\s+readiness/gi, 'PR checks')
-    .replace(/\bpersona\b/gi, 'release')
+    .replace(/\bpersonas?\b/gi, (m) => (m.toLowerCase().endsWith('s') ? 'releases' : 'release'))
     .replace(/\s*\(\s*issue\s*#607\s*\)/gi, '')
     .replace(/\bissue\s*#607\b/gi, 'cleanup')
-    .replace(/\bcompile\s+#612\b/gi, 'Compile')
-    .replace(/#612\b/gi, 'release')
     .replace(/hairy[\s_-]*dog[\s_-]*trumpet|381055\+/gi, 'capyboop');
 }
 
@@ -242,8 +243,18 @@ export function sanitizeCommitMessage(rawMessage, { fallback = null } = {}) {
 
   const withoutPrSuffix = firstLine.replace(/\s*\(#\d+\)\s*$/, '').trim();
   const scrubbed = applyForbiddenTextReplacements(transformPersonaContent(withoutPrSuffix))
-    .replace(FORBIDDEN_COMMIT_LOG_CASE_SENSITIVE_REGEX, 'project docs')
+    .replace(new RegExp(FORBIDDEN_COMMIT_LOG_CASE_SENSITIVE_REGEX.source, 'g'), 'project docs')
     .replace(/github-actions\[bot\]/gi, 'CI automation')
+    .replace(/replay\s+full(?:\s+(?:public|clean[- ]room))?\s+commit\s+history/gi, 'sync public release history')
+    .replace(/replay\s+full\b/gi, 'sync')
+    .replace(/during\s+replay/gi, 'during sync')
+    .replace(/\bcompile\s+#612\b/gi, 'Compile')
+    .replace(/#612\b/gi, 'release')
+    .replace(/\s*\(\s*#607\s*\)/gi, '')
+    .replace(/#607\b/gi, 'cleanup')
+    .replace(/readiness\s+checklist\b/gi, 'PR checklist')
+    .replace(/ci\(gate\)/gi, 'ci(checks)')
+    .replace(/scrub\s+dev\s+tokens\s+in\s+historical\s+commit\s+messages/gi, 'normalize release commit history')
     .replace(/\s+/g, ' ')
     .trim();
   const result = scrubbed.length > 0 ? scrubbed : 'Update Capy Paint';

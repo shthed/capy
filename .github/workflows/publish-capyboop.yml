@@ -41,7 +41,7 @@ jobs:
   publish:
     name: Export & Push Clean capyboop Release
     if: github.repository == 'shthed/capy'
-    timeout-minutes: 10
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - name: Check CAPYBOOP_SYNC_TOKEN configuration
@@ -182,6 +182,7 @@ jobs:
             .split('\n')
             .filter(Boolean);
 
+          const headSha = commits[commits.length - 1];
           const cleanMap = new Map();
           let lastCleanSha = '';
 
@@ -200,7 +201,7 @@ jobs:
             exportCleanPersonaStage({
               repoRoot: histSrc,
               stageDir: histStage,
-              historicalScrub: true,
+              historicalScrub: origSha !== headSha,
             });
 
             for (const entry of fs.readdirSync(histDst)) {
@@ -256,7 +257,7 @@ jobs:
             node "${SOURCE_REPO_DIR}/web/scripts/rebrand-persona.mjs" --verify-log "${verify_log_file}"
 
             local legacy_hits
-            legacy_hits="$(git -C "${repo_dir}" log --all --oneline -- '.github/copilot-instructions.md' 'capy.prompt.yml' 'CLAUDE.md' 'GEMINI.md' 'AGENTS.md' 'CAPYBOOP.md')"
+            legacy_hits="$(git -C "${repo_dir}" log --all --oneline -- '.github/copilot-instructions.md' 'capy.prompt.yml' 'CLAUDE.md' 'GEMINI.md' 'AGENTS.md' 'CAPYBOOP.md' 'docs/ai' 'web/scripts/rebrand-persona.mjs' '.github/workflows/publish-capyboop.yml')"
             if [ -n "${legacy_hits}" ]; then
               echo "Legacy dev-only file leaked in replayed history:" >&2
               echo "${legacy_hits}" >&2
@@ -279,7 +280,7 @@ jobs:
               "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API" \
               "invoke_subagent"; do
               local blob_hits
-              blob_hits="$(git -C "${repo_dir}" log --all -S "${token}" --oneline)"
+              blob_hits="$(git -C "${repo_dir}" log --all -i -S "${token}" --oneline)"
               if [ -n "${blob_hits}" ]; then
                 echo "Forbidden token '${token}' leaked in replayed historical blobs:" >&2
                 echo "${blob_hits}" >&2
@@ -367,17 +368,31 @@ jobs:
 
           if [ "${NEEDS_CLEAN_RESET}" = "true" ]; then
             echo "Pruning orphaned remote tags not reachable from clean main (${PUSHED_COMMIT_SHA})..."
+            REMOTE_TAGS="$(git -C "${TAG_REPO_DIR}" ls-remote --tags target)"
+            declare -A tag_sha=()
             while read -r remote_sha remote_ref; do
               [ -z "${remote_ref}" ] && continue
               case "${remote_ref}" in
-                *'^{}') continue ;;
+                *'^{}')
+                  tag_name="${remote_ref#refs/tags/}"
+                  tag_name="${tag_name%\^\{\}}"
+                  tag_sha["${tag_name}"]="${remote_sha}"
+                  ;;
+                refs/tags/*)
+                  tag_name="${remote_ref#refs/tags/}"
+                  if [ -z "${tag_sha["${tag_name}"]+x}" ]; then
+                    tag_sha["${tag_name}"]="${remote_sha}"
+                  fi
+                  ;;
               esac
-              remote_tag="${remote_ref#refs/tags/}"
+            done <<< "${REMOTE_TAGS}"
+            for remote_tag in "${!tag_sha[@]}"; do
+              remote_sha="${tag_sha["${remote_tag}"]}"
               if ! git -C "${TAG_REPO_DIR}" merge-base --is-ancestor "${remote_sha}" "${PUSHED_COMMIT_SHA}" 2>/dev/null; then
                 echo "Deleting orphaned remote tag ${remote_tag} (${remote_sha}) on capyboop/paint..."
                 git -C "${TAG_REPO_DIR}" push target ":refs/tags/${remote_tag}"
               fi
-            done < <(git -C "${TAG_REPO_DIR}" ls-remote --tags target)
+            done
           fi
 
       - name: Migrate open issues from capyboop/capy to capyboop/paint
