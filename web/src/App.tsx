@@ -386,7 +386,9 @@ export const App: React.FC = () => {
   showSettingsRef.current = showSettings;
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
   const [settingsTabRequestKey, setSettingsTabRequestKey] = useState<number>(0);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<number>(1);
   const activeSettingsTabRef = useRef<number>(1);
+  activeSettingsTabRef.current = activeSettingsTab;
   const tutorialOpenedSettingsRef = useRef<boolean>(false);
   const hasCheckedSettingsTipRef = useRef<boolean>(false);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
@@ -595,8 +597,16 @@ export const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
-    document.documentElement.dataset.largeText = settings.largeText ? 'true' : 'false';
-  }, [settings.largeText]);
+    const textScale = Number.isFinite(settings.textScale) ? settings.textScale : settings.largeText ? 1.25 : 1.0;
+    const uiScale = Number.isFinite(settings.uiScale) ? settings.uiScale : settings.largeText ? 1.25 : 1.0;
+    const root = document.documentElement;
+    root.dataset.largeText = textScale > 1.0 || uiScale > 1.0 ? 'true' : 'false';
+    root.dataset.textScaled = textScale !== 1.0 ? 'true' : 'false';
+    root.dataset.uiScaled = uiScale !== 1.0 ? 'true' : 'false';
+    root.dataset.uiBoosted = uiScale > 1.0 ? 'true' : 'false';
+    root.style.setProperty('--capy-text-scale', String(textScale));
+    root.style.setProperty('--capy-ui-scale', String(uiScale));
+  }, [settings.largeText, settings.textScale, settings.uiScale]);
 
   // Sync modal & overlay states with native LIFO hardware back button stack
   useEffect(() => {
@@ -5531,7 +5541,7 @@ export const App: React.FC = () => {
         difficulty={settings.difficulty}
         fatFingerAssist={settings.fatFingerAssist}
         touchReachRadiusPx={
-          settings.largeText
+          settings.uiScale > 1.0 || settings.largeText
             ? Math.max(settings.touchReachRadiusPx, 34)
             : settings.touchReachRadiusPx
         }
@@ -5546,8 +5556,8 @@ export const App: React.FC = () => {
         labelScale={settings.labelScale}
         minLabelSize={settings.minLabelSize}
         maxLabelSize={
-          settings.largeText
-            ? Math.round(Math.max(settings.maxLabelSize * 1.5, 28))
+          settings.textScale > 1.0
+            ? Math.round(Math.max(settings.maxLabelSize * settings.textScale * 1.2, 28))
             : settings.maxLabelSize
         }
         highlightMatching={isReplaying ? false : settings.highlightMatching}
@@ -5835,6 +5845,7 @@ export const App: React.FC = () => {
           isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}
           largeText={Boolean(settings.largeText)}
+          uiScale={settings.uiScale}
           isFreeColorMode={isFreeColorMode}
           showCustomColorButton={Boolean(
             isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
@@ -6335,8 +6346,10 @@ export const App: React.FC = () => {
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
           onStartTour={handleStartSettingsTour}
+          hasDockedTutorial={showTutorial && showSettings && !showPaletteOptions}
           onTabOpened={(tabId) => {
             activeSettingsTabRef.current = tabId;
+            setActiveSettingsTab(tabId);
             if (tabId === 1) {
               markTutorialActionTried('settings');
             } else if (tabId === 2) {
@@ -6358,6 +6371,8 @@ export const App: React.FC = () => {
       <OnboardingTutorial
         isOpen={showTutorial}
         isModalOpen={showSettings || showPaletteOptions}
+        isSettingsOpen={showSettings && !showPaletteOptions}
+        activeSettingsTab={activeSettingsTab}
         isLoading={isLoading}
         stepIndex={tutorialStep}
         triedActions={tutorialTried}
@@ -6367,8 +6382,19 @@ export const App: React.FC = () => {
           handleUpdateSettings((prev) => {
             const nextLargeText = !prev.largeText;
             return nextLargeText
-              ? { ...prev, largeText: true, fatFingerAssist: true }
-              : { ...prev, largeText: false };
+              ? {
+                  ...prev,
+                  largeText: true,
+                  textScale: Math.max(prev.textScale || 1.0, 1.25),
+                  uiScale: Math.max(prev.uiScale || 1.0, 1.25),
+                  fatFingerAssist: true,
+                }
+              : {
+                  ...prev,
+                  largeText: false,
+                  textScale: 1.0,
+                  uiScale: 1.0,
+                };
           });
           if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings') {
             markTutorialActionTried('settings');
@@ -6425,7 +6451,10 @@ export const App: React.FC = () => {
             }
             reducedMotion={Boolean(settings.reducedMotion)}
             largeText={Boolean(settings.largeText)}
+            textScale={settings.textScale}
+            uiScale={settings.uiScale}
             isModalSpotlight={isModalTutorialStep}
+            activeSettingsTab={activeSettingsTab}
             zIndexClass={isModalTutorialStep ? 'z-[58]' : 'z-[38]'}
           />
         );

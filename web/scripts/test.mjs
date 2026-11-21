@@ -10068,6 +10068,8 @@ async function runCodecAndEngineTests() {
       assert.equal(storageMod.DEFAULT_SETTINGS.hintColorArgb, 0xfff59e0b);
       assert.equal(storageMod.DEFAULT_SETTINGS.autoReplayOnLoad, false);
       assert.equal(storageMod.DEFAULT_SETTINGS.raisePaletteDock, true);
+      assert.equal(storageMod.DEFAULT_SETTINGS.textScale, 1.0);
+      assert.equal(storageMod.DEFAULT_SETTINGS.uiScale, 1.0);
       assert.equal('showSavePreviews' in storageMod.DEFAULT_SETTINGS, false);
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
@@ -10076,6 +10078,8 @@ async function runCodecAndEngineTests() {
         highlightStyle: 'CENTROID_GLOW',
         fatFingerAssist: false,
         touchReachRadiusPx: 34,
+        textScale: 1.35,
+        uiScale: 1.2,
       });
       const loadedNormalHue = storageMod.StorageService.loadSettings();
       assert.equal(loadedNormalHue.difficulty, 'NORMAL');
@@ -10083,6 +10087,38 @@ async function runCodecAndEngineTests() {
       assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
       assert.equal(loadedNormalHue.fatFingerAssist, false);
       assert.equal(loadedNormalHue.touchReachRadiusPx, 34);
+      assert.equal(loadedNormalHue.textScale, 1.35);
+      assert.equal(loadedNormalHue.uiScale, 1.2);
+      assert.equal(loadedNormalHue.largeText, true);
+
+      // Verify legacy { largeText: true } without textScale/uiScale migrates to 1.25 / 1.25
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ largeText: true })
+      );
+      const migratedLargeText = storageMod.StorageService.loadSettings();
+      assert.equal(migratedLargeText.textScale, 1.25);
+      assert.equal(migratedLargeText.uiScale, 1.25);
+      assert.equal(migratedLargeText.largeText, true);
+
+      // Verify textScale [0.85, 1.5] and uiScale [0.85, 1.4] clamping and largeText sync
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ textScale: 0.4, uiScale: 2.5 })
+      );
+      const clampedScales = storageMod.StorageService.loadSettings();
+      assert.equal(clampedScales.textScale, 0.85);
+      assert.equal(clampedScales.uiScale, 1.4);
+      assert.equal(clampedScales.largeText, true);
+
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ textScale: 0.9, uiScale: 0.95, largeText: true })
+      );
+      const scaledDown = storageMod.StorageService.loadSettings();
+      assert.equal(scaledDown.textScale, 0.9);
+      assert.equal(scaledDown.uiScale, 0.95);
+      assert.equal(scaledDown.largeText, false);
 
       // Verify legacy showSavePreviews key in stored JSON is safely ignored on load
       mockStorage.set(
@@ -10130,6 +10166,12 @@ async function runCodecAndEngineTests() {
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
       assert.equal(offersMod.FEATURE_OFFER_IDS.length, 9);
       assert.equal(tutorialMod.TUTORIAL_STEPS.length, 12);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[7]?.key, 'free_color');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[7]?.modalTab, 1);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[8]?.key, 'create_gallery');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[8]?.modalTab, 3);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[9]?.key, 'saves_export');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[9]?.modalTab, 4);
       assert.equal(tutorialMod.TUTORIAL_STEPS[10]?.key, 'settings');
       assert.equal(tutorialMod.TUTORIAL_STEPS[10]?.modalTab, 1);
       assert.equal(tutorialMod.TUTORIAL_STEPS[11]?.key, 'hints');
@@ -13703,11 +13745,29 @@ async function runBrowserBasicsSuite() {
     };
     await expectTutStep(1);
     const step1LargeBtnBox = await tutPage.getByTestId('tutorial-large-text-btn').boundingBox();
-    assert.ok(step1LargeBtnBox && step1LargeBtnBox.width > 200, 'Step 1 Large Text button must be full-width banner');
+    assert.ok(
+      step1LargeBtnBox && step1LargeBtnBox.width < 150 && step1LargeBtnBox.height <= 34,
+      `Step 1 Large Text button must be compact header pill matching Step 2+ (got ${JSON.stringify(step1LargeBtnBox)})`
+    );
+    const desktopNextRefBox = await tutPage.getByTestId('tutorial-next-btn').boundingBox();
+    assert.ok(desktopNextRefBox, 'Expected Step 1 tutorial-next-btn boundingBox on desktop');
+    const assertDesktopNextStable = async (stepNum) => {
+      const box = await tutPage.getByTestId('tutorial-next-btn').boundingBox();
+      assert.ok(box, `Expected tutorial-next-btn boundingBox on Step ${stepNum}`);
+      assert.equal(
+        Math.abs(box.x - desktopNextRefBox.x) <= 1 &&
+          Math.abs(box.y - desktopNextRefBox.y) <= 1 &&
+          Math.abs(box.width - desktopNextRefBox.width) <= 1 &&
+          Math.abs(box.height - desktopNextRefBox.height) <= 1,
+        true,
+        `Desktop Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(desktopNextRefBox)}, got=${JSON.stringify(box)})`
+      );
+    };
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 0 -> 1 (palette): tapping the ALREADY-active swatch on Step 1 must advance cleanly without triggering hint
     await tutPage.locator('[data-testid="palette-dock"] button[aria-pressed="true"]').first().click();
     await expectTutStep(2);
+    await assertDesktopNextStable(2);
     const step2PromptText = await tutPage.getByTestId('tutorial-try-pill').innerText();
     assert.equal(
       step2PromptText.includes('Try it: Tap a matching number on the picture') &&
@@ -13735,6 +13795,7 @@ async function runBrowserBasicsSuite() {
     }
     assert.ok(paintedOnTut >= 1, 'Expected at least 1 region painted on tutPage');
     await expectTutStep(3);
+    await assertDesktopNextStable(3);
     // Verify topbar-saves-btn exposes data-filled-count >= 1
     assert.ok(
       Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')) >= 1,
@@ -13743,15 +13804,18 @@ async function runBrowserBasicsSuite() {
     // Step 2 -> 3 (zoom)
     await tutPage.keyboard.press('+');
     await expectTutStep(4);
+    await assertDesktopNextStable(4);
     await tutPage.keyboard.press('0');
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 3 -> 4 (hint)
     await tutPage.getByTestId('tutorial-try-hint-btn').click();
     await expectTutStep(5);
+    await assertDesktopNextStable(5);
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
+    await assertDesktopNextStable(6);
     // Back onto already-tried Step 4 (STEP 5 OF 12) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
@@ -13771,6 +13835,7 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
     await tutPage.mouse.up();
     await expectTutStep(7);
+    await assertDesktopNextStable(7);
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     const step7Metrics = await assertSpotlightAligned(tutPage, 'tutorial');
     assert.equal(step7Metrics.ringCount, 2, 'Step 7 (peek_fullscreen) must highlight both Eye and Full Screen');
@@ -13792,10 +13857,44 @@ async function runBrowserBasicsSuite() {
       0,
       'Leaving Step 7 must automatically reset tutorial-triggered isPreviewMode'
     );
-    // Step 8 (free_color in Settings; must pause while SettingsModal is open and hide spotlight on non-modal step)
+    // Step 8 (free_color in Settings; tutorial must dock at z-[60] & spotlight tab/control while SettingsModal is open)
     await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock above SettingsModal (data-modal-docked="true") on Step 8'
+    );
+    await tutPage.getByTestId('spotlight-overlay').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal on Step 8'
+    );
+    // Switch to wrong tab (About) -> prompt tells user which tab to press and shows Open Settings button
+    await tutPage.getByTestId('settings-tab-about').click();
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Tap the Settings tab at the top'),
+      true,
+      'Step 8 on wrong tab must instruct user to tap the Settings tab'
+    );
+    assert.equal(
+      await tutPage.getByTestId('tutorial-open-free-color-btn').isVisible(),
+      true,
+      'Step 8 on wrong tab must show Open Settings button'
+    );
+    // Switch to Tab 1 (Settings) -> prompt transitions to control guidance and hides redundant Open Settings button
     await tutPage.getByTestId('settings-tab-settings').click();
-    assert.equal(await tutPage.getByTestId('spotlight-overlay').count(), 0, 'Spotlight must hide while SettingsModal is open on non-modal step');
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Turn on Free Color Mode below'),
+      true,
+      'Step 8 on Settings tab must instruct user to turn on Free Color Mode'
+    );
+    assert.equal(
+      await tutPage.getByTestId('tutorial-open-free-color-btn').count(),
+      0,
+      'Step 8 on target Settings tab must hide redundant Open Settings button'
+    );
     await tutPage.getByTestId('setting-free-color-mode').click();
     await tutPage.waitForTimeout(950);
     assert.equal(
@@ -13806,14 +13905,41 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('setting-free-color-mode').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(9);
-    // Step 9 (create_gallery: Daily Puzzle, Gallery & Photos)
+    // Step 9 (create_gallery: Daily Puzzle, Gallery & Photos) — opening Settings lands on Tab 1 (wrong tab) then transitions on Tab 3 (Create)
     await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock above SettingsModal on Step 9'
+    );
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Tap the Create tab at the top'),
+      true,
+      'Step 9 on Settings tab must instruct user to tap the Create tab'
+    );
     await tutPage.getByTestId('settings-tab-create').click();
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Tap Play Daily Puzzle'),
+      true,
+      'Step 9 on Create tab must transition to Play Daily Puzzle / Preset Gallery guidance'
+    );
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(10);
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 10 (saves_export)
     await tutPage.getByTestId('topbar-saves-btn').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock above SettingsModal on Step 10'
+    );
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal on Step 10'
+    );
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(11);
     await assertSpotlightAligned(tutPage, 'tutorial');
@@ -13844,7 +13970,7 @@ async function runBrowserBasicsSuite() {
       'Manual tab click must switch to Tab 0 (About)'
     );
     await tutPage.getByTestId('tutorial-open-settings-btn').click();
-    await tutPage.getByTestId('settings-section-appearance').waitFor({ state: 'visible', timeout: 3000 });
+    await tutPage.getByTestId('settings-section-accessibility').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
       await tutPage.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
       'true',
@@ -14779,21 +14905,32 @@ async function runBrowserBasicsSuite() {
       await page.getByTestId('about-open-feedback-btn').click();
     }
 
-    // Tab 1: Settings (6 grouped sections, collapsible Replay & Labels headers with live summaries, no leaked About/Hints/Create content)
+    // Tab 1: Settings (Accessibility first, UI with Canvas Background, Gameplay, Controls, Navigation, Sound & Haptics + 2 collapsibles)
     await page.getByTestId('settings-tab-settings').click();
     await page.getByText('Canvas Background').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.getByText('Canvas Background').isVisible(), true, 'Settings tab must render Canvas Background');
     for (const secId of [
-      'settings-section-appearance',
+      'settings-section-accessibility',
+      'settings-section-ui',
       'settings-section-gameplay',
       'settings-section-controls',
       'settings-section-navigation',
-      'settings-section-audio-a11y',
+      'settings-section-audio',
       'settings-section-replay',
       'settings-section-labels',
     ]) {
       assert.equal(await page.getByTestId(secId).isVisible(), true, `Settings tab must render grouped section ${secId}`);
     }
+    const a11ySecBox = await page.getByTestId('settings-section-accessibility').boundingBox();
+    const uiSecBox = await page.getByTestId('settings-section-ui').boundingBox();
+    assert.ok(a11ySecBox && uiSecBox && a11ySecBox.y < uiSecBox.y, 'Accessibility section must appear first above UI section on Tab 1');
+    assert.equal(
+      await page.locator('[data-testid="settings-section-ui"]').getByText('Canvas Background').isVisible(),
+      true,
+      'Canvas Background must live inside settings-section-ui'
+    );
+    assert.equal(await page.getByText('Tap Behavior', { exact: true }).count(), 0, 'Tap Behavior (Difficulty) must be relocated from Tab 1 Settings to Tab 2 Hints');
+    assert.equal(await page.getByText('Color Mode', { exact: true }).count(), 0, 'Color Mode must be relocated from Tab 1 Settings to Tab 2 Hints');
     const replaySummaryText = (await page.getByTestId('settings-section-replay-summary').innerText()).trim();
     assert.equal(/x\s*•\s*Auto-replay (On|Off)/i.test(replaySummaryText), true, `Expected live Replay summary badge (got "${replaySummaryText}")`);
     const labelsSummaryText = (await page.getByTestId('settings-section-labels-summary').innerText()).trim();
@@ -14860,11 +14997,22 @@ async function runBrowserBasicsSuite() {
     );
     await page.getByTestId('setting-fat-finger-assist').click();
 
-    // Tab 2: Hints (grouped sections + fresh install Amber swatch #f59e0b selected)
+    // Tab 2: Hints (grouped sections + fresh install Amber swatch #f59e0b selected + relocated Coloring Mode & Difficulty)
     await page.getByTestId('settings-tab-hints').click();
     await page.getByTestId('hints-section-style').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.getByTestId('hints-section-style').isVisible(), true, 'Hints tab must render hints-section-style');
     assert.equal(await page.getByTestId('hints-section-assist').isVisible(), true, 'Hints tab must render hints-section-assist');
+    assert.equal(await page.getByTestId('hints-section-mode-difficulty').isVisible(), true, 'Hints tab must render hints-section-mode-difficulty');
+    assert.equal(
+      await page.locator('[data-testid="hints-section-mode-difficulty"]').getByText('Tap Behavior').isVisible(),
+      true,
+      'Hints tab must render relocated Tap Behavior (Difficulty)'
+    );
+    assert.equal(
+      await page.locator('[data-testid="hints-section-mode-difficulty"]').getByText('Color Mode').isVisible(),
+      true,
+      'Hints tab must render relocated Color Mode'
+    );
     assert.equal(await page.getByText('Highlight Style').isVisible(), true, 'Hints tab must render Highlight Style');
     assert.equal(await page.getByText('Hint Fill Pattern').isVisible(), true, 'Hints tab must render Hint Fill Pattern');
     assert.equal(await page.getByText('Canvas Background').count(), 0, 'Hints tab must not render Settings content');
@@ -17495,6 +17643,38 @@ async function runBrowserBasicsSuite() {
       true,
       `Step 1 compact OnboardingTutorial card height (${mobileTutorialBox.height}px) must stay slim <= 210px on 360x780`
     );
+    // Verify Next button stays at exact same (x, y, width, height) <= 1px across basic-feature Steps 1-7 on 360x780 mobile
+    const mobileNextRefBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+    assert.ok(mobileNextRefBox, 'Expected Step 1 tutorial-next-btn boundingBox on 360x780 mobile');
+    for (let stepNum = 2; stepNum <= 7; stepNum++) {
+      await mobileTopbarPage.getByTestId('tutorial-next-btn').click();
+      await mobileTopbarPage.waitForFunction(
+        (expected) =>
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+          `STEP ${expected} OF 12`,
+        stepNum,
+        { timeout: 3000 }
+      );
+      const nextBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+      assert.ok(nextBox, `Expected Step ${stepNum} tutorial-next-btn boundingBox on 360x780 mobile`);
+      assert.equal(
+        Math.abs(nextBox.x - mobileNextRefBox.x) <= 1 &&
+          Math.abs(nextBox.y - mobileNextRefBox.y) <= 1 &&
+          Math.abs(nextBox.width - mobileNextRefBox.width) <= 1 &&
+          Math.abs(nextBox.height - mobileNextRefBox.height) <= 1,
+        true,
+        `Mobile 360x780 Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(mobileNextRefBox)}, got=${JSON.stringify(nextBox)})`
+      );
+    }
+    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topic-item-0').click();
+    await mobileTopbarPage.waitForFunction(
+      () =>
+        document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+        'STEP 1 OF 12',
+      undefined,
+      { timeout: 3000 }
+    );
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
     const normalTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
@@ -19127,6 +19307,65 @@ async function runBrowserBasicsSuite() {
     await ffSwitch.click();
     await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Large Text Variant 1 fatFinger ON');
     await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'Large Text Variant 1 largeText ON');
+
+    // Verify independent Text Size and UI Size sliders scale text and buttons separately while maintaining switch knob containment
+    const setRangeSlider = async (page, testId, val) => {
+      await page.getByTestId(testId).evaluate((el, v) => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(el, String(v));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, val);
+    };
+    // Reset to 100% / 100% via Large Text toggle OFF first
+    await ltSwitch.click();
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.largeText === 'false', undefined, { timeout: 3000 });
+    const baselineFontSize = await ltMobilePage
+      .locator('[data-testid="settings-section-accessibility"] .text-xs')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const baselineSwitchW = (await ltSwitch.boundingBox()).width;
+
+    // 1) Text Size 140%, UI Size 100%: font size grows, switch width unchanged
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.4);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'true', undefined, { timeout: 3000 });
+    assert.equal((await ltMobilePage.getByTestId('setting-text-size-value').innerText()).trim(), '140%');
+    assert.equal(await ltMobilePage.evaluate(() => document.documentElement.dataset.uiScaled), 'false');
+    const textOnlyFontSize = await ltMobilePage
+      .locator('[data-testid="settings-section-accessibility"] .text-xs')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const textOnlySwitchW = (await ltSwitch.boundingBox()).width;
+    assert.ok(textOnlyFontSize > baselineFontSize + 2, `Text Size 140% must enlarge font (${baselineFontSize} -> ${textOnlyFontSize})`);
+    assert.ok(Math.abs(textOnlySwitchW - baselineSwitchW) <= 1, `Text Size 140% alone must not resize switch (${baselineSwitchW} vs ${textOnlySwitchW})`);
+
+    // 2) Text Size 100%, UI Size 135%: switch width grows & knob stays contained, font size back to baseline
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.0);
+    await setRangeSlider(ltMobilePage, 'setting-ui-size', 1.35);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.uiScaled === 'true', undefined, { timeout: 3000 });
+    assert.equal((await ltMobilePage.getByTestId('setting-ui-size-value').innerText()).trim(), '135%');
+    assert.equal(await ltMobilePage.evaluate(() => document.documentElement.dataset.textScaled), 'false');
+    const uiOnlyFontSize = await ltMobilePage
+      .locator('[data-testid="settings-section-accessibility"] .text-xs')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const uiOnlySwitchW = (await ltSwitch.boundingBox()).width;
+    assert.ok(Math.abs(uiOnlyFontSize - baselineFontSize) <= 1, `UI Size 135% alone must not enlarge font (${baselineFontSize} vs ${uiOnlyFontSize})`);
+    assert.ok(uiOnlySwitchW > baselineSwitchW + 6, `UI Size 135% must enlarge switch (${baselineSwitchW} -> ${uiOnlySwitchW})`);
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'UI Size 135% largeText ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'UI Size 135% fatFinger ON');
+
+    // Restore Large Text preset (125% / 125%) for remaining E2E 22 checks
+    await ltSwitch.click();
+    await ltSwitch.click();
+    await ltMobilePage.waitForFunction(
+      () =>
+        document.documentElement.dataset.largeText === 'true' &&
+        document.documentElement.dataset.textScaled === 'true' &&
+        document.documentElement.dataset.uiScaled === 'true',
+      undefined,
+      { timeout: 3000 }
+    );
 
     // Fix 1: Expand collapsible Replay section and verify unified switch knob containment on follow & auto-replay toggles
     const ltReplayToggle = ltMobilePage.getByTestId('settings-section-replay-toggle');

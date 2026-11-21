@@ -22,6 +22,7 @@ interface PaletteDockProps {
   isReplaying?: boolean;
   reducedMotion?: boolean;
   largeText?: boolean;
+  uiScale?: number;
   showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
   onSyncActiveColor?: (colorId: number) => void;
@@ -158,6 +159,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   isReplaying = false,
   reducedMotion = false,
   largeText = false,
+  uiScale,
   showCustomColorButton = false,
   onColorSelected,
   onSyncActiveColor,
@@ -167,6 +169,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   onUpdateColor,
   onApplyPresetPalette,
 }) => {
+  const effectiveUiScale = uiScale ?? (largeText ? 1.25 : 1.0);
   const onColorSelectedRef = useRef(onColorSelected);
   onColorSelectedRef.current = onColorSelected;
   const onSyncActiveColorRef = useRef(onSyncActiveColor);
@@ -259,8 +262,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     const measure = () => {
       const clientW = container.clientWidth;
       if (clientW <= 0) return;
-      const swatchW = largeText ? 58 : 46;
-      const swatchGap = largeText ? 10 : 8;
+      const swatchW = Math.round(46 * effectiveUiScale);
+      const swatchGap = Math.round(8 * effectiveUiScale);
       const naturalWidth =
         itemCount * swatchW + Math.max(0, itemCount - 1) * swatchGap + 24;
       setIsScrollable(naturalWidth > clientW);
@@ -274,7 +277,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [itemCount, largeText]);
+  }, [itemCount, effectiveUiScale]);
 
   // Smoothly center the active color in view when activeColorId or dock layout changes
   useEffect(() => {
@@ -297,7 +300,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     } else {
       container.scrollLeft = targetLeft;
     }
-  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length, largeText]);
+  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length, effectiveUiScale]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {

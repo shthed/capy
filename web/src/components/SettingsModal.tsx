@@ -150,6 +150,7 @@ interface SettingsModalProps {
   onZoomIntoDetailTile?: () => void;
   onStartTutorial?: () => void;
   onStartTour?: () => void;
+  hasDockedTutorial?: boolean;
   onTabOpened?: (tabId: number) => void;
   onExplorePresetGallery?: () => void;
 }
@@ -358,6 +359,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onZoomIntoDetailTile,
   onStartTutorial,
   onStartTour,
+  hasDockedTutorial = false,
   onTabOpened,
   onExplorePresetGallery,
 }) => {
@@ -765,7 +767,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div
           className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-4 sm:space-y-5"
           style={{
-            paddingBottom: 'max(2.5rem, calc(var(--sab, 0px) + 1.75rem))',
+            paddingBottom: hasDockedTutorial
+              ? 'max(12rem, calc(var(--sab, 0px) + 11rem))'
+              : 'max(2.5rem, calc(var(--sab, 0px) + 1.75rem))',
             paddingLeft: 'max(0.875rem, calc(var(--sal, 0px) + 0.75rem))',
             paddingRight: 'max(0.875rem, calc(var(--sar, 0px) + 0.75rem))',
           }}
@@ -1365,11 +1369,207 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* TAB 1: SETTINGS */}
           {activeTab === 1 && (
             <div className="space-y-4">
-              {/* 1. Appearance & Canvas */}
+              {/* 1. Accessibility */}
               <SettingSectionCard
-                title="Appearance & Canvas"
+                title="Accessibility"
+                icon={<Type size={13} />}
+                testId="settings-section-accessibility"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <SettingSwitchRow
+                    label="Large Text & Buttons"
+                    description="Enlarge text, buttons, and numbers, and turn on Tap Assist"
+                    checked={Boolean(settings.largeText)}
+                    onToggle={() => {
+                      const nextLargeText = !settings.largeText;
+                      if (nextLargeText) {
+                        updateSettings({
+                          largeText: true,
+                          textScale: Math.max(settings.textScale ?? 1.0, 1.25),
+                          uiScale: Math.max(settings.uiScale ?? 1.0, 1.25),
+                          fatFingerAssist: true,
+                        });
+                      } else {
+                        updateSettings({
+                          largeText: false,
+                          textScale: 1.0,
+                          uiScale: 1.0,
+                        });
+                      }
+                    }}
+                    testId="setting-large-text"
+                  />
+                  <SettingSwitchRow
+                    label="Reduced Motion"
+                    description="Skip confetti bursts, camera glides, and pulsing hints"
+                    checked={Boolean(settings.reducedMotion)}
+                    onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)}
+                    testId="setting-reduced-motion"
+                  />
+                </div>
+
+                {/* Independent Text Size & UI Size Sliders */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {/* Text Size */}
+                  <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-200 font-semibold">Text Size</span>
+                      <span
+                        data-testid="setting-text-size-value"
+                        className="text-amber-400 font-mono font-bold"
+                      >
+                        {Math.round((settings.textScale ?? 1.0) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.85"
+                      max="1.5"
+                      step="0.05"
+                      aria-label="Text Size"
+                      data-testid="setting-text-size"
+                      value={settings.textScale ?? 1.0}
+                      onChange={(e) => {
+                        const raw = parseFloat(e.target.value);
+                        const nextTextScale =
+                          Math.round(Math.min(1.5, Math.max(0.85, Number.isFinite(raw) ? raw : 1.0)) * 100) /
+                          100;
+                        const curUiScale = settings.uiScale ?? 1.0;
+                        updateSettings({
+                          textScale: nextTextScale,
+                          largeText: nextTextScale > 1.0 || curUiScale > 1.0,
+                        });
+                      }}
+                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <div className="text-[11px] text-slate-400">
+                      Adjust label and menu text size independently (85%–150%)
+                    </div>
+                  </div>
+
+                  {/* UI Size */}
+                  <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-200 font-semibold">UI Size</span>
+                      <span
+                        data-testid="setting-ui-size-value"
+                        className="text-amber-400 font-mono font-bold"
+                      >
+                        {Math.round((settings.uiScale ?? 1.0) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.85"
+                      max="1.4"
+                      step="0.05"
+                      aria-label="UI Size"
+                      data-testid="setting-ui-size"
+                      value={settings.uiScale ?? 1.0}
+                      onChange={(e) => {
+                        const raw = parseFloat(e.target.value);
+                        const nextUiScale =
+                          Math.round(Math.min(1.4, Math.max(0.85, Number.isFinite(raw) ? raw : 1.0)) * 100) /
+                          100;
+                        const curTextScale = settings.textScale ?? 1.0;
+                        updateSettings({
+                          uiScale: nextUiScale,
+                          largeText: curTextScale > 1.0 || nextUiScale > 1.0,
+                        });
+                      }}
+                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <div className="text-[11px] text-slate-400">
+                      Adjust button, switch, and color swatch size independently (85%–140%)
+                    </div>
+                  </div>
+                </div>
+
+                {/* Fat-Finger Tap Assist & Finger Reach Radius */}
+                <div className="p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75 space-y-2.5">
+                  <SettingSwitchRow
+                    label="Fat-Finger Tap Assist"
+                    description="Snaps near-miss taps to nearby unfilled shapes"
+                    checked={Boolean(settings.fatFingerAssist)}
+                    onToggle={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
+                    testId="setting-fat-finger-assist"
+                    className="!bg-transparent !border-0 !p-0 !min-h-0"
+                  />
+
+                  <div
+                    data-testid="setting-touch-reach-controls"
+                    className={`space-y-1.5 pt-2 border-t border-slate-800/60 transition-opacity ${
+                      settings.fatFingerAssist ? 'opacity-100' : 'opacity-50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-xs gap-2">
+                      <span className="text-slate-300 font-semibold">Finger Reach Radius</span>
+                      <span
+                        data-testid="setting-touch-reach-value"
+                        className="text-amber-400 font-mono font-bold text-right"
+                      >
+                        {settings.fatFingerAssist &&
+                        ((settings.uiScale ?? 1.0) > 1.0 || settings.largeText) &&
+                        Math.round(settings.touchReachRadiusPx ?? 22) < 34
+                          ? `34px (Large UI • saved ${Math.round(settings.touchReachRadiusPx ?? 22)}px)`
+                          : `${Math.round(settings.touchReachRadiusPx ?? 22)}px`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="8"
+                      max="40"
+                      step="1"
+                      aria-label="Finger Reach Radius"
+                      data-testid="setting-touch-reach-radius"
+                      value={Math.round(settings.touchReachRadiusPx ?? 22)}
+                      onChange={(e) =>
+                        updateSettings({
+                          fatFingerAssist: true,
+                          touchReachRadiusPx: Math.round(
+                            Math.min(40, Math.max(8, parseInt(e.target.value, 10) || 22))
+                          ),
+                        })
+                      }
+                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                    <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                      {(
+                        [
+                          { px: 12, label: 'Compact 12px' },
+                          { px: 22, label: 'Standard 22px' },
+                          { px: 34, label: 'Large 34px' },
+                        ] as const
+                      ).map((preset) => (
+                        <button
+                          key={preset.px}
+                          type="button"
+                          data-testid={`setting-touch-reach-preset-${preset.px}`}
+                          onClick={() =>
+                            updateSettings({
+                              fatFingerAssist: true,
+                              touchReachRadiusPx: preset.px,
+                            })
+                          }
+                          className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all cursor-pointer ${
+                            Math.round(settings.touchReachRadiusPx ?? 22) === preset.px
+                              ? 'border-amber-400 bg-slate-800/80 text-amber-300 ring-1 ring-amber-400'
+                              : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </SettingSectionCard>
+
+              {/* 2. UI */}
+              <SettingSectionCard
+                title="UI"
                 icon={<Palette size={13} />}
-                testId="settings-section-appearance"
+                testId="settings-section-ui"
               >
                 {/* Canvas Background */}
                 <div className="space-y-1.5">
@@ -1450,47 +1650,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Color Mode */}
-                <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
-                  <span className="text-xs font-semibold text-slate-300">Color Mode</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(
-                      [
-                        {
-                          key: 'DETAIL',
-                          label: 'Original Detail',
-                          desc: 'Reveals full photo and line detail',
-                        },
-                        {
-                          key: 'SOLID',
-                          label: 'Solid Palette',
-                          desc: 'Fills with a uniform palette color',
-                        },
-                      ] as const
-                    ).map((mode) => (
-                      <button
-                        key={mode.key}
-                        type="button"
-                        onClick={() =>
-                          updateSetting('regionColorMode', mode.key as RegionColorMode)
-                        }
-                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                          settings.regionColorMode === mode.key
-                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
-                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
-                        }`}
-                      >
-                        <span className="text-xs sm:text-sm font-bold text-slate-100">
-                          {mode.label}
-                        </span>
-                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                          {mode.desc}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Palette Order */}
                 <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
                   <span className="text-xs font-semibold text-slate-300">Palette Order</span>
@@ -1519,7 +1678,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Appearance Toggles */}
+                {/* UI Toggles */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1 border-t border-slate-800/60">
                   <SettingSwitchRow
                     label="Show Numbers on Regions"
@@ -1540,162 +1699,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </SettingSectionCard>
 
-              {/* 2. Gameplay */}
+              {/* 3. Gameplay */}
               <SettingSectionCard
                 title="Gameplay"
                 icon={<Gamepad2 size={13} />}
                 testId="settings-section-gameplay"
+                columns={2}
               >
-                {/* Tap Behavior / Difficulty */}
-                <div className="space-y-1.5">
-                  <span className="text-xs font-semibold text-slate-300">Tap Behavior</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(
-                      [
-                        {
-                          key: 'EASY',
-                          label: 'Auto-Select Color (Easy)',
-                          desc: 'Tap any shape to select and paint its color',
-                        },
-                        {
-                          key: 'NORMAL',
-                          label: 'Precise (Standard)',
-                          desc: 'Only paints shapes matching your selected color',
-                        },
-                      ] as const
-                    ).map((diff) => (
-                      <button
-                        key={diff.key}
-                        type="button"
-                        onClick={() => updateSetting('difficulty', diff.key as Difficulty)}
-                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
-                          settings.difficulty === diff.key
-                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
-                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
-                        }`}
-                      >
-                        <span className="text-xs sm:text-sm font-bold text-slate-100">
-                          {diff.label}
-                        </span>
-                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                          {diff.desc}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Fat-Finger Tap Assist & Finger Reach Radius */}
-                <div className="p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75 space-y-2.5">
-                  <SettingSwitchRow
-                    label="Fat-Finger Tap Assist"
-                    description="Snaps near-miss taps to nearby unfilled shapes"
-                    checked={Boolean(settings.fatFingerAssist)}
-                    onToggle={() => updateSetting('fatFingerAssist', !settings.fatFingerAssist)}
-                    testId="setting-fat-finger-assist"
-                    className="!bg-transparent !border-0 !p-0 !min-h-0"
-                  />
-
-                  <div
-                    data-testid="setting-touch-reach-controls"
-                    className={`space-y-1.5 pt-2 border-t border-slate-800/60 transition-opacity ${
-                      settings.fatFingerAssist ? 'opacity-100' : 'opacity-50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center text-xs gap-2">
-                      <span className="text-slate-300 font-semibold">Finger Reach Radius</span>
-                      <span
-                        data-testid="setting-touch-reach-value"
-                        className="text-amber-400 font-mono font-bold text-right"
-                      >
-                        {settings.fatFingerAssist &&
-                        settings.largeText &&
-                        Math.round(settings.touchReachRadiusPx ?? 22) < 34
-                          ? `34px (Large UI • saved ${Math.round(settings.touchReachRadiusPx ?? 22)}px)`
-                          : `${Math.round(settings.touchReachRadiusPx ?? 22)}px`}
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="8"
-                      max="40"
-                      step="1"
-                      aria-label="Finger Reach Radius"
-                      data-testid="setting-touch-reach-radius"
-                      value={Math.round(settings.touchReachRadiusPx ?? 22)}
-                      onChange={(e) =>
-                        updateSettings({
-                          fatFingerAssist: true,
-                          touchReachRadiusPx: Math.round(
-                            Math.min(40, Math.max(8, parseInt(e.target.value, 10) || 22))
-                          ),
-                        })
-                      }
-                      className="w-full accent-amber-400 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                    />
-                    <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                      {(
-                        [
-                          { px: 12, label: 'Compact 12px' },
-                          { px: 22, label: 'Standard 22px' },
-                          { px: 34, label: 'Large 34px' },
-                        ] as const
-                      ).map((preset) => (
-                        <button
-                          key={preset.px}
-                          type="button"
-                          data-testid={`setting-touch-reach-preset-${preset.px}`}
-                          onClick={() =>
-                            updateSettings({
-                              fatFingerAssist: true,
-                              touchReachRadiusPx: preset.px,
-                            })
-                          }
-                          className={`py-1.5 px-2 rounded-lg border text-[11px] font-bold text-center transition-all cursor-pointer ${
-                            Math.round(settings.touchReachRadiusPx ?? 22) === preset.px
-                              ? 'border-amber-400 bg-slate-800/80 text-amber-300 ring-1 ring-amber-400'
-                              : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:bg-slate-800/50'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Gameplay Toggles */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  <SettingSwitchRow
-                    label="Auto-Advance Color"
-                    description="Switch to the next unfinished color automatically"
-                    checked={Boolean(settings.autoAdvance)}
-                    onToggle={() => updateSetting('autoAdvance', !settings.autoAdvance)}
-                    testId="setting-auto-advance"
-                  />
-                  <SettingSwitchRow
-                    label="Free Color Mode"
-                    description="Pick any color freely and paint without number limits"
-                    checked={Boolean(settings.isFreeColorMode)}
-                    onToggle={() => updateSetting('isFreeColorMode', !settings.isFreeColorMode)}
-                    testId="setting-free-color-mode"
-                  />
-                  <SettingSwitchRow
-                    label="Custom Color Picker for All Puzzles"
-                    description="Allow custom colors on every puzzle, not just coloring pages"
-                    checked={Boolean(settings.enableCustomColorForAllPuzzles)}
-                    onToggle={() =>
-                      updateSetting(
-                        'enableCustomColorForAllPuzzles',
-                        !settings.enableCustomColorForAllPuzzles
-                      )
-                    }
-                    testId="setting-custom-color-all"
-                  />
-                </div>
+                <SettingSwitchRow
+                  label="Auto-Advance Color"
+                  description="Switch to the next unfinished color automatically"
+                  checked={Boolean(settings.autoAdvance)}
+                  onToggle={() => updateSetting('autoAdvance', !settings.autoAdvance)}
+                  testId="setting-auto-advance"
+                />
+                <SettingSwitchRow
+                  label="Free Color Mode"
+                  description="Pick any color freely and paint without number limits"
+                  checked={Boolean(settings.isFreeColorMode)}
+                  onToggle={() => updateSetting('isFreeColorMode', !settings.isFreeColorMode)}
+                  testId="setting-free-color-mode"
+                />
+                <SettingSwitchRow
+                  label="Custom Color Picker for All Puzzles"
+                  description="Allow custom colors on every puzzle, not just coloring pages"
+                  checked={Boolean(settings.enableCustomColorForAllPuzzles)}
+                  onToggle={() =>
+                    updateSetting(
+                      'enableCustomColorForAllPuzzles',
+                      !settings.enableCustomColorForAllPuzzles
+                    )
+                  }
+                  testId="setting-custom-color-all"
+                />
               </SettingSectionCard>
 
-              {/* 3. Controls & On-Screen Buttons */}
+              {/* 4. Controls & On-Screen Buttons */}
               <SettingSectionCard
                 title="Controls & On-Screen Buttons"
                 icon={<Hand size={13} />}
@@ -1749,7 +1788,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </SettingSectionCard>
 
-              {/* 4. Navigation & Zoom */}
+              {/* 5. Navigation & Zoom */}
               <SettingSectionCard
                 title="Navigation & Zoom"
                 icon={<Compass size={13} />}
@@ -1813,11 +1852,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </SettingSectionCard>
 
-              {/* 5. Sound, Haptics & Accessibility */}
+              {/* 6. Sound & Haptics */}
               <SettingSectionCard
-                title="Sound, Haptics & Accessibility"
+                title="Sound & Haptics"
                 icon={<Volume2 size={13} />}
-                testId="settings-section-audio-a11y"
+                testId="settings-section-audio"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                   <SettingSwitchRow
@@ -1835,27 +1874,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     checked={Boolean(settings.hapticsEnabled)}
                     onToggle={() => updateSetting('hapticsEnabled', !settings.hapticsEnabled)}
                     testId="setting-haptics"
-                  />
-                  <SettingSwitchRow
-                    label="Large Text & Buttons"
-                    description="Enlarge text, buttons, and numbers, and turn on Tap Assist"
-                    checked={Boolean(settings.largeText)}
-                    onToggle={() => {
-                      const nextLargeText = !settings.largeText;
-                      if (nextLargeText) {
-                        updateSettings({ largeText: true, fatFingerAssist: true });
-                      } else {
-                        updateSetting('largeText', false);
-                      }
-                    }}
-                    testId="setting-large-text"
-                  />
-                  <SettingSwitchRow
-                    label="Reduced Motion"
-                    description="Skip confetti bursts, camera glides, and pulsing hints"
-                    checked={Boolean(settings.reducedMotion)}
-                    onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)}
-                    testId="setting-reduced-motion"
                   />
                 </div>
 
@@ -1895,7 +1913,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </SettingSectionCard>
 
-              {/* 6a. Collapsible Replay Settings */}
+              {/* 7a. Collapsible Replay Settings */}
               <CollapsibleSettingSection
                 title="Replay"
                 summary={`${settings.replaySpeed || 1}x • Auto-replay ${settings.autoReplayOnLoad ? 'On' : 'Off'}`}
@@ -1952,14 +1970,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </CollapsibleSettingSection>
 
-              {/* 6b. Collapsible Number Label Sizing */}
+              {/* 7b. Collapsible Number Label Sizing */}
               <CollapsibleSettingSection
                 title="Number Label Sizing"
                 summary={`${settings.minLabelSize ?? 6}–${settings.maxLabelSize ?? 18}px • ${Math.round(settings.labelScale * 100)}%`}
                 icon={<Type size={14} />}
                 testId="settings-section-labels"
                 disabled={!settings.showRegionLabels}
-                disabledNote="Turn on Show Numbers on Regions in Appearance to adjust label sizing."
+                disabledNote="Turn on Show Numbers on Regions in UI to adjust label sizing."
               >
                 {/* Min Size */}
                 <div className="space-y-1 p-2.5 rounded-xl bg-slate-900/55 border border-slate-800/75">
@@ -2277,6 +2295,92 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }
                   testId="setting-show-next-region-hint"
                 />
+              </SettingSectionCard>
+
+              <SettingSectionCard
+                title="Coloring Mode & Difficulty"
+                icon={<Gamepad2 size={13} />}
+                testId="hints-section-mode-difficulty"
+              >
+                {/* Tap Behavior / Difficulty */}
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-slate-300">Tap Behavior</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: 'EASY',
+                          label: 'Auto-Select Color (Easy)',
+                          desc: 'Tap any shape to select and paint its color',
+                        },
+                        {
+                          key: 'NORMAL',
+                          label: 'Precise (Standard)',
+                          desc: 'Only paints shapes matching your selected color',
+                        },
+                      ] as const
+                    ).map((diff) => (
+                      <button
+                        key={diff.key}
+                        type="button"
+                        onClick={() => updateSetting('difficulty', diff.key as Difficulty)}
+                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          settings.difficulty === diff.key
+                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span className="text-xs sm:text-sm font-bold text-slate-100">
+                          {diff.label}
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                          {diff.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Color Mode */}
+                <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
+                  <span className="text-xs font-semibold text-slate-300">Color Mode</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          key: 'DETAIL',
+                          label: 'Original Detail',
+                          desc: 'Reveals full photo and line detail',
+                        },
+                        {
+                          key: 'SOLID',
+                          label: 'Solid Palette',
+                          desc: 'Fills with a uniform palette color',
+                        },
+                      ] as const
+                    ).map((mode) => (
+                      <button
+                        key={mode.key}
+                        type="button"
+                        onClick={() =>
+                          updateSetting('regionColorMode', mode.key as RegionColorMode)
+                        }
+                        className={`flex flex-col text-left p-2.5 rounded-lg border transition-all cursor-pointer ${
+                          settings.regionColorMode === mode.key
+                            ? 'border-amber-400 bg-slate-800/80 text-white ring-1 ring-amber-400'
+                            : 'border-slate-800 bg-slate-900/50 text-slate-400 hover:bg-slate-800/50'
+                        }`}
+                      >
+                        <span className="text-xs sm:text-sm font-bold text-slate-100">
+                          {mode.label}
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                          {mode.desc}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </SettingSectionCard>
             </div>
           )}

@@ -143,6 +143,8 @@ export interface UserSettings {
   soundVolume: number;
   reducedMotion: boolean;
   largeText: boolean;
+  textScale: number;
+  uiScale: number;
   detailedLoadingProgress: boolean;
   generatorConfig: GeneratorConfig;
 }
