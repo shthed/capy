@@ -713,9 +713,94 @@ jobs:
               FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.title || '')) ||
               FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.body || ''));
 
+            const isMainTarget = baseRef === 'main';
+            // Blocking CI evidence on the exact head SHA:
+            // - Always require latest `Build & Test` to be `success` and no latest check run failing.
+            // - For `main` release promotions (`isMainTarget`), also require `Android APK` and
+            //   `Playwright E2E` to complete with `success` unless the PR is strictly docs-only
+            //   (matching `deploy-branch.yml`'s fast-path predicate).
+            let headChecksGreenPromise = null;
+            const headChecksGreen = async () => {
+              if (headChecksGreenPromise) return headChecksGreenPromise;
+              headChecksGreenPromise = (async () => {
+                if (typeof github.rest.checks?.listForRef !== 'function') return false;
+                try {
+                  let isDocsOnlyMainPr = false;
+                  if (isMainTarget && typeof github.rest.pulls?.listFiles === 'function') {
+                    try {
+                      const prChangedFiles = await github.paginate(github.rest.pulls.listFiles, {
+                        owner,
+                        repo,
+                        pull_number: prNumber,
+                        per_page: 100,
+                      });
+                      isDocsOnlyMainPr =
+                        Array.isArray(prChangedFiles) &&
+                        prChangedFiles.length > 0 &&
+                        prChangedFiles.every(
+                          (f) =>
+                            typeof f?.filename === 'string' &&
+                            (f.filename.endsWith('.md') ||
+                              f.filename.startsWith('docs/') ||
+                              f.filename.startsWith('notes/') ||
+                              f.filename === '.gitignore' ||
+                              f.filename === 'LICENSE')
+                        );
+                    } catch (err) {
+                      core.warning(
+                        `Failed to inspect changed files for docs-only check on PR #${prNumber}: ${err.message}`
+                      );
+                    }
+                  }
+                  const { data } = await github.rest.checks.listForRef({
+                    owner,
+                    repo,
+                    ref: headSha,
+                    per_page: 100,
+                  });
+                  const latestByName = new Map();
+                  for (const run of data?.check_runs || []) {
+                    const prev = latestByName.get(run.name);
+                    if (!prev || new Date(run.started_at) > new Date(prev.started_at)) {
+                      latestByName.set(run.name, run);
+                    }
+                  }
+                  const requiredChecks =
+                    isMainTarget && !isDocsOnlyMainPr
+                      ? ['Build & Test', 'Android APK', 'Playwright E2E']
+                      : ['Build & Test'];
+                  for (const reqName of requiredChecks) {
+                    const reqRun = latestByName.get(reqName);
+                    if (
+                      !reqRun ||
+                      reqRun.status !== 'completed' ||
+                      reqRun.conclusion !== 'success'
+                    ) {
+                      return false;
+                    }
+                  }
+                  for (const run of latestByName.values()) {
+                    if (
+                      run.status === 'completed' &&
+                      ['failure', 'timed_out', 'action_required'].includes(run.conclusion)
+                    ) {
+                      return false;
+                    }
+                  }
+                  return true;
+                } catch (err) {
+                  core.warning(`Failed to read head check runs for PR #${prNumber}: ${err.message}`);
+                  return false;
+                }
+              })();
+              return headChecksGreenPromise;
+            };
+
             const aiOrSyncReady = aiApproved || (isBetaTarget && isVerifiedMainSync);
             const strictAiReady = !isDraft && !changesRequested && !hasForbiddenCrossRef && aiOrSyncReady;
-            const gatePassed = strictAiReady;
+            const mainReleaseChecksReady =
+              !isMainTarget || !strictAiReady ? true : await headChecksGreen();
+            const gatePassed = strictAiReady && mainReleaseChecksReady;
 
             // 3. Dismiss any legacy github-actions[bot] formal PR approvals
             const botReviews = reviews.filter(
@@ -754,6 +839,9 @@ jobs:
               } else {
                 blockers.push('AI review');
               }
+            }
+            if (!mainReleaseChecksReady) {
+              blockers.push('Playwright E2E / Android APK release checks');
             }
 
             const targetScope = isBetaTarget
@@ -856,6 +944,11 @@ jobs:
               `- [${aiOrSyncReady ? 'x' : ' '}] **AI Review (100% + \`review:ai-approved\`)**${isBetaTarget && isVerifiedMainSync && !aiApproved ? ' (verified `origin/main` ancestry sync)' : ''}`,
               `- [${readinessValid ? 'x' : ' '}] **PR Description & Readiness** (\`## Summary\`, \`PR Readiness Score: 100%\`, zero unchecked tasks)`,
               `- [${!changesRequested ? 'x' : ' '}] **No Active Holds / Changes Requested**`,
+              ...(isMainTarget
+                ? [
+                    `- [${mainReleaseChecksReady && strictAiReady ? 'x' : ' '}] **Production Release Checks** (\`Build & Test\`, \`Android APK\`, \`Playwright E2E\`)`,
+                  ]
+                : []),
               ...(isDraft ? ['- [ ] **Ready for Review** (PR is currently a Draft)'] : []),
               ...(isDraft && !isDraftChecklistExempt
                 ? [
@@ -963,47 +1056,6 @@ jobs:
                   return false;
                 };
 
-                // Blocking CI evidence on the exact head SHA: latest `Build & Test` must be green and
-                // no latest check run may be failing. Async E2E/Android/Pages stay non-blocking.
-                const headChecksGreen = async () => {
-                  if (typeof github.rest.checks?.listForRef !== 'function') return false;
-                  try {
-                    const { data } = await github.rest.checks.listForRef({
-                      owner,
-                      repo,
-                      ref: headSha,
-                      per_page: 100,
-                    });
-                    const latestByName = new Map();
-                    for (const run of data?.check_runs || []) {
-                      const prev = latestByName.get(run.name);
-                      if (!prev || new Date(run.started_at) > new Date(prev.started_at)) {
-                        latestByName.set(run.name, run);
-                      }
-                    }
-                    const buildAndTest = latestByName.get('Build & Test');
-                    if (
-                      !buildAndTest ||
-                      buildAndTest.status !== 'completed' ||
-                      buildAndTest.conclusion !== 'success'
-                    ) {
-                      return false;
-                    }
-                    for (const run of latestByName.values()) {
-                      if (
-                        run.status === 'completed' &&
-                        ['failure', 'timed_out', 'action_required'].includes(run.conclusion)
-                      ) {
-                        return false;
-                      }
-                    }
-                    return true;
-                  } catch (err) {
-                    core.warning(`Failed to read head check runs for PR #${prNumber}: ${err.message}`);
-                    return false;
-                  }
-                };
-
                 if (!pr.auto_merge || existingMethod !== desiredMergeMethod) {
                   try {
                     await github.graphql(
@@ -1020,8 +1072,8 @@ jobs:
                   } catch (err) {
                     const msg = String(err?.message || err || '');
                     if (
-                      /clean status|stacked pull requests/i.test(msg) ||
-                      (/unstable status/i.test(msg) && (await headChecksGreen()))
+                      (/clean status/i.test(msg) && (!isMainTarget || (await headChecksGreen()))) ||
+                      (/stacked pull requests|unstable status/i.test(msg) && (await headChecksGreen()))
                     ) {
                       await directMergeWithFallback();
                     } else {
