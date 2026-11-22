@@ -975,6 +975,9 @@ class CapyAndroidBridgeTest {
         assertFalse(CapyAndroidBridge.isValidImageMagicBytes(pngHeader, length = 7))
         assertFalse(CapyAndroidBridge.isValidImageMagicBytes(jpegHeader, length = 2))
         assertFalse(CapyAndroidBridge.isValidImageMagicBytes(webpHeader, length = 11))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes("BM".toByteArray(Charsets.US_ASCII)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(bmpHeader, length = 2))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(bmpHeader, length = 5))
         val aviHeader = "RIFF\u0000\u0000\u0000\u0000AVI ".toByteArray(Charsets.US_ASCII)
         assertFalse(CapyAndroidBridge.isValidImageMagicBytes(aviHeader))
         val mp4Header = byteArrayOf(
@@ -1005,6 +1008,27 @@ class CapyAndroidBridgeTest {
 
         val noExt = CapyAndroidBridge.prepareSharedExportFile(cacheDir, "archive", nowMs = fixedNow)
         assertTrue(noExt.name.startsWith("archive_"))
+    }
+
+    @Test
+    fun `prepareSharedExportFile caps long filenames below NAME_MAX while preserving extension and uniqueness`() {
+        val cacheDir = tempFolder.newFolder("capy_long_exports")
+        val fixedNow = 1_700_000_000_000L
+        val longBase = "capy_artwork_" + "a".repeat(240)
+        val longFileName = "$longBase.png"
+
+        val first = CapyAndroidBridge.prepareSharedExportFile(cacheDir, longFileName, nowMs = fixedNow)
+        val second = CapyAndroidBridge.prepareSharedExportFile(cacheDir, longFileName, nowMs = fixedNow)
+
+        assertNotEquals(first.name, second.name)
+        assertTrue("Filename must stay under Linux NAME_MAX (255 bytes), got ${first.name.length}", first.name.length <= 200)
+        assertTrue("Filename must stay under Linux NAME_MAX (255 bytes), got ${second.name.length}", second.name.length <= 200)
+        assertTrue("Expected .png extension preserved, got '${first.name}'", first.name.endsWith(".png"))
+        assertTrue("Expected .png extension preserved, got '${second.name}'", second.name.endsWith(".png"))
+        assertTrue("Expected prefix preserved, got '${first.name}'", first.name.startsWith("capy_artwork_"))
+
+        val longNoExt = CapyAndroidBridge.prepareSharedExportFile(cacheDir, "b".repeat(260), nowMs = fixedNow)
+        assertTrue("Extensionless filename must stay under NAME_MAX, got ${longNoExt.name.length}", longNoExt.name.length <= 200)
     }
 
     @Test
@@ -1049,13 +1073,24 @@ class CapyAndroidBridgeTest {
         val docFactory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
         }
+        val toolsNs = "http://schemas.android.com/tools"
         val backupDoc = docFactory.newDocumentBuilder().parse(resolveRepoFile("app/src/main/res/xml/backup_rules.xml"))
         assertEquals("full-backup-content", backupDoc.documentElement.tagName)
+        assertEquals(
+            "backup_rules.xml must declare tools:ignore=\"FullBackupContent\"",
+            "FullBackupContent",
+            backupDoc.documentElement.getAttributeNS(toolsNs, "ignore"),
+        )
         verifyRulesSection(backupDoc.documentElement, "backup_rules.xml")
 
         val extractionDoc = docFactory.newDocumentBuilder()
             .parse(resolveRepoFile("app/src/main/res/xml/data_extraction_rules.xml"))
         assertEquals("data-extraction-rules", extractionDoc.documentElement.tagName)
+        assertEquals(
+            "data_extraction_rules.xml must declare tools:ignore=\"FullBackupContent\"",
+            "FullBackupContent",
+            extractionDoc.documentElement.getAttributeNS(toolsNs, "ignore"),
+        )
         val cloudBackup = extractionDoc.getElementsByTagName("cloud-backup").item(0) as? Element
         val deviceTransfer = extractionDoc.getElementsByTagName("device-transfer").item(0) as? Element
         assertNotNull("data_extraction_rules.xml must define <cloud-backup>", cloudBackup)

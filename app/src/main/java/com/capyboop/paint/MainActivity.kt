@@ -80,7 +80,10 @@ class MainActivity : ComponentActivity() {
         }
         try {
             playGamesIoExecutor.execute {
-                if (isDestroyed || isFinishing) return@execute
+                if (isDestroyed || isFinishing) {
+                    onRejected?.invoke()
+                    return@execute
+                }
                 task()
             }
         } catch (e: RejectedExecutionException) {

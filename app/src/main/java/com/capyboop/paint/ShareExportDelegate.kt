@@ -93,6 +93,8 @@ internal class ShareExportDelegate(
         const val MAX_SHARED_IMAGE_DIMENSION = 2048
         const val MAX_RAW_SHARED_IMAGE_BYTES = 4 * 1024 * 1024
         const val IMAGE_MAGIC_HEADER_BYTES = 12
+        const val MAX_EXPORT_BASE_NAME_LENGTH = 120
+        const val MAX_EXPORT_EXTENSION_LENGTH = 32
 
         private val ALLOWED_EXPORT_MIME_TYPES = setOf(
             "image/png",
@@ -154,11 +156,12 @@ internal class ShareExportDelegate(
             val dotIndex = safeName.lastIndexOf('.')
             val suffix = "${nowMs}_$uniqueToken"
             return if ((dotIndex > 0) && (dotIndex < safeName.length - 1)) {
-                val baseName = safeName.substring(0, dotIndex)
-                val extension = safeName.substring(dotIndex)
+                val baseName = safeName.substring(0, dotIndex).take(MAX_EXPORT_BASE_NAME_LENGTH)
+                val extension = safeName.substring(dotIndex).take(MAX_EXPORT_EXTENSION_LENGTH)
                 "${baseName}_${suffix}${extension}"
             } else {
-                "${safeName}_${suffix}"
+                val baseName = safeName.take(MAX_EXPORT_BASE_NAME_LENGTH)
+                "${baseName}_${suffix}"
             }
         }
 
@@ -310,8 +313,8 @@ internal class ShareExportDelegate(
                 return true
             }
 
-            // BMP: 42 4D ("BM")
-            if ((header[0] == 0x42.toByte()) && (header[1] == 0x4D.toByte())) {
+            // BMP: 42 4D ("BM") + 4-byte file size header
+            if ((len >= 6) && (header[0] == 0x42.toByte()) && (header[1] == 0x4D.toByte())) {
                 return true
             }
 

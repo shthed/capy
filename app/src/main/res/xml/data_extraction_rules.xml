@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules xmlns:tools="http://schemas.android.com/tools"
-    tools:ignore="DataExtractionRules">
+    tools:ignore="FullBackupContent">
     <cloud-backup>
         <include domain="file" path="capy_saves" />
         <exclude domain="sharedpref" path="capy_play_games_prefs.xml" />
