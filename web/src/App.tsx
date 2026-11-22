@@ -62,11 +62,13 @@ import { computeSlotKeyForSnapshot, ProviderRegistry } from './services/provider
 import { CoopParticipant } from './services/providers/types';
 import { CoopRippleBuffer } from './engine/CoopRippleBuffer';
 import { useIsomorphicLayoutEffect, useLatest } from './hooks/useLatest';
+import { useReplayController } from './hooks/useReplayController';
 import { useSessionRestore } from './hooks/useSessionRestore';
+import { UndoHistoryEntry, useUndoRedo } from './hooks/useUndoRedo';
 import { finishPaintStroke } from './services/paintStrokeHelper';
 import { loadHtmlImage, mergeCustomPalette } from './services/sessionRestorePipeline';
 import { getDisplayNumberMap, getVisiblePalette } from './components/PaletteDock';
-import { clampCanvasOffset, PuzzleCanvas } from './components/PuzzleCanvas';
+import { PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
@@ -105,13 +107,6 @@ function isMaxGeneratorConfig(cfg: GeneratorConfig): boolean {
 }
 
 export { mergeCustomPalette };
-
-interface UndoHistoryEntry {
-  regionId: number;
-  wasPreviouslyFilled: boolean;
-  previousPaintedColorId?: number;
-  paintedColorId?: number;
-}
 
 function isEditableKeyboardTarget(el: EventTarget | null): boolean {
   if (!el || typeof el !== 'object') return false;
@@ -155,28 +150,6 @@ export const App: React.FC = () => {
   const [activeColorId, setActiveColorId] = useState<number>(1);
   const [filledRegionIds, setFilledRegionIds] = useState<Set<number>>(new Set());
   const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
-  const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
-  const [redoStack, setRedoStack] = useState<UndoHistoryEntry[]>([]);
-  const undoStackRef = useLatest(undoStack);
-  const redoStackRef = useLatest(redoStack);
-  const syncUndoStack = useCallback(
-    (nextOrUpdater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])) => {
-      const next =
-        typeof nextOrUpdater === 'function' ? nextOrUpdater(undoStackRef.current) : nextOrUpdater;
-      undoStackRef.current = next;
-      setUndoStack(next);
-    },
-    [undoStackRef]
-  );
-  const syncRedoStack = useCallback(
-    (nextOrUpdater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])) => {
-      const next =
-        typeof nextOrUpdater === 'function' ? nextOrUpdater(redoStackRef.current) : nextOrUpdater;
-      redoStackRef.current = next;
-      setRedoStack(next);
-    },
-    [redoStackRef]
-  );
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const isPreviewModeRef = useLatest(isPreviewMode);
@@ -235,17 +208,6 @@ export const App: React.FC = () => {
   const coopJoinSeqRef = useRef<number>(0);
   const [coopRoomCode, setCoopRoomCode] = useState<string | null>(null);
   const [coopParticipants, setCoopParticipants] = useState<CoopParticipant[]>([]);
-
-  // Replay State
-  const [isReplaying, setIsReplaying] = useState<boolean>(false);
-  const isReplayingRef = useLatest(isReplaying);
-  const [isPostLoadReplay, setIsPostLoadReplay] = useState<boolean>(false);
-  const isPostLoadReplayRef = useLatest(isPostLoadReplay);
-  const [isReplayPlaying, setIsReplayPlaying] = useState<boolean>(false);
-  const isReplayPlayingRef = useLatest(isReplayPlaying);
-  const [replayStep, setReplayStep] = useState<number>(0);
-  const [replaySequence, setReplaySequence] = useState<number[]>([]);
-  const replaySequenceLengthRef = useLatest(replaySequence.length);
 
   // Spatial Viewport
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
@@ -420,6 +382,142 @@ export const App: React.FC = () => {
   }, [puzzle]);
   const regionByIdRef = useLatest(regionByIdMap);
 
+  const flushPendingViewportSaveRef = useRef<() => void>(() => {});
+  const tutorialTriggeredPreviewRef = useRef<boolean>(false);
+
+  // Sync settings updates to storage without stale closure overwrites
+  const handleUpdateSettings = useCallback(
+    (updater: UserSettings | ((prev: UserSettings) => UserSettings)) => {
+      setSettings((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        StorageService.saveSettings(next);
+        return next;
+      });
+    },
+    []
+  );
+
+  const emitCoopPaint = useCallback(
+    (
+      action: 'FILL' | 'UNFILL',
+      regionIds: number[],
+      paintedColors?: Record<number, number>
+    ) => {
+      const room = ProviderRegistry.realtimeRoom.activeRoomCode;
+      if (!room || regionIds.length === 0) return;
+      const identity = ProviderRegistry.auth.getCurrentIdentity();
+      ProviderRegistry.realtimeRoom.broadcastPaintEvent({
+        eventId: `${identity.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        roomCode: room,
+        playerId: identity.playerId,
+        displayName: identity.displayName,
+        avatarColorHex: identity.avatarColorHex,
+        action,
+        regionIds,
+        ...(paintedColors && Object.keys(paintedColors).length > 0 ? { paintedColors } : {}),
+        timestamp: Date.now(),
+      });
+    },
+    []
+  );
+
+  const emitCoopUnfill = useCallback((regionIds: number[]) => {
+    const room = ProviderRegistry.realtimeRoom.activeRoomCode;
+    if (!room || regionIds.length === 0) return;
+    const identity = ProviderRegistry.auth.getCurrentIdentity();
+    const maxBatch = 512;
+    for (let offsetIdx = 0; offsetIdx < regionIds.length; offsetIdx += maxBatch) {
+      const slice = regionIds.slice(offsetIdx, offsetIdx + maxBatch);
+      const now = Date.now();
+      ProviderRegistry.realtimeRoom.broadcastUnfillEvent({
+        eventId: `${identity.playerId}_unfill_${now}_${Math.random().toString(36).slice(2, 6)}`,
+        roomCode: room,
+        senderId: identity.playerId,
+        playerId: identity.playerId,
+        displayName: identity.displayName,
+        avatarColorHex: identity.avatarColorHex,
+        regionId: slice[0],
+        regionIds: slice,
+        timestamp: now,
+      });
+    }
+  }, []);
+
+  const {
+    isReplaying,
+    isPostLoadReplay,
+    isReplayPlaying,
+    replayStep,
+    replaySequence,
+    displayedFilledRegionIds,
+    isReplayingRef,
+    isPostLoadReplayRef,
+    isReplayPlayingRef,
+    tutorialOpenedReplayRef,
+    cancelAutoResume,
+    resetReplayState,
+    exitReplay,
+    dismissPostLoadReplayIfAwaiting,
+    startReplay,
+    handleOpenTimelineReplay,
+    handleReplayTogglePlay,
+    handleReplayToggleLoop,
+    handleReplayToggleFollow,
+    handleReplayRestart,
+    handleReplaySkipToEnd,
+    handleReplaySeek,
+    handleReplayChangeSpeed,
+    handleReplayUserInteract,
+  } = useReplayController({
+    puzzle,
+    filledRegionIds,
+    settings,
+    settingsRef,
+    liveCoopRef,
+    viewportRef,
+    canvasContainerSizeRef,
+    regionByIdRef,
+    flushPendingViewportSaveRef,
+    showTutorialRef,
+    tutorialStepRef,
+    handleUpdateSettings,
+    setHintRegionId,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  });
+
+  const {
+    undoStack,
+    redoStack,
+    undoStackRef,
+    syncUndoStack,
+    syncRedoStack,
+    isUndoEnabled,
+    handleUndo,
+    handleRedo,
+  } = useUndoRedo({
+    puzzle,
+    settings,
+    isFreeColorMode,
+    liveCoopRef,
+    viewportRef,
+    regionByIdRef,
+    isReplayingRef,
+    emitCoopPaint,
+    emitCoopUnfill,
+    setFilledRegionIds,
+    setPaintedRegionColors,
+    setActiveColorId,
+    setHintRegionId,
+    setSnapshots,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  });
+
+  const handleLongPressUndo = useCallback(() => {
+    handleOpenTimelineReplay(undoStackRef.current);
+  }, [handleOpenTimelineReplay, undoStackRef]);
+
   // Fullscreen State
   const [isFullscreen, setIsFullscreen] = useState<boolean>(() => {
     if (typeof document === 'undefined') return false;
@@ -560,19 +658,6 @@ export const App: React.FC = () => {
     return NativeBridge.pushBackHandler(() => setShowSettings(false));
   }, [showSettings]);
 
-
-  // Sync settings updates to storage without stale closure overwrites
-  const handleUpdateSettings = useCallback(
-    (updater: UserSettings | ((prev: UserSettings) => UserSettings)) => {
-      setSettings((prev) => {
-        const next = typeof updater === 'function' ? updater(prev) : updater;
-        StorageService.saveSettings(next);
-        return next;
-      });
-    },
-    []
-  );
-
   // Resolve full-resolution source image URL for built-in samples or IndexedDB image blobs
   const resolveSnapshotImageSrc = useCallback(
     async (snap: SavedSnapshot): Promise<{ src: string; objectUrl: string | null }> => {
@@ -668,46 +753,6 @@ export const App: React.FC = () => {
     []
   );
 
-  const autoResumeReplayRef = useRef<boolean>(false);
-  const autoResumeTimerRef = useRef<number | null>(null);
-  const awaitingReplayDismissRef = useRef<boolean>(false);
-  const tutorialOpenedReplayRef = useRef<boolean>(false);
-  const tutorialTriggeredPreviewRef = useRef<boolean>(false);
-  const replayStepRef = useLatest(replayStep);
-
-  const cancelAutoResume = useCallback(() => {
-    autoResumeReplayRef.current = false;
-    awaitingReplayDismissRef.current = false;
-    if (autoResumeTimerRef.current !== null) {
-      window.clearTimeout(autoResumeTimerRef.current);
-      autoResumeTimerRef.current = null;
-    }
-  }, []);
-
-  const flushPendingViewportSaveRef = useRef<() => void>(() => {});
-
-  const exitReplay = useCallback(() => {
-    flushPendingViewportSaveRef.current();
-    cancelAutoResume();
-    tutorialOpenedReplayRef.current = false;
-    isReplayingRef.current = false;
-    isPostLoadReplayRef.current = false;
-    setIsPostLoadReplay(false);
-    setIsReplaying(false);
-    setIsReplayPlaying(false);
-  }, [cancelAutoResume, isPostLoadReplayRef, isReplayingRef]);
-
-  useEffect(() => {
-    if (!isReplaying) return;
-    return NativeBridge.pushBackHandler(exitReplay);
-  }, [isReplaying, exitReplay]);
-
-  const dismissPostLoadReplayIfAwaiting = useCallback((): boolean => {
-    if (!awaitingReplayDismissRef.current) return false;
-    exitReplay();
-    return true;
-  }, [exitReplay]);
-
   const handleSyncActiveColor = useCallback((colId: number) => {
     liveCoopRef.current = { ...liveCoopRef.current, activeColorId: colId };
     setActiveColorId(colId);
@@ -731,7 +776,7 @@ export const App: React.FC = () => {
         setShowSettings(false);
       }
     },
-    [exitReplay, isPreviewModeRef]
+    [exitReplay, isPreviewModeRef, tutorialOpenedReplayRef]
   );
 
   const completeTutorial = useCallback(() => {
@@ -849,272 +894,6 @@ export const App: React.FC = () => {
     [cleanupTutorialTransientModes, showSettingsRef]
   );
 
-  // Zero-allocation bounding-box frustum check against the current canvas viewport
-  const isRegionVisibleInViewport = useCallback(
-    (regionId: number): boolean => {
-      if (!puzzle) return true;
-      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      if (zoomScale <= 1.02 && Math.abs(panOffsetX) <= 4 && Math.abs(panOffsetY) <= 4) {
-        return true;
-      }
-      const reg = regionByIdRef.current.get(regionId);
-      if (!reg) return true;
-      const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
-      const h = canvasContainerSizeRef.current.height || window.innerHeight || 768;
-      const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
-      const baseOffsetX = (w - puzzle.width * baseScale) / 2;
-      const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-      const effScale = zoomScale * baseScale;
-      if (effScale <= 0) return true;
-
-      const visLeft = (-panOffsetX - baseOffsetX) / effScale;
-      const visTop = (-panOffsetY - baseOffsetY) / effScale;
-      const visRight = visLeft + w / effScale;
-      const visBottom = visTop + h / effScale;
-
-      return (
-        reg.maxX >= visLeft &&
-        reg.minX <= visRight &&
-        reg.maxY >= visTop &&
-        reg.minY <= visBottom
-      );
-    },
-    [puzzle, regionByIdRef]
-  );
-
-  // Pre-allocated scratch vectors for zero-allocation camera-follow frustum checks
-  const followRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const followClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  // Zero-allocation check for whether the viewport has panned to bring the target region onscreen during replayFollow
-  const isViewportCaughtUpToRegion = useCallback(
-    (regionId: number): boolean => {
-      if (!puzzle) return true;
-      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      // At fit-to-screen zoom (<= 1.05x), the entire puzzle is already visible onscreen
-      if (zoomScale <= 1.05) return true;
-      const reg = regionByIdRef.current.get(regionId);
-      if (!reg) return true;
-      const w = canvasContainerSizeRef.current.width || window.innerWidth || 1024;
-      const h = canvasContainerSizeRef.current.height || window.innerHeight || 768;
-      const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
-      const baseOffsetX = (w - puzzle.width * baseScale) / 2;
-      const baseOffsetY = (h - puzzle.height * baseScale) / 2;
-      const effScale = zoomScale * baseScale;
-      if (effScale <= 0) return true;
-
-      // Check if viewport is already within 12px of its clamped target offset for this region
-      const rawScratch = followRawScratchRef.current;
-      rawScratch.x = w / 2 - (baseOffsetX + reg.centroidX * effScale);
-      rawScratch.y = h / 2 - (baseOffsetY + reg.centroidY * effScale);
-      const clampedTarget = clampCanvasOffset(
-        rawScratch,
-        zoomScale,
-        puzzle.width,
-        puzzle.height,
-        w,
-        h,
-        followClampedScratchRef.current
-      );
-      if (Math.hypot(clampedTarget.x - panOffsetX, clampedTarget.y - panOffsetY) <= 24) {
-        return true;
-      }
-
-      const visLeft = (-panOffsetX - baseOffsetX) / effScale;
-      const visTop = (-panOffsetY - baseOffsetY) / effScale;
-      const visW = w / effScale;
-      const visH = h / effScale;
-      const visRight = visLeft + visW;
-      const visBottom = visTop + visH;
-
-      // Allow continuous painting as long as the region is inside the visible safe bounds (inner 84%)
-      const padX = visW * 0.08;
-      const padY = visH * 0.08;
-      return (
-        reg.centroidX >= visLeft + padX &&
-        reg.centroidX <= visRight - padX &&
-        reg.centroidY >= visTop + padY &&
-        reg.centroidY <= visBottom - padY
-      );
-    },
-    [puzzle, regionByIdRef]
-  );
-
-  // Start animated region-by-region replay from the user's current viewport without zooming out or moving the camera
-  const startReplay = useCallback(
-    (sequence: number[], autoResumeOnFinish: boolean = false) => {
-      if (!sequence || sequence.length === 0) return;
-      if (autoResumeTimerRef.current !== null) {
-        window.clearTimeout(autoResumeTimerRef.current);
-        autoResumeTimerRef.current = null;
-      }
-      awaitingReplayDismissRef.current = false;
-      autoResumeReplayRef.current = autoResumeOnFinish;
-      if (autoResumeOnFinish) {
-        handleUpdateSettings((prev) =>
-          prev.replayLoop ? { ...prev, replayLoop: false } : prev
-        );
-      }
-      setHintRegionId(null);
-      setReplaySequence(sequence);
-      replayStepRef.current = 0;
-      setReplayStep(0);
-      isReplayingRef.current = true;
-      isPostLoadReplayRef.current = autoResumeOnFinish;
-      setIsPostLoadReplay(autoResumeOnFinish);
-      setIsReplaying(true);
-      setIsReplayPlaying(true);
-    },
-    [handleUpdateSettings, isPostLoadReplayRef, isReplayingRef, replayStepRef]
-  );
-
-  // Animated Replay Loop (60 FPS smooth accumulator scaled by replaySpeed with offscreen fast-forward, camera follow, and auto-loop)
-  useEffect(() => {
-    const finishAutoResume = () => {
-      autoResumeReplayRef.current = false;
-      if (autoResumeTimerRef.current !== null) {
-        window.clearTimeout(autoResumeTimerRef.current);
-        autoResumeTimerRef.current = null;
-      }
-      if (replaySequence.length === 0) {
-        awaitingReplayDismissRef.current = false;
-        isReplayingRef.current = false;
-        isPostLoadReplayRef.current = false;
-        setIsPostLoadReplay(false);
-        setIsReplaying(false);
-        return;
-      }
-      // Keep ReplayControls onscreen at 100% until the user interacts with the puzzle
-      awaitingReplayDismissRef.current = true;
-    };
-
-    if (!isReplaying || !isReplayPlaying) return;
-    if (replaySequence.length === 0) {
-      setIsReplayPlaying(false);
-      if (autoResumeReplayRef.current) {
-        finishAutoResume();
-      }
-      return;
-    }
-
-    let animId: number;
-    let lastTime = performance.now();
-    let accRegions = 0;
-    let loopPauseUntil = 0;
-
-    // Base speed: complete puzzle replay in ~5.5s at 1x, clamped between 12 and 65 regions/sec
-    const baseRate = Math.max(12, Math.min(65, replaySequence.length / 5.5));
-    const speedMultiplier = settings.replaySpeed || 1;
-    const regionsPerMs = (baseRate * speedMultiplier) / 1000;
-
-    const tick = (now: number) => {
-      const dt = Math.min(64, Math.max(0, now - lastTime));
-      lastTime = now;
-
-      const prev = replayStepRef.current;
-      if (prev >= replaySequence.length) {
-        if (settings.replayLoop && !autoResumeReplayRef.current) {
-          if (loopPauseUntil === 0) {
-            loopPauseUntil = now + 350;
-          }
-          if (now >= loopPauseUntil) {
-            loopPauseUntil = 0;
-            accRegions = 0;
-            replayStepRef.current = 0;
-            setReplayStep(0);
-          }
-          animId = requestAnimationFrame(tick);
-          return;
-        }
-        setIsReplayPlaying(false);
-        if (autoResumeReplayRef.current) {
-          finishAutoResume();
-        }
-        return;
-      }
-
-      if (settings.replayFollow) {
-        // Wait for the camera to smoothly pan until the next region is onscreen; never skip offscreen steps
-        if (!isViewportCaughtUpToRegion(replaySequence[prev])) {
-          accRegions = Math.min(1, accRegions + dt * regionsPerMs);
-          animId = requestAnimationFrame(tick);
-          return;
-        }
-      }
-
-      accRegions += dt * regionsPerMs;
-      const stepDelta = accRegions >= 1 ? Math.floor(accRegions) : 0;
-
-      let cursor = prev;
-      if (settings.replayFollow) {
-        if (stepDelta > 0) {
-          // Advance 1 step at a time so each subsequent region is followed and verified onscreen before painting
-          accRegions = Math.min(1, accRegions - 1);
-          cursor = prev + 1;
-        }
-      } else if (stepDelta > 0) {
-        accRegions -= stepDelta;
-      }
-
-      if (!settings.replayFollow) {
-        // Immediately fast-forward past consecutive offscreen regions
-        while (
-          cursor < replaySequence.length &&
-          !isRegionVisibleInViewport(replaySequence[cursor])
-        ) {
-          cursor++;
-        }
-
-        // Advance stepDelta on-screen steps and fast-forward any consecutive offscreen steps following each
-        for (let s = 0; s < stepDelta && cursor < replaySequence.length; s++) {
-          cursor++;
-          while (
-            cursor < replaySequence.length &&
-            !isRegionVisibleInViewport(replaySequence[cursor])
-          ) {
-            cursor++;
-          }
-        }
-      }
-
-      const next = Math.min(replaySequence.length, cursor);
-      if (next !== prev) {
-        replayStepRef.current = next;
-        setReplayStep(next);
-      }
-
-      if (next >= replaySequence.length) {
-        if (settings.replayLoop && !autoResumeReplayRef.current) {
-          loopPauseUntil = now + 350;
-          animId = requestAnimationFrame(tick);
-          return;
-        }
-        setIsReplayPlaying(false);
-        if (autoResumeReplayRef.current) {
-          finishAutoResume();
-        }
-        return;
-      }
-
-      animId = requestAnimationFrame(tick);
-    };
-
-    animId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animId);
-  }, [
-    isReplaying,
-    isReplayPlaying,
-    replaySequence,
-    settings.replaySpeed,
-    settings.replayLoop,
-    settings.replayFollow,
-    isRegionVisibleInViewport,
-    isViewportCaughtUpToRegion,
-    isReplayingRef,
-    isPostLoadReplayRef,
-    replayStepRef,
-  ]);
-
   // Generation sequence tracking to ignore cancelled/superseded requests
   const generationSeqRef = useRef<number>(0);
 
@@ -1145,13 +924,7 @@ export const App: React.FC = () => {
         activeSnapshotId: null,
         puzzle: null,
       };
-      cancelAutoResume();
-      tutorialOpenedReplayRef.current = false;
-      isReplayingRef.current = false;
-      isPostLoadReplayRef.current = false;
-      setIsPostLoadReplay(false);
-      setIsReplaying(false);
-      setIsReplayPlaying(false);
+      resetReplayState();
       setIsLoading(true);
       setLoadingProgress(0.02);
       setLoadingStatus('Analyzing artwork style and line composition...');
@@ -1452,11 +1225,11 @@ export const App: React.FC = () => {
       clearPendingViewportSave,
       generatePreviewDataUrl,
       startReplay,
-      cancelAutoResume,
+      resetReplayState,
       handleUpdateSettings,
       resetActivePuzzleSessionStats,
-      isPostLoadReplayRef,
-      isReplayingRef,
+      syncUndoStack,
+      syncRedoStack,
       latestRenderCoopRef,
     ]
   );
@@ -1541,312 +1314,6 @@ export const App: React.FC = () => {
     if (!puzzle) return new Map<number, string>();
     return getDisplayNumberMap(puzzle.palette, puzzle.regions, settings.paletteSort);
   }, [puzzle, settings.paletteSort]);
-
-  // Undo & Redo capability: disabled by default for standard puzzles, enabled automatically for free colour puzzles or when explicitly enabled in settings
-  const isUndoEnabled = Boolean(settings.enableUndo || isFreeColorMode || puzzle?.isFreeColor);
-
-  const emitCoopPaint = useCallback(
-    (
-      action: 'FILL' | 'UNFILL',
-      regionIds: number[],
-      paintedColors?: Record<number, number>
-    ) => {
-      const room = ProviderRegistry.realtimeRoom.activeRoomCode;
-      if (!room || regionIds.length === 0) return;
-      const identity = ProviderRegistry.auth.getCurrentIdentity();
-      ProviderRegistry.realtimeRoom.broadcastPaintEvent({
-        eventId: `${identity.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        roomCode: room,
-        playerId: identity.playerId,
-        displayName: identity.displayName,
-        avatarColorHex: identity.avatarColorHex,
-        action,
-        regionIds,
-        ...(paintedColors && Object.keys(paintedColors).length > 0 ? { paintedColors } : {}),
-        timestamp: Date.now(),
-      });
-    },
-    []
-  );
-
-  const emitCoopUnfill = useCallback((regionIds: number[]) => {
-    const room = ProviderRegistry.realtimeRoom.activeRoomCode;
-    if (!room || regionIds.length === 0) return;
-    const identity = ProviderRegistry.auth.getCurrentIdentity();
-    const maxBatch = 512;
-    for (let offsetIdx = 0; offsetIdx < regionIds.length; offsetIdx += maxBatch) {
-      const slice = regionIds.slice(offsetIdx, offsetIdx + maxBatch);
-      const now = Date.now();
-      ProviderRegistry.realtimeRoom.broadcastUnfillEvent({
-        eventId: `${identity.playerId}_unfill_${now}_${Math.random().toString(36).slice(2, 6)}`,
-        roomCode: room,
-        senderId: identity.playerId,
-        playerId: identity.playerId,
-        displayName: identity.displayName,
-        avatarColorHex: identity.avatarColorHex,
-        regionId: slice[0],
-        regionIds: slice,
-        timestamp: now,
-      });
-    }
-  }, []);
-
-  // Undo last region completion
-  const handleUndo = useCallback((bypassReplayCheck: boolean = false) => {
-    const cur = liveCoopRef.current;
-    const curPuzzle = cur.puzzle;
-    const curIsFreeColor = cur.isFreeColorMode;
-    const curSnapshotId = cur.activeSnapshotId;
-    const curSettings = cur.settings;
-    const curUndoEnabled = Boolean(
-      curSettings.enableUndo || curIsFreeColor || curPuzzle?.isFreeColor
-    );
-    const currentUndoStack = undoStackRef.current;
-    if (
-      !curPuzzle ||
-      (isReplayingRef.current && bypassReplayCheck !== true) ||
-      currentUndoStack.length === 0 ||
-      !curUndoEnabled
-    ) {
-      return;
-    }
-
-    const lastAction = currentUndoStack[currentUndoStack.length - 1];
-    syncUndoStack((prev) => prev.slice(0, -1));
-    syncRedoStack((prev) => [...prev, lastAction]);
-
-    const curFilled = cur.filledRegionIds;
-    const curPainted = cur.paintedRegionColors;
-    const nextFilled = new Set(curFilled);
-    const nextPainted = new Map(curPainted);
-    const undoneRegion =
-      curPuzzle === puzzle
-        ? regionByIdRef.current.get(lastAction.regionId)
-        : curPuzzle.regions.find((r) => r.id === lastAction.regionId);
-
-    if (lastAction.wasPreviouslyFilled) {
-      if (lastAction.previousPaintedColorId !== undefined) {
-        nextPainted.set(lastAction.regionId, lastAction.previousPaintedColorId);
-        emitCoopPaint('FILL', [lastAction.regionId], {
-          [lastAction.regionId]: lastAction.previousPaintedColorId,
-        });
-      } else {
-        nextPainted.delete(lastAction.regionId);
-        if (undoneRegion) {
-          emitCoopPaint('FILL', [lastAction.regionId], {
-            [lastAction.regionId]: undoneRegion.colorId,
-          });
-        }
-      }
-    } else {
-      nextFilled.delete(lastAction.regionId);
-      nextPainted.delete(lastAction.regionId);
-      emitCoopUnfill([lastAction.regionId]);
-    }
-
-    const nextActiveCol =
-      undoneRegion && !curIsFreeColor ? undoneRegion.colorId : cur.activeColorId;
-    liveCoopRef.current = {
-      ...cur,
-      filledRegionIds: nextFilled,
-      paintedRegionColors: nextPainted,
-      activeColorId: nextActiveCol,
-    };
-    setFilledRegionIds(nextFilled);
-    setPaintedRegionColors(nextPainted);
-    setHintRegionId(null);
-    NativeBridge.haptic('tick', curSettings.hapticsEnabled);
-    markTutorialActionTried('undo_redo');
-    triggerFeatureOffer('undo_replay');
-
-    if (undoneRegion && !curIsFreeColor) {
-      setActiveColorId(undoneRegion.colorId);
-    }
-
-    if (curSnapshotId) {
-      const paintedObj = Object.fromEntries(nextPainted);
-      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      const updated = StorageService.updateSnapshotProgress(
-        curSnapshotId,
-        nextFilled.size,
-        curPuzzle.regions.length,
-        Array.from(nextFilled),
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-        undefined,
-        paintedObj,
-        curPuzzle.palette,
-        curPuzzle.isFreeColor
-      );
-      setSnapshots(updated);
-      StorageService.saveActiveState({
-        activeSnapshotId: curSnapshotId,
-        activeColorId: nextActiveCol,
-        filledRegionIds: Array.from(nextFilled),
-        paintedRegionColors: paintedObj,
-        isFreeColorMode: curIsFreeColor,
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-      });
-    }
-  }, [
-    puzzle,
-    emitCoopPaint,
-    emitCoopUnfill,
-    markTutorialActionTried,
-    triggerFeatureOffer,
-    syncUndoStack,
-    syncRedoStack,
-    isReplayingRef,
-    regionByIdRef,
-    undoStackRef,
-  ]);
-
-  // Redo last undone region action
-  const handleRedo = useCallback((bypassReplayCheck: boolean = false) => {
-    const cur = liveCoopRef.current;
-    const curPuzzle = cur.puzzle;
-    const curIsFreeColor = cur.isFreeColorMode;
-    const curSnapshotId = cur.activeSnapshotId;
-    const curSettings = cur.settings;
-    const curUndoEnabled = Boolean(
-      curSettings.enableUndo || curIsFreeColor || curPuzzle?.isFreeColor
-    );
-    const currentRedoStack = redoStackRef.current;
-    if (
-      !curPuzzle ||
-      (isReplayingRef.current && bypassReplayCheck !== true) ||
-      currentRedoStack.length === 0 ||
-      !curUndoEnabled
-    ) {
-      return;
-    }
-
-    const lastRedo = currentRedoStack[currentRedoStack.length - 1];
-    syncRedoStack((prev) => prev.slice(0, -1));
-    syncUndoStack((prev) => [...prev, lastRedo]);
-
-    const curFilled = cur.filledRegionIds;
-    const curPainted = cur.paintedRegionColors;
-    const curActiveColorId = cur.activeColorId;
-    const nextFilled = new Set(curFilled);
-    const nextPainted = new Map(curPainted);
-    const redoneRegion =
-      curPuzzle === puzzle
-        ? regionByIdRef.current.get(lastRedo.regionId)
-        : curPuzzle.regions.find((r) => r.id === lastRedo.regionId);
-
-    nextFilled.add(lastRedo.regionId);
-    let redonePaintedCol: number | undefined;
-    if (lastRedo.paintedColorId !== undefined) {
-      nextPainted.set(lastRedo.regionId, lastRedo.paintedColorId);
-      redonePaintedCol = lastRedo.paintedColorId;
-    } else if (redoneRegion && curIsFreeColor) {
-      nextPainted.set(lastRedo.regionId, curActiveColorId);
-      redonePaintedCol = curActiveColorId;
-    }
-    emitCoopPaint(
-      'FILL',
-      [lastRedo.regionId],
-      redonePaintedCol !== undefined
-        ? { [lastRedo.regionId]: redonePaintedCol }
-        : undefined
-    );
-
-    const nextActiveCol = redoneRegion && !curIsFreeColor ? redoneRegion.colorId : curActiveColorId;
-    liveCoopRef.current = {
-      ...cur,
-      filledRegionIds: nextFilled,
-      paintedRegionColors: nextPainted,
-      activeColorId: nextActiveCol,
-    };
-    setFilledRegionIds(nextFilled);
-    setPaintedRegionColors(nextPainted);
-    setHintRegionId(null);
-    NativeBridge.haptic('tick', curSettings.hapticsEnabled);
-    markTutorialActionTried('undo_redo');
-
-    if (redoneRegion && !curIsFreeColor) {
-      setActiveColorId(redoneRegion.colorId);
-    }
-
-    if (curSnapshotId) {
-      const paintedObj = Object.fromEntries(nextPainted);
-      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-      const updated = StorageService.updateSnapshotProgress(
-        curSnapshotId,
-        nextFilled.size,
-        curPuzzle.regions.length,
-        Array.from(nextFilled),
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-        undefined,
-        paintedObj,
-        curPuzzle.palette,
-        curPuzzle.isFreeColor
-      );
-      setSnapshots(updated);
-      StorageService.saveActiveState({
-        activeSnapshotId: curSnapshotId,
-        activeColorId: nextActiveCol,
-        filledRegionIds: Array.from(nextFilled),
-        paintedRegionColors: paintedObj,
-        isFreeColorMode: curIsFreeColor,
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-      });
-    }
-  }, [
-    puzzle,
-    emitCoopPaint,
-    markTutorialActionTried,
-    syncUndoStack,
-    syncRedoStack,
-    isReplayingRef,
-    regionByIdRef,
-    redoStackRef,
-  ]);
-
-  // Open replay timeline scrubber from long-press Undo or floating controls
-  const handleOpenTimelineReplay = useCallback(() => {
-    const cur = liveCoopRef.current;
-    const curPuzzle = cur.puzzle ?? puzzle;
-    const curFilled = cur.filledRegionIds;
-    const curUndo = undoStackRef.current;
-    if (!curPuzzle || (curFilled.size === 0 && curUndo.length === 0)) return;
-
-    // Build unique ordered list of filled regions matching first-fill gameplay chronology
-    const orderedList =
-      curFilled.size > 0
-        ? Array.from(curFilled)
-        : Array.from(new Set(curUndo.map((u) => u.regionId)));
-
-    if (orderedList.length === 0) return;
-
-    NativeBridge.haptic('tick', cur.settings.hapticsEnabled);
-    awaitingReplayDismissRef.current = false;
-    if (showTutorialRef.current && TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'replay') {
-      tutorialOpenedReplayRef.current = true;
-    }
-    setHintRegionId(null);
-    setReplaySequence(orderedList);
-    setReplayStep(orderedList.length);
-    setIsReplaying(true);
-    setIsReplayPlaying(false);
-    markTutorialActionTried('replay');
-    triggerFeatureOffer('replay_scrubber');
-  }, [
-    puzzle,
-    markTutorialActionTried,
-    triggerFeatureOffer,
-    showTutorialRef,
-    tutorialStepRef,
-    undoStackRef,
-  ]);
 
   // Keyboard shortcuts:
   // - Ctrl+Z / Cmd+Z (Undo), Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (Redo)
@@ -2697,13 +2164,7 @@ export const App: React.FC = () => {
       puzzle: null,
     };
 
-    cancelAutoResume();
-    tutorialOpenedReplayRef.current = false;
-    isReplayingRef.current = false;
-    isPostLoadReplayRef.current = false;
-    setIsPostLoadReplay(false);
-    setIsReplaying(false);
-    setIsReplayPlaying(false);
+    resetReplayState();
     setIsLoading(true);
     setLoadingProgress(0.15);
     setLoadingStatus(`Loading ${snapshot.title}...`);
@@ -3003,17 +2464,6 @@ export const App: React.FC = () => {
   const filledCount = filledRegionIds.size;
   const progressPercentage = computeProgressPercentage(filledCount, totalCount);
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
-
-  // Displayed regions on canvas (animated slice during Replay mode, or full filled set)
-  const displayedFilledRegionIds = useMemo(() => {
-    if (!isReplaying) return filledRegionIds;
-    const set = new Set<number>();
-    const limit = Math.min(replayStep, replaySequence.length);
-    for (let i = 0; i < limit; i++) {
-      set.add(replaySequence[i]);
-    }
-    return set;
-  }, [isReplaying, replaySequence, replayStep, filledRegionIds]);
 
   // Export full-resolution colored artwork as PNG (supports Web download and Android native Share Sheet)
   const handleExportArtwork = useCallback(() => {
@@ -3446,13 +2896,7 @@ export const App: React.FC = () => {
                 viewportRef.current = targetView;
                 setInitialViewport(targetView);
                 setRestoreViewTrigger((prev) => prev + 1);
-                cancelAutoResume();
-                tutorialOpenedReplayRef.current = false;
-                isReplayingRef.current = false;
-                isPostLoadReplayRef.current = false;
-                setIsPostLoadReplay(false);
-                setIsReplaying(false);
-                setIsReplayPlaying(false);
+                resetReplayState();
                 setShowSettings(false);
                 const syncedSnap = updatedList.find((s) => s.id === prebakedSnap.id);
                 liveCoopRef.current = {
@@ -3560,9 +3004,10 @@ export const App: React.FC = () => {
       generatePreviewDataUrl,
       handleUpdateSettings,
       loadArtworkFromImage,
-      cancelAutoResume,
-      isPostLoadReplayRef,
-      isReplayingRef,
+      resetActivePuzzleSessionStats,
+      resetReplayState,
+      syncUndoStack,
+      syncRedoStack,
       latestRenderCoopRef,
     ]
   );
@@ -4959,7 +4404,14 @@ export const App: React.FC = () => {
     markTutorialActionTried('replay');
     triggerFeatureOffer('replay_scrubber');
     startReplay(Array.from(liveCoopRef.current.filledRegionIds));
-  }, [markTutorialActionTried, showTutorialRef, startReplay, triggerFeatureOffer, tutorialStepRef]);
+  }, [
+    markTutorialActionTried,
+    showTutorialRef,
+    startReplay,
+    triggerFeatureOffer,
+    tutorialOpenedReplayRef,
+    tutorialStepRef,
+  ]);
 
   const handleTogglePaintMode = useCallback(() => {
     const curSettings = settingsRef.current;
@@ -5000,89 +4452,6 @@ export const App: React.FC = () => {
     markTutorialActionTried('zoom');
     setResetViewTrigger((prev) => prev + 1);
   }, [dismissPostLoadReplayIfAwaiting, markTutorialActionTried]);
-
-  const handleReplayTogglePlay = useCallback(() => {
-    cancelAutoResume();
-    isPostLoadReplayRef.current = false;
-    setIsPostLoadReplay(false);
-    if (!isReplayPlayingRef.current && replayStepRef.current >= replaySequenceLengthRef.current) {
-      replayStepRef.current = 0;
-      setReplayStep(0);
-      setIsReplayPlaying(true);
-    } else {
-      setIsReplayPlaying((prev) => !prev);
-    }
-  }, [cancelAutoResume, isPostLoadReplayRef, isReplayPlayingRef, replaySequenceLengthRef, replayStepRef]);
-
-  const handleReplayToggleLoop = useCallback(() => {
-    cancelAutoResume();
-    isPostLoadReplayRef.current = false;
-    setIsPostLoadReplay(false);
-    const curSettings = settingsRef.current;
-    NativeBridge.haptic('tick', curSettings.hapticsEnabled);
-    const nextLoop = !curSettings.replayLoop;
-    handleUpdateSettings((prev) => ({ ...prev, replayLoop: nextLoop }));
-    if (nextLoop && replayStepRef.current >= replaySequenceLengthRef.current) {
-      replayStepRef.current = 0;
-      setReplayStep(0);
-      setIsReplayPlaying(true);
-    }
-  }, [
-    cancelAutoResume,
-    handleUpdateSettings,
-    isPostLoadReplayRef,
-    replaySequenceLengthRef,
-    replayStepRef,
-    settingsRef,
-  ]);
-
-  const handleReplayToggleFollow = useCallback(() => {
-    cancelAutoResume();
-    isPostLoadReplayRef.current = false;
-    setIsPostLoadReplay(false);
-    const curSettings = settingsRef.current;
-    NativeBridge.haptic('tick', curSettings.hapticsEnabled);
-    handleUpdateSettings((prev) => ({ ...prev, replayFollow: !prev.replayFollow }));
-  }, [cancelAutoResume, handleUpdateSettings, isPostLoadReplayRef, settingsRef]);
-
-  const handleReplayRestart = useCallback(() => {
-    cancelAutoResume();
-    replayStepRef.current = 0;
-    setReplayStep(0);
-    setIsReplayPlaying(true);
-  }, [cancelAutoResume, replayStepRef]);
-
-  const handleReplaySkipToEnd = useCallback(() => {
-    cancelAutoResume();
-    const totalSteps = replaySequenceLengthRef.current;
-    replayStepRef.current = totalSteps;
-    setReplayStep(totalSteps);
-    setIsReplayPlaying(false);
-  }, [cancelAutoResume, replaySequenceLengthRef, replayStepRef]);
-
-  const handleReplaySeek = useCallback(
-    (step: number) => {
-      cancelAutoResume();
-      replayStepRef.current = step;
-      setReplayStep(step);
-      setIsReplayPlaying(false);
-    },
-    [cancelAutoResume, replayStepRef]
-  );
-
-  const handleReplayChangeSpeed = useCallback(
-    (spd: number) => {
-      cancelAutoResume();
-      handleUpdateSettings((prev) => ({ ...prev, replaySpeed: spd }));
-    },
-    [cancelAutoResume, handleUpdateSettings]
-  );
-
-  const handleReplayUserInteract = useCallback(() => {
-    cancelAutoResume();
-    markTutorialActionTried('replay');
-    triggerFeatureOffer('replay_scrubber');
-  }, [cancelAutoResume, markTutorialActionTried, triggerFeatureOffer]);
 
   const handlePaletteColorSelected = useCallback(
     (colId: number) => {
@@ -5264,7 +4633,7 @@ export const App: React.FC = () => {
           isReplaying={isReplaying}
           onUndo={handleFloatingUndo}
           onRedo={handleFloatingRedo}
-          onLongPressUndo={handleOpenTimelineReplay}
+          onLongPressUndo={handleLongPressUndo}
           onStartReplay={handleFloatingStartReplay}
           onTogglePaintMode={handleTogglePaintMode}
           onZoomIn={handleZoomIn}
@@ -5793,13 +5162,7 @@ export const App: React.FC = () => {
                   freshSnap?.resetEpoch ?? 0,
                   activeStateEpoch
                 ) + 1;
-              cancelAutoResume();
-              tutorialOpenedReplayRef.current = false;
-              isReplayingRef.current = false;
-              isPostLoadReplayRef.current = false;
-              setIsPostLoadReplay(false);
-              setIsReplaying(false);
-              setIsReplayPlaying(false);
+              resetReplayState();
               setFilledRegionIds(new Set());
               setPaintedRegionColors(new Map());
               syncUndoStack([]);
