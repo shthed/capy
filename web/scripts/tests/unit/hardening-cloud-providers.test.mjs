@@ -1595,15 +1595,18 @@ export async function runHardeningCloudProvidersTests(vite) {
             'Reset occurring during pushRemoteLibraryManifest must set hasPendingLocalChanges so App.tsx schedules trailing pass'
           );
 
-          const appSrc = fs.readFileSync(path.join(WEB_ROOT, 'src/App.tsx'), 'utf8');
+          const cloudSyncHookSrc = fs.readFileSync(
+            path.join(WEB_ROOT, 'src/hooks/useCloudSyncController.ts'),
+            'utf8'
+          );
           assert.match(
-            appSrc,
+            cloudSyncHookSrc,
             /libSummary\.hasPendingLocalChanges[\s\S]*?latestSavedEpoch > pushedSlotEpoch[\s\S]*?controller\.requestTrailingPass\(\)/,
-            'App.tsx must re-queue cloud sync via controller.requestTrailingPass() when resetEpoch advances mid-sync'
+            'useCloudSyncController.ts must re-queue cloud sync via controller.requestTrailingPass() when resetEpoch advances mid-sync'
           );
         }
 
-        // 7l. C8-2 regression: App.tsx must compute canonical slotKey via computeSlotKeyForSnapshot so ./assets/ vs assets/ prefixes never fork cloud slots
+        // 7l. C8-2 regression: useCloudSyncController.ts must compute canonical slotKey via computeSlotKeyForSnapshot so ./assets/ vs assets/ prefixes never fork cloud slots
         {
           lsMap.clear();
           ssMap.clear();
@@ -1622,21 +1625,26 @@ export async function runHardeningCloudProvidersTests(vite) {
             'sample_assets_capy_forest_webp',
             'computeSlotKeyForSnapshot must strip leading ./ to produce canonical slotKey'
           );
+          const cloudSyncHookSrc7l = fs.readFileSync(
+            path.join(WEB_ROOT, 'src/hooks/useCloudSyncController.ts'),
+            'utf8'
+          );
           const appSrc7l = fs.readFileSync(path.join(WEB_ROOT, 'src/App.tsx'), 'utf8');
           assert.match(
-            appSrc7l,
-            /import\s*\{[^}]*\bcomputeSlotKeyForSnapshot\b[^}]*\}\s*from\s*'\.\/services\/providers\/ProviderRegistry'/,
-            'App.tsx must import computeSlotKeyForSnapshot from ProviderRegistry'
+            cloudSyncHookSrc7l,
+            /import\s*\{[^}]*\bcomputeSlotKeyForSnapshot\b[^}]*\}\s*from\s*'\.\.\/services\/(?:cloud\/slotKey|providers\/ProviderRegistry)'/,
+            'useCloudSyncController.ts must import computeSlotKeyForSnapshot'
           );
           assert.match(
-            appSrc7l,
+            cloudSyncHookSrc7l,
             /const slotKey = computeSlotKeyForSnapshot\(/,
-            'App.tsx executeSingleSyncPass must compute active slotKey via computeSlotKeyForSnapshot'
+            'useCloudSyncController.ts must compute active slotKey via computeSlotKeyForSnapshot'
           );
           assert.equal(
-            appSrc7l.includes('sample_${startSampleUri.replace'),
+            cloudSyncHookSrc7l.includes('sample_${startSampleUri.replace') ||
+              appSrc7l.includes('sample_${startSampleUri.replace'),
             false,
-            'App.tsx must not diverge with inline sample_ slotKey string formatting'
+            'Cloud sync controller and App.tsx must not diverge with inline sample_ slotKey string formatting'
           );
 
           const remoteResetToken = await codecMod.encodeProgressDeltaToken({
