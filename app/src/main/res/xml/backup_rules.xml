@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<full-backup-content>
+<full-backup-content xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="FullBackupContent">
+    <!-- Explicitly allowlist capy_saves so app_webview/ and all other paths are excluded by default. -->
+    <include domain="file" path="capy_saves" />
     <exclude domain="sharedpref" path="capy_play_games_prefs.xml" />
     <exclude domain="file" path="capy_cloud" />
 </full-backup-content>
