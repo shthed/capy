@@ -52,7 +52,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-2 sm:px-3 pb-3 safe-top flex justify-between items-center gap-1 sm:gap-2"
+      className="fixed top-0 left-0 right-0 z-30 pointer-events-none px-2 sm:px-3 pb-3 safe-top flex justify-between items-center gap-0.5 sm:gap-2"
       style={{
         paddingLeft: 'max(0.5rem, calc(var(--sal, 0px) + 0.5rem))',
         paddingRight: 'max(0.5rem, calc(var(--sar, 0px) + 0.5rem))',
@@ -61,7 +61,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
       {/* Top Left: Progress % / Title Pill, Channel Badge, Parent Breadcrumb & Zoom Stepper */}
       <div
         data-testid="topbar-left-lane"
-        className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar"
+        className="pointer-events-auto flex items-center gap-0.5 sm:gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar"
       >
         {onBackToParentPuzzle && (
           <button
@@ -93,7 +93,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
           onClick={onOpenSaves}
           title="View saves and snapshots"
           aria-label={`${activeTitle || 'Capy Paint'}, ${progressPercentage}% complete. Open saved art`}
-          className={`capy-topbar-pill flex items-center gap-0.5 sm:gap-1.5 min-h-[36px] sm:min-h-[38px] px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer min-w-0 max-w-full flex-shrink ${
+          className={`capy-topbar-pill flex items-center gap-0.5 sm:gap-1.5 min-h-[36px] sm:min-h-[38px] px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-extrabold shadow-lg backdrop-blur-md transition-all active:scale-95 cursor-pointer min-w-0 max-w-full flex-shrink ${
             isCompleted
               ? 'bg-amber-400 text-amber-950 ring-2 ring-amber-300'
               : 'bg-slate-900/80 text-amber-400 border border-slate-700/60 hover:bg-slate-800/80'
@@ -152,7 +152,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
       {/* Top Right: Actions */}
       <div
         data-testid="topbar-right-lane"
-        className="pointer-events-auto flex items-center gap-1 sm:gap-2 flex-shrink-0"
+        className="pointer-events-auto flex items-center gap-0.5 sm:gap-2 flex-shrink-0"
       >
         {/* Co-op & Share Link Button */}
         {onOpenCoop && (

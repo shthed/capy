@@ -55,6 +55,8 @@ export function createInitialTutorialTried(): TutorialTriedActions {
 interface OnboardingTutorialProps {
   isOpen: boolean;
   isModalOpen?: boolean;
+  isSettingsOpen?: boolean;
+  activeSettingsTab?: number;
   isLoading?: boolean;
   stepIndex: number;
   triedActions: TutorialTriedActions;
@@ -75,6 +77,9 @@ export interface TutorialStepDef {
   tryPrompt: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   modalTab?: number;
+  modalTabName?: string;
+  modalTabPrompt?: string;
+  modalControlPrompt?: string;
   actionLabel?: string;
   actionTestId?: string;
 }
@@ -142,6 +147,12 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Want your own shades? Turn on Free Color Mode in Settings to paint any color you like.',
     tryPrompt: 'Try it: Open Settings and turn on Free Color Mode',
     icon: Paintbrush,
+    modalTab: 1,
+    modalTabName: 'Settings',
+    modalTabPrompt: 'Tap the Settings tab at the top',
+    modalControlPrompt: 'Turn on Free Color Mode above',
+    actionLabel: 'Open Settings',
+    actionTestId: 'tutorial-open-free-color-btn',
   },
   {
     key: 'create_gallery',
@@ -150,6 +161,12 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Tap Photo above for your own pictures, or open Menu > Create for the Daily Puzzle, Gallery, Styles, and Detail Tiles.',
     tryPrompt: 'Try it: Tap Photo above or open Menu > Create',
     icon: Compass,
+    modalTab: 3,
+    modalTabName: 'Create',
+    modalTabPrompt: 'Tap the Create tab at the top',
+    modalControlPrompt: 'Tap Play Daily Puzzle or browse the Preset Gallery',
+    actionLabel: 'Open Create',
+    actionTestId: 'tutorial-open-create-btn',
   },
   {
     key: 'saves_export',
@@ -158,15 +175,24 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
       'Tap the top-left title pill anytime to switch pictures, save backups, or print coloring pages.',
     tryPrompt: 'Try it: Tap the title pill top-left',
     icon: Save,
+    modalTab: 4,
+    modalTabName: 'Saves',
+    modalTabPrompt: 'Tap the Saves tab at the top',
+    modalControlPrompt: 'Pick a saved picture to switch, back up, or print',
+    actionLabel: 'Open Saves',
+    actionTestId: 'tutorial-open-saves-btn',
   },
   {
     key: 'settings',
     title: 'Customize Settings',
     description:
-      'Adjust Appearance, Gameplay, Controls, Audio, and Accessibility—including Large Text and Tap Assist—in the Settings tab.',
+      'Adjust Accessibility (Text & UI Size, Fat-Finger Tap Assist), UI, Gameplay, Controls, and Audio in the Settings tab.',
     tryPrompt: 'Try it: Open Settings and explore your options',
     icon: Sliders,
     modalTab: 1,
+    modalTabName: 'Settings',
+    modalTabPrompt: 'Tap the Settings tab at the top',
+    modalControlPrompt: 'Try Accessibility, UI, or Gameplay options above',
     actionLabel: 'Open Settings',
     actionTestId: 'tutorial-open-settings-btn',
   },
@@ -174,10 +200,13 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     key: 'hints',
     title: 'Customize Hints',
     description:
-      'Pick your Hint Highlight Style, Color, Fill Pattern, and Auto-Pan behavior in the Hints tab.',
+      'Pick your Hint Style, Color, Auto-Pan, Coloring Mode, and Difficulty in the Hints tab.',
     tryPrompt: 'Try it: Open Hints to customize your hint style',
     icon: Sparkles,
     modalTab: 2,
+    modalTabName: 'Hints',
+    modalTabPrompt: 'Tap the Hints tab at the top',
+    modalControlPrompt: 'Customize Hint Appearance, Mode, or Difficulty above',
     actionLabel: 'Open Hints',
     actionTestId: 'tutorial-open-hints-btn',
   },
@@ -186,6 +215,8 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
 export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   isOpen,
   isModalOpen = false,
+  isSettingsOpen = false,
+  activeSettingsTab,
   isLoading = false,
   stepIndex,
   triedActions,
@@ -206,7 +237,12 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
   const isCurrentTried = Boolean(triedActions[currentStep.key]);
   const isLastStep = clampedStep === TUTORIAL_STEPS.length - 1;
   const isModalStep = currentStep.modalTab !== undefined;
-  const isDockedInModal = isModalOpen && isModalStep;
+  const isDockedInModal = Boolean(isSettingsOpen);
+  const isOnTargetModalTab =
+    isDockedInModal &&
+    isModalStep &&
+    activeSettingsTab !== undefined &&
+    activeSettingsTab === currentStep.modalTab;
 
   useEffect(() => {
     if (!isOpen) {
@@ -271,6 +307,19 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
 
   const Icon = currentStep.icon;
   const progressPercent = Math.round(((clampedStep + 1) / TUTORIAL_STEPS.length) * 100);
+  const activePromptText = isDockedInModal
+    ? isModalStep
+      ? isOnTargetModalTab
+        ? currentStep.modalControlPrompt || currentStep.tryPrompt
+        : currentStep.modalTabPrompt || currentStep.tryPrompt
+      : 'Close Menu (×) to try this on the picture, or tap Next'
+    : currentStep.tryPrompt;
+  const showOpenTabButton = Boolean(
+    isModalStep &&
+      currentStep.actionLabel &&
+      onOpenSettingsTab &&
+      !isOnTargetModalTab
+  );
 
   return (
     <div
@@ -290,38 +339,22 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
       <div
         data-testid="onboarding-tutorial"
         data-modal-docked={isDockedInModal ? 'true' : undefined}
-        className={`pointer-events-auto w-full overflow-y-auto rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl text-slate-100 animate-in fade-in duration-200 ${
+        className={`pointer-events-auto w-full rounded-2xl bg-slate-900/95 border border-amber-400/50 shadow-2xl backdrop-blur-xl text-slate-100 animate-in fade-in duration-200 ${
           isDockedInModal
-            ? 'max-w-lg max-h-[42dvh] px-3 py-2 sm:px-3.5 space-y-1.5 slide-in-from-bottom-2'
-            : 'max-w-md max-h-[calc(100dvh-6.5rem)] px-3 py-2.5 sm:px-3.5 space-y-2 slide-in-from-top-2'
+            ? 'overflow-y-auto max-w-lg max-h-[42dvh] px-3 py-2 sm:px-3.5 space-y-1.5 slide-in-from-bottom-2'
+            : `flex flex-col max-w-md max-h-[calc(100dvh-6.5rem)] px-3 py-2.5 sm:px-3.5 slide-in-from-top-2 ${
+                showTopics ? 'overflow-y-auto gap-2' : 'overflow-hidden capy-tutorial-fixed-card'
+              }`
         }`}
       >
-        {onToggleLargeText && clampedStep === 0 && (
-          <button
-            type="button"
-            data-testid="tutorial-large-text-btn"
-            aria-pressed={largeText}
-            onClick={onToggleLargeText}
-            className={`w-full flex items-center justify-between gap-2 px-3 py-1 rounded-xl border text-left text-xs font-extrabold transition-colors cursor-pointer ${
-              largeText
-                ? 'bg-amber-400 text-slate-950 border-amber-300 hover:bg-amber-300'
-                : 'bg-amber-400/10 text-amber-200 border-amber-400/45 hover:bg-amber-400/20'
-            }`}
-          >
-            <span className="truncate">
-              {largeText ? 'Large Text: On (tap to switch back)' : 'Too small? Switch to Large Text'}
-            </span>
-          </button>
-        )}
-
         {/* Header */}
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 flex-shrink-0">
           <div className="flex items-start gap-2 min-w-0">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-amber-400/20 border border-amber-400/40 text-amber-300 flex-shrink-0 mt-0.5">
               <Icon size={14} />
             </span>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1.5 whitespace-nowrap">
                 <span
                   data-testid="tutorial-step-indicator"
                   className="text-[10px] font-extrabold uppercase tracking-wider text-amber-300"
@@ -338,14 +371,14 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
                   </span>
                 )}
               </div>
-              <h3 className="text-xs sm:text-sm font-extrabold text-white leading-snug">
+              <h3 className="text-xs sm:text-sm font-extrabold text-white leading-snug truncate">
                 {currentStep.title}
               </h3>
             </div>
           </div>
 
           <div className="flex items-center gap-1 flex-shrink-0">
-            {onToggleLargeText && clampedStep > 0 && !isDockedInModal && (
+            {onToggleLargeText && !isDockedInModal && (
               <button
                 type="button"
                 data-testid="tutorial-large-text-btn"
@@ -368,7 +401,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
               onClick={onSkip}
               data-testid="tutorial-skip-btn"
               aria-label="Skip Tutorial"
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
             >
               <span>Skip</span>
               <X size={13} />
@@ -380,7 +413,7 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
         {showTopics && (
           <div
             data-testid="tutorial-topics-drawer"
-            className="rounded-xl bg-slate-950/90 border border-slate-700/80 p-2 max-h-52 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5"
+            className="rounded-xl bg-slate-950/90 border border-slate-700/80 p-2 max-h-52 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5 flex-shrink-0"
           >
             {TUTORIAL_STEPS.map((step, idx) => {
               const isCurrent = idx === clampedStep;
@@ -410,107 +443,116 @@ export const OnboardingTutorial: React.FC<OnboardingTutorialProps> = ({
           </div>
         )}
 
-        {/* Description */}
-        <p className="text-[11px] sm:text-xs leading-snug text-slate-200">
-          {currentStep.description}
-        </p>
-
-        {/* Lightweight Action Cue */}
+        {/* Content Band (Description + Action Cue) */}
         <div
-          data-testid="tutorial-try-pill"
-          className={`flex items-center justify-between gap-2 text-[11px] font-bold ${
-            isCurrentTried ? 'text-emerald-300' : 'text-amber-300'
-          }`}
+          className={
+            isDockedInModal
+              ? 'space-y-1'
+              : 'flex-1 min-h-0 overflow-y-auto flex flex-col py-1'
+          }
         >
-          <span className="min-w-0 leading-snug">{currentStep.tryPrompt}</span>
-          {currentStep.key === 'hint' && (
+          <div className={isDockedInModal ? 'space-y-1' : 'my-auto flex flex-col gap-1.5'}>
+            <p className="text-[11px] sm:text-xs leading-snug text-slate-200">
+              {currentStep.description}
+            </p>
+
+            {/* Lightweight Action Cue */}
+            <div
+              data-testid="tutorial-try-pill"
+              className={`flex items-center justify-between gap-2 min-h-[1.5rem] text-[11px] font-bold ${
+                isCurrentTried ? 'text-emerald-300' : 'text-amber-300'
+              }`}
+            >
+              <span className="min-w-0 leading-snug">{activePromptText}</span>
+              {currentStep.key === 'hint' && !isDockedInModal && (
+                <button
+                  type="button"
+                  data-testid="tutorial-try-hint-btn"
+                  onClick={onTriggerHint}
+                  className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  Try Hint
+                </button>
+              )}
+              {showOpenTabButton && (
+                <button
+                  type="button"
+                  data-testid={currentStep.actionTestId}
+                  onClick={() => onOpenSettingsTab!(currentStep.modalTab!)}
+                  className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  {currentStep.actionLabel}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Band (Progress Bar + Topics Jump + Navigation) */}
+        <div className={isDockedInModal ? 'space-y-1.5' : 'mt-auto flex-shrink-0 space-y-2'}>
+          <div className="h-1 w-full rounded-full bg-slate-800 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-amber-400 transition-all duration-200"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          <div className="capy-tutorial-footer-row flex flex-nowrap items-center justify-between gap-2">
             <button
               type="button"
-              data-testid="tutorial-try-hint-btn"
-              onClick={onTriggerHint}
-              className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0"
+              data-testid="tutorial-topics-btn"
+              aria-expanded={showTopics}
+              onClick={() => setShowTopics((prev) => !prev)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap ${
+                showTopics
+                  ? 'bg-amber-400/20 text-amber-200 border-amber-400/60'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+              }`}
             >
-              Try Hint
+              <List size={13} />
+              <span>All Topics</span>
             </button>
-          )}
-          {currentStep.modalTab !== undefined &&
-            currentStep.actionLabel &&
-            onOpenSettingsTab && (
-              <button
-                type="button"
-                data-testid={currentStep.actionTestId}
-                onClick={() => onOpenSettingsTab(currentStep.modalTab!)}
-                className="px-2.5 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-[10px] font-extrabold transition-colors cursor-pointer flex-shrink-0"
-              >
-                {currentStep.actionLabel}
-              </button>
-            )}
-        </div>
 
-        {/* Sleek Progress Bar */}
-        <div className="h-1 w-full rounded-full bg-slate-800 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-amber-400 transition-all duration-200"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
+            <div className="flex flex-nowrap items-center gap-1.5 ml-auto flex-shrink-0">
+              {clampedStep > 0 && (
+                <button
+                  type="button"
+                  data-testid="tutorial-prev-btn"
+                  onClick={() => {
+                    setShowTopics(false);
+                    onStepChange(clampedStep - 1);
+                  }}
+                  className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  <ChevronLeft size={13} />
+                  <span>Back</span>
+                </button>
+              )}
 
-        {/* Topics Jump + Navigation */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            data-testid="tutorial-topics-btn"
-            aria-expanded={showTopics}
-            onClick={() => setShowTopics((prev) => !prev)}
-            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition-colors cursor-pointer ${
-              showTopics
-                ? 'bg-amber-400/20 text-amber-200 border-amber-400/60'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-            }`}
-          >
-            <List size={13} />
-            <span>All Topics</span>
-          </button>
-
-          <div className="flex flex-wrap items-center gap-1.5 ml-auto">
-            {clampedStep > 0 && (
-              <button
-                type="button"
-                data-testid="tutorial-prev-btn"
-                onClick={() => {
-                  setShowTopics(false);
-                  onStepChange(clampedStep - 1);
-                }}
-                className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
-              >
-                <ChevronLeft size={13} />
-                <span>Back</span>
-              </button>
-            )}
-
-            {isLastStep ? (
-              <button
-                type="button"
-                data-testid="tutorial-finish-btn"
-                onClick={onComplete}
-                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer"
-              >
-                <span>Finish Coloring</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                data-testid="tutorial-next-btn"
-                onClick={() => {
-                  setShowTopics(false);
-                  onStepChange(clampedStep + 1);
-                }}
-                className="inline-flex items-center gap-0.5 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer"
-              >
-                <span>Next</span>
-                <ChevronRight size={13} />
-              </button>
-            )}
+              {isLastStep ? (
+                <button
+                  type="button"
+                  data-testid="tutorial-finish-btn"
+                  onClick={onComplete}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  <span>Finish Coloring</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="tutorial-next-btn"
+                  onClick={() => {
+                    setShowTopics(false);
+                    onStepChange(clampedStep + 1);
+                  }}
+                  className="inline-flex items-center gap-0.5 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold shadow transition-colors cursor-pointer flex-shrink-0 whitespace-nowrap"
+                >
+                  <span>Next</span>
+                  <ChevronRight size={13} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

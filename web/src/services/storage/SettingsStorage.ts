@@ -58,6 +58,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   soundVolume: 0.7,
   reducedMotion: false,
   largeText: false,
+  textScale: 1.0,
+  uiScale: 1.0,
   detailedLoadingProgress: false,
   generatorConfig: { ...DEFAULT_GENERATOR_CONFIG },
 };
@@ -105,6 +107,8 @@ const SETTINGS_NUMBER_KEYS = [
   'replaySpeed',
   'zoomSensitivity',
   'soundVolume',
+  'textScale',
+  'uiScale',
 ] as const;
 
 const SETTINGS_ENUM_VALUES: Record<string, readonly string[]> = {
@@ -267,6 +271,29 @@ function resolveUserSettings(
       ? rawReplaySpeed
       : DEFAULT_SETTINGS.replaySpeed;
 
+  const rawLargeText = pickBool('largeText', DEFAULT_SETTINGS.largeText);
+  const hasExplicitTextScale =
+    typeof parsed.textScale === 'number' && Number.isFinite(parsed.textScale);
+  const hasExplicitUiScale =
+    typeof parsed.uiScale === 'number' && Number.isFinite(parsed.uiScale);
+  const legacyDefaultedScales =
+    rawLargeText &&
+    (!hasExplicitTextScale || parsed.textScale === 1.0) &&
+    (!hasExplicitUiScale || parsed.uiScale === 1.0);
+  const rawTextScale = legacyDefaultedScales
+    ? 1.25
+    : hasExplicitTextScale
+      ? (parsed.textScale as number)
+      : DEFAULT_SETTINGS.textScale;
+  const rawUiScale = legacyDefaultedScales
+    ? 1.25
+    : hasExplicitUiScale
+      ? (parsed.uiScale as number)
+      : DEFAULT_SETTINGS.uiScale;
+  const textScale = Math.round(Math.min(1.5, Math.max(0.85, rawTextScale)) * 100) / 100;
+  const uiScale = Math.round(Math.min(1.4, Math.max(0.85, rawUiScale)) * 100) / 100;
+  const largeText = textScale > 1.0 || uiScale > 1.0;
+
   return {
     autoAdvance: pickBool('autoAdvance', DEFAULT_SETTINGS.autoAdvance),
     difficulty: pickSettingsEnum(parsed, 'difficulty'),
@@ -318,7 +345,9 @@ function resolveUserSettings(
     soundEnabled: pickBool('soundEnabled', DEFAULT_SETTINGS.soundEnabled),
     soundVolume: Math.min(1.0, Math.max(0.0, pickFinite('soundVolume', DEFAULT_SETTINGS.soundVolume))),
     reducedMotion: pickBool('reducedMotion', systemReducedMotion),
-    largeText: pickBool('largeText', DEFAULT_SETTINGS.largeText),
+    largeText,
+    textScale,
+    uiScale,
     detailedLoadingProgress: pickBool(
       'detailedLoadingProgress',
       DEFAULT_SETTINGS.detailedLoadingProgress
