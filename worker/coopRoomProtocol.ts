@@ -450,44 +450,54 @@ function validateControlOnlyFrame(ctx: FrameValidationContext): FramePayloadVali
 }
 
 export const COOP_FRAME_VALIDATORS: Readonly<Record<RelayMessageType, FrameValidator>> =
-  Object.freeze({
-    HELLO: validateSeedCapableFrame,
-    WELCOME_STATE: validateSeedCapableFrame,
-    PAINT_EVENT: ({ record, expectedRoomCode, senderPlayerId }) => {
-      if (record.seedToken !== undefined) {
-        return { ok: false, reason: 'invalid_seed_token' };
-      }
-      if (record.hostToken !== undefined) {
-        return { ok: false, reason: 'invalid_host_token' };
-      }
-      if (record.unfillEvent !== undefined) {
-        return { ok: false, reason: 'invalid_event_payload' };
-      }
-      const clean = sanitizePaintEvent(record.paintEvent, expectedRoomCode, senderPlayerId);
-      if (!clean) {
-        return { ok: false, reason: 'invalid_event_payload' };
-      }
-      return { ok: true, paintEvent: clean };
-    },
-    UNFILL_EVENT: ({ record, expectedRoomCode, senderPlayerId }) => {
-      if (record.seedToken !== undefined) {
-        return { ok: false, reason: 'invalid_seed_token' };
-      }
-      if (record.hostToken !== undefined) {
-        return { ok: false, reason: 'invalid_host_token' };
-      }
-      if (record.paintEvent !== undefined) {
-        return { ok: false, reason: 'invalid_event_payload' };
-      }
-      const clean = sanitizeUnfillEvent(record.unfillEvent, expectedRoomCode, senderPlayerId);
-      if (!clean) {
-        return { ok: false, reason: 'invalid_event_payload' };
-      }
-      return { ok: true, unfillEvent: clean };
-    },
-    HEARTBEAT: validateControlOnlyFrame,
-    LEAVE: validateControlOnlyFrame,
-  });
+  Object.freeze(
+    Object.assign(Object.create(null) as Record<RelayMessageType, FrameValidator>, {
+      HELLO: validateSeedCapableFrame,
+      WELCOME_STATE: validateSeedCapableFrame,
+      PAINT_EVENT: ({
+        record,
+        expectedRoomCode,
+        senderPlayerId,
+      }: FrameValidationContext): FramePayloadValidationResult => {
+        if (record.seedToken !== undefined) {
+          return { ok: false, reason: 'invalid_seed_token' };
+        }
+        if (record.hostToken !== undefined) {
+          return { ok: false, reason: 'invalid_host_token' };
+        }
+        if (record.unfillEvent !== undefined) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        const clean = sanitizePaintEvent(record.paintEvent, expectedRoomCode, senderPlayerId);
+        if (!clean) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        return { ok: true, paintEvent: clean };
+      },
+      UNFILL_EVENT: ({
+        record,
+        expectedRoomCode,
+        senderPlayerId,
+      }: FrameValidationContext): FramePayloadValidationResult => {
+        if (record.seedToken !== undefined) {
+          return { ok: false, reason: 'invalid_seed_token' };
+        }
+        if (record.hostToken !== undefined) {
+          return { ok: false, reason: 'invalid_host_token' };
+        }
+        if (record.paintEvent !== undefined) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        const clean = sanitizeUnfillEvent(record.unfillEvent, expectedRoomCode, senderPlayerId);
+        if (!clean) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        return { ok: true, unfillEvent: clean };
+      },
+      HEARTBEAT: validateControlOnlyFrame,
+      LEAVE: validateControlOnlyFrame,
+    })
+  );
 
 export function generateHostToken(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

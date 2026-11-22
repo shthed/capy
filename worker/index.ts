@@ -35,6 +35,7 @@ interface SocketAttachment {
   connectedAt?: number;
   clientIp?: string | null;
   hostToken?: string | null;
+  displacedAlarmAt?: number | null;
 }
 
 interface RoomSeedRecord {
@@ -168,7 +169,15 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       }
 
       const now = Date.now();
-      this.evictExpiredUnjoinedSockets(now);
+      const { displacedAlarmAt: evictedDisplacedAlarmAt } = this.evictExpiredUnjoinedSockets(now);
+      const existingDisplacedAlarmAt = this.getEarliestDisplacedAlarmAt();
+      let carriedDisplacedAlarmAt = evictedDisplacedAlarmAt;
+      if (existingDisplacedAlarmAt !== null) {
+        carriedDisplacedAlarmAt =
+          carriedDisplacedAlarmAt === null
+            ? existingDisplacedAlarmAt
+            : Math.min(carriedDisplacedAlarmAt, existingDisplacedAlarmAt);
+      }
 
       const activeSockets = this.ctx.getWebSockets();
       const clientIp = extractClientIp(request);
@@ -193,6 +202,14 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         });
       }
 
+      const handshakeDeadline = now + UNJOINED_HANDSHAKE_TIMEOUT_MS;
+      const existingAlarm = await this.ctx.storage.getAlarm();
+      let displacedAlarmAt = carriedDisplacedAlarmAt;
+      if (existingAlarm !== null && existingAlarm > handshakeDeadline) {
+        displacedAlarmAt =
+          displacedAlarmAt === null ? existingAlarm : Math.min(displacedAlarmAt, existingAlarm);
+      }
+
       const pair = new WebSocketPair();
       const client = pair[0];
       const server = pair[1];
@@ -204,11 +221,14 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         connectedAt: now,
         clientIp,
         hostToken: null,
+        displacedAlarmAt,
       };
       this.ctx.acceptWebSocket(server);
       server.serializeAttachment(initialAttachment);
 
-      await this.scheduleEarliestAlarm(now + UNJOINED_HANDSHAKE_TIMEOUT_MS);
+      if (existingAlarm === null || existingAlarm > handshakeDeadline) {
+        await this.ctx.storage.setAlarm(handshakeDeadline);
+      }
 
       return new Response(null, {
         status: 101,
@@ -239,6 +259,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         typeof attachment.connectedAt === 'number' &&
         now - attachment.connectedAt >= UNJOINED_HANDSHAKE_TIMEOUT_MS
       ) {
+        await this.restoreOrPropagateDisplacedAlarm(ws, attachment, now);
         ws.close(1008, 'Handshake timeout');
         return;
       }
@@ -309,6 +330,9 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       attachment.boundPlayerId = senderCheck.boundPlayerId;
       attachment.participant = parsed.sender;
       attachment.joinedAt = nextJoinedAt;
+      if (nextJoinedAt) {
+        attachment.displacedAlarmAt = null;
+      }
       if (participantChanged) {
         ws.serializeAttachment(attachment);
       }
@@ -422,7 +446,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
             now + 250,
             this.lastSeedWriteAt + SEED_CHECKPOINT_DEBOUNCE_MS
           );
-          await this.ctx.storage.setAlarm(nextAlarmAt);
+          await this.scheduleEarliestAlarm(nextAlarmAt);
           scheduledDebounceAlarm = true;
         }
       }
@@ -497,17 +521,38 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
   async alarm(): Promise<void> {
     const now = Date.now();
     const hadUnjoined = this.hasAnyUnjoinedSocket();
-    this.evictExpiredUnjoinedSockets(now);
+    const preEvictDisplaced = this.getEarliestDisplacedAlarmAt();
+    const { displacedAlarmAt: evictedDisplaced } = this.evictExpiredUnjoinedSockets(now);
+    const remainingDisplaced = this.getEarliestDisplacedAlarmAt();
+    let displacedAlarmAt: number | null = preEvictDisplaced;
+    for (const candidate of [evictedDisplaced, remainingDisplaced]) {
+      if (candidate !== null) {
+        displacedAlarmAt =
+          displacedAlarmAt === null ? candidate : Math.min(displacedAlarmAt, candidate);
+      }
+    }
 
     if (!this.sqlInitialized) {
       if (hadUnjoined && !this.hasAnyJoinedSocket()) {
         const earliestUnjoinedAt = this.getEarliestUnjoinedDeadline(now);
         if (earliestUnjoinedAt !== null) {
+          if (displacedAlarmAt !== null) {
+            this.propagateDisplacedAlarm(displacedAlarmAt);
+          }
           await this.ctx.storage.setAlarm(earliestUnjoinedAt);
+          return;
         }
-        return;
-      }
-      if (!this.hasAnyJoinedSocket() && !this.hasPersistedRoomStateTable()) {
+        if (displacedAlarmAt !== null) {
+          if (displacedAlarmAt > now) {
+            await this.ctx.storage.setAlarm(displacedAlarmAt);
+            return;
+          }
+          // Displaced room TTL alarm is already due; fall through to ensureSqlInitialized(now)
+          // so expired room_state is cleaned up.
+        } else {
+          return;
+        }
+      } else if (!this.hasAnyJoinedSocket() && !this.hasPersistedRoomStateTable()) {
         return;
       }
       this.ensureSqlInitialized(now);
@@ -551,6 +596,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       this.rateLimitWindows.delete(ws);
       const attachment = (ws.deserializeAttachment() as SocketAttachment | null) ?? null;
       if (!attachment?.joinedAt) {
+        await this.restoreOrPropagateDisplacedAlarm(ws, attachment, Date.now());
         return;
       }
 
@@ -566,7 +612,7 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         this.ctx.getWebSockets().length <= 1 &&
         (this.loadRoomSeedRecord(now) || this.hostPlayerId || this.loadHostPlayerIdFromSql(now))
       ) {
-        await this.ctx.storage.setAlarm(now + ROOM_STATE_TTL_MS);
+        await this.scheduleNextRoomAlarm(now);
       }
     } catch (err) {
       console.error(
@@ -608,8 +654,9 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     }
   }
 
-  private hasAnyJoinedSocket(): boolean {
+  private hasAnyJoinedSocket(excludeWs?: WebSocket): boolean {
     for (const peer of this.ctx.getWebSockets()) {
+      if (peer === excludeWs) continue;
       const att = (peer.deserializeAttachment() as SocketAttachment | null) ?? null;
       if (att?.joinedAt) return true;
     }
@@ -622,6 +669,52 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       if (!att?.joinedAt) return true;
     }
     return false;
+  }
+
+  private getEarliestDisplacedAlarmAt(excludeWs?: WebSocket): number | null {
+    let earliest: number | null = null;
+    for (const peer of this.ctx.getWebSockets()) {
+      if (peer === excludeWs) continue;
+      const att = (peer.deserializeAttachment() as SocketAttachment | null) ?? null;
+      if (att?.joinedAt) continue;
+      if (typeof att?.displacedAlarmAt === 'number') {
+        if (earliest === null || att.displacedAlarmAt < earliest) {
+          earliest = att.displacedAlarmAt;
+        }
+      }
+    }
+    return earliest;
+  }
+
+  private propagateDisplacedAlarm(displacedAlarmAt: number, excludeWs?: WebSocket): boolean {
+    let propagated = false;
+    for (const peer of this.ctx.getWebSockets()) {
+      if (peer === excludeWs) continue;
+      const att = (peer.deserializeAttachment() as SocketAttachment | null) ?? null;
+      if (!att || att.joinedAt) continue;
+      if (typeof att.displacedAlarmAt !== 'number' || displacedAlarmAt < att.displacedAlarmAt) {
+        att.displacedAlarmAt = displacedAlarmAt;
+        peer.serializeAttachment(att);
+      }
+      propagated = true;
+    }
+    return propagated;
+  }
+
+  private async restoreOrPropagateDisplacedAlarm(
+    ws: WebSocket,
+    attachment: SocketAttachment | null,
+    now: number
+  ): Promise<void> {
+    const displacedAlarmAt =
+      typeof attachment?.displacedAlarmAt === 'number' ? attachment.displacedAlarmAt : null;
+    if (displacedAlarmAt === null || this.hasAnyJoinedSocket(ws)) {
+      return;
+    }
+    const propagated = this.propagateDisplacedAlarm(displacedAlarmAt, ws);
+    if (!propagated) {
+      await this.ctx.storage.setAlarm(displacedAlarmAt > now ? displacedAlarmAt : now);
+    }
   }
 
   private getEarliestUnjoinedDeadline(now: number): number | null {
@@ -653,8 +746,12 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(nextTarget);
   }
 
-  private evictExpiredUnjoinedSockets(now: number): number {
+  private evictExpiredUnjoinedSockets(now: number): {
+    evicted: number;
+    displacedAlarmAt: number | null;
+  } {
     let evicted = 0;
+    let displacedAlarmAt: number | null = null;
     for (const peer of this.ctx.getWebSockets()) {
       const att = (peer.deserializeAttachment() as SocketAttachment | null) ?? null;
       if (att?.joinedAt) continue;
@@ -662,6 +759,12 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         typeof att?.connectedAt === 'number' &&
         now - att.connectedAt >= UNJOINED_HANDSHAKE_TIMEOUT_MS
       ) {
+        if (typeof att.displacedAlarmAt === 'number') {
+          displacedAlarmAt =
+            displacedAlarmAt === null
+              ? att.displacedAlarmAt
+              : Math.min(displacedAlarmAt, att.displacedAlarmAt);
+        }
         this.rateLimitWindows.delete(peer);
         try {
           peer.close(1008, 'Handshake timeout');
@@ -671,7 +774,10 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
         evicted++;
       }
     }
-    return evicted;
+    if (displacedAlarmAt !== null) {
+      this.propagateDisplacedAlarm(displacedAlarmAt);
+    }
+    return { evicted, displacedAlarmAt };
   }
 
   private hasActivePeerWithPlayerId(senderWs: WebSocket, playerId: string): boolean {

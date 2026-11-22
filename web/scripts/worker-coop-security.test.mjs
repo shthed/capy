@@ -37,6 +37,11 @@ export async function runWorkerCoopSecurityTests(vite) {
       true,
       'COOP_FRAME_VALIDATORS must be frozen'
     );
+    assert.equal(
+      Object.getPrototypeOf(protoMod.COOP_FRAME_VALIDATORS),
+      null,
+      'COOP_FRAME_VALIDATORS must be null-prototype for safe direct lookups'
+    );
     for (const msgType of protoMod.VALID_MESSAGE_TYPES) {
       assert.equal(
         typeof protoMod.COOP_FRAME_VALIDATORS[msgType],
@@ -831,6 +836,119 @@ export async function runWorkerCoopSecurityTests(vite) {
 
       legit.webSocket.close(1000, 'cleanup');
       freshAfterTimeout.webSocket.close(1000, 'cleanup');
+    }
+
+    // 8. Hibernated 24h ROOM_STATE_TTL_MS alarm preserved across unjoined timeout & early disconnect
+    {
+      // (a) Unjoined socket connects to hibernated room and times out -> 24h alarm restored with zero SQLite calls, then expires at +24h
+      const hostUp = await upgrade('HIB001', '198.51.100.41');
+      assert.equal(hostUp.status, 101);
+      const room = ctx.rooms.get('HIB001');
+      await room.instance.webSocketMessage(
+        hostUp.webSocket.peer,
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'HIB001',
+          sender: { playerId: 'hib-host-1', displayName: 'HibHost', avatarColorHex: '#fbbf24' },
+          seedToken: seedA,
+        })
+      );
+      fakeNow += 1_000;
+      await room.instance.webSocketClose(hostUp.webSocket.peer, 1000, 'host_left', true);
+      const expectedTtlAlarm = fakeNow + protoMod.ROOM_STATE_TTL_MS;
+      assert.equal(
+        room.getAlarm(),
+        expectedTtlAlarm,
+        'Empty seeded room must schedule 24h ROOM_STATE_TTL_MS cleanup alarm'
+      );
+
+      // Simulate DO hibernation (fresh instance with sqlInitialized === false)
+      room.instance = new workerMod.CoopRoomDurableObject(room.state, ctx.env);
+      fakeNow += 60 * 60 * 1000; // +1 hour
+      const sqlCountBeforeUnjoined = room.sqlExecCalls.length;
+
+      // Unjoined socket connects, displacing the single DO alarm to now + 10s
+      const unjoinedUp = await upgrade('HIB001', '198.51.100.42');
+      assert.equal(unjoinedUp.status, 101);
+      assert.equal(
+        room.getAlarm(),
+        fakeNow + protoMod.UNJOINED_HANDSHAKE_TIMEOUT_MS,
+        'Unjoined connect must schedule earlier handshake timeout alarm'
+      );
+      assert.equal(
+        room.sqlExecCalls.length,
+        sqlCountBeforeUnjoined,
+        'Unjoined connect on hibernated room must perform zero SQLite calls'
+      );
+
+      // Alarm fires at +10.1s -> evicts unjoined socket AND restores 24h TTL alarm with zero SQLite calls
+      fakeNow += protoMod.UNJOINED_HANDSHAKE_TIMEOUT_MS + 100;
+      await room.instance.alarm();
+      assert.equal(
+        unjoinedUp.webSocket.peer.closedCode,
+        1008,
+        'Timed-out unjoined socket on hibernated room must be evicted with 1008'
+      );
+      assert.equal(
+        room.sqlExecCalls.length,
+        sqlCountBeforeUnjoined,
+        'Unjoined eviction alarm on hibernated room must restore 24h alarm with zero SQLite calls'
+      );
+      assert.equal(
+        room.getAlarm(),
+        expectedTtlAlarm,
+        '24h ROOM_STATE_TTL_MS alarm must be restored after unjoined socket timeout'
+      );
+
+      // When +24h passes, alarm() wakes up and cleans up expired room_state
+      fakeNow = expectedTtlAlarm + 1_000;
+      await room.instance.alarm();
+      assert.equal(
+        room.state.storage.sql.exec('SELECT key FROM room_state').toArray().length,
+        0,
+        'Restored 24h alarm must clean up expired room_state rows'
+      );
+
+      // (b) Unjoined socket connects to hibernated room and disconnects early before timeout -> 24h alarm restored
+      const host2Up = await upgrade('HIB002', '198.51.100.43');
+      assert.equal(host2Up.status, 101);
+      const room2 = ctx.rooms.get('HIB002');
+      await room2.instance.webSocketMessage(
+        host2Up.webSocket.peer,
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'HIB002',
+          sender: { playerId: 'hib-host-2', displayName: 'HibHost2', avatarColorHex: '#38bdf8' },
+          seedToken: seedB,
+        })
+      );
+      fakeNow += 1_000;
+      await room2.instance.webSocketClose(host2Up.webSocket.peer, 1000, 'host_left', true);
+      const expectedTtlAlarm2 = fakeNow + protoMod.ROOM_STATE_TTL_MS;
+      assert.equal(room2.getAlarm(), expectedTtlAlarm2);
+
+      // Simulate DO hibernation
+      room2.instance = new workerMod.CoopRoomDurableObject(room2.state, ctx.env);
+      fakeNow += 30 * 60 * 1000; // +30 min
+      const sqlCountBeforeEarly = room2.sqlExecCalls.length;
+
+      const earlyUnjoined = await upgrade('HIB002', '198.51.100.44');
+      assert.equal(earlyUnjoined.status, 101);
+      assert.equal(room2.getAlarm(), fakeNow + protoMod.UNJOINED_HANDSHAKE_TIMEOUT_MS);
+
+      // Unjoined socket closes early (+2s, before 10s handshake timeout)
+      fakeNow += 2_000;
+      await room2.instance.webSocketClose(earlyUnjoined.webSocket.peer, 1000, 'early_bye', true);
+      assert.equal(
+        room2.sqlExecCalls.length,
+        sqlCountBeforeEarly,
+        'Early unjoined disconnect on hibernated room must perform zero SQLite calls'
+      );
+      assert.equal(
+        room2.getAlarm(),
+        expectedTtlAlarm2,
+        '24h ROOM_STATE_TTL_MS alarm must be restored when unjoined socket disconnects early'
+      );
     }
   } finally {
     Date.now = OrigDateNow;
