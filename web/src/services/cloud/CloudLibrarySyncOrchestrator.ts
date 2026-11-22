@@ -621,7 +621,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       if (snapTs > deletedAt) {
         delete tombstones[slotKey];
       } else {
-        await StorageService.deleteSnapshot(snap.id);
+        await StorageService.deleteSnapshot(snap.id, { skipTombstone: true });
         tombstones[slotKey] = deletedAt;
       }
     }

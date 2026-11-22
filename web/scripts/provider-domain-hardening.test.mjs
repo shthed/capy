@@ -544,6 +544,38 @@ export async function runProviderDomainHardeningTests(vite) {
         'Remote tombstone newer than local snapshot must delete local snapshot on sync'
       );
 
+      // 5b-1D: Remote historical tombstone T_old must NOT be inflated to Date.now()
+      const tOld = Date.now() - 60_000;
+      const staleHistSnap = {
+        id: 'snap_hist_tomb',
+        title: 'Historical Tombstone Target',
+        timestamp: tOld - 10_000,
+        lastOpened: tOld - 10_000,
+        filledCount: 1,
+        totalCount: 5,
+        filledRegionIds: [1],
+      };
+      const histSlotKey = slotKeyMod.computeSlotKeyForSnapshot(staleHistSnap);
+      storageMod.StorageService.saveSnapshots([staleHistSnap]);
+      remoteManifestStore = {
+        version: 2,
+        updatedAt: tOld,
+        devicePlayerId: 'google_user_A',
+        entries: {},
+        tombstones: { [histSlotKey]: tOld },
+      };
+      await cloudInst.syncFullLibrary([staleHistSnap]);
+      assert.equal(
+        storageMod.StorageService.loadSnapshots().some((s) => s.id === 'snap_hist_tomb'),
+        false,
+        'Historical remote tombstone must still delete stale local snapshot'
+      );
+      assert.equal(
+        remoteManifestStore.tombstones?.[histSlotKey],
+        tOld,
+        'Pushed manifest tombstone must preserve exact historical T_old and never inflate to Date.now()'
+      );
+
       // Re-creating a slot with lastOpened > deletedAt clears the tombstone
       const recreatedSnap = {
         id: 'snap_remote_del',
@@ -637,6 +669,84 @@ export async function runProviderDomainHardeningTests(vite) {
         Boolean(remoteManifestStore?.entries?.save_fp_1),
         false,
         'User A saves must never upload to User B remote manifest'
+      );
+
+      // 5e-2D: HTTP 401 session invalidation must clear User A unscoped tombstones so User B's matching sample slot is not deleted
+      ls.clear();
+      ss.clear();
+      remoteManifestStore = null;
+      const mockDriverA401 = createMockDriver('google', 'google_user_A_401', 'User A 401');
+      authInst.registerDriver(mockDriverA401);
+      await authInst.signInWithProvider('google');
+      assert.equal(authInst.getCurrentIdentity().isAuthenticated, true);
+
+      const sampleSnapA = {
+        id: 'sample_capy_a',
+        sampleId: 'sample_capy_shared',
+        title: 'Shared Sample A',
+        timestamp: Date.now() - 5_000,
+        lastOpened: Date.now() - 5_000,
+        filledCount: 1,
+        totalCount: 5,
+        filledRegionIds: [1],
+      };
+      const sharedSampleSlotKey = slotKeyMod.computeSlotKeyForSnapshot(sampleSnapA);
+      storageMod.StorageService.saveSnapshots([sampleSnapA]);
+      await storageMod.StorageService.deleteSnapshot('sample_capy_a');
+      assert.ok(
+        slotKeyMod.readLocalSlotTombstones()[sharedSampleSlotKey] > 0,
+        'User A deleteSnapshot must record local tombstone prior to 401'
+      );
+
+      const prevFetchFor401 = globalThis.fetch;
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ error: { code: 401 } }), { status: 401 });
+      try {
+        await assert.rejects(
+          () => googleClientMod.fetchGoogleUserProfile('expired-user-a-token'),
+          /401/
+        );
+      } finally {
+        globalThis.fetch = prevFetchFor401;
+      }
+
+      assert.equal(
+        authInst.getCurrentIdentity().isAuthenticated,
+        false,
+        'HTTP 401 via fetchGoogleUserProfile must downgrade User A to guest'
+      );
+      assert.equal(
+        googleClientMod.isExplicitlySignedOut(),
+        false,
+        'HTTP 401 must NOT set EXPLICIT_SIGNOUT_STORAGE_KEY'
+      );
+
+      const sampleSnapB = {
+        id: 'sample_capy_b',
+        sampleId: 'sample_capy_shared',
+        title: 'Shared Sample B',
+        timestamp: Date.now() - 20_000,
+        lastOpened: Date.now() - 20_000,
+        filledCount: 2,
+        totalCount: 5,
+        filledRegionIds: [1, 2],
+      };
+      storageMod.StorageService.saveSnapshots([sampleSnapB]);
+      remoteManifestStore = null;
+      const mockDriverB401 = createMockDriver('google', 'google_user_B_401', 'User B 401');
+      authInst.registerDriver(mockDriverB401);
+      await authInst.signInWithProvider('google');
+      await cloudInst.syncFullLibrary([sampleSnapB]);
+
+      assert.equal(
+        storageMod.StorageService.loadSnapshots().length,
+        1,
+        'User B sample snapshot must NOT be deleted by User A tombstone after HTTP 401 session invalidation'
+      );
+      assert.equal(
+        storageMod.StorageService.loadSnapshots()[0].id,
+        'sample_capy_b',
+        'User B sample snapshot must remain intact after syncFullLibrary'
       );
     }
 

@@ -145,6 +145,38 @@ function isValidPaintRegionIds(raw: unknown): raw is number[] {
   );
 }
 
+function isValidEventId(raw: unknown): raw is string {
+  return (
+    typeof raw === 'string' &&
+    raw.trim().length > 0 &&
+    raw.length <= MAX_EVENT_ID_CHARS &&
+    !/[\u0000-\u001F\u007F]/.test(raw)
+  );
+}
+
+function isValidPaintEventHeader(
+  ev: Record<string, unknown>,
+  roomCode: string,
+  sender: CoopParticipant
+): boolean {
+  if (!isValidEventId(ev.eventId)) return false;
+  if (ev.roomCode !== undefined && ev.roomCode !== roomCode) return false;
+  if (
+    ev.playerId !== undefined &&
+    (typeof ev.playerId !== 'string' || ev.playerId.trim() !== sender.playerId)
+  ) {
+    return false;
+  }
+  if (ev.displayName !== undefined && (typeof ev.displayName !== 'string' || ev.displayName.length > 64)) {
+    return false;
+  }
+  if (ev.avatarColorHex !== undefined && !isValidHexColor(ev.avatarColorHex)) return false;
+  if (ev.timestamp !== undefined && (typeof ev.timestamp !== 'number' || !Number.isFinite(ev.timestamp))) {
+    return false;
+  }
+  return true;
+}
+
 function sanitizeIncomingPaintEvent(
   raw: unknown,
   roomCode: string,
@@ -153,37 +185,15 @@ function sanitizeIncomingPaintEvent(
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const ev = raw as Record<string, unknown>;
 
-  if (
-    typeof ev.eventId !== 'string' ||
-    ev.eventId.trim().length === 0 ||
-    ev.eventId.length > MAX_EVENT_ID_CHARS ||
-    /[\u0000-\u001F\u007F]/.test(ev.eventId)
-  ) {
-    return null;
-  }
-  if (ev.roomCode !== undefined && ev.roomCode !== roomCode) return null;
-  if (
-    ev.playerId !== undefined &&
-    (typeof ev.playerId !== 'string' || ev.playerId.trim() !== sender.playerId)
-  ) {
-    return null;
-  }
+  if (!isValidPaintEventHeader(ev, roomCode, sender)) return null;
   if (ev.action !== 'FILL' && ev.action !== 'UNFILL') return null;
   if (!isValidPaintRegionIds(ev.regionIds)) return null;
-
-  if (ev.displayName !== undefined && (typeof ev.displayName !== 'string' || ev.displayName.length > 64)) {
-    return null;
-  }
-  if (ev.avatarColorHex !== undefined && !isValidHexColor(ev.avatarColorHex)) return null;
-  if (ev.timestamp !== undefined && (typeof ev.timestamp !== 'number' || !Number.isFinite(ev.timestamp))) {
-    return null;
-  }
 
   const sanitizedPaintedColors = sanitizePaintedColors(ev.paintedColors);
   if (sanitizedPaintedColors === null) return null;
 
   const cleanEvent: CoopPaintEvent = {
-    eventId: ev.eventId.trim(),
+    eventId: (ev.eventId as string).trim(),
     roomCode,
     playerId: sender.playerId,
     displayName: sanitizeDisplayName(ev.displayName, sender.displayName),
@@ -200,6 +210,7 @@ function sanitizeIncomingPaintEvent(
 
 function parseUnfillRegionIds(ev: Record<string, unknown>): number[] {
   if (Array.isArray(ev.regionIds)) {
+    if (ev.regionIds.length > MAX_EVENT_REGION_IDS) return [];
     return ev.regionIds.filter(
       (id): id is number =>
         typeof id === 'number' && Number.isInteger(id) && id > 0 && id <= MAX_REGION_ID

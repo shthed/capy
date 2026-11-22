@@ -436,12 +436,26 @@ export function togglePinSnapshot(id: string): SavedSnapshot[] {
   return updated;
 }
 
-export async function deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
+export interface DeleteSnapshotOptions {
+  skipTombstone?: boolean;
+  tombstoneAt?: number;
+}
+
+export async function deleteSnapshot(
+  id: string,
+  options?: DeleteSnapshotOptions
+): Promise<SavedSnapshot[]> {
   const { snapshots: list, metaTsById } = loadSnapshotsWithMeta();
   const target = list.find((s) => s.id === id);
   const updated = list.filter((s) => s.id !== id);
-  if (target) {
-    recordLocalSlotTombstone(computeSlotKeyForSnapshot(target), Date.now());
+  if (target && !options?.skipTombstone) {
+    const deletedAt =
+      typeof options?.tombstoneAt === 'number' &&
+      Number.isFinite(options.tombstoneAt) &&
+      options.tombstoneAt > 0
+        ? options.tombstoneAt
+        : Date.now();
+    recordLocalSlotTombstone(computeSlotKeyForSnapshot(target), deletedAt);
   }
   if (updated.length < list.length) {
     if (updated.length > 0) {

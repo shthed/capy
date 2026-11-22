@@ -131,6 +131,7 @@ export class MultiProviderAuthManager implements AuthProvider {
     if (!this.identity.isAuthenticated || this.identity.provider !== providerId) {
       return;
     }
+    this.notifySignOutListeners({ ...this.identity });
     const tabSuffix = getTabPeerSuffix();
     const baseId = this.identity.playerId
       .replace(/^(pgs_|google_|steam_|ms_|apple_)/, '')
