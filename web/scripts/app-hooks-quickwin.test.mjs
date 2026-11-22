@@ -377,6 +377,79 @@ export async function runAppHooksQuickwinTests(vite) {
     assert.equal(rec2.calls.saveActiveState.length, 0);
   }
 
+  // 6c. finishPaintStroke: empty-region puzzle (puzzle.regions = []) and unmatched filledRegionColorId must NOT trigger false completion or 'success' haptic
+  {
+    const emptyPuzzle = makeTestPuzzle({ regions: [] });
+    const baseSettings = {
+      hapticsEnabled: true,
+      reducedMotion: false,
+      autoAdvance: true,
+      paletteSort: 'ORIGINAL',
+      prioritizeOnScreen: false,
+    };
+    const viewport = { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 };
+
+    for (const filledRegionColorId of [undefined, 1]) {
+      const rec = makeRecorderEffects();
+      const res = finishPaintStroke(
+        {
+          puzzle: emptyPuzzle,
+          nextFilled: new Set(),
+          paintedRegionColors: new Map(),
+          activeColorId: 1,
+          isFreeColorMode: false,
+          wasPuzzleIncomplete: true,
+          snapshotId: 'snap-empty',
+          settings: baseSettings,
+          viewport,
+          visibleColorIds: new Set([1, 2, 3]),
+          ...(filledRegionColorId !== undefined ? { filledRegionColorId } : {}),
+        },
+        rec.effects
+      );
+
+      assert.equal(res.isComplete, false, 'Empty puzzle must not report isComplete=true');
+      assert.equal(res.hapticType, 'tick', 'Empty puzzle must keep tick haptic');
+      assert.equal(res.didAutoAdvance, false, 'Empty puzzle must not auto-advance');
+      assert.equal(res.nextActiveColorId, 1);
+      assert.deepEqual(rec.calls.haptics, [{ type: 'tick', enabled: true }]);
+      assert.equal(rec.calls.firstTimeCompletion.length, 0);
+      assert.equal(rec.calls.confettiCount, 0);
+      assert.equal(rec.calls.replays.length, 0);
+      assert.equal(rec.calls.autoAdvanced.length, 0);
+    }
+
+    // Non-empty puzzle with a filledRegionColorId that matches 0 regions must not fire 'success' haptic
+    const nonEmptyPuzzle = makeTestPuzzle();
+    const unmatchedRec = makeRecorderEffects();
+    const unmatchedRes = finishPaintStroke(
+      {
+        puzzle: nonEmptyPuzzle,
+        nextFilled: new Set([101]),
+        paintedRegionColors: new Map(),
+        activeColorId: 1,
+        isFreeColorMode: false,
+        wasPuzzleIncomplete: true,
+        snapshotId: 'snap-unmatched-color',
+        settings: baseSettings,
+        viewport,
+        visibleColorIds: new Set([1, 2, 3]),
+        filledRegionColorId: 999,
+      },
+      unmatchedRec.effects
+    );
+    assert.equal(unmatchedRes.isComplete, false);
+    assert.equal(
+      unmatchedRes.hapticType,
+      'tick',
+      'filledRegionColorId with 0 matching regions must not trigger success haptic'
+    );
+    assert.deepEqual(unmatchedRec.calls.haptics, [{ type: 'tick', enabled: true }]);
+    assert.equal(unmatchedRec.calls.firstTimeCompletion.length, 0);
+    assert.equal(unmatchedRec.calls.confettiCount, 0);
+    assert.equal(unmatchedRec.calls.replays.length, 0);
+  }
+
   // 7. Static source contracts for M5-1 (#585-1)
   const appSrc = fs.readFileSync(path.join(projectRoot, 'src/App.tsx'), 'utf8');
   const topBarSrc = fs.readFileSync(path.join(projectRoot, 'src/components/GameTopBar.tsx'), 'utf8');

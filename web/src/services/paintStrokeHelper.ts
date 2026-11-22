@@ -72,6 +72,24 @@ export interface FinishPaintStrokeResult {
   hapticType: 'tick' | 'success';
 }
 
+function isColorCompletedInPuzzle(
+  regions: PuzzleData['regions'],
+  nextFilled: Set<number>,
+  colorId: number
+): boolean {
+  let matchingColorRegions = 0;
+  for (let i = 0; i < regions.length; i += 1) {
+    const region = regions[i];
+    if (region.colorId === colorId) {
+      matchingColorRegions += 1;
+      if (!nextFilled.has(region.id)) {
+        return false;
+      }
+    }
+  }
+  return matchingColorRegions > 0;
+}
+
 /**
  * Shared post-stroke completion, haptic, confetti, replay, auto-advance, and
  * snapshot/session persistence routine used by both single-region and batch
@@ -98,14 +116,14 @@ export function finishPaintStroke<TSnapshot = unknown>(
   } = params;
 
   const orderedFilledRegionIds = Array.from(nextFilled);
-  const isComplete = nextFilled.size >= puzzle.regions.length;
+  const isComplete = puzzle.regions.length > 0 && nextFilled.size >= puzzle.regions.length;
 
-  let isFilledColorComplete = false;
-  if (!isFreeColorMode && !isComplete && filledRegionColorId !== undefined) {
-    isFilledColorComplete = !puzzle.regions.some(
-      (r) => r.colorId === filledRegionColorId && !nextFilled.has(r.id)
-    );
-  }
+  const isFilledColorComplete =
+    puzzle.regions.length > 0 &&
+    !isFreeColorMode &&
+    !isComplete &&
+    filledRegionColorId !== undefined &&
+    isColorCompletedInPuzzle(puzzle.regions, nextFilled, filledRegionColorId);
 
   const hapticType: 'tick' | 'success' =
     isComplete || isFilledColorComplete ? 'success' : 'tick';
@@ -124,7 +142,7 @@ export function finishPaintStroke<TSnapshot = unknown>(
   let nextActiveColorId = activeColorId;
   let didAutoAdvance = false;
 
-  if (!isFreeColorMode && settings.autoAdvance && !isComplete) {
+  if (puzzle.regions.length > 0 && !isFreeColorMode && settings.autoAdvance && !isComplete) {
     const hasRemainingForCurrent = puzzle.regions.some(
       (r) => r.colorId === nextActiveColorId && !nextFilled.has(r.id)
     );
