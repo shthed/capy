@@ -31,8 +31,6 @@ import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
 import { PlayerLifetimeStats, PlayerStatsService } from './services/PlayerStatsService';
 import { GenerationCancelledError, PuzzleWorkerService } from './services/PuzzleWorkerService';
 import {
-  decodeProgressDeltaToken,
-  encodeProgressDeltaToken,
   isAllowedSampleAssetPath,
   isSafeSnapshotPreviewDataUrl,
   mergeProgressDeltas,
@@ -50,17 +48,8 @@ import {
   resolveSafeSampleAssetPath,
   resolveSafeSnapshotPreviewUrl,
 } from './utils/snapshotPaths';
-import {
-  buildShareProgressUrl,
-  clearShareHashFromWindowUrl,
-  generateCoopRoomCode,
-  normalizeCoopRoomCode,
-  parseShareLinkFromUrl,
-  resolveSampleFromSourceRef,
-} from './services/ShareLinkService';
 import { computeSlotKeyForSnapshot, ProviderRegistry } from './services/providers/ProviderRegistry';
-import { CoopParticipant } from './services/providers/types';
-import { CoopRippleBuffer } from './engine/CoopRippleBuffer';
+import { CoopLoadSampleFn, useCoopSession } from './hooks/useCoopSession';
 import { useIsomorphicLayoutEffect, useLatest } from './hooks/useLatest';
 import { useReplayController } from './hooks/useReplayController';
 import { useSessionRestore } from './hooks/useSessionRestore';
@@ -203,12 +192,6 @@ export const App: React.FC = () => {
   }, []);
   const activeBlobUrlRef = useRef<string | null>(null);
 
-  // Co-op Multiplayer & Zero-Allocation Canvas Ripple Buffer
-  const [coopRippleBuffer] = useState<CoopRippleBuffer>(() => new CoopRippleBuffer());
-  const coopJoinSeqRef = useRef<number>(0);
-  const [coopRoomCode, setCoopRoomCode] = useState<string | null>(null);
-  const [coopParticipants, setCoopParticipants] = useState<CoopParticipant[]>([]);
-
   // Spatial Viewport
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
   const [visibleRegionIds, setVisibleRegionIds] = useState<Set<number>>(new Set());
@@ -264,7 +247,6 @@ export const App: React.FC = () => {
   const settingsRef = useLatest(settings);
   const visibleColorIdsRef = useLatest(visibleColorIds);
   const visibleRegionIdsRef = useLatest(visibleRegionIds);
-  const coopRoomCodeRef = useLatest(coopRoomCode);
   const sourceImageRef = useLatest(sourceImage);
   const isFreeColorMode = Boolean(settings.isFreeColorMode);
   const activeSave = snapshots.find((s) => s.id === activeSnapshotId);
@@ -315,7 +297,6 @@ export const App: React.FC = () => {
   const isFeatureOfferSuppressed =
     isLoading || showTutorial || showSettings || showPaletteOptions;
   const isFeatureOfferSuppressedRef = useLatest(isFeatureOfferSuppressed);
-  const showCloudCoopUi = isCloudCoopUiEnabled() || Boolean(coopRoomCode);
   const releaseChannelInfo = useMemo(() => resolveReleaseChannel(), []);
 
   const advanceFeatureOffer = useCallback(() => {
@@ -397,51 +378,50 @@ export const App: React.FC = () => {
     []
   );
 
-  const emitCoopPaint = useCallback(
-    (
-      action: 'FILL' | 'UNFILL',
-      regionIds: number[],
-      paintedColors?: Record<number, number>
-    ) => {
-      const room = ProviderRegistry.realtimeRoom.activeRoomCode;
-      if (!room || regionIds.length === 0) return;
-      const identity = ProviderRegistry.auth.getCurrentIdentity();
-      ProviderRegistry.realtimeRoom.broadcastPaintEvent({
-        eventId: `${identity.playerId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-        roomCode: room,
-        playerId: identity.playerId,
-        displayName: identity.displayName,
-        avatarColorHex: identity.avatarColorHex,
-        action,
-        regionIds,
-        ...(paintedColors && Object.keys(paintedColors).length > 0 ? { paintedColors } : {}),
-        timestamp: Date.now(),
-      });
-    },
+  const loadSampleForCoopRef = useRef<CoopLoadSampleFn | null>(null);
+  const loadSampleForCoop = useCallback<CoopLoadSampleFn>(
+    (...args) =>
+      loadSampleForCoopRef.current ? loadSampleForCoopRef.current(...args) : Promise.resolve(),
     []
   );
 
-  const emitCoopUnfill = useCallback((regionIds: number[]) => {
-    const room = ProviderRegistry.realtimeRoom.activeRoomCode;
-    if (!room || regionIds.length === 0) return;
-    const identity = ProviderRegistry.auth.getCurrentIdentity();
-    const maxBatch = 512;
-    for (let offsetIdx = 0; offsetIdx < regionIds.length; offsetIdx += maxBatch) {
-      const slice = regionIds.slice(offsetIdx, offsetIdx + maxBatch);
-      const now = Date.now();
-      ProviderRegistry.realtimeRoom.broadcastUnfillEvent({
-        eventId: `${identity.playerId}_unfill_${now}_${Math.random().toString(36).slice(2, 6)}`,
-        roomCode: room,
-        senderId: identity.playerId,
-        playerId: identity.playerId,
-        displayName: identity.displayName,
-        avatarColorHex: identity.avatarColorHex,
-        regionId: slice[0],
-        regionIds: slice,
-        timestamp: now,
-      });
-    }
-  }, []);
+  const {
+    coopRippleBuffer,
+    coopRoomCode,
+    coopParticipants,
+    nextCoopJoinSeq,
+    getCoopJoinSeq,
+    setCoopRoomState,
+    isCoopSessionActive,
+    emitCoopPaint,
+    emitCoopUnfill,
+    canShareActiveLink,
+    handleShareProgressLink,
+    handleHostCoopRoom,
+    handleJoinCoopRoom,
+    handleLeaveCoopRoom,
+    handleCopyCoopInviteLink,
+  } = useCoopSession({
+    puzzle,
+    activeSnapshotId,
+    activeSave,
+    activeTitle,
+    filledRegionIds,
+    paintedRegionColors,
+    isFreeColorMode,
+    hapticsEnabled: settings.hapticsEnabled,
+    liveCoopRef,
+    viewportRef,
+    regionByIdRef,
+    loadSampleFromPrebakedOrGenerate: loadSampleForCoop,
+    markTutorialActionTried,
+    setFilledRegionIds,
+    setPaintedRegionColors,
+    setActiveColorId,
+    setSnapshots,
+  });
+
+  const showCloudCoopUi = isCloudCoopUiEnabled() || Boolean(coopRoomCode);
 
   const {
     isReplaying,
@@ -1239,8 +1219,8 @@ export const App: React.FC = () => {
     callbacks: {
       getSettings: () => settingsRef.current,
       getTransitionSeq: () => snapshotTransitionSeqRef.current,
-      nextCoopJoinSeq: () => ++coopJoinSeqRef.current,
-      getCoopJoinSeq: () => coopJoinSeqRef.current,
+      nextCoopJoinSeq,
+      getCoopJoinSeq,
       getActiveBlobUrl: () => activeBlobUrlRef.current,
       setActiveBlobUrl: (url) => {
         activeBlobUrlRef.current = url;
@@ -1275,10 +1255,7 @@ export const App: React.FC = () => {
       onSetIsLoading: setIsLoading,
       onStartReplay: startReplay,
       onSetShowTutorial: setShowTutorial,
-      onSetCoopRoomState: (roomCode, participants) => {
-        setCoopRoomCode(roomCode);
-        setCoopParticipants(participants);
-      },
+      onSetCoopRoomState: setCoopRoomState,
     },
   });
 
@@ -1608,12 +1585,7 @@ export const App: React.FC = () => {
         setHintRegionId(null);
         markTutorialActionTried('paint');
         emitCoopPaint('FILL', [regionId], { [regionId]: curActiveColorId });
-        setLifetimeStats(
-          PlayerStatsService.recordRegionsColored(
-            1,
-            Boolean(ProviderRegistry.realtimeRoom.activeRoomCode || coopRoomCodeRef.current)
-          )
-        );
+        setLifetimeStats(PlayerStatsService.recordRegionsColored(1, isCoopSessionActive()));
         SoundService.playRegionTap(curActiveColorId);
         completePaintStroke(
           curPuzzle,
@@ -1661,12 +1633,7 @@ export const App: React.FC = () => {
       setHintRegionId(null);
       markTutorialActionTried('paint');
       emitCoopPaint('FILL', [regionId]);
-      setLifetimeStats(
-        PlayerStatsService.recordRegionsColored(
-          1,
-          Boolean(ProviderRegistry.realtimeRoom.activeRoomCode || coopRoomCodeRef.current)
-        )
-      );
+      setLifetimeStats(PlayerStatsService.recordRegionsColored(1, isCoopSessionActive()));
       SoundService.playRegionTap(region.colorId);
       completePaintStroke(
         curPuzzle,
@@ -1688,7 +1655,7 @@ export const App: React.FC = () => {
       markTutorialActionTried,
       syncUndoStack,
       syncRedoStack,
-      coopRoomCodeRef,
+      isCoopSessionActive,
       isPostLoadReplayRef,
       isReplayingRef,
       regionByIdRef,
@@ -1768,7 +1735,7 @@ export const App: React.FC = () => {
           setLifetimeStats(
             PlayerStatsService.recordRegionsColored(
               newUndoEntries.length,
-              Boolean(ProviderRegistry.realtimeRoom.activeRoomCode || coopRoomCodeRef.current)
+              isCoopSessionActive()
             )
           );
           SoundService.playRegionTap(curActiveColorId);
@@ -1833,10 +1800,7 @@ export const App: React.FC = () => {
           newUndoEntries.map((u) => u.regionId)
         );
         setLifetimeStats(
-          PlayerStatsService.recordRegionsColored(
-            newUndoEntries.length,
-            Boolean(ProviderRegistry.realtimeRoom.activeRoomCode || coopRoomCodeRef.current)
-          )
+          PlayerStatsService.recordRegionsColored(newUndoEntries.length, isCoopSessionActive())
         );
         SoundService.playRegionTap(
           newUndoEntries[newUndoEntries.length - 1]?.paintedColorId ?? nextActiveColorId
@@ -1861,7 +1825,7 @@ export const App: React.FC = () => {
       markTutorialActionTried,
       syncUndoStack,
       syncRedoStack,
-      coopRoomCodeRef,
+      isCoopSessionActive,
       isPostLoadReplayRef,
       isReplayingRef,
       regionByIdRef,
@@ -3012,604 +2976,9 @@ export const App: React.FC = () => {
     ]
   );
 
-  // Subscribe to Realtime Co-op Room events (Collaborator Paints, Welcome Convergence, Presence)
-  useEffect(() => {
-    const unsubParticipants = ProviderRegistry.realtimeRoom.onParticipantsChanged((peers) => {
-      setCoopParticipants(peers);
-      setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
-    });
-
-    const unsubPaint = ProviderRegistry.realtimeRoom.onPaintEvent((event) => {
-      const cur = liveCoopRef.current;
-      if (!cur.puzzle) return;
-
-      const nextFilled = new Set(cur.filledRegionIds);
-      const nextPainted = new Map(cur.paintedRegionColors);
-      let changed = false;
-
-      if (event.action === 'FILL') {
-        for (const rId of event.regionIds) {
-          const reg =
-            cur.puzzle === puzzle
-              ? regionByIdRef.current.get(rId)
-              : cur.puzzle.regions.find((r) => r.id === rId);
-          if (!reg) continue;
-          if (!nextFilled.has(rId)) {
-            nextFilled.add(rId);
-            changed = true;
-          }
-          if (event.paintedColors && event.paintedColors[rId] !== undefined) {
-            if (nextPainted.get(rId) !== event.paintedColors[rId]) {
-              nextPainted.set(rId, event.paintedColors[rId]);
-              changed = true;
-            }
-          }
-          // Spawn zero-allocation canvas ripple at region centroid
-          coopRippleBuffer.spawn(reg.centroidX, reg.centroidY, event.avatarColorHex);
-        }
-      } else if (event.action === 'UNFILL') {
-        for (const rId of event.regionIds) {
-          if (nextFilled.has(rId)) {
-            nextFilled.delete(rId);
-            nextPainted.delete(rId);
-            changed = true;
-          }
-        }
-      }
-
-      if (!changed) return;
-      const orderedList = Array.from(nextFilled);
-      const paintedObj = Object.fromEntries(nextPainted);
-      liveCoopRef.current = {
-        ...cur,
-        filledRegionIds: nextFilled,
-        paintedRegionColors: nextPainted,
-      };
-      setFilledRegionIds(nextFilled);
-      setPaintedRegionColors(nextPainted);
-
-      if (cur.activeSnapshotId) {
-        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-        const updated = StorageService.updateSnapshotProgress(
-          cur.activeSnapshotId,
-          nextFilled.size,
-          cur.puzzle.regions.length,
-          orderedList,
-          zoomScale,
-          panOffsetX,
-          panOffsetY,
-          undefined,
-          paintedObj,
-          cur.puzzle.palette,
-          cur.puzzle.isFreeColor
-        );
-        setSnapshots(updated);
-        StorageService.saveActiveState({
-          activeSnapshotId: cur.activeSnapshotId,
-          activeColorId: cur.activeColorId,
-          filledRegionIds: orderedList,
-          paintedRegionColors: paintedObj,
-          isFreeColorMode: cur.isFreeColorMode,
-          zoomScale,
-          panOffsetX,
-          panOffsetY,
-        });
-      }
-    });
-
-    const unsubUnfill = ProviderRegistry.realtimeRoom.onUnfillEvent((event) => {
-      const localPeerId = ProviderRegistry.auth.getCurrentIdentity().playerId;
-      if ((event.senderId || event.playerId) === localPeerId) return;
-
-      const cur = liveCoopRef.current;
-      if (!cur.puzzle) return;
-
-      const targetIds =
-        event.regionIds && event.regionIds.length > 0
-          ? event.regionIds
-          : event.regionId !== undefined
-            ? [event.regionId]
-            : [];
-      if (targetIds.length === 0) return;
-
-      const nextFilled = new Set(cur.filledRegionIds);
-      const nextPainted = new Map(cur.paintedRegionColors);
-      let changed = false;
-      let firstUnfilledColorId: number | null = null;
-
-      for (const rId of targetIds) {
-        if (nextFilled.has(rId)) {
-          nextFilled.delete(rId);
-          nextPainted.delete(rId);
-          changed = true;
-          if (firstUnfilledColorId === null) {
-            const reg =
-              cur.puzzle === puzzle
-                ? regionByIdRef.current.get(rId)
-                : cur.puzzle.regions.find((r) => r.id === rId);
-            if (reg) {
-              firstUnfilledColorId = reg.colorId;
-              coopRippleBuffer.spawn(
-                reg.centroidX,
-                reg.centroidY,
-                event.avatarColorHex
-              );
-            }
-          }
-        }
-      }
-
-      if (!changed) return;
-
-      const wasCompleted =
-        cur.puzzle.regions.length > 0 && cur.filledRegionIds.size >= cur.puzzle.regions.length;
-      const nextActiveColorId =
-        (wasCompleted || cur.activeColorId === 0) && firstUnfilledColorId !== null
-          ? firstUnfilledColorId
-          : cur.activeColorId;
-      liveCoopRef.current = {
-        ...cur,
-        filledRegionIds: nextFilled,
-        paintedRegionColors: nextPainted,
-        activeColorId: nextActiveColorId,
-      };
-      if (nextActiveColorId !== cur.activeColorId) {
-        setActiveColorId(nextActiveColorId);
-      }
-
-      const orderedList = Array.from(nextFilled);
-      const paintedObj = Object.fromEntries(nextPainted);
-      setFilledRegionIds(nextFilled);
-      setPaintedRegionColors(nextPainted);
-
-      if (cur.activeSnapshotId) {
-        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-        const updated = StorageService.updateSnapshotProgress(
-          cur.activeSnapshotId,
-          nextFilled.size,
-          cur.puzzle.regions.length,
-          orderedList,
-          zoomScale,
-          panOffsetX,
-          panOffsetY,
-          undefined,
-          paintedObj,
-          cur.puzzle.palette,
-          cur.puzzle.isFreeColor
-        );
-        setSnapshots(updated);
-        StorageService.saveActiveState({
-          activeSnapshotId: cur.activeSnapshotId,
-          activeColorId: nextActiveColorId,
-          filledRegionIds: orderedList,
-          paintedRegionColors: paintedObj,
-          isFreeColorMode: cur.isFreeColorMode,
-          zoomScale,
-          panOffsetX,
-          panOffsetY,
-        });
-      }
-    });
-
-    const unsubWelcome = ProviderRegistry.realtimeRoom.onWelcomeState(async (seedToken) => {
-      try {
-        const delta = await decodeProgressDeltaToken(seedToken);
-        const cur = liveCoopRef.current;
-        const targetSample = resolveSampleFromSourceRef(delta.sourceRef);
-        const currentSamplePath =
-          cur.activeSave?.sampleAssetPath ||
-          (cur.activeSave?.sourceRef?.kind === 'sample' ? cur.activeSave.sourceRef.uri : null);
-
-        if (
-          targetSample &&
-          currentSamplePath?.replace(/^\.\//, '') !== targetSample.assetPath.replace(/^\.\//, '')
-        ) {
-          await loadSampleFromPrebakedOrGenerate(
-            targetSample,
-            delta.filledRegionIds,
-            delta.paintedRegionColors,
-            delta.isFreeColor,
-            undefined,
-            delta.resetEpoch
-          );
-          return;
-        }
-
-        if (!cur.puzzle) return;
-        const validIds = new Set(cur.puzzle.regions.map((r) => r.id));
-        const localEpoch = cur.activeSave?.resetEpoch ?? 0;
-        const localPaintedObj =
-          cur.paintedRegionColors.size > 0
-            ? Object.fromEntries(cur.paintedRegionColors)
-            : undefined;
-        const localDelta: ProgressDeltaV2 = {
-          version: 2,
-          filledRegionIds: Array.from(cur.filledRegionIds),
-          ...(localPaintedObj ? { paintedRegionColors: localPaintedObj } : {}),
-          ...(cur.isFreeColorMode ? { isFreeColor: true } : {}),
-          ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
-          updatedAt: Date.now(),
-        };
-        const mergedWelcome = mergeProgressDeltas(localDelta, delta);
-        const mergedEpoch = mergedWelcome.resetEpoch ?? 0;
-        const epochAdvanced = mergedEpoch > localEpoch;
-
-        const nextFilled = new Set<number>();
-        for (const rId of mergedWelcome.filledRegionIds) {
-          if (validIds.has(rId)) nextFilled.add(rId);
-        }
-        const nextPainted = new Map<number, number>();
-        if (mergedWelcome.paintedRegionColors) {
-          for (const [k, v] of Object.entries(mergedWelcome.paintedRegionColors)) {
-            const numK = Number(k);
-            if (validIds.has(numK)) nextPainted.set(numK, v);
-          }
-        }
-
-        let stateChanged = epochAdvanced || nextFilled.size !== cur.filledRegionIds.size;
-        if (!stateChanged) {
-          for (const rId of nextFilled) {
-            if (!cur.filledRegionIds.has(rId)) {
-              stateChanged = true;
-              break;
-            }
-          }
-        }
-        if (!stateChanged && nextPainted.size !== cur.paintedRegionColors.size) {
-          stateChanged = true;
-        }
-        if (!stateChanged) {
-          for (const [rId, col] of nextPainted) {
-            if (cur.paintedRegionColors.get(rId) !== col) {
-              stateChanged = true;
-              break;
-            }
-          }
-        }
-
-        if (stateChanged) {
-          const orderedList = Array.from(nextFilled);
-          const paintedObj = Object.fromEntries(nextPainted);
-          let nextActiveColorId = cur.activeColorId;
-          if (!cur.isFreeColorMode && nextFilled.size < cur.puzzle.regions.length) {
-            const curStillAvailable = cur.puzzle.regions.some(
-              (r) => r.colorId === cur.activeColorId && !nextFilled.has(r.id)
-            );
-            if (!curStillAvailable) {
-              const fallback = getVisiblePalette(
-                cur.puzzle.palette,
-                cur.puzzle.regions,
-                nextFilled,
-                cur.settings.paletteSort
-              )[0];
-              if (fallback) {
-                nextActiveColorId = fallback.id;
-                setActiveColorId(fallback.id);
-              }
-            }
-          }
-          liveCoopRef.current = {
-            ...cur,
-            filledRegionIds: nextFilled,
-            paintedRegionColors: nextPainted,
-            activeColorId: nextActiveColorId,
-          };
-          setFilledRegionIds(nextFilled);
-          setPaintedRegionColors(nextPainted);
-          if (cur.activeSnapshotId) {
-            const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-            const updated = StorageService.updateSnapshotProgress(
-              cur.activeSnapshotId,
-              nextFilled.size,
-              cur.puzzle.regions.length,
-              orderedList,
-              zoomScale,
-              panOffsetX,
-              panOffsetY,
-              undefined,
-              paintedObj,
-              cur.puzzle.palette,
-              cur.puzzle.isFreeColor,
-              undefined,
-              mergedEpoch > 0 ? mergedEpoch : undefined
-            );
-            const updatedWelcomeSave = updated.find((s) => s.id === cur.activeSnapshotId);
-            if (updatedWelcomeSave) {
-              liveCoopRef.current = {
-                ...liveCoopRef.current,
-                activeSave: updatedWelcomeSave,
-              };
-            }
-            setSnapshots(updated);
-            StorageService.saveActiveState({
-              activeSnapshotId: cur.activeSnapshotId,
-              activeColorId: nextActiveColorId,
-              filledRegionIds: orderedList,
-              paintedRegionColors: paintedObj,
-              isFreeColorMode: cur.isFreeColorMode,
-              ...(mergedEpoch > 0 ? { resetEpoch: mergedEpoch } : {}),
-              zoomScale,
-              panOffsetX,
-              panOffsetY,
-            });
-          } else if (epochAdvanced && liveCoopRef.current.activeSave) {
-            liveCoopRef.current = {
-              ...liveCoopRef.current,
-              activeSave: {
-                ...liveCoopRef.current.activeSave,
-                resetEpoch: mergedEpoch,
-              },
-            };
-          }
-        }
-      } catch {
-        // Ignore malformed welcome token
-      }
-    });
-
-    return () => {
-      unsubParticipants();
-      unsubPaint();
-      unsubUnfill();
-      unsubWelcome();
-    };
-  }, [coopRippleBuffer, loadSampleFromPrebakedOrGenerate]);
-
-  const prevCoopSnapRef = useRef<string | null>(null);
-  const prevCoopResetEpochRef = useRef<number>(0);
-
-  // Keep active Co-op room welcome seed token fresh whenever local progress or active puzzle updates
-  useEffect(() => {
-    if (!coopRoomCode || !puzzle) {
-      prevCoopSnapRef.current = null;
-      prevCoopResetEpochRef.current = 0;
-      return;
-    }
-    const currentEpoch = activeSave?.resetEpoch ?? 0;
-    const switchedPuzzle =
-      (prevCoopSnapRef.current !== null && prevCoopSnapRef.current !== activeSnapshotId) ||
-      currentEpoch > prevCoopResetEpochRef.current;
-    prevCoopSnapRef.current = activeSnapshotId;
-    prevCoopResetEpochRef.current = currentEpoch;
-
-    const sampleUri = isAllowedSampleAssetPath(activeSave?.sampleAssetPath)
-      ? activeSave.sampleAssetPath
-      : activeSave?.sourceRef?.kind === 'sample' &&
-          isAllowedSampleAssetPath(activeSave.sourceRef.uri)
-        ? activeSave.sourceRef.uri
-        : undefined;
-    const paintedObj =
-      paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
-    void encodeProgressDeltaToken({
-      version: 2,
-      ...(sampleUri ? { sourceRef: { kind: 'sample', uri: sampleUri } } : {}),
-      filledRegionIds: Array.from(filledRegionIds),
-      ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
-      ...(isFreeColorMode ? { isFreeColor: true } : {}),
-      ...(currentEpoch > 0 ? { resetEpoch: currentEpoch } : {}),
-      updatedAt: Date.now(),
-    }).then((token) => {
-      if (switchedPuzzle) {
-        ProviderRegistry.realtimeRoom.broadcastWelcomeState(token);
-      } else {
-        ProviderRegistry.realtimeRoom.updateSeedToken(token);
-      }
-    });
-  }, [
-    coopRoomCode,
-    puzzle,
-    activeSnapshotId,
-    activeSave,
-    filledRegionIds,
-    paintedRegionColors,
-    isFreeColorMode,
-  ]);
-
-  // Handle incoming Android App Links / runtime URL hash navigation
-  useEffect(() => {
-    const handleIncomingUrl = async (rawUrl: string) => {
-      const parsed = await parseShareLinkFromUrl(rawUrl);
-      if (parsed.roomCode) {
-        const joinSeq = ++coopJoinSeqRef.current;
-        try {
-          const id = ProviderRegistry.auth.getCurrentIdentity();
-          await ProviderRegistry.realtimeRoom.joinRoom(parsed.roomCode, {
-            playerId: id.playerId,
-            displayName: id.displayName,
-            avatarColorHex: id.avatarColorHex,
-            lastActiveAt: Date.now(),
-          });
-          if (joinSeq === coopJoinSeqRef.current) {
-            setCoopRoomCode(ProviderRegistry.realtimeRoom.activeRoomCode);
-            setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
-          }
-        } catch {
-          // Ignore malformed room codes cleanly
-        }
-      }
-      if (parsed.matchedSample && parsed.delta) {
-        clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsed.roomCode);
-        await loadSampleFromPrebakedOrGenerate(
-          parsed.matchedSample,
-          parsed.delta.filledRegionIds,
-          parsed.delta.paintedRegionColors,
-          parsed.delta.isFreeColor,
-          undefined,
-          parsed.delta.resetEpoch
-        );
-      } else if (parsed.hasToken || parsed.tokenError) {
-        clearShareHashFromWindowUrl(ProviderRegistry.realtimeRoom.activeRoomCode || parsed.roomCode);
-      }
-    };
-
-    const unsubDeepLink = NativeBridge.onDeepLink((url) => {
-      void handleIncomingUrl(url);
-    });
-    const onHashChange = () => {
-      if (window.location.hash.includes('s=')) {
-        void handleIncomingUrl(window.location.href);
-      }
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => {
-      unsubDeepLink();
-      window.removeEventListener('hashchange', onHashChange);
-    };
+  useIsomorphicLayoutEffect(() => {
+    loadSampleForCoopRef.current = loadSampleFromPrebakedOrGenerate;
   }, [loadSampleFromPrebakedOrGenerate]);
-
-  const activeSourceRef = useMemo(() => {
-    if (isAllowedSampleAssetPath(activeSave?.sampleAssetPath)) {
-      return { kind: 'sample' as const, uri: activeSave.sampleAssetPath };
-    }
-    if (
-      activeSave?.sourceRef?.kind === 'sample' &&
-      isAllowedSampleAssetPath(activeSave.sourceRef.uri)
-    ) {
-      return { kind: 'sample' as const, uri: activeSave.sourceRef.uri };
-    }
-    if (activeSave?.sourceRef?.kind === 'catalog' && activeSave.sourceRef.uri) {
-      return { kind: 'catalog' as const, uri: activeSave.sourceRef.uri };
-    }
-    return undefined;
-  }, [activeSave?.sampleAssetPath, activeSave?.sourceRef?.kind, activeSave?.sourceRef?.uri]);
-
-  const canShareActiveLink = Boolean(activeSourceRef);
-
-  const buildActiveShareUrl = useCallback(
-    async (roomOverride?: string | null): Promise<string | null> => {
-      if (!puzzle) return null;
-      const paintedObj =
-        paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
-      const { url } = await buildShareProgressUrl({
-        sourceRef: activeSourceRef,
-        filledRegionIds: Array.from(filledRegionIds),
-        paintedRegionColors: paintedObj,
-        isFreeColor: isFreeColorMode,
-        resetEpoch: activeSave?.resetEpoch,
-        roomCode: roomOverride,
-      });
-      return url;
-    },
-    [
-      puzzle,
-      activeSourceRef,
-      activeSave?.resetEpoch,
-      filledRegionIds,
-      paintedRegionColors,
-      isFreeColorMode,
-    ]
-  );
-
-  const handleShareProgressLink = useCallback(async (): Promise<string | null> => {
-    if (!canShareActiveLink) return null;
-    const url = await buildActiveShareUrl(null);
-    if (!url) return null;
-    await NativeBridge.shareTextLink(`${activeTitle} — Capy Progress`, url);
-    NativeBridge.haptic('tick', settings.hapticsEnabled);
-    markTutorialActionTried('saves_export');
-    return url;
-  }, [
-    canShareActiveLink,
-    buildActiveShareUrl,
-    activeTitle,
-    settings.hapticsEnabled,
-    markTutorialActionTried,
-  ]);
-
-  const handleHostCoopRoom = useCallback(async (): Promise<string | null> => {
-    const joinSeq = ++coopJoinSeqRef.current;
-    try {
-      const code = generateCoopRoomCode(6);
-      const id = ProviderRegistry.auth.getCurrentIdentity();
-      const paintedObj =
-        paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
-      const currentEpoch = activeSave?.resetEpoch ?? 0;
-      const seedToken = await encodeProgressDeltaToken({
-        version: 2,
-        ...(activeSourceRef ? { sourceRef: activeSourceRef } : {}),
-        filledRegionIds: Array.from(filledRegionIds),
-        ...(paintedObj ? { paintedRegionColors: paintedObj } : {}),
-        ...(isFreeColorMode ? { isFreeColor: true } : {}),
-        ...(currentEpoch > 0 ? { resetEpoch: currentEpoch } : {}),
-        updatedAt: Date.now(),
-      });
-      if (joinSeq !== coopJoinSeqRef.current) return null;
-      await ProviderRegistry.realtimeRoom.joinRoom(
-        code,
-        {
-          playerId: id.playerId,
-          displayName: id.displayName,
-          avatarColorHex: id.avatarColorHex,
-          lastActiveAt: Date.now(),
-        },
-        seedToken
-      );
-      if (joinSeq !== coopJoinSeqRef.current) {
-        ProviderRegistry.realtimeRoom.leaveRoom();
-        return null;
-      }
-      const activeCode = ProviderRegistry.realtimeRoom.activeRoomCode;
-      setCoopRoomCode(activeCode);
-      setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
-      NativeBridge.haptic('success', settings.hapticsEnabled);
-      return activeCode;
-    } catch {
-      return null;
-    }
-  }, [
-    activeSourceRef,
-    activeSave?.resetEpoch,
-    filledRegionIds,
-    paintedRegionColors,
-    isFreeColorMode,
-    settings.hapticsEnabled,
-  ]);
-
-  const handleJoinCoopRoom = useCallback(
-    async (rawCode: string): Promise<boolean> => {
-      const normalized = normalizeCoopRoomCode(rawCode);
-      if (!normalized) return false;
-      const joinSeq = ++coopJoinSeqRef.current;
-      try {
-        const id = ProviderRegistry.auth.getCurrentIdentity();
-        await ProviderRegistry.realtimeRoom.joinRoom(normalized, {
-          playerId: id.playerId,
-          displayName: id.displayName,
-          avatarColorHex: id.avatarColorHex,
-          lastActiveAt: Date.now(),
-        });
-        if (joinSeq !== coopJoinSeqRef.current) {
-          ProviderRegistry.realtimeRoom.leaveRoom();
-          return false;
-        }
-        const activeCode = ProviderRegistry.realtimeRoom.activeRoomCode;
-        setCoopRoomCode(activeCode);
-        setCoopParticipants(ProviderRegistry.realtimeRoom.getParticipants());
-        NativeBridge.haptic('success', settings.hapticsEnabled);
-        return Boolean(activeCode);
-      } catch {
-        return false;
-      }
-    },
-    [settings.hapticsEnabled]
-  );
-
-  const handleLeaveCoopRoom = useCallback(() => {
-    ++coopJoinSeqRef.current;
-    ProviderRegistry.realtimeRoom.leaveRoom();
-    setCoopRoomCode(null);
-    setCoopParticipants([]);
-    clearShareHashFromWindowUrl(null);
-  }, []);
-
-  const handleCopyCoopInviteLink = useCallback(async (): Promise<string | null> => {
-    if (!coopRoomCode) return null;
-    const url = await buildActiveShareUrl(coopRoomCode);
-    if (!url) return null;
-    await NativeBridge.shareTextLink(`Join my Capy Co-op Room (${coopRoomCode})`, url);
-    NativeBridge.haptic('tick', settings.hapticsEnabled);
-    return url;
-  }, [coopRoomCode, buildActiveShareUrl, settings.hapticsEnabled]);
 
   interface CloudSyncUiSummary {
     addedFromCloud: number;
