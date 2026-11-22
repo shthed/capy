@@ -95,7 +95,8 @@ jobs:
       - name: Commit regenerated .capy archives and open or update beta PR
         if: steps.diff_check.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          READY_TOKEN: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -144,5 +145,9 @@ jobs:
           if [ -n "$EXISTING_PR" ]; then
             gh pr edit "$EXISTING_PR" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY"
           else
-            gh pr create --base beta --head "$BRANCH" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY" --label "ci,web"
+            PR_URL=$(gh pr create --draft --base beta --head "$BRANCH" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY" --label "ci,web")
+            PR_NUM=$(printf '%s' "$PR_URL" | grep -oE '[0-9]+$' || true)
+            if [ -n "$PR_NUM" ]; then
+              GH_TOKEN="$READY_TOKEN" gh pr ready "$PR_NUM"
+            fi
           fi
