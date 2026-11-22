@@ -1,16 +1,24 @@
 package com.capyboop.paint
 
 import android.annotation.TargetApi
+import android.content.ContextWrapper
 import android.os.Build
+import android.webkit.JavascriptInterface
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicInteger
+import javax.xml.parsers.DocumentBuilderFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.w3c.dom.Element
 
 class CapyAndroidBridgeTest {
 
@@ -384,7 +392,10 @@ class CapyAndroidBridgeTest {
             maxAgeMs = 86_400_000L,
         )
         assertEquals(sharedDir, target.parentFile)
-        assertEquals("_.._my_export.png", target.name)
+        assertTrue(
+            "Expected sanitized base prefix with unique suffix and .png extension, got '${target.name}'",
+            target.name.startsWith("_.._my_export_") && target.name.endsWith(".png"),
+        )
         assertFalse("Stale shared export older than maxAgeMs should be pruned", staleFile.exists())
         assertTrue("Fresh shared export should be preserved", freshFile.exists())
     }
@@ -746,6 +757,348 @@ class CapyAndroidBridgeTest {
         assertEquals("strict-origin-when-cross-origin", jsHeaders["Referrer-Policy"])
         assertFalse(jsHeaders.containsKey("Content-Security-Policy"))
     }
+
+    private fun resolveRepoFile(relativePath: String): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").canonicalFile
+        repeat(8) {
+            val current = dir ?: return@repeat
+            val candidate = File(current, relativePath)
+            if (candidate.exists()) {
+                return candidate
+            }
+            dir = current.parentFile
+        }
+        throw AssertionError("Unable to locate repository file '$relativePath' from '${System.getProperty("user.dir")}'")
+    }
+
+    @Test
+    fun `CapyAndroidBridge preserves all 19 JavascriptInterface methods after delegate decomposition`() {
+        val expectedMethods = setOf(
+            "getSafeAreaInsets",
+            "haptic",
+            "setModalOpen",
+            "saveBackup",
+            "loadBackup",
+            "saveCloudSnapshot",
+            "loadCloudSnapshot",
+            "saveCloudBinaryChunk",
+            "loadCloudBinaryChunk",
+            "isPlayGamesConfigured",
+            "requestCloudSnapshotPull",
+            "signInPlayGames",
+            "consumePendingSharedImage",
+            "openExternalOAuth",
+            "consumePendingDeepLink",
+            "getAppVersion",
+            "shareTextLink",
+            "shareImage",
+            "shareFile",
+        )
+        val actualMethods = CapyAndroidBridge::class.java.declaredMethods
+            .filter { it.isAnnotationPresent(JavascriptInterface::class.java) }
+            .map { it.name }
+            .toSet()
+        assertEquals(expectedMethods, actualMethods)
+        assertEquals(19, actualMethods.size)
+    }
+
+    @Test
+    fun `internal delegates round-trip backup storage, Play Games snapshots, and haptics specs`() {
+        val backupDir = tempFolder.newFolder("delegate_backup")
+        val backupDelegate = BackupStorageDelegate(backupDirProvider = { backupDir })
+        assertTrue(backupDelegate.saveBackup("slot_a", """{"ok":true}"""))
+        assertEquals("""{"ok":true}""", backupDelegate.loadBackup("slot_a"))
+
+        val cloudDir = tempFolder.newFolder("delegate_cloud")
+        var savedSlot: String? = null
+        var pulledSlot: String? = null
+        val playGamesDelegate = PlayGamesSnapshotDelegate(
+            context = ContextWrapper(null),
+            cloudDirProvider = { cloudDir },
+            onSaveCloudSnapshot = { slot, _ -> savedSlot = slot },
+            onRequestCloudSnapshotPull = { slot -> pulledSlot = slot },
+            isPlayGamesConfiguredProvider = { true },
+        )
+        assertTrue(playGamesDelegate.isPlayGamesConfigured())
+        assertTrue(playGamesDelegate.saveCloudSnapshot("capy_cloud_manifest_v2", """{"v":2}"""))
+        assertEquals("capy_cloud_manifest_v2", savedSlot)
+        assertEquals("""{"v":2}""", playGamesDelegate.loadCloudSnapshot("capy_cloud_manifest_v2"))
+        assertTrue(playGamesDelegate.saveCloudBinaryChunk("pgblob_art", 0, 1, "QUFB"))
+        assertEquals("QUFB", playGamesDelegate.loadCloudBinaryChunk("pgblob_art", 0))
+        assertTrue(playGamesDelegate.requestCloudSnapshotPull("pgblob_art_part_0"))
+        assertEquals("pgblob_art_part_0", pulledSlot)
+
+        assertEquals(
+            CapyAndroidBridge.resolveHapticSpec("success"),
+            HapticsDelegate.resolveHapticSpec("success"),
+        )
+    }
+
+    @Test
+    fun `consumePending methods atomically deliver payload to strictly one concurrent consumer`() {
+        val bridge = CapyAndroidBridge(
+            context = ContextWrapper(null),
+            rootViewProvider = { null },
+            onModalStateChanged = {},
+            isPlayGamesConfiguredProvider = { false },
+            originGuard = { true },
+        )
+
+        // Single-threaded consumption clears immediately
+        bridge.pendingSharedImageJson = """{"title":"A","dataUrl":"data:image/png;base64,AA=="}"""
+        assertNotNull(bridge.consumePendingSharedImage())
+        assertNull(bridge.consumePendingSharedImage())
+
+        bridge.pendingDeepLinkUrl = "https://capypaint.com/#s=abc123"
+        assertEquals("https://capypaint.com/#s=abc123", bridge.consumePendingDeepLink())
+        assertNull(bridge.consumePendingDeepLink())
+
+        bridge.pendingOAuthCallbackUrl = "capypaint://oauth/callback?code=123"
+        assertEquals("capypaint://oauth/callback?code=123", bridge.consumePendingOAuthCallbackInternal())
+        assertNull(bridge.consumePendingOAuthCallbackInternal())
+
+        // Untrusted originGuard must not consume pending payloads
+        val guardedBridge = CapyAndroidBridge(
+            context = ContextWrapper(null),
+            rootViewProvider = { null },
+            onModalStateChanged = {},
+            isPlayGamesConfiguredProvider = { false },
+            originGuard = { false },
+        )
+        guardedBridge.pendingSharedImageJson = """{"title":"Guarded","dataUrl":"data:image/png;base64,AA=="}"""
+        guardedBridge.pendingDeepLinkUrl = "https://capypaint.com/#s=guarded"
+        assertNull(guardedBridge.consumePendingSharedImage())
+        assertNull(guardedBridge.consumePendingDeepLink())
+        assertNotNull(guardedBridge.pendingSharedImageJson)
+        assertNotNull(guardedBridge.pendingDeepLinkUrl)
+
+        // Multi-threaded race across 12 threads x 25 rounds: strictly 1 winner per pending slot
+        val threadCount = 12
+        val rounds = 25
+        val errors = CopyOnWriteArrayList<Throwable>()
+        for (round in 0 until rounds) {
+            val sharedPayload = """{"round":$round,"dataUrl":"data:image/png;base64,AA=="}"""
+            val deepLinkPayload = "https://capypaint.com/#s=round_$round"
+            val oauthPayload = "capypaint://oauth/callback?code=round_$round"
+            bridge.pendingSharedImageJson = sharedPayload
+            bridge.pendingDeepLinkUrl = deepLinkPayload
+            bridge.pendingOAuthCallbackUrl = oauthPayload
+
+            val startLatch = CountDownLatch(1)
+            val sharedWinners = AtomicInteger(0)
+            val deepLinkWinners = AtomicInteger(0)
+            val oauthWinners = AtomicInteger(0)
+
+            val threads = (0 until threadCount).map {
+                Thread {
+                    try {
+                        startLatch.await()
+                        if (bridge.consumePendingSharedImage() == sharedPayload) {
+                            sharedWinners.incrementAndGet()
+                        }
+                        if (bridge.consumePendingDeepLink() == deepLinkPayload) {
+                            deepLinkWinners.incrementAndGet()
+                        }
+                        if (bridge.consumePendingOAuthCallbackInternal() == oauthPayload) {
+                            oauthWinners.incrementAndGet()
+                        }
+                    } catch (t: Throwable) {
+                        errors.add(t)
+                    }
+                }
+            }
+            threads.forEach { it.start() }
+            startLatch.countDown()
+            threads.forEach { it.join(10_000) }
+
+            assertEquals("Expected exactly 1 shared image consumer on round $round", 1, sharedWinners.get())
+            assertEquals("Expected exactly 1 deep link consumer on round $round", 1, deepLinkWinners.get())
+            assertEquals("Expected exactly 1 OAuth callback consumer on round $round", 1, oauthWinners.get())
+        }
+        assertTrue("Unexpected concurrency errors: $errors", errors.isEmpty())
+    }
+
+    @Test
+    fun `ACTION_SEND URI scheme enforcement accepts content only and rejects unsafe schemes`() {
+        assertTrue(CapyAndroidBridge.isAllowedIncomingShareUriScheme("content"))
+
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme(null))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme(""))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme("file"))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme("http"))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme("https"))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme("android.resource"))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme("CONTENT"))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme("Content"))
+        assertFalse(CapyAndroidBridge.isAllowedIncomingShareUriScheme(" content "))
+    }
+
+    @Test
+    fun `isValidImageMagicBytes accepts supported raster signatures and rejects HTML SVG JS empty and truncated payloads`() {
+        val pngHeader = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D)
+        val jpegHeader = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0x00, 0x10)
+        val gif87aHeader = "GIF87a\u0001\u0000".toByteArray(Charsets.US_ASCII)
+        val gif89aHeader = "GIF89a\u0001\u0000".toByteArray(Charsets.US_ASCII)
+        val webpHeader = byteArrayOf(
+            'R'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 'F'.code.toByte(),
+            0x24, 0x00, 0x00, 0x00,
+            'W'.code.toByte(), 'E'.code.toByte(), 'B'.code.toByte(), 'P'.code.toByte(),
+        )
+        val bmpHeader = byteArrayOf(0x42, 0x4D, 0x36, 0x00, 0x00, 0x00)
+        val heicHeader = byteArrayOf(
+            0x00, 0x00, 0x00, 0x18,
+            'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+            'h'.code.toByte(), 'e'.code.toByte(), 'i'.code.toByte(), 'c'.code.toByte(),
+        )
+        val avifHeader = byteArrayOf(
+            0x00, 0x00, 0x00, 0x1C,
+            'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+            'a'.code.toByte(), 'v'.code.toByte(), 'i'.code.toByte(), 'f'.code.toByte(),
+        )
+
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(pngHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(jpegHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(gif87aHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(gif89aHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(webpHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(bmpHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(heicHeader))
+        assertTrue(CapyAndroidBridge.isValidImageMagicBytes(avifHeader))
+
+        // Reject non-image, scriptable, empty, truncated, or random payloads
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes("<html><body>xss</body></html>".toByteArray(Charsets.UTF_8)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes("<svg xmlns='http://www.w3.org/2000/svg'/>".toByteArray(Charsets.UTF_8)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes("<?xml version='1.0'?><root/>".toByteArray(Charsets.UTF_8)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes("alert(document.cookie);".toByteArray(Charsets.UTF_8)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(ByteArray(0)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(byteArrayOf(0x89.toByte())))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(pngHeader, length = 7))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(jpegHeader, length = 2))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(webpHeader, length = 11))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes("BM".toByteArray(Charsets.US_ASCII)))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(bmpHeader, length = 2))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(bmpHeader, length = 5))
+        val aviHeader = "RIFF\u0000\u0000\u0000\u0000AVI ".toByteArray(Charsets.US_ASCII)
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(aviHeader))
+        val mp4Header = byteArrayOf(
+            0x00, 0x00, 0x00, 0x18,
+            'f'.code.toByte(), 't'.code.toByte(), 'y'.code.toByte(), 'p'.code.toByte(),
+            'i'.code.toByte(), 's'.code.toByte(), 'o'.code.toByte(), 'm'.code.toByte(),
+        )
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(mp4Header))
+        assertFalse(CapyAndroidBridge.isValidImageMagicBytes(byteArrayOf(0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08)))
+    }
+
+    @Test
+    fun `prepareSharedExportFile generates unique filenames across repeated calls without clobbering`() {
+        val cacheDir = tempFolder.newFolder("capy_unique_exports")
+        val fixedNow = 1_700_000_000_000L
+
+        val first = CapyAndroidBridge.prepareSharedExportFile(cacheDir, "artwork.png", nowMs = fixedNow)
+        val second = CapyAndroidBridge.prepareSharedExportFile(cacheDir, "artwork.png", nowMs = fixedNow)
+
+        assertNotEquals(first.name, second.name)
+        assertTrue(first.name.startsWith("artwork_") && first.name.endsWith(".png"))
+        assertTrue(second.name.startsWith("artwork_") && second.name.endsWith(".png"))
+
+        first.writeBytes(byteArrayOf(1, 2, 3))
+        second.writeBytes(byteArrayOf(4, 5, 6, 7))
+        assertTrue(byteArrayOf(1, 2, 3).contentEquals(first.readBytes()))
+        assertTrue(byteArrayOf(4, 5, 6, 7).contentEquals(second.readBytes()))
+
+        val noExt = CapyAndroidBridge.prepareSharedExportFile(cacheDir, "archive", nowMs = fixedNow)
+        assertTrue(noExt.name.startsWith("archive_"))
+    }
+
+    @Test
+    fun `prepareSharedExportFile caps long filenames below NAME_MAX while preserving extension and uniqueness`() {
+        val cacheDir = tempFolder.newFolder("capy_long_exports")
+        val fixedNow = 1_700_000_000_000L
+        val longBase = "capy_artwork_" + "a".repeat(240)
+        val longFileName = "$longBase.png"
+
+        val first = CapyAndroidBridge.prepareSharedExportFile(cacheDir, longFileName, nowMs = fixedNow)
+        val second = CapyAndroidBridge.prepareSharedExportFile(cacheDir, longFileName, nowMs = fixedNow)
+
+        assertNotEquals(first.name, second.name)
+        assertTrue("Filename must stay under Linux NAME_MAX (255 bytes), got ${first.name.length}", first.name.length <= 200)
+        assertTrue("Filename must stay under Linux NAME_MAX (255 bytes), got ${second.name.length}", second.name.length <= 200)
+        assertTrue("Expected .png extension preserved, got '${first.name}'", first.name.endsWith(".png"))
+        assertTrue("Expected .png extension preserved, got '${second.name}'", second.name.endsWith(".png"))
+        assertTrue("Expected prefix preserved, got '${first.name}'", first.name.startsWith("capy_artwork_"))
+
+        val longNoExt = CapyAndroidBridge.prepareSharedExportFile(cacheDir, "b".repeat(260), nowMs = fixedNow)
+        assertTrue("Extensionless filename must stay under NAME_MAX, got ${longNoExt.name.length}", longNoExt.name.length <= 200)
+    }
+
+    @Test
+    fun `backup_rules and data_extraction_rules allowlist capy_saves and exclude Play Games prefs and capy_cloud`() {
+        fun verifyRulesSection(section: Element, sectionLabel: String) {
+            val childElements = mutableListOf<Element>()
+            val nodes = section.childNodes
+            for (i in 0 until nodes.length) {
+                val node = nodes.item(i)
+                if (node is Element) {
+                    childElements.add(node)
+                }
+            }
+            val includeIdx = childElements.indexOfFirst {
+                it.tagName == "include" &&
+                    it.getAttribute("domain") == "file" &&
+                    it.getAttribute("path") == "capy_saves"
+            }
+            assertTrue("$sectionLabel must allowlist <include domain=\"file\" path=\"capy_saves\" />", includeIdx >= 0)
+
+            val firstExcludeIdx = childElements.indexOfFirst { it.tagName == "exclude" }
+            assertTrue("$sectionLabel must place <include> before <exclude>", firstExcludeIdx > includeIdx)
+
+            val excludes = childElements
+                .filter { it.tagName == "exclude" }
+                .map { it.getAttribute("domain") to it.getAttribute("path") }
+                .toSet()
+            assertTrue(
+                "$sectionLabel must exclude sharedpref/capy_play_games_prefs.xml",
+                ("sharedpref" to "capy_play_games_prefs.xml") in excludes,
+            )
+            assertTrue(
+                "$sectionLabel must exclude file/capy_cloud",
+                ("file" to "capy_cloud") in excludes,
+            )
+            assertTrue(
+                "$sectionLabel must not include app_webview",
+                childElements.none { it.tagName == "include" && it.getAttribute("path").contains("webview", ignoreCase = true) },
+            )
+        }
+
+        val docFactory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }
+        val toolsNs = "http://schemas.android.com/tools"
+        val backupDoc = docFactory.newDocumentBuilder().parse(resolveRepoFile("app/src/main/res/xml/backup_rules.xml"))
+        assertEquals("full-backup-content", backupDoc.documentElement.tagName)
+        assertEquals(
+            "backup_rules.xml must declare tools:ignore=\"FullBackupContent\"",
+            "FullBackupContent",
+            backupDoc.documentElement.getAttributeNS(toolsNs, "ignore"),
+        )
+        verifyRulesSection(backupDoc.documentElement, "backup_rules.xml")
+
+        val extractionDoc = docFactory.newDocumentBuilder()
+            .parse(resolveRepoFile("app/src/main/res/xml/data_extraction_rules.xml"))
+        assertEquals("data-extraction-rules", extractionDoc.documentElement.tagName)
+        assertEquals(
+            "data_extraction_rules.xml must declare tools:ignore=\"FullBackupContent\"",
+            "FullBackupContent",
+            extractionDoc.documentElement.getAttributeNS(toolsNs, "ignore"),
+        )
+        val cloudBackup = extractionDoc.getElementsByTagName("cloud-backup").item(0) as? Element
+        val deviceTransfer = extractionDoc.getElementsByTagName("device-transfer").item(0) as? Element
+        assertNotNull("data_extraction_rules.xml must define <cloud-backup>", cloudBackup)
+        assertNotNull("data_extraction_rules.xml must define <device-transfer>", deviceTransfer)
+        verifyRulesSection(cloudBackup!!, "data_extraction_rules.xml#cloud-backup")
+        verifyRulesSection(deviceTransfer!!, "data_extraction_rules.xml#device-transfer")
+    }
 }
+
 
 

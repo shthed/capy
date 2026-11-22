@@ -45,7 +45,9 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 class MainActivity : ComponentActivity() {
 
@@ -56,7 +58,39 @@ class MainActivity : ComponentActivity() {
     @Volatile
     private var isTrustedPageLoaded: Boolean = false
     private val lastKnownRemotePayloads = ConcurrentHashMap<String, String>()
-    private val shareDecodeExecutor = Executors.newSingleThreadExecutor()
+    private val shareDecodeExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "CapyShareDecode").apply { isDaemon = true }
+    }
+    private val playGamesIoExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "CapyPlayGamesIO").apply { isDaemon = true }
+    }
+
+    private fun runOnActiveUiThread(block: () -> Unit) {
+        if (isDestroyed || isFinishing) return
+        runOnUiThread {
+            if (isDestroyed || isFinishing) return@runOnUiThread
+            block()
+        }
+    }
+
+    private fun submitPlayGamesIo(onRejected: (() -> Unit)? = null, task: () -> Unit) {
+        if (isDestroyed || isFinishing || playGamesIoExecutor.isShutdown) {
+            onRejected?.invoke()
+            return
+        }
+        try {
+            playGamesIoExecutor.execute {
+                if (isDestroyed || isFinishing) {
+                    onRejected?.invoke()
+                    return@execute
+                }
+                task()
+            }
+        } catch (e: RejectedExecutionException) {
+            Log.w(TAG, "Play Games I/O task rejected during activity teardown", e)
+            onRejected?.invoke()
+        }
+    }
 
     private fun updateBackCallbackState() {
         backPressedCallback.isEnabled = bridge.isModalOpen || (webView?.canGoBack() == true)
@@ -502,6 +536,10 @@ class MainActivity : ComponentActivity() {
             intent.getParcelableExtra(Intent.EXTRA_STREAM)
         }
         if (imageUri == null) return
+        if (!CapyAndroidBridge.isAllowedIncomingShareUriScheme(imageUri.scheme)) {
+            Log.w(TAG, "Rejected incoming ACTION_SEND URI with unsupported scheme: ${imageUri.scheme}")
+            return
+        }
 
         val title = CapyAndroidBridge.sanitizeShareTitle(
             imageUri.lastPathSegment?.substringAfterLast('/'),
@@ -509,23 +547,28 @@ class MainActivity : ComponentActivity() {
             maxLength = 80,
         )
         val appResolver = applicationContext.contentResolver
-        shareDecodeExecutor.execute {
-            try {
-                val dataUrl = decodeAndDownsampleSharedImage(appResolver, imageUri, type) ?: return@execute
-                if (!CapyAndroidBridge.isAllowedSharedImageDataUrl(dataUrl)) {
-                    Log.w(TAG, "Rejected unsafe shared image data URL")
-                    return@execute
-                }
-                runOnUiThread {
-                    if (isDestroyed || isFinishing) return@runOnUiThread
-                    bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
-                    if (isPageLoaded) {
-                        deliverPendingSharedImageIfNeeded()
+        if (isDestroyed || isFinishing || shareDecodeExecutor.isShutdown) return
+        try {
+            shareDecodeExecutor.execute {
+                if (isDestroyed || isFinishing) return@execute
+                try {
+                    val dataUrl = decodeAndDownsampleSharedImage(appResolver, imageUri, type) ?: return@execute
+                    if (!CapyAndroidBridge.isAllowedSharedImageDataUrl(dataUrl)) {
+                        Log.w(TAG, "Rejected unsafe shared image data URL")
+                        return@execute
                     }
+                    runOnActiveUiThread {
+                        bridge.pendingSharedImageJson = CapyAndroidBridge.formatSharedImageJson(title, dataUrl)
+                        if (isPageLoaded) {
+                            deliverPendingSharedImageIfNeeded()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to resolve incoming share image URI: $imageUri", e)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to resolve incoming share image URI: $imageUri", e)
             }
+        } catch (e: RejectedExecutionException) {
+            Log.w(TAG, "Incoming share decode rejected during activity teardown", e)
         }
     }
 
@@ -534,6 +577,21 @@ class MainActivity : ComponentActivity() {
         imageUri: Uri,
         mimeType: String,
     ): String? {
+        val header = ByteArray(CapyAndroidBridge.IMAGE_MAGIC_HEADER_BYTES)
+        val headerRead = resolver.openInputStream(imageUri)?.use { stream ->
+            var offset = 0
+            while (offset < header.size) {
+                val read = stream.read(header, offset, header.size - offset)
+                if (read <= 0) break
+                offset += read
+            }
+            offset
+        } ?: return null
+        if (!CapyAndroidBridge.isValidImageMagicBytes(header, headerRead)) {
+            Log.w(TAG, "Rejected incoming ACTION_SEND payload with invalid image magic bytes")
+            return null
+        }
+
         val boundsOptions = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
@@ -780,25 +838,39 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun commitSnapshotPayload(
+    private fun commitSnapshotPayloadOnIoThread(
         snapshotsClient: SnapshotsClient,
         snapshot: Snapshot,
         slotKey: String,
         safeSlot: String,
         payloadJson: String,
     ) {
-        snapshot.snapshotContents.writeBytes(payloadJson.toByteArray(Charsets.UTF_8))
-        val metadataChange = SnapshotMetadataChange.Builder()
-            .setDescription("Capy Paint Cloud Save ($safeSlot)")
-            .build()
-        snapshotsClient.commitAndClose(snapshot, metadataChange)
-            .addOnSuccessListener {
-                lastKnownRemotePayloads[safeSlot] = payloadJson
+        try {
+            snapshot.snapshotContents.writeBytes(payloadJson.toByteArray(Charsets.UTF_8))
+            val metadataChange = SnapshotMetadataChange.Builder()
+                .setDescription("Capy Paint Cloud Save ($safeSlot)")
+                .build()
+            snapshotsClient.commitAndClose(snapshot, metadataChange)
+                .addOnSuccessListener {
+                    lastKnownRemotePayloads[safeSlot] = payloadJson
+                }
+                .addOnFailureListener { err ->
+                    Log.w(TAG, "Failed to commit Play Games snapshot '$safeSlot'", err)
+                    runOnActiveUiThread {
+                        deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_COMMIT_FAILED")
+                    }
+                }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error writing Play Games snapshot payload '$safeSlot'", e)
+            try {
+                snapshotsClient.discardAndClose(snapshot)
+            } catch (_: Exception) {
+                // Ignore cleanup error
             }
-            .addOnFailureListener { err ->
-                Log.w(TAG, "Failed to commit Play Games snapshot '$safeSlot'", err)
+            runOnActiveUiThread {
                 deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_COMMIT_FAILED")
             }
+        }
     }
 
     private fun handlePlayGamesSnapshotConflict(
@@ -809,45 +881,70 @@ class MainActivity : ComponentActivity() {
         serverSnapshot: Snapshot,
         conflictingSnapshot: Snapshot,
     ) {
-        try {
-            val serverBytes = serverSnapshot.snapshotContents.readFully()
-            val otherBytes = conflictingSnapshot.snapshotContents.readFully()
-            val serverJson = if (serverBytes.isNotEmpty()) String(serverBytes, Charsets.UTF_8) else null
-            val otherJson = if (otherBytes.isNotEmpty()) String(otherBytes, Charsets.UTF_8) else null
-            val chosenJson = serverJson ?: otherJson
-            if (chosenJson != null) {
-                lastKnownRemotePayloads[safeSlot] = chosenJson
-            }
-            if (!safeSlot.startsWith("pgblob_")) {
-                if (serverJson != null) {
-                    bridge.saveLocalCloudSnapshotOnly(slotKey, serverJson)
-                    deliverCloudSnapshotToWebView(slotKey, serverJson)
+        submitPlayGamesIo(
+            onRejected = {
+                try {
+                    snapshotsClient.discardAndClose(serverSnapshot)
+                } catch (_: Exception) {
+                    // Ignore cleanup error
                 }
-                if (otherJson != null && otherJson != serverJson) {
-                    bridge.saveLocalCloudSnapshotOnly(slotKey, otherJson)
-                    deliverCloudSnapshotToWebView(slotKey, otherJson)
+                try {
+                    snapshotsClient.discardAndClose(conflictingSnapshot)
+                } catch (_: Exception) {
+                    // Ignore cleanup error
                 }
-            } else if (chosenJson != null) {
-                bridge.saveLocalCloudSnapshotOnly(slotKey, chosenJson)
-                deliverCloudSnapshotToWebView(slotKey, chosenJson)
-            }
-            snapshotsClient.resolveConflict(conflictId, serverSnapshot)
-                .addOnSuccessListener { resolved ->
-                    resolved.data?.let { s ->
-                        try {
-                            snapshotsClient.discardAndClose(s)
-                        } catch (_: Exception) {
-                            // Ignore if already closed
+            },
+        ) {
+            try {
+                val serverBytes = serverSnapshot.snapshotContents.readFully()
+                val otherBytes = conflictingSnapshot.snapshotContents.readFully()
+                val serverJson = if (serverBytes.isNotEmpty()) String(serverBytes, Charsets.UTF_8) else null
+                val otherJson = if (otherBytes.isNotEmpty()) String(otherBytes, Charsets.UTF_8) else null
+                val chosenJson = serverJson ?: otherJson
+                if (chosenJson != null) {
+                    lastKnownRemotePayloads[safeSlot] = chosenJson
+                }
+                if (!safeSlot.startsWith("pgblob_")) {
+                    if (serverJson != null) {
+                        bridge.saveLocalCloudSnapshotOnly(slotKey, serverJson)
+                        runOnActiveUiThread {
+                            deliverCloudSnapshotToWebView(slotKey, serverJson)
                         }
                     }
+                    if (otherJson != null && otherJson != serverJson) {
+                        bridge.saveLocalCloudSnapshotOnly(slotKey, otherJson)
+                        runOnActiveUiThread {
+                            deliverCloudSnapshotToWebView(slotKey, otherJson)
+                        }
+                    }
+                } else if (chosenJson != null) {
+                    bridge.saveLocalCloudSnapshotOnly(slotKey, chosenJson)
+                    runOnActiveUiThread {
+                        deliverCloudSnapshotToWebView(slotKey, chosenJson)
+                    }
                 }
-                .addOnFailureListener { err ->
-                    Log.w(TAG, "Failed resolving Play Games snapshot conflict '$safeSlot'", err)
+                snapshotsClient.resolveConflict(conflictId, serverSnapshot)
+                    .addOnSuccessListener { resolved ->
+                        resolved.data?.let { s ->
+                            try {
+                                snapshotsClient.discardAndClose(s)
+                            } catch (_: Exception) {
+                                // Ignore if already closed
+                            }
+                        }
+                    }
+                    .addOnFailureListener { err ->
+                        Log.w(TAG, "Failed resolving Play Games snapshot conflict '$safeSlot'", err)
+                        runOnActiveUiThread {
+                            deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error resolving Play Games snapshot conflict '$safeSlot'", e)
+                runOnActiveUiThread {
                     deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
                 }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error resolving Play Games snapshot conflict '$safeSlot'", e)
-            deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_CONFLICT_FAILED")
+            }
         }
     }
 
@@ -888,40 +985,60 @@ class MainActivity : ComponentActivity() {
                     deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_UNAVAILABLE")
                     return@addOnSuccessListener
                 }
-                try {
-                    val existingBytes = snapshot.snapshotContents.readFully()
-                    val existingJson = if (existingBytes.isEmpty()) null else String(existingBytes, Charsets.UTF_8)
-                    when (
-                        CapyAndroidBridge.decideSnapshotPushAction(
-                            slotKey = slotKey,
-                            existingRemotePayload = existingJson,
-                            lastKnownRemotePayload = lastKnownRemotePayloads[safeSlot],
-                            incomingPayload = payloadJson,
-                        )
-                    ) {
-                        CapyAndroidBridge.SnapshotPushDecision.SKIP_IDENTICAL -> {
-                            lastKnownRemotePayloads[safeSlot] = payloadJson
+                submitPlayGamesIo(
+                    onRejected = {
+                        try {
                             snapshotsClient.discardAndClose(snapshot)
+                        } catch (_: Exception) {
+                            // Ignore cleanup error
                         }
-                        CapyAndroidBridge.SnapshotPushDecision.MERGE_UNSEEN_REMOTE -> {
-                            val remotePayload = existingJson!!
-                            lastKnownRemotePayloads[safeSlot] = remotePayload
-                            bridge.saveLocalCloudSnapshotOnly(slotKey, remotePayload)
-                            deliverCloudSnapshotToWebView(slotKey, remotePayload)
-                            snapshotsClient.discardAndClose(snapshot)
-                        }
-                        CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING -> {
-                            commitSnapshotPayload(snapshotsClient, snapshot, slotKey, safeSlot, payloadJson)
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed inspecting Play Games snapshot '$safeSlot' before commit", e)
+                    },
+                ) {
                     try {
-                        snapshotsClient.discardAndClose(snapshot)
-                    } catch (_: Exception) {
-                        // Ignore cleanup error
+                        val existingBytes = snapshot.snapshotContents.readFully()
+                        val existingJson = if (existingBytes.isEmpty()) null else String(existingBytes, Charsets.UTF_8)
+                        when (
+                            CapyAndroidBridge.decideSnapshotPushAction(
+                                slotKey = slotKey,
+                                existingRemotePayload = existingJson,
+                                lastKnownRemotePayload = lastKnownRemotePayloads[safeSlot],
+                                incomingPayload = payloadJson,
+                            )
+                        ) {
+                            CapyAndroidBridge.SnapshotPushDecision.SKIP_IDENTICAL -> {
+                                lastKnownRemotePayloads[safeSlot] = payloadJson
+                                snapshotsClient.discardAndClose(snapshot)
+                            }
+                            CapyAndroidBridge.SnapshotPushDecision.MERGE_UNSEEN_REMOTE -> {
+                                val remotePayload = existingJson!!
+                                lastKnownRemotePayloads[safeSlot] = remotePayload
+                                bridge.saveLocalCloudSnapshotOnly(slotKey, remotePayload)
+                                runOnActiveUiThread {
+                                    deliverCloudSnapshotToWebView(slotKey, remotePayload)
+                                }
+                                snapshotsClient.discardAndClose(snapshot)
+                            }
+                            CapyAndroidBridge.SnapshotPushDecision.COMMIT_INCOMING -> {
+                                commitSnapshotPayloadOnIoThread(
+                                    snapshotsClient = snapshotsClient,
+                                    snapshot = snapshot,
+                                    slotKey = slotKey,
+                                    safeSlot = safeSlot,
+                                    payloadJson = payloadJson,
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed inspecting Play Games snapshot '$safeSlot' before commit", e)
+                        try {
+                            snapshotsClient.discardAndClose(snapshot)
+                        } catch (_: Exception) {
+                            // Ignore cleanup error
+                        }
+                        runOnActiveUiThread {
+                            deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_WRITE_FAILED")
+                        }
                     }
-                    deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_WRITE_FAILED")
                 }
             }.addOnFailureListener { err ->
                 Log.w(TAG, "Failed to open Play Games snapshot '$safeSlot' for writing", err)
@@ -962,18 +1079,37 @@ class MainActivity : ComponentActivity() {
                 }
                 val snapshot = dataOrConflict.data
                 if (snapshot != null) {
-                    try {
-                        val bytes = snapshot.snapshotContents.readFully()
-                        snapshotsClient.discardAndClose(snapshot)
-                        if (bytes.isNotEmpty()) {
-                            val payloadJson = String(bytes, Charsets.UTF_8)
-                            lastKnownRemotePayloads[safeSlot] = payloadJson
-                            bridge.saveLocalCloudSnapshotOnly(slotKey, payloadJson)
-                            deliverCloudSnapshotToWebView(slotKey, payloadJson)
+                    submitPlayGamesIo(
+                        onRejected = {
+                            try {
+                                snapshotsClient.discardAndClose(snapshot)
+                            } catch (_: Exception) {
+                                // Ignore cleanup error
+                            }
+                        },
+                    ) {
+                        try {
+                            val bytes = snapshot.snapshotContents.readFully()
+                            snapshotsClient.discardAndClose(snapshot)
+                            if (bytes.isNotEmpty()) {
+                                val payloadJson = String(bytes, Charsets.UTF_8)
+                                lastKnownRemotePayloads[safeSlot] = payloadJson
+                                bridge.saveLocalCloudSnapshotOnly(slotKey, payloadJson)
+                                runOnActiveUiThread {
+                                    deliverCloudSnapshotToWebView(slotKey, payloadJson)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed reading Play Games snapshot '$safeSlot'", e)
+                            try {
+                                snapshotsClient.discardAndClose(snapshot)
+                            } catch (_: Exception) {
+                                // Ignore cleanup error
+                            }
+                            runOnActiveUiThread {
+                                deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_READ_FAILED")
+                            }
                         }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed reading Play Games snapshot '$safeSlot'", e)
-                        deliverCloudSnapshotErrorToWebView(slotKey, "PLAY_GAMES_SNAPSHOT_READ_FAILED")
                     }
                 }
             }.addOnFailureListener { err ->
@@ -1020,6 +1156,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         shareDecodeExecutor.shutdownNow()
+        playGamesIoExecutor.shutdownNow()
         webView?.destroy()
         webView = null
         super.onDestroy()
