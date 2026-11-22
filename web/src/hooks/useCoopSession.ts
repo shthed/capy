@@ -536,7 +536,9 @@ export async function hostCoopRoomAction(
       seedToken
     );
     if (joinSeq !== deps.coopJoinSeqRef.current) {
-      deps.realtimeRoom.leaveRoom();
+      if (deps.realtimeRoom.activeRoomCode === code) {
+        deps.realtimeRoom.leaveRoom();
+      }
       return null;
     }
     const activeCode = deps.realtimeRoom.activeRoomCode;
@@ -565,7 +567,9 @@ export async function joinCoopRoomAction(
       lastActiveAt: Date.now(),
     });
     if (joinSeq !== deps.coopJoinSeqRef.current) {
-      deps.realtimeRoom.leaveRoom();
+      if (deps.realtimeRoom.activeRoomCode === normalized) {
+        deps.realtimeRoom.leaveRoom();
+      }
       return false;
     }
     const activeCode = deps.realtimeRoom.activeRoomCode;
@@ -596,7 +600,8 @@ export async function handleIncomingShareUrlAction(
     realtimeRoom: Pick<
       RealtimeRoomProvider,
       'activeRoomCode' | 'joinRoom' | 'getParticipants'
-    >;
+    > &
+      Partial<Pick<RealtimeRoomProvider, 'leaveRoom'>>;
     auth: Pick<AuthProvider, 'getCurrentIdentity'>;
     coopJoinSeqRef: MutableRefObject<number>;
     onSetRoomState: (roomCode: string | null, participants: CoopParticipant[]) => void;
@@ -620,6 +625,8 @@ export async function handleIncomingShareUrlAction(
           deps.realtimeRoom.activeRoomCode,
           deps.realtimeRoom.getParticipants()
         );
+      } else if (deps.realtimeRoom.activeRoomCode === parsed.roomCode) {
+        deps.realtimeRoom.leaveRoom?.();
       }
     } catch (err) {
       reportSwallowed('useCoopSession.incomingShareLinkJoin', err, {

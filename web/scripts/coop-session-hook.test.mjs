@@ -595,6 +595,198 @@ export async function runCoopSessionHookTests(vite) {
   assert.equal(incomingLoaded[0].epoch, 2);
   assert.equal(incomingClearCalls[0], 'CAPY99');
 
+  // 7b. Stale coopJoinSeq race conditions must not clobber newer active rooms
+  {
+    const makeDeferredRaceRoom = () => {
+      let activeCode = null;
+      let peers = [];
+      let leaveCalls = 0;
+      const deferredByRoom = new Map();
+      return {
+        get activeRoomCode() {
+          return activeCode;
+        },
+        get leaveCalls() {
+          return leaveCalls;
+        },
+        deferRoom(code) {
+          let resolve;
+          let markStarted;
+          const promise = new Promise((r) => {
+            resolve = r;
+          });
+          const started = new Promise((r) => {
+            markStarted = r;
+          });
+          deferredByRoom.set(code, { promise, resolve, markStarted });
+          return { started, resolve: () => resolve() };
+        },
+        async joinRoom(roomCode, participant) {
+          const deferred = deferredByRoom.get(roomCode);
+          if (deferred) {
+            deferred.markStarted();
+            await deferred.promise;
+            // Only overwrite activeCode if no newer room is already attached, or simulate slow socket
+            if (activeCode === null) {
+              activeCode = roomCode;
+              peers = [participant];
+            }
+            return;
+          }
+          activeCode = roomCode;
+          peers = [participant];
+        },
+        leaveRoom() {
+          leaveCalls += 1;
+          activeCode = null;
+          peers = [];
+        },
+        getParticipants() {
+          return [...peers];
+        },
+      };
+    };
+
+    // 7b-i. Stale joinCoopRoomAction('ROOMAA') resolving AFTER joinCoopRoomAction('ROOMBB')
+    const raceRoom1 = makeDeferredRaceRoom();
+    const raceSeq1 = { current: 0 };
+    const raceStates1 = [];
+    const roomAADeferred = raceRoom1.deferRoom('ROOMAA');
+
+    const staleJoinPromise = joinCoopRoomAction('ROOMAA', {
+      realtimeRoom: raceRoom1,
+      auth,
+      coopJoinSeqRef: raceSeq1,
+      onSetRoomState: (code) => raceStates1.push(code),
+      hapticsEnabled: false,
+      haptic: () => {},
+    });
+    await roomAADeferred.started;
+    const newerJoinOk = await joinCoopRoomAction('ROOMBB', {
+      realtimeRoom: raceRoom1,
+      auth,
+      coopJoinSeqRef: raceSeq1,
+      onSetRoomState: (code) => raceStates1.push(code),
+      hapticsEnabled: false,
+      haptic: () => {},
+    });
+    assert.equal(newerJoinOk, true);
+    assert.equal(raceRoom1.activeRoomCode, 'ROOMBB');
+
+    roomAADeferred.resolve();
+    const staleJoinOk = await staleJoinPromise;
+    assert.equal(staleJoinOk, false);
+    assert.equal(
+      raceRoom1.activeRoomCode,
+      'ROOMBB',
+      'stale join resolution must not clobber newer active room ROOMBB'
+    );
+    assert.equal(
+      raceRoom1.leaveCalls,
+      0,
+      'stale join resolution must not call leaveRoom() when activeRoomCode is ROOMBB'
+    );
+    assert.deepEqual(raceStates1, ['ROOMBB']);
+
+    // 7b-ii. Stale joinCoopRoomAction('ROOMAA') that STILL holds activeRoomCode === 'ROOMAA' DOES clean up
+    let ownActiveCode = null;
+    let ownLeaveCalls = 0;
+    let resolveOwnJoin;
+    const ownJoinRoom = {
+      get activeRoomCode() {
+        return ownActiveCode;
+      },
+      async joinRoom(roomCode) {
+        await new Promise((r) => {
+          resolveOwnJoin = () => {
+            ownActiveCode = roomCode;
+            r();
+          };
+        });
+      },
+      leaveRoom() {
+        ownLeaveCalls += 1;
+        ownActiveCode = null;
+      },
+      getParticipants() {
+        return [];
+      },
+    };
+    const ownSeq = { current: 0 };
+    const ownStaleJoin = joinCoopRoomAction('ROOMAA', {
+      realtimeRoom: ownJoinRoom,
+      auth,
+      coopJoinSeqRef: ownSeq,
+      onSetRoomState: () => {},
+      hapticsEnabled: false,
+      haptic: () => {},
+    });
+    // Simulate user leaving/cancelling before ROOMAA finishes connecting
+    leaveCoopRoomAction({
+      realtimeRoom: ownJoinRoom,
+      coopJoinSeqRef: ownSeq,
+      onSetRoomState: () => {},
+      clearShareHash: () => {},
+    });
+    assert.equal(ownLeaveCalls, 1);
+    resolveOwnJoin();
+    assert.equal(await ownStaleJoin, false);
+    assert.equal(
+      ownLeaveCalls,
+      2,
+      'stale join holding its own activeRoomCode must clean up via leaveRoom()'
+    );
+    assert.equal(ownJoinRoom.activeRoomCode, null);
+
+    // 7b-iii. Stale hostCoopRoomAction('HOSTAA') resolving AFTER joinCoopRoomAction('ROOMBB')
+    const raceRoom2 = makeDeferredRaceRoom();
+    const raceSeq2 = { current: 0 };
+    const raceStates2 = [];
+    const hostAADeferred = raceRoom2.deferRoom('HOSTAA');
+
+    const staleHostPromise = hostCoopRoomAction({
+      realtimeRoom: raceRoom2,
+      auth,
+      coopJoinSeqRef: raceSeq2,
+      onSetRoomState: (code) => raceStates2.push(code),
+      hapticsEnabled: false,
+      haptic: () => {},
+      activeSourceRef: { kind: 'sample', uri: sample0.assetPath },
+      filledRegionIds: new Set([101]),
+      paintedRegionColors: new Map(),
+      isFreeColorMode: false,
+      resetEpoch: 1,
+      generateCode: () => 'HOSTAA',
+    });
+    await hostAADeferred.started;
+
+    const newerJoinOk2 = await joinCoopRoomAction('ROOMBB', {
+      realtimeRoom: raceRoom2,
+      auth,
+      coopJoinSeqRef: raceSeq2,
+      onSetRoomState: (code) => raceStates2.push(code),
+      hapticsEnabled: false,
+      haptic: () => {},
+    });
+    assert.equal(newerJoinOk2, true);
+    assert.equal(raceRoom2.activeRoomCode, 'ROOMBB');
+
+    hostAADeferred.resolve();
+    const staleHostCode = await staleHostPromise;
+    assert.equal(staleHostCode, null);
+    assert.equal(
+      raceRoom2.activeRoomCode,
+      'ROOMBB',
+      'stale host resolution must not clobber newer active room ROOMBB'
+    );
+    assert.equal(
+      raceRoom2.leaveCalls,
+      0,
+      'stale host resolution must not call leaveRoom() when activeRoomCode is ROOMBB'
+    );
+    assert.deepEqual(raceStates2, ['ROOMBB']);
+  }
+
   // buildCoopProgressDelta sanity
   const builtDelta = buildCoopProgressDelta({
     sourceRef: { kind: 'sample', uri: sample0.assetPath },
