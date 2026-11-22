@@ -1,4 +1,8 @@
-### 3.1.0 - 2026-11-22 (Production, Beta)
+### 3.1.1 - 2026-11-22 (Beta)
+
+- [#635](../../pull/635) Decompose `ProviderRegistry` into focused auth, cloud sync, Co-op, and catalog domain modules, enforce per-slot deletion tombstones and cross-account `signOut()` isolation, harden OAuth 401/One Tap validation, Drive 404 retry, and Co-op wire whitelisting, and instrument swallowed catches with `reportSwallowed`
+
+### 3.1.0 - 2026-11-22 (Production)
 
 - [#632](../../pull/632) Add a Browser Storage analyzer and targeted cleanup tool in Saves, automatically prune stale preview caches and slim down initial offline precaching, and compress oversized custom photo uploads to minimize browser storage usage
 - [#631](../../pull/631) Harden Content-Security-Policy and XSS defenses across Cloudflare `_headers`, Vite build-time `<meta>` CSP, standalone HTML pages, Worker API responses, OAuth/Feedback/Avatar URL validation, and Android WebView asset headers and `JSON.parse` bridge delivery
