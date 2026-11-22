@@ -272,7 +272,17 @@ class MainActivity : ComponentActivity() {
                     if (scheme != "https" || reqUrl.host?.lowercase() != CapyAndroidBridge.APP_ASSETS_HOST) {
                         return null
                     }
-                    return assetLoader.shouldInterceptRequest(reqUrl)
+                    val assetResponse = assetLoader.shouldInterceptRequest(reqUrl) ?: return null
+                    val mergedHeaders = LinkedHashMap<String, String>()
+                    assetResponse.responseHeaders?.let { mergedHeaders.putAll(it) }
+                    mergedHeaders.putAll(
+                        CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+                            mimeType = assetResponse.mimeType,
+                            path = reqUrl.path,
+                        ),
+                    )
+                    assetResponse.responseHeaders = mergedHeaders
+                    return assetResponse
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -611,11 +621,12 @@ class MainActivity : ComponentActivity() {
 
     private fun deliverPendingSharedImageIfNeeded() {
         val pendingJson = bridge.consumePendingSharedImage() ?: return
+        val escapedJson = CapyAndroidBridge.escapeJsString(pendingJson)
         evaluateOnTrustedPage(
             """
             (function() {
                 try {
-                    var payload = $pendingJson;
+                    var payload = JSON.parse("$escapedJson");
                     if (window.__capyReceiveSharedImage && payload && payload.dataUrl) {
                         window.__capyReceiveSharedImage(payload.title || "Shared Photo", payload.dataUrl);
                     }
@@ -724,12 +735,13 @@ class MainActivity : ComponentActivity() {
 
     private fun deliverCachedPlayGamesProfileIfNeeded() {
         val profileJson = bridge.loadCachedPlayGamesProfileJson() ?: return
+        val escapedJson = CapyAndroidBridge.escapeJsString(profileJson)
         evaluateOnTrustedPage(
             """
             (function() {
                 try {
                     if (window.__capyReceivePlayGamesProfile) {
-                        window.__capyReceivePlayGamesProfile($profileJson);
+                        window.__capyReceivePlayGamesProfile(JSON.parse("$escapedJson"));
                     }
                 } catch (e) {}
             })();

@@ -230,6 +230,24 @@ export function getWebOAuthRedirectUri(): string {
   return `${origin}${cleanPath}`;
 }
 
+export function isSafeOAuthAuthorizeUrl(rawUrl: string): boolean {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || /[\s\u0000-\u001F\u007F]/.test(trimmed)) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return (
+      parsed.protocol.toLowerCase() === 'https:' &&
+      parsed.hostname.length > 0 &&
+      parsed.username === '' &&
+      parsed.password === '' &&
+      (parsed.port === '' || parsed.port === '443')
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Launches either the Android external-browser PKCE flow (returning via `capypaint://oauth/callback`
  * -> `window.__capyReceiveOAuthCallback`) or a Web OAuth popup window, validating CSRF `state`
@@ -240,6 +258,9 @@ export function awaitOAuthCallback(
 ): Promise<{ code: string; state: string }> {
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('OAUTH_WINDOW_UNAVAILABLE'));
+  }
+  if (!isSafeOAuthAuthorizeUrl(options.authorizeUrl)) {
+    return Promise.reject(new Error('OAUTH_UNSAFE_AUTHORIZE_URL'));
   }
 
   const timeoutMs = options.timeoutMs ?? 120_000;
@@ -320,6 +341,7 @@ export function awaitOAuthCallback(
 
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
+      if (popup && event.source !== popup) return;
       const data = event.data as { type?: string; url?: string } | null;
       if (!data || data.type !== POPUP_CALLBACK_MESSAGE_TYPE || typeof data.url !== 'string') {
         return;

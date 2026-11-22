@@ -2,6 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'sha256-+fc8nU2DbWoucS0E2v83eh2wgyLqmonNFOFASmj8h20='; script-src-attr 'none'; style-src 'unsafe-inline'; connect-src 'self' https://api.github.com; base-uri 'self'; form-action 'none'; object-src 'none';"
+  />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Capy Paint — Open PR Previews</title>
   <style>
@@ -144,7 +148,8 @@
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
-      var missing = params.get('missing');
+      var rawMissing = params.get('missing');
+      var missing = rawMissing ? rawMissing.trim().replace(/[^A-Za-z0-9._-]/g, '').slice(0, 32) : '';
       var banner = document.getElementById('missing-banner');
       if (missing && banner) {
         banner.style.display = 'block';
@@ -153,6 +158,16 @@
 
       var statusEl = document.getElementById('status');
       var listEl = document.getElementById('pr-list');
+
+      function resolveSafePreviewPath(pr) {
+        var num = pr && typeof pr.number === 'number' && Number.isInteger(pr.number) && pr.number > 0
+          ? pr.number
+          : null;
+        if (pr && typeof pr.path === 'string' && /^\/capy\/alpha\/\d+\/$/.test(pr.path)) {
+          return pr.path;
+        }
+        return num !== null ? '/capy/alpha/' + num + '/' : null;
+      }
 
       function deriveRepoSlug() {
         var host = window.location.hostname || '';
@@ -169,7 +184,10 @@
         while (listEl.firstChild) {
           listEl.removeChild(listEl.firstChild);
         }
-        if (!prs || prs.length === 0) {
+        var safePrs = Array.isArray(prs)
+          ? prs.filter(function (pr) { return resolveSafePreviewPath(pr) !== null; })
+          : [];
+        if (safePrs.length === 0) {
           var empty = document.createElement('div');
           empty.className = 'empty';
           empty.textContent = 'No open PR previews are currently deployed.';
@@ -177,7 +195,10 @@
           return;
         }
 
-        prs.forEach(function (pr) {
+        safePrs.forEach(function (pr) {
+          var safePath = resolveSafePreviewPath(pr);
+          if (!safePath) return;
+
           var card = document.createElement('article');
           card.className = 'item';
 
@@ -201,14 +222,14 @@
 
           var webLink = document.createElement('a');
           webLink.className = 'btn primary';
-          webLink.href = pr.path || ('/capy/alpha/' + pr.number + '/');
+          webLink.href = safePath;
           webLink.textContent = 'Open Web Preview';
           actions.appendChild(webLink);
 
           if (pr.hasApk) {
             var apkLink = document.createElement('a');
             apkLink.className = 'btn';
-            apkLink.href = (pr.path || ('/capy/alpha/' + pr.number + '/')) + 'capy.apk';
+            apkLink.href = safePath + 'capy.apk';
             apkLink.textContent = 'Download APK';
             actions.appendChild(apkLink);
           }
