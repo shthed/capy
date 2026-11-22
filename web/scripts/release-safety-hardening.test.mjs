@@ -694,7 +694,13 @@ export async function runReleaseSafetyHardeningTests(vite) {
       // Avatar URL sanitization in ID token decoding
       const mkJwt = (payload) => {
         const hdr = Buffer.from(JSON.stringify({ alg: 'RS256' })).toString('base64url');
-        const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+        const body = Buffer.from(
+          JSON.stringify({
+            iss: 'https://accounts.google.com',
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            ...payload,
+          })
+        ).toString('base64url');
         return `${hdr}.${body}.sig`;
       };
       const badPicProfile = gClient.decodeGoogleIdTokenPayload(

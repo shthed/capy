@@ -30,6 +30,8 @@ export const MICROSOFT_TOKEN_STORAGE_KEY = 'capy_microsoft_oauth_token_v1';
 export const IDENTITY_STORAGE_KEY = 'capy_player_identity_v1';
 export const CLOUD_VAULT_STORAGE_KEY = 'capy_cloud_vault_v1';
 export const CLOUD_MANIFEST_STORAGE_KEY = 'capy_cloud_library_manifest_v2';
+export const CLOUD_TOMBSTONES_STORAGE_KEY = 'capy_cloud_tombstones_v1';
+export const TAB_SESSION_SUFFIX_KEY = 'capy_tab_peer_suffix_v1';
 export const COMMUNITY_IDEAS_STORAGE_KEY = 'capy_community_ideas_v1';
 export const AI_CREDITS_STORAGE_KEY = 'capy_ai_credits_v1';
 
@@ -55,6 +57,7 @@ export const STORAGE_KEYS = {
   PLAYER_IDENTITY: IDENTITY_STORAGE_KEY,
   CLOUD_VAULT: CLOUD_VAULT_STORAGE_KEY,
   CLOUD_MANIFEST: CLOUD_MANIFEST_STORAGE_KEY,
+  CLOUD_TOMBSTONES: CLOUD_TOMBSTONES_STORAGE_KEY,
   COMMUNITY_IDEAS: COMMUNITY_IDEAS_STORAGE_KEY,
   AI_CREDITS: AI_CREDITS_STORAGE_KEY,
 } as const;

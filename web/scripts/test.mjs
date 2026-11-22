@@ -22,6 +22,7 @@ import {
 import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
 import { runStorageGatewayTests } from './storage-gateway.test.mjs';
 import { runStorageAnalyzerTests } from './storage-analyzer.test.mjs';
+import { runProviderDomainHardeningTests } from './provider-domain-hardening.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -13067,7 +13068,8 @@ async function runCodecAndEngineTests() {
     await runReleaseSafetyHardeningTests(vite);
     await runStorageGatewayTests(vite);
     await runStorageAnalyzerTests(vite);
-    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer & M1 release safety hardening verified.');
+    await runProviderDomainHardeningTests(vite);
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening & M1 release safety hardening verified.');
 
     // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
     // createAutoCloudSyncScheduler & Cross-Provider CRDT Merge Parity

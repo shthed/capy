@@ -184,8 +184,11 @@ export class StorageService {
     return togglePinSnapshot(id);
   }
 
-  static deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
-    return deleteSnapshot(id);
+  static deleteSnapshot(
+    id: string,
+    options?: { skipTombstone?: boolean; tombstoneAt?: number }
+  ): Promise<SavedSnapshot[]> {
+    return deleteSnapshot(id, options);
   }
 
   static clearAllSnapshots(): Promise<void> {

@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ProviderContextProvider } from './context/ProviderContext';
 import { StorageService, isDebugStorageExposed } from './services/StorageService';
 import { PwaService } from './services/PwaService';
 import { resolveScopedStorageKey } from './services/StorageNamespace';
@@ -50,8 +51,10 @@ if (typeof window !== 'undefined') {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary onReset={clearDebugCrashQueryParam}>
-      <DebugCrashGate />
-      <App />
+      <ProviderContextProvider>
+        <DebugCrashGate />
+        <App />
+      </ProviderContextProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

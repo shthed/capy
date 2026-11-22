@@ -1,12 +1,14 @@
 import { base64ToUint8, uint8ToBase64 } from '../CapyCodec';
 import { NativeBridge } from '../NativeBridge';
 import { isCloudCoopUiEnabled } from '../StorageNamespace';
+import { reportSwallowed } from '../telemetry';
 import {
   attemptSilentOrOneTapGoogleSignIn,
   clearCachedGoogleSession,
   getAllowedMockGoogleOAuthToken,
   getConfiguredGoogleClientId,
   GoogleDriveAppDataClient,
+  GoogleDriveHttpError,
   isExplicitlySignedOut,
   isValidGoogleDriveFileId,
   loadCachedGoogleSession,
@@ -44,6 +46,26 @@ import {
 export const CLOUD_MANIFEST_FILE_NAME = 'capy_cloud_manifest_v2.json';
 export const CLOUD_MANIFEST_SLOT_KEY = 'capy_cloud_manifest_v2';
 
+export class KeyedWriteQueue {
+  private readonly locks = new Map<string, Promise<unknown>>();
+
+  enqueue<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(lockKey) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(task);
+    const tracked = next.catch(() => undefined).finally(() => {
+      if (this.locks.get(lockKey) === tracked) {
+        this.locks.delete(lockKey);
+      }
+    });
+    this.locks.set(lockKey, tracked);
+    return next;
+  }
+
+  clear(): void {
+    this.locks.clear();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 1. Google Cloud Driver (Google OAuth 2.0 + Google Drive appDataFolder REST API)
 // ---------------------------------------------------------------------------
@@ -53,18 +75,20 @@ export class GoogleCloudDriver implements CloudProviderDriver {
   private cachedManifestFileId: string | undefined;
   private cachedSlotFileIds = new Map<string, string>();
   private cachedBlobFileIds = new Map<string, string>();
-  private writeLocks = new Map<string, Promise<unknown>>();
+  private readonly writeQueue = new KeyedWriteQueue();
 
-  private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
-    const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(task);
-    const tracked = next.catch(() => undefined).finally(() => {
-      if (this.writeLocks.get(lockKey) === tracked) {
-        this.writeLocks.delete(lockKey);
-      }
-    });
-    this.writeLocks.set(lockKey, tracked);
-    return next;
+  private isNotFoundError(err: unknown): boolean {
+    return (
+      (err instanceof GoogleDriveHttpError && err.status === 404) ||
+      /\(404\)/.test(String(err))
+    );
+  }
+
+  clearFileIdCaches(): void {
+    this.cachedManifestFileId = undefined;
+    this.cachedSlotFileIds.clear();
+    this.cachedBlobFileIds.clear();
+    this.writeQueue.clear();
   }
 
   getDescriptor(): CloudProviderDescriptor {
@@ -85,7 +109,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
 
   restoreSession(): Partial<PlayerIdentity> | null {
     const session = loadCachedGoogleSession();
-    if (!session) return null;
+    if (!session || !session.accessToken?.trim()) return null;
     return {
       playerId: `google_${session.sub}`,
       displayName: session.displayName,
@@ -100,7 +124,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
     if (isExplicitlySignedOut()) return null;
     const clientId = getConfiguredGoogleClientId();
     const session = await attemptSilentOrOneTapGoogleSignIn(clientId);
-    if (!session) return null;
+    if (!session || !session.accessToken?.trim()) return null;
     return {
       playerId: `google_${session.sub}`,
       displayName: session.displayName.slice(0, 32),
@@ -134,10 +158,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
   }
 
   async signOut(): Promise<void> {
-    this.cachedManifestFileId = undefined;
-    this.cachedSlotFileIds.clear();
-    this.cachedBlobFileIds.clear();
-    this.writeLocks.clear();
+    this.clearFileIdCaches();
     setExplicitlySignedOut(true);
     clearCachedGoogleSession();
   }
@@ -149,16 +170,23 @@ export class GoogleCloudDriver implements CloudProviderDriver {
       session.accessToken,
       CLOUD_MANIFEST_FILE_NAME
     );
-    if (!fileMeta?.id) return null;
+    if (!fileMeta?.id) {
+      this.cachedManifestFileId = undefined;
+      return null;
+    }
     this.cachedManifestFileId = fileMeta.id;
-    return GoogleDriveAppDataClient.downloadJsonFile<CloudLibraryManifestV2>(
+    const manifest = await GoogleDriveAppDataClient.downloadJsonFile<CloudLibraryManifestV2>(
       session.accessToken,
       fileMeta.id
     );
+    if (manifest === null) {
+      this.cachedManifestFileId = undefined;
+    }
+    return manifest;
   }
 
   async writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean> {
-    return this.enqueueWrite(`manifest:${CLOUD_MANIFEST_FILE_NAME}`, async () => {
+    return this.writeQueue.enqueue(`manifest:${CLOUD_MANIFEST_FILE_NAME}`, async () => {
       const session = loadCachedGoogleSession();
       if (!session?.accessToken) return false;
       if (!this.cachedManifestFileId) {
@@ -168,14 +196,35 @@ export class GoogleCloudDriver implements CloudProviderDriver {
         );
         this.cachedManifestFileId = existing?.id;
       }
-      const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
-        session.accessToken,
-        CLOUD_MANIFEST_FILE_NAME,
-        { ...manifest, providerId: 'google' },
-        this.cachedManifestFileId
-      );
-      this.cachedManifestFileId = uploaded.id;
-      return true;
+      const payload = { ...manifest, providerId: 'google' as const };
+      try {
+        const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
+          session.accessToken,
+          CLOUD_MANIFEST_FILE_NAME,
+          payload,
+          this.cachedManifestFileId
+        );
+        this.cachedManifestFileId = uploaded.id;
+        return true;
+      } catch (err) {
+        if (!this.cachedManifestFileId || !this.isNotFoundError(err)) {
+          throw err;
+        }
+        reportSwallowed('GoogleCloudDriver.writeManifest404Retry', err);
+        this.cachedManifestFileId = undefined;
+        const refreshed = await GoogleDriveAppDataClient.findFileByName(
+          session.accessToken,
+          CLOUD_MANIFEST_FILE_NAME
+        );
+        const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
+          session.accessToken,
+          CLOUD_MANIFEST_FILE_NAME,
+          payload,
+          refreshed?.id
+        );
+        this.cachedManifestFileId = uploaded.id;
+        return true;
+      }
     });
   }
 
@@ -187,17 +236,24 @@ export class GoogleCloudDriver implements CloudProviderDriver {
       session.accessToken,
       fileName
     );
-    if (!fileMeta?.id) return null;
+    if (!fileMeta?.id) {
+      this.cachedSlotFileIds.delete(fileName);
+      return null;
+    }
     this.cachedSlotFileIds.set(fileName, fileMeta.id);
-    return GoogleDriveAppDataClient.downloadJsonFile<CloudSaveEnvelope>(
+    const envelope = await GoogleDriveAppDataClient.downloadJsonFile<CloudSaveEnvelope>(
       session.accessToken,
       fileMeta.id
     );
+    if (envelope === null) {
+      this.cachedSlotFileIds.delete(fileName);
+    }
+    return envelope;
   }
 
   async writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean> {
     const fileName = `capy_slot_${envelope.slotKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
-    return this.enqueueWrite(`slot:${fileName}`, async () => {
+    return this.writeQueue.enqueue(`slot:${fileName}`, async () => {
       const session = loadCachedGoogleSession();
       if (!session?.accessToken) return false;
       let existingFileId = this.cachedSlotFileIds.get(fileName);
@@ -211,16 +267,38 @@ export class GoogleCloudDriver implements CloudProviderDriver {
           this.cachedSlotFileIds.set(fileName, existingFileId);
         }
       }
-      const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
-        session.accessToken,
-        fileName,
-        envelope,
-        existingFileId
-      );
-      if (uploaded?.id) {
-        this.cachedSlotFileIds.set(fileName, uploaded.id);
+      try {
+        const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
+          session.accessToken,
+          fileName,
+          envelope,
+          existingFileId
+        );
+        if (uploaded?.id) {
+          this.cachedSlotFileIds.set(fileName, uploaded.id);
+        }
+        return true;
+      } catch (err) {
+        if (!existingFileId || !this.isNotFoundError(err)) {
+          throw err;
+        }
+        reportSwallowed('GoogleCloudDriver.writeSlotEnvelope404Retry', err, { fileName });
+        this.cachedSlotFileIds.delete(fileName);
+        const refreshed = await GoogleDriveAppDataClient.findFileByName(
+          session.accessToken,
+          fileName
+        );
+        const uploaded = await GoogleDriveAppDataClient.uploadJsonFile(
+          session.accessToken,
+          fileName,
+          envelope,
+          refreshed?.id
+        );
+        if (uploaded?.id) {
+          this.cachedSlotFileIds.set(fileName, uploaded.id);
+        }
+        return true;
       }
-      return true;
     });
   }
 
@@ -238,7 +316,7 @@ export class GoogleCloudDriver implements CloudProviderDriver {
     fileName: string,
     bytes: Uint8Array
   ): Promise<string | null> {
-    return this.enqueueWrite(`blob:${fileName}`, async () => {
+    return this.writeQueue.enqueue(`blob:${fileName}`, async () => {
       const session = loadCachedGoogleSession();
       if (!session?.accessToken) return null;
       let existingFileId = this.cachedBlobFileIds.get(fileName);
@@ -252,16 +330,38 @@ export class GoogleCloudDriver implements CloudProviderDriver {
           this.cachedBlobFileIds.set(fileName, existingFileId);
         }
       }
-      const uploaded = await GoogleDriveAppDataClient.uploadBinaryFile(
-        session.accessToken,
-        fileName,
-        bytes,
-        existingFileId
-      );
-      if (uploaded?.id) {
-        this.cachedBlobFileIds.set(fileName, uploaded.id);
+      try {
+        const uploaded = await GoogleDriveAppDataClient.uploadBinaryFile(
+          session.accessToken,
+          fileName,
+          bytes,
+          existingFileId
+        );
+        if (uploaded?.id) {
+          this.cachedBlobFileIds.set(fileName, uploaded.id);
+        }
+        return uploaded.id;
+      } catch (err) {
+        if (!existingFileId || !this.isNotFoundError(err)) {
+          throw err;
+        }
+        reportSwallowed('GoogleCloudDriver.writeBinaryBlob404Retry', err, { fileName });
+        this.cachedBlobFileIds.delete(fileName);
+        const refreshed = await GoogleDriveAppDataClient.findFileByName(
+          session.accessToken,
+          fileName
+        );
+        const uploaded = await GoogleDriveAppDataClient.uploadBinaryFile(
+          session.accessToken,
+          fileName,
+          bytes,
+          refreshed?.id
+        );
+        if (uploaded?.id) {
+          this.cachedBlobFileIds.set(fileName, uploaded.id);
+        }
+        return uploaded.id;
       }
-      return uploaded.id;
     });
   }
 }
@@ -379,7 +479,8 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
       let immediate: { playerId: string; displayName: string } | null = null;
       try {
         immediate = NativeBridge.signInPlayGames();
-      } catch {
+      } catch (err) {
+        reportSwallowed('PlayGamesAndroidDriver.attemptAutoSignIn', err);
         immediate = null;
       }
       if (settled) {
@@ -460,7 +561,8 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
       let immediate: { playerId: string; displayName: string } | null = null;
       try {
         immediate = NativeBridge.signInPlayGames();
-      } catch {
+      } catch (err) {
+        reportSwallowed('PlayGamesAndroidDriver.signIn', err);
         immediate = null;
       }
       if (settled) {
@@ -514,7 +616,8 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
         return parsed;
       }
       return null;
-    } catch {
+    } catch (err) {
+      reportSwallowed('PlayGamesAndroidDriver.readManifestParse', err);
       return null;
     }
   }
@@ -540,7 +643,8 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
         return parsed;
       }
       return null;
-    } catch {
+    } catch (err) {
+      reportSwallowed('PlayGamesAndroidDriver.readSlotEnvelopeParse', err, { slotKey });
       return null;
     }
   }
@@ -550,191 +654,27 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
   }
 
   async readBinaryBlob(blobRef: string): Promise<Uint8Array | null> {
-    if (!blobRef || typeof blobRef !== 'string') return null;
-    const match = /^pgblob:([a-zA-Z0-9._-]+):(\d+):(\d+)$/.exec(blobRef.trim());
-    if (!match) return null;
+    const parsed = parsePlayGamesBlobRef(blobRef);
+    if (!parsed) return null;
 
-    const safeBlobKey = match[1];
-    if (
-      !safeBlobKey.startsWith('pgblob_') ||
-      safeBlobKey.length <= 'pgblob_'.length ||
-      safeBlobKey === '.' ||
-      safeBlobKey === '..' ||
-      safeBlobKey.includes('..')
-    ) {
-      return null;
-    }
-    const totalChunks = Number(match[2]);
-    const expectedBytes = Number(match[3]);
-    if (
-      !Number.isInteger(totalChunks) ||
-      totalChunks < 1 ||
-      totalChunks > MAX_PLAY_GAMES_BINARY_CHUNKS ||
-      !Number.isInteger(expectedBytes) ||
-      expectedBytes < 1 ||
-      expectedBytes > MAX_PLAY_GAMES_BINARY_BYTES
-    ) {
-      return null;
-    }
-
-    const chunkPayloads = new Array<string | null>(totalChunks).fill(null);
-    const missingIndices: number[] = [];
-    for (let i = 0; i < totalChunks; i++) {
-      const localChunk = NativeBridge.loadCloudBinaryChunk(safeBlobKey, i);
-      if (localChunk) {
-        chunkPayloads[i] = localChunk;
-      } else {
-        missingIndices.push(i);
-      }
-    }
+    const { safeBlobKey, totalChunks, expectedBytes } = parsed;
+    const chunkPayloads: Array<string | null> = Array.from({ length: totalChunks }, () => null);
+    const allIndices = Array.from({ length: totalChunks }, (_, i) => i);
+    const missingIndices = fillChunksFromLocalDisk(safeBlobKey, allIndices, chunkPayloads);
 
     if (missingIndices.length > 0) {
-      const slotToIdx = new Map<string, number>();
-      const remainingMissing = new Set<number>(missingIndices);
-      for (const idx of missingIndices) {
-        slotToIdx.set(`${safeBlobKey}_part_${idx}`, idx);
-      }
-
-      NativeBridge.clearAbortedCloudPulls(slotToIdx.keys());
-      const pendingPullSlots = new Set<string>();
-
-      const pulledOk = await new Promise<boolean>((resolve) => {
-        let settled = false;
-        let timer: ReturnType<typeof setTimeout> | null = null;
-        let unsubSnap: () => void = () => {};
-        let unsubErr: () => void = () => {};
-        const cleanup = () => {
-          if (timer !== null) {
-            clearTimeout(timer);
-            timer = null;
-          }
-          unsubSnap();
-          unsubErr();
-        };
-        const finish = (ok: boolean) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          if (pendingPullSlots.size > 0) {
-            NativeBridge.discardAbortedCloudPulls(pendingPullSlots);
-            pendingPullSlots.clear();
-          }
-          resolve(ok);
-        };
-
-        unsubSnap = NativeBridge.onCloudSnapshot(
-          (slot, payload) => {
-            if (settled) return false;
-            const idx = slotToIdx.get(slot);
-            if (idx === undefined) return false;
-            pendingPullSlots.delete(slot);
-            if (!payload) {
-              finish(false);
-              return true;
-            }
-            chunkPayloads[idx] = payload;
-            remainingMissing.delete(idx);
-            if (remainingMissing.size === 0) {
-              finish(true);
-            }
-            return true;
-          },
-          { slotFilter: (slot) => slotToIdx.has(slot) }
-        );
-        if (settled) {
-          unsubSnap();
-          cleanup();
-          return;
-        }
-
-        unsubErr = NativeBridge.onCloudSnapshotError(
-          (slot) => {
-            if (settled) return false;
-            if (!slotToIdx.has(slot)) return false;
-            pendingPullSlots.delete(slot);
-            finish(false);
-            return true;
-          },
-          { slotFilter: (slot) => slotToIdx.has(slot), once: true }
-        );
-        if (settled) {
-          unsubErr();
-          cleanup();
-          return;
-        }
-
-        for (const idx of [...remainingMissing]) {
-          if (settled) break;
-          if (!remainingMissing.has(idx)) continue;
-          const partSlot = `${safeBlobKey}_part_${idx}`;
-          pendingPullSlots.add(partSlot);
-          let pullStarted = false;
-          try {
-            pullStarted = NativeBridge.requestCloudSnapshotPull(partSlot);
-          } catch {
-            pullStarted = false;
-          }
-          if (settled) break;
-          if (!pullStarted) {
-            pendingPullSlots.delete(partSlot);
-            const diskFallback = NativeBridge.loadCloudBinaryChunk(safeBlobKey, idx);
-            if (diskFallback) {
-              chunkPayloads[idx] = diskFallback;
-              remainingMissing.delete(idx);
-            } else {
-              finish(false);
-              break;
-            }
-          }
-        }
-
-        if (settled) {
-          cleanup();
-          return;
-        }
-        if (remainingMissing.size === 0) {
-          finish(true);
-          return;
-        }
-
-        timer = setTimeout(() => {
-          for (const idx of [...remainingMissing]) {
-            const diskFallback = NativeBridge.loadCloudBinaryChunk(safeBlobKey, idx);
-            if (diskFallback) {
-              chunkPayloads[idx] = diskFallback;
-              remainingMissing.delete(idx);
-            }
-          }
-          finish(remainingMissing.size === 0);
-        }, 1500);
-      });
-
+      const pulledOk = await pullMissingPlayGamesChunks(
+        safeBlobKey,
+        missingIndices,
+        chunkPayloads,
+        PLAY_GAMES_CHUNK_PULL_TIMEOUT_MS
+      );
       if (!pulledOk) {
         return null;
       }
     }
 
-    const assembled = new Uint8Array(expectedBytes);
-    let writeOffset = 0;
-
-    for (let i = 0; i < totalChunks; i++) {
-      const chunkB64 = chunkPayloads[i];
-      if (!chunkB64) return null;
-
-      let partBytes: Uint8Array;
-      try {
-        partBytes = base64ToUint8(chunkB64);
-      } catch {
-        return null;
-      }
-      if (partBytes.byteLength === 0 || writeOffset + partBytes.byteLength > expectedBytes) {
-        return null;
-      }
-      assembled.set(partBytes, writeOffset);
-      writeOffset += partBytes.byteLength;
-    }
-
-    return writeOffset === expectedBytes ? assembled : null;
+    return assembleBase64Chunks(chunkPayloads, expectedBytes, safeBlobKey);
   }
 
   async writeBinaryBlob(
@@ -756,26 +696,18 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
     }
     const cleanSlot = trimmedSlot.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64) || 'custom_save';
     const safeBlobKey = `pgblob_${cleanSlot}`;
-    if (
-      cleanSlot === '.' ||
-      cleanSlot === '..' ||
-      cleanSlot.includes('..') ||
-      safeBlobKey === '.' ||
-      safeBlobKey === '..' ||
-      safeBlobKey.includes('..')
-    ) {
+    if (!isSafePlayGamesBlobKey(safeBlobKey)) {
       return null;
     }
-    const totalChunks = Math.ceil(bytes.byteLength / PLAY_GAMES_BINARY_CHUNK_BYTES);
+
+    const chunks = sliceBytesToBase64Chunks(bytes, PLAY_GAMES_BINARY_CHUNK_BYTES);
+    const totalChunks = chunks.length;
     if (totalChunks < 1 || totalChunks > MAX_PLAY_GAMES_BINARY_CHUNKS) {
       return null;
     }
 
     for (let i = 0; i < totalChunks; i++) {
-      const start = i * PLAY_GAMES_BINARY_CHUNK_BYTES;
-      const end = Math.min(bytes.byteLength, start + PLAY_GAMES_BINARY_CHUNK_BYTES);
-      const chunkB64 = uint8ToBase64(bytes.subarray(start, end));
-      const saved = NativeBridge.saveCloudBinaryChunk(safeBlobKey, i, totalChunks, chunkB64);
+      const saved = NativeBridge.saveCloudBinaryChunk(safeBlobKey, i, totalChunks, chunks[i]);
       if (!saved) {
         return null;
       }
@@ -788,6 +720,233 @@ export class PlayGamesAndroidDriver implements CloudProviderDriver {
 export const PLAY_GAMES_BINARY_CHUNK_BYTES = 180_000;
 export const MAX_PLAY_GAMES_BINARY_BYTES = 3 * 1024 * 1024;
 export const MAX_PLAY_GAMES_BINARY_CHUNKS = 32;
+export const PLAY_GAMES_CHUNK_PULL_TIMEOUT_MS = 10_000;
+
+export function isSafePlayGamesBlobKey(key: string): boolean {
+  if (typeof key !== 'string') return false;
+  if (!key.startsWith('pgblob_') || key.length <= 'pgblob_'.length) return false;
+  if (key === '.' || key === '..' || key.includes('..')) return false;
+  return /^[a-zA-Z0-9._-]+$/.test(key);
+}
+
+export function parsePlayGamesBlobRef(
+  blobRef: string
+): { safeBlobKey: string; totalChunks: number; expectedBytes: number } | null {
+  if (!blobRef || typeof blobRef !== 'string') return null;
+  const match = /^pgblob:([a-zA-Z0-9._-]+):(\d+):(\d+)$/.exec(blobRef.trim());
+  if (!match) return null;
+
+  const safeBlobKey = match[1];
+  if (!isSafePlayGamesBlobKey(safeBlobKey)) return null;
+
+  const totalChunks = Number(match[2]);
+  const expectedBytes = Number(match[3]);
+  if (
+    !Number.isInteger(totalChunks) ||
+    totalChunks < 1 ||
+    totalChunks > MAX_PLAY_GAMES_BINARY_CHUNKS ||
+    !Number.isInteger(expectedBytes) ||
+    expectedBytes < 1 ||
+    expectedBytes > MAX_PLAY_GAMES_BINARY_BYTES
+  ) {
+    return null;
+  }
+
+  return { safeBlobKey, totalChunks, expectedBytes };
+}
+
+export function sliceBytesToBase64Chunks(
+  bytes: Uint8Array,
+  chunkBytes: number = PLAY_GAMES_BINARY_CHUNK_BYTES
+): string[] {
+  if (!bytes || bytes.byteLength === 0 || chunkBytes <= 0) return [];
+  const totalChunks = Math.ceil(bytes.byteLength / chunkBytes);
+  const chunks: string[] = [];
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * chunkBytes;
+    const end = Math.min(bytes.byteLength, start + chunkBytes);
+    chunks.push(uint8ToBase64(bytes.subarray(start, end)));
+  }
+  return chunks;
+}
+
+export function fillChunksFromLocalDisk(
+  safeBlobKey: string,
+  indices: Iterable<number>,
+  chunkPayloads: Array<string | null>
+): number[] {
+  const stillMissing: number[] = [];
+  for (const idx of indices) {
+    const localChunk = NativeBridge.loadCloudBinaryChunk(safeBlobKey, idx);
+    if (localChunk) {
+      chunkPayloads[idx] = localChunk;
+    } else {
+      stillMissing.push(idx);
+    }
+  }
+  return stillMissing;
+}
+
+export function pullMissingPlayGamesChunks(
+  safeBlobKey: string,
+  missingIndices: number[],
+  chunkPayloads: Array<string | null>,
+  timeoutMs: number = PLAY_GAMES_CHUNK_PULL_TIMEOUT_MS
+): Promise<boolean> {
+  const slotToIdx = new Map<string, number>();
+  const remainingMissing = new Set<number>(missingIndices);
+  for (const idx of missingIndices) {
+    slotToIdx.set(`${safeBlobKey}_part_${idx}`, idx);
+  }
+
+  NativeBridge.clearAbortedCloudPulls(slotToIdx.keys());
+  const pendingPullSlots = new Set<string>();
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let unsubSnap: () => void = () => {};
+    let unsubErr: () => void = () => {};
+    const cleanup = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      unsubSnap();
+      unsubErr();
+    };
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (pendingPullSlots.size > 0) {
+        NativeBridge.discardAbortedCloudPulls(pendingPullSlots);
+        pendingPullSlots.clear();
+      }
+      resolve(ok);
+    };
+
+    unsubSnap = NativeBridge.onCloudSnapshot(
+      (slot, payload) => {
+        if (settled) return false;
+        const idx = slotToIdx.get(slot);
+        if (idx === undefined) return false;
+        pendingPullSlots.delete(slot);
+        if (!payload) {
+          finish(false);
+          return true;
+        }
+        chunkPayloads[idx] = payload;
+        remainingMissing.delete(idx);
+        if (remainingMissing.size === 0) {
+          finish(true);
+        }
+        return true;
+      },
+      { slotFilter: (slot) => slotToIdx.has(slot) }
+    );
+    if (settled) {
+      unsubSnap();
+      cleanup();
+      return;
+    }
+
+    unsubErr = NativeBridge.onCloudSnapshotError(
+      (slot) => {
+        if (settled) return false;
+        if (!slotToIdx.has(slot)) return false;
+        pendingPullSlots.delete(slot);
+        finish(false);
+        return true;
+      },
+      { slotFilter: (slot) => slotToIdx.has(slot), once: true }
+    );
+    if (settled) {
+      unsubErr();
+      cleanup();
+      return;
+    }
+
+    const initialMissing = Array.from(remainingMissing);
+    for (const idx of initialMissing) {
+      if (settled) break;
+      if (!remainingMissing.has(idx)) continue;
+      const partSlot = `${safeBlobKey}_part_${idx}`;
+      pendingPullSlots.add(partSlot);
+      let pullStarted = false;
+      try {
+        pullStarted = NativeBridge.requestCloudSnapshotPull(partSlot);
+      } catch (err) {
+        reportSwallowed('PlayGamesAndroidDriver.requestChunkPull', err, { partSlot });
+        pullStarted = false;
+      }
+      if (settled) break;
+      if (!pullStarted) {
+        pendingPullSlots.delete(partSlot);
+        const stillMissing = fillChunksFromLocalDisk(safeBlobKey, [idx], chunkPayloads);
+        if (stillMissing.length === 0) {
+          remainingMissing.delete(idx);
+        } else {
+          finish(false);
+          break;
+        }
+      }
+    }
+
+    if (settled) {
+      cleanup();
+      return;
+    }
+    if (remainingMissing.size === 0) {
+      finish(true);
+      return;
+    }
+
+    timer = setTimeout(() => {
+      const pendingIndices = Array.from(remainingMissing);
+      const stillMissing = fillChunksFromLocalDisk(safeBlobKey, pendingIndices, chunkPayloads);
+      const stillMissingSet = new Set(stillMissing);
+      for (const idx of pendingIndices) {
+        if (!stillMissingSet.has(idx)) {
+          remainingMissing.delete(idx);
+        }
+      }
+      finish(remainingMissing.size === 0);
+    }, timeoutMs);
+  });
+}
+
+export function assembleBase64Chunks(
+  chunkPayloads: Array<string | null>,
+  expectedBytes: number,
+  safeBlobKey: string
+): Uint8Array | null {
+  const assembled = new Uint8Array(expectedBytes);
+  let writeOffset = 0;
+
+  for (let i = 0; i < chunkPayloads.length; i++) {
+    const chunkB64 = chunkPayloads[i];
+    if (!chunkB64) return null;
+
+    let partBytes: Uint8Array;
+    try {
+      partBytes = base64ToUint8(chunkB64);
+    } catch (err) {
+      reportSwallowed('PlayGamesAndroidDriver.decodeChunkBase64', err, {
+        safeBlobKey,
+        chunkIndex: i,
+      });
+      return null;
+    }
+    if (partBytes.byteLength === 0 || writeOffset + partBytes.byteLength > expectedBytes) {
+      return null;
+    }
+    assembled.set(partBytes, writeOffset);
+    writeOffset += partBytes.byteLength;
+  }
+
+  return writeOffset === expectedBytes ? assembled : null;
+}
 
 // ---------------------------------------------------------------------------
 // 3. Extensible Future Platform Drivers (Steam, Microsoft/Xbox, Apple/iCloud)
@@ -856,23 +1015,11 @@ export class SteamCloudDriver implements CloudProviderDriver {
  */
 export class MicrosoftCloudDriver implements CloudProviderDriver {
   readonly id = 'microsoft' as const;
-  private writeLocks = new Map<string, Promise<unknown>>();
+  private readonly writeQueue = new KeyedWriteQueue();
   private readonly fetchImpl?: typeof fetch;
 
   constructor(options?: { fetchImpl?: typeof fetch }) {
     this.fetchImpl = options?.fetchImpl;
-  }
-
-  private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
-    const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(task);
-    const tracked = next.catch(() => undefined).finally(() => {
-      if (this.writeLocks.get(lockKey) === tracked) {
-        this.writeLocks.delete(lockKey);
-      }
-    });
-    this.writeLocks.set(lockKey, tracked);
-    return next;
   }
 
   private getClient(): OneDriveAppFolderClient | null {
@@ -938,7 +1085,7 @@ export class MicrosoftCloudDriver implements CloudProviderDriver {
   async signOut(): Promise<void> {
     setExplicitlySignedOut(true);
     clearCachedMicrosoftSession();
-    this.writeLocks.clear();
+    this.writeQueue.clear();
   }
 
   async readManifest(): Promise<CloudLibraryManifestV2 | null> {
@@ -948,7 +1095,7 @@ export class MicrosoftCloudDriver implements CloudProviderDriver {
   }
 
   async writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean> {
-    return this.enqueueWrite(CLOUD_MANIFEST_FILE_NAME, async () => {
+    return this.writeQueue.enqueue(CLOUD_MANIFEST_FILE_NAME, async () => {
       const client = this.getClient();
       if (!client) return false;
       return client.uploadJsonFile(CLOUD_MANIFEST_FILE_NAME, manifest);
@@ -966,7 +1113,7 @@ export class MicrosoftCloudDriver implements CloudProviderDriver {
   async writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean> {
     const fileName = `capy_slot_${envelope.slotKey}.json`;
     if (!isValidOneDriveFileName(fileName)) return false;
-    return this.enqueueWrite(fileName, async () => {
+    return this.writeQueue.enqueue(fileName, async () => {
       const client = this.getClient();
       if (!client) return false;
       return client.uploadJsonFile(fileName, envelope);
@@ -986,7 +1133,7 @@ export class MicrosoftCloudDriver implements CloudProviderDriver {
     bytes: Uint8Array
   ): Promise<string | null> {
     if (!isValidOneDriveFileName(fileName)) return null;
-    return this.enqueueWrite(fileName, async () => {
+    return this.writeQueue.enqueue(fileName, async () => {
       const client = this.getClient();
       if (!client) return null;
       return client.uploadBinaryFile(fileName, bytes);
@@ -1001,19 +1148,7 @@ export class MicrosoftCloudDriver implements CloudProviderDriver {
  */
 export class AppleCloudDriver implements CloudProviderDriver {
   readonly id = 'apple' as const;
-  private writeLocks = new Map<string, Promise<unknown>>();
-
-  private enqueueWrite<T>(lockKey: string, task: () => Promise<T>): Promise<T> {
-    const prev = this.writeLocks.get(lockKey) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(task);
-    const tracked = next.catch(() => undefined).finally(() => {
-      if (this.writeLocks.get(lockKey) === tracked) {
-        this.writeLocks.delete(lockKey);
-      }
-    });
-    this.writeLocks.set(lockKey, tracked);
-    return next;
-  }
+  private readonly writeQueue = new KeyedWriteQueue();
 
   private getClient(): AppleCloudKitClient | null {
     const session = loadCachedAppleSession();
@@ -1070,7 +1205,7 @@ export class AppleCloudDriver implements CloudProviderDriver {
   async signOut(): Promise<void> {
     setExplicitlySignedOut(true);
     clearCachedAppleSession();
-    this.writeLocks.clear();
+    this.writeQueue.clear();
   }
 
   async readManifest(): Promise<CloudLibraryManifestV2 | null> {
@@ -1080,7 +1215,7 @@ export class AppleCloudDriver implements CloudProviderDriver {
   }
 
   async writeManifest(manifest: CloudLibraryManifestV2): Promise<boolean> {
-    return this.enqueueWrite(CLOUD_MANIFEST_FILE_NAME, async () => {
+    return this.writeQueue.enqueue(CLOUD_MANIFEST_FILE_NAME, async () => {
       const client = this.getClient();
       if (!client) return false;
       return client.writeJsonRecord(CLOUD_MANIFEST_FILE_NAME, manifest);
@@ -1098,7 +1233,7 @@ export class AppleCloudDriver implements CloudProviderDriver {
   async writeSlotEnvelope(envelope: CloudSaveEnvelope): Promise<boolean> {
     const recordName = `capy_slot_${envelope.slotKey}.json`;
     if (!isValidCloudKitRecordName(recordName)) return false;
-    return this.enqueueWrite(recordName, async () => {
+    return this.writeQueue.enqueue(recordName, async () => {
       const client = this.getClient();
       if (!client) return false;
       return client.writeJsonRecord(recordName, envelope);
@@ -1118,7 +1253,7 @@ export class AppleCloudDriver implements CloudProviderDriver {
     bytes: Uint8Array
   ): Promise<string | null> {
     if (!isValidCloudKitRecordName(fileName)) return null;
-    return this.enqueueWrite(fileName, async () => {
+    return this.writeQueue.enqueue(fileName, async () => {
       const client = this.getClient();
       if (!client) return null;
       return client.writeBinaryRecord(fileName, bytes);
