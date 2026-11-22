@@ -646,15 +646,22 @@ const CAPYBOOP_GITHUB_ISSUES_URL_RE = /^https:\/\/github\.com\/capyboop\/paint\/
 export function validatePublicTrackerPolicy(repoRoot) {
   const root = path.resolve(repoRoot);
 
+  const aboutTabPath = path.join(root, 'web/src/components/settings/AboutTab.tsx');
   const settingsModalPath = path.join(root, 'web/src/components/SettingsModal.tsx');
-  if (fs.existsSync(settingsModalPath)) {
-    const settingsSrc = fs.readFileSync(settingsModalPath, 'utf8');
+  const reportLinkTargetPath = fs.existsSync(aboutTabPath)
+    ? aboutTabPath
+    : fs.existsSync(settingsModalPath)
+      ? settingsModalPath
+      : null;
+  if (reportLinkTargetPath) {
+    const relTarget = path.relative(root, reportLinkTargetPath).replace(/\\/g, '/');
+    const targetSrc = fs.readFileSync(reportLinkTargetPath, 'utf8');
     const reportLinkMatch = /<a\b(?:=>|[^<>])*data-testid="about-report-issue-link"(?:=>|[^<>])*>/i.exec(
-      settingsSrc
+      targetSrc
     );
     assert.ok(
       reportLinkMatch,
-      'web/src/components/SettingsModal.tsx must render data-testid="about-report-issue-link"'
+      `${relTarget} must render data-testid="about-report-issue-link"`
     );
     const hrefMatch = /\bhref="([^"]+)"/i.exec(reportLinkMatch[0]);
     assert.ok(hrefMatch, 'about-report-issue-link must specify an href attribute');

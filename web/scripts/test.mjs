@@ -23,6 +23,7 @@ import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.
 import { runStorageGatewayTests } from './storage-gateway.test.mjs';
 import { runStorageAnalyzerTests } from './storage-analyzer.test.mjs';
 import { runProviderDomainHardeningTests } from './provider-domain-hardening.test.mjs';
+import { runSettingsDecompositionTests } from './settings-decomposition.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -1721,6 +1722,21 @@ async function runCodecAndEngineTests() {
         /about-report-issue-link/
       );
       fs.writeFileSync(settingsPath, cleanSettingsTag, 'utf8');
+
+      const aboutTabPath = path.join(tmpStrictRepo, 'web/src/components/settings/AboutTab.tsx');
+      fs.mkdirSync(path.dirname(aboutTabPath), { recursive: true });
+      fs.writeFileSync(
+        aboutTabPath,
+        '<a href="https://github.com/shthed/capy/issues/new/choose" data-testid="about-report-issue-link">Report</a>',
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /about-report-issue-link/
+      );
+      fs.writeFileSync(aboutTabPath, cleanSettingsTag, 'utf8');
+      runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true });
+      fs.rmSync(aboutTabPath);
 
       fs.writeFileSync(
         privacyPath,
@@ -13069,7 +13085,8 @@ async function runCodecAndEngineTests() {
     await runStorageGatewayTests(vite);
     await runStorageAnalyzerTests(vite);
     await runProviderDomainHardeningTests(vite);
-    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening & M1 release safety hardening verified.');
+    await runSettingsDecompositionTests(vite);
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening, SettingsModal Decomposition & M1 release safety hardening verified.');
 
     // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
     // createAutoCloudSyncScheduler & Cross-Provider CRDT Merge Parity
@@ -14706,8 +14723,9 @@ async function runBrowserBasicsSuite() {
     logE2eStart('Verifying 5-tab SettingsModal (About, Settings, Hints, Create, Saves), Enable Undo toggle & tab persistence...');
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo visible by default for standard puzzles');
 
-    // Open Settings -> verify default first-time tab is Tab 1 (Settings), ARIA roles, all 5 distinct tabs, zero duplicates, and tab 4 persistence across reload
+    // Open Settings -> verify default first-time tab is Tab 1 (Settings), ARIA roles, aria-labelledby, focus restoration, accessible slider labels, all 5 distinct tabs, zero duplicates, and tab 4 persistence across reload
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
+    await settingsBtn.focus();
     await settingsBtn.click();
     await page.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
@@ -14715,6 +14733,73 @@ async function runBrowserBasicsSuite() {
       1,
       'SettingsModal must expose role="dialog" aria-modal="true"'
     );
+    const dialogLabelledByText = await page.locator('[role="dialog"][aria-modal="true"]').evaluate((dialogEl) => {
+      const refId = dialogEl.getAttribute('aria-labelledby');
+      if (!refId) return '';
+      return document.getElementById(refId)?.textContent?.trim() || '';
+    });
+    assert.equal(
+      dialogLabelledByText.length > 0,
+      true,
+      `SettingsModal aria-labelledby must resolve to a non-empty heading (got '${dialogLabelledByText}')`
+    );
+
+    // Focus restoration on Escape and Close button
+    await page.keyboard.press('Escape');
+    await page.getByTestId('settings-modal-tabs').waitFor({ state: 'hidden', timeout: 3000 });
+    const focusedAfterEscape = await page.evaluate(() => document.activeElement?.getAttribute('title') || '');
+    assert.equal(
+      focusedAfterEscape,
+      'Settings and Menu',
+      'Closing SettingsModal via Escape must restore focus to the trigger button'
+    );
+    await settingsBtn.click();
+    await page.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-modal-close').click();
+    await page.getByTestId('settings-modal-tabs').waitFor({ state: 'hidden', timeout: 3000 });
+    const focusedAfterCloseBtn = await page.evaluate(() => document.activeElement?.getAttribute('title') || '');
+    assert.equal(
+      focusedAfterCloseBtn,
+      'Settings and Menu',
+      'Closing SettingsModal via Close button must restore focus to the trigger button'
+    );
+    await settingsBtn.click();
+    await page.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+
+    const assertVisibleSlidersLabeled = async (tabLabel, minExpectedCount) => {
+      const results = await page.locator('[role="dialog"] input[type="range"]').evaluateAll((els) =>
+        els.map((el) => {
+          const id = el.getAttribute('id') || '';
+          const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+          const labelText = id ? (document.querySelector(`label[for="${CSS.escape(id)}"]`)?.textContent || '').trim() : '';
+          return {
+            testId: el.getAttribute('data-testid') || '',
+            id,
+            ariaLabel,
+            labelText,
+          };
+        })
+      );
+      assert.equal(
+        results.length >= minExpectedCount,
+        true,
+        `Expected at least ${minExpectedCount} range sliders in ${tabLabel} tab (found ${results.length})`
+      );
+      for (const item of results) {
+        assert.equal(
+          item.id.length > 0 && item.labelText.length > 0 && item.ariaLabel.length > 0,
+          true,
+          `Slider in ${tabLabel} tab must have paired <label htmlFor> and non-empty aria-label (${JSON.stringify(item)})`
+        );
+      }
+    };
+    await assertVisibleSlidersLabeled('Settings', 5);
+    await page.getByTestId('settings-tab-hints').click();
+    await assertVisibleSlidersLabeled('Hints', 1);
+    await page.getByTestId('settings-tab-create').click();
+    await assertVisibleSlidersLabeled('Create', 4);
+    await page.getByTestId('settings-tab-settings').click();
+
     assert.equal(
       await page.getByTestId('settings-modal-tabs').getAttribute('role'),
       'tablist',
@@ -19336,11 +19421,20 @@ async function runBrowserBasicsSuite() {
       .getByTestId('setting-touch-reach-controls')
       .evaluate((el) => el.classList.contains('opacity-50'));
     assert.equal(reachControlsDimmed, true, 'Reach radius controls must be visually dimmed when fatFingerAssist is off');
+    const reachSliderDimmed = await ltMobilePage
+      .getByTestId('setting-touch-reach-radius')
+      .evaluate((el) => el.getAttribute('data-dimmed') === 'true' && el.classList.contains('accent-slate-500') && !el.disabled);
+    assert.equal(reachSliderDimmed, true, 'Reach radius slider must show dimmed styling while remaining interactive when fatFingerAssist is off');
 
     // Clicking a preset while fatFingerAssist is OFF must auto-enable fatFingerAssist
     await ltMobilePage.getByTestId('setting-touch-reach-preset-34').click();
     assert.equal(await ffSwitch.getAttribute('aria-checked'), 'true', 'Clicking a reach preset must auto-enable fatFingerAssist');
     assert.equal(await ltMobilePage.getByTestId('setting-touch-reach-radius').inputValue(), '34');
+    assert.equal(
+      await ltMobilePage.getByTestId('setting-touch-reach-radius').getAttribute('data-dimmed'),
+      null,
+      'Reach radius slider must clear dimmed state once fatFingerAssist is enabled'
+    );
 
     // Set saved radius to 22px, turn fatFingerAssist OFF, then toggle Large Text ON -> must enable fatFingerAssist & show 34px Large UI boost
     await ltMobilePage.getByTestId('setting-touch-reach-preset-22').click();
