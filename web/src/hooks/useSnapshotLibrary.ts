@@ -151,6 +151,16 @@ export function shouldUsePrebakedSample(options: {
   );
 }
 
+function normalizeResetEpoch(value?: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : 0;
+}
+
+function isBlobUrl(url: string | null | undefined): url is string {
+  return typeof url === 'string' && url.startsWith('blob:');
+}
+
 /**
  * Pure helper computing the strictly monotonic `resetEpoch` for progress reset anti-resurrection.
  */
@@ -162,10 +172,11 @@ export function computeNextResetEpoch(
 ): number {
   return (
     Math.max(
-      activeSaveEpoch ?? 0,
-      liveSaveEpoch ?? 0,
-      freshSnapEpoch ?? 0,
-      activeStateEpoch ?? 0
+      0,
+      normalizeResetEpoch(activeSaveEpoch),
+      normalizeResetEpoch(liveSaveEpoch),
+      normalizeResetEpoch(freshSnapEpoch),
+      normalizeResetEpoch(activeStateEpoch)
     ) + 1
   );
 }
@@ -179,12 +190,12 @@ export function resolveBlobUrlCommitPlan(
   prevActiveBlobUrl: string | null
 ): BlobUrlCommitPlan {
   const usedUrl =
-    resolvedObjectUrl && loadedImgSrc === resolvedObjectUrl ? resolvedObjectUrl : null;
+    isBlobUrl(resolvedObjectUrl) && loadedImgSrc === resolvedObjectUrl ? resolvedObjectUrl : null;
   const urlsToRevoke: string[] = [];
-  if (resolvedObjectUrl && !usedUrl) {
+  if (isBlobUrl(resolvedObjectUrl) && !usedUrl) {
     urlsToRevoke.push(resolvedObjectUrl);
   }
-  if (prevActiveBlobUrl && prevActiveBlobUrl !== usedUrl) {
+  if (isBlobUrl(prevActiveBlobUrl) && prevActiveBlobUrl !== usedUrl) {
     urlsToRevoke.push(prevActiveBlobUrl);
   }
   return { nextActiveBlobUrl: usedUrl, urlsToRevoke };
@@ -197,10 +208,12 @@ export function computeDetailTileCrop(
   srcW: number,
   srcH: number
 ): { cropX: number; cropY: number; cropW: number; cropH: number } {
-  const cropW = Math.max(128, Math.round(srcW * 0.5));
-  const cropH = Math.max(128, Math.round(srcH * 0.5));
-  const cropX = Math.max(0, Math.min(srcW - cropW, Math.round((srcW - cropW) / 2)));
-  const cropY = Math.max(0, Math.min(srcH - cropH, Math.round((srcH - cropH) / 2)));
+  const safeW = Number.isFinite(srcW) && srcW > 0 ? Math.floor(srcW) : 0;
+  const safeH = Number.isFinite(srcH) && srcH > 0 ? Math.floor(srcH) : 0;
+  const cropW = Math.min(safeW, Math.max(128, Math.round(safeW * 0.5)));
+  const cropH = Math.min(safeH, Math.max(128, Math.round(safeH * 0.5)));
+  const cropX = Math.max(0, Math.min(safeW - cropW, Math.round((safeW - cropW) / 2)));
+  const cropY = Math.max(0, Math.min(safeH - cropH, Math.round((safeH - cropH) / 2)));
   return { cropX, cropY, cropW, cropH };
 }
 
@@ -212,7 +225,7 @@ export function buildDetailTileTitle(activeTitle: string): string {
 }
 
 function revokeBlobUrlSafely(url: string | null): void {
-  if (url && url.startsWith('blob:')) {
+  if (isBlobUrl(url)) {
     URL.revokeObjectURL(url);
   }
 }

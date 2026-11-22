@@ -68,19 +68,29 @@ export interface UsePaintControllerParams {
   markTutorialActionTried: (action: keyof TutorialTriedActions) => void;
 }
 
+const HEX_COLOR_RE = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
 /**
- * Pure helper parsing a `#RRGGBB` or `RRGGBB` hex string into RGB, ARGB, and luminance fields.
+ * Pure helper strictly validating & normalizing a `#RRGGBB`, `RRGGBB`, `#RGB`, or `RGB` hex string
+ * into RGB, ARGB, and luminance fields. Returns `null` for malformed inputs.
  */
-export function parseHexToPaletteFields(hex: string): ParsedPaletteFields {
-  const clean = hex.replace('#', '');
-  const num = parseInt(clean, 16);
+export function parseHexToPaletteFields(hex: string): ParsedPaletteFields | null {
+  if (typeof hex !== 'string') return null;
+  const match = HEX_COLOR_RE.exec(hex.trim());
+  if (!match) return null;
+  const raw = match[1].toLowerCase();
+  const normalized =
+    raw.length === 3
+      ? `${raw[0]}${raw[0]}${raw[1]}${raw[1]}${raw[2]}${raw[2]}`
+      : raw;
+  const num = parseInt(normalized, 16);
   const r = (num >> 16) & 255;
   const g = (num >> 8) & 255;
   const b = num & 255;
   const isLight = 0.299 * r + 0.587 * g + 0.114 * b > 160;
   const argb = ((0xff << 24) | (r << 16) | (g << 8) | b) >>> 0;
   return {
-    hex: hex.startsWith('#') ? hex : `#${hex}`,
+    hex: `#${normalized}`,
     isLight,
     argb,
     r,
@@ -714,8 +724,10 @@ export function usePaintController(params: UsePaintControllerParams) {
       const curPuzzle = cur.puzzle;
       if (!curPuzzle) return;
 
-      const nextId = computeNextCustomColorId(curPuzzle.palette);
       const parsed = parseHexToPaletteFields(hex);
+      if (!parsed) return;
+
+      const nextId = computeNextCustomColorId(curPuzzle.palette);
       const newColor: PaletteColor = { id: nextId, ...parsed };
       const updatedPalette = [...curPuzzle.palette, newColor];
       const updatedPuzzle = { ...curPuzzle, palette: updatedPalette };
@@ -738,7 +750,15 @@ export function usePaintController(params: UsePaintControllerParams) {
       const curPuzzle = cur.puzzle;
       if (!curPuzzle) return;
 
+      const existing = curPuzzle.palette.find((c) => c.id === colorId);
+      if (!existing) return;
+
       const parsed = parseHexToPaletteFields(hex);
+      if (!parsed) return;
+      if (existing.hex.toLowerCase() === parsed.hex && existing.argb === parsed.argb) {
+        return;
+      }
+
       const updatedPalette = curPuzzle.palette.map((c) =>
         c.id === colorId ? { ...c, ...parsed } : c
       );
@@ -755,12 +775,23 @@ export function usePaintController(params: UsePaintControllerParams) {
     (preset: PalettePreset) => {
       const cur = liveCoopRef.current;
       const curPuzzle = cur.puzzle;
-      if (!curPuzzle) return;
+      if (!curPuzzle || !preset || !Array.isArray(preset.colors) || preset.colors.length === 0) {
+        return;
+      }
 
-      const updatedPalette = curPuzzle.palette.map((c, i) => {
-        const hex = preset.colors[i % preset.colors.length];
-        return { ...c, ...parseHexToPaletteFields(hex) };
-      });
+      const parsedColors: ParsedPaletteFields[] = [];
+      for (let i = 0; i < preset.colors.length; i++) {
+        const parsed = parseHexToPaletteFields(preset.colors[i]);
+        if (parsed) {
+          parsedColors.push(parsed);
+        }
+      }
+      if (parsedColors.length === 0) return;
+
+      const updatedPalette = curPuzzle.palette.map((c, i) => ({
+        ...c,
+        ...parsedColors[i % parsedColors.length],
+      }));
       const updatedPuzzle = { ...curPuzzle, palette: updatedPalette };
       liveCoopRef.current = { ...cur, puzzle: updatedPuzzle };
       setPuzzle(updatedPuzzle);
@@ -777,11 +808,6 @@ export function usePaintController(params: UsePaintControllerParams) {
       if (!curPuzzle) return;
 
       const targetColor = colorId ?? cur.activeColorId;
-      if (colorId !== undefined && cur.activeColorId !== colorId) {
-        liveCoopRef.current = { ...cur, activeColorId: colorId };
-        setActiveColorId(colorId);
-      }
-
       const target = selectHintTargetRegion(
         curPuzzle.regions,
         targetColor,
@@ -789,6 +815,11 @@ export function usePaintController(params: UsePaintControllerParams) {
         visibleRegionIdsRef.current
       );
       if (!target) return;
+
+      if (colorId !== undefined && cur.activeColorId !== colorId) {
+        liveCoopRef.current = { ...cur, activeColorId: colorId };
+        setActiveColorId(colorId);
+      }
 
       NativeBridge.haptic('warning', cur.settings.hapticsEnabled);
       hintsUsedInSessionRef.current += 1;

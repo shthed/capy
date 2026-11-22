@@ -39,10 +39,14 @@ export async function runTutorialSnapshotHooksTests(vite) {
   const snapshotMod = await vite.ssrLoadModule('/src/hooks/useSnapshotLibrary.ts');
   const typesMod = await vite.ssrLoadModule('/src/types/index.ts');
   const storageMod = await vite.ssrLoadModule('/src/services/StorageService.ts');
+  const telemetryMod = await vite.ssrLoadModule('/src/services/telemetry.ts');
+  const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
 
-  // 1. artworkExporter.ts pure helpers
+  // 1. artworkExporter.ts pure helpers & hardening
   assert.equal(exporter.buildArtworkPngFileName('Cozy Capybara! #1'), 'cozy-capybara-1.png');
   assert.equal(exporter.buildArtworkPngFileName('   '), 'capy-artwork.png');
+  assert.equal(exporter.buildArtworkPngFileName('!!!'), 'capy-artwork.png');
+  assert.equal(exporter.buildArtworkPngFileName('---Hello---'), 'hello.png');
   assert.equal(exporter.buildSnapshotArchiveFileName('My Save (2x)'), 'My_Save__2x_.capy');
   assert.equal(exporter.buildSnapshotArchiveFileName(''), 'puzzle.capy');
 
@@ -56,7 +60,87 @@ export async function runTutorialSnapshotHooksTests(vite) {
   assert.equal(smallDims.height, 50);
   assert.equal(smallDims.scale, 1);
 
+  assert.deepEqual(exporter.computePreviewDimensions(NaN, 100), { width: 0, height: 0, scale: 0 });
+  assert.deepEqual(exporter.computePreviewDimensions(0, 100), { width: 0, height: 0, scale: 0 });
+  assert.deepEqual(exporter.computePreviewDimensions(-50, 100), { width: 0, height: 0, scale: 0 });
+  assert.deepEqual(exporter.computePreviewDimensions(Infinity, 100), {
+    width: 0,
+    height: 0,
+    scale: 0,
+  });
+
   const puzzle = createSamplePuzzle();
+  // SSR safety when document is undefined
+  assert.equal(exporter.generatePreviewDataUrl(puzzle, {}, new Set()), '');
+  assert.doesNotThrow(() =>
+    exporter.exportColoredArtworkPng({
+      puzzle,
+      sourceImage: {},
+      filledRegionIds: new Set(),
+      paintedRegionColors: new Map(),
+      title: 'SSR Test',
+      hapticsEnabled: false,
+    })
+  );
+
+  // Share rejection inside canvas.toBlob must be caught and reported via reportSwallowed
+  telemetryMod.clearSwallowedErrorLog();
+  const prevDoc = globalThis.document;
+  const origShare = nativeBridgeMod.NativeBridge.exportOrShareFile;
+  try {
+    nativeBridgeMod.NativeBridge.exportOrShareFile = async () => {
+      throw new Error('simulated share failure');
+    };
+    globalThis.document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ({
+          createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+          putImageData: () => {},
+          drawImage: () => {},
+          globalCompositeOperation: 'source-over',
+        }),
+        toBlob: (cb) => cb(new Blob(['png'])),
+      }),
+    };
+    exporter.exportColoredArtworkPng({
+      puzzle,
+      sourceImage: {},
+      filledRegionIds: new Set([10, 11, 12]),
+      paintedRegionColors: new Map(),
+      title: 'Share Error Test',
+      hapticsEnabled: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.ok(
+      telemetryMod
+        .getSwallowedErrorLog()
+        .some((entry) => entry.scope === 'artworkExporter.exportColoredArtworkPng.share'),
+      'exportColoredArtworkPng must report share rejections via reportSwallowed'
+    );
+  } finally {
+    globalThis.document = prevDoc;
+    nativeBridgeMod.NativeBridge.exportOrShareFile = origShare;
+  }
+
+  // Catch blocks in archive import/export report via reportSwallowed
+  telemetryMod.clearSwallowedErrorLog();
+  const failedImport = await exporter.importSnapshotsArchive(
+    {
+      arrayBuffer: async () => {
+        throw new Error('simulated read failure');
+      },
+    },
+    false
+  );
+  assert.equal(failedImport.ok, false);
+  assert.ok(
+    telemetryMod
+      .getSwallowedErrorLog()
+      .some((entry) => entry.scope === 'artworkExporter.importSnapshotsArchive'),
+    'importSnapshotsArchive must report failures via reportSwallowed'
+  );
   const rgba = new Uint8ClampedArray(16 * 4);
   exporter.writeFreeColorRegionPixels(rgba, puzzle, new Set([10, 12]), new Map([[10, 2]]));
   // Pixel 0 belongs to region 10 overridden to color 2 (0, 255, 0)
@@ -69,6 +153,10 @@ export async function runTutorialSnapshotHooksTests(vite) {
   // 2. useTutorialAndOffers.ts pure helpers + SSR smoke test
   assert.equal(tutorialMod.clampTutorialStepIndex(-5), 0);
   assert.equal(tutorialMod.clampTutorialStepIndex(999), 11);
+  assert.equal(tutorialMod.clampTutorialStepIndex(NaN), 0);
+  assert.equal(tutorialMod.clampTutorialStepIndex(Infinity), 0);
+  assert.equal(tutorialMod.clampTutorialStepIndex(-Infinity), 0);
+  assert.equal(tutorialMod.clampTutorialStepIndex(1.7), 1);
 
   const queue = ['paint_mode', 'free_color', 'saves_export'];
   const firstOffer = tutorialMod.dequeueNextUnseenOffer(queue, (id) => id === 'paint_mode');
@@ -77,6 +165,12 @@ export async function runTutorialSnapshotHooksTests(vite) {
   const noneLeft = tutorialMod.dequeueNextUnseenOffer(queue, () => true);
   assert.equal(noneLeft, null);
   assert.deepEqual(queue, []);
+
+  // Unknown offer IDs must be skipped instead of abandoning valid later offers
+  const queueWithUnknown = ['nonexistent_offer_id', 'free_color', 'saves_export'];
+  const skippedUnknownOffer = tutorialMod.dequeueNextUnseenOffer(queueWithUnknown, () => false);
+  assert.equal(skippedUnknownOffer?.id, 'free_color');
+  assert.deepEqual(queueWithUnknown, ['saves_export']);
 
   const baseSettings = storageMod.DEFAULT_SETTINGS;
   assert.deepEqual(
@@ -252,14 +346,27 @@ export async function runTutorialSnapshotHooksTests(vite) {
 
   // 4. usePaintController.ts pure helpers + SSR smoke test
   const parsedWhite = paintMod.parseHexToPaletteFields('ffffff');
-  assert.equal(parsedWhite.hex, '#ffffff');
-  assert.equal(parsedWhite.isLight, true);
-  assert.equal(parsedWhite.argb, 0xffffffff);
+  assert.equal(parsedWhite?.hex, '#ffffff');
+  assert.equal(parsedWhite?.isLight, true);
+  assert.equal(parsedWhite?.argb, 0xffffffff);
   const parsedDark = paintMod.parseHexToPaletteFields('#112233');
-  assert.equal(parsedDark.isLight, false);
-  assert.equal(parsedDark.r, 0x11);
-  assert.equal(parsedDark.g, 0x22);
-  assert.equal(parsedDark.b, 0x33);
+  assert.equal(parsedDark?.isLight, false);
+  assert.equal(parsedDark?.r, 0x11);
+  assert.equal(parsedDark?.g, 0x22);
+  assert.equal(parsedDark?.b, 0x33);
+  const parsedShort = paintMod.parseHexToPaletteFields('#123');
+  assert.equal(parsedShort?.hex, '#112233');
+  assert.equal(parsedShort?.r, 0x11);
+  assert.equal(parsedShort?.g, 0x22);
+  assert.equal(parsedShort?.b, 0x33);
+  const parsedShortNoHash = paintMod.parseHexToPaletteFields('AbC');
+  assert.equal(parsedShortNoHash?.hex, '#aabbcc');
+  assert.equal(parsedShortNoHash?.isLight, true);
+  assert.equal(paintMod.parseHexToPaletteFields(''), null);
+  assert.equal(paintMod.parseHexToPaletteFields('not-a-hex'), null);
+  assert.equal(paintMod.parseHexToPaletteFields('#ZZZ'), null);
+  assert.equal(paintMod.parseHexToPaletteFields('##ff0000'), null);
+  assert.equal(paintMod.parseHexToPaletteFields('#12345'), null);
 
   assert.equal(paintMod.computeNextCustomColorId([]), 1);
   assert.equal(paintMod.computeNextCustomColorId(puzzle.palette), 3);
@@ -342,6 +449,89 @@ export async function runTutorialSnapshotHooksTests(vite) {
   assert.equal(typeof capturedPaintApi.attemptFillRegion, 'function');
   assert.equal(typeof capturedPaintApi.triggerHint, 'function');
 
+  // Guard regressions on live usePaintController handlers
+  let paintSetPuzzleCalls = 0;
+  let paintSetActiveColorCalls = 0;
+  const loadedPaintCoopRef = createRef({
+    puzzle,
+    activeSnapshotId: 'snap-guard',
+    activeSave: undefined,
+    activeTitle: 'Capy',
+    filledRegionIds: new Set([12]), // color 2 is already 100% filled
+    paintedRegionColors: new Map(),
+    isFreeColorMode: false,
+    activeColorId: 1,
+    settings: baseSettings,
+  });
+  let guardedPaintApi = null;
+  function GuardedPaintHarness() {
+    guardedPaintApi = paintMod.usePaintController({
+      puzzle,
+      isLoading: false,
+      isReplaying: false,
+      showSettings: false,
+      showPaletteOptions: false,
+      filledRegionCount: 1,
+      initialSnapshots: [],
+      liveCoopRef: loadedPaintCoopRef,
+      viewportRef: createRef({ zoomScale: 1, panOffsetX: 0, panOffsetY: 0 }),
+      regionByIdRef: createRef(new Map(puzzle.regions.map((r) => [r.id, r]))),
+      visibleColorIdsRef: createRef(new Set([1, 2])),
+      visibleRegionIdsRef: createRef(new Set([10, 11])),
+      sourceImageRef: createRef(null),
+      isReplayingRef: createRef(false),
+      isPostLoadReplayRef: createRef(false),
+      exitReplay: () => {},
+      startReplay: () => {},
+      emitCoopPaint: () => {},
+      isCoopSessionActive: () => false,
+      syncUndoStack: () => {},
+      syncRedoStack: () => {},
+      setPuzzle: () => {
+        paintSetPuzzleCalls += 1;
+      },
+      setFilledRegionIds: () => {},
+      setPaintedRegionColors: () => {},
+      setActiveColorId: () => {
+        paintSetActiveColorCalls += 1;
+      },
+      setHintRegionId: () => {},
+      setSnapshots: () => {},
+      setLifetimeStats: () => {},
+      markTutorialActionTried: () => {},
+    });
+    return React.createElement('div', null, 'paint-guard-ok');
+  }
+  assert.equal(
+    renderToStaticMarkup(React.createElement(GuardedPaintHarness)),
+    '<div>paint-guard-ok</div>'
+  );
+
+  assert.doesNotThrow(() =>
+    guardedPaintApi.handleApplyPresetPalette({ id: 'empty', name: 'Empty', colors: [] })
+  );
+  assert.doesNotThrow(() =>
+    guardedPaintApi.handleApplyPresetPalette({
+      id: 'invalid',
+      name: 'Invalid',
+      colors: ['not-a-hex', '#ZZZ'],
+    })
+  );
+  guardedPaintApi.handleAddCustomColor('');
+  guardedPaintApi.handleAddCustomColor('not-a-hex');
+  guardedPaintApi.handleAddCustomColor('##ff0000');
+  guardedPaintApi.handleUpdateColor(999, '#112233'); // non-existent colorId
+  guardedPaintApi.handleUpdateColor(1, '#ff0000'); // unchanged hex
+  guardedPaintApi.handleUpdateColor(1, '#ZZZ'); // invalid hex
+  assert.equal(paintSetPuzzleCalls, 0);
+  assert.equal(paintSetActiveColorCalls, 0);
+
+  // triggerHint must not mutate activeColorId when target color has no unfilled regions
+  guardedPaintApi.triggerHint(999);
+  guardedPaintApi.triggerHint(2);
+  assert.equal(loadedPaintCoopRef.current.activeColorId, 1);
+  assert.equal(paintSetActiveColorCalls, 0);
+
   // 5. useSnapshotLibrary.ts pure helpers + SSR smoke test
   assert.equal(snapshotMod.isDefaultGeneratorConfig(typesMod.DEFAULT_GENERATOR_CONFIG), true);
   assert.equal(snapshotMod.isMaxGeneratorConfig(typesMod.MAX_GENERATOR_CONFIG), true);
@@ -378,10 +568,15 @@ export async function runTutorialSnapshotHooksTests(vite) {
     false
   );
 
-  // Monotonic resetEpoch dominance across all 4 sources
+  // Monotonic resetEpoch dominance across all 4 sources (including malformed epochs)
   assert.equal(snapshotMod.computeNextResetEpoch(0, 0, 0, 0), 1);
   assert.equal(snapshotMod.computeNextResetEpoch(2, 5, 3, 4), 6);
   assert.equal(snapshotMod.computeNextResetEpoch(undefined, 1, undefined, 7), 8);
+  assert.equal(snapshotMod.computeNextResetEpoch(NaN, 2, 1, 0), 3);
+  assert.equal(snapshotMod.computeNextResetEpoch(-5, -2, -3, -1), 1);
+  assert.equal(snapshotMod.computeNextResetEpoch(-10, -20, -30, -40), 1);
+  assert.equal(snapshotMod.computeNextResetEpoch(Infinity, 2, 1, 0), 3);
+  assert.equal(snapshotMod.computeNextResetEpoch(1.9, 2.8, undefined, -4), 3);
 
   // Safe blob: URL commit & revocation plan without premature revocation
   const usedPlan = snapshotMod.resolveBlobUrlCommitPlan(
@@ -408,11 +603,38 @@ export async function runTutorialSnapshotHooksTests(vite) {
   assert.equal(sameUrlPlan.nextActiveBlobUrl, 'blob:same');
   assert.deepEqual(sameUrlPlan.urlsToRevoke, []);
 
+  // Non-blob URLs must never be placed in urlsToRevoke or nextActiveBlobUrl
+  const nonBlobPlan = snapshotMod.resolveBlobUrlCommitPlan(
+    'data:image/png;base64,AAA',
+    './assets/capybara.webp',
+    'https://example.com/old.png'
+  );
+  assert.equal(nonBlobPlan.nextActiveBlobUrl, null);
+  assert.deepEqual(nonBlobPlan.urlsToRevoke, []);
+
   assert.deepEqual(snapshotMod.computeDetailTileCrop(1000, 600), {
     cropX: 250,
     cropY: 150,
     cropW: 500,
     cropH: 300,
+  });
+  assert.deepEqual(snapshotMod.computeDetailTileCrop(64, 64), {
+    cropX: 0,
+    cropY: 0,
+    cropW: 64,
+    cropH: 64,
+  });
+  assert.deepEqual(snapshotMod.computeDetailTileCrop(200, 100), {
+    cropX: 36,
+    cropY: 0,
+    cropW: 128,
+    cropH: 100,
+  });
+  assert.deepEqual(snapshotMod.computeDetailTileCrop(0, -10), {
+    cropX: 0,
+    cropY: 0,
+    cropW: 0,
+    cropH: 0,
   });
   assert.equal(snapshotMod.buildDetailTileTitle('Capybara'), 'Capybara (2x Detail)');
   assert.equal(

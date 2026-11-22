@@ -3,6 +3,7 @@ import { StorageService } from './StorageService';
 import { exportPrintableColoringSvg } from './SvgPrintExporter';
 import { NativeBridge } from './NativeBridge';
 import { mergeCustomPalette } from './sessionRestorePipeline';
+import { reportSwallowed } from './telemetry';
 
 export interface ExportColoredArtworkOptions {
   puzzle: PuzzleData;
@@ -34,8 +35,12 @@ export interface ImportSnapshotsResult {
  * Pure filename sanitizers for PNG and `.capy` exports.
  */
 export function buildArtworkPngFileName(title: string): string {
-  const titleStr = (title || '').trim() || 'capy-artwork';
-  return `${titleStr.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
+  const sanitized = (title || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${sanitized || 'capy-artwork'}.png`;
 }
 
 export function buildSnapshotArchiveFileName(title: string): string {
@@ -51,9 +56,18 @@ export function computePreviewDimensions(
   height: number,
   maxDim: number = 320
 ): { width: number; height: number; scale: number } {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return { width: 0, height: 0, scale: 0 };
+  }
+  const safeMaxDim = Number.isFinite(maxDim) && maxDim > 0 ? maxDim : 320;
   const safeW = Math.max(1, width);
   const safeH = Math.max(1, height);
-  const scale = Math.min(1, maxDim / Math.max(safeW, safeH));
+  const scale = Math.min(1, safeMaxDim / Math.max(safeW, safeH));
   return {
     width: Math.max(1, Math.round(safeW * scale)),
     height: Math.max(1, Math.round(safeH * scale)),
@@ -117,7 +131,9 @@ export function generatePreviewDataUrl(
   filledSet: Set<number>,
   customColors?: Map<number, number>
 ): string {
+  if (typeof document === 'undefined') return '';
   const dims = computePreviewDimensions(puzzleData.width, puzzleData.height, 320);
+  if (dims.width <= 0 || dims.height <= 0) return '';
   const canvas = document.createElement('canvas');
   canvas.width = dims.width;
   canvas.height = dims.height;
@@ -144,8 +160,17 @@ export function generatePreviewDataUrl(
  * Export full-resolution colored artwork as PNG (supports Web download and Android native Share Sheet).
  */
 export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): void {
+  if (typeof document === 'undefined') return;
   const { puzzle, sourceImage, filledRegionIds, paintedRegionColors, title, hapticsEnabled } =
     options;
+  if (
+    !Number.isFinite(puzzle.width) ||
+    !Number.isFinite(puzzle.height) ||
+    puzzle.width <= 0 ||
+    puzzle.height <= 0
+  ) {
+    return;
+  }
   const canvas = document.createElement('canvas');
   canvas.width = puzzle.width;
   canvas.height = puzzle.height;
@@ -190,6 +215,8 @@ export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): v
       fileName,
       mimeType: 'image/png',
       data: blob,
+    }).catch((err) => {
+      reportSwallowed('artworkExporter.exportColoredArtworkPng.share', err);
     });
     NativeBridge.haptic('tick', hapticsEnabled);
   }, 'image/png');
@@ -250,6 +277,7 @@ export async function exportSnapshotPrintableSvg(
     }
     return ok;
   } catch (e) {
+    reportSwallowed('artworkExporter.exportSnapshotPrintableSvg', e);
     console.error('Failed to export snapshot printable SVG', e);
     return false;
   }
@@ -274,6 +302,7 @@ export async function exportSingleSnapshotArchive(
     NativeBridge.haptic('tick', hapticsEnabled);
     return true;
   } catch (e) {
+    reportSwallowed('artworkExporter.exportSingleSnapshotArchive', e);
     console.error('Failed to export snapshot', e);
     return false;
   }
@@ -294,6 +323,7 @@ export async function exportAllSnapshotsArchive(hapticsEnabled: boolean): Promis
     NativeBridge.haptic('tick', hapticsEnabled);
     return true;
   } catch (e) {
+    reportSwallowed('artworkExporter.exportAllSnapshotsArchive', e);
     console.error('Failed to export all snapshots', e);
     return false;
   }
@@ -329,6 +359,7 @@ export async function importSnapshotsArchive(
       message: `Failed to import saves: ${errorMsg}`,
     };
   } catch (e) {
+    reportSwallowed('artworkExporter.importSnapshotsArchive', e);
     console.error('Failed to import file', e);
     NativeBridge.haptic('error', hapticsEnabled);
     return {

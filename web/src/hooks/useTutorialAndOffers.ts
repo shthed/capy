@@ -63,7 +63,11 @@ export interface UseTutorialAndOffersParams {
  * Pure helper to clamp a tutorial step index within valid TUTORIAL_STEPS bounds.
  */
 export function clampTutorialStepIndex(stepIdx: number): number {
-  return Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, stepIdx));
+  const maxIdx = Math.max(0, TUTORIAL_STEPS.length - 1);
+  if (typeof stepIdx !== 'number' || !Number.isFinite(stepIdx)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(maxIdx, Math.floor(stepIdx)));
 }
 
 /**
@@ -75,8 +79,10 @@ export function dequeueNextUnseenOffer(
 ): FeatureOfferDef | null {
   while (queue.length > 0) {
     const nextId = queue.shift()!;
-    if (!hasSeen(nextId)) {
-      return FEATURE_OFFERS[nextId] ?? null;
+    if (hasSeen(nextId)) continue;
+    const offer = FEATURE_OFFERS[nextId];
+    if (offer) {
+      return offer;
     }
   }
   return null;
