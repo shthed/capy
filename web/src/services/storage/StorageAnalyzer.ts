@@ -9,8 +9,7 @@ import { reportSwallowed } from '../telemetry';
 import { clearActiveState } from './ActiveSessionStorage';
 import {
   clearWithBackup,
-  hasReadableNativeBackup,
-  loadRawWithBackupFallback,
+  peekBackupCandidatesReadOnly,
 } from './BackupEngine';
 import {
   clearAllPreviewCaches,
@@ -317,11 +316,78 @@ export function estimateStructuredCloneBytes(
   return estimateCollectionBytes(obj, seen, depth);
 }
 
+function collectLiveSnapshotRefs(
+  rawJson: string,
+  liveIds: Set<string>,
+  liveBlobUris: Set<string>
+): boolean {
+  try {
+    const parsed = JSON.parse(rawJson);
+    if (!Array.isArray(parsed)) {
+      return false;
+    }
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const rec = item as { id?: unknown; sourceRef?: { kind?: unknown; uri?: unknown } };
+      if (typeof rec.id === 'string' && rec.id.length > 0) {
+        liveIds.add(rec.id);
+      }
+      if (
+        rec.sourceRef &&
+        rec.sourceRef.kind === 'blob' &&
+        typeof rec.sourceRef.uri === 'string' &&
+        rec.sourceRef.uri.length > 0
+      ) {
+        liveBlobUris.add(rec.sourceRef.uri);
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function collectLiveActiveStateRef(rawJson: string, liveIds: Set<string>): boolean {
+  try {
+    const parsedActive = JSON.parse(rawJson);
+    if (!parsedActive || typeof parsedActive !== 'object' || Array.isArray(parsedActive)) {
+      return false;
+    }
+    const activeId = (parsedActive as { activeSnapshotId?: unknown }).activeSnapshotId;
+    if (typeof activeId === 'string' && activeId.length > 0) {
+      liveIds.add(activeId);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function collectNonEmptyCandidates(
+  primary: string | null,
+  extras?: string[]
+): string[] {
+  const out: string[] = [];
+  if (primary !== null && primary.trim().length > 0) {
+    out.push(primary);
+  }
+  if (extras) {
+    for (const candidate of extras) {
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        out.push(candidate);
+      }
+    }
+  }
+  return out;
+}
+
 export function computeOrphanedKeys(params: {
   puzzleKeys: string[];
   imageKeys: string[];
   rawSnapshotsJson: string | null;
   rawActiveStateJson: string | null;
+  extraSnapshotsCandidates?: string[];
+  extraActiveStateCandidates?: string[];
 }): {
   skipped: boolean;
   orphanedPuzzleKeys: string[];
@@ -330,43 +396,20 @@ export function computeOrphanedKeys(params: {
   const liveIds = new Set<string>();
   const liveBlobUris = new Set<string>();
 
-  if (params.rawSnapshotsJson !== null && params.rawSnapshotsJson.trim().length > 0) {
-    try {
-      const parsed = JSON.parse(params.rawSnapshotsJson);
-      if (!Array.isArray(parsed)) {
-        return { skipped: true, orphanedPuzzleKeys: [], orphanedImageKeys: [] };
-      }
-      for (const item of parsed) {
-        if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-        const rec = item as { id?: unknown; sourceRef?: { kind?: unknown; uri?: unknown } };
-        if (typeof rec.id === 'string' && rec.id.length > 0) {
-          liveIds.add(rec.id);
-        }
-        if (
-          rec.sourceRef &&
-          rec.sourceRef.kind === 'blob' &&
-          typeof rec.sourceRef.uri === 'string' &&
-          rec.sourceRef.uri.length > 0
-        ) {
-          liveBlobUris.add(rec.sourceRef.uri);
-        }
-      }
-    } catch {
+  for (const rawSnap of collectNonEmptyCandidates(
+    params.rawSnapshotsJson,
+    params.extraSnapshotsCandidates
+  )) {
+    if (!collectLiveSnapshotRefs(rawSnap, liveIds, liveBlobUris)) {
       return { skipped: true, orphanedPuzzleKeys: [], orphanedImageKeys: [] };
     }
   }
 
-  if (params.rawActiveStateJson !== null && params.rawActiveStateJson.trim().length > 0) {
-    try {
-      const parsedActive = JSON.parse(params.rawActiveStateJson);
-      if (!parsedActive || typeof parsedActive !== 'object' || Array.isArray(parsedActive)) {
-        return { skipped: true, orphanedPuzzleKeys: [], orphanedImageKeys: [] };
-      }
-      const activeId = (parsedActive as { activeSnapshotId?: unknown }).activeSnapshotId;
-      if (typeof activeId === 'string' && activeId.length > 0) {
-        liveIds.add(activeId);
-      }
-    } catch {
+  for (const rawActive of collectNonEmptyCandidates(
+    params.rawActiveStateJson,
+    params.extraActiveStateCandidates
+  )) {
+    if (!collectLiveActiveStateRef(rawActive, liveIds)) {
       return { skipped: true, orphanedPuzzleKeys: [], orphanedImageKeys: [] };
     }
   }
@@ -735,61 +778,65 @@ function isHealthyJsonLocalValue(raw: string | null): boolean {
   }
 }
 
-function readNativeBackupSafely(
-  backupKey: string,
-  kind: 'snapshots' | 'activeState'
-): { ok: boolean; value: string | null } {
-  let rawNative: string | null = null;
-  try {
-    rawNative = window.CapyAndroid?.loadBackup?.(backupKey) ?? null;
-  } catch (err) {
-    reportSwallowed('StorageAnalyzer.readNativeBackupSafely', err, { backupKey, kind });
-    return { ok: false, value: null };
-  }
-  const recovered = loadRawWithBackupFallback(backupKey, backupKey, kind);
-  if (recovered !== null) {
-    return { ok: true, value: recovered };
-  }
-  if (typeof rawNative === 'string' && rawNative.trim().length > 0) {
-    // Non-empty native backup failed validation/parsing -> fail closed
-    return { ok: false, value: null };
-  }
-  return { ok: true, value: null };
-}
-
 function readChannelMetadataForOrphanCheck(
   dbName: string,
   activeDbName: string,
   snapshotsKey: string,
   activeStateKey: string
-): { ok: boolean; rawSnapshotsJson: string | null; rawActiveStateJson: string | null } {
+): {
+  ok: boolean;
+  rawSnapshotsJson: string | null;
+  rawActiveStateJson: string | null;
+  extraSnapshotsCandidates: string[];
+  extraActiveStateCandidates: string[];
+} {
   const snapRead = SafeLocalStore.tryGetItem(snapshotsKey);
   const activeRead = SafeLocalStore.tryGetItem(activeStateKey);
   if (!snapRead.ok || !activeRead.ok) {
-    return { ok: false, rawSnapshotsJson: null, rawActiveStateJson: null };
+    return {
+      ok: false,
+      rawSnapshotsJson: null,
+      rawActiveStateJson: null,
+      extraSnapshotsCandidates: [],
+      extraActiveStateCandidates: [],
+    };
   }
 
-  let rawSnapshotsJson = snapRead.value;
-  let rawActiveStateJson = activeRead.value;
+  let extraSnapshotsCandidates: string[] = [];
+  let extraActiveStateCandidates: string[] = [];
 
-  if (dbName === activeDbName && hasReadableNativeBackup()) {
-    if (!rawSnapshotsJson || rawSnapshotsJson.trim().length === 0) {
-      const nativeSnap = readNativeBackupSafely(snapshotsKey, 'snapshots');
-      if (!nativeSnap.ok) {
-        return { ok: false, rawSnapshotsJson: null, rawActiveStateJson: null };
-      }
-      rawSnapshotsJson = nativeSnap.value;
+  if (dbName === activeDbName) {
+    const snapBackup = peekBackupCandidatesReadOnly(snapshotsKey, snapshotsKey);
+    if (!snapBackup.ok) {
+      return {
+        ok: false,
+        rawSnapshotsJson: null,
+        rawActiveStateJson: null,
+        extraSnapshotsCandidates: [],
+        extraActiveStateCandidates: [],
+      };
     }
-    if (!rawActiveStateJson || rawActiveStateJson.trim().length === 0) {
-      const nativeActive = readNativeBackupSafely(activeStateKey, 'activeState');
-      if (!nativeActive.ok) {
-        return { ok: false, rawSnapshotsJson: null, rawActiveStateJson: null };
-      }
-      rawActiveStateJson = nativeActive.value;
+    const activeBackup = peekBackupCandidatesReadOnly(activeStateKey, activeStateKey);
+    if (!activeBackup.ok) {
+      return {
+        ok: false,
+        rawSnapshotsJson: null,
+        rawActiveStateJson: null,
+        extraSnapshotsCandidates: [],
+        extraActiveStateCandidates: [],
+      };
     }
+    extraSnapshotsCandidates = snapBackup.candidates;
+    extraActiveStateCandidates = activeBackup.candidates;
   }
 
-  return { ok: true, rawSnapshotsJson, rawActiveStateJson };
+  return {
+    ok: true,
+    rawSnapshotsJson: snapRead.value,
+    rawActiveStateJson: activeRead.value,
+    extraSnapshotsCandidates,
+    extraActiveStateCandidates,
+  };
 }
 
 async function inspectSingleIdbDatabase(
@@ -816,6 +863,8 @@ async function inspectSingleIdbDatabase(
           imageKeys: imageEntries.map((e) => e.key),
           rawSnapshotsJson: metaRead.rawSnapshotsJson,
           rawActiveStateJson: metaRead.rawActiveStateJson,
+          extraSnapshotsCandidates: metaRead.extraSnapshotsCandidates,
+          extraActiveStateCandidates: metaRead.extraActiveStateCandidates,
         })
       : { skipped: true, orphanedPuzzleKeys: [] as string[], orphanedImageKeys: [] as string[] };
     const orphanPuzzleSet = new Set(orphanRes.orphanedPuzzleKeys);
@@ -1256,11 +1305,10 @@ export async function cleanOrphanedSaveData(
   // Recompute live references fail-closed right before deleting to prevent TOCTOU races
   const activeReport = await inspectSingleIdbDatabase(activeDbName, activeDbName);
   if (activeReport?.orphanDetectionSkipped) {
-    result.warnings.push('Skipped orphan cleanup because save metadata could not be parsed safely.');
-    return result;
-  }
-
-  if (
+    result.warnings.push(
+      'Skipped IDB orphan cleanup because save metadata could not be verified safely.'
+    );
+  } else if (
     activeReport &&
     (activeReport.orphanedPuzzleKeys.length > 0 || activeReport.orphanedImageKeys.length > 0)
   ) {
@@ -1378,13 +1426,22 @@ async function deletePreviewDatabases(
       }
     } else if (del.blocked) {
       result.blockedDatabases.push(dbName);
+      let cleared = false;
       if (dbName === activeDbName || beforeBytes !== undefined) {
-        await clearAllStores(dbName);
-        if (beforeBytes !== undefined) {
+        cleared = await clearAllStores(dbName, blockedTimeoutMs);
+        if (cleared && beforeBytes !== undefined) {
           result.freedBytesEstimate += beforeBytes;
         }
       }
-      result.warnings.push(`Close other open tabs using ${dbName} to finish removing it.`);
+      if (cleared) {
+        result.warnings.push(
+          `Database ${dbName} is open in another tab; data was cleared, close other Capy tabs to finish removing it.`
+        );
+      } else {
+        result.warnings.push(
+          `Database ${dbName} is open in another tab and could not be cleared until other Capy tabs are closed.`
+        );
+      }
     }
   }
 }
@@ -1468,13 +1525,22 @@ async function deleteAllCapyDatabases(
     }
     if (del.blocked) {
       result.blockedDatabases.push(dbName);
+      let cleared = false;
       if (dbName === activeDbName || dbSizes.has(dbName)) {
-        await clearAllStores(dbName);
-        result.freedBytesEstimate += dbSizes.get(dbName) ?? 0;
+        cleared = await clearAllStores(dbName, blockedTimeoutMs);
+        if (cleared) {
+          result.freedBytesEstimate += dbSizes.get(dbName) ?? 0;
+        }
       }
-      result.warnings.push(
-        `Database ${dbName} is open in another tab; data was cleared but close other tabs to finish cleanup.`
-      );
+      if (cleared) {
+        result.warnings.push(
+          `Database ${dbName} is open in another tab; data was cleared but close other tabs to finish cleanup.`
+        );
+      } else {
+        result.warnings.push(
+          `Database ${dbName} is open in another tab and could not be cleared until other Capy tabs are closed.`
+        );
+      }
     }
   }
 }

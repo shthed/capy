@@ -472,7 +472,12 @@ export async function deleteOrphanedEntries(
   );
 }
 
-export async function clearAllStores(targetDbName?: string): Promise<void> {
+const DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS = 2500;
+
+export async function clearAllStores(
+  targetDbName?: string,
+  timeoutMs: number = DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS
+): Promise<boolean> {
   const effectiveDbName = targetDbName || resolveScopedDbName();
   const dbPrefix = `${effectiveDbName}::`;
   for (const key of Array.from(previewCache.keys())) {
@@ -480,17 +485,70 @@ export async function clearAllStores(targetDbName?: string): Promise<void> {
       previewCache.delete(key);
     }
   }
-  if (typeof indexedDB === 'undefined') return;
+  if (typeof indexedDB === 'undefined') return false;
+
+  const effectiveTimeoutMs =
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS;
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+
+  const clearPromise = runTransaction(
+    [STORE_PUZZLES, STORE_IMAGES],
+    (tx) => {
+      tx.objectStore(STORE_PUZZLES).clear();
+      tx.objectStore(STORE_IMAGES).clear();
+    },
+    effectiveDbName
+  ).then(
+    () => !timedOut,
+    (err) => {
+      reportSwallowed('IndexedDbStore.clearAllStores', err, { dbName: effectiveDbName });
+      return false;
+    }
+  );
+
+  const timeoutPromise = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => {
+      timer = null;
+      timedOut = true;
+      const stuckHandle = dbPromises.get(effectiveDbName);
+      if (stuckHandle) {
+        dbPromises.delete(effectiveDbName);
+        void stuckHandle.then(
+          (db) => {
+            try {
+              if (db && typeof db.close === 'function') {
+                db.close();
+              }
+            } catch (err) {
+              reportSwallowed('IndexedDbStore.clearAllStoresTimeoutClose', err, {
+                dbName: effectiveDbName,
+              });
+            }
+          },
+          () => {}
+        );
+      }
+      resolve(false);
+    }, effectiveTimeoutMs);
+    if (
+      typeof timer === 'object' &&
+      timer !== null &&
+      typeof (timer as { unref?: () => void }).unref === 'function'
+    ) {
+      (timer as { unref: () => void }).unref();
+    }
+  });
+
   try {
-    await runTransaction(
-      [STORE_PUZZLES, STORE_IMAGES],
-      (tx) => {
-        tx.objectStore(STORE_PUZZLES).clear();
-        tx.objectStore(STORE_IMAGES).clear();
-      },
-      effectiveDbName
-    );
-  } catch (err) {
-    reportSwallowed('IndexedDbStore.clearAllStores', err, { dbName: effectiveDbName });
+    return await Promise.race([clearPromise, timeoutPromise]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
   }
 }

@@ -701,6 +701,7 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
   const executeCleanup = useCallback(
     async (actionId: CleanupActionId) => {
       if (busyActionRef.current !== null) return;
+      scanSeqRef.current += 1;
       busyActionRef.current = actionId;
       setBusyAction(actionId);
       setErrorMsg(null);

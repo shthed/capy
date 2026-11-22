@@ -79,9 +79,12 @@ function createMockIndexedDb({
   initialDbs = {},
   exposeDatabasesApi = true,
   blockedDbNames = new Set(),
+  blockOpenDbNames = new Set(),
+  blockOpenAfterDeleteDbNames = new Set(),
 } = {}) {
   const dbs = new Map();
   const createdNames = [];
+  const deleteAttemptedDbNames = new Set();
 
   for (const [dbName, stores] of Object.entries(initialDbs)) {
     const storeMap = new Map();
@@ -198,6 +201,13 @@ function createMockIndexedDb({
         onblocked: null,
       };
       queueMicrotask(() => {
+        if (
+          blockOpenDbNames.has(dbName) ||
+          (blockOpenAfterDeleteDbNames.has(dbName) && deleteAttemptedDbNames.has(dbName))
+        ) {
+          req.onblocked?.({ target: req });
+          return;
+        }
         const existed = dbs.has(dbName);
         if (!existed) {
           let aborted = false;
@@ -226,6 +236,7 @@ function createMockIndexedDb({
       return req;
     },
     deleteDatabase(dbName) {
+      deleteAttemptedDbNames.add(dbName);
       const req = {
         result: undefined,
         error: null,
@@ -499,6 +510,8 @@ async function runImageCompressionTests(vite) {
 async function runStorageAnalyzerCoreTests(vite) {
   const analyzerMod = await vite.ssrLoadModule('/src/services/storage/StorageAnalyzer.ts');
   const idbMod = await vite.ssrLoadModule('/src/services/storage/IndexedDbStore.ts');
+  const snapshotMod = await vite.ssrLoadModule('/src/services/storage/SnapshotStorage.ts');
+  const backupMod = await vite.ssrLoadModule('/src/services/storage/BackupEngine.ts');
   const resetCachedHandles = async () => {
     await idbMod.closeDbHandle('capy_game_storage_v8');
     await idbMod.closeDbHandle('capy_game_storage_v8_beta');
@@ -1155,6 +1168,338 @@ async function runStorageAnalyzerCoreTests(vite) {
       qReport.totalReclaimableSafeBytes,
       0,
       'Uncleanable quarantine keys must NOT inflate totalReclaimableSafeBytes'
+    );
+
+    // 10. Regression: Android localStorage="[]" while CapyAndroid.loadBackup has live saves -> must preserve live saves
+    await resetCachedHandles();
+    const androidEmptyArrLs = createMockLocalStorage({
+      capy_snapshots_v8: '[]',
+    });
+    const androidEmptyArrIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            'native-live-1': { data: new Uint8Array(512) },
+            'native-orphan-1': { data: new Uint8Array(256) },
+          },
+          images: {
+            'native-blob-1': new Blob([new Uint8Array(256)]),
+            'preview_native-live-1': new Blob([new Uint8Array(128)]),
+            'orphan-img-1': new Blob([new Uint8Array(128)]),
+          },
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = androidEmptyArrLs;
+    globalThis.indexedDB = androidEmptyArrIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+      CapyAndroid: {
+        loadBackup: (key) =>
+          key === 'capy_snapshots_v8'
+            ? JSON.stringify([
+                {
+                  id: 'native-live-1',
+                  title: 'Recovered From Native',
+                  sourceRef: { kind: 'blob', uri: 'native-blob-1' },
+                },
+              ])
+            : null,
+        saveBackup: () => true,
+      },
+    };
+    const emptyArrClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(emptyArrClean.deletedIdbRecords, 2);
+    assert.deepEqual(
+      androidEmptyArrIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'),
+      ['native-live-1'],
+      'Android backup live save must survive cleanOrphanedSaveData when localStorage="[]"'
+    );
+    assert.deepEqual(
+      androidEmptyArrIdb._getStoreKeys('capy_game_storage_v8', 'images').sort(),
+      ['native-blob-1', 'preview_native-live-1'],
+      'Android backup blob and preview must survive cleanOrphanedSaveData when localStorage="[]"'
+    );
+
+    // 11. Regression: Android localStorage has stale [s1] while CapyAndroid.loadBackup has [s1, s2] -> s2 must survive
+    await resetCachedHandles();
+    const androidStaleLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 's1', title: 'Save 1' }]),
+    });
+    const androidStaleIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            s1: { data: new Uint8Array(512) },
+            s2: { data: new Uint8Array(512) },
+            'stale-orphan': { data: new Uint8Array(256) },
+          },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = androidStaleLs;
+    globalThis.indexedDB = androidStaleIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+      CapyAndroid: {
+        loadBackup: (key) =>
+          key === 'capy_snapshots_v8'
+            ? JSON.stringify([
+                { id: 's1', title: 'Save 1' },
+                { id: 's2', title: 'Save 2 Newer' },
+              ])
+            : null,
+        saveBackup: () => true,
+      },
+    };
+    const staleBackupClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(staleBackupClean.deletedIdbRecords, 1);
+    assert.deepEqual(
+      androidStaleIdb._getStoreKeys('capy_game_storage_v8', 'puzzles').sort(),
+      ['s1', 's2'],
+      'Newer save s2 in Android backup must survive cleanOrphanedSaveData when localStorage has stale [s1]'
+    );
+
+    // 12. Regression: Pure Web QuotaExceededError buffering [s1, s2] in BackupEngine pendingLocalHealWrites -> s2 must survive
+    await resetCachedHandles();
+    const baseQuotaLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 's1', title: 'Save 1', updatedAt: 1000 }]),
+    });
+    let throwQuotaOnSet = true;
+    const quotaWebLs = {
+      get length() {
+        return baseQuotaLs.length;
+      },
+      key(i) {
+        return baseQuotaLs.key(i);
+      },
+      getItem(k) {
+        return baseQuotaLs.getItem(k);
+      },
+      setItem(k, v) {
+        if (throwQuotaOnSet && k === 'capy_snapshots_v8') {
+          throw new DOMException('Quota exceeded', 'QuotaExceededError');
+        }
+        baseQuotaLs.setItem(k, v);
+      },
+      removeItem(k) {
+        baseQuotaLs.removeItem(k);
+      },
+      clear() {
+        baseQuotaLs.clear();
+      },
+    };
+    const quotaWebIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            s1: { data: new Uint8Array(512) },
+            s2: { data: new Uint8Array(512) },
+            'web-orphan': { data: new Uint8Array(256) },
+          },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = quotaWebLs;
+    globalThis.indexedDB = quotaWebIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    snapshotMod.saveSnapshots([
+      { id: 's1', title: 'Save 1', updatedAt: 1000 },
+      { id: 's2', title: 'Save 2 Buffered', updatedAt: 2000 },
+    ]);
+    // Confirm localStorage still only has stale [s1] while BackupEngine buffered [s1, s2]
+    assert.equal(JSON.parse(quotaWebLs.getItem('capy_snapshots_v8')).length, 1);
+    const webQuotaClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(webQuotaClean.deletedIdbRecords, 1);
+    assert.deepEqual(
+      quotaWebIdb._getStoreKeys('capy_game_storage_v8', 'puzzles').sort(),
+      ['s1', 's2'],
+      'Live save s2 buffered in BackupEngine pendingLocalHealWrites after QuotaExceededError must survive cleanOrphanedSaveData'
+    );
+    // Clean up BackupEngine pending queue so state does not leak to subsequent tests
+    throwQuotaOnSet = false;
+    backupMod.flushPendingBackups();
+
+    // 13. Regression: analyzeBrowserStorage() on Android with empty localStorage + populated CapyAndroid.loadBackup MUST be 100% read-only (0 writes)
+    await resetCachedHandles();
+    const roBaseLs = createMockLocalStorage({});
+    let lsWriteCount = 0;
+    const roSpyLs = {
+      get length() {
+        return roBaseLs.length;
+      },
+      key(i) {
+        return roBaseLs.key(i);
+      },
+      getItem(k) {
+        return roBaseLs.getItem(k);
+      },
+      setItem(k, v) {
+        lsWriteCount += 1;
+        roBaseLs.setItem(k, v);
+      },
+      removeItem(k) {
+        lsWriteCount += 1;
+        roBaseLs.removeItem(k);
+      },
+      clear() {
+        lsWriteCount += 1;
+        roBaseLs.clear();
+      },
+    };
+    const roAndroidIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            'ro-live-1': { data: new Uint8Array(512) },
+            'ro-orphan-1': { data: new Uint8Array(256) },
+          },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = roSpyLs;
+    globalThis.indexedDB = roAndroidIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+      CapyAndroid: {
+        loadBackup: (key) =>
+          key === 'capy_snapshots_v8'
+            ? JSON.stringify([{ id: 'ro-live-1', title: 'Android Backup' }])
+            : null,
+        saveBackup: () => true,
+      },
+    };
+    const roReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(roReport.indexedDb.activeDb.orphanDetectionSkipped, false);
+    assert.deepEqual(roReport.indexedDb.activeDb.orphanedPuzzleKeys, ['ro-orphan-1']);
+    assert.equal(
+      lsWriteCount,
+      0,
+      `analyzeBrowserStorage() must perform 0 localStorage writes on Android backup read (got ${lsWriteCount})`
+    );
+    assert.equal(roBaseLs.getItem('capy_snapshots_v8'), null);
+
+    // 14. Regression: Blocked DB where indexedDB.open inside clearAllStores() ALSO blocks -> returns false, no freedBytes inflation, accurate warning
+    await resetCachedHandles();
+    const blockedOpenLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'p1', title: 'Prod' }]),
+    });
+    const blockedOpenIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { p1: { data: new Uint8Array(50_000) } },
+          images: {},
+        },
+        capy_game_storage_v8_alpha: {
+          puzzles: { a1: { data: new Uint8Array(50_000) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+      blockedDbNames: new Set(['capy_game_storage_v8_alpha', 'capy_game_storage_v8']),
+      blockOpenAfterDeleteDbNames: new Set(['capy_game_storage_v8_alpha', 'capy_game_storage_v8']),
+    });
+    globalThis.localStorage = blockedOpenLs;
+    globalThis.indexedDB = blockedOpenIdb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const blockedPreviewRes = await analyzerMod.clearPreviewChannelData({
+      ...opts,
+      channels: ['alpha'],
+      blockedTimeoutMs: 60,
+    });
+    assert.deepEqual(blockedPreviewRes.blockedDatabases, ['capy_game_storage_v8_alpha']);
+    assert.equal(
+      blockedPreviewRes.freedBytesEstimate,
+      0,
+      `Blocked DB whose clearAllStores() failed must NOT inflate freedBytesEstimate (got ${blockedPreviewRes.freedBytesEstimate})`
+    );
+    assert.equal(
+      blockedPreviewRes.warnings.some((w) => w.includes('data was cleared')),
+      false,
+      'Warning must NOT falsely claim "data was cleared" when clearAllStores() fails'
+    );
+    assert.deepEqual(blockedOpenIdb._getStoreKeys('capy_game_storage_v8_alpha', 'puzzles'), ['a1']);
+
+    // Direct clearAllStores() call against blocked-open DB must return false
+    const directClearOk = await idbMod.clearAllStores('capy_game_storage_v8_alpha', 60);
+    assert.equal(directClearOk, false, 'clearAllStores() must return false when open() is blocked');
+
+    // Also verify clearAllCapyStorage does not credit blocked un-cleared active DB bytes
+    const blockedAllRes = await analyzerMod.clearAllCapyStorage({ ...opts, blockedTimeoutMs: 60 });
+    assert.equal(blockedAllRes.blockedDatabases.includes('capy_game_storage_v8'), true);
+    assert.equal(
+      blockedAllRes.freedBytesEstimate < 50_000,
+      true,
+      `clearAllCapyStorage must NOT include un-cleared 50KB DB bytes (got ${blockedAllRes.freedBytesEstimate})`
+    );
+    assert.equal(
+      blockedAllRes.warnings.some((w) => w.includes('data was cleared')),
+      false,
+      'clearAllCapyStorage warning must NOT falsely claim "data was cleared" when clearAllStores() fails'
+    );
+
+    // 15. Regression: Corrupt SNAPSHOTS_KEY + healthy SETTINGS_KEY quarantine key -> cleanableQuarantineCount===1 and cleanOrphanedSaveData deletes it while preserving all IDB saves
+    await resetCachedHandles();
+    const corruptSnapLs = createMockLocalStorage({
+      capy_snapshots_v8: '{corrupt-json',
+      capy_user_settings_v8: JSON.stringify({ theme: 'dark' }),
+      capy_user_settings_v8__corrupt_quarantine: '{old-corrupt-settings',
+    });
+    const corruptSnapIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            'preserve-1': { data: new Uint8Array(1024) },
+            'preserve-2': { data: new Uint8Array(1024) },
+          },
+          images: {
+            'preserve-1': new Blob([new Uint8Array(512)]),
+          },
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = corruptSnapLs;
+    globalThis.indexedDB = corruptSnapIdb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const corruptSnapReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(corruptSnapReport.indexedDb.activeDb.orphanDetectionSkipped, true);
+    assert.equal(corruptSnapReport.indexedDb.activeDb.orphanedCount, 0);
+    assert.equal(
+      corruptSnapReport.localStore.cleanableQuarantineCount,
+      1,
+      'Healthy settings quarantine key must still be counted as cleanable when snapshots JSON is corrupt'
+    );
+    const corruptSnapClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(corruptSnapClean.deletedIdbRecords, 0, 'IDB saves must be preserved when metadata is corrupt');
+    assert.equal(
+      corruptSnapClean.deletedLocalKeys,
+      1,
+      'cleanOrphanedSaveData must still clean the 1 healthy quarantine key matching cleanableQuarantineCount'
+    );
+    assert.equal(corruptSnapLs.getItem('capy_user_settings_v8__corrupt_quarantine'), null);
+    assert.deepEqual(
+      corruptSnapIdb._getStoreKeys('capy_game_storage_v8', 'puzzles').sort(),
+      ['preserve-1', 'preserve-2']
+    );
+    assert.equal(
+      corruptSnapClean.warnings.some((w) => w.includes('Skipped IDB orphan cleanup')),
+      true
     );
   } finally {
     await resetCachedHandles();
