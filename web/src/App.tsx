@@ -22,6 +22,7 @@ import {
   resolveScopedBackupKey,
 } from './services/StorageNamespace';
 import { SafeLocalStore } from './services/storage/SafeLocalStore';
+import { compressImageForStorage } from './services/storage/ImageCompression';
 import { TUTORIAL_COMPLETED_KEY } from './services/storage/StorageKeys';
 import { reportSwallowed } from './services/telemetry';
 import { NativeBridge } from './services/NativeBridge';
@@ -1268,13 +1269,14 @@ export const App: React.FC = () => {
         const updatedSnapshots = StorageService.addSnapshot(newSnapshot);
         setSnapshots(updatedSnapshots);
 
-        // Persist full-resolution custom image blob to IndexedDB so reloads never degrade to thumbnails
+        // Persist custom image blob to IndexedDB (downscaling & compressing oversized uploads)
         if (!sampleAssetPath) {
-          const persistBlobPromise = sourceBlob
-            ? Promise.resolve(sourceBlob)
-            : new Promise<Blob | null>((resolve) =>
-                canvas.toBlob((b) => resolve(b), 'image/webp', 0.92)
-              );
+          const persistBlobPromise = compressImageForStorage({
+            blob: sourceBlob,
+            image: img,
+            width: canvas.width,
+            height: canvas.height,
+          });
           persistBlobPromise
             .then((blob) => {
               if (blob) {
@@ -6116,6 +6118,64 @@ export const App: React.FC = () => {
               }
             } catch (err) {
               console.error('Failed to clear all snapshots:', err);
+              if (clearSeq === snapshotTransitionSeqRef.current) {
+                setIsLoading(false);
+              }
+            } finally {
+              if (!handedOff && clearSeq === snapshotTransitionSeqRef.current) {
+                clearPendingViewportSave();
+                snapshotTransitioningRef.current = false;
+                if (!clearedLocalState) {
+                  liveCoopRef.current = latestRenderCoopRef.current;
+                }
+              }
+            }
+          }}
+          onAfterStorageClear={async ({ clearedActiveChannel }) => {
+            if (!clearedActiveChannel) return;
+            clearPendingViewportSave();
+            const clearSeq = ++snapshotTransitionSeqRef.current;
+            snapshotTransitioningRef.current = true;
+            liveCoopRef.current = {
+              ...liveCoopRef.current,
+              activeSnapshotId: null,
+              puzzle: null,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+            };
+            let handedOff = false;
+            let clearedLocalState = false;
+            try {
+              setSnapshots([]);
+              setActiveSnapshotId(null);
+              setPuzzle(null);
+              setFilledRegionIds(new Set());
+              setPaintedRegionColors(new Map());
+              syncUndoStack([]);
+              syncRedoStack([]);
+              setHintRegionId(null);
+              clearedLocalState = true;
+              const defaultSample = SAMPLE_GALLERY[0];
+              const img = await loadHtmlImage(defaultSample.assetPath);
+              if (clearSeq !== snapshotTransitionSeqRef.current) return;
+              if (img) {
+                handedOff = true;
+                loadArtworkFromImage(
+                  img,
+                  defaultSample.title,
+                  settings.generatorConfig,
+                  new Set(),
+                  undefined,
+                  undefined,
+                  defaultSample.assetPath
+                );
+              } else {
+                clearPendingViewportSave();
+                snapshotTransitioningRef.current = false;
+                setIsLoading(false);
+              }
+            } catch (err) {
+              console.error('Failed to reset state after storage clear:', err);
               if (clearSeq === snapshotTransitionSeqRef.current) {
                 setIsLoading(false);
               }

@@ -144,4 +144,42 @@ export const SafeLocalStore = {
   removeScopedItem(baseKey: string, options?: { rethrow?: boolean }): boolean {
     return this.removeItem(resolveScopedStorageKey(baseKey), options);
   },
+
+  keys(): string[] {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return [];
+      const result: string[] = [];
+      const len = typeof localStorage.length === 'number' ? localStorage.length : 0;
+      for (let i = 0; i < len; i++) {
+        const k = localStorage.key(i);
+        if (typeof k === 'string') {
+          result.push(k);
+        }
+      }
+      return result;
+    } catch (err) {
+      reportSwallowed('SafeLocalStore.keys', err);
+      return [];
+    }
+  },
+
+  entries(): Array<[string, string]> {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return [];
+      const result: Array<[string, string]> = [];
+      const len = typeof localStorage.length === 'number' ? localStorage.length : 0;
+      for (let i = 0; i < len; i++) {
+        const k = localStorage.key(i);
+        if (typeof k !== 'string') continue;
+        const v = localStorage.getItem(k);
+        if (typeof v === 'string') {
+          result.push([k, v]);
+        }
+      }
+      return result;
+    } catch (err) {
+      reportSwallowed('SafeLocalStore.entries', err);
+      return [];
+    }
+  },
 };

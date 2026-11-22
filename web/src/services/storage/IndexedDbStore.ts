@@ -60,6 +60,10 @@ export function clearScopedPreviewCache(): void {
   }
 }
 
+export function clearAllPreviewCaches(): void {
+  previewCache.clear();
+}
+
 export function getPreviewCacheSize(): number {
   return previewCache.size;
 }
@@ -91,6 +95,21 @@ export function evictDbHandle(dbName: string, expectedPromise?: Promise<IDBDatab
     .catch((err) => {
       reportSwallowed('IndexedDbStore.evictDbHandleReject', err, { dbName });
     });
+}
+
+export async function closeDbHandle(dbName: string): Promise<void> {
+  const current = dbPromises.get(dbName);
+  if (!current) return;
+  dbPromises.delete(dbName);
+  try {
+    const db = await current;
+    if (db && typeof db.close === 'function') {
+      db.close();
+    }
+  } catch (err) {
+    reportSwallowed('IndexedDbStore.closeDbHandle', err, { dbName });
+  }
+  await Promise.resolve();
 }
 
 function getDBWithHandle(): { dbName: string; dbPromise: Promise<IDBDatabase> } {
@@ -414,6 +433,36 @@ export async function deleteSnapshotEntries(id: string): Promise<void> {
   } catch (err) {
     reportSwallowed('IndexedDbStore.deleteSnapshotEntries', err, { id });
   }
+}
+
+export async function deleteOrphanedEntries(
+  puzzleKeys: string[],
+  imageKeys: string[]
+): Promise<void> {
+  if (puzzleKeys.length === 0 && imageKeys.length === 0) return;
+  for (const key of imageKeys) {
+    if (key.startsWith('preview_')) {
+      deleteCachedPreview(key.slice('preview_'.length));
+    }
+  }
+  if (typeof indexedDB === 'undefined') return;
+  const storesToOpen: string[] = [];
+  if (puzzleKeys.length > 0) storesToOpen.push(STORE_PUZZLES);
+  if (imageKeys.length > 0) storesToOpen.push(STORE_IMAGES);
+  await runTransaction(storesToOpen, (tx) => {
+    if (puzzleKeys.length > 0) {
+      const puzzleStore = tx.objectStore(STORE_PUZZLES);
+      for (const key of puzzleKeys) {
+        puzzleStore.delete(key);
+      }
+    }
+    if (imageKeys.length > 0) {
+      const imageStore = tx.objectStore(STORE_IMAGES);
+      for (const key of imageKeys) {
+        imageStore.delete(key);
+      }
+    }
+  });
 }
 
 export async function clearAllStores(): Promise<void> {
