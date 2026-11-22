@@ -33,6 +33,7 @@ import { runSettingsDecompositionTests } from './settings-decomposition.test.mjs
 import { runWorkerCoopSecurityTests } from './worker-coop-security.test.mjs';
 import { runEngineCanvasPerfTests } from './engine-canvas-perf.test.mjs';
 import { runAppHooksQuickwinTests } from './app-hooks-quickwin.test.mjs';
+import { runSessionRestorePipelineTests } from './session-restore-pipeline.test.mjs';
 
 import { runBrowserBasicsSuite } from './tests/e2e/runner.mjs';
 
@@ -102,8 +103,9 @@ async function runCodecAndEngineTests() {
     await runWorkerCoopSecurityTests(vite);
     await runEngineCanvasPerfTests(vite);
     await runAppHooksQuickwinTests(vite);
+    await runSessionRestorePipelineTests(vite);
     logUnitPass(
-      '.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening, SettingsModal Decomposition, Worker Co-op Security, Engine/Canvas Perf, App Hooks Quick-Win & M1 release safety hardening verified.'
+      '.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening, SettingsModal Decomposition, Worker Co-op Security, Engine/Canvas Perf, App Hooks Quick-Win, Session Restore Pipeline & M1 release safety hardening verified.'
     );
 
     await runByocCloudSyncTests(ctx);
