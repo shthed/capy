@@ -246,33 +246,37 @@ export class LineArtExtractor {
       }
     }
 
-    // Seed watershed propagation from neighboring colored regions
+    // Seed watershed propagation from neighboring colored regions without mutating regionMap
+    // in-place during the scan so medial-axis symmetry is preserved regardless of scan order.
+    const seedValues = new Int32Array(total);
     for (let y = 0; y < height; y++) {
       const row = y * width;
       for (let x = 0; x < width; x++) {
         const idx = row + x;
         if (multiTouchLine[idx] === 1 && regionMap[idx] === -1) {
           let neighborR = -1;
-          const neighbors = [
-            x > 0 ? idx - 1 : -1,
-            x < width - 1 ? idx + 1 : -1,
-            y > 0 ? idx - width : -1,
-            y < height - 1 ? idx + width : -1,
-          ];
-
-          for (const n of neighbors) {
-            if (n >= 0 && regionMap[n] > 0) {
-              neighborR = regionMap[n];
-              break;
-            }
+          if (x > 0 && regionMap[idx - 1] > 0) {
+            neighborR = regionMap[idx - 1];
+          } else if (x < width - 1 && regionMap[idx + 1] > 0) {
+            neighborR = regionMap[idx + 1];
+          } else if (y > 0 && regionMap[idx - width] > 0) {
+            neighborR = regionMap[idx - width];
+          } else if (y < height - 1 && regionMap[idx + width] > 0) {
+            neighborR = regionMap[idx + width];
           }
 
           if (neighborR > 0) {
-            regionMap[idx] = neighborR;
-            queue[tail++] = idx;
+            queue[tail] = idx;
+            seedValues[tail] = neighborR;
+            tail++;
           }
         }
       }
+    }
+
+    // Apply all Pass-2 seeds simultaneously after the scan completes
+    for (let i = 0; i < tail; i++) {
+      regionMap[queue[i]] = seedValues[i];
     }
 
     // Multi-source BFS watershed expansion

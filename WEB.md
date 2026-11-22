@@ -220,7 +220,7 @@ flowchart TD
 ### Viewport Clamping (`clampCanvasOffset`), Magnetic Detents & `ResizeObserver`
 - **Zoom Range, Sensitivity & Magnetic Detents**: Smoothly clamped between **`0.5x`** and **`12.0x`**. Mouse-wheel, two-finger pinch (`Math.pow(rawRatio, zoomSensitivity)`), and one-finger double-tap drag deltas scale smoothly in log-space by `zoomSensitivity` (`0.5`--`2.0`). When `snapZoomLevels` is enabled, `applyZoomSnapDetent` snaps relative zoom within `+-4%` onto magnetic stops `[1, 2, 4, 8, 12]` while re-anchoring `offset` around the active cursor/pinch/double-tap focal point.
 - **Dynamic Corner Margins**: Scales pan bounds dynamically with `containerWidth * 0.72` and `containerHeight * 0.72` when zoomed in so all four puzzle corners can pan comfortably past screen center above `PaletteDock` and below `GameTopBar`.
-- **Immediate Resize & Rotation Clamping (`BF-2`) & Zero-Alloc Rendering**: A `ResizeObserver` on `containerRef` (plus `window` `resize` fallback) immediately re-clamps `offsetRef.current`, updates `containerSize`, refreshes `canvasRectRef`, resizes the high-DPI `<canvas>`, and repaints synchronously on portrait/landscape rotation or split-screen resize. `PuzzleCanvas` is wrapped in `React.memo` alongside `GameTopBar`, `FloatingActions`, `PaletteDock`, and `ReplayControls`; `drawCompositeFrame` reads `scaleRef.current`/`offsetRef.current` directly without recreating resize/media/ripple effects during pan/zoom, `highlightImageDataRef` reuses its buffer in place, the idle hint pulse loop throttles to `>= 50ms` (`~20fps`), and `App.tsx` maintains an $O(1)$ `regionByIdRef` lookup map plus `Set`-equality viewport filters.
+- **Immediate Resize & Rotation Clamping (`BF-2`) & Zero-Alloc Rendering**: A `ResizeObserver` on `containerRef` (plus `window` `resize` fallback) immediately re-clamps `offsetRef.current`, updates `containerSize`, refreshes `canvasRectRef`, resizes the high-DPI `<canvas>`, and repaints synchronously on portrait/landscape rotation or split-screen resize. `PuzzleCanvas` is wrapped in `React.memo` alongside `GameTopBar`, `FloatingActions`, `PaletteDock`, and `ReplayControls`; `drawCompositeFrame` reads `scaleRef.current`/`offsetRef.current`/`tapDotRef.current` directly without recreating resize/media/ripple effects during pan/zoom/tap, `highlightImageDataRef` reuses its buffer in place via `fill(0)`, wheel zoom uses a native `{ passive: false }` listener on `<canvas>`, pointer coordinate mapping reuses `getCachedCanvasRect()`, the idle hint pulse loop throttles to `>= 50ms` (`~20fps`), and `App.tsx` maintains an $O(1)$ `regionByIdRef` lookup map plus `Set`-equality viewport filters.
 
 ### 6-Mode Touch, Mouse & Gesture Engine
 `PuzzleCanvas` orchestrates **6 distinct** interaction modes:
@@ -270,10 +270,11 @@ type WorkerResponse =
         width: number;
         height: number;
         palette: PaletteColor[];
-        regions: Array<Omit<Region, 'pixels'> & { pixelsBuffer: ArrayBuffer }>;
+        regions: Array<Omit<Region, 'pixels'> & { pixelsOffset: number; pixelsLength: number }>;
+        packedPixelsBuffer: ArrayBuffer; // Single contiguous Int32Array sliced via subarray on main thread
         regionMap: ArrayBuffer; // Reconstructed to Int32Array on main thread
         borderMap: ArrayBuffer; // Reconstructed to Uint8Array on main thread
-        isBlackAndWhite?: boolean;
+        isFreeColor?: boolean;
       };
     }
   | {

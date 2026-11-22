@@ -571,8 +571,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const gestureRawOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const gestureClampedOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Interactive feedback
-  const [tapDot, setTapDot] = useState<{ x: number; y: number; alpha: number } | null>(null);
+  // Interactive feedback dot (stored in ref + demand-driven rAF loop; zero React state updates)
+  const tapDotRef = useRef<{ x: number; y: number; alpha: number; lastTimeMs: number }>({
+    x: 0,
+    y: 0,
+    alpha: 0,
+    lastTimeMs: 0,
+  });
+  const tapDotRafIdRef = useRef<number | null>(null);
 
   // Animation pulse (stored in ref to avoid 60 FPS React state reconciliation)
   const pulseAlphaRef = useRef(0.7);
@@ -1096,17 +1102,40 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     return () => cancelAnimationFrame(animId);
   }, [isSmoothFollowingReplay, puzzle]);
 
-  // Tap dot decay
-  useEffect(() => {
-    if (!tapDot) return;
-    const interval = setInterval(() => {
-      setTapDot((prev) => {
-        if (!prev || prev.alpha <= 0.05) return null;
-        return { ...prev, alpha: prev.alpha * 0.75 };
-      });
-    }, 30);
-    return () => clearInterval(interval);
-  }, [tapDot]);
+  // Demand-driven tap dot decay rAF loop (zero React state updates; sleeps completely when expired)
+  const stepTapDotRef = useRef<(now: number) => void>(() => {});
+  const stepTapDot = useCallback((now: number) => {
+    tapDotRafIdRef.current = null;
+    const dot = tapDotRef.current;
+    if (dot.alpha <= 0) return;
+
+    const dt = Math.max(0, now - dot.lastTimeMs);
+    dot.lastTimeMs = now;
+    const nextAlpha = dot.alpha * Math.pow(0.75, dt / 30);
+    if (nextAlpha <= 0.05) {
+      dot.alpha = 0;
+      drawCompositeFrameRef.current(pulseAlphaRef.current);
+      return;
+    }
+    dot.alpha = nextAlpha;
+    drawCompositeFrameRef.current(pulseAlphaRef.current);
+    if (typeof requestAnimationFrame === 'function') {
+      tapDotRafIdRef.current = requestAnimationFrame(stepTapDotRef.current);
+    }
+  }, []);
+  stepTapDotRef.current = stepTapDot;
+
+  const triggerTapDot = useCallback((x: number, y: number) => {
+    const dot = tapDotRef.current;
+    dot.x = x;
+    dot.y = y;
+    dot.alpha = 1;
+    dot.lastTimeMs = performance.now();
+    drawCompositeFrameRef.current(pulseAlphaRef.current);
+    if (typeof requestAnimationFrame === 'function' && tapDotRafIdRef.current === null) {
+      tapDotRafIdRef.current = requestAnimationFrame(stepTapDotRef.current);
+    }
+  }, []);
 
   // Helper to paint a single region into baseImageData
   const writeRegionToImageData = useCallback(
@@ -1333,10 +1362,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     if (highlightCanvasRef.current.width !== width || highlightCanvasRef.current.height !== height) {
       highlightCanvasRef.current.width = width;
       highlightCanvasRef.current.height = height;
+      highlightImageDataRef.current = null;
     }
 
     const hCtx = highlightCanvasRef.current.getContext('2d')!;
-    const imgData = hCtx.createImageData(width, height);
+    let imgData = highlightImageDataRef.current;
+    if (!imgData || imgData.width !== width || imgData.height !== height) {
+      imgData = hCtx.createImageData(width, height);
+      highlightImageDataRef.current = imgData;
+    } else {
+      imgData.data.fill(0);
+    }
     const data = imgData.data;
 
     const hr = (hintColorArgb >> 16) & 0xff;
@@ -1485,11 +1521,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   // Coordinate conversion helper
   const screenToCanvasCoords = useCallback(
     (clientX: number, clientY: number) => {
-      const canvas = canvasRef.current;
       const container = containerRef.current;
-      if (!canvas || !container || !puzzle) return null;
+      if (!container || !puzzle) return null;
 
-      const rect = canvas.getBoundingClientRect();
+      const rect = getCachedCanvasRect();
+      if (!rect) return null;
       const screenX = clientX - rect.left;
       const screenY = clientY - rect.top;
 
@@ -1507,7 +1543,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
       return { x: canvasX, y: canvasY, screenX, screenY, effScale };
     },
-    [puzzle]
+    [puzzle, getCachedCanvasRect]
   );
 
   // Bresenham line painting for smooth drag strokes; returns true when at least one eligible region is dispatched
@@ -1790,8 +1826,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         );
       }
 
-      // 4. Tap feedback animation dot
-      if (tapDot && tapDot.alpha > 0) {
+      // 4. Tap feedback animation dot (ref-driven, zero React state updates)
+      const tapDot = tapDotRef.current;
+      if (tapDot.alpha > 0) {
         ctx.beginPath();
         ctx.arc(tapDot.x, tapDot.y, 7 / effScale, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(56, 189, 248, ${tapDot.alpha * 0.9})`;
@@ -1852,7 +1889,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       reducedMotion,
       hintIntensity,
       displayNumberMap,
-      tapDot,
       isGenerating,
       detailedProgress,
       generationProgress,
@@ -1951,6 +1987,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       highlightImageDataRef.current = null;
       canvasRectRef.current = null;
       sourcePixelsRef.current = null;
+      if (tapDotRafIdRef.current !== null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(tapDotRafIdRef.current);
+        tapDotRafIdRef.current = null;
+      }
     };
   }, []);
 
@@ -2112,7 +2152,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       if (hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y)) {
         paintedInGestureRef.current = true;
       }
-      setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
+      triggerTapDot(coords.x, coords.y);
     }
   };
 
@@ -2270,7 +2310,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       if (hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y)) {
         paintedInGestureRef.current = true;
       }
-      setTapDot({ x: currCoords.x, y: currCoords.y, alpha: 1 });
+      triggerTapDot(currCoords.x, currCoords.y);
     } else {
       const container = containerRef.current;
       if (!container || !puzzle) return;
@@ -2475,7 +2515,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       } else if (!alreadyPaintedInGesture) {
         const coords = screenToCanvasCoords(e.clientX, e.clientY);
         if (coords && puzzle) {
-          setTapDot({ x: coords.x, y: coords.y, alpha: 1 });
+          triggerTapDot(coords.x, coords.y);
           const lx = Math.floor(coords.x);
           const ly = Math.floor(coords.y);
           onPuzzleInteractionRef.current?.();
@@ -2547,14 +2587,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     isPinchPanningRef.current = false;
     isDoubleTapCandidateRef.current = false;
     isOneFingerZoomingRef.current = false;
+    isDoubleTapPanningRef.current = false;
     if (touchPointerCountRef.current === 0) {
       wasPinchingRef.current = false;
     }
     commitTransformState(true);
   };
 
-  // Wheel zoom around cursor
-  const handleWheel = (e: React.WheelEvent) => {
+  // Wheel zoom around cursor (attached natively with { passive: false } so preventDefault works cleanly)
+  const handleWheelRef = useRef<(e: WheelEvent) => void>(() => {});
+  const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     if (!containerRef.current || !puzzle || e.deltaY === 0) return;
 
@@ -2607,6 +2649,17 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       onPuzzleInteractionRef.current?.();
     }
   };
+  handleWheelRef.current = handleWheel;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onNativeWheel = (e: WheelEvent) => handleWheelRef.current(e);
+    canvas.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', onNativeWheel);
+    };
+  }, []);
 
   // Multi-touch 2-finger focal-point pinch-to-zoom & pan
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -2746,7 +2799,6 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
-      onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
