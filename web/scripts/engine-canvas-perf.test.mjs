@@ -275,6 +275,129 @@ export async function runEngineCanvasPerfTests(vite) {
         `Horizontal medial-axis symmetry failed at (${x}, 5): expected 2, got ${horizRegionMap[5 * hw + x]}`
       );
     }
+
+    // 3c. Strict H-mirror, V-mirror, and 180-degree rotation symmetry across 2px, 3px, and 4px
+    // vertical lines, horizontal lines, and 4-quadrant crosses (guards Pass-1 mutation & Pass-2
+    // interior-line tie-break regressions).
+    const transformGrid = (grid, gw, gh, mode, remap) => {
+      const out = new grid.constructor(gw * gh);
+      for (let y = 0; y < gh; y++) {
+        for (let x = 0; x < gw; x++) {
+          const sx = mode === 'h' || mode === 'rot180' ? gw - 1 - x : x;
+          const sy = mode === 'v' || mode === 'rot180' ? gh - 1 - y : y;
+          const v = grid[sy * gw + sx];
+          out[y * gw + x] = remap ? (remap[v] ?? v) : v;
+        }
+      }
+      return out;
+    };
+
+    const assertSymmetry = (label, baseRegionMap, baseLineMask, gw, gh, remaps) => {
+      const origOut = new Int32Array(baseRegionMap);
+      LineArtExtractor.alignBoundariesToLines(origOut, baseLineMask, gw, gh);
+
+      for (const mode of ['h', 'v', 'rot180']) {
+        const remap = remaps[mode];
+        const tRegion = transformGrid(baseRegionMap, gw, gh, mode, remap);
+        const tMask = transformGrid(baseLineMask, gw, gh, mode, null);
+        LineArtExtractor.alignBoundariesToLines(tRegion, tMask, gw, gh);
+
+        const expected = transformGrid(origOut, gw, gh, mode, remap);
+        let diffs = 0;
+        for (let i = 0; i < origOut.length; i++) {
+          if (tRegion[i] !== expected[i]) diffs++;
+        }
+        assert.equal(
+          diffs,
+          0,
+          `LineArtExtractor ${label} failed ${mode} symmetry with ${diffs} differing pixels`
+        );
+      }
+    };
+
+    for (const thickness of [2, 3, 4]) {
+      // Vertical line (R3) separating R1 (left) and R2 (right)
+      const vw = 12 + thickness;
+      const vh = 12;
+      const vReg = new Int32Array(vw * vh);
+      const vMask = new Uint8Array(vw * vh);
+      const xStart = 6;
+      const xEnd = 6 + thickness - 1;
+      for (let y = 0; y < vh; y++) {
+        for (let x = 0; x < vw; x++) {
+          const idx = y * vw + x;
+          if (x < xStart) {
+            vReg[idx] = 1;
+          } else if (x > xEnd) {
+            vReg[idx] = 2;
+          } else {
+            vReg[idx] = 3;
+            vMask[idx] = 1;
+          }
+        }
+      }
+      assertSymmetry(`vertical_${thickness}px`, vReg, vMask, vw, vh, {
+        h: { 1: 2, 2: 1, 3: 3 },
+        v: { 1: 1, 2: 2, 3: 3 },
+        rot180: { 1: 2, 2: 1, 3: 3 },
+      });
+
+      // Horizontal line (R3) separating R1 (top) and R2 (bottom)
+      const hw2 = 12;
+      const hh2 = 12 + thickness;
+      const hReg = new Int32Array(hw2 * hh2);
+      const hMask = new Uint8Array(hw2 * hh2);
+      const yStart = 6;
+      const yEnd = 6 + thickness - 1;
+      for (let y = 0; y < hh2; y++) {
+        for (let x = 0; x < hw2; x++) {
+          const idx = y * hw2 + x;
+          if (y < yStart) {
+            hReg[idx] = 1;
+          } else if (y > yEnd) {
+            hReg[idx] = 2;
+          } else {
+            hReg[idx] = 3;
+            hMask[idx] = 1;
+          }
+        }
+      }
+      assertSymmetry(`horizontal_${thickness}px`, hReg, hMask, hw2, hh2, {
+        h: { 1: 1, 2: 2, 3: 3 },
+        v: { 1: 2, 2: 1, 3: 3 },
+        rot180: { 1: 2, 2: 1, 3: 3 },
+      });
+
+      // 4-quadrant cross (R5) separating R1 (TL), R2 (TR), R3 (BL), R4 (BR)
+      const cw = 12 + thickness;
+      const ch = 12 + thickness;
+      const cReg = new Int32Array(cw * ch);
+      const cMask = new Uint8Array(cw * ch);
+      for (let y = 0; y < ch; y++) {
+        for (let x = 0; x < cw; x++) {
+          const idx = y * cw + x;
+          const inX = x >= 6 && x < 6 + thickness;
+          const inY = y >= 6 && y < 6 + thickness;
+          if (inX || inY) {
+            cReg[idx] = 5;
+            cMask[idx] = 1;
+          } else if (y < 6 && x < 6) {
+            cReg[idx] = 1;
+          } else if (y < 6 && x >= 6 + thickness) {
+            cReg[idx] = 2;
+          } else if (y >= 6 + thickness && x < 6) {
+            cReg[idx] = 3;
+          } else {
+            cReg[idx] = 4;
+          }
+        }
+      }
+      assertSymmetry(`cross_${thickness}px`, cReg, cMask, cw, ch, {
+        h: { 1: 2, 2: 1, 3: 4, 4: 3, 5: 5 },
+        v: { 1: 3, 2: 4, 3: 1, 4: 2, 5: 5 },
+        rot180: { 1: 4, 2: 3, 3: 2, 4: 1, 5: 5 },
+      });
+    }
   }
 
   // -------------------------------------------------------------------------

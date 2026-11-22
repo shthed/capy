@@ -43,13 +43,12 @@ export function packPuzzleForTransfer(puzzleData: PuzzleData): {
 
   const packedPixels = new Int32Array(totalRegionPixels);
   let offset = 0;
-  const serializedRegions: SerializedWorkerRegion[] = new Array(puzzleData.regions.length);
-
-  for (let i = 0; i < puzzleData.regions.length; i++) {
-    const r = puzzleData.regions[i];
+  const serializedRegions: SerializedWorkerRegion[] = puzzleData.regions.map((r) => {
     const len = r.pixels.length;
     packedPixels.set(r.pixels, offset);
-    serializedRegions[i] = {
+    const regionOffset = offset;
+    offset += len;
+    return {
       id: r.id,
       colorId: r.colorId,
       centroidX: r.centroidX,
@@ -60,11 +59,10 @@ export function packPuzzleForTransfer(puzzleData: PuzzleData): {
       minY: r.minY,
       maxY: r.maxY,
       maxRadius: r.maxRadius,
-      pixelsOffset: offset,
+      pixelsOffset: regionOffset,
       pixelsLength: len,
     };
-    offset += len;
-  }
+  });
 
   const regionMapBuffer: ArrayBuffer =
     puzzleData.regionMap.buffer instanceof ArrayBuffer &&
