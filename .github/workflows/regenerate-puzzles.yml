@@ -22,7 +22,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
   group: regenerate-puzzles-beta
@@ -92,62 +91,26 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Commit regenerated .capy archives and open or update beta PR
+      - name: Commit and push regenerated .capy archives directly to beta
         if: steps.diff_check.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          READY_TOKEN: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          BRANCH="automation/regenerate-puzzles"
-          REMOTE_SHA="$(git ls-remote --heads origin "refs/heads/${BRANCH}" | awk '{print $1}')"
-          git checkout -B "$BRANCH"
           git add web/public/assets/sample_saves.capy web/public/assets/daily_saves.capy
           git commit -m "Regenerate Max-settings sample and daily .capy puzzles"
-          if [ -n "$REMOTE_SHA" ]; then
-            git push --force-with-lease="refs/heads/${BRANCH}:${REMOTE_SHA}" origin "$BRANCH"
-          else
-            git push origin "$BRANCH"
-          fi
 
-          PR_BODY=$(cat <<'EOF'
-          ## Summary
-
-          Automatically regenerates the pre-built sample and daily puzzles at maximum detail settings so players can open them immediately without waiting for on-device generation.
-
-          ### When the Job Runs
-
-          - **Puzzle/Engine Updates**: Runs automatically when `beta` receives changes under `web/src/engine/**`, `web/scripts/generate-sample-saves.mjs`, `web/public/assets/*.webp`, or `.github/workflows/regenerate-puzzles.yml`.
-          - **Manual Trigger**: Can be run on demand via `workflow_dispatch` (serialized via `regenerate-puzzles-beta`).
-
-          ### How It Works
-
-          - Runs `npm run generate:samples` (`web/scripts/generate-sample-saves.mjs`) against a local Vite server and headless Playwright Chromium using `MAX_GENERATOR_CONFIG` (`2048` resolution, `64` colors, `<= 2000` regions, `ABSORB_LINES`, `HIGH`).
-          - Rebuilds the `4` starter samples (`web/public/assets/sample_saves.capy`) and `20` daily combinations (`web/public/assets/daily_saves.capy`) with deterministic timestamps and a `< 14 MB` decompressed payload ceiling.
-          - Verifies `npm run test:sanity && npm run lint && npm run build && npm run test:unit` and pushes/updates this `--base beta` PR only when `.capy` bytes change.
-
-          ### PR Readiness Score: 100%
-
-          <details><summary>PR Readiness Checklist</summary>
-
-          - **100%** — **Pre-Generated Bundles**: `sample_saves.capy` and `daily_saves.capy` regenerated headlessly at Max settings (`<= 2000` regions, `< 14 MB` unpacked).
-          - **100%** — **Verification Gates**: `npm run test:sanity`, `npm run lint`, `npm run build`, and `npm run test:unit` passed.
-
-          </details>
-
-          Ready for automated review and merge to `beta`.
-          EOF
-          )
-
-          EXISTING_PR=$(gh pr list --head "$BRANCH" --base beta --state open --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING_PR" ]; then
-            gh pr edit "$EXISTING_PR" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY"
-          else
-            PR_URL=$(gh pr create --draft --base beta --head "$BRANCH" --title "Regenerate Max-settings sample and daily puzzles" --body "$PR_BODY" --label "ci,web")
-            PR_NUM=$(printf '%s' "$PR_URL" | grep -oE '[0-9]+$' || true)
-            if [ -n "$PR_NUM" ]; then
-              GH_TOKEN="$READY_TOKEN" gh pr ready "$PR_NUM"
+          # Rebase cleanly onto latest origin/beta in case another PR merged while Chromium ran
+          for attempt in 1 2 3; do
+            git fetch origin +refs/heads/beta:refs/remotes/origin/beta
+            git rebase origin/beta
+            if git push origin HEAD:refs/heads/beta; then
+              echo "Pushed regenerated .capy archives directly to beta on attempt ${attempt}."
+              exit 0
             fi
-          fi
+            echo "Push to beta raced on attempt ${attempt}; retrying after fresh fetch..."
+            sleep 3
+          done
+          echo "::error::Failed to push regenerated .capy archives to beta after 3 attempts." >&2
+          exit 1
