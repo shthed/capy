@@ -69,6 +69,7 @@ export interface AuthProvider {
   signInWithGoogle(customClientId?: string): Promise<PlayerIdentity>;
   signInWithPlayGames(): Promise<PlayerIdentity>;
   signOut(): Promise<PlayerIdentity>;
+  onSignOut?(listener: (previousIdentity: PlayerIdentity) => void): () => void;
   subscribe(listener: (identity: PlayerIdentity) => void): () => void;
 }
 
@@ -109,6 +110,7 @@ export interface CloudLibraryManifestV2 {
   devicePlayerId: string;
   providerId?: CloudProviderId;
   entries: Record<string, CloudSaveEntryV2>;
+  tombstones?: Record<string, number>;
 }
 
 export type CloudBackendKind =
@@ -151,6 +153,8 @@ export interface CloudSaveProvider {
     totalCount: number
   ): Promise<CloudSyncResult>;
   syncFullLibrary(localSnapshots: SavedSnapshot[]): Promise<CloudLibrarySyncSummary>;
+  recordSlotDeletion?(slotKey: string, deletedAt?: number): void;
+  clearLocalCloudCache?(previousIdentity?: PlayerIdentity): void;
 }
 
 export interface CoopParticipant {

@@ -1,5 +1,6 @@
 import { PaletteColor, PuzzleData, SavedSnapshot } from '../../types';
 import { estimateCompactPuzzleBytes } from '../CapyCodec';
+import { computeSlotKeyForSnapshot, recordLocalSlotTombstone } from '../cloud/slotKey';
 import { reportSwallowed } from '../telemetry';
 import { clearActiveState, loadActiveState } from './ActiveSessionStorage';
 import {
@@ -437,7 +438,11 @@ export function togglePinSnapshot(id: string): SavedSnapshot[] {
 
 export async function deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
   const { snapshots: list, metaTsById } = loadSnapshotsWithMeta();
+  const target = list.find((s) => s.id === id);
   const updated = list.filter((s) => s.id !== id);
+  if (target) {
+    recordLocalSlotTombstone(computeSlotKeyForSnapshot(target), Date.now());
+  }
   if (updated.length < list.length) {
     if (updated.length > 0) {
       const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);

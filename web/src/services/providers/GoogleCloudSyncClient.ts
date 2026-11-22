@@ -91,6 +91,41 @@ declare global {
   }
 }
 
+export class GoogleDriveHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = 'GoogleDriveHttpError';
+  }
+}
+
+export type GoogleSessionInvalidationReason = 'http_401';
+
+const googleSessionInvalidatedListeners = new Set<
+  (reason: GoogleSessionInvalidationReason) => void
+>();
+
+export function onGoogleSessionInvalidated(
+  listener: (reason: GoogleSessionInvalidationReason) => void
+): () => void {
+  googleSessionInvalidatedListeners.add(listener);
+  return () => {
+    googleSessionInvalidatedListeners.delete(listener);
+  };
+}
+
+function notifyGoogleSessionInvalidated(reason: GoogleSessionInvalidationReason): void {
+  for (const listener of googleSessionInvalidatedListeners) {
+    try {
+      listener(reason);
+    } catch (err) {
+      reportSwallowed('GoogleCloudSyncClient.sessionInvalidatedListener', err, { reason });
+    }
+  }
+}
+
 export function sanitizeGoogleAvatarUrl(raw?: string): string | undefined {
   if (!raw || typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
@@ -113,7 +148,8 @@ export function sanitizeGoogleAvatarUrl(raw?: string): string | undefined {
       return undefined;
     }
     return parsed.toString();
-  } catch {
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.sanitizeGoogleAvatarUrl', err);
     return undefined;
   }
 }
@@ -340,15 +376,21 @@ function ensureGoogleIdentityScriptLoaded(): Promise<void> {
   return gsiScriptPromise;
 }
 
-export function decodeGoogleIdTokenPayload(jwt: string): {
+const VALID_GOOGLE_JWT_ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
+
+export function decodeGoogleIdTokenPayload(
+  jwt: string,
+  expectedClientId?: string
+): {
   sub: string;
   displayName: string;
   email?: string;
   picture?: string;
 } | null {
   try {
+    if (typeof jwt !== 'string') return null;
     const parts = jwt.split('.');
-    if (parts.length < 2) return null;
+    if (parts.length !== 3 || parts.some((part) => part.length === 0)) return null;
     const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
     const jsonStr = decodeURIComponent(
@@ -362,7 +404,24 @@ export function decodeGoogleIdTokenPayload(jwt: string): {
       given_name?: string;
       email?: string;
       picture?: string;
+      iss?: string;
+      aud?: string;
+      exp?: number;
     };
+    if (typeof data.iss !== 'string' || !VALID_GOOGLE_JWT_ISSUERS.has(data.iss)) {
+      return null;
+    }
+    if (
+      typeof data.exp !== 'number' ||
+      !Number.isFinite(data.exp) ||
+      data.exp * 1000 <= Date.now() + 30_000
+    ) {
+      return null;
+    }
+    const cleanExpectedClientId = expectedClientId?.trim();
+    if (cleanExpectedClientId && data.aud !== cleanExpectedClientId) {
+      return null;
+    }
     const sub = (data.sub || data.email || '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
     if (!sub) return null;
     const rawName = (data.name || data.given_name || data.email || 'Google Player')
@@ -374,7 +433,8 @@ export function decodeGoogleIdTokenPayload(jwt: string): {
       email: data.email?.replace(/[\u0000-\u001F\u007F]/g, '').trim(),
       picture: sanitizeHttpsUrl(data.picture),
     };
-  } catch {
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.decodeGoogleIdTokenPayload', err);
     return null;
   }
 }
@@ -392,6 +452,7 @@ export async function fetchGoogleUserProfile(accessToken: string): Promise<{
   });
   if (res.status === 401) {
     clearCachedGoogleSession();
+    notifyGoogleSessionInvalidated('http_401');
   }
   if (!res.ok) {
     throw new Error(`Google UserInfo request failed (${res.status})`);
@@ -425,6 +486,7 @@ export async function fetchGoogleUserProfile(accessToken: string): Promise<{
  * 2. Supports E2E Playwright mock token when `window.__capyMockGoogleOAuthToken` is present.
  * 3. Uses Google One Tap / FedCM (`google.accounts.id.initialize({ auto_select: true })` + `prompt()`)
  *    and silent OAuth token refresh (`prompt: ''`) when `VITE_GOOGLE_CLIENT_ID` is configured.
+ *    Requires a non-empty OAuth2 `accessToken` so UI never reports connected Drive sync without a token.
  */
 export async function attemptSilentOrOneTapGoogleSignIn(
   clientId: string
@@ -440,7 +502,8 @@ export async function attemptSilentOrOneTapGoogleSignIn(
 
   try {
     await ensureGoogleIdentityScriptLoaded();
-  } catch {
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.loadGsiScript', err);
     return null;
   }
 
@@ -457,7 +520,8 @@ export async function attemptSilentOrOneTapGoogleSignIn(
       };
       saveCachedGoogleSession(session);
       return session;
-    } catch {
+    } catch (err) {
+      reportSwallowed('GoogleCloudSyncClient.mockAutoSignIn', err);
       return null;
     }
   }
@@ -486,13 +550,13 @@ export async function attemptSilentOrOneTapGoogleSignIn(
           finish(null);
           return;
         }
-        const decoded = decodeGoogleIdTokenPayload(credResp.credential);
+        const decoded = decodeGoogleIdTokenPayload(credResp.credential, cleanClientId);
         if (!decoded) {
           finish(null);
           return;
         }
 
-        // Attempt silent OAuth2 access_token upgrade (prompt: '') so Drive appDataFolder can sync immediately if already granted
+        // Require silent OAuth2 access_token upgrade (prompt: '') so Drive appDataFolder can sync
         const oauth2 = window.google?.accounts?.oauth2;
         if (oauth2) {
           try {
@@ -505,7 +569,8 @@ export async function attemptSilentOrOneTapGoogleSignIn(
                 hint: decoded.email,
                 callback: (tr) => {
                   window.clearTimeout(tTimer);
-                  resToken(tr.access_token || null);
+                  const token = typeof tr.access_token === 'string' ? tr.access_token.trim() : '';
+                  resToken(token || null);
                 },
                 error_callback: () => {
                   window.clearTimeout(tTimer);
@@ -528,20 +593,12 @@ export async function attemptSilentOrOneTapGoogleSignIn(
               finish(fullSession);
               return;
             }
-          } catch {
-            // Fall through to One Tap identity session
+          } catch (err) {
+            reportSwallowed('GoogleCloudSyncClient.silentTokenUpgrade', err);
           }
         }
 
-        const oneTapSession: GoogleOAuthSession = {
-          accessToken: '',
-          expiresAt: Date.now() + 3500 * 1000,
-          sub: decoded.sub,
-          displayName: decoded.displayName,
-          email: decoded.email,
-          picture: decoded.picture,
-        };
-        finish(oneTapSession);
+        finish(null);
       },
     });
 
@@ -653,6 +710,7 @@ export class GoogleDriveAppDataClient {
   private static handleAuthFailure(res: Response): void {
     if (res.status === 401) {
       clearCachedGoogleSession();
+      notifyGoogleSessionInvalidated('http_401');
     }
   }
 
@@ -677,7 +735,10 @@ export class GoogleDriveAppDataClient {
     });
     this.handleAuthFailure(res);
     if (!res.ok) {
-      throw new Error(`Google Drive appDataFolder list failed (${res.status})`);
+      throw new GoogleDriveHttpError(
+        `Google Drive appDataFolder list failed (${res.status})`,
+        res.status
+      );
     }
     const body = (await res.json()) as { files?: DriveAppDataFileMetadata[] };
     const first = body.files && body.files.length > 0 ? body.files[0] : null;
@@ -698,7 +759,10 @@ export class GoogleDriveAppDataClient {
     this.handleAuthFailure(res);
     if (res.status === 404) return null;
     if (!res.ok) {
-      throw new Error(`Google Drive appDataFolder download failed (${res.status})`);
+      throw new GoogleDriveHttpError(
+        `Google Drive appDataFolder download failed (${res.status})`,
+        res.status
+      );
     }
     return (await res.json()) as T;
   }
@@ -717,7 +781,10 @@ export class GoogleDriveAppDataClient {
     this.handleAuthFailure(res);
     if (res.status === 404) return null;
     if (!res.ok) {
-      throw new Error(`Google Drive binary download failed (${res.status})`);
+      throw new GoogleDriveHttpError(
+        `Google Drive binary download failed (${res.status})`,
+        res.status
+      );
     }
     return new Uint8Array(await res.arrayBuffer());
   }
@@ -764,7 +831,10 @@ export class GoogleDriveAppDataClient {
     });
     this.handleAuthFailure(res);
     if (!res.ok) {
-      throw new Error(`Google Drive appDataFolder upload failed (${res.status})`);
+      throw new GoogleDriveHttpError(
+        `Google Drive appDataFolder upload failed (${res.status})`,
+        res.status
+      );
     }
     const uploaded = (await res.json()) as DriveAppDataFileMetadata;
     if (!uploaded || !isValidGoogleDriveFileId(uploaded.id)) {
@@ -818,7 +888,10 @@ export class GoogleDriveAppDataClient {
     });
     this.handleAuthFailure(res);
     if (!res.ok) {
-      throw new Error(`Google Drive binary upload failed (${res.status})`);
+      throw new GoogleDriveHttpError(
+        `Google Drive binary upload failed (${res.status})`,
+        res.status
+      );
     }
     const uploaded = (await res.json()) as DriveAppDataFileMetadata;
     if (!uploaded || !isValidGoogleDriveFileId(uploaded.id)) {

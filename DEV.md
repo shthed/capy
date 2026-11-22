@@ -108,6 +108,9 @@ All contributors modifying Web (`web/`) or Android (`app/`) code must preserve t
 8. **Touch Gesture Transitions & Hardware Back Navigation**:
    - Maintain `touch-action: none` ([`web/src/index.css`](./web/src/index.css)) on the interactive canvas container and dynamically re-anchor pan coordinates when releasing one finger out of a pinch-to-zoom gesture so the canvas never jumps.
    - Register open modals via `NativeBridge.pushBackHandler(onClose)` / `setBackModalOpen` (`window.__capyCloseModal()` from `MainActivity.kt`) alongside desktop `Escape` listeners.
+9. **Modular Provider Domains & Telemetry Instrumentation ([`ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts), [`AuthManager.ts`](./web/src/services/auth/AuthManager.ts), [`CloudLibrarySyncOrchestrator.ts`](./web/src/services/cloud/CloudLibrarySyncOrchestrator.ts), [`HybridCoopRoomClient.ts`](./web/src/services/coop/HybridCoopRoomClient.ts), [`CatalogIdeasService.ts`](./web/src/services/catalog/CatalogIdeasService.ts), [`ProviderContext.tsx`](./web/src/context/ProviderContext.tsx))**:
+   - Keep `ProviderRegistry.ts` as a thin backward-compatible wiring facade over the domain modules (`auth/`, `cloud/`, `coop/`, `catalog/`) and expose DI-ready access via `ProviderContext`.
+   - Instrument swallowed error paths in auth, cloud sync, cloud drivers, and Co-op transport with `reportSwallowed(...)` ([`telemetry.ts`](./web/src/services/telemetry.ts)), enforce strict Android Play Games `play_games_v2` isolation (zero GIS fallback in both `signInWithGoogle` and `attemptAutoSignIn`), and preserve per-slot deletion tombstones (`CLOUD_TOMBSTONES_STORAGE_KEY`) plus `signOut()` cross-account cache clearing.
 
 ### B. Native Android Style & Safety (`app/`)
 
