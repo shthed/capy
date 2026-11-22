@@ -766,12 +766,29 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     await landPage.getByTestId('replay-btn').waitFor({ state: 'visible', timeout: 5000 });
     await landPage.getByTestId('replay-btn').click();
     await landPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
-    await getStableBoundingBox(landPage.getByTestId('replay-controls-window'));
+    await landPage
+      .waitForFunction(
+        () => {
+          const header = document.querySelector('header');
+          const undo = document.querySelector('[data-testid="undo-btn"]');
+          const paint = document.querySelector('[data-testid="paint-mode-btn"]');
+          const replay = document.querySelector('[data-testid="replay-controls-window"]');
+          if (!header || !undo || !paint || !replay) return false;
+          const h = header.getBoundingClientRect();
+          const u = undo.getBoundingClientRect();
+          const p = paint.getBoundingClientRect();
+          const r = replay.getBoundingClientRect();
+          return u.top >= h.bottom - 1 && p.bottom <= r.top + 1;
+        },
+        undefined,
+        { timeout: 3000 }
+      )
+      .catch(() => {});
     const [compHeaderBox, compUndoBox, compPaintBox, compReplayBox] = await Promise.all([
-      landPage.locator('header').first().boundingBox(),
-      landPage.getByTestId('undo-btn').boundingBox(),
-      landPage.getByTestId('paint-mode-btn').boundingBox(),
-      landPage.getByTestId('replay-controls-window').boundingBox(),
+      getStableBoundingBox(landPage.locator('header').first()),
+      getStableBoundingBox(landPage.getByTestId('undo-btn')),
+      getStableBoundingBox(landPage.getByTestId('paint-mode-btn')),
+      getStableBoundingBox(landPage.getByTestId('replay-controls-window')),
     ]);
     assert.ok(compHeaderBox && compUndoBox && compPaintBox && compReplayBox);
     assert.equal(
