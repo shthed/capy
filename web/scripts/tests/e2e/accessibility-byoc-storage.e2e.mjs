@@ -3,6 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import {
+  createSyntheticPngBuffer,
   getStableBoundingBox,
   tapCanvasGrid,
   waitForAnimationFrames,
@@ -10,7 +11,7 @@ import {
   waitForPuzzleLoaded,
 } from './helpers.mjs';
 
-export async function runAccessibilityByocStorageE2e(ctx) {
+export async function runAccessibilityByocE2e(ctx) {
   const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     logE2eStart('Verifying Large Text full UI button scaling (360x780, 412x915, 1280x720), Fat-Finger coupling & Paint/Free-Colour fixes...');
 
@@ -21,7 +22,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     });
     const ltMobilePage = await ltMobileCtx.newPage();
     attachErrorListeners(ltMobilePage, 'ltMobilePage');
-    await ltMobilePage.goto(`${BASE_URL}/?capy_channel=alpha&capy_pr=520&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await ltMobilePage.goto(`${BASE_URL}/?capy_channel=alpha&capy_pr=520&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(ltMobilePage);
 
     const normalMobileBoxes = {
@@ -511,7 +512,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     await ltMobilePage.evaluate(() => {
       localStorage.setItem('capy_dev_cloud_coop_ui', '1');
     });
-    await ltMobilePage.reload({ waitUntil: 'networkidle' });
+    await ltMobilePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(ltMobilePage);
     await ltMobilePage.getByTestId('topbar-coop-btn').waitFor({ state: 'visible', timeout: 5000 });
     const [coopLeftBox, coopRightBox, coopBtnBox] = await Promise.all([
@@ -656,7 +657,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     });
     const landPage = await landCtx.newPage();
     attachErrorListeners(landPage, 'landPage');
-    await landPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await landPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(landPage);
 
     // Fill 1 region and open Replay so replay_scrubber FeatureOfferBanner + raised dock + ReplayControls + FABs are all live simultaneously
@@ -761,7 +762,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
         localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
       }
     });
-    await landPage.reload({ waitUntil: 'networkidle' });
+    await landPage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(landPage);
     await landPage.getByTestId('replay-btn').waitFor({ state: 'visible', timeout: 5000 });
     await landPage.getByTestId('replay-btn').click();
@@ -815,7 +816,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     });
     const tutCouplePage = await tutCoupleCtx.newPage();
     attachErrorListeners(tutCouplePage, 'tutCouplePage');
-    await tutCouplePage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await tutCouplePage.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(tutCouplePage);
     await tutCouplePage.getByTestId('tutorial-large-text-btn').waitFor({ state: 'visible', timeout: 5000 });
     await tutCouplePage.getByTestId('tutorial-large-text-btn').click();
@@ -843,7 +844,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     });
     const regPage = await regCtx.newPage();
     attachErrorListeners(regPage, 'regPage');
-    await regPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await regPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(regPage);
 
     // Find an exact interior pixel of an unfilled region A that has an adjacent unfilled region B within 3-8 screen px (<12px) and another neighbor C within 24 screen px
@@ -1155,7 +1156,10 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     await byocPage.close();
     await byocContext.close();
     logE2ePass('M4 $0 BYOC multi-provider login UI, default-off gate, 360px zero-overflow & automatic background sync verified.');
+}
 
+export async function runStorageAnalyzerE2e(ctx) {
+  const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     // E2E Stage 24: Browser Storage Analyzer, Targeted Safe Cleanups, 360x780 Layout & Oversized Photo Compression
     logE2eStart('Browser Storage Analyzer modal, 360x780 zero-overflow, safe cleanups (caches/orphans/previews) & oversized photo upload compression');
     const storageContext = await browser.newContext({ viewport: { width: 360, height: 780 } });
@@ -1456,35 +1460,12 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     await storagePage.getByTestId('settings-modal-close').click();
     await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
-    // 24e. Oversized custom photo upload compression (2400x1800 noisy PNG -> downscaled <= 2048px & smaller WebP)
-    const oversizedPngBytes = await storagePage.evaluate(async () => {
-      const w = 2400;
-      const h = 1800;
-      const c = document.createElement('canvas');
-      c.width = w;
-      c.height = h;
-      const ctx = c.getContext('2d');
-      const imgData = ctx.createImageData(w, h);
-      const data = imgData.data;
-      let seed = 0x12345678;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          seed = (seed * 1664525 + 1013904223) >>> 0;
-          const idx = (y * w + x) * 4;
-          data[idx] = (x * 7 + (seed & 0x3f)) & 0xff;
-          data[idx + 1] = (y * 5 + ((seed >> 8) & 0x3f)) & 0xff;
-          data[idx + 2] = ((x + y) * 3 + ((seed >> 16) & 0x3f)) & 0xff;
-          data[idx + 3] = 255;
-        }
-      }
-      ctx.putImageData(imgData, 0, 0);
-      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-      return Array.from(new Uint8Array(await blob.arrayBuffer()));
-    });
+    // 24e. Oversized custom photo upload compression (2200x240 > 400 KB PNG -> downscaled <= 2048px & smaller WebP)
+    const oversizedPngBuffer = createSyntheticPngBuffer(2200, 240);
     assert.equal(
-      oversizedPngBytes.length > 400_000,
+      oversizedPngBuffer.length > 400_000,
       true,
-      `Expected synthetic oversized PNG > 400 KB, got ${oversizedPngBytes.length} B`
+      `Expected synthetic oversized PNG > 400 KB, got ${oversizedPngBuffer.length} B`
     );
 
     const snapIdBeforeOversized = await storagePage.evaluate(
@@ -1493,7 +1474,7 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     await storagePage.locator('input[type="file"][accept="image/*"]').setInputFiles({
       name: 'oversized_test_photo.png',
       mimeType: 'image/png',
-      buffer: Buffer.from(oversizedPngBytes),
+      buffer: oversizedPngBuffer,
     });
     await storagePage.waitForFunction(
       (prevId) => {
@@ -1538,9 +1519,9 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     });
     assert.ok(compressedUploadInfo, 'Compressed custom upload blob must persist in STORE_IMAGES');
     assert.equal(
-      compressedUploadInfo.size < oversizedPngBytes.length,
+      compressedUploadInfo.size < oversizedPngBuffer.length,
       true,
-      `Expected compressed blob (${compressedUploadInfo.size} B) < raw PNG (${oversizedPngBytes.length} B)`
+      `Expected compressed blob (${compressedUploadInfo.size} B) < raw PNG (${oversizedPngBuffer.length} B)`
     );
     assert.equal(
       compressedUploadInfo.width <= 2048 && compressedUploadInfo.height <= 2048,
@@ -1616,5 +1597,9 @@ export async function runAccessibilityByocStorageE2e(ctx) {
     await storagePage.close();
     await storageContext.close();
     logE2ePass('Browser Storage Analyzer modal, 360x780 zero-overflow, all 4 cleanups, Escape isolation & oversized photo upload compression verified.');
+}
 
+export async function runAccessibilityByocStorageE2e(ctx) {
+  await runAccessibilityByocE2e(ctx);
+  await runStorageAnalyzerE2e(ctx);
 }

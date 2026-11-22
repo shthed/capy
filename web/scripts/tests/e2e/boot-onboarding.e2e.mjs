@@ -8,14 +8,25 @@ import path from 'node:path';
 import {
   assertSpotlightAligned,
   captureV3012Screenshot,
+  createBootedContext,
   getStableBoundingBox,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
 } from './helpers.mjs';
 
-export async function runBootOnboardingE2e(ctx) {
-  const { browser, context, page, BASE_URL, webPkgJson, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+export async function runBootE2e(ctx) {
+  const { browser, BASE_URL, webPkgJson, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const ownBoot = !ctx.page;
+  const { context, page } = ownBoot
+    ? await createBootedContext(browser, BASE_URL, {
+        label: 'boot',
+        attachErrorListeners,
+        skipTutorial: false,
+        bootUrl: false,
+      })
+    : { context: ctx.context, page: ctx.page };
+  try {
     logE2eStart('Verifying PWA manifest, Digital Asset Links, privacy policy, Service Worker & instant pre-baked boot...');
     const manifestRes = await page.goto(`${BASE_URL}/manifest.webmanifest`);
     assert.equal(manifestRes?.status(), 200);
@@ -149,7 +160,7 @@ export async function runBootOnboardingE2e(ctx) {
     const skipTutContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const skipTutPage = await skipTutContext.newPage();
     attachErrorListeners(skipTutPage, 'skipTutPage');
-    await skipTutPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await skipTutPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(skipTutPage);
     assert.equal(
       await skipTutPage.getByTestId('onboarding-tutorial').count(),
@@ -162,7 +173,7 @@ export async function runBootOnboardingE2e(ctx) {
     const escTutContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const escTutPage = await escTutContext.newPage();
     attachErrorListeners(escTutPage, 'escTutPage');
-    await escTutPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await escTutPage.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(escTutPage);
     await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     await escTutPage.locator('button[title="Settings and Menu"]').click();
@@ -184,12 +195,18 @@ export async function runBootOnboardingE2e(ctx) {
     await escTutPage.close();
     await escTutContext.close();
     logE2ePass('PWA manifest, Digital Asset Links, privacy policy, Service Worker cache & instant 4-sample boot verified.');
+  } finally {
+    if (ownBoot) await context.close();
+  }
+}
 
+export async function runOnboardingE2e(ctx) {
+  const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     logE2eStart('Verifying 12-step OnboardingTutorial tour, modal-docked Settings/Hints spotlight, [All Topics] drawer & rapid Ctrl+Z burst...');
     const tutContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     const tutPage = await tutContext.newPage();
     attachErrorListeners(tutPage, 'tutPage');
-    await tutPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await tutPage.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(tutPage);
     await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     const expectTutStep = async (stepNum) => {
@@ -621,7 +638,10 @@ export async function runBootOnboardingE2e(ctx) {
     await tutPage.close();
     await tutContext.close();
     logE2ePass('12-step OnboardingTutorial tour, modal-docked Settings/Hints spotlight, reducedMotion, [All Topics] drawer & rapid Ctrl+Z burst verified.');
+}
 
+export async function runOffersE2e(ctx) {
+  const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     // -------------------------------------------------------------------------
     // 3. FeatureOfferBanner Quick Tips, Channel Isolation, #s= DoS Resilience & Play Store Saves
     // -------------------------------------------------------------------------
@@ -641,7 +661,7 @@ export async function runBootOnboardingE2e(ctx) {
     });
     const offerPage = await offerContext.newPage();
     attachErrorListeners(offerPage, 'offerPage');
-    await offerPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await offerPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(offerPage);
     assert.equal(await offerPage.getByTestId('feature-offer-banner').count(), 0);
     const expectOfferBanner = async (offerId) => {
@@ -678,7 +698,7 @@ export async function runBootOnboardingE2e(ctx) {
       });
       const prefilledPage = await prefilledContext.newPage();
       attachErrorListeners(prefilledPage, 'prefilledPage');
-      await prefilledPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+      await prefilledPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(prefilledPage);
       const seeded = await prefilledPage.evaluate(async () => {
         const snaps = window.capyStorage.loadSnapshots();
@@ -706,7 +726,7 @@ export async function runBootOnboardingE2e(ctx) {
         return { targetId, count: prefilledIds.length };
       });
       assert.ok(seeded && seeded.count === 2, 'Expected to seed 2 pre-filled regions for bootstrap undoStack test');
-      await prefilledPage.reload({ waitUntil: 'networkidle' });
+      await prefilledPage.reload({ waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(prefilledPage);
       const filledBeforeBootstrapUndo = Number(
         await prefilledPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
@@ -805,7 +825,7 @@ export async function runBootOnboardingE2e(ctx) {
       const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
       return Array.from(new Uint8Array(await blob.arrayBuffer()));
     });
-    const offerPhotoPath = path.join(os.tmpdir(), 'capy_offer_photo.png');
+    const offerPhotoPath = path.join(os.tmpdir(), `capy_offer_photo_${process.pid}.png`);
     fs.writeFileSync(offerPhotoPath, Buffer.from(offerPngBytes));
     try {
       await offerPage.locator('input[type="file"][accept="image/*"]').setInputFiles(offerPhotoPath);
@@ -866,7 +886,7 @@ export async function runBootOnboardingE2e(ctx) {
       );
     }
     // Seen offers persist across reload (toggling Paint Mode does not re-show paint_mode)
-    await offerPage.reload({ waitUntil: 'networkidle' });
+    await offerPage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(offerPage);
     await offerPage.locator('[data-testid="paint-mode-btn"]').click();
     // INTENTIONAL_TIMING_WINDOW: negative-absence guard verifying dismissed feature-offer-banner does not reappear after reload
@@ -882,7 +902,7 @@ export async function runBootOnboardingE2e(ctx) {
       });
       const returningPage = await returningCtx.newPage();
       attachErrorListeners(returningPage, 'returningPage');
-      await returningPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+      await returningPage.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(returningPage);
       await returningPage.waitForFunction(
         () => document.querySelector('[data-testid="feature-offer-banner"]')?.getAttribute('data-offer-id') === 'settings_hints_tip',
@@ -898,7 +918,7 @@ export async function runBootOnboardingE2e(ctx) {
       );
       await returningPage.getByTestId('tutorial-skip-btn').click();
       // Reloading must NOT re-show settings_hints_tip
-      await returningPage.reload({ waitUntil: 'networkidle' });
+      await returningPage.reload({ waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(returningPage);
       // INTENTIONAL_TIMING_WINDOW: negative-absence guard verifying one-time settings_hints_tip banner does not reappear on reload
       await returningPage.waitForTimeout(200);
@@ -910,7 +930,7 @@ export async function runBootOnboardingE2e(ctx) {
     // Verify ?capy_channel=beta isolates capy_feature_offers_v1__sandbox_beta from root offers
     const betaOfferPage = await offerContext.newPage();
     attachErrorListeners(betaOfferPage, 'betaOfferPage');
-    await betaOfferPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await betaOfferPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(betaOfferPage);
     await betaOfferPage.locator('[data-testid="paint-mode-btn"]').click();
     await betaOfferPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
@@ -925,27 +945,29 @@ export async function runBootOnboardingE2e(ctx) {
     await offerContext.close();
 
 
-    // Verify malformed #s= DoS token degrades cleanly without crashing the app
-    const dosSharePage = await context.newPage();
+    // Verify malformed #s= DoS token degrades cleanly without crashing the app,
+    // and verify Play Store Q1 Saves cleanup hides unfinished Cloud/Co-op hub and topbar Friends button by default
+    const dosShareCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    const dosSharePage = await dosShareCtx.newPage();
     attachErrorListeners(dosSharePage, 'dosSharePage');
-    await dosSharePage.goto(`${BASE_URL}/#s=AAIAAf____8P`, { waitUntil: 'networkidle' });
+    await dosSharePage.goto(`${BASE_URL}/?skipTutorial=1#s=AAIAAf____8P`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(dosSharePage);
-    await dosSharePage.close();
 
-    // Verify Play Store Q1 Saves cleanup hides unfinished Cloud/Co-op hub and topbar Friends button by default
-    assert.equal(await page.getByTestId('topbar-coop-btn').count(), 0, 'topbar-coop-btn must stay hidden by default');
-    await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByTestId('settings-tab-saves').waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByTestId('settings-tab-saves').click();
-    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await page.getByTestId('cloud-coop-hub').count(), 0, 'cloud-coop-hub must stay hidden by default');
-    assert.equal(await page.getByTestId('play-games-signin-btn').count(), 0, 'play-games-signin-btn must stay hidden by default');
-    assert.equal(await page.getByTestId('cloud-sync-btn').count(), 0, 'cloud-sync-btn must stay hidden by default');
-    assert.equal(await page.getByTestId('cloud-providers-bar').count(), 0, 'cloud-providers-bar must stay hidden by default');
-    assert.equal(await page.getByTestId('share-progress-link-btn').isVisible(), true);
-    assert.equal(await page.getByTestId('export-printable-svg-btn').isVisible(), true);
-    await page.keyboard.press('Escape');
-    await page.getByTestId('saves-share-print-bar').waitFor({ state: 'hidden', timeout: 3000 });
+    assert.equal(await dosSharePage.getByTestId('topbar-coop-btn').count(), 0, 'topbar-coop-btn must stay hidden by default');
+    await dosSharePage.locator('button[title="Settings and Menu"]').click();
+    await dosSharePage.getByTestId('settings-tab-saves').waitFor({ state: 'visible', timeout: 3000 });
+    await dosSharePage.getByTestId('settings-tab-saves').click();
+    await dosSharePage.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await dosSharePage.getByTestId('cloud-coop-hub').count(), 0, 'cloud-coop-hub must stay hidden by default');
+    assert.equal(await dosSharePage.getByTestId('play-games-signin-btn').count(), 0, 'play-games-signin-btn must stay hidden by default');
+    assert.equal(await dosSharePage.getByTestId('cloud-sync-btn').count(), 0, 'cloud-sync-btn must stay hidden by default');
+    assert.equal(await dosSharePage.getByTestId('cloud-providers-bar').count(), 0, 'cloud-providers-bar must stay hidden by default');
+    assert.equal(await dosSharePage.getByTestId('share-progress-link-btn').isVisible(), true);
+    assert.equal(await dosSharePage.getByTestId('export-printable-svg-btn').isVisible(), true);
+    await dosSharePage.keyboard.press('Escape');
+    await dosSharePage.getByTestId('saves-share-print-bar').waitFor({ state: 'hidden', timeout: 3000 });
+    await dosSharePage.close();
+    await dosShareCtx.close();
 
     // Verify startup ProviderRegistry.auth.attemptAutoSignIn is NOT invoked when showCloudCoopUi === false
     // and Create tab hides Optional Ad, AI Credits, and vote-idea-* even when NativeBridge.isAndroid === true
@@ -967,7 +989,7 @@ export async function runBootOnboardingE2e(ctx) {
         loadBackup: () => null,
       };
     });
-    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(androidGatePage);
     // INTENTIONAL_TIMING_WINDOW: negative-absence guard verifying Android Play Store startup does not trigger window.__capySignInCalls
     await androidGatePage.waitForTimeout(200);
@@ -1010,7 +1032,7 @@ export async function runBootOnboardingE2e(ctx) {
       true,
       'Android Create tab must label local notebook as Puzzle Idea Notebook'
     );
-    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&capy_channel=beta`, { waitUntil: 'networkidle' });
+    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&capy_channel=beta`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(androidGatePage);
     await androidGatePage.locator('button[title="Settings and Menu"]').click();
     await androidGatePage.getByTestId('settings-tab-about').click();
@@ -1022,23 +1044,17 @@ export async function runBootOnboardingE2e(ctx) {
     );
     assert.equal(await androidGatePage.getByTestId('android-apk-download-link').count(), 0);
     assert.equal(await androidGatePage.getByTestId('beta-apk-download-link').count(), 0);
-    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'networkidle' });
+    await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(androidGatePage);
     await androidGatePage.waitForFunction(() => (window.__capySignInCalls || 0) >= 1, undefined, { timeout: 3000 });
     await androidGatePage.close();
     await androidGateCtx.close();
 
-    // Disable autoReplayOnLoad and enable EASY difficulty for fast deterministic E2E interaction checks
-    await page.evaluate(() => {
-      localStorage.removeItem('capy_last_settings_tab');
-      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
-      s.autoReplayOnLoad = false;
-      s.difficulty = 'EASY';
-      localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
-    });
-    await page.reload({ waitUntil: 'networkidle' });
-    await waitForPuzzleLoaded(page);
     logE2ePass('FeatureOfferBanner 8-offer queue, ?capy_channel=beta offer isolation, #s= DoS resilience & Play Store Saves gating verified.');
+}
 
-    // -------------------------------------------------------------------------
+export async function runBootOnboardingE2e(ctx) {
+  await runBootE2e(ctx);
+  await runOnboardingE2e(ctx);
+  await runOffersE2e(ctx);
 }

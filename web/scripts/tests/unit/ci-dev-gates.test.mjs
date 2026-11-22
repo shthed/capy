@@ -1160,23 +1160,83 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     });
     assert.equal(deployMainSyncDivergedRes.outputs.is_main_sync, 'false');
 
+    // Non-web-only PR (e.g. .github/workflows or app/ only) must output has_web_changes='false'
+    const deployNonWebPrRes = await runDeployTargetCase({
+      eventName: 'pull_request',
+      ref: 'refs/pull/712/merge',
+      sha: 'abc123',
+      payload: {
+        pull_request: {
+          number: 712,
+          draft: false,
+          head: { ref: 'fix/workflow-only', sha: 'def456', repo: { full_name: 'shthed/capy' } },
+          base: { ref: 'beta' },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: '.github/workflows/regenerate-puzzles.yml' }, { filename: 'app/src/MainActivity.kt' }],
+    });
+    assert.equal(deployNonWebPrRes.outputs.is_docs_only, 'false');
+    assert.equal(deployNonWebPrRes.outputs.has_web_changes, 'false');
+
+    // Web-touching PR must output has_web_changes='true'
+    const deployWebPrRes = await runDeployTargetCase({
+      eventName: 'pull_request',
+      ref: 'refs/pull/713/merge',
+      sha: 'abc124',
+      payload: {
+        pull_request: {
+          number: 713,
+          draft: false,
+          head: { ref: 'feature/web-fix', sha: 'def457', repo: { full_name: 'shthed/capy' } },
+          base: { ref: 'beta' },
+          mergeable: true,
+        },
+      },
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+    });
+    assert.equal(deployWebPrRes.outputs.has_web_changes, 'true');
+
+    // Non-web push to main (workflow-only) must output has_web_changes='false'
+    const deployNonWebMainPushRes = await runDeployTargetCase({
+      eventName: 'push',
+      ref: 'refs/heads/main',
+      sha: '2222222222222222222222222222222222222222',
+      payload: {
+        before: '1111111111111111111111111111111111111111',
+      },
+      compareMap: {
+        '1111111111111111111111111111111111111111...2222222222222222222222222222222222222222': {
+          files: [{ filename: '.github/workflows/deploy-branch.yml' }],
+        },
+      },
+    });
+    assert.equal(deployNonWebMainPushRes.outputs.has_web_changes, 'false');
+
     const deployYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/deploy-branch.yml'),
       'utf8'
     );
     assert.equal(deployYaml.includes('github.event.inputs.target_branch'), true);
     assert.equal(deployYaml.includes('actions/cache@v6'), true);
-    assert.equal(deployYaml.includes("github.base_ref == 'main' || github.base_ref == 'beta'"), true);
+    assert.equal(
+      deployYaml.includes("github.base_ref == 'main' || (github.base_ref == 'beta' && needs.prepare.outputs.has_web_changes == 'true')"),
+      true
+    );
     assert.equal(deployYaml.includes("github.event.pull_request.user.login != 'dependabot[bot]'"), true);
     assert.equal(deployYaml.includes('steps.target.outputs.is_docs_only'), true);
+    assert.equal(deployYaml.includes('steps.target.outputs.has_web_changes'), true);
     assert.equal(deployYaml.includes('needs.prepare.outputs.is_main_sync'), true);
     assert.equal(deployYaml.includes('node-modules-cache'), true);
     assert.equal(deployYaml.includes('android_build:'), true);
     assert.equal(deployYaml.includes('e2e_release_gate:'), true);
+    assert.equal(deployYaml.includes('deploy_preview:'), true);
     assert.equal(deployYaml.includes('web-dist-'), true);
     assert.equal(deployYaml.includes('node scripts/test.mjs --unit'), true);
+    assert.equal(deployYaml.includes('npm run test:e2e -- --workers=4'), true);
     assert.equal(deployYaml.includes('include-hidden-files: true'), true);
     assert.equal(deployYaml.includes('cp -a web/dist/. staging/web/'), true);
+    assert.equal(deployYaml.includes('needs: [prepare, build, android_build]'), true);
     assert.equal(deployYaml.includes('needs: [prepare, build, android_build, e2e_release_gate]'), true);
     assert.equal(deployYaml.includes("needs.e2e_release_gate.result == 'success'"), true);
     assert.equal(
@@ -1186,6 +1246,24 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
       true
     );
     assert.equal(deployYaml.includes("--exclude 'alpha/'"), true);
+
+    // Verify modular parallel E2E suite registry, smoke selection & lossless sharding
+    const e2eRunnerMod = await import('../e2e/runner.mjs');
+    assert.equal(e2eRunnerMod.E2E_SUITES.length, 10);
+    assert.equal(
+      e2eRunnerMod.E2E_SUITES.reduce((sum, s) => sum + s.stages, 0),
+      24
+    );
+    const smokeSuites = e2eRunnerMod.selectE2eSuites({ smoke: true });
+    assert.deepEqual(
+      smokeSuites.map((s) => s.name),
+      ['boot', 'gameplay']
+    );
+    const shard1 = e2eRunnerMod.selectE2eSuites({ shard: { index: 1, total: 2 } }).map((s) => s.name);
+    const shard2 = e2eRunnerMod.selectE2eSuites({ shard: { index: 2, total: 2 } }).map((s) => s.name);
+    assert.equal(shard1.length + shard2.length, e2eRunnerMod.E2E_SUITES.length);
+    assert.equal(new Set([...shard1, ...shard2]).size, e2eRunnerMod.E2E_SUITES.length);
+    assert.throws(() => e2eRunnerMod.selectE2eSuites({ suites: ['nonexistent-suite'] }), /Unknown E2E suite/);
 
     const publishCapyboopYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
