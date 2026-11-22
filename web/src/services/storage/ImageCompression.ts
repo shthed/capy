@@ -162,12 +162,7 @@ export async function compressImageForStorage(
   // Safari and older WebViews silently return image/png when image/webp is unsupported;
   // fall back to JPEG with a white matte for transparent PNGs.
   const jpegCandidate = await runEncode('image/jpeg', true);
-  const validJpeg =
-    jpegCandidate && jpegCandidate.size > 0 && jpegCandidate.type === 'image/jpeg'
-      ? jpegCandidate
-      : jpegCandidate && jpegCandidate.size > 0
-        ? jpegCandidate
-        : null;
+  const validJpeg = jpegCandidate && jpegCandidate.size > 0 ? jpegCandidate : null;
 
   return selectBestCompressedBlob(original, [validJpeg]);
 }

@@ -8,6 +8,11 @@ import {
 import { reportSwallowed } from '../telemetry';
 import { clearActiveState } from './ActiveSessionStorage';
 import {
+  clearWithBackup,
+  hasReadableNativeBackup,
+  loadRawWithBackupFallback,
+} from './BackupEngine';
+import {
   clearAllPreviewCaches,
   clearAllStores,
   closeDbHandle,
@@ -18,8 +23,10 @@ import { clearAllSnapshots } from './SnapshotStorage';
 import {
   ACTIVE_STATE_KEY,
   matchesScopedKey,
+  resolveScopedBackupKey,
   resolveScopedDbName,
   resolveScopedStorageKey,
+  SETTINGS_KEY,
   SNAPSHOTS_KEY,
   STORAGE_KEYS,
   STORE_IMAGES,
@@ -100,6 +107,8 @@ export interface LocalStoreReport {
   prodChannelCount: number;
   quarantineBytes: number;
   quarantineCount: number;
+  cleanableQuarantineBytes: number;
+  cleanableQuarantineCount: number;
   otherCapyBytes: number;
   otherCapyCount: number;
   otherOriginBytes: number;
@@ -284,6 +293,8 @@ export function estimateStructuredCloneBytes(
   if (valueType !== 'object') return 0;
 
   if (typeof Blob !== 'undefined' && value instanceof Blob) {
+    if (seen.has(value)) return 0;
+    seen.add(value);
     return Number.isFinite(value.size) && value.size > 0 ? value.size : 0;
   }
   if (value instanceof ArrayBuffer) {
@@ -292,9 +303,10 @@ export function estimateStructuredCloneBytes(
     return value.byteLength;
   }
   if (ArrayBuffer.isView(value)) {
-    if (seen.has(value)) return 0;
-    seen.add(value);
-    return value.byteLength;
+    const backing = value.buffer;
+    if (seen.has(backing)) return 0;
+    seen.add(backing);
+    return backing.byteLength;
   }
   if (value instanceof Date) return 8;
   if (value instanceof RegExp) return value.source.length * 2 + 8;
@@ -363,7 +375,7 @@ export function computeOrphanedKeys(params: {
   const orphanedImageKeys = params.imageKeys.filter((key) => {
     if (key.startsWith('preview_')) {
       const snapId = key.slice('preview_'.length);
-      return !liveIds.has(snapId);
+      return !liveIds.has(snapId) && !liveBlobUris.has(key);
     }
     return !liveIds.has(key) && !liveBlobUris.has(key);
   });
@@ -713,6 +725,73 @@ async function readStoreEntries(
   });
 }
 
+function isHealthyJsonLocalValue(raw: string | null): boolean {
+  if (!raw || raw.trim().length === 0) return false;
+  try {
+    JSON.parse(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readNativeBackupSafely(
+  backupKey: string,
+  kind: 'snapshots' | 'activeState'
+): { ok: boolean; value: string | null } {
+  let rawNative: string | null = null;
+  try {
+    rawNative = window.CapyAndroid?.loadBackup?.(backupKey) ?? null;
+  } catch (err) {
+    reportSwallowed('StorageAnalyzer.readNativeBackupSafely', err, { backupKey, kind });
+    return { ok: false, value: null };
+  }
+  const recovered = loadRawWithBackupFallback(backupKey, backupKey, kind);
+  if (recovered !== null) {
+    return { ok: true, value: recovered };
+  }
+  if (typeof rawNative === 'string' && rawNative.trim().length > 0) {
+    // Non-empty native backup failed validation/parsing -> fail closed
+    return { ok: false, value: null };
+  }
+  return { ok: true, value: null };
+}
+
+function readChannelMetadataForOrphanCheck(
+  dbName: string,
+  activeDbName: string,
+  snapshotsKey: string,
+  activeStateKey: string
+): { ok: boolean; rawSnapshotsJson: string | null; rawActiveStateJson: string | null } {
+  const snapRead = SafeLocalStore.tryGetItem(snapshotsKey);
+  const activeRead = SafeLocalStore.tryGetItem(activeStateKey);
+  if (!snapRead.ok || !activeRead.ok) {
+    return { ok: false, rawSnapshotsJson: null, rawActiveStateJson: null };
+  }
+
+  let rawSnapshotsJson = snapRead.value;
+  let rawActiveStateJson = activeRead.value;
+
+  if (dbName === activeDbName && hasReadableNativeBackup()) {
+    if (!rawSnapshotsJson || rawSnapshotsJson.trim().length === 0) {
+      const nativeSnap = readNativeBackupSafely(snapshotsKey, 'snapshots');
+      if (!nativeSnap.ok) {
+        return { ok: false, rawSnapshotsJson: null, rawActiveStateJson: null };
+      }
+      rawSnapshotsJson = nativeSnap.value;
+    }
+    if (!rawActiveStateJson || rawActiveStateJson.trim().length === 0) {
+      const nativeActive = readNativeBackupSafely(activeStateKey, 'activeState');
+      if (!nativeActive.ok) {
+        return { ok: false, rawSnapshotsJson: null, rawActiveStateJson: null };
+      }
+      rawActiveStateJson = nativeActive.value;
+    }
+  }
+
+  return { ok: true, rawSnapshotsJson, rawActiveStateJson };
+}
+
 async function inspectSingleIdbDatabase(
   dbName: string,
   activeDbName: string
@@ -725,12 +804,20 @@ async function inspectSingleIdbDatabase(
     const meta = resolveChannelMetaForDbName(dbName);
     const snapshotsKey = `${SNAPSHOTS_KEY}${meta.sandboxSuffix}`;
     const activeStateKey = `${ACTIVE_STATE_KEY}${meta.sandboxSuffix}`;
-    const orphanRes = computeOrphanedKeys({
-      puzzleKeys: puzzleEntries.map((e) => e.key),
-      imageKeys: imageEntries.map((e) => e.key),
-      rawSnapshotsJson: SafeLocalStore.getItem(snapshotsKey),
-      rawActiveStateJson: SafeLocalStore.getItem(activeStateKey),
-    });
+    const metaRead = readChannelMetadataForOrphanCheck(
+      dbName,
+      activeDbName,
+      snapshotsKey,
+      activeStateKey
+    );
+    const orphanRes = metaRead.ok
+      ? computeOrphanedKeys({
+          puzzleKeys: puzzleEntries.map((e) => e.key),
+          imageKeys: imageEntries.map((e) => e.key),
+          rawSnapshotsJson: metaRead.rawSnapshotsJson,
+          rawActiveStateJson: metaRead.rawActiveStateJson,
+        })
+      : { skipped: true, orphanedPuzzleKeys: [] as string[], orphanedImageKeys: [] as string[] };
     const orphanPuzzleSet = new Set(orphanRes.orphanedPuzzleKeys);
     const orphanImageSet = new Set(orphanRes.orphanedImageKeys);
 
@@ -877,6 +964,8 @@ function inspectLocalStore(activeSandboxSuffix: string): LocalStoreReport {
     prodChannelCount: 0,
     quarantineBytes: 0,
     quarantineCount: 0,
+    cleanableQuarantineBytes: 0,
+    cleanableQuarantineCount: 0,
     otherCapyBytes: 0,
     otherCapyCount: 0,
     otherOriginBytes: 0,
@@ -885,6 +974,7 @@ function inspectLocalStore(activeSandboxSuffix: string): LocalStoreReport {
   if (!supported) return report;
 
   const entries = SafeLocalStore.entries();
+  const entriesByKey = new Map<string, string>(entries);
   for (const [key, value] of entries) {
     const bytes = (key.length + value.length) * 2;
     report.totalBytes += bytes;
@@ -898,6 +988,17 @@ function inspectLocalStore(activeSandboxSuffix: string): LocalStoreReport {
     if (key.endsWith(QUARANTINE_SUFFIX)) {
       report.quarantineBytes += bytes;
       report.quarantineCount += 1;
+      const baseKeyWithSandbox = key.slice(0, -QUARANTINE_SUFFIX.length);
+      const qSandboxMatch = SANDBOX_SUFFIX_RE.exec(baseKeyWithSandbox);
+      const qSuffix = qSandboxMatch ? `__sandbox_${qSandboxMatch[1].toLowerCase()}` : '';
+      if (
+        qSuffix === activeSandboxSuffix &&
+        isHealthyJsonLocalValue(entriesByKey.get(baseKeyWithSandbox) ?? null)
+      ) {
+        report.cleanableQuarantineBytes += bytes;
+        report.cleanableQuarantineCount += 1;
+      }
+      continue;
     }
 
     const sandboxMatch = SANDBOX_SUFFIX_RE.exec(key);
@@ -954,11 +1055,15 @@ export async function analyzeBrowserStorage(
     browserEstimate.usageBytes !== null
       ? Math.max(0, browserEstimate.usageBytes - totalOriginMeasuredBytes)
       : 0;
+  const activeOrphanedBytes =
+    indexedDb.activeDb && !indexedDb.activeDb.orphanDetectionSkipped
+      ? indexedDb.activeDb.orphanedBytes
+      : 0;
   const totalReclaimableSafeBytes =
     cacheStorage.staleAlphaBytes +
     cacheStorage.staleVersionBytes +
-    indexedDb.totalOrphanedBytes +
-    localStore.quarantineBytes;
+    activeOrphanedBytes +
+    localStore.cleanableQuarantineBytes;
 
   return {
     measuredAt: Date.now(),
@@ -1101,13 +1206,43 @@ export async function clearStaleAndOfflineCaches(
   return result;
 }
 
-function isHealthyJsonLocalValue(raw: string | null): boolean {
-  if (!raw || raw.trim().length === 0) return false;
-  try {
-    JSON.parse(raw);
-    return true;
-  } catch {
-    return false;
+function matchesLiveWindowNamespace(targetDbName: string): boolean {
+  return targetDbName === resolveScopedDbName();
+}
+
+function snapshotMatchingLocalKeys(
+  predicate: (key: string) => boolean
+): Map<string, number> {
+  const sizes = new Map<string, number>();
+  for (const [key, value] of SafeLocalStore.entries()) {
+    if (!predicate(key)) continue;
+    sizes.set(key, (key.length + value.length) * 2);
+  }
+  return sizes;
+}
+
+function removeAndCountLocalKeys(
+  predicate: (key: string) => boolean,
+  preMeasured: Map<string, number>,
+  result: StorageCleanupResult
+): void {
+  const removedKeys = new Set<string>();
+  for (const [key, value] of SafeLocalStore.entries()) {
+    if (!predicate(key)) continue;
+    if (SafeLocalStore.removeItem(key)) {
+      removedKeys.add(key);
+      result.deletedLocalKeys += 1;
+      result.freedBytesEstimate += preMeasured.get(key) ?? (key.length + value.length) * 2;
+    }
+  }
+  // Account for pre-measured keys already removed earlier by clearActiveState() / clearWithBackup()
+  for (const [key, bytes] of preMeasured.entries()) {
+    if (removedKeys.has(key)) continue;
+    const read = SafeLocalStore.tryGetItem(key);
+    if (read.ok && read.value === null) {
+      result.deletedLocalKeys += 1;
+      result.freedBytesEstimate += bytes;
+    }
   }
 }
 
@@ -1130,7 +1265,11 @@ export async function cleanOrphanedSaveData(
     (activeReport.orphanedPuzzleKeys.length > 0 || activeReport.orphanedImageKeys.length > 0)
   ) {
     try {
-      await deleteOrphanedEntries(activeReport.orphanedPuzzleKeys, activeReport.orphanedImageKeys);
+      await deleteOrphanedEntries(
+        activeReport.orphanedPuzzleKeys,
+        activeReport.orphanedImageKeys,
+        activeDbName
+      );
       result.deletedIdbRecords +=
         activeReport.orphanedPuzzleKeys.length + activeReport.orphanedImageKeys.length;
       result.freedBytesEstimate += activeReport.orphanedBytes;
@@ -1168,6 +1307,18 @@ function scopeMatchesPreviewChannels(
   return matchesAlpha || matchesBeta;
 }
 
+function isPreviewChannelLocalKey(
+  key: string,
+  targetChannels: Set<'alpha' | 'beta'>
+): boolean {
+  if (!isCapyPaintLocalKey(key)) return false;
+  const match = SANDBOX_SUFFIX_RE.exec(key);
+  if (!match) return false;
+  const keyChannel = match[1].toLowerCase();
+  if (keyChannel !== 'alpha' && keyChannel !== 'beta') return false;
+  return targetChannels.has(keyChannel);
+}
+
 async function deletePreviewCaches(
   targetChannels: Set<'alpha' | 'beta'>,
   activeCacheName: string,
@@ -1197,20 +1348,14 @@ async function deletePreviewCaches(
 
 function deletePreviewLocalKeys(
   targetChannels: Set<'alpha' | 'beta'>,
+  preMeasuredLocalKeys: Map<string, number>,
   result: StorageCleanupResult
 ): void {
-  for (const [key, value] of SafeLocalStore.entries()) {
-    if (!isCapyPaintLocalKey(key)) continue;
-    const match = SANDBOX_SUFFIX_RE.exec(key);
-    if (!match) continue;
-    const keyChannel = match[1].toLowerCase();
-    if (keyChannel !== 'alpha' && keyChannel !== 'beta') continue;
-    if (!targetChannels.has(keyChannel)) continue;
-    if (SafeLocalStore.removeItem(key)) {
-      result.deletedLocalKeys += 1;
-      result.freedBytesEstimate += (key.length + value.length) * 2;
-    }
-  }
+  removeAndCountLocalKeys(
+    (key) => isPreviewChannelLocalKey(key, targetChannels),
+    preMeasuredLocalKeys,
+    result
+  );
 }
 
 async function deletePreviewDatabases(
@@ -1218,22 +1363,26 @@ async function deletePreviewDatabases(
   activeDbName: string,
   affectedActiveChannel: boolean,
   blockedTimeoutMs: number,
+  preMeasuredDbSizes: Map<string, number>,
   result: StorageCleanupResult
 ): Promise<void> {
   for (const channel of targetChannels) {
     const dbName = `capy_game_storage_v8_${channel}`;
-    const before = await inspectSingleIdbDatabase(dbName, activeDbName);
-    if (!before && !affectedActiveChannel) continue;
+    const beforeBytes = preMeasuredDbSizes.get(dbName);
+    if (beforeBytes === undefined && !affectedActiveChannel) continue;
     const del = await safeDeleteDatabase(dbName, blockedTimeoutMs);
     if (del.deleted) {
-      if (before) {
+      if (beforeBytes !== undefined) {
         result.deletedIdbDatabases += 1;
-        result.freedBytesEstimate += before.totalBytes;
+        result.freedBytesEstimate += beforeBytes;
       }
     } else if (del.blocked) {
       result.blockedDatabases.push(dbName);
-      if (dbName === activeDbName) {
-        await clearAllStores();
+      if (dbName === activeDbName || beforeBytes !== undefined) {
+        await clearAllStores(dbName);
+        if (beforeBytes !== undefined) {
+          result.freedBytesEstimate += beforeBytes;
+        }
       }
       result.warnings.push(`Close other open tabs using ${dbName} to finish removing it.`);
     }
@@ -1254,59 +1403,51 @@ export async function clearPreviewChannelData(
     (ns.channel === 'alpha' || ns.channel === 'beta') &&
     targetChannels.has(ns.channel);
 
-  if (affectedActiveChannel) {
+  // 1. Pre-measure preview IDB sizes & Local Storage keys BEFORE any destructive clears
+  const preMeasuredDbSizes = new Map<string, number>();
+  for (const channel of targetChannels) {
+    const dbName = `capy_game_storage_v8_${channel}`;
+    const inspected = await inspectSingleIdbDatabase(dbName, ns.dbName);
+    if (inspected) {
+      preMeasuredDbSizes.set(dbName, inspected.totalBytes);
+    }
+  }
+  const preMeasuredLocalKeys = snapshotMatchingLocalKeys((key) =>
+    isPreviewChannelLocalKey(key, targetChannels)
+  );
+
+  // 2. Only invoke window.location-bound snapshot/active clears when options match live window namespace
+  if (affectedActiveChannel && matchesLiveWindowNamespace(ns.dbName)) {
     await clearAllSnapshots();
     clearActiveState();
   }
 
+  // 3. Delete preview caches, stale preview SWs, preview IDBs, then preview Local Storage keys
   await deletePreviewCaches(targetChannels, activeCacheName, activeScopePath, result);
   result.unregisteredWorkers = await unregisterMatchingServiceWorkers(
     (scopePath) => scopeMatchesPreviewChannels(scopePath, targetChannels),
     activeScopePath
   );
-  deletePreviewLocalKeys(targetChannels, result);
   await deletePreviewDatabases(
     targetChannels,
     ns.dbName,
     affectedActiveChannel,
     blockedTimeoutMs,
+    preMeasuredDbSizes,
     result
   );
+  deletePreviewLocalKeys(targetChannels, preMeasuredLocalKeys, result);
 
   return { ...result, affectedActiveChannel };
 }
 
-export async function clearAllCapyStorage(
-  options?: StorageAnalyzerOptions
-): Promise<StorageCleanupResult & { affectedActiveChannel: boolean }> {
-  const result = createEmptyCleanupResult();
-  const ns = resolveStorageNamespace(options?.pathname, options?.origin, options?.search);
-  const activeDbName = ns.dbName;
-  const blockedTimeoutMs = options?.blockedTimeoutMs ?? DEFAULT_BLOCKED_TIMEOUT_MS;
-
-  // 1. Measure Capy IDB databases before clearing so freedBytesEstimate is accurate
-  const { capyDbNames } = await discoverIdbNames(activeDbName);
-  const dbSizes = new Map<string, number>();
-  for (const dbName of capyDbNames) {
-    const inspected = await inspectSingleIdbDatabase(dbName, activeDbName);
-    if (inspected) {
-      dbSizes.set(dbName, inspected.totalBytes);
-    }
-  }
-
-  // 2. Cancel pending BackupEngine writes and clear Android native backups for the active channel
-  await clearAllSnapshots();
-  clearActiveState();
-  clearAllPreviewCaches();
-
-  // 3. Delete all Capy caches (NEVER touch non-Capy origin caches)
-  const cacheCleanup = await clearStaleAndOfflineCaches(options);
-  result.deletedCaches += cacheCleanup.deletedCaches;
-  result.unregisteredWorkers += cacheCleanup.unregisteredWorkers;
-  result.freedBytesEstimate += cacheCleanup.freedBytesEstimate;
-  result.warnings.push(...cacheCleanup.warnings);
-
-  // 4. Close and delete all Capy IndexedDB databases (fallback to clearAllStores if active DB is blocked)
+async function deleteAllCapyDatabases(
+  activeDbName: string,
+  capyDbNames: string[],
+  dbSizes: Map<string, number>,
+  blockedTimeoutMs: number,
+  result: StorageCleanupResult
+): Promise<void> {
   const allCapyDbs = Array.from(
     new Set<string>([
       'capy_game_storage_v8',
@@ -1323,10 +1464,12 @@ export async function clearAllCapyStorage(
         result.deletedIdbDatabases += 1;
         result.freedBytesEstimate += dbSizes.get(dbName) ?? 0;
       }
-    } else if (del.blocked) {
+      continue;
+    }
+    if (del.blocked) {
       result.blockedDatabases.push(dbName);
-      if (dbName === activeDbName) {
-        await clearAllStores();
+      if (dbName === activeDbName || dbSizes.has(dbName)) {
+        await clearAllStores(dbName);
         result.freedBytesEstimate += dbSizes.get(dbName) ?? 0;
       }
       result.warnings.push(
@@ -1334,19 +1477,61 @@ export async function clearAllCapyStorage(
       );
     }
   }
+}
 
-  // 5. Remove all Capy Paint Local Storage keys across channels (NEVER touch CapyGame or other origin keys)
-  for (const [key, value] of SafeLocalStore.entries()) {
-    if (!isCapyPaintLocalKey(key)) continue;
-    if (SafeLocalStore.removeItem(key)) {
-      result.deletedLocalKeys += 1;
-      result.freedBytesEstimate += (key.length + value.length) * 2;
+export async function clearAllCapyStorage(
+  options?: StorageAnalyzerOptions
+): Promise<StorageCleanupResult & { affectedActiveChannel: boolean }> {
+  const result = createEmptyCleanupResult();
+  const ns = resolveStorageNamespace(options?.pathname, options?.origin, options?.search);
+  const activeDbName = ns.dbName;
+  const blockedTimeoutMs = options?.blockedTimeoutMs ?? DEFAULT_BLOCKED_TIMEOUT_MS;
+
+  // 1. Pre-measure Capy IDB databases AND Capy Local Storage keys before clearing so freedBytesEstimate & deletedLocalKeys are accurate
+  const { capyDbNames } = await discoverIdbNames(activeDbName);
+  const dbSizes = new Map<string, number>();
+  for (const dbName of capyDbNames) {
+    const inspected = await inspectSingleIdbDatabase(dbName, activeDbName);
+    if (inspected) {
+      dbSizes.set(dbName, inspected.totalBytes);
     }
   }
+  const preMeasuredLocalKeys = snapshotMatchingLocalKeys((key) => isCapyPaintLocalKey(key));
 
-  // Re-ensure active scoped snapshot/session keys don't linger
-  SafeLocalStore.removeItem(resolveScopedStorageKey(SNAPSHOTS_KEY, options?.pathname, options?.origin, options?.search));
-  SafeLocalStore.removeItem(resolveScopedStorageKey(ACTIVE_STATE_KEY, options?.pathname, options?.origin, options?.search));
+  // 2. Cancel pending BackupEngine writes and clear Android native backups when matching live channel
+  if (matchesLiveWindowNamespace(activeDbName)) {
+    await clearAllSnapshots();
+    clearActiveState();
+    clearWithBackup(
+      resolveScopedStorageKey(SETTINGS_KEY, options?.pathname, options?.origin, options?.search),
+      resolveScopedBackupKey(SETTINGS_KEY, options?.pathname, options?.origin, options?.search)
+    );
+  }
+  clearAllPreviewCaches();
+
+  // 3. Delete all Capy caches (NEVER touch non-Capy origin caches)
+  const cacheCleanup = await clearStaleAndOfflineCaches(options);
+  result.deletedCaches += cacheCleanup.deletedCaches;
+  result.unregisteredWorkers += cacheCleanup.unregisteredWorkers;
+  result.freedBytesEstimate += cacheCleanup.freedBytesEstimate;
+  result.warnings.push(...cacheCleanup.warnings);
+
+  // 4. Close and delete all Capy IndexedDB databases (fallback to clearAllStores(dbName) if blocked)
+  await deleteAllCapyDatabases(activeDbName, capyDbNames, dbSizes, blockedTimeoutMs, result);
+
+  // 5. Remove all Capy Paint Local Storage keys across channels (NEVER touch CapyGame or other origin keys)
+  removeAndCountLocalKeys((key) => isCapyPaintLocalKey(key), preMeasuredLocalKeys, result);
+
+  // Re-ensure active scoped snapshot/session/settings keys don't linger
+  SafeLocalStore.removeItem(
+    resolveScopedStorageKey(SNAPSHOTS_KEY, options?.pathname, options?.origin, options?.search)
+  );
+  SafeLocalStore.removeItem(
+    resolveScopedStorageKey(ACTIVE_STATE_KEY, options?.pathname, options?.origin, options?.search)
+  );
+  SafeLocalStore.removeItem(
+    resolveScopedStorageKey(SETTINGS_KEY, options?.pathname, options?.origin, options?.search)
+  );
 
   return { ...result, affectedActiveChannel: true };
 }

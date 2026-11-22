@@ -18,12 +18,14 @@ export const PLAYER_STATS_STORAGE_KEY = 'capy_player_stats_v1';
 export const APPLE_CLIENT_ID_STORAGE_KEY = 'capy_apple_client_id_v1';
 export const APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY = 'capy_apple_cloudkit_container_v1';
 export const APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY = 'capy_apple_cloudkit_api_token_v1';
+export const APPLE_SESSION_STORAGE_KEY = 'capy_apple_cloud_session_v1';
 
 export const GOOGLE_CLIENT_ID_STORAGE_KEY = 'capy_google_oauth_client_id_v1';
 export const GOOGLE_TOKEN_STORAGE_KEY = 'capy_google_oauth_token_v1';
 export const EXPLICIT_SIGNOUT_STORAGE_KEY = 'capy_cloud_explicit_signout_v1';
 
 export const MICROSOFT_CLIENT_ID_STORAGE_KEY = 'capy_microsoft_oauth_client_id_v1';
+export const MICROSOFT_TOKEN_STORAGE_KEY = 'capy_microsoft_oauth_token_v1';
 
 export const IDENTITY_STORAGE_KEY = 'capy_player_identity_v1';
 export const CLOUD_VAULT_STORAGE_KEY = 'capy_cloud_vault_v1';
@@ -44,10 +46,12 @@ export const STORAGE_KEYS = {
   APPLE_CLIENT_ID: APPLE_CLIENT_ID_STORAGE_KEY,
   APPLE_CLOUDKIT_CONTAINER: APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY,
   APPLE_CLOUDKIT_API_TOKEN: APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY,
+  APPLE_SESSION: APPLE_SESSION_STORAGE_KEY,
   GOOGLE_CLIENT_ID: GOOGLE_CLIENT_ID_STORAGE_KEY,
   GOOGLE_TOKEN: GOOGLE_TOKEN_STORAGE_KEY,
   EXPLICIT_SIGNOUT: EXPLICIT_SIGNOUT_STORAGE_KEY,
   MICROSOFT_CLIENT_ID: MICROSOFT_CLIENT_ID_STORAGE_KEY,
+  MICROSOFT_TOKEN: MICROSOFT_TOKEN_STORAGE_KEY,
   PLAYER_IDENTITY: IDENTITY_STORAGE_KEY,
   CLOUD_VAULT: CLOUD_VAULT_STORAGE_KEY,
   CLOUD_MANIFEST: CLOUD_MANIFEST_STORAGE_KEY,

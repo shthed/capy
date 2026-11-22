@@ -121,7 +121,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activation: purge older cache generations for this scope only (preserving sibling channels)
+// Activation: purge older cache generations for this scope and stale alpha/PR/pull preview caches (preserving sibling Production/Beta channels)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {

@@ -123,7 +123,10 @@ interface SettingsModalProps {
   onTogglePinSnapshot?: (id: string) => void;
   onDeleteSnapshot: (id: string) => void;
   onClearAllSnapshots: () => void;
-  onAfterStorageClear?: (opts: { clearedActiveChannel: boolean }) => Promise<void> | void;
+  onAfterStorageClear?: (opts: {
+    clearedActiveChannel: boolean;
+    clearedSettings?: boolean;
+  }) => Promise<void> | void;
   onResetProgress?: () => void;
   onRegenerate: (config: GeneratorConfig) => void;
   onSelectSample: (sample: SampleArtwork, config?: GeneratorConfig, prebakedSnapshotId?: string) => void;
@@ -556,13 +559,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   }, [isOpen, activeTab]);
 
-  // Close on Escape key (close sub-modals and inline rename first if active)
+  // Close on Escape key (BrowserStorageModal owns Escape when open; otherwise cancel inline rename first)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (isStorageAnalyzerOpen) {
-          setIsStorageAnalyzerOpen(false);
           return;
         }
         if (renamingId) {
@@ -685,14 +687,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer sm:cursor-default"
-    >
+    <>
+      <div
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+        className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer sm:cursor-default"
+      >
       <div
         role="dialog"
         aria-modal="true"
@@ -4257,12 +4260,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
         </div>
       </div>
+      </div>
 
       <BrowserStorageModal
         isOpen={isStorageAnalyzerOpen}
         onClose={() => setIsStorageAnalyzerOpen(false)}
         onAfterStorageClear={onAfterStorageClear}
       />
-    </div>
+    </>
   );
 };

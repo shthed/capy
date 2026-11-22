@@ -112,8 +112,8 @@ export async function closeDbHandle(dbName: string): Promise<void> {
   await Promise.resolve();
 }
 
-function getDBWithHandle(): { dbName: string; dbPromise: Promise<IDBDatabase> } {
-  const dbName = resolveScopedDbName();
+function getDBWithHandle(targetDbName?: string): { dbName: string; dbPromise: Promise<IDBDatabase> } {
+  const dbName = targetDbName || resolveScopedDbName();
   const existing = dbPromises.get(dbName);
   if (existing) {
     return { dbName, dbPromise: existing };
@@ -187,10 +187,11 @@ function resolveIdbError(
 
 export async function runTransaction(
   storeNames: string | string[],
-  work: (tx: IDBTransaction) => void
+  work: (tx: IDBTransaction) => void,
+  targetDbName?: string
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { dbName, dbPromise } = getDBWithHandle();
+    const { dbName, dbPromise } = getDBWithHandle(targetDbName);
     try {
       const db = await dbPromise;
       await new Promise<void>((resolve, reject) => {
@@ -437,43 +438,59 @@ export async function deleteSnapshotEntries(id: string): Promise<void> {
 
 export async function deleteOrphanedEntries(
   puzzleKeys: string[],
-  imageKeys: string[]
+  imageKeys: string[],
+  targetDbName?: string
 ): Promise<void> {
   if (puzzleKeys.length === 0 && imageKeys.length === 0) return;
+  const effectiveDbName = targetDbName || resolveScopedDbName();
   for (const key of imageKeys) {
     if (key.startsWith('preview_')) {
-      deleteCachedPreview(key.slice('preview_'.length));
+      previewCache.delete(`${effectiveDbName}::${key.slice('preview_'.length)}`);
     }
   }
   if (typeof indexedDB === 'undefined') return;
   const storesToOpen: string[] = [];
   if (puzzleKeys.length > 0) storesToOpen.push(STORE_PUZZLES);
   if (imageKeys.length > 0) storesToOpen.push(STORE_IMAGES);
-  await runTransaction(storesToOpen, (tx) => {
-    if (puzzleKeys.length > 0) {
-      const puzzleStore = tx.objectStore(STORE_PUZZLES);
-      for (const key of puzzleKeys) {
-        puzzleStore.delete(key);
+  await runTransaction(
+    storesToOpen,
+    (tx) => {
+      if (puzzleKeys.length > 0) {
+        const puzzleStore = tx.objectStore(STORE_PUZZLES);
+        for (const key of puzzleKeys) {
+          puzzleStore.delete(key);
+        }
       }
-    }
-    if (imageKeys.length > 0) {
-      const imageStore = tx.objectStore(STORE_IMAGES);
-      for (const key of imageKeys) {
-        imageStore.delete(key);
+      if (imageKeys.length > 0) {
+        const imageStore = tx.objectStore(STORE_IMAGES);
+        for (const key of imageKeys) {
+          imageStore.delete(key);
+        }
       }
-    }
-  });
+    },
+    effectiveDbName
+  );
 }
 
-export async function clearAllStores(): Promise<void> {
-  clearScopedPreviewCache();
+export async function clearAllStores(targetDbName?: string): Promise<void> {
+  const effectiveDbName = targetDbName || resolveScopedDbName();
+  const dbPrefix = `${effectiveDbName}::`;
+  for (const key of Array.from(previewCache.keys())) {
+    if (key.startsWith(dbPrefix)) {
+      previewCache.delete(key);
+    }
+  }
   if (typeof indexedDB === 'undefined') return;
   try {
-    await runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
-      tx.objectStore(STORE_PUZZLES).clear();
-      tx.objectStore(STORE_IMAGES).clear();
-    });
+    await runTransaction(
+      [STORE_PUZZLES, STORE_IMAGES],
+      (tx) => {
+        tx.objectStore(STORE_PUZZLES).clear();
+        tx.objectStore(STORE_IMAGES).clear();
+      },
+      effectiveDbName
+    );
   } catch (err) {
-    reportSwallowed('IndexedDbStore.clearAllStores', err);
+    reportSwallowed('IndexedDbStore.clearAllStores', err, { dbName: effectiveDbName });
   }
 }

@@ -4,6 +4,7 @@ import {
   APPLE_CLIENT_ID_STORAGE_KEY,
   APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY,
   APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY,
+  APPLE_SESSION_STORAGE_KEY,
   resolveScopedStorageKey,
 } from '../storage/StorageKeys';
 import { isDebugEnvironmentEnabled } from '../../utils/debugEnvironment';
@@ -12,8 +13,8 @@ export {
   APPLE_CLIENT_ID_STORAGE_KEY,
   APPLE_CLOUDKIT_API_TOKEN_STORAGE_KEY,
   APPLE_CLOUDKIT_CONTAINER_STORAGE_KEY,
+  APPLE_SESSION_STORAGE_KEY,
 };
-export const APPLE_SESSION_STORAGE_KEY = 'capy_apple_cloud_session_v1';
 export const APPLE_CLOUDKIT_RECORD_TYPE = 'CapyCloudSaveRecord';
 
 export interface AppleCloudSession {

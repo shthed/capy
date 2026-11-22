@@ -139,7 +139,8 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **`z-[39]` (`FeatureOfferBanner`)**: Contextual non-blocking feature tip banner.
 - **`z-40` (`LoadingOverlay`, `OnboardingTutorial`)**: Non-blocking bottom-anchored generation HUD, 6-stage inspector drawer, and non-blocking top-anchored 14-step tutorial card.
 - **`z-50` (`SettingsModal`, `ColorPickerPopover`)**: Modal configuration sheet and nested custom color popover.
-- **`z-[60]` (`BrowserStorageModal`, `storage-quota-toast` in `App.tsx`)**: Browser Storage Analyzer & Cleaner modal and dismissible `QuotaExceededError` alert surfacing above open modals whenever local or IndexedDB persistence hits browser storage limits.
+- **`z-[60]` (`storage-quota-toast` in `App.tsx`, modal-docked `OnboardingTutorial`)**: Dismissible `QuotaExceededError` alert surfacing above open modals and modal-docked tutorial guide bar across Settings Steps 8--12.
+- **`z-[65]` (`BrowserStorageModal`)**: Standalone Browser Storage Analyzer & Cleaner modal rendered outside `SettingsModal`'s `z-50` stacking context so it always stacks cleanly above modal-docked tutorial overlays.
 
 ### Component Responsibilities & Key Interactions
 

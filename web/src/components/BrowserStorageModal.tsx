@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Database,
@@ -24,7 +24,10 @@ import {
 export interface BrowserStorageModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAfterStorageClear?: (opts: { clearedActiveChannel: boolean }) => Promise<void> | void;
+  onAfterStorageClear?: (opts: {
+    clearedActiveChannel: boolean;
+    clearedSettings?: boolean;
+  }) => Promise<void> | void;
 }
 
 type CleanupActionId = 'caches' | 'orphans' | 'previews' | 'all';
@@ -42,6 +45,7 @@ interface CleanupActionRowProps {
   disabled: boolean;
   isConfirming: boolean;
   isBusy: boolean;
+  isAnyBusy: boolean;
   onRequestConfirm: (id: CleanupActionId) => void;
   onCancelConfirm: () => void;
   onConfirm: (id: CleanupActionId) => void;
@@ -66,6 +70,7 @@ const CleanupActionRow: React.FC<CleanupActionRowProps> = ({
   disabled,
   isConfirming,
   isBusy,
+  isAnyBusy,
   onRequestConfirm,
   onCancelConfirm,
   onConfirm,
@@ -113,10 +118,10 @@ const CleanupActionRow: React.FC<CleanupActionRowProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              disabled={isBusy}
+              disabled={isAnyBusy}
               data-testid={confirmTestId}
               onClick={() => onConfirm(actionId)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold text-white transition-colors cursor-pointer disabled:opacity-50 ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                 isDanger
                   ? 'bg-red-600 hover:bg-red-500'
                   : 'bg-amber-600 hover:bg-amber-500'
@@ -126,9 +131,9 @@ const CleanupActionRow: React.FC<CleanupActionRowProps> = ({
             </button>
             <button
               type="button"
-              disabled={isBusy}
+              disabled={isAnyBusy}
               onClick={onCancelConfirm}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -138,9 +143,13 @@ const CleanupActionRow: React.FC<CleanupActionRowProps> = ({
         <div className="flex justify-end">
           <button
             type="button"
-            disabled={disabled || isBusy}
+            disabled={disabled || isAnyBusy}
             data-testid={buttonTestId}
-            onClick={() => onRequestConfirm(actionId)}
+            onClick={() => {
+              if (!isAnyBusy) {
+                onRequestConfirm(actionId);
+              }
+            }}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
               isDanger
                 ? 'bg-red-950/60 hover:bg-red-900/70 text-red-200 border-red-700/60'
@@ -531,6 +540,13 @@ function renderLocalStoreSection(report: StorageAnalysisReport): React.ReactNode
               tone="amber"
             />
           )}
+          {localStore.otherCapyCount > 0 && (
+            <BreakdownMetricRow
+              label={`Other Capy Keys (${localStore.otherCapyCount})`}
+              value={formatStorageBytes(localStore.otherCapyBytes)}
+              tone="muted"
+            />
+          )}
           {localStore.otherOriginCount > 0 && (
             <BreakdownMetricRow
               label={`Other Origin Keys (${localStore.otherOriginCount})`}
@@ -547,6 +563,49 @@ function renderLocalStoreSection(report: StorageAnalysisReport): React.ReactNode
   );
 }
 
+interface ActionNoticeState {
+  message: string;
+  isWarning: boolean;
+}
+
+interface CleanupAvailability {
+  hasCapyCaches: boolean;
+  hasOrphans: boolean;
+  hasPreviewData: boolean;
+  hasAnyCapyData: boolean;
+}
+
+function computeCleanupAvailability(report: StorageAnalysisReport | null): CleanupAvailability {
+  if (!report) {
+    return {
+      hasCapyCaches: false,
+      hasOrphans: false,
+      hasPreviewData: false,
+      hasAnyCapyData: false,
+    };
+  }
+  const hasCapyCaches = report.cacheStorage.caches.some((c) => c.category !== 'otherOrigin');
+  const hasOrphans =
+    Boolean(
+      report.indexedDb.activeDb &&
+        !report.indexedDb.activeDb.orphanDetectionSkipped &&
+        report.indexedDb.activeDb.orphanedCount > 0
+    ) || report.localStore.cleanableQuarantineCount > 0;
+  const hasPreviewData =
+    report.cacheStorage.staleAlphaCount > 0 ||
+    report.cacheStorage.caches.some((c) => c.category === 'siblingBeta') ||
+    report.indexedDb.siblingPreviewDbs.length > 0 ||
+    report.localStore.previewChannelsCount > 0 ||
+    report.activeChannel === 'alpha' ||
+    report.activeChannel === 'beta';
+  const hasAnyCapyData =
+    report.totalCapyMeasuredBytes > 0 ||
+    hasCapyCaches ||
+    hasPreviewData ||
+    report.localStore.currentChannelCount > 0;
+  return { hasCapyCaches, hasOrphans, hasPreviewData, hasAnyCapyData };
+}
+
 export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
   isOpen,
   onClose,
@@ -557,67 +616,92 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmingAction, setConfirmingAction] = useState<CleanupActionId | null>(null);
   const [busyAction, setBusyAction] = useState<CleanupActionId | null>(null);
-  const [actionNotice, setActionNotice] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<ActionNoticeState | null>(null);
 
-  const runScan = useCallback(async () => {
+  const busyActionRef = useRef<CleanupActionId | null>(null);
+  const scanSeqRef = useRef(0);
+  const isOpenRef = useRef(isOpen);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      scanSeqRef.current += 1;
+    };
+  }, []);
+
+  const runScan = useCallback(async (resetTransientUi: boolean = false) => {
+    const seq = ++scanSeqRef.current;
     setIsLoading(true);
     setErrorMsg(null);
+    if (resetTransientUi) {
+      setConfirmingAction(null);
+      setActionNotice(null);
+    }
     try {
       const next = await analyzeBrowserStorage();
+      if (seq !== scanSeqRef.current || !isOpenRef.current || !isMountedRef.current) return;
       setReport(next);
     } catch (err) {
+      if (seq !== scanSeqRef.current || !isOpenRef.current || !isMountedRef.current) return;
       setErrorMsg(
         err instanceof Error ? err.message : 'Unable to analyze browser storage right now.'
       );
     } finally {
-      setIsLoading(false);
+      if (seq === scanSeqRef.current && isOpenRef.current && isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   const handleClose = useCallback(() => {
+    if (busyActionRef.current !== null) return;
+    scanSeqRef.current += 1;
     setConfirmingAction(null);
     setActionNotice(null);
     onClose();
   }, [onClose]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
+    isOpenRef.current = isOpen;
+    if (!isOpen) {
+      scanSeqRef.current += 1;
+      return;
+    }
     const load = async () => {
-      setIsLoading(true);
-      setErrorMsg(null);
-      setConfirmingAction(null);
-      setActionNotice(null);
-      try {
-        const next = await analyzeBrowserStorage();
-        if (!cancelled) {
-          setReport(next);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setErrorMsg(
-            err instanceof Error ? err.message : 'Unable to analyze browser storage right now.'
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
+      await runScan(true);
     };
     void load();
     return () => {
-      cancelled = true;
+      isOpenRef.current = false;
+      scanSeqRef.current += 1;
     };
-  }, [isOpen]);
+  }, [isOpen, runScan]);
 
   useEffect(() => {
     if (!isOpen) return;
     return NativeBridge.pushBackHandler(handleClose);
   }, [isOpen, handleClose]);
 
+  // Capture-phase Escape handler: blocks Escape while busy and closes only BrowserStorageModal when idle
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      if (busyActionRef.current !== null) return;
+      handleClose();
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isOpen, handleClose]);
+
   const executeCleanup = useCallback(
     async (actionId: CleanupActionId) => {
+      if (busyActionRef.current !== null) return;
+      busyActionRef.current = actionId;
       setBusyAction(actionId);
       setErrorMsg(null);
       try {
@@ -637,18 +721,33 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
           clearedActiveChannel = allRes.affectedActiveChannel;
         }
 
-        setConfirmingAction(null);
-        setActionNotice(summarizeCleanupResult(actionId, res));
-        if (clearedActiveChannel && onAfterStorageClear) {
-          await onAfterStorageClear({ clearedActiveChannel: true });
+        if (isMountedRef.current && isOpenRef.current) {
+          setConfirmingAction(null);
+          setActionNotice({
+            message: summarizeCleanupResult(actionId, res),
+            isWarning: !res.ok || res.warnings.length > 0 || res.blockedDatabases.length > 0,
+          });
         }
-        await runScan();
+        if (clearedActiveChannel && onAfterStorageClear) {
+          await onAfterStorageClear({
+            clearedActiveChannel: true,
+            clearedSettings: actionId === 'all',
+          });
+        }
+        if (isMountedRef.current && isOpenRef.current) {
+          await runScan();
+        }
       } catch (err) {
-        setErrorMsg(
-          err instanceof Error ? err.message : 'Failed to complete storage cleanup.'
-        );
+        if (isMountedRef.current && isOpenRef.current) {
+          setErrorMsg(
+            err instanceof Error ? err.message : 'Failed to complete storage cleanup.'
+          );
+        }
       } finally {
-        setBusyAction(null);
+        busyActionRef.current = null;
+        if (isMountedRef.current) {
+          setBusyAction(null);
+        }
       }
     },
     [onAfterStorageClear, runScan]
@@ -656,39 +755,20 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
 
   if (!isOpen) return null;
 
-  const hasCapyCaches = Boolean(
-    report &&
-      report.cacheStorage.caches.some((c) => c.category !== 'otherOrigin')
-  );
-  const hasOrphans = Boolean(
-    report &&
-      ((report.indexedDb.activeDb &&
-        !report.indexedDb.activeDb.orphanDetectionSkipped &&
-        report.indexedDb.activeDb.orphanedCount > 0) ||
-        report.localStore.quarantineCount > 0)
-  );
-  const hasPreviewData = Boolean(
-    report &&
-      (report.cacheStorage.staleAlphaCount > 0 ||
-        report.cacheStorage.caches.some((c) => c.category === 'siblingBeta') ||
-        report.indexedDb.siblingPreviewDbs.length > 0 ||
-        report.localStore.previewChannelsCount > 0 ||
-        report.activeChannel === 'alpha' ||
-        report.activeChannel === 'beta')
-  );
-  const hasAnyCapyData = Boolean(
-    report &&
-      (report.totalCapyMeasuredBytes > 0 ||
-        hasCapyCaches ||
-        hasPreviewData ||
-        report.localStore.currentChannelCount > 0)
-  );
+  const isAnyBusy = busyAction !== null;
+  const { hasCapyCaches, hasOrphans, hasPreviewData, hasAnyCapyData } =
+    computeCleanupAvailability(report);
+
+  const handleRequestConfirm = (id: CleanupActionId) => {
+    if (busyActionRef.current !== null) return;
+    setConfirmingAction(id);
+  };
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm sm:p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget && !busyAction) {
+        if (e.target === e.currentTarget && busyActionRef.current === null) {
           handleClose();
         }
       }}
@@ -708,7 +788,7 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
-              disabled={isLoading || busyAction !== null}
+              disabled={isLoading || isAnyBusy}
               data-testid="storage-refresh-btn"
               onClick={() => void runScan()}
               title="Refresh storage breakdown"
@@ -719,7 +799,7 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
             </button>
             <button
               type="button"
-              disabled={busyAction !== null}
+              disabled={isAnyBusy}
               data-testid="storage-close-btn"
               onClick={handleClose}
               aria-label="Close Browser Storage"
@@ -746,9 +826,14 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
             <div
               role="status"
               data-testid="storage-action-notice"
-              className="px-3 py-2 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-xs font-semibold text-emerald-200 break-words"
+              data-notice-tone={actionNotice.isWarning ? 'warning' : 'success'}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold break-words ${
+                actionNotice.isWarning
+                  ? 'bg-amber-950/60 border-amber-500/40 text-amber-200'
+                  : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-200'
+              }`}
             >
-              {actionNotice}
+              {actionNotice.message}
             </div>
           )}
 
@@ -785,7 +870,8 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
                   disabled={!hasCapyCaches}
                   isConfirming={confirmingAction === 'caches'}
                   isBusy={busyAction === 'caches'}
-                  onRequestConfirm={setConfirmingAction}
+                  isAnyBusy={isAnyBusy}
+                  onRequestConfirm={handleRequestConfirm}
                   onCancelConfirm={() => setConfirmingAction(null)}
                   onConfirm={(id) => void executeCleanup(id)}
                 />
@@ -803,7 +889,8 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
                   disabled={!hasOrphans}
                   isConfirming={confirmingAction === 'orphans'}
                   isBusy={busyAction === 'orphans'}
-                  onRequestConfirm={setConfirmingAction}
+                  isAnyBusy={isAnyBusy}
+                  onRequestConfirm={handleRequestConfirm}
                   onCancelConfirm={() => setConfirmingAction(null)}
                   onConfirm={(id) => void executeCleanup(id)}
                 />
@@ -821,7 +908,8 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
                   disabled={!hasPreviewData}
                   isConfirming={confirmingAction === 'previews'}
                   isBusy={busyAction === 'previews'}
-                  onRequestConfirm={setConfirmingAction}
+                  isAnyBusy={isAnyBusy}
+                  onRequestConfirm={handleRequestConfirm}
                   onCancelConfirm={() => setConfirmingAction(null)}
                   onConfirm={(id) => void executeCleanup(id)}
                 />
@@ -839,7 +927,8 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
                   disabled={!hasAnyCapyData}
                   isConfirming={confirmingAction === 'all'}
                   isBusy={busyAction === 'all'}
-                  onRequestConfirm={setConfirmingAction}
+                  isAnyBusy={isAnyBusy}
+                  onRequestConfirm={handleRequestConfirm}
                   onCancelConfirm={() => setConfirmingAction(null)}
                   onConfirm={(id) => void executeCleanup(id)}
                 />

@@ -1271,6 +1271,7 @@ export const App: React.FC = () => {
 
         // Persist custom image blob to IndexedDB (downscaling & compressing oversized uploads)
         if (!sampleAssetPath) {
+          const expectedTransitionSeq = snapshotTransitionSeqRef.current;
           const persistBlobPromise = compressImageForStorage({
             blob: sourceBlob,
             image: img,
@@ -1279,9 +1280,14 @@ export const App: React.FC = () => {
           });
           persistBlobPromise
             .then((blob) => {
-              if (blob) {
-                return StorageService.saveImageBlob(snapId, blob);
+              if (
+                !blob ||
+                expectedTransitionSeq !== snapshotTransitionSeqRef.current ||
+                !StorageService.loadSnapshots().some((s) => s.id === snapId)
+              ) {
+                return;
               }
+              return StorageService.saveImageBlob(snapId, blob);
             })
             .catch((err) => console.warn('Failed to persist source image blob:', err));
         }
@@ -6131,11 +6137,15 @@ export const App: React.FC = () => {
               }
             }
           }}
-          onAfterStorageClear={async ({ clearedActiveChannel }) => {
+          onAfterStorageClear={async ({ clearedActiveChannel, clearedSettings }) => {
             if (!clearedActiveChannel) return;
             clearPendingViewportSave();
             const clearSeq = ++snapshotTransitionSeqRef.current;
             snapshotTransitioningRef.current = true;
+            const effectiveSettings = clearedSettings ? StorageService.loadSettings() : settings;
+            if (clearedSettings) {
+              setSettings(effectiveSettings);
+            }
             liveCoopRef.current = {
               ...liveCoopRef.current,
               activeSnapshotId: null,
@@ -6163,7 +6173,7 @@ export const App: React.FC = () => {
                 loadArtworkFromImage(
                   img,
                   defaultSample.title,
-                  settings.generatorConfig,
+                  effectiveSettings.generatorConfig,
                   new Set(),
                   undefined,
                   undefined,

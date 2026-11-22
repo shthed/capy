@@ -20581,7 +20581,13 @@ async function runBrowserBasicsSuite() {
     await storagePage.getByTestId('storage-clean-previews-btn').click();
     await storagePage.getByTestId('storage-clean-previews-confirm').click();
     await storagePage.waitForFunction(
-      () => localStorage.getItem('capy_snapshots_v8__sandbox_alpha') === null,
+      () => {
+        const btn = document.querySelector('[data-testid="storage-clean-previews-btn"]');
+        return (
+          Boolean(btn && btn.hasAttribute('disabled')) &&
+          localStorage.getItem('capy_snapshots_v8__sandbox_alpha') === null
+        );
+      },
       undefined,
       { timeout: 10000 }
     );
@@ -20702,9 +20708,74 @@ async function runBrowserBasicsSuite() {
       `Expected compressed dimensions <= 2048px, got ${compressedUploadInfo.width}x${compressedUploadInfo.height}`
     );
 
+    // 24f. Cleanup 4: Clear All Capy Storage resets custom settings, reloads starter sample & protects CapyGame
+    await storagePage.getByTestId('topbar-settings-btn').click();
+    await storagePage.getByTestId('settings-tab-settings').click();
+    await storagePage.getByTestId('setting-free-color-mode').click();
+    const freeColorBeforeClear = await storagePage.evaluate(
+      () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').isFreeColorMode)
+    );
+    assert.equal(freeColorBeforeClear, true, 'Expected Free Color Mode setting persisted before Clear All');
+
+    await storagePage.getByTestId('settings-tab-saves').click();
+    await storagePage.getByTestId('saves-storage-info-btn').click();
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-clean-all-btn').waitFor({ state: 'visible', timeout: 10000 });
+    await storagePage.getByTestId('storage-clean-all-btn').click();
+    await storagePage.getByTestId('storage-clean-all-confirm').click();
+    await storagePage.getByTestId('storage-action-notice').waitFor({ state: 'visible', timeout: 15000 });
+    await storagePage.waitForFunction(
+      () => {
+        const closeBtn = document.querySelector('[data-testid="storage-close-btn"]');
+        return Boolean(closeBtn && !closeBtn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+    await storagePage.keyboard.press('Escape');
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'hidden', timeout: 5000 });
+    await storagePage.getByTestId('settings-modal-close').click();
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+    await waitForPuzzleLoaded(storagePage);
+    await storagePage.waitForFunction(
+      () => {
+        try {
+          const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+          return Array.isArray(snaps) && snaps.length === 1;
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+    const afterClearAll = await storagePage.evaluate(async () => {
+      const settingsRaw = localStorage.getItem('capy_user_settings_v8');
+      const parsedSettings = settingsRaw ? JSON.parse(settingsRaw) : null;
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const cacheNames = await caches.keys();
+      return {
+        isFreeColorMode: parsedSettings ? Boolean(parsedSettings.isFreeColorMode) : false,
+        snapCount: snaps.length,
+        capyGameLs: localStorage.getItem('capy_game_save_v3'),
+        hasCapyGameCache: cacheNames.includes('capygame-cache-v1'),
+      };
+    });
+    assert.equal(
+      afterClearAll.isFreeColorMode,
+      false,
+      'Clear All Capy Storage must reset custom settings instead of resurrecting isFreeColorMode'
+    );
+    assert.equal(afterClearAll.snapCount, 1, 'Clear All must reload a fresh starter sample snapshot');
+    assert.equal(
+      afterClearAll.capyGameLs !== null && afterClearAll.hasCapyGameCache,
+      true,
+      'Clear All Capy Storage must preserve CapyGame localStorage key and CacheStorage'
+    );
+
     await storagePage.close();
     await storageContext.close();
-    logE2ePass('Browser Storage Analyzer modal, 360x780 zero-overflow, safe cleanups, Escape isolation & oversized photo upload compression verified.');
+    logE2ePass('Browser Storage Analyzer modal, 360x780 zero-overflow, all 4 cleanups, Escape isolation & oversized photo upload compression verified.');
 
     assert.equal(
       e2eStep,

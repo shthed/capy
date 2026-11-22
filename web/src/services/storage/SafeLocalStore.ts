@@ -92,14 +92,20 @@ export const SafeLocalStore = {
     }
   },
 
-  getItem(storageKey: string): string | null {
+  tryGetItem(storageKey: string): { ok: boolean; value: string | null } {
     try {
-      if (typeof localStorage === 'undefined' || localStorage === null) return null;
-      return localStorage.getItem(storageKey);
+      if (typeof localStorage === 'undefined' || localStorage === null) {
+        return { ok: false, value: null };
+      }
+      return { ok: true, value: localStorage.getItem(storageKey) };
     } catch (err) {
-      reportSwallowed('SafeLocalStore.getItem', err, { key: storageKey });
-      return null;
+      reportSwallowed('SafeLocalStore.tryGetItem', err, { key: storageKey });
+      return { ok: false, value: null };
     }
+  },
+
+  getItem(storageKey: string): string | null {
+    return this.tryGetItem(storageKey).value;
   },
 
   setItem(storageKey: string, value: string, options?: SafeLocalWriteOptions): boolean {

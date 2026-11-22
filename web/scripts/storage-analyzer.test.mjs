@@ -544,6 +544,20 @@ async function runStorageAnalyzerCoreTests(vite) {
   assert.equal(analyzerMod.isCapyPaintLocalKey('capy_dev_debug'), true);
   assert.equal(analyzerMod.isCapyPaintLocalKey('capy_user_settings_v7'), true);
   assert.equal(
+    analyzerMod.isCapyPaintLocalKey('capy_apple_cloud_session_v1'),
+    true,
+    'Apple OAuth session key must be classified as Capy Paint storage'
+  );
+  assert.equal(
+    analyzerMod.isCapyPaintLocalKey('capy_apple_cloud_session_v1__sandbox_alpha'),
+    true
+  );
+  assert.equal(
+    analyzerMod.isCapyPaintLocalKey('capy_microsoft_oauth_token_v1'),
+    true,
+    'Microsoft OAuth token key must be classified as Capy Paint storage'
+  );
+  assert.equal(
     analyzerMod.isCapyPaintLocalKey('capy_game_save_v3'),
     false,
     'CapyGame save key must NEVER be classified as Capy Paint storage'
@@ -553,26 +567,63 @@ async function runStorageAnalyzerCoreTests(vite) {
     false,
     'CapyGame settings key must NEVER be classified as Capy Paint storage'
   );
+  assert.equal(
+    analyzerMod.isCapyPaintLocalKey('capy_game_onboarding_v1'),
+    false,
+    'CapyGame onboarding key must NEVER be classified as Capy Paint storage'
+  );
   assert.equal(analyzerMod.isCapyPaintLocalKey('unrelated_site_key'), false);
 
-  // 2. Recursive structured clone sizing (Blob, deduped ArrayBuffer, TypedArray, cycle & depth guard)
-  const sharedBuf = new ArrayBuffer(128);
-  const view = new Uint8Array(64);
+  // 2. Recursive structured clone sizing (Blob, deduped ArrayBuffer, shared views, cycle & depth guard)
+  const sharedBuf = new ArrayBuffer(10_000);
+  const view1 = new Uint8Array(sharedBuf);
+  const view2 = new DataView(sharedBuf);
   const blob = new Blob([new Uint8Array(512)], { type: 'image/webp' });
-  const cyclic = { label: 'abc', buf1: sharedBuf, buf2: sharedBuf, view, blob };
+  const cyclic = { label: 'abc', buf1: sharedBuf, buf2: sharedBuf, view1, view2, b1: blob, b2: blob };
   cyclic.self = cyclic;
   const est = analyzerMod.estimateStructuredCloneBytes(cyclic);
-  assert.equal(est >= 512 + 128 + 64, true, `Expected >= 704 bytes, got ${est}`);
+  // Shared backing ArrayBuffer (10,000) and shared Blob (512) must each be counted ONCE
+  assert.equal(est >= 10_000 + 512, true, `Expected >= 10512 bytes, got ${est}`);
+  assert.equal(
+    est < 10_000 + 512 + 256,
+    true,
+    `Shared ArrayBuffer views and duplicate Blob refs must not double-count (got ${est})`
+  );
+  const sharedViewsOnly = analyzerMod.estimateStructuredCloneBytes({
+    v1: new Uint8Array(sharedBuf),
+    v2: new DataView(sharedBuf),
+  });
+  assert.equal(
+    sharedViewsOnly >= 10_000 && sharedViewsOnly < 10_100,
+    true,
+    `Two views over one 10000-byte ArrayBuffer must count backing buffer once (got ${sharedViewsOnly})`
+  );
+  const bufAndView = analyzerMod.estimateStructuredCloneBytes({
+    buf: sharedBuf,
+    view: new Uint8Array(sharedBuf),
+  });
+  assert.equal(
+    bufAndView >= 10_000 && bufAndView < 10_100,
+    true,
+    `{ buf, view } sharing one ArrayBuffer must count backing buffer once (got ${bufAndView})`
+  );
+  const dupBlobs = analyzerMod.estimateStructuredCloneBytes({ b1: blob, b2: blob });
+  assert.equal(
+    dupBlobs >= 512 && dupBlobs < 600,
+    true,
+    `Duplicate Blob references must count Blob once (got ${dupBlobs})`
+  );
   let deep = { leaf: 'x' };
   for (let i = 0; i < 30; i++) deep = { nested: deep };
   assert.equal(Number.isFinite(analyzerMod.estimateStructuredCloneBytes(deep)), true);
 
-  // 3. Zero-false-positive orphan computation + fail-closed corrupt JSON guard
+  // 3. Zero-false-positive orphan computation + fail-closed corrupt JSON + preview_ sourceRef.uri guard
   const orphanNormal = analyzerMod.computeOrphanedKeys({
     puzzleKeys: ['snap-1', 'snap-active', 'orphan-p1'],
     imageKeys: [
       'snap-1',
       'custom-uri-1',
+      'preview_custom-77',
       'preview_snap-1',
       'preview_snap-active',
       'orphan-img',
@@ -580,12 +631,17 @@ async function runStorageAnalyzerCoreTests(vite) {
     ],
     rawSnapshotsJson: JSON.stringify([
       { id: 'snap-1', title: 'Live', sourceRef: { kind: 'blob', uri: 'custom-uri-1' } },
+      { id: 'snap-2', title: 'PreviewPrefixedUri', sourceRef: { kind: 'blob', uri: 'preview_custom-77' } },
     ]),
     rawActiveStateJson: JSON.stringify({ activeSnapshotId: 'snap-active' }),
   });
   assert.equal(orphanNormal.skipped, false);
   assert.deepEqual(orphanNormal.orphanedPuzzleKeys, ['orphan-p1']);
-  assert.deepEqual(orphanNormal.orphanedImageKeys.sort(), ['orphan-img', 'preview_orphan-p1']);
+  assert.deepEqual(
+    orphanNormal.orphanedImageKeys.sort(),
+    ['orphan-img', 'preview_orphan-p1'],
+    'preview_-prefixed sourceRef.uri must never be flagged as orphaned'
+  );
 
   const orphanCorrupt = analyzerMod.computeOrphanedKeys({
     puzzleKeys: ['snap-1', 'orphan-p1'],
@@ -597,7 +653,7 @@ async function runStorageAnalyzerCoreTests(vite) {
   assert.deepEqual(orphanCorrupt.orphanedPuzzleKeys, []);
   assert.deepEqual(orphanCorrupt.orphanedImageKeys, []);
 
-  // 4. Full analyzeBrowserStorage() + all 4 cleanup actions + non-creating IDB probe
+  // 4. Full analyzeBrowserStorage() + all 4 cleanup actions + non-creating IDB probe + regression probes
   const prevLs = globalThis.localStorage;
   const prevCaches = globalThis.caches;
   const prevIdb = globalThis.indexedDB;
@@ -620,6 +676,7 @@ async function runStorageAnalyzerCoreTests(vite) {
       capy_snapshots_v8: snapshotsPayload,
       capy_snapshots_v8__corrupt_quarantine: '{broken',
       capy_active_session_v8: JSON.stringify({ activeSnapshotId: 'live-1' }),
+      capy_user_settings_v8: JSON.stringify({ isFreeColorMode: true }),
       capy_snapshots_v8__sandbox_alpha: JSON.stringify([{ id: 'alpha-1', title: 'Alpha Save' }]),
       capy_snapshots_v8__sandbox_beta: JSON.stringify([{ id: 'beta-1', title: 'Beta Save' }]),
       capy_game_save_v3: JSON.stringify({ capybaraScore: 9000 }),
@@ -739,6 +796,17 @@ async function runStorageAnalyzerCoreTests(vite) {
     assert.equal(report.localStore.otherOriginCount, 2, 'CapyGame keys must be counted as otherOrigin');
     assert.equal(report.localStore.previewChannelsCount, 2);
     assert.equal(report.localStore.quarantineCount, 1);
+    assert.equal(report.localStore.cleanableQuarantineCount, 1);
+    assert.equal(
+      report.localStore.currentChannelBytes +
+        report.localStore.previewChannelsBytes +
+        report.localStore.prodChannelBytes +
+        report.localStore.quarantineBytes +
+        report.localStore.otherCapyBytes +
+        report.localStore.otherOriginBytes,
+      report.localStore.totalBytes,
+      'Local Storage sub-rows must sum exactly to totalBytes with zero quarantine double-counting'
+    );
 
     // Cleanup 1: Clear Stale & Offline Caches (zero save loss, protects CapyGame cache)
     const cacheClean = await analyzerMod.clearStaleAndOfflineCaches(opts);
@@ -797,7 +865,7 @@ async function runStorageAnalyzerCoreTests(vite) {
     );
     assert.deepEqual(noListIdb._createdNames, []);
 
-    // Cleanup 4: Clear All Capy Storage (including blocked active DB fallback & CapyGame protection)
+    // Cleanup 4: Clear All Capy Storage (blocked active DB fallback, accurate deletedLocalKeys/freedBytesEstimate & CapyGame protection)
     await resetCachedHandles();
     const blockedIdb = createMockIndexedDb({
       initialDbs: {
@@ -828,6 +896,18 @@ async function runStorageAnalyzerCoreTests(vite) {
     );
     assert.equal(blockedIdb._hasDb('capygame_world_db'), true, 'CapyGame DB must stay untouched');
     assert.equal(mockLs.getItem('capy_snapshots_v8'), null);
+    assert.equal(mockLs.getItem('capy_active_session_v8'), null);
+    assert.equal(mockLs.getItem('capy_user_settings_v8'), null);
+    assert.equal(
+      clearAllRes.deletedLocalKeys,
+      3,
+      `clearAllCapyStorage must count snapshots, active_session, and user_settings (got ${clearAllRes.deletedLocalKeys})`
+    );
+    assert.equal(
+      clearAllRes.freedBytesEstimate > 512 + 256 + 128 + snapshotsPayload.length * 2,
+      true,
+      `clearAllCapyStorage must include pre-measured IDB + Local Storage bytes (got ${clearAllRes.freedBytesEstimate})`
+    );
     assert.equal(mockLs.getItem('capy_game_save_v3') !== null, true, 'CapyGame save must stay untouched');
     assert.equal(
       mockLs.getItem('capy_game_settings_v1') !== null,
@@ -835,6 +915,247 @@ async function runStorageAnalyzerCoreTests(vite) {
       'CapyGame settings must stay untouched'
     );
     assert.deepEqual(mockCaches._names(), ['capygame-cache-v1']);
+
+    // 5. Regression: Fail-closed Orphan GC when localStorage throws SecurityError or is undefined
+    await resetCachedHandles();
+    const failClosedIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'live-protected': { data: new Uint8Array(1024) } },
+          images: { 'live-protected': new Blob([new Uint8Array(512)]) },
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.indexedDB = failClosedIdb;
+    globalThis.localStorage = {
+      get length() {
+        throw new DOMException('Blocked', 'SecurityError');
+      },
+      key() {
+        throw new DOMException('Blocked', 'SecurityError');
+      },
+      getItem() {
+        throw new DOMException('Blocked', 'SecurityError');
+      },
+      setItem() {
+        throw new DOMException('Blocked', 'SecurityError');
+      },
+      removeItem() {
+        throw new DOMException('Blocked', 'SecurityError');
+      },
+    };
+    const secErrReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(
+      secErrReport.indexedDb.activeDb.orphanDetectionSkipped,
+      true,
+      'SecurityError on localStorage.getItem must fail closed'
+    );
+    assert.equal(secErrReport.indexedDb.activeDb.orphanedCount, 0);
+    const secErrClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(secErrClean.deletedIdbRecords, 0);
+    assert.deepEqual(failClosedIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'), ['live-protected']);
+
+    globalThis.localStorage = undefined;
+    const undefLsReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(
+      undefLsReport.indexedDb.activeDb.orphanDetectionSkipped,
+      true,
+      'undefined localStorage must fail closed'
+    );
+    assert.equal(undefLsReport.indexedDb.activeDb.orphanedCount, 0);
+    const undefLsClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(undefLsClean.deletedIdbRecords, 0);
+    assert.deepEqual(failClosedIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'), ['live-protected']);
+
+    // 6. Regression: Android native BackupEngine fallback & fail-closed orphan protection
+    await resetCachedHandles();
+    const androidLs = createMockLocalStorage({});
+    const androidIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            'android-live-1': { data: new Uint8Array(512) },
+            'android-orphan-1': { data: new Uint8Array(256) },
+          },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = androidLs;
+    globalThis.indexedDB = androidIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+      CapyAndroid: {
+        loadBackup: (key) =>
+          key === 'capy_snapshots_v8'
+            ? JSON.stringify([{ id: 'android-live-1', title: 'Backed Up On Android' }])
+            : null,
+        saveBackup: () => true,
+      },
+    };
+    const androidBackupReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(androidBackupReport.indexedDb.activeDb.orphanDetectionSkipped, false);
+    assert.deepEqual(
+      androidBackupReport.indexedDb.activeDb.orphanedPuzzleKeys,
+      ['android-orphan-1'],
+      'Android native backup snapshots must keep live IDB saves protected while detecting true orphans'
+    );
+    // Throwing Android native backup when localStorage is empty must fail closed
+    androidLs.removeItem('capy_snapshots_v8');
+    globalThis.window.CapyAndroid.loadBackup = () => {
+      throw new Error('Native bridge unavailable');
+    };
+    const androidErrReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(
+      androidErrReport.indexedDb.activeDb.orphanDetectionSkipped,
+      true,
+      'Throwing Android native backup must fail closed'
+    );
+    assert.equal(androidErrReport.indexedDb.activeDb.orphanedCount, 0);
+
+    // 7. Regression: StorageAnalyzerOptions honored across cross-channel calls (window.location is Prod, options is Alpha)
+    await resetCachedHandles();
+    const crossLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-1', title: 'Production Save' }]),
+      capy_active_session_v8: JSON.stringify({ activeSnapshotId: 'prod-1' }),
+      capy_snapshots_v8__sandbox_alpha: JSON.stringify([{ id: 'alpha-live', title: 'Alpha Save' }]),
+      capy_active_session_v8__sandbox_alpha: JSON.stringify({ activeSnapshotId: 'alpha-live' }),
+    });
+    const crossIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-1': { data: new Uint8Array(4096) } },
+          images: {},
+        },
+        capy_game_storage_v8_alpha: {
+          puzzles: {
+            'alpha-live': { data: new Uint8Array(2048) },
+            'alpha-orphan': { data: new Uint8Array(1024) },
+          },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = crossLs;
+    globalThis.indexedDB = crossIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const alphaOpts = {
+      pathname: '/capy/alpha/629/',
+      origin: 'https://example.github.io',
+      search: '',
+      scopeUrl: 'https://example.github.io/capy/alpha/629/',
+      version: '3.0.12',
+    };
+    const crossOrphanRes = await analyzerMod.cleanOrphanedSaveData(alphaOpts);
+    assert.equal(crossOrphanRes.deletedIdbRecords, 1);
+    assert.deepEqual(
+      crossIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'),
+      ['prod-1'],
+      'cleanOrphanedSaveData(alphaOptions) from Prod window must NEVER touch Production DB'
+    );
+    assert.deepEqual(
+      crossIdb._getStoreKeys('capy_game_storage_v8_alpha', 'puzzles'),
+      ['alpha-live'],
+      'cleanOrphanedSaveData(alphaOptions) must delete only Alpha orphan'
+    );
+    const crossPreviewRes = await analyzerMod.clearPreviewChannelData(alphaOpts);
+    assert.equal(crossPreviewRes.affectedActiveChannel, true);
+    assert.equal(crossIdb._hasDb('capy_game_storage_v8_alpha'), false);
+    assert.equal(crossIdb._hasDb('capy_game_storage_v8'), true, 'Production DB must remain untouched');
+    assert.deepEqual(
+      crossIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'),
+      ['prod-1'],
+      'clearPreviewChannelData(alphaOptions) from Prod window must NEVER wipe Production saves'
+    );
+    assert.equal(
+      JSON.parse(crossLs.getItem('capy_snapshots_v8')).length,
+      1,
+      'Production snapshots Local Storage key must remain intact'
+    );
+
+    // 8. Regression: clearPreviewChannelData from active Beta channel reports accurate freedBytesEstimate & deletedLocalKeys
+    await resetCachedHandles();
+    const betaLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-keep', title: 'Prod' }]),
+      capy_snapshots_v8__sandbox_beta: JSON.stringify([{ id: 'beta-big', title: 'Beta Big' }]),
+      capy_active_session_v8__sandbox_beta: JSON.stringify({ activeSnapshotId: 'beta-big' }),
+    });
+    const betaIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-keep': { data: new Uint8Array(500) } },
+          images: {},
+        },
+        capy_game_storage_v8_beta: {
+          puzzles: { 'beta-big': { data: new Uint8Array(50_000) } },
+          images: { 'beta-big': new Blob([new Uint8Array(20_000)]) },
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = betaLs;
+    globalThis.indexedDB = betaIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/beta/', origin: 'https://example.github.io', search: '' },
+    };
+    const betaOpts = {
+      pathname: '/capy/beta/',
+      origin: 'https://example.github.io',
+      search: '',
+      scopeUrl: 'https://example.github.io/capy/beta/',
+      version: '3.0.12',
+    };
+    const betaClean = await analyzerMod.clearPreviewChannelData(betaOpts);
+    assert.equal(betaClean.affectedActiveChannel, true);
+    assert.equal(betaClean.deletedIdbDatabases, 1);
+    assert.equal(betaClean.deletedLocalKeys, 2);
+    assert.equal(
+      betaClean.freedBytesEstimate >= 70_000,
+      true,
+      `Active Beta clearPreviewChannelData must pre-measure IDB bytes >= 70000 (got ${betaClean.freedBytesEstimate})`
+    );
+    assert.equal(betaIdb._hasDb('capy_game_storage_v8'), true);
+    assert.equal(betaLs.getItem('capy_snapshots_v8') !== null, true);
+
+    // 9. Regression: Sibling-channel & unhealthy quarantine keys do not inflate cleanableQuarantineCount or totalReclaimableSafeBytes
+    await resetCachedHandles();
+    const qLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-1', title: 'Prod' }]),
+      capy_snapshots_v8__sandbox_alpha__corrupt_quarantine: '{sibling-corrupt',
+      capy_user_settings_v8__corrupt_quarantine: '{unhealthy-no-live-key',
+    });
+    const qIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-1': { data: new Uint8Array(128) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = qLs;
+    globalThis.indexedDB = qIdb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const qReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(qReport.localStore.quarantineCount, 2);
+    assert.equal(
+      qReport.localStore.cleanableQuarantineCount,
+      0,
+      'Sibling-channel & unhealthy quarantine keys must NOT be counted as cleanable'
+    );
+    assert.equal(
+      qReport.totalReclaimableSafeBytes,
+      0,
+      'Uncleanable quarantine keys must NOT inflate totalReclaimableSafeBytes'
+    );
   } finally {
     await resetCachedHandles();
     globalThis.localStorage = prevLs;
