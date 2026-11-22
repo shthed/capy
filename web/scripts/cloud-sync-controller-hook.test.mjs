@@ -128,7 +128,9 @@ function makeMemoryStorage(initialSnapshots = []) {
               filledCount,
               totalCount,
               filledRegionIds: [...filledRegionIds],
-              paintedRegionColors: paintedRegionColors ? { ...paintedRegionColors } : undefined,
+              ...(paintedRegionColors !== undefined
+                ? { paintedRegionColors: { ...paintedRegionColors } }
+                : {}),
               ...(resetEpoch !== undefined ? { resetEpoch } : {}),
             }
           : item
@@ -151,6 +153,7 @@ export async function runCloudSyncControllerHookTests(vite) {
     resolvePostSyncStatus,
     resolveSyncErrorState,
     buildAutoSyncProgressKey,
+    normalizeResetEpoch,
     resolveSnapshotSampleUri,
     resolveSlotSourceRef,
     findMatchingSnapshotForActiveSlot,
@@ -197,6 +200,63 @@ export async function runCloudSyncControllerHookTests(vite) {
     './assets/capy_forest.webp'
   );
   assert.equal(matchByNormalizedSample?.id, 'snap-remote');
+
+  // 1b. Regression: findMatchingSnapshotForActiveSlot ID precedence & malformed manifest resilience
+  {
+    const orderedSnapshots = [
+      makeSnapshot({ id: 'old-copy', sampleAssetPath: './assets/capy_forest.webp' }),
+      makeSnapshot({ id: 'exact-id', sampleAssetPath: './assets/capy_forest.webp' }),
+    ];
+    const exactMatch = findMatchingSnapshotForActiveSlot(
+      orderedSnapshots,
+      'exact-id',
+      './assets/capy_forest.webp'
+    );
+    assert.equal(
+      exactMatch?.id,
+      'exact-id',
+      'Exact snapshot ID must take precedence over an earlier same-sample entry'
+    );
+
+    const malformedManifest = [
+      null,
+      undefined,
+      { id: 'bad-types', sampleAssetPath: 123, sourceRef: { kind: 'sample', uri: 456 } },
+      makeSnapshot({ id: 'dot-slash-only', sampleAssetPath: './', sourceRef: { kind: 'sample', uri: './' } }),
+      makeSnapshot({ id: 'valid-sample', sampleAssetPath: 'assets/capy_river.webp' }),
+    ];
+    assert.equal(
+      findMatchingSnapshotForActiveSlot(malformedManifest, 'missing-id', './assets/capy_river.webp')?.id,
+      'valid-sample',
+      'Malformed manifest entries must be skipped safely without throwing'
+    );
+    assert.equal(
+      findMatchingSnapshotForActiveSlot(malformedManifest, 'missing-id', './'),
+      undefined,
+      'Bare "./" sample URI must normalize to null and never false-match'
+    );
+    assert.equal(
+      findMatchingSnapshotForActiveSlot(malformedManifest, 'missing-id', ''),
+      undefined,
+      'Empty sample URI must normalize to null and never false-match'
+    );
+
+    assert.equal(resolveSnapshotSampleUri(null), undefined);
+    assert.equal(resolveSnapshotSampleUri(undefined), undefined);
+    assert.equal(resolveSnapshotSampleUri({ sampleAssetPath: 42 }), undefined);
+    assert.equal(resolveSnapshotSampleUri({ sourceRef: { kind: 'sample', uri: 99 } }), undefined);
+    assert.equal(resolveSnapshotSampleUri({ sampleAssetPath: './' }), undefined);
+    assert.equal(resolveSnapshotSampleUri({ sourceRef: { kind: 'catalog', uri: './' } }), undefined);
+  }
+
+  // 1c. Regression: normalizeResetEpoch edge cases
+  assert.equal(normalizeResetEpoch(-1), 0);
+  assert.equal(normalizeResetEpoch(Number.NaN), 0);
+  assert.equal(normalizeResetEpoch(Number.POSITIVE_INFINITY), 0);
+  assert.equal(normalizeResetEpoch(Number.NEGATIVE_INFINITY), 0);
+  assert.equal(normalizeResetEpoch(2.9), 2);
+  assert.equal(normalizeResetEpoch(undefined), 0);
+  assert.equal(normalizeResetEpoch('3'), 0);
 
   // 2. reconcileActiveSlotProgress — resetEpoch dominance for BOTH filledRegionIds AND paintedRegionColors
   const validRegions = new Set([101, 102, 103]);
@@ -307,6 +367,63 @@ export async function runCloudSyncControllerHookTests(vite) {
     });
     assert.equal(res.activeSlotMissing, true);
     assert.equal(res.shouldApply, false);
+  }
+
+  // 2e. Regression: negative, NaN, and non-integer resetEpoch normalization in reconcileActiveSlotProgress
+  {
+    // Negative liveUiEpoch (-1) against epoch 0 must NOT spuriously advance epoch or drop mid-flight strokes
+    const negRes = reconcileActiveSlotProgress({
+      liveFilled: new Set([101]),
+      livePainted: new Map([[101, 1]]),
+      liveUiEpoch: -1,
+      isFreeColorMode: true,
+      matchingSave: makeSnapshot({
+        filledRegionIds: [],
+        paintedRegionColors: {},
+        resetEpoch: 0,
+      }),
+      slotMergedDelta: null,
+      validRegionIds: validRegions,
+      now: 5_000,
+    });
+    assert.equal(negRes.epochAdvanced, false);
+    assert.equal(negRes.reconciledEpoch, 0);
+    assert.deepEqual(Array.from(negRes.combinedFilled), [101]);
+    assert.deepEqual(Object.fromEntries(negRes.nextPainted), { 101: 1 });
+
+    // NaN liveUiEpoch with missing matchingSave must return finite 0
+    const nanMissingRes = reconcileActiveSlotProgress({
+      liveFilled: new Set([101]),
+      livePainted: new Map([[101, 1]]),
+      liveUiEpoch: Number.NaN,
+      isFreeColorMode: false,
+      matchingSave: undefined,
+      slotMergedDelta: null,
+      validRegionIds: validRegions,
+    });
+    assert.equal(Number.isFinite(nanMissingRes.reconciledEpoch), true);
+    assert.equal(nanMissingRes.reconciledEpoch, 0);
+    assert.equal(nanMissingRes.epochAdvanced, false);
+
+    // NaN liveUiEpoch against remote epoch 2 must detect epochAdvanced = true
+    const nanRemoteRes = reconcileActiveSlotProgress({
+      liveFilled: new Set([101]),
+      livePainted: new Map([[101, 1]]),
+      liveUiEpoch: Number.NaN,
+      isFreeColorMode: true,
+      matchingSave: makeSnapshot({
+        filledRegionIds: [102],
+        paintedRegionColors: { 102: 2 },
+        resetEpoch: 2,
+      }),
+      slotMergedDelta: null,
+      validRegionIds: validRegions,
+      now: 6_000,
+    });
+    assert.equal(nanRemoteRes.epochAdvanced, true);
+    assert.equal(nanRemoteRes.reconciledEpoch, 2);
+    assert.deepEqual(Array.from(nanRemoteRes.combinedFilled), [102]);
+    assert.deepEqual(Object.fromEntries(nanRemoteRes.nextPainted), { 102: 2 });
   }
 
   // 3. executeSingleSyncPass full happy path + coalesced controller trailing pass
@@ -595,6 +712,159 @@ export async function runCloudSyncControllerHookTests(vite) {
     assert.equal(payload.slotEpoch, 5);
     assert.deepEqual(payload.localDelta.filledRegionIds, [103]);
     assert.deepEqual(payload.localDelta.paintedRegionColors, { 103: 3 });
+  }
+
+  // 6b. Regression: buildActiveSlotSyncPayload normalizes NaN & non-integer resetEpoch inputs
+  {
+    const nanSnapPayload = buildActiveSlotSyncPayload({
+      startSnapshotId: 'snap-nan',
+      startSampleUri: './assets/capy_forest.webp',
+      startSourceRef: { kind: 'sample', uri: './assets/capy_forest.webp' },
+      preSyncSnap: makeSnapshot({
+        id: 'snap-nan',
+        filledRegionIds: [101],
+        paintedRegionColors: { 101: 1 },
+        resetEpoch: Number.NaN,
+      }),
+      preSyncState: {
+        puzzle: makeTestPuzzle(),
+        activeSnapshotId: 'snap-nan',
+        activeSave: makeSnapshot({ id: 'snap-nan', resetEpoch: 2 }),
+        activeTitle: 'Capy',
+        filledRegionIds: new Set([102]),
+        paintedRegionColors: new Map([[102, 2]]),
+        isFreeColorMode: true,
+        activeColorId: 2,
+        hapticsEnabled: false,
+      },
+      preSyncActiveMatches: true,
+      now: 9100,
+    });
+    assert.equal(nanSnapPayload.slotEpoch, 2);
+    assert.equal(nanSnapPayload.localDelta.resetEpoch, 2);
+    assert.deepEqual(nanSnapPayload.localDelta.filledRegionIds, [102]);
+
+    const floatUiPayload = buildActiveSlotSyncPayload({
+      startSnapshotId: 'snap-float',
+      startSampleUri: './assets/capy_forest.webp',
+      startSourceRef: { kind: 'sample', uri: './assets/capy_forest.webp' },
+      preSyncSnap: makeSnapshot({
+        id: 'snap-float',
+        filledRegionIds: [101],
+        resetEpoch: 1,
+      }),
+      preSyncState: {
+        puzzle: makeTestPuzzle(),
+        activeSnapshotId: 'snap-float',
+        activeSave: makeSnapshot({ id: 'snap-float', resetEpoch: 2.9 }),
+        activeTitle: 'Capy',
+        filledRegionIds: new Set([103]),
+        paintedRegionColors: new Map([[103, 3]]),
+        isFreeColorMode: true,
+        activeColorId: 3,
+        hapticsEnabled: false,
+      },
+      preSyncActiveMatches: true,
+      now: 9200,
+    });
+    assert.equal(floatUiPayload.slotEpoch, 2);
+    assert.equal(floatUiPayload.localDelta.resetEpoch, 2);
+  }
+
+  // 6c. Regression: local empty reset at higher resetEpoch flushes {} paintedRegionColors before syncFullLibrary
+  {
+    const puzzle = makeTestPuzzle({ isFreeColor: true });
+    const staleStorageSnap = makeSnapshot({
+      id: 'snap-reset-flush',
+      filledRegionIds: [101, 102],
+      paintedRegionColors: { 101: 1, 102: 2 },
+      isFreeColor: true,
+      resetEpoch: 1,
+    });
+    const storage = makeMemoryStorage([staleStorageSnap]);
+    const controller = coordMod.createCoalescedSyncController();
+    let syncedSnapshotsSeenByCloud = [];
+
+    const cloudSave = {
+      providerName: 'mock-cloud',
+      async pullEnvelope() {
+        return null;
+      },
+      async pushEnvelope() {
+        return true;
+      },
+      async syncFullLibrary(snaps) {
+        syncedSnapshotsSeenByCloud = snaps.map((s) => ({
+          id: s.id,
+          resetEpoch: s.resetEpoch,
+          filledRegionIds: [...(s.filledRegionIds || [])],
+          paintedRegionColors: s.paintedRegionColors ? { ...s.paintedRegionColors } : undefined,
+        }));
+        return {
+          syncedAt: 9500,
+          totalSavesSynced: 1,
+          importedSavesFromCloud: 0,
+          mergedRegionsFromCloud: 0,
+          pushedToCloud: true,
+          cloudBackend: 'google_drive_appdata',
+        };
+      },
+      async syncProgress(slotKey, _title, localDelta) {
+        return {
+          slotKey,
+          mergedDelta: localDelta,
+          addedFromCloud: 0,
+          pushedToCloud: true,
+          syncedAt: 9500,
+        };
+      },
+    };
+
+    await executeSingleSyncPass({
+      cloudSave,
+      controller,
+      getLiveState: () => ({
+        puzzle,
+        activeSnapshotId: 'snap-reset-flush',
+        activeSave: makeSnapshot({
+          id: 'snap-reset-flush',
+          filledRegionIds: [],
+          paintedRegionColors: {},
+          isFreeColor: true,
+          resetEpoch: 2,
+        }),
+        activeTitle: 'Reset Flush Test',
+        filledRegionIds: new Set(),
+        paintedRegionColors: new Map(),
+        isFreeColorMode: true,
+        activeColorId: 1,
+        hapticsEnabled: false,
+      }),
+      getViewport: () => ({ zoomScale: 1, panOffsetX: 0, panOffsetY: 0 }),
+      getValidRegionIds: () => new Set([101, 102, 103]),
+      isSnapshotTransitioning: () => false,
+      getTransitionSeq: () => 1,
+      storage,
+      haptic: () => {},
+      now: () => 9500,
+      applySnapshots: () => {},
+      applyReconciledActiveSlot: () => {},
+    });
+
+    assert.equal(storage.updateCalls.length >= 1, true);
+    assert.deepEqual(
+      storage.updateCalls[0].paintedRegionColors,
+      {},
+      'flushActiveStateBeforeSync must pass {} (not undefined) so stale paintedRegionColors are cleared in storage'
+    );
+    assert.equal(syncedSnapshotsSeenByCloud.length, 1);
+    assert.equal(syncedSnapshotsSeenByCloud[0].resetEpoch, 2);
+    assert.deepEqual(syncedSnapshotsSeenByCloud[0].filledRegionIds, []);
+    assert.deepEqual(
+      syncedSnapshotsSeenByCloud[0].paintedRegionColors,
+      {},
+      'syncFullLibrary must receive cleared paintedRegionColors after local empty reset'
+    );
   }
 
   // 7. Auth state transitions, signOut() cross-account isolation, and startup auto-sign-in

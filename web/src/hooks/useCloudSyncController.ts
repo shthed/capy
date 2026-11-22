@@ -220,17 +220,41 @@ export function buildAutoSyncProgressKey(
 }
 
 /**
+ * Normalizes a raw `resetEpoch` value to a non-negative integer (matching `CapyCodec.normalizeResetEpoch`).
+ */
+export function normalizeResetEpoch(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+}
+
+function normalizeComparableSampleUri(uri: unknown): string | null {
+  if (typeof uri !== 'string') return null;
+  const stripped = uri.replace(/^\.\//, '');
+  return stripped.length > 0 ? stripped : null;
+}
+
+/**
  * Resolves the canonical sample/catalog URI associated with a saved snapshot, if any.
  */
 export function resolveSnapshotSampleUri(
-  activeSave?: Pick<SavedSnapshot, 'sampleAssetPath' | 'sourceRef'>
+  activeSave?: Pick<SavedSnapshot, 'sampleAssetPath' | 'sourceRef'> | null
 ): string | undefined {
-  if (activeSave?.sampleAssetPath) {
+  if (!activeSave || typeof activeSave !== 'object') {
+    return undefined;
+  }
+  if (
+    typeof activeSave.sampleAssetPath === 'string' &&
+    normalizeComparableSampleUri(activeSave.sampleAssetPath) !== null
+  ) {
     return activeSave.sampleAssetPath;
   }
-  const kind = activeSave?.sourceRef?.kind;
-  if (kind === 'sample' || kind === 'catalog') {
-    return activeSave?.sourceRef?.uri;
+  const kind = activeSave.sourceRef?.kind;
+  const sourceUri = activeSave.sourceRef?.uri;
+  if (
+    (kind === 'sample' || kind === 'catalog') &&
+    typeof sourceUri === 'string' &&
+    normalizeComparableSampleUri(sourceUri) !== null
+  ) {
+    return sourceUri;
   }
   return undefined;
 }
@@ -252,21 +276,30 @@ export function resolveSlotSourceRef(
 }
 
 /**
- * Locates the matching snapshot in the post-sync snapshot list by ID or normalized sample URI.
+ * Locates the matching snapshot in the post-sync snapshot list, prioritizing exact ID match
+ * before falling back to normalized sample/catalog URI.
  */
 export function findMatchingSnapshotForActiveSlot(
   refreshedSnapshots: SavedSnapshot[],
   startSnapshotId: string,
   startSampleUri?: string
 ): SavedSnapshot | undefined {
-  const normalizedActiveSample = startSampleUri ? startSampleUri.replace(/^\.\//, '') : null;
-  return refreshedSnapshots.find(
-    (s) =>
-      s.id === startSnapshotId ||
-      (normalizedActiveSample !== null &&
-        (s.sourceRef?.uri?.replace(/^\.\//, '') === normalizedActiveSample ||
-          s.sampleAssetPath?.replace(/^\.\//, '') === normalizedActiveSample))
+  if (!Array.isArray(refreshedSnapshots)) return undefined;
+  const exactMatch = refreshedSnapshots.find(
+    (s) => Boolean(s) && typeof s === 'object' && s.id === startSnapshotId
   );
+  if (exactMatch) return exactMatch;
+
+  const normalizedActiveSample = normalizeComparableSampleUri(startSampleUri);
+  if (normalizedActiveSample === null) return undefined;
+
+  return refreshedSnapshots.find((s) => {
+    if (!s || typeof s !== 'object') return false;
+    return (
+      normalizeComparableSampleUri(s.sourceRef?.uri) === normalizedActiveSample ||
+      normalizeComparableSampleUri(s.sampleAssetPath) === normalizedActiveSample
+    );
+  });
 }
 
 /**
@@ -300,8 +333,10 @@ export function buildActiveSlotSyncPayload(params: {
     sourceRef: effectiveSourceRef,
   });
 
-  const uiEpoch = preSyncActiveMatches ? (preSyncState.activeSave?.resetEpoch ?? 0) : 0;
-  const snapEpoch = preSyncSnap.resetEpoch ?? 0;
+  const uiEpoch = preSyncActiveMatches
+    ? normalizeResetEpoch(preSyncState.activeSave?.resetEpoch)
+    : 0;
+  const snapEpoch = normalizeResetEpoch(preSyncSnap.resetEpoch);
   const useUiStateForSlot = preSyncActiveMatches && uiEpoch >= snapEpoch;
 
   const preSyncFilled = useUiStateForSlot
@@ -338,12 +373,13 @@ function buildLiveProgressDelta(
   liveUiEpoch: number,
   now: number
 ): ProgressDeltaV2 {
+  const normalizedEpoch = normalizeResetEpoch(liveUiEpoch);
   return {
     version: 2,
     filledRegionIds: Array.from(liveFilled),
     ...(livePaintedObj ? { paintedRegionColors: livePaintedObj } : {}),
     ...(isFreeColorMode ? { isFreeColor: true } : {}),
-    ...(liveUiEpoch > 0 ? { resetEpoch: liveUiEpoch } : {}),
+    ...(normalizedEpoch > 0 ? { resetEpoch: normalizedEpoch } : {}),
     updatedAt: now,
   };
 }
@@ -402,13 +438,15 @@ export function reconcileActiveSlotProgress(
     now = Date.now(),
   } = params;
 
+  const normalizedLiveUiEpoch = normalizeResetEpoch(liveUiEpoch);
+
   if (!matchingSave) {
     return {
       activeSlotMissing: true,
       shouldApply: false,
       combinedFilled: liveFilled,
       nextPainted: livePainted,
-      reconciledEpoch: liveUiEpoch,
+      reconciledEpoch: normalizedLiveUiEpoch,
       epochAdvanced: false,
       gainedOnActive: 0,
     };
@@ -419,18 +457,17 @@ export function reconcileActiveSlotProgress(
     liveFilled,
     livePaintedObj,
     isFreeColorMode,
-    liveUiEpoch,
+    normalizedLiveUiEpoch,
     now
   );
 
+  const matchingSaveEpoch = normalizeResetEpoch(matchingSave.resetEpoch);
   reconciledDelta = mergeProgressDeltas(reconciledDelta, {
     version: 2,
     filledRegionIds: matchingSave.filledRegionIds || [],
     paintedRegionColors: matchingSave.paintedRegionColors,
     isFreeColor: matchingSave.isFreeColor,
-    ...(matchingSave.resetEpoch && matchingSave.resetEpoch > 0
-      ? { resetEpoch: matchingSave.resetEpoch }
-      : {}),
+    ...(matchingSaveEpoch > 0 ? { resetEpoch: matchingSaveEpoch } : {}),
     updatedAt: matchingSave.lastOpened || matchingSave.timestamp || 0,
   });
 
@@ -440,11 +477,11 @@ export function reconcileActiveSlotProgress(
 
   // Ensure mid-flight local strokes at live epoch survive any stale cloud timestamp,
   // while letting a higher remote resetEpoch dominate both filledRegionIds and paintedRegionColors.
-  const postCloudEpoch = reconciledDelta.resetEpoch ?? 0;
-  if (postCloudEpoch <= liveUiEpoch) {
+  const postCloudEpoch = normalizeResetEpoch(reconciledDelta.resetEpoch);
+  if (postCloudEpoch <= normalizedLiveUiEpoch) {
     reconciledDelta = mergeProgressDeltas(
       reconciledDelta,
-      buildLiveProgressDelta(liveFilled, livePaintedObj, isFreeColorMode, liveUiEpoch, now)
+      buildLiveProgressDelta(liveFilled, livePaintedObj, isFreeColorMode, normalizedLiveUiEpoch, now)
     );
   }
 
@@ -452,8 +489,8 @@ export function reconcileActiveSlotProgress(
     reconciledDelta,
     validRegionIds
   );
-  const reconciledEpoch = reconciledDelta.resetEpoch ?? 0;
-  const epochAdvanced = reconciledEpoch > liveUiEpoch;
+  const reconciledEpoch = normalizeResetEpoch(reconciledDelta.resetEpoch);
+  const epochAdvanced = reconciledEpoch > normalizedLiveUiEpoch;
   const gainedOnActive = Math.max(0, combinedFilled.size - liveFilled.size);
   const diverged = hasProgressDiverged(combinedFilled, liveFilled, nextPainted, livePainted);
 
@@ -479,13 +516,12 @@ function flushActiveStateBeforeSync(
   const storageSnapAtStart = storage.loadSnapshots().find((s) => s.id === activeSnapshotId);
   if (!storageSnapAtStart) return;
 
-  const uiStartEpoch = activeSave?.resetEpoch ?? 0;
-  const storageStartEpoch = storageSnapAtStart.resetEpoch ?? 0;
+  const uiStartEpoch = normalizeResetEpoch(activeSave?.resetEpoch);
+  const storageStartEpoch = normalizeResetEpoch(storageSnapAtStart.resetEpoch);
   if (uiStartEpoch < storageStartEpoch) return;
 
   const localResetEpoch = Math.max(uiStartEpoch, storageStartEpoch);
-  const paintedObj =
-    paintedRegionColors.size > 0 ? Object.fromEntries(paintedRegionColors) : undefined;
+  const paintedObj = Object.fromEntries(paintedRegionColors);
 
   storage.updateSnapshotProgress(
     activeSnapshotId,
@@ -597,7 +633,7 @@ function applyActiveSlotReconciliationIfStillActive(params: {
   const reconciled = reconcileActiveSlotProgress({
     liveFilled: liveAfterSync.filledRegionIds,
     livePainted: liveAfterSync.paintedRegionColors,
-    liveUiEpoch: liveAfterSync.activeSave?.resetEpoch ?? 0,
+    liveUiEpoch: normalizeResetEpoch(liveAfterSync.activeSave?.resetEpoch),
     isFreeColorMode: liveAfterSync.isFreeColorMode,
     matchingSave,
     slotMergedDelta,
@@ -699,7 +735,7 @@ export async function executeSingleSyncPass(
 
   // 5. Queue a coalesced trailing pass if local mutations or epoch advances occurred mid-sync
   const latestSavedEpoch = startSnapshotId
-    ? (storage.loadSnapshots().find((s) => s.id === startSnapshotId)?.resetEpoch ?? 0)
+    ? normalizeResetEpoch(storage.loadSnapshots().find((s) => s.id === startSnapshotId)?.resetEpoch)
     : 0;
   if (
     libSummary.hasPendingLocalChanges ||
