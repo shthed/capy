@@ -241,38 +241,41 @@ export class LineArtExtractor {
 
         if (hasDiff) {
           multiTouchLine[idx] = 1;
-          regionMap[idx] = -1; // Clear for watershed expansion
         }
       }
     }
 
-    // Seed watershed propagation from neighboring colored regions
+    // Clear all multi-touch line pixels after Pass 1 completes so Pass-1 neighbor checks
+    // never observe in-place mutations from earlier scan coordinates.
+    for (let i = 0; i < total; i++) {
+      if (multiTouchLine[i] === 1) {
+        regionMap[i] = -1; // Clear for watershed expansion
+      }
+    }
+
+    // Seed watershed propagation from neighboring colored regions without mutating regionMap
+    // in-place during the scan so medial-axis symmetry is preserved regardless of scan order.
+    // Prefer non-line colored region neighbors (lineMask === 0) over interior line pixels so
+    // thick (3px/4px) line boundaries expand symmetrically from both outer colored edges.
+    const seedValues = new Int32Array(total);
     for (let y = 0; y < height; y++) {
       const row = y * width;
       for (let x = 0; x < width; x++) {
         const idx = row + x;
         if (multiTouchLine[idx] === 1 && regionMap[idx] === -1) {
-          let neighborR = -1;
-          const neighbors = [
-            x > 0 ? idx - 1 : -1,
-            x < width - 1 ? idx + 1 : -1,
-            y > 0 ? idx - width : -1,
-            y < height - 1 ? idx + width : -1,
-          ];
-
-          for (const n of neighbors) {
-            if (n >= 0 && regionMap[n] > 0) {
-              neighborR = regionMap[n];
-              break;
-            }
-          }
-
+          const neighborR = this.findSeedNeighbor(regionMap, lineMask, width, height, x, y, idx);
           if (neighborR > 0) {
-            regionMap[idx] = neighborR;
-            queue[tail++] = idx;
+            queue[tail] = idx;
+            seedValues[tail] = neighborR;
+            tail++;
           }
         }
       }
+    }
+
+    // Apply all Pass-2 seeds simultaneously after the scan completes
+    for (let i = 0; i < tail; i++) {
+      regionMap[queue[i]] = seedValues[i];
     }
 
     // Multi-source BFS watershed expansion
@@ -296,6 +299,32 @@ export class LineArtExtractor {
         }
       }
     }
+  }
+
+  /**
+   * Finds the watershed seed region for a cleared multi-touch line pixel, preferring
+   * adjacent non-line colored regions (lineMask === 0) over interior line pixels.
+   */
+  private static findSeedNeighbor(
+    regionMap: Int32Array,
+    lineMask: Uint8Array,
+    width: number,
+    height: number,
+    x: number,
+    y: number,
+    idx: number
+  ): number {
+    if (x > 0 && lineMask[idx - 1] === 0 && regionMap[idx - 1] > 0) return regionMap[idx - 1];
+    if (x < width - 1 && lineMask[idx + 1] === 0 && regionMap[idx + 1] > 0) return regionMap[idx + 1];
+    if (y > 0 && lineMask[idx - width] === 0 && regionMap[idx - width] > 0) return regionMap[idx - width];
+    if (y < height - 1 && lineMask[idx + width] === 0 && regionMap[idx + width] > 0) return regionMap[idx + width];
+
+    if (x > 0 && regionMap[idx - 1] > 0) return regionMap[idx - 1];
+    if (x < width - 1 && regionMap[idx + 1] > 0) return regionMap[idx + 1];
+    if (y > 0 && regionMap[idx - width] > 0) return regionMap[idx - width];
+    if (y < height - 1 && regionMap[idx + width] > 0) return regionMap[idx + width];
+
+    return -1;
   }
 
   /**

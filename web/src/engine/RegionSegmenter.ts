@@ -481,6 +481,10 @@ export class RegionSegmenter {
     onProgress?.(0.92, 'Placing number centroids with optimal clearance...');
 
     // 6. Convert to final Region models with guaranteed interior centroid (Pole of Inaccessibility)
+    // Reusable scratch buffers eliminate per-region Map<number, number> and typed-array allocations.
+    const distGrid = new Int32Array(total);
+    const bfsQueue = new Int32Array(total);
+
     const regions: Region[] = activeFinalRegions.map((reg) => {
       const regionId = reg.id;
       const count = reg.pixels.length;
@@ -529,16 +533,8 @@ export class RegionSegmenter {
         }
         maxDistance = Math.sqrt(count) * 0.5;
       } else {
-        const distArray = new Int32Array(count);
-        distArray.fill(-1);
-        const queue = new Int32Array(count);
         let head = 0;
         let tail = 0;
-
-        const idxToPos = new Map<number, number>();
-        for (let i = 0; i < count; i++) {
-          idxToPos.set(pixelData[i], i);
-        }
 
         // Enqueue perimeter boundary pixels
         for (let i = 0; i < count; i++) {
@@ -558,69 +554,73 @@ export class RegionSegmenter {
             (py < height - 1 && finalRegionMap[idx + width] !== regionId);
 
           if (isBoundary) {
-            distArray[i] = 1;
-            queue[tail++] = i;
+            distGrid[idx] = 1;
+            bfsQueue[tail++] = idx;
           }
         }
 
         let maxDist = 1;
-        let maxPos = tail > 0 ? queue[0] : 0;
+        let maxIdx = tail > 0 ? bfsQueue[0] : pixelData[0];
 
         while (head < tail) {
-          const pos = queue[head++];
-          const d = distArray[pos];
-          const idx = pixelData[pos];
+          const idx = bfsQueue[head++];
+          const nextDist = distGrid[idx] + 1;
           const px = idx % width;
           const py = Math.floor(idx / width);
 
           if (px > 0) {
-            const n1 = idxToPos.get(idx - 1);
-            if (n1 !== undefined && distArray[n1] === -1) {
-              distArray[n1] = d + 1;
-              queue[tail++] = n1;
-              if (d + 1 > maxDist) {
-                maxDist = d + 1;
-                maxPos = n1;
+            const n1 = idx - 1;
+            if (finalRegionMap[n1] === regionId && distGrid[n1] === 0) {
+              distGrid[n1] = nextDist;
+              bfsQueue[tail++] = n1;
+              if (nextDist > maxDist) {
+                maxDist = nextDist;
+                maxIdx = n1;
               }
             }
           }
           if (px < width - 1) {
-            const n2 = idxToPos.get(idx + 1);
-            if (n2 !== undefined && distArray[n2] === -1) {
-              distArray[n2] = d + 1;
-              queue[tail++] = n2;
-              if (d + 1 > maxDist) {
-                maxDist = d + 1;
-                maxPos = n2;
+            const n2 = idx + 1;
+            if (finalRegionMap[n2] === regionId && distGrid[n2] === 0) {
+              distGrid[n2] = nextDist;
+              bfsQueue[tail++] = n2;
+              if (nextDist > maxDist) {
+                maxDist = nextDist;
+                maxIdx = n2;
               }
             }
           }
           if (py > 0) {
-            const n3 = idxToPos.get(idx - width);
-            if (n3 !== undefined && distArray[n3] === -1) {
-              distArray[n3] = d + 1;
-              queue[tail++] = n3;
-              if (d + 1 > maxDist) {
-                maxDist = d + 1;
-                maxPos = n3;
+            const n3 = idx - width;
+            if (finalRegionMap[n3] === regionId && distGrid[n3] === 0) {
+              distGrid[n3] = nextDist;
+              bfsQueue[tail++] = n3;
+              if (nextDist > maxDist) {
+                maxDist = nextDist;
+                maxIdx = n3;
               }
             }
           }
           if (py < height - 1) {
-            const n4 = idxToPos.get(idx + width);
-            if (n4 !== undefined && distArray[n4] === -1) {
-              distArray[n4] = d + 1;
-              queue[tail++] = n4;
-              if (d + 1 > maxDist) {
-                maxDist = d + 1;
-                maxPos = n4;
+            const n4 = idx + width;
+            if (finalRegionMap[n4] === regionId && distGrid[n4] === 0) {
+              distGrid[n4] = nextDist;
+              bfsQueue[tail++] = n4;
+              if (nextDist > maxDist) {
+                maxDist = nextDist;
+                maxIdx = n4;
               }
             }
           }
         }
 
-        bestPx = pixelData[maxPos] % width;
-        bestPy = Math.floor(pixelData[maxPos] / width);
+        // Reset only this region's pixels so work stays O(region pixels)
+        for (let i = 0; i < count; i++) {
+          distGrid[pixelData[i]] = 0;
+        }
+
+        bestPx = maxIdx % width;
+        bestPy = Math.floor(maxIdx / width);
         maxDistance = maxDist;
       }
 
