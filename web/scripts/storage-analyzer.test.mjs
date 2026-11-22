@@ -1793,6 +1793,332 @@ async function runStorageAnalyzerCoreTests(vite) {
       'cleanOrphanedSaveData must still clean orphaned records when rawSnapshotsJson is valid "[]"'
     );
     assert.deepEqual(corruptElemIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'), []);
+
+    // 19. Regression (D1): 2nd queued clearAllCapyStorage({ blockedTimeoutMs: 60 }) while 1st deleteDatabase() is still pending (never fires onblocked) resolves within bounded timeout
+    await resetCachedHandles();
+    const queuedLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'q-1', title: 'Queued 1' }]),
+    });
+    const queuedBaseIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'q-1': { data: new Uint8Array(512) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    let prodDeleteCalls = 0;
+    const queuedIdb = {
+      ...queuedBaseIdb,
+      deleteDatabase(dbName) {
+        if (dbName === 'capy_game_storage_v8') {
+          prodDeleteCalls += 1;
+          const req = {
+            result: undefined,
+            error: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+          if (prodDeleteCalls === 1) {
+            // 1st deleteDatabase fires onblocked and stays pending in the IDB queue
+            setTimeout(() => req.onblocked?.({ target: req }), 0);
+          }
+          // 2nd+ queued deleteDatabase never fires onblocked/onsuccess/onerror while 1st is pending
+          return req;
+        }
+        return queuedBaseIdb.deleteDatabase(dbName);
+      },
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8' && prodDeleteCalls >= 1) {
+          // Queued behind pending deleteDatabase: never fires any event
+          return {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+        }
+        return queuedBaseIdb.open(dbName, version);
+      },
+    };
+    globalThis.localStorage = queuedLs;
+    globalThis.indexedDB = queuedIdb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const firstClearRes = await analyzerMod.clearAllCapyStorage({ ...opts, blockedTimeoutMs: 60 });
+    assert.equal(firstClearRes.blockedDatabases.includes('capy_game_storage_v8'), true);
+    const secondClearStartMs = Date.now();
+    const secondClearRes = await analyzerMod.clearAllCapyStorage({ ...opts, blockedTimeoutMs: 60 });
+    const secondClearElapsedMs = Date.now() - secondClearStartMs;
+    assert.equal(
+      secondClearElapsedMs < 1000,
+      true,
+      `2nd queued clearAllCapyStorage() must resolve within bounded timeout (took ${secondClearElapsedMs}ms)`
+    );
+    assert.equal(
+      secondClearRes.blockedDatabases.includes('capy_game_storage_v8'),
+      true,
+      '2nd queued clearAllCapyStorage() must report capy_game_storage_v8 in blockedDatabases'
+    );
+    assert.equal(prodDeleteCalls >= 2, true, `Expected >=2 deleteDatabase calls (got ${prodDeleteCalls})`);
+
+    // 20. Regression (D2): closeDbHandle(dbName, 60) with a stalled openPromise resolves within bounded timeout AND closes the DB handle immediately when open() later resolves (0 unhandled rejections)
+    await resetCachedHandles();
+    let unhandledCount = 0;
+    const onUnhandled = () => {
+      unhandledCount += 1;
+    };
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const stalledOpenReqs = [];
+      const stalledOpenBaseIdb = createMockIndexedDb({
+        initialDbs: {
+          capy_game_storage_v8: { puzzles: {}, images: {} },
+        },
+        exposeDatabasesApi: true,
+      });
+      globalThis.indexedDB = {
+        ...stalledOpenBaseIdb,
+        open(dbName) {
+          const req = {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+          stalledOpenReqs.push({ dbName, req });
+          return req;
+        },
+      };
+      globalThis.window = {
+        location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+      };
+
+      // Populate dbPromises with a stalled openPromise via a normal app write
+      const pendingSave = idbMod
+        .saveCompactPuzzleRecord('stalled-d2', { data: new Uint8Array(16) })
+        .catch(() => undefined);
+      assert.equal(stalledOpenReqs.length, 1, 'Expected stalled open() request to be created');
+
+      const closeStartMs = Date.now();
+      await idbMod.closeDbHandle('capy_game_storage_v8', 60);
+      const closeElapsedMs = Date.now() - closeStartMs;
+      assert.equal(
+        closeElapsedMs < 500,
+        true,
+        `closeDbHandle(dbName, 60) must resolve within bounded timeout (took ${closeElapsedMs}ms)`
+      );
+
+      // Now resolve the stalled open() late and verify closeWhenReady closes the handle immediately
+      const lateTrackedDb = {
+        name: 'capy_game_storage_v8',
+        closed: false,
+        onversionchange: null,
+        onclose: null,
+        transaction() {
+          throw new DOMException('The database connection is closing.', 'InvalidStateError');
+        },
+        close() {
+          this.closed = true;
+        },
+      };
+      stalledOpenReqs[0].req.result = lateTrackedDb;
+      stalledOpenReqs[0].req.onsuccess?.({ target: stalledOpenReqs[0].req });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal(
+        lateTrackedDb.closed,
+        true,
+        'Late-resolving DB handle after closeDbHandle() timeout must be closed immediately'
+      );
+
+      // Also verify stalled open() that later rejects triggers 0 unhandled rejections
+      const pendingRejectSave = idbMod
+        .saveCompactPuzzleRecord('stalled-d2-reject', { data: new Uint8Array(16) })
+        .catch(() => undefined);
+      const rejectReq = stalledOpenReqs[stalledOpenReqs.length - 1].req;
+      await idbMod.closeDbHandle('capy_game_storage_v8', 60);
+      rejectReq.error = new DOMException('Open aborted', 'AbortError');
+      rejectReq.onerror?.({ target: rejectReq });
+      await pendingRejectSave;
+      // Settle any retry request created by pendingSave cleanly
+      for (const item of stalledOpenReqs.slice(1)) {
+        if (!item.req.error && !item.req.result) {
+          item.req.error = new DOMException('Aborted', 'AbortError');
+          item.req.onerror?.({ target: item.req });
+        }
+      }
+      await pendingSave;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      assert.equal(unhandledCount, 0, `Expected 0 unhandled rejections (got ${unhandledCount})`);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    // 21. Regression (D3 + D4/D5): Pre-measurement open() hang on Production does NOT silently skip preview DB deletion, emits busy warning on cleanOrphanedSaveData, and counts sibling DB deletions accurately
+    // 21a (D3): Production clearPreviewChannelData({ channels: ['beta'], blockedTimeoutMs: 60 }) when beta pre-measure open() hangs
+    await resetCachedHandles();
+    const d3Ls = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-safe', title: 'Prod Safe' }]),
+    });
+    const d3BaseIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-safe': { data: new Uint8Array(512) } },
+          images: {},
+        },
+        capy_game_storage_v8_beta: {
+          puzzles: { 'beta-stuck': { data: new Uint8Array(2048) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+      blockedDbNames: new Set(['capy_game_storage_v8_beta']),
+    });
+    let betaDeleteCalls = 0;
+    const d3Idb = {
+      ...d3BaseIdb,
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8_beta') {
+          // Hang pre-measurement open() and clearAllStores open()
+          return {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+        }
+        return d3BaseIdb.open(dbName, version);
+      },
+      deleteDatabase(dbName) {
+        if (dbName === 'capy_game_storage_v8_beta') {
+          betaDeleteCalls += 1;
+        }
+        return d3BaseIdb.deleteDatabase(dbName);
+      },
+    };
+    globalThis.localStorage = d3Ls;
+    globalThis.indexedDB = d3Idb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const d3Res = await analyzerMod.clearPreviewChannelData({
+      ...opts,
+      channels: ['beta'],
+      blockedTimeoutMs: 60,
+    });
+    assert.equal(d3Res.affectedActiveChannel, false);
+    assert.equal(
+      betaDeleteCalls,
+      1,
+      `Production clearPreviewChannelData must still call safeDeleteDatabase on timed-out beta DB (got ${betaDeleteCalls})`
+    );
+    assert.deepEqual(d3Res.blockedDatabases, ['capy_game_storage_v8_beta']);
+    assert.equal(
+      d3Res.warnings.some((w) => w.includes('capy_game_storage_v8_beta') && w.includes('another tab')),
+      true,
+      `Expected blocked warning for capy_game_storage_v8_beta (got ${JSON.stringify(d3Res.warnings)})`
+    );
+
+    // 21b (D4): cleanOrphanedSaveData when active DB open() hangs emits busy warning while still cleaning healthy quarantine keys
+    await resetCachedHandles();
+    const d4Ls = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-1', title: 'Prod 1' }]),
+      capy_user_settings_v8: JSON.stringify({ theme: 'light' }),
+      capy_user_settings_v8__corrupt_quarantine: '{corrupt-settings',
+    });
+    const d4BaseIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-1': { data: new Uint8Array(256) }, 'orphan-1': { data: new Uint8Array(256) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = d4Ls;
+    globalThis.indexedDB = {
+      ...d4BaseIdb,
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8') {
+          return {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+        }
+        return d4BaseIdb.open(dbName, version);
+      },
+    };
+    const d4Res = await analyzerMod.cleanOrphanedSaveData({ ...opts, blockedTimeoutMs: 60 });
+    assert.equal(d4Res.deletedIdbRecords, 0);
+    assert.equal(d4Res.deletedLocalKeys, 1, 'Healthy quarantine key must still be cleaned when IDB is busy');
+    assert.equal(
+      d4Res.warnings.some((w) => w.includes('busy in another tab')),
+      true,
+      `Expected busy-tab warning on active DB open timeout (got ${JSON.stringify(d4Res.warnings)})`
+    );
+
+    // 21c (D5): clearAllCapyStorage when sibling alpha pre-measurement open() hangs but deleteDatabase succeeds counts both DBs
+    await resetCachedHandles();
+    const d5Ls = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-1', title: 'Prod 1' }]),
+    });
+    const d5BaseIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-1': { data: new Uint8Array(256) } },
+          images: {},
+        },
+        capy_game_storage_v8_alpha: {
+          puzzles: { 'alpha-1': { data: new Uint8Array(512) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = d5Ls;
+    globalThis.indexedDB = {
+      ...d5BaseIdb,
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8_alpha') {
+          return {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+        }
+        return d5BaseIdb.open(dbName, version);
+      },
+    };
+    const d5Res = await analyzerMod.clearAllCapyStorage({ ...opts, blockedTimeoutMs: 60 });
+    assert.equal(
+      d5Res.deletedIdbDatabases,
+      2,
+      `Expected deletedIdbDatabases=2 even when sibling alpha pre-measure timed out (got ${d5Res.deletedIdbDatabases})`
+    );
+    assert.equal(d5BaseIdb._hasDb('capy_game_storage_v8_alpha'), false);
   } finally {
     await resetCachedHandles();
     globalThis.localStorage = prevLs;

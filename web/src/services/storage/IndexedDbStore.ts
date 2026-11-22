@@ -10,6 +10,7 @@ import { isQuotaError, notifyQuotaWarning } from './SafeLocalStore';
 import { DB_VERSION, resolveScopedDbName, STORE_IMAGES, STORE_PUZZLES } from './StorageKeys';
 
 export const MAX_PREVIEW_CACHE_ENTRIES = 128;
+const DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS = 2500;
 
 const dbPromises = new Map<string, Promise<IDBDatabase>>();
 const previewCache = new Map<string, string>();
@@ -97,17 +98,56 @@ export function evictDbHandle(dbName: string, expectedPromise?: Promise<IDBDatab
     });
 }
 
-export async function closeDbHandle(dbName: string): Promise<void> {
+export async function closeDbHandle(
+  dbName: string,
+  timeoutMs: number = DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS
+): Promise<void> {
   const current = dbPromises.get(dbName);
   if (!current) return;
   dbPromises.delete(dbName);
-  try {
-    const db = await current;
-    if (db && typeof db.close === 'function') {
-      db.close();
+
+  const effectiveTimeoutMs =
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS;
+
+  const closeWhenReady = current.then(
+    (db) => {
+      try {
+        if (db && typeof db.close === 'function') {
+          db.close();
+        }
+      } catch (err) {
+        reportSwallowed('IndexedDbStore:closeDbHandle', err, { dbName });
+      }
+    },
+    (err) => {
+      reportSwallowed('IndexedDbStore:closeDbHandlePending', err, { dbName });
     }
-  } catch (err) {
-    reportSwallowed('IndexedDbStore.closeDbHandle', err, { dbName });
+  );
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      timer = null;
+      resolve();
+    }, effectiveTimeoutMs);
+    if (
+      typeof timer === 'object' &&
+      timer !== null &&
+      typeof (timer as { unref?: () => void }).unref === 'function'
+    ) {
+      (timer as { unref: () => void }).unref();
+    }
+  });
+
+  try {
+    await Promise.race([closeWhenReady, timeoutPromise]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
   }
   await Promise.resolve();
 }
@@ -479,8 +519,6 @@ export async function deleteOrphanedEntries(
     effectiveDbName
   );
 }
-
-const DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS = 2500;
 
 export async function clearAllStores(
   targetDbName?: string,

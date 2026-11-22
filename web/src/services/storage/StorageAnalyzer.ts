@@ -654,7 +654,8 @@ async function inspectCacheStorage(
 
 async function openExistingIdbReadonly(
   dbName: string,
-  timeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS
+  timeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS,
+  onTimedOutOrBlocked?: () => void
 ): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined' || typeof indexedDB.open !== 'function') {
     return null;
@@ -686,6 +687,9 @@ async function openExistingIdbReadonly(
     }
     timer = setTimeout(() => {
       timer = null;
+      if (!settled) {
+        onTimedOutOrBlocked?.();
+      }
       finish(null);
     }, effectiveTimeoutMs);
     if (
@@ -728,7 +732,12 @@ async function openExistingIdbReadonly(
       finish(db);
     };
     req.onerror = () => finish(null);
-    req.onblocked = () => finish(null);
+    req.onblocked = () => {
+      if (!settled) {
+        onTimedOutOrBlocked?.();
+      }
+      finish(null);
+    };
   });
 }
 
@@ -872,9 +881,12 @@ function readChannelMetadataForOrphanCheck(
 async function inspectSingleIdbDatabase(
   dbName: string,
   activeDbName: string,
-  blockedTimeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS
+  blockedTimeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS,
+  blockedOrTimedOutDbs?: Set<string>
 ): Promise<IdbDatabaseReport | null> {
-  const db = await openExistingIdbReadonly(dbName, blockedTimeoutMs);
+  const db = await openExistingIdbReadonly(dbName, blockedTimeoutMs, () => {
+    blockedOrTimedOutDbs?.add(dbName);
+  });
   if (!db) return null;
   try {
     const puzzleEntries = await readStoreEntries(db, STORE_PUZZLES);
@@ -957,6 +969,7 @@ async function inspectSingleIdbDatabase(
 async function discoverIdbNames(activeDbName: string): Promise<{
   capyDbNames: string[];
   otherOriginDbNames: string[];
+  enumerated: boolean;
 }> {
   const canonical = new Set<string>([
     'capy_game_storage_v8',
@@ -982,6 +995,7 @@ async function discoverIdbNames(activeDbName: string): Promise<{
       return {
         capyDbNames: Array.from(capyFound),
         otherOriginDbNames: Array.from(new Set(otherOriginDbNames)).sort(),
+        enumerated: true,
       };
     } catch (err) {
       reportSwallowed('StorageAnalyzer.idbDatabases', err);
@@ -991,6 +1005,7 @@ async function discoverIdbNames(activeDbName: string): Promise<{
   return {
     capyDbNames: Array.from(canonical),
     otherOriginDbNames,
+    enumerated: false,
   };
 }
 
@@ -1208,7 +1223,11 @@ async function safeDeleteDatabase(
   dbName: string,
   blockedTimeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS
 ): Promise<{ deleted: boolean; blocked: boolean }> {
-  await closeDbHandle(dbName);
+  const effectiveTimeoutMs =
+    typeof blockedTimeoutMs === 'number' && Number.isFinite(blockedTimeoutMs) && blockedTimeoutMs > 0
+      ? blockedTimeoutMs
+      : DEFAULT_BLOCKED_TIMEOUT_MS;
+  await closeDbHandle(dbName, effectiveTimeoutMs);
   if (typeof indexedDB === 'undefined' || typeof indexedDB.deleteDatabase !== 'function') {
     return { deleted: false, blocked: false };
   }
@@ -1232,15 +1251,20 @@ async function safeDeleteDatabase(
       finish({ deleted: false, blocked: false });
       return;
     }
+    // Arm timeout unconditionally so a queued delete behind an already-blocked delete still settles
+    blockedTimer = setTimeout(() => {
+      blockedTimer = null;
+      finish({ deleted: false, blocked: true });
+    }, Math.max(50, effectiveTimeoutMs));
+    if (
+      typeof blockedTimer === 'object' &&
+      blockedTimer !== null &&
+      typeof (blockedTimer as { unref?: () => void }).unref === 'function'
+    ) {
+      (blockedTimer as { unref: () => void }).unref();
+    }
     req.onsuccess = () => finish({ deleted: true, blocked: false });
     req.onerror = () => finish({ deleted: false, blocked: false });
-    req.onblocked = () => {
-      if (blockedTimer === null) {
-        blockedTimer = setTimeout(() => {
-          finish({ deleted: false, blocked: true });
-        }, Math.max(50, blockedTimeoutMs));
-      }
-    };
   });
 }
 
@@ -1331,6 +1355,25 @@ function removeAndCountLocalKeys(
   }
 }
 
+function cleanHealthyQuarantineKeys(
+  activeSandboxSuffix: string,
+  result: StorageCleanupResult
+): void {
+  const entries = SafeLocalStore.entries();
+  for (const [key, value] of entries) {
+    if (!key.endsWith(QUARANTINE_SUFFIX) || !isCapyPaintLocalKey(key)) continue;
+    const baseKeyWithSandbox = key.slice(0, -QUARANTINE_SUFFIX.length);
+    const sandboxMatch = SANDBOX_SUFFIX_RE.exec(baseKeyWithSandbox);
+    const keySuffix = sandboxMatch ? `__sandbox_${sandboxMatch[1].toLowerCase()}` : '';
+    if (keySuffix !== activeSandboxSuffix) continue;
+    if (!isHealthyJsonLocalValue(SafeLocalStore.getItem(baseKeyWithSandbox))) continue;
+    if (SafeLocalStore.removeItem(key)) {
+      result.deletedLocalKeys += 1;
+      result.freedBytesEstimate += (key.length + value.length) * 2;
+    }
+  }
+}
+
 export async function cleanOrphanedSaveData(
   options?: StorageAnalyzerOptions
 ): Promise<StorageCleanupResult> {
@@ -1341,8 +1384,22 @@ export async function cleanOrphanedSaveData(
   const blockedTimeoutMs = options?.blockedTimeoutMs ?? DEFAULT_BLOCKED_TIMEOUT_MS;
 
   // Recompute live references fail-closed right before deleting to prevent TOCTOU races
-  const activeReport = await inspectSingleIdbDatabase(activeDbName, activeDbName, blockedTimeoutMs);
-  if (activeReport?.orphanDetectionSkipped) {
+  const { capyDbNames, enumerated } = await discoverIdbNames(activeDbName);
+  const blockedOrTimedOutDbs = new Set<string>();
+  const activeReport = await inspectSingleIdbDatabase(
+    activeDbName,
+    activeDbName,
+    blockedTimeoutMs,
+    blockedOrTimedOutDbs
+  );
+  if (
+    activeReport === null &&
+    (blockedOrTimedOutDbs.has(activeDbName) || (enumerated && capyDbNames.includes(activeDbName)))
+  ) {
+    result.warnings.push(
+      'Skipped IDB orphan cleanup because the database is busy in another tab.'
+    );
+  } else if (activeReport?.orphanDetectionSkipped) {
     result.warnings.push(
       'Skipped IDB orphan cleanup because save metadata could not be verified safely.'
     );
@@ -1367,19 +1424,7 @@ export async function cleanOrphanedSaveData(
   }
 
   // Also remove stale __corrupt_quarantine keys in the active channel when their live key is healthy
-  const entries = SafeLocalStore.entries();
-  for (const [key, value] of entries) {
-    if (!key.endsWith(QUARANTINE_SUFFIX) || !isCapyPaintLocalKey(key)) continue;
-    const baseKeyWithSandbox = key.slice(0, -QUARANTINE_SUFFIX.length);
-    const sandboxMatch = SANDBOX_SUFFIX_RE.exec(baseKeyWithSandbox);
-    const keySuffix = sandboxMatch ? `__sandbox_${sandboxMatch[1].toLowerCase()}` : '';
-    if (keySuffix !== ns.sandboxSuffix) continue;
-    if (!isHealthyJsonLocalValue(SafeLocalStore.getItem(baseKeyWithSandbox))) continue;
-    if (SafeLocalStore.removeItem(key)) {
-      result.deletedLocalKeys += 1;
-      result.freedBytesEstimate += (key.length + value.length) * 2;
-    }
-  }
+  cleanHealthyQuarantineKeys(ns.sandboxSuffix, result);
 
   return result;
 }
@@ -1450,22 +1495,26 @@ async function deletePreviewDatabases(
   affectedActiveChannel: boolean,
   blockedTimeoutMs: number,
   preMeasuredDbSizes: Map<string, number>,
+  existingPreviewDbs: Set<string>,
   result: StorageCleanupResult
 ): Promise<void> {
   for (const channel of targetChannels) {
     const dbName = `capy_game_storage_v8_${channel}`;
     const beforeBytes = preMeasuredDbSizes.get(dbName);
-    if (beforeBytes === undefined && !affectedActiveChannel) continue;
+    const knownToExist = beforeBytes !== undefined || existingPreviewDbs.has(dbName);
+    if (!knownToExist && !affectedActiveChannel) continue;
     const del = await safeDeleteDatabase(dbName, blockedTimeoutMs);
     if (del.deleted) {
-      if (beforeBytes !== undefined) {
+      if (knownToExist) {
         result.deletedIdbDatabases += 1;
-        result.freedBytesEstimate += beforeBytes;
+        if (beforeBytes !== undefined) {
+          result.freedBytesEstimate += beforeBytes;
+        }
       }
     } else if (del.blocked) {
       result.blockedDatabases.push(dbName);
       let cleared = false;
-      if (dbName === activeDbName || beforeBytes !== undefined) {
+      if (dbName === activeDbName || knownToExist) {
         cleared = await clearAllStores(dbName, blockedTimeoutMs);
         if (cleared && beforeBytes !== undefined) {
           result.freedBytesEstimate += beforeBytes;
@@ -1499,12 +1548,24 @@ export async function clearPreviewChannelData(
     targetChannels.has(ns.channel);
 
   // 1. Pre-measure preview IDB sizes & Local Storage keys BEFORE any destructive clears
+  const { capyDbNames, enumerated } = await discoverIdbNames(ns.dbName);
+  const discoveredCapyDbs = new Set<string>(capyDbNames);
   const preMeasuredDbSizes = new Map<string, number>();
+  const existingPreviewDbs = new Set<string>();
   for (const channel of targetChannels) {
     const dbName = `capy_game_storage_v8_${channel}`;
-    const inspected = await inspectSingleIdbDatabase(dbName, ns.dbName, blockedTimeoutMs);
+    if (enumerated && discoveredCapyDbs.has(dbName)) {
+      existingPreviewDbs.add(dbName);
+    }
+    const inspected = await inspectSingleIdbDatabase(
+      dbName,
+      ns.dbName,
+      blockedTimeoutMs,
+      existingPreviewDbs
+    );
     if (inspected) {
       preMeasuredDbSizes.set(dbName, inspected.totalBytes);
+      existingPreviewDbs.add(dbName);
     }
   }
   const preMeasuredLocalKeys = snapshotMatchingLocalKeys((key) =>
@@ -1513,7 +1574,7 @@ export async function clearPreviewChannelData(
 
   // 2. Only invoke window.location-bound snapshot/active clears when options match live window namespace
   if (affectedActiveChannel && matchesLiveWindowNamespace(ns.dbName)) {
-    await clearAllSnapshots();
+    await clearAllSnapshots(blockedTimeoutMs);
     clearActiveState();
   }
 
@@ -1529,6 +1590,7 @@ export async function clearPreviewChannelData(
     affectedActiveChannel,
     blockedTimeoutMs,
     preMeasuredDbSizes,
+    existingPreviewDbs,
     result
   );
   deletePreviewLocalKeys(targetChannels, preMeasuredLocalKeys, result);
@@ -1540,6 +1602,7 @@ async function deleteAllCapyDatabases(
   activeDbName: string,
   capyDbNames: string[],
   dbSizes: Map<string, number>,
+  existingCapyDbs: Set<string>,
   blockedTimeoutMs: number,
   result: StorageCleanupResult
 ): Promise<void> {
@@ -1553,9 +1616,10 @@ async function deleteAllCapyDatabases(
     ])
   );
   for (const dbName of allCapyDbs) {
+    const knownToExist = dbSizes.has(dbName) || existingCapyDbs.has(dbName);
     const del = await safeDeleteDatabase(dbName, blockedTimeoutMs);
     if (del.deleted) {
-      if (dbSizes.has(dbName)) {
+      if (knownToExist) {
         result.deletedIdbDatabases += 1;
         result.freedBytesEstimate += dbSizes.get(dbName) ?? 0;
       }
@@ -1564,7 +1628,7 @@ async function deleteAllCapyDatabases(
     if (del.blocked) {
       result.blockedDatabases.push(dbName);
       let cleared = false;
-      if (dbName === activeDbName || dbSizes.has(dbName)) {
+      if (dbName === activeDbName || knownToExist) {
         cleared = await clearAllStores(dbName, blockedTimeoutMs);
         if (cleared) {
           result.freedBytesEstimate += dbSizes.get(dbName) ?? 0;
@@ -1592,19 +1656,26 @@ export async function clearAllCapyStorage(
   const blockedTimeoutMs = options?.blockedTimeoutMs ?? DEFAULT_BLOCKED_TIMEOUT_MS;
 
   // 1. Pre-measure Capy IDB databases AND Capy Local Storage keys before clearing so freedBytesEstimate & deletedLocalKeys are accurate
-  const { capyDbNames } = await discoverIdbNames(activeDbName);
+  const { capyDbNames, enumerated } = await discoverIdbNames(activeDbName);
   const dbSizes = new Map<string, number>();
+  const existingCapyDbs = new Set<string>(enumerated ? capyDbNames : []);
   for (const dbName of capyDbNames) {
-    const inspected = await inspectSingleIdbDatabase(dbName, activeDbName, blockedTimeoutMs);
+    const inspected = await inspectSingleIdbDatabase(
+      dbName,
+      activeDbName,
+      blockedTimeoutMs,
+      existingCapyDbs
+    );
     if (inspected) {
       dbSizes.set(dbName, inspected.totalBytes);
+      existingCapyDbs.add(dbName);
     }
   }
   const preMeasuredLocalKeys = snapshotMatchingLocalKeys((key) => isCapyPaintLocalKey(key));
 
   // 2. Cancel pending BackupEngine writes and clear Android native backups when matching live channel
   if (matchesLiveWindowNamespace(activeDbName)) {
-    await clearAllSnapshots();
+    await clearAllSnapshots(blockedTimeoutMs);
     clearActiveState();
     clearWithBackup(
       resolveScopedStorageKey(SETTINGS_KEY, options?.pathname, options?.origin, options?.search),
@@ -1621,7 +1692,14 @@ export async function clearAllCapyStorage(
   result.warnings.push(...cacheCleanup.warnings);
 
   // 4. Close and delete all Capy IndexedDB databases (fallback to clearAllStores(dbName) if blocked)
-  await deleteAllCapyDatabases(activeDbName, capyDbNames, dbSizes, blockedTimeoutMs, result);
+  await deleteAllCapyDatabases(
+    activeDbName,
+    capyDbNames,
+    dbSizes,
+    existingCapyDbs,
+    blockedTimeoutMs,
+    result
+  );
 
   // 5. Remove all Capy Paint Local Storage keys across channels (NEVER touch CapyGame or other origin keys)
   removeAndCountLocalKeys((key) => isCapyPaintLocalKey(key), preMeasuredLocalKeys, result);
