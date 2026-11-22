@@ -20610,6 +20610,14 @@ async function runBrowserBasicsSuite() {
     );
 
     // 24d. Escape closes BrowserStorageModal while keeping SettingsModal open
+    await storagePage.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="storage-close-btn"]');
+        return Boolean(btn && !btn.hasAttribute('disabled'));
+      },
+      null,
+      { timeout: 5000 }
+    );
     await storagePage.keyboard.press('Escape');
     await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'hidden', timeout: 5000 });
     await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
