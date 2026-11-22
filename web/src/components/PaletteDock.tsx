@@ -22,6 +22,7 @@ interface PaletteDockProps {
   isReplaying?: boolean;
   reducedMotion?: boolean;
   largeText?: boolean;
+  uiScale?: number;
   showCustomColorButton?: boolean;
   onColorSelected: (colorId: number) => void;
   onSyncActiveColor?: (colorId: number) => void;
@@ -158,6 +159,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   isReplaying = false,
   reducedMotion = false,
   largeText = false,
+  uiScale,
   showCustomColorButton = false,
   onColorSelected,
   onSyncActiveColor,
@@ -167,6 +169,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   onUpdateColor,
   onApplyPresetPalette,
 }) => {
+  const effectiveUiScale = uiScale ?? (largeText ? 1.25 : 1.0);
   const onColorSelectedRef = useRef(onColorSelected);
   onColorSelectedRef.current = onColorSelected;
   const onSyncActiveColorRef = useRef(onSyncActiveColor);
@@ -259,8 +262,8 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     const measure = () => {
       const clientW = container.clientWidth;
       if (clientW <= 0) return;
-      const swatchW = largeText ? 58 : 46;
-      const swatchGap = largeText ? 10 : 8;
+      const swatchW = Math.round(46 * effectiveUiScale);
+      const swatchGap = Math.round(8 * effectiveUiScale);
       const naturalWidth =
         itemCount * swatchW + Math.max(0, itemCount - 1) * swatchGap + 24;
       setIsScrollable(naturalWidth > clientW);
@@ -274,7 +277,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [itemCount, largeText]);
+  }, [itemCount, effectiveUiScale]);
 
   // Smoothly center the active color in view when activeColorId or dock layout changes
   useEffect(() => {
@@ -297,7 +300,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     } else {
       container.scrollLeft = targetLeft;
     }
-  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length, largeText]);
+  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length, effectiveUiScale]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -424,13 +427,14 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
           );
         })}
 
-        {/* Button to open custom colour picker & palette options at the end of the dock */}
+        {/* Button to open custom color picker & palette options at the end of the dock */}
         {showCustomColorButton && onOpenPaletteOptions && (
           <button
             type="button"
             data-testid="palette-custom-btn"
             onClick={onOpenPaletteOptions}
-            title="Custom Colour & Palette Options"
+            aria-label="Custom Color and Palette Options"
+            title="Custom Color & Palette Options"
             className="capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl bg-slate-900/90 text-amber-400 border border-slate-700/80 shadow-md hover:bg-slate-800 hover:scale-105 active:scale-95 transition-[transform,opacity,box-shadow,background-color]"
           >
             <Palette size={18} />

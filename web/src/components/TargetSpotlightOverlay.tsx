@@ -50,9 +50,12 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
   zoom: [
     {
       selector: '[data-testid="zoom-in-btn"]',
-      optional: true,
+      fallbackSelectors: [
+        '[data-testid="reset-view-btn"]',
+        '[data-testid="puzzle-canvas"]',
+      ],
       padding: 4,
-      borderRadius: 9999,
+      borderRadius: 16,
     },
     {
       selector: '[data-testid="zoom-out-btn"]',
@@ -119,31 +122,16 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       borderRadius: 14,
     },
   ],
-  gallery_daily: [
-    {
-      selector: '[data-testid="topbar-settings-btn"]',
-      padding: 3,
-      borderRadius: 9999,
-    },
-  ],
-  custom_photo: [
+  create_gallery: [
     {
       selector: '[data-testid="topbar-upload-btn"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
       padding: 3,
       borderRadius: 9999,
     },
-  ],
-  puzzle_presets: [
     {
       selector: '[data-testid="topbar-settings-btn"]',
-      padding: 3,
-      borderRadius: 9999,
-    },
-  ],
-  infinite_zoom: [
-    {
-      selector: '[data-testid="topbar-parent-puzzle-btn"]',
-      fallbackSelector: '[data-testid="topbar-settings-btn"]',
+      optional: true,
       padding: 3,
       borderRadius: 9999,
     },
@@ -155,13 +143,123 @@ export const TUTORIAL_STEP_TARGETS: Record<TutorialStepKey, SpotlightTargetSpec[
       borderRadius: 9999,
     },
   ],
-  settings_a11y: [
+  settings: [
     {
-      selector: '[data-testid="topbar-settings-btn"]',
+      selector: '[data-testid="settings-tab-settings"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
       padding: 3,
-      borderRadius: 9999,
+      borderRadius: 10,
+    },
+    {
+      selector: '[data-testid="settings-section-accessibility"]',
+      fallbackSelector: '[data-testid="settings-section-gameplay"]',
+      optional: true,
+      padding: 4,
+      borderRadius: 14,
     },
   ],
+  hints: [
+    {
+      selector: '[data-testid="settings-tab-hints"]',
+      fallbackSelector: '[data-testid="topbar-settings-btn"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    {
+      selector: '[data-testid="hints-section-style"]',
+      optional: true,
+      padding: 4,
+      borderRadius: 14,
+    },
+  ],
+};
+
+export interface ModalSpotlightTargetDef {
+  modalTab: number;
+  tabSpec: SpotlightTargetSpec;
+  controlSpecs: SpotlightTargetSpec[];
+}
+
+export const TUTORIAL_MODAL_STEP_TARGETS: Partial<Record<TutorialStepKey, ModalSpotlightTargetDef>> = {
+  free_color: {
+    modalTab: 1,
+    tabSpec: {
+      selector: '[data-testid="settings-tab-settings"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    controlSpecs: [
+      {
+        selector: '[data-testid="setting-free-color-mode"]',
+        fallbackSelector: '[data-testid="settings-section-gameplay"]',
+        padding: 4,
+        borderRadius: 12,
+      },
+    ],
+  },
+  create_gallery: {
+    modalTab: 3,
+    tabSpec: {
+      selector: '[data-testid="settings-tab-create"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    controlSpecs: [
+      {
+        selector: '[data-testid="daily-puzzle-play-btn"]',
+        fallbackSelector: '[data-testid="daily-puzzle-card"]',
+        padding: 4,
+        borderRadius: 12,
+      },
+    ],
+  },
+  saves_export: {
+    modalTab: 4,
+    tabSpec: {
+      selector: '[data-testid="settings-tab-saves"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    controlSpecs: [
+      {
+        selector: '[data-testid="selected-save-action-bar"]',
+        fallbackSelector: '[data-testid="saves-list-section"]',
+        padding: 4,
+        borderRadius: 12,
+      },
+    ],
+  },
+  settings: {
+    modalTab: 1,
+    tabSpec: {
+      selector: '[data-testid="settings-tab-settings"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    controlSpecs: [
+      {
+        selector: '[data-testid="settings-section-accessibility"]',
+        fallbackSelector: '[data-testid="settings-section-gameplay"]',
+        padding: 4,
+        borderRadius: 14,
+      },
+    ],
+  },
+  hints: {
+    modalTab: 2,
+    tabSpec: {
+      selector: '[data-testid="settings-tab-hints"]',
+      padding: 3,
+      borderRadius: 10,
+    },
+    controlSpecs: [
+      {
+        selector: '[data-testid="hints-section-style"]',
+        padding: 4,
+        borderRadius: 14,
+      },
+    ],
+  },
 };
 
 export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]> = {
@@ -231,6 +329,13 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
   saves_export: [
     {
       selector: '[data-testid="topbar-saves-btn"]',
+      padding: 3,
+      borderRadius: 9999,
+    },
+  ],
+  settings_hints_tip: [
+    {
+      selector: '[data-testid="topbar-settings-btn"]',
       padding: 3,
       borderRadius: 9999,
     },
@@ -457,6 +562,11 @@ export interface TargetSpotlightOverlayProps {
   cardSelector: string;
   reducedMotion?: boolean;
   largeText?: boolean;
+  textScale?: number;
+  uiScale?: number;
+  isModalSpotlight?: boolean;
+  activeSettingsTab?: number;
+  zIndexClass?: string;
 }
 
 interface ClipBounds {
@@ -542,6 +652,11 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
   cardSelector,
   reducedMotion = false,
   largeText = false,
+  textScale = 1.0,
+  uiScale = 1.0,
+  isModalSpotlight = false,
+  activeSettingsTab,
+  zIndexClass,
 }) => {
   const [layout, setLayout] = useState<ResolvedLayout>({ rings: [], connector: null });
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -592,10 +707,22 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
         }
       : null;
 
-    const specs =
-      variant === 'tutorial'
-        ? TUTORIAL_STEP_TARGETS[targetKey as TutorialStepKey]
-        : FEATURE_OFFER_TARGETS[targetKey as FeatureOfferId];
+    let specs: SpotlightTargetSpec[] | undefined;
+    let isModalOnTargetTab = false;
+    if (variant === 'tutorial' && isModalSpotlight) {
+      const modalDef = TUTORIAL_MODAL_STEP_TARGETS[targetKey as TutorialStepKey];
+      if (modalDef) {
+        isModalOnTargetTab =
+          activeSettingsTab === undefined || activeSettingsTab === modalDef.modalTab;
+        specs = isModalOnTargetTab
+          ? [modalDef.tabSpec, ...modalDef.controlSpecs]
+          : [modalDef.tabSpec];
+      }
+    } else if (variant === 'tutorial') {
+      specs = TUTORIAL_STEP_TARGETS[targetKey as TutorialStepKey];
+    } else {
+      specs = FEATURE_OFFER_TARGETS[targetKey as FeatureOfferId];
+    }
 
     if (!specs || specs.length === 0) {
       syncObservedElements(observeTargets);
@@ -678,8 +805,11 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
 
     let connector: SpotlightConnector | null = null;
     if (cardRect && resolvedRings.length > 0) {
-      let anchorRect = resolvedRings[0].rect;
-      if (resolvedRings.length >= 2) {
+      let anchorRect =
+        isModalSpotlight && isModalOnTargetTab && resolvedRings.length >= 2
+          ? resolvedRings[1].rect
+          : resolvedRings[0].rect;
+      if (!isModalSpotlight && resolvedRings.length >= 2) {
         const r0 = resolvedRings[0].rect;
         const r1 = resolvedRings[1].rect;
         const c0x = r0.left + r0.width / 2;
@@ -704,11 +834,11 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
 
     const nextLayout: ResolvedLayout = { rings: resolvedRings, connector };
     setLayout((prev) => (areLayoutsEqual(prev, nextLayout) ? prev : nextLayout));
-  }, [isActive, variant, targetKey, cardSelector, syncObservedElements]);
+  }, [isActive, isModalSpotlight, activeSettingsTab, variant, targetKey, cardSelector, syncObservedElements]);
 
   useLayoutEffect(() => {
     measure();
-  }, [measure, largeText]);
+  }, [measure, largeText, textScale, uiScale, activeSettingsTab]);
 
   useEffect(() => {
     if (!isActive || !targetKey) return;
@@ -820,7 +950,82 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
       resizeObserverRef.current = null;
       observedElementsRef.current.clear();
     };
-  }, [isActive, targetKey, cardSelector, largeText, measure]);
+  }, [isActive, targetKey, cardSelector, largeText, textScale, uiScale, activeSettingsTab, measure]);
+
+  useEffect(() => {
+    if (!isActive || !isModalSpotlight || !targetKey || typeof document === 'undefined') {
+      return;
+    }
+    const modalDef =
+      variant === 'tutorial'
+        ? TUTORIAL_MODAL_STEP_TARGETS[targetKey as TutorialStepKey]
+        : undefined;
+    if (!modalDef || modalDef.controlSpecs.length === 0) return;
+    if (activeSettingsTab !== undefined && activeSettingsTab !== modalDef.modalTab) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      const controlSpec = modalDef.controlSpecs[0];
+      const candidates = [
+        controlSpec.selector,
+        ...(controlSpec.fallbackSelectors || []),
+        ...(controlSpec.fallbackSelector ? [controlSpec.fallbackSelector] : []),
+      ];
+      let targetEl: Element | null = null;
+      for (const candidate of candidates) {
+        const found = document.querySelector(candidate);
+        if (found instanceof HTMLElement) {
+          targetEl = found;
+          break;
+        }
+      }
+      if (targetEl instanceof HTMLElement) {
+        const scrollContainer = targetEl.closest('.overflow-y-auto');
+        const tutorialEl = document.querySelector('[data-testid="onboarding-tutorial"]');
+        if (scrollContainer instanceof HTMLElement) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const targetRect = targetEl.getBoundingClientRect();
+          const tutorialRect =
+            tutorialEl instanceof HTMLElement ? tutorialEl.getBoundingClientRect() : null;
+          const visibleTop = containerRect.top;
+          const visibleBottom =
+            tutorialRect && tutorialRect.height > 0
+              ? Math.min(
+                  containerRect.bottom,
+                  tutorialRect.top - 12,
+                  window.innerHeight - tutorialRect.height - 20
+                )
+              : containerRect.bottom;
+          const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+          const desiredTop =
+            visibleHeight >= targetRect.height + 24
+              ? visibleTop + (visibleHeight - targetRect.height) / 2
+              : visibleTop + Math.min(12, Math.max(0, (visibleHeight - targetRect.height) / 2));
+          const delta = targetRect.top - desiredTop;
+          const nextScrollTop = Math.max(0, scrollContainer.scrollTop + delta);
+          if (typeof scrollContainer.scrollTo === 'function') {
+            scrollContainer.scrollTo({
+              top: nextScrollTop,
+              behavior: reducedMotion ? 'auto' : 'smooth',
+            });
+          } else {
+            scrollContainer.scrollTop = nextScrollTop;
+          }
+        } else if (typeof targetEl.scrollIntoView === 'function') {
+          targetEl.scrollIntoView({
+            block: 'start',
+            behavior: reducedMotion ? 'auto' : 'smooth',
+          });
+        }
+      }
+      measure();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isActive, isModalSpotlight, activeSettingsTab, variant, targetKey, reducedMotion, measure]);
 
   if (!isActive || !targetKey || layout.rings.length === 0) return null;
 
@@ -829,13 +1034,15 @@ export const TargetSpotlightOverlay: React.FC<TargetSpotlightOverlayProps> = ({
     variant === 'tutorial'
       ? '0 0 0 1px rgba(251, 191, 36, 0.25), 0 0 12px rgba(251, 191, 36, 0.35)'
       : '0 0 0 1px rgba(56, 189, 248, 0.25), 0 0 12px rgba(56, 189, 248, 0.35)';
+  const resolvedZIndex = zIndexClass || (isModalSpotlight ? 'z-[58]' : 'z-[38]');
 
   return (
     <div
       data-testid="spotlight-overlay"
       data-variant={variant}
+      data-modal-spotlight={isModalSpotlight ? 'true' : undefined}
       aria-hidden="true"
-      className="fixed inset-0 z-[38] pointer-events-none overflow-hidden"
+      className={`fixed inset-0 ${resolvedZIndex} pointer-events-none overflow-hidden`}
     >
       {layout.rings.map((ring, idx) => (
         <div

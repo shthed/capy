@@ -27,10 +27,16 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val playGamesAppId = System.getenv("CAPY_PLAY_GAMES_APP_ID")?.trim()
-        if (!playGamesAppId.isNullOrEmpty()) {
-            resValue("string", "game_services_project_id", playGamesAppId)
+        val rawPlayGamesAppId = System.getenv("CAPY_PLAY_GAMES_APP_ID")?.trim().orEmpty()
+        val resolvedPlayGamesAppId = if (rawPlayGamesAppId.isEmpty()) {
+            "000000000000"
+        } else {
+            if (!Regex("^[0-9]{6,}$").matches(rawPlayGamesAppId)) {
+                throw GradleException("CAPY_PLAY_GAMES_APP_ID must be a numeric Play Games project ID (>= 6 digits).")
+            }
+            rawPlayGamesAppId
         }
+        resValue("string", "game_services_project_id", resolvedPlayGamesAppId)
 
         val rawCertFingerprints = System.getenv("CAPY_ANDROID_SHA256_CERT_FINGERPRINTS")?.trim().orEmpty()
         val hasValidCertFingerprints = rawCertFingerprints
@@ -88,6 +94,7 @@ android {
     }
     buildFeatures {
         buildConfig = true
+        resValues = true
     }
 }
 

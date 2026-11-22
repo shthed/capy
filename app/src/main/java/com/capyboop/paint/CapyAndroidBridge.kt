@@ -427,7 +427,7 @@ class CapyAndroidBridge(
         const val MAX_BACKUP_PAYLOAD_CHARS = 16 * 1024 * 1024
         const val MAX_SHARE_FILE_BYTES = 16 * 1024 * 1024
         const val MAX_SHARE_BASE64_CHARS = 24 * 1024 * 1024
-        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com")
+        val ROOT_DEEP_LINK_HOSTS = setOf("capypaint.com", "www.capypaint.com", "paint.capyboop.com")
         val GITHUB_PAGES_DEEP_LINK_HOSTS = setOf("shthed.github.io", "capyboop.github.io")
         private val FILE_IO_LOCK = Any()
         private val ALLOWED_EXPORT_MIME_TYPES = setOf(
@@ -955,6 +955,52 @@ class CapyAndroidBridge(
             }
         }
 
+        const val WEBVIEW_CONTENT_SECURITY_POLICY =
+            "default-src 'self'; " +
+                "script-src 'self' 'sha256-Aq5koStiHs7iOXZ0FstBiuWUfXvNHn4fqzL7j4yX+0Y=' " +
+                "'sha256-oyhhX5B/ChcdXFJ02Q3hzScXh6cePvaGt0Gqh/iqeyY=' https://accounts.google.com/gsi/client; " +
+                "script-src-attr 'none'; " +
+                "style-src 'self' 'unsafe-inline' https://accounts.google.com; " +
+                "img-src 'self' data: blob: https://*.googleusercontent.com; " +
+                "font-src 'self' data:; " +
+                "connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com " +
+                "https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com " +
+                "https://graph.microsoft.com https://login.microsoftonline.com " +
+                "wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com; " +
+                "worker-src 'self' blob:; " +
+                "frame-src https://accounts.google.com; " +
+                "manifest-src 'self'; " +
+                "media-src 'none'; " +
+                "form-action 'self'; " +
+                "object-src 'none'; " +
+                "base-uri 'self'; " +
+                "frame-ancestors 'self';"
+
+        const val WEBVIEW_PRIVACY_POLICY_CSP =
+            "default-src 'none'; script-src 'none'; script-src-attr 'none'; style-src 'unsafe-inline'; " +
+                "img-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'self';"
+
+        fun buildWebViewAssetResponseHeaders(
+            mimeType: String?,
+            path: String? = null,
+        ): Map<String, String> {
+            val headers = linkedMapOf(
+                "X-Content-Type-Options" to "nosniff",
+                "Referrer-Policy" to "strict-origin-when-cross-origin",
+            )
+            val normalizedMime = mimeType?.trim()?.lowercase()?.substringBefore(';')?.trim() ?: ""
+            val normalizedPath = path?.trim()?.lowercase() ?: ""
+            if ((normalizedMime == "text/html") || normalizedPath.endsWith(".html")) {
+                headers["X-Frame-Options"] = "SAMEORIGIN"
+                headers["Content-Security-Policy"] = if (normalizedPath.endsWith("/privacy-policy.html")) {
+                    WEBVIEW_PRIVACY_POLICY_CSP
+                } else {
+                    WEBVIEW_CONTENT_SECURITY_POLICY
+                }
+            }
+            return headers
+        }
+
         fun shouldBlockDocumentRequest(
             url: String?,
             isForMainFrame: Boolean,
@@ -1039,8 +1085,9 @@ class CapyAndroidBridge(
         }
 
         /**
-         * Validates incoming Android App Link URIs so only HTTPS URLs under capypaint.com
-         * (or verified GitHub Pages /capy paths) are forwarded into the WebView deep-link handler.
+         * Validates incoming Android App Link URIs so only HTTPS URLs under `ROOT_DEEP_LINK_HOSTS`
+         * (`capypaint.com`, `www.capypaint.com`, `paint.capyboop.com`) or verified GitHub Pages
+         * `/capy` (and `capyboop.github.io/paint`) paths are forwarded into the WebView deep-link handler.
          */
         fun isAllowedCapyDeepLink(rawUrl: String?): Boolean {
             if (rawUrl.isNullOrBlank()) return false
@@ -1054,10 +1101,15 @@ class CapyAndroidBridge(
                 if (scheme != "https") return false
                 if (uri.userInfo != null) return false
                 if (uri.port != -1 && uri.port != 443) return false
+                val normalizedPath = path.lowercase()
+                if (normalizedPath == "/privacy-policy.html" || normalizedPath.endsWith("/privacy-policy.html")) {
+                    return false
+                }
                 if (host in ROOT_DEEP_LINK_HOSTS) {
                     path.isEmpty() || path.startsWith("/")
                 } else if (host in GITHUB_PAGES_DEEP_LINK_HOSTS) {
-                    (path == "/capy") || path.startsWith("/capy/")
+                    (path == "/capy") || path.startsWith("/capy/") ||
+                        (host == "capyboop.github.io" && ((path == "/paint") || path.startsWith("/paint/")))
                 } else {
                     false
                 }

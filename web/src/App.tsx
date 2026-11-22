@@ -20,8 +20,11 @@ import { DEFAULT_SETTINGS, QuotaWarning, StorageService } from './services/Stora
 import {
   isCloudCoopUiEnabled,
   resolveScopedBackupKey,
-  resolveScopedStorageKey,
 } from './services/StorageNamespace';
+import { SafeLocalStore } from './services/storage/SafeLocalStore';
+import { compressImageForStorage } from './services/storage/ImageCompression';
+import { TUTORIAL_COMPLETED_KEY } from './services/storage/StorageKeys';
+import { reportSwallowed } from './services/telemetry';
 import { NativeBridge } from './services/NativeBridge';
 import { SoundService } from './services/SoundService';
 import { exportPrintableColoringSvg } from './services/SvgPrintExporter';
@@ -380,7 +383,15 @@ export const App: React.FC = () => {
     liveCoopRef.current = liveCoopSnapshot;
   }
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const showSettingsRef = useRef<boolean>(false);
+  showSettingsRef.current = showSettings;
   const [settingsInitialTab, setSettingsInitialTab] = useState<number | undefined>(undefined);
+  const [settingsTabRequestKey, setSettingsTabRequestKey] = useState<number>(0);
+  const [activeSettingsTab, setActiveSettingsTab] = useState<number>(1);
+  const activeSettingsTabRef = useRef<number>(1);
+  activeSettingsTabRef.current = activeSettingsTab;
+  const tutorialOpenedSettingsRef = useRef<boolean>(false);
+  const hasCheckedSettingsTipRef = useRef<boolean>(false);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
   const [showTutorial, setShowTutorial] = useState<boolean>(false);
   const showTutorialRef = useRef<boolean>(false);
@@ -587,8 +598,16 @@ export const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useLayoutEffect(() => {
-    document.documentElement.dataset.largeText = settings.largeText ? 'true' : 'false';
-  }, [settings.largeText]);
+    const textScale = Number.isFinite(settings.textScale) ? settings.textScale : settings.largeText ? 1.25 : 1.0;
+    const uiScale = Number.isFinite(settings.uiScale) ? settings.uiScale : settings.largeText ? 1.25 : 1.0;
+    const root = document.documentElement;
+    root.dataset.largeText = textScale > 1.0 || uiScale > 1.0 ? 'true' : 'false';
+    root.dataset.textScaled = textScale !== 1.0 ? 'true' : 'false';
+    root.dataset.uiScaled = uiScale !== 1.0 ? 'true' : 'false';
+    root.dataset.uiBoosted = uiScale > 1.0 ? 'true' : 'false';
+    root.style.setProperty('--capy-text-scale', String(textScale));
+    root.style.setProperty('--capy-ui-scale', String(uiScale));
+  }, [settings.largeText, settings.textScale, settings.uiScale]);
 
   // Sync modal & overlay states with native LIFO hardware back button stack
   useEffect(() => {
@@ -765,6 +784,13 @@ export const App: React.FC = () => {
         isPreviewModeRef.current = false;
         setIsPreviewMode(false);
       }
+      const nextStepDef = nextStepKey
+        ? TUTORIAL_STEPS.find((step) => step.key === nextStepKey)
+        : undefined;
+      if (tutorialOpenedSettingsRef.current && nextStepDef?.modalTab === undefined) {
+        tutorialOpenedSettingsRef.current = false;
+        setShowSettings(false);
+      }
     },
     [exitReplay]
   );
@@ -773,12 +799,10 @@ export const App: React.FC = () => {
     cleanupTutorialTransientModes(null);
     setShowTutorial(false);
     setTutorialStepTriedInVisit(false);
-    try {
-      localStorage.setItem(resolveScopedStorageKey('capy_tutorial_completed_v1'), '1');
-    } catch {
-      // Ignored
-    }
-    NativeBridge.saveBackup(resolveScopedBackupKey('capy_tutorial_completed_v1'), '1');
+    hasCheckedSettingsTipRef.current = true;
+    FeatureOffersService.markOfferSeen('settings_hints_tip');
+    SafeLocalStore.setScopedItem(TUTORIAL_COMPLETED_KEY, '1');
+    NativeBridge.saveBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY), '1');
   }, [cleanupTutorialTransientModes]);
 
   useEffect(() => {
@@ -786,10 +810,31 @@ export const App: React.FC = () => {
     return NativeBridge.pushBackHandler(completeTutorial);
   }, [showTutorial, completeTutorial]);
 
+  useEffect(() => {
+    if (isLoading || !puzzle || showTutorial || hasCheckedSettingsTipRef.current) return;
+    hasCheckedSettingsTipRef.current = true;
+    const skipTutorial =
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).has('skipTutorial');
+    if (skipTutorial) return;
+    let tutorialCompleted = false;
+    try {
+      tutorialCompleted =
+        SafeLocalStore.getScopedItem(TUTORIAL_COMPLETED_KEY) === '1' ||
+        NativeBridge.loadBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY)) === '1';
+    } catch (err) {
+      reportSwallowed('App.tutorialCompletedCheck', err);
+    }
+    if (tutorialCompleted) {
+      triggerFeatureOffer('settings_hints_tip');
+    }
+  }, [isLoading, puzzle, showTutorial, triggerFeatureOffer]);
+
   const handleStartTutorial = useCallback(() => {
     featureOfferQueueRef.current = [];
     activeFeatureOfferRef.current = null;
     setActiveFeatureOffer(null);
+    tutorialOpenedSettingsRef.current = false;
     cleanupTutorialTransientModes(TUTORIAL_STEPS[0]?.key ?? null);
     setTutorialStepTriedInVisit(false);
     setTutorialStep(0);
@@ -797,22 +842,67 @@ export const App: React.FC = () => {
     setShowTutorial(true);
   }, [cleanupTutorialTransientModes]);
 
+  const handleStartSettingsTour = useCallback(() => {
+    featureOfferQueueRef.current = [];
+    activeFeatureOfferRef.current = null;
+    setActiveFeatureOffer(null);
+    const targetKey: TutorialStepKey = activeSettingsTabRef.current === 2 ? 'hints' : 'settings';
+    const targetIdx = Math.max(
+      0,
+      TUTORIAL_STEPS.findIndex((step) => step.key === targetKey)
+    );
+    const targetTab = TUTORIAL_STEPS[targetIdx]?.modalTab ?? 1;
+    tutorialOpenedSettingsRef.current = false;
+    cleanupTutorialTransientModes(targetKey);
+    setSettingsInitialTab(targetTab);
+    setSettingsTabRequestKey((k) => k + 1);
+    setShowSettings(true);
+    setTutorialStepTriedInVisit(false);
+    setTutorialStep(targetIdx);
+    setShowTutorial(true);
+  }, [cleanupTutorialTransientModes]);
+
+  const handleOpenTutorialSettingsTab = useCallback((tabIndex: number) => {
+    if (!showSettingsRef.current) {
+      tutorialOpenedSettingsRef.current = true;
+    }
+    setSettingsInitialTab(tabIndex);
+    setSettingsTabRequestKey((k) => k + 1);
+    setShowSettings(true);
+  }, []);
+
   const handleJumpToTutorialStep = useCallback(
     (stepIdx: number) => {
+      const clampedIdx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, stepIdx));
+      const targetStep = TUTORIAL_STEPS[clampedIdx];
       advanceFeatureOffer();
-      cleanupTutorialTransientModes(TUTORIAL_STEPS[stepIdx]?.key ?? null);
+      cleanupTutorialTransientModes(targetStep?.key ?? null);
       setTutorialStepTriedInVisit(false);
-      setTutorialStep(stepIdx);
+      setTutorialStep(clampedIdx);
       setShowTutorial(true);
+      if (targetStep?.modalTab !== undefined) {
+        if (!showSettingsRef.current) {
+          tutorialOpenedSettingsRef.current = true;
+        }
+        setSettingsInitialTab(targetStep.modalTab);
+        setSettingsTabRequestKey((k) => k + 1);
+        setShowSettings(true);
+      }
     },
     [advanceFeatureOffer, cleanupTutorialTransientModes]
   );
 
   const handleTutorialStepChange = useCallback(
     (nextStep: number) => {
-      cleanupTutorialTransientModes(TUTORIAL_STEPS[nextStep]?.key ?? null);
+      const clampedIdx = Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, nextStep));
+      const nextStepDef = TUTORIAL_STEPS[clampedIdx];
+      cleanupTutorialTransientModes(nextStepDef?.key ?? null);
       setTutorialStepTriedInVisit(false);
-      setTutorialStep(nextStep);
+      setTutorialStep(clampedIdx);
+      if (showSettingsRef.current && nextStepDef?.modalTab !== undefined) {
+        setSettingsInitialTab(nextStepDef.modalTab);
+        setSettingsTabRequestKey((k) => k + 1);
+      }
     },
     [cleanupTutorialTransientModes]
   );
@@ -1179,18 +1269,25 @@ export const App: React.FC = () => {
         const updatedSnapshots = StorageService.addSnapshot(newSnapshot);
         setSnapshots(updatedSnapshots);
 
-        // Persist full-resolution custom image blob to IndexedDB so reloads never degrade to thumbnails
+        // Persist custom image blob to IndexedDB (downscaling & compressing oversized uploads)
         if (!sampleAssetPath) {
-          const persistBlobPromise = sourceBlob
-            ? Promise.resolve(sourceBlob)
-            : new Promise<Blob | null>((resolve) =>
-                canvas.toBlob((b) => resolve(b), 'image/webp', 0.92)
-              );
+          const expectedTransitionSeq = snapshotTransitionSeqRef.current;
+          const persistBlobPromise = compressImageForStorage({
+            blob: sourceBlob,
+            image: img,
+            width: canvas.width,
+            height: canvas.height,
+          });
           persistBlobPromise
             .then((blob) => {
-              if (blob) {
-                return StorageService.saveImageBlob(snapId, blob);
+              if (
+                !blob ||
+                expectedTransitionSeq !== snapshotTransitionSeqRef.current ||
+                !StorageService.loadSnapshots().some((s) => s.id === snapId)
+              ) {
+                return;
               }
+              return StorageService.saveImageBlob(snapId, blob);
             })
             .catch((err) => console.warn('Failed to persist source image blob:', err));
         }
@@ -1343,8 +1440,10 @@ export const App: React.FC = () => {
           };
           setSnapshots(finalizedSnapshots);
 
-          // Persist puzzle in IndexedDB
-          await StorageService.savePuzzleData(snapId, puzzleData);
+          // Persist puzzle in IndexedDB (quota/IDB errors surface via onQuotaWarning toast)
+          await StorageService.savePuzzleData(snapId, puzzleData).catch((err) => {
+            reportSwallowed('App.savePuzzleData', err, { id: snapId });
+          });
 
           if (
             currentSeq !== generationSeqRef.current ||
@@ -1927,10 +2026,10 @@ export const App: React.FC = () => {
               let tutorialCompleted = false;
               try {
                 tutorialCompleted =
-                  localStorage.getItem(resolveScopedStorageKey('capy_tutorial_completed_v1')) === '1' ||
-                  NativeBridge.loadBackup(resolveScopedBackupKey('capy_tutorial_completed_v1')) === '1';
-              } catch {
-                // Ignored
+                  SafeLocalStore.getScopedItem(TUTORIAL_COMPLETED_KEY) === '1' ||
+                  NativeBridge.loadBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY)) === '1';
+              } catch (err) {
+                reportSwallowed('App.restoreSession.tutorialCheck', err);
               }
               if (!skipTutorial && !tutorialCompleted) {
                 setShowTutorial(true);
@@ -1961,6 +2060,20 @@ export const App: React.FC = () => {
         undefined,
         defaultSample.assetPath
       );
+      const skipTutorialFallback =
+        typeof window !== 'undefined' &&
+        new URLSearchParams(window.location.search).has('skipTutorial');
+      let tutorialCompletedFallback = false;
+      try {
+        tutorialCompletedFallback =
+          SafeLocalStore.getScopedItem(TUTORIAL_COMPLETED_KEY) === '1' ||
+          NativeBridge.loadBackup(resolveScopedBackupKey(TUTORIAL_COMPLETED_KEY)) === '1';
+      } catch (err) {
+        reportSwallowed('App.restoreSession.tutorialFallbackCheck', err);
+      }
+      if (!skipTutorialFallback && !tutorialCompletedFallback) {
+        setShowTutorial(true);
+      }
     };
 
     restoreSession();
@@ -3017,7 +3130,9 @@ export const App: React.FC = () => {
       NativeBridge.haptic('tick', curSettings.hapticsEnabled);
 
       if (curSnapshotId) {
-        StorageService.savePuzzleData(curSnapshotId, updatedPuzzle);
+        void StorageService.savePuzzleData(curSnapshotId, updatedPuzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: curSnapshotId });
+        });
         const updated = StorageService.updateSnapshotProgress(
           curSnapshotId,
           curFilled.size,
@@ -3079,7 +3194,9 @@ export const App: React.FC = () => {
       NativeBridge.haptic('tick', curSettings.hapticsEnabled);
 
       if (curSnapshotId) {
-        StorageService.savePuzzleData(curSnapshotId, updatedPuzzle);
+        void StorageService.savePuzzleData(curSnapshotId, updatedPuzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: curSnapshotId });
+        });
         const previewUrl = curSourceImage
           ? generatePreviewDataUrl(updatedPuzzle, curSourceImage, curFilled, curPainted)
           : undefined;
@@ -3141,7 +3258,9 @@ export const App: React.FC = () => {
       NativeBridge.haptic('success', curSettings.hapticsEnabled);
 
       if (curSnapshotId) {
-        StorageService.savePuzzleData(curSnapshotId, updatedPuzzle);
+        void StorageService.savePuzzleData(curSnapshotId, updatedPuzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: curSnapshotId });
+        });
         const previewUrl = curSourceImage
           ? generatePreviewDataUrl(updatedPuzzle, curSourceImage, curFilled, curPainted)
           : undefined;
@@ -3212,7 +3331,7 @@ export const App: React.FC = () => {
       };
       img.onload = () => {
         const title = file.name.replace(/\.[^/.]+$/, '');
-        markTutorialActionTried('custom_photo');
+        markTutorialActionTried('create_gallery');
         triggerFeatureOffer('photo_upload');
         loadArtworkFromImage(
           img,
@@ -5205,7 +5324,9 @@ export const App: React.FC = () => {
           puzzle.isFreeColor
         );
         setSnapshots(updatedParentList);
-        void StorageService.savePuzzleData(parentId, puzzle);
+        void StorageService.savePuzzleData(parentId, puzzle).catch((err) => {
+          reportSwallowed('App.savePuzzleData', err, { id: parentId });
+        });
       } else if (existingParent) {
         const updatedParentList = StorageService.updateSnapshotViewport(
           parentId,
@@ -5235,7 +5356,9 @@ export const App: React.FC = () => {
         };
         setSnapshots(StorageService.addSnapshot(parentSnapshot));
         if (puzzle) {
-          void StorageService.savePuzzleData(parentId, puzzle);
+          void StorageService.savePuzzleData(parentId, puzzle).catch((err) => {
+            reportSwallowed('App.savePuzzleData', err, { id: parentId });
+          });
         }
       }
 
@@ -5276,7 +5399,7 @@ export const App: React.FC = () => {
           const subTitle = activeTitle.includes('(2x Detail)')
             ? activeTitle
             : `${activeTitle} (2x Detail)`;
-          markTutorialActionTried('infinite_zoom');
+          markTutorialActionTried('create_gallery');
           triggerFeatureOffer('infinite_zoom');
           loadArtworkFromImage(
             detailImg,
@@ -5374,7 +5497,6 @@ export const App: React.FC = () => {
         }}
         onToggleFullscreen={handleToggleFullscreen}
         onOpenSettings={() => {
-          markTutorialActionTried('settings_a11y');
           setSettingsInitialTab(undefined);
           setShowSettings(true);
         }}
@@ -5427,7 +5549,7 @@ export const App: React.FC = () => {
         difficulty={settings.difficulty}
         fatFingerAssist={settings.fatFingerAssist}
         touchReachRadiusPx={
-          settings.largeText
+          (settings.uiScale ?? 1.0) > 1.0
             ? Math.max(settings.touchReachRadiusPx, 34)
             : settings.touchReachRadiusPx
         }
@@ -5442,8 +5564,8 @@ export const App: React.FC = () => {
         labelScale={settings.labelScale}
         minLabelSize={settings.minLabelSize}
         maxLabelSize={
-          settings.largeText
-            ? Math.round(Math.max(settings.maxLabelSize * 1.5, 28))
+          settings.textScale > 1.0
+            ? Math.round(Math.max(settings.maxLabelSize * settings.textScale * 1.2, 28))
             : settings.maxLabelSize
         }
         highlightMatching={isReplaying ? false : settings.highlightMatching}
@@ -5731,6 +5853,7 @@ export const App: React.FC = () => {
           isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}
           largeText={Boolean(settings.largeText)}
+          uiScale={settings.uiScale}
           isFreeColorMode={isFreeColorMode}
           showCustomColorButton={Boolean(
             isFreeColorMode || puzzle.isFreeColor || settings.enableCustomColorForAllPuzzles
@@ -5801,6 +5924,7 @@ export const App: React.FC = () => {
         <SettingsModal
           isOpen={showSettings}
           initialTab={settingsInitialTab}
+          initialTabRequestKey={settingsTabRequestKey}
           settings={settings}
           lifetimeStats={lifetimeStats}
           snapshots={snapshots}
@@ -5818,14 +5942,24 @@ export const App: React.FC = () => {
             const toggledFreeColor =
               nextSettings.isFreeColorMode !== prev.isFreeColorMode ||
               nextSettings.enableCustomColorForAllPuzzles !== prev.enableCustomColorForAllPuzzles;
+            const changedHintSetting =
+              nextSettings.highlightStyle !== prev.highlightStyle ||
+              nextSettings.hintColorArgb !== prev.hintColorArgb ||
+              nextSettings.hintFillStyle !== prev.hintFillStyle ||
+              nextSettings.hintIntensity !== prev.hintIntensity ||
+              nextSettings.highlightMatching !== prev.highlightMatching ||
+              nextSettings.animateHint !== prev.animateHint ||
+              nextSettings.showNextRegionHint !== prev.showNextRegionHint;
             handleUpdateSettings(nextSettings);
             if (toggledFreeColor) {
               markTutorialActionTried('free_color');
               if (enablingFreeColor) {
                 triggerFeatureOffer('free_color');
               }
+            } else if (changedHintSetting) {
+              markTutorialActionTried('hints');
             } else {
-              markTutorialActionTried('settings_a11y');
+              markTutorialActionTried('settings');
             }
           }}
           onToggleFullscreen={handleToggleFullscreen}
@@ -5990,6 +6124,68 @@ export const App: React.FC = () => {
               }
             } catch (err) {
               console.error('Failed to clear all snapshots:', err);
+              if (clearSeq === snapshotTransitionSeqRef.current) {
+                setIsLoading(false);
+              }
+            } finally {
+              if (!handedOff && clearSeq === snapshotTransitionSeqRef.current) {
+                clearPendingViewportSave();
+                snapshotTransitioningRef.current = false;
+                if (!clearedLocalState) {
+                  liveCoopRef.current = latestRenderCoopRef.current;
+                }
+              }
+            }
+          }}
+          onAfterStorageClear={async ({ clearedActiveChannel, clearedSettings }) => {
+            if (!clearedActiveChannel) return;
+            clearPendingViewportSave();
+            const clearSeq = ++snapshotTransitionSeqRef.current;
+            snapshotTransitioningRef.current = true;
+            const effectiveSettings = clearedSettings ? StorageService.loadSettings() : settings;
+            if (clearedSettings) {
+              setSettings(effectiveSettings);
+            }
+            liveCoopRef.current = {
+              ...liveCoopRef.current,
+              activeSnapshotId: null,
+              puzzle: null,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+            };
+            let handedOff = false;
+            let clearedLocalState = false;
+            try {
+              setSnapshots([]);
+              setActiveSnapshotId(null);
+              setPuzzle(null);
+              setFilledRegionIds(new Set());
+              setPaintedRegionColors(new Map());
+              syncUndoStack([]);
+              syncRedoStack([]);
+              setHintRegionId(null);
+              clearedLocalState = true;
+              const defaultSample = SAMPLE_GALLERY[0];
+              const img = await loadHtmlImage(defaultSample.assetPath);
+              if (clearSeq !== snapshotTransitionSeqRef.current) return;
+              if (img) {
+                handedOff = true;
+                loadArtworkFromImage(
+                  img,
+                  defaultSample.title,
+                  effectiveSettings.generatorConfig,
+                  new Set(),
+                  undefined,
+                  undefined,
+                  defaultSample.assetPath
+                );
+              } else {
+                clearPendingViewportSave();
+                snapshotTransitioningRef.current = false;
+                setIsLoading(false);
+              }
+            } catch (err) {
+              console.error('Failed to reset state after storage clear:', err);
               if (clearSeq === snapshotTransitionSeqRef.current) {
                 setIsLoading(false);
               }
@@ -6192,7 +6388,7 @@ export const App: React.FC = () => {
             cfg?: GeneratorConfig,
             prebakedSnapshotId?: string
           ) => {
-            markTutorialActionTried('gallery_daily');
+            markTutorialActionTried('create_gallery');
             void loadSampleFromPrebakedOrGenerate(
               sample,
               undefined,
@@ -6219,9 +6415,17 @@ export const App: React.FC = () => {
           lastCloudSyncError={lastCloudSyncError}
           onZoomIntoDetailTile={handleZoomIntoDetailTile}
           onStartTutorial={handleStartTutorial}
+          onStartTour={handleStartSettingsTour}
+          hasDockedTutorial={showTutorial && showSettings && !showPaletteOptions}
           onTabOpened={(tabId) => {
-            if (tabId === 3) {
-              markTutorialActionTried('gallery_daily');
+            activeSettingsTabRef.current = tabId;
+            setActiveSettingsTab(tabId);
+            if (tabId === 1) {
+              markTutorialActionTried('settings');
+            } else if (tabId === 2) {
+              markTutorialActionTried('hints');
+            } else if (tabId === 3) {
+              markTutorialActionTried('create_gallery');
               triggerFeatureOffer('create_gallery');
             } else if (tabId === 4) {
               markTutorialActionTried('saves_export');
@@ -6229,7 +6433,7 @@ export const App: React.FC = () => {
             }
           }}
           onExplorePresetGallery={() => {
-            markTutorialActionTried('puzzle_presets');
+            markTutorialActionTried('create_gallery');
           }}
         />
       </Suspense>
@@ -6237,6 +6441,8 @@ export const App: React.FC = () => {
       <OnboardingTutorial
         isOpen={showTutorial}
         isModalOpen={showSettings || showPaletteOptions}
+        isSettingsOpen={showSettings && !showPaletteOptions}
+        activeSettingsTab={activeSettingsTab}
         isLoading={isLoading}
         stepIndex={tutorialStep}
         triedActions={tutorialTried}
@@ -6246,11 +6452,22 @@ export const App: React.FC = () => {
           handleUpdateSettings((prev) => {
             const nextLargeText = !prev.largeText;
             return nextLargeText
-              ? { ...prev, largeText: true, fatFingerAssist: true }
-              : { ...prev, largeText: false };
+              ? {
+                  ...prev,
+                  largeText: true,
+                  textScale: Math.max(prev.textScale || 1.0, 1.25),
+                  uiScale: Math.max(prev.uiScale || 1.0, 1.25),
+                  fatFingerAssist: true,
+                }
+              : {
+                  ...prev,
+                  largeText: false,
+                  textScale: 1.0,
+                  uiScale: 1.0,
+                };
           });
-          if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings_a11y') {
-            markTutorialActionTried('settings_a11y');
+          if (TUTORIAL_STEPS[tutorialStepRef.current]?.key === 'settings') {
+            markTutorialActionTried('settings');
           }
         }}
         onStepChange={handleTutorialStepChange}
@@ -6261,6 +6478,7 @@ export const App: React.FC = () => {
           triggerHint();
           markTutorialActionTried('hint');
         }}
+        onOpenSettingsTab={handleOpenTutorialSettingsTab}
         onComplete={completeTutorial}
         onSkip={completeTutorial}
       />
@@ -6272,31 +6490,45 @@ export const App: React.FC = () => {
         onDismiss={advanceFeatureOffer}
       />
 
-      <TargetSpotlightOverlay
-        isActive={
-          !isLoading &&
-          !showSettings &&
+      {(() => {
+        const activeTutorialStep =
+          TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))];
+        const isModalTutorialStep =
+          showTutorial &&
+          showSettings &&
           !showPaletteOptions &&
-          (!isPreviewMode ||
-            (showTutorial &&
-              TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ===
-                'peek_fullscreen')) &&
-          (showTutorial || Boolean(activeFeatureOffer && !isFeatureOfferSuppressed))
-        }
-        variant={showTutorial ? 'tutorial' : 'offer'}
-        targetKey={
-          showTutorial
-            ? TUTORIAL_STEPS[Math.max(0, Math.min(TUTORIAL_STEPS.length - 1, tutorialStep))]?.key ?? null
-            : activeFeatureOffer?.id ?? null
-        }
-        cardSelector={
-          showTutorial
-            ? '[data-testid="onboarding-tutorial"]'
-            : '[data-testid="feature-offer-banner"]'
-        }
-        reducedMotion={Boolean(settings.reducedMotion)}
-        largeText={Boolean(settings.largeText)}
-      />
+          activeTutorialStep?.modalTab !== undefined;
+        return (
+          <TargetSpotlightOverlay
+            isActive={
+              !isLoading &&
+              !showPaletteOptions &&
+              (!showSettings || isModalTutorialStep) &&
+              (!isPreviewMode ||
+                (showTutorial && activeTutorialStep?.key === 'peek_fullscreen')) &&
+              (showTutorial || Boolean(activeFeatureOffer && !isFeatureOfferSuppressed))
+            }
+            variant={showTutorial ? 'tutorial' : 'offer'}
+            targetKey={
+              showTutorial
+                ? activeTutorialStep?.key ?? null
+                : activeFeatureOffer?.id ?? null
+            }
+            cardSelector={
+              showTutorial
+                ? '[data-testid="onboarding-tutorial"]'
+                : '[data-testid="feature-offer-banner"]'
+            }
+            reducedMotion={Boolean(settings.reducedMotion)}
+            largeText={Boolean(settings.largeText)}
+            textScale={settings.textScale}
+            uiScale={settings.uiScale}
+            isModalSpotlight={isModalTutorialStep}
+            activeSettingsTab={activeSettingsTab}
+            zIndexClass={isModalTutorialStep ? 'z-[58]' : 'z-[38]'}
+          />
+        );
+      })()}
 
       {storageQuotaWarning && (
         <div
@@ -6305,7 +6537,7 @@ export const App: React.FC = () => {
           className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-md w-[calc(100%-2rem)] bg-amber-950/95 border border-amber-500/70 text-amber-100 px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 text-sm backdrop-blur-md"
         >
           <div className="flex-1">
-            <p className="font-semibold text-amber-300">Browser Storage Full</p>
+            <p className="font-semibold text-amber-300">Storage Full</p>
             <p className="text-xs text-amber-100/90 mt-0.5">{storageQuotaWarning.message}</p>
           </div>
           <button

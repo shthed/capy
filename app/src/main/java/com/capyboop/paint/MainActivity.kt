@@ -1,7 +1,9 @@
 package com.capyboop.paint
 
 import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -60,6 +62,47 @@ class MainActivity : ComponentActivity() {
         backPressedCallback.isEnabled = bridge.isModalOpen || (webView?.canGoBack() == true)
     }
 
+    /**
+     * Launches external HTTP(S) URLs (such as the Privacy Policy) in an installed external browser
+     * package excluding this app's own packageName, preventing autoVerify App Links from looping
+     * back into MainActivity.onNewIntent().
+     */
+    private fun openExternalBrowserUrl(uri: Uri) {
+        val viewIntent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+        val probeIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com"))
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+        val resolvedBrowsers = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.queryIntentActivities(
+                probeIntent,
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong()),
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.queryIntentActivities(probeIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+        val externalBrowserPkg = resolvedBrowsers
+            .mapNotNull { it.activityInfo?.packageName?.takeIf(String::isNotBlank) }
+            .firstOrNull { it != packageName && it != "android" }
+        if (externalBrowserPkg != null) {
+            viewIntent.setPackage(externalBrowserPkg)
+        }
+        try {
+            startActivity(viewIntent)
+        } catch (e: ActivityNotFoundException) {
+            if (externalBrowserPkg != null) {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE))
+                } catch (fallbackError: Exception) {
+                    Log.w(TAG, "No handler available for external URL: $uri", fallbackError)
+                }
+            } else {
+                Log.w(TAG, "No handler available for external URL: $uri", e)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to open external URL: $uri", e)
+        }
+    }
+
     private val pickMediaLauncher = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri: Uri? ->
@@ -103,7 +146,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.BLACK),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
 
@@ -229,7 +272,17 @@ class MainActivity : ComponentActivity() {
                     if (scheme != "https" || reqUrl.host?.lowercase() != CapyAndroidBridge.APP_ASSETS_HOST) {
                         return null
                     }
-                    return assetLoader.shouldInterceptRequest(reqUrl)
+                    val assetResponse = assetLoader.shouldInterceptRequest(reqUrl) ?: return null
+                    val mergedHeaders = LinkedHashMap<String, String>()
+                    assetResponse.responseHeaders?.let { mergedHeaders.putAll(it) }
+                    mergedHeaders.putAll(
+                        CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+                            mimeType = assetResponse.mimeType,
+                            path = reqUrl.path,
+                        ),
+                    )
+                    assetResponse.responseHeaders = mergedHeaders
+                    return assetResponse
                 }
 
                 override fun shouldOverrideUrlLoading(
@@ -241,11 +294,7 @@ class MainActivity : ComponentActivity() {
                         CapyAndroidBridge.WebViewNavigationAction.ALLOW_INTERNAL -> false
                         CapyAndroidBridge.WebViewNavigationAction.OPEN_EXTERNAL -> {
                             if (request.isForMainFrame) {
-                                try {
-                                    startActivity(Intent(Intent.ACTION_VIEW, request.url))
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "No handler available for external URL: $targetUrl", e)
-                                }
+                                request.url?.let { openExternalBrowserUrl(it) }
                             }
                             true
                         }
@@ -572,11 +621,12 @@ class MainActivity : ComponentActivity() {
 
     private fun deliverPendingSharedImageIfNeeded() {
         val pendingJson = bridge.consumePendingSharedImage() ?: return
+        val escapedJson = CapyAndroidBridge.escapeJsString(pendingJson)
         evaluateOnTrustedPage(
             """
             (function() {
                 try {
-                    var payload = $pendingJson;
+                    var payload = JSON.parse("$escapedJson");
                     if (window.__capyReceiveSharedImage && payload && payload.dataUrl) {
                         window.__capyReceiveSharedImage(payload.title || "Shared Photo", payload.dataUrl);
                     }
@@ -685,12 +735,13 @@ class MainActivity : ComponentActivity() {
 
     private fun deliverCachedPlayGamesProfileIfNeeded() {
         val profileJson = bridge.loadCachedPlayGamesProfileJson() ?: return
+        val escapedJson = CapyAndroidBridge.escapeJsString(profileJson)
         evaluateOnTrustedPage(
             """
             (function() {
                 try {
                     if (window.__capyReceivePlayGamesProfile) {
-                        window.__capyReceivePlayGamesProfile($profileJson);
+                        window.__capyReceivePlayGamesProfile(JSON.parse("$escapedJson"));
                     }
                 } catch (e) {}
             })();

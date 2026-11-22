@@ -221,7 +221,7 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
     >
       <div
         data-testid="replay-controls-window"
-        className="capy-replay-window pointer-events-auto w-full max-w-2xl flex items-center gap-1 sm:gap-2.5 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-2 sm:px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        className="capy-replay-window pointer-events-auto w-full max-w-2xl flex items-center gap-1 sm:gap-2 bg-slate-900/94 border border-amber-400/40 rounded-full shadow-2xl backdrop-blur-xl px-1.5 sm:px-3 py-1.5 text-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-200"
       >
         {/* Play / Pause / Replay */}
         <button
@@ -230,14 +230,14 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
           aria-label={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
           title={isFinished ? 'Replay Again' : isPlaying ? 'Pause Replay' : 'Resume Replay'}
           data-testid="replay-play-pause-btn"
-          className="capy-replay-play-btn inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer flex-shrink-0"
+          className="capy-replay-play-btn inline-flex items-center justify-center min-w-[38px] min-h-[38px] sm:w-10 sm:h-10 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 shadow transition-all active:scale-95 cursor-pointer flex-shrink-0"
         >
           {isFinished ? (
-            <RotateCcw size={13} />
+            <RotateCcw size={15} />
           ) : isPlaying ? (
-            <Pause size={13} />
+            <Pause size={15} />
           ) : (
-            <Play size={13} className="ml-0.5" />
+            <Play size={15} className="ml-0.5" />
           )}
         </button>
 
@@ -248,12 +248,12 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
         <button
           type="button"
           onClick={handleCycleSpeed}
-          aria-label="Change Replay Speed"
+          aria-label={`Change Replay Speed (currently ${replaySpeed}x)`}
           title="Change Replay Speed"
           data-testid="replay-speed-btn"
-          className="capy-replay-speed-btn inline-flex items-center gap-0.5 px-1.5 sm:px-2 py-1 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
+          className="capy-replay-speed-btn inline-flex items-center justify-center gap-0.5 min-h-[38px] sm:min-h-[40px] px-2 sm:px-2.5 rounded-full text-[11px] font-extrabold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition-colors tabular-nums cursor-pointer flex-shrink-0"
         >
-          <FastForward size={11} />
+          <FastForward size={12} />
           <span>{replaySpeed}x</span>
         </button>
 
@@ -268,22 +268,22 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
             aria-pressed={isFollowing}
             aria-label={
               isFollowing
-                ? 'Follow Painting Active (Smooth Camera Pan)'
-                : 'Follow Painting Process (Smooth Camera Pan)'
+                ? 'Follow Painting Active'
+                : 'Follow Painting'
             }
             title={
               isFollowing
-                ? 'Follow Painting Active (Smooth Camera Pan)'
-                : 'Follow Painting Process (Smooth Camera Pan)'
+                ? 'Follow Painting Active'
+                : 'Follow Painting'
             }
             data-testid="replay-follow-btn"
-            className={`capy-replay-icon-btn p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
+            className={`capy-replay-icon-btn inline-flex items-center justify-center min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
               isFollowing
                 ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
             }`}
           >
-            <Crosshair size={12} />
+            <Crosshair size={15} />
           </button>
         )}
 
@@ -298,38 +298,41 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
             aria-pressed={isLooping}
             aria-label={
               isLooping
-                ? 'Auto-Loop Replay Enabled (Click to Disable)'
-                : 'Auto-Loop Replay When Finished'
+                ? 'Auto-Loop Replay On'
+                : 'Auto-Loop Replay'
             }
             title={
               isLooping
-                ? 'Auto-Loop Replay Enabled (Click to Disable)'
-                : 'Auto-Loop Replay When Finished'
+                ? 'Auto-Loop Replay On'
+                : 'Auto-Loop Replay'
             }
             data-testid="replay-loop-btn"
-            className={`capy-replay-icon-btn p-1.5 rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
+            className={`capy-replay-icon-btn inline-flex items-center justify-center min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] rounded-full border transition-colors cursor-pointer flex-shrink-0 ${
               isLooping
                 ? 'bg-amber-400/20 text-amber-300 border-amber-400/60'
                 : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
             }`}
           >
-            <Repeat size={12} />
+            <Repeat size={15} />
           </button>
         )}
 
-        {/* Skip to End */}
-        {!isFinished && (
-          <button
-            type="button"
-            onClick={onSkipToEnd}
-            aria-label="Skip to Completed Artwork"
-            title="Skip to Completed Artwork"
-            data-testid="replay-skip-btn"
-            className="capy-replay-icon-btn p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer flex-shrink-0"
-          >
-            <SkipForward size={12} />
-          </button>
-        )}
+        {/* Skip to End (kept mounted when finished so replay controls never shift horizontally) */}
+        <button
+          type="button"
+          disabled={isFinished}
+          onClick={onSkipToEnd}
+          aria-label="Skip to Completed Artwork"
+          title="Skip to Completed Artwork"
+          data-testid="replay-skip-btn"
+          className={`capy-replay-icon-btn inline-flex items-center justify-center min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] rounded-full border transition-colors flex-shrink-0 ${
+            isFinished
+              ? 'bg-slate-800/50 text-slate-600 border-slate-800 opacity-45 cursor-not-allowed'
+              : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 cursor-pointer'
+          }`}
+        >
+          <SkipForward size={15} />
+        </button>
 
         {/* Exit Replay */}
         <button
@@ -338,9 +341,9 @@ export const ReplayControls: React.FC<ReplayControlsProps> = React.memo(({
           aria-label="Exit Replay"
           title="Exit Replay"
           data-testid="replay-exit-btn"
-          className="capy-replay-icon-btn w-6 h-6 sm:w-7 sm:h-7 inline-flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
+          className="capy-replay-icon-btn inline-flex items-center justify-center min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer flex-shrink-0"
         >
-          <X size={14} />
+          <X size={16} />
         </button>
       </div>
     </div>

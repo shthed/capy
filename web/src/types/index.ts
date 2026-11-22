@@ -111,7 +111,6 @@ export interface UserSettings {
   canvasBgColor: CanvasBgColor;
   canvasBgArgb: number;
   saveSortOrder: SaveSortOrder;
-  showSavePreviews: boolean;
   highlightStyle: RegionHighlightStyle;
   hintFillStyle: HintFillStyle;
   hintColorArgb: number;
@@ -144,6 +143,8 @@ export interface UserSettings {
   soundVolume: number;
   reducedMotion: boolean;
   largeText: boolean;
+  textScale: number;
+  uiScale: number;
   detailedLoadingProgress: boolean;
   generatorConfig: GeneratorConfig;
 }

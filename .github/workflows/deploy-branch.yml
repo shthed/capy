@@ -475,7 +475,7 @@ jobs:
   e2e_release_gate:
     name: Playwright E2E
     needs: [prepare, build]
-    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')) || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'))
+    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')) || (github.event_name == 'workflow_dispatch' && needs.prepare.outputs.target_dir == '.') || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -527,12 +527,19 @@ jobs:
 
       - name: Run Unified Engine, Codec & Headless Chromium E2E Suite
         working-directory: web
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_APPLE_CLIENT_ID: ${{ vars.VITE_APPLE_CLIENT_ID }}
+          VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
+          VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
+          CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
         run: npm test
 
   deploy:
     name: Deploy Pages
-    needs: [prepare, build, android_build]
-    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && needs.android_build.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
+    needs: [prepare, build, android_build, e2e_release_gate]
+    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && needs.android_build.result == 'success' && (needs.e2e_release_gate.result == 'success' || (needs.prepare.outputs.target_dir != '.' && needs.e2e_release_gate.result == 'skipped')) && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:

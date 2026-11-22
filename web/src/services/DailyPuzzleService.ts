@@ -26,7 +26,7 @@ export const DAILY_PRESET_VARIATIONS: readonly DailyPresetVariation[] = [
   {
     id: 'balanced-classic',
     label: 'Max Detail (Auto)',
-    description: 'Max Detail (64 colours • 2000 pieces)',
+    description: 'Max Detail (64 colors • 2000 pieces)',
     config: {
       ...MAX_GENERATOR_CONFIG,
       algorithm: 'AUTO',
@@ -35,7 +35,7 @@ export const DAILY_PRESET_VARIATIONS: readonly DailyPresetVariation[] = [
   {
     id: 'cozy-relax',
     label: 'Max Detail (Auto)',
-    description: 'Max Detail (64 colours • 2000 pieces)',
+    description: 'Max Detail (64 colors • 2000 pieces)',
     config: {
       ...MAX_GENERATOR_CONFIG,
       algorithm: 'AUTO',
@@ -44,7 +44,7 @@ export const DAILY_PRESET_VARIATIONS: readonly DailyPresetVariation[] = [
   {
     id: 'crisp-posterized',
     label: 'Crisp Posterized (Max Detail)',
-    description: 'Posterized • Max Detail (64 colours • 2000 pieces)',
+    description: 'Posterized • Max Detail (64 colors • 2000 pieces)',
     config: {
       ...MAX_GENERATOR_CONFIG,
       algorithm: 'POSTERIZED',
@@ -53,7 +53,7 @@ export const DAILY_PRESET_VARIATIONS: readonly DailyPresetVariation[] = [
   {
     id: 'stained-mosaic',
     label: 'Stained Mosaic (Max Detail)',
-    description: 'Mosaic Cells • Max Detail (64 colours • 2000 pieces)',
+    description: 'Mosaic Cells • Max Detail (64 colors • 2000 pieces)',
     config: {
       ...MAX_GENERATOR_CONFIG,
       algorithm: 'MOSAIC_CEL',
@@ -62,7 +62,7 @@ export const DAILY_PRESET_VARIATIONS: readonly DailyPresetVariation[] = [
   {
     id: 'detailed-challenge',
     label: 'Max Detail (Auto)',
-    description: 'Max Detail (64 colours • 2000 pieces)',
+    description: 'Max Detail (64 colors • 2000 pieces)',
     config: {
       ...MAX_GENERATOR_CONFIG,
       algorithm: 'AUTO',
@@ -136,9 +136,9 @@ export function getDailyFeaturedPuzzle(utcDateStr?: string): DailyFeaturedPuzzle
     snapshotId: getDailyPrebakedSnapshotId(sample.id, preset.id),
     sample,
     presetId: preset.id,
-    presetLabel: isFreeColor ? 'Free Colour Line Art • Max Detail' : preset.label,
+    presetLabel: isFreeColor ? 'Free Color Line Art • Max Detail' : preset.label,
     presetDescription: isFreeColor
-      ? 'Free Colour • Max Detail (20 colours • up to 2000 pieces)'
+      ? 'Free Color • Max Detail (20 colors • up to 2000 pieces)'
       : preset.description,
     config,
   };

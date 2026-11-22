@@ -17,13 +17,19 @@ const SCOPE_URL =
 const SCOPE_PATH = normalizeScopePath(new URL(SCOPE_URL).pathname);
 const CACHE_NAME = `capy-cache-v${EFFECTIVE_VERSION}:${SCOPE_PATH}`;
 
+function isAlphaPreviewScopePath(scopePath) {
+  return /\/(?:alpha|PR|pull)\/[^/]+\//i.test(scopePath);
+}
+
 function shouldEvictCacheKey(key) {
   if (key === CACHE_NAME) return false;
   if (key === 'capy-cache-v2') return true;
   if (!key.startsWith('capy-cache-v')) return false;
   const colonIdx = key.indexOf(':');
   if (colonIdx === -1) return false;
-  return key.slice(colonIdx + 1) === SCOPE_PATH;
+  const keyScope = normalizeScopePath(key.slice(colonIdx + 1));
+  if (keyScope === SCOPE_PATH) return true;
+  return isAlphaPreviewScopePath(keyScope);
 }
 
 const PRECACHE_RELATIVE_URLS = [
@@ -33,14 +39,11 @@ const PRECACHE_RELATIVE_URLS = [
   './privacy-policy.html',
   './manifest.webmanifest',
   './assets/sample_saves.capy',
-  './assets/daily_saves.capy',
   './assets/capybara.webp',
   './assets/capy_forest.webp',
   './assets/mushrooms.webp',
   './assets/snail_guitar.webp',
   './assets/icon-192.png',
-  './assets/icon-512.png',
-  './assets/icon-maskable-512.png',
   './assets/apple-touch-icon.png',
 ];
 
@@ -118,7 +121,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activation: purge older cache generations for this scope only (preserving sibling channels)
+// Activation: purge older cache generations for this scope and stale alpha/PR/pull preview caches (preserving sibling Production/Beta channels)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {

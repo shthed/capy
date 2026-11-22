@@ -1,7 +1,13 @@
 import { NativeBridge } from './NativeBridge';
-import { resolveScopedBackupKey, resolveScopedStorageKey } from './StorageNamespace';
+import { reportSwallowed } from './telemetry';
+import { SafeLocalStore } from './storage/SafeLocalStore';
+import {
+  FEATURE_OFFERS_KEY,
+  resolveScopedBackupKey,
+  resolveScopedStorageKey,
+} from './storage/StorageKeys';
 
-export const FEATURE_OFFERS_KEY = 'capy_feature_offers_v1';
+export { FEATURE_OFFERS_KEY };
 
 export type FeatureOfferId =
   | 'paint_mode'
@@ -11,7 +17,8 @@ export type FeatureOfferId =
   | 'create_gallery'
   | 'photo_upload'
   | 'infinite_zoom'
-  | 'saves_export';
+  | 'saves_export'
+  | 'settings_hints_tip';
 
 export interface FeatureOfferDef {
   id: FeatureOfferId;
@@ -61,21 +68,28 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     title: 'Photo Styles',
     message:
       'Adjust puzzle style and detail level anytime under Create in the menu.',
-    tutorialStepIndex: 10,
+    tutorialStepIndex: 8,
   },
   infinite_zoom: {
     id: 'infinite_zoom',
     title: 'Detail View Created',
     message:
       'Tap the Parent button in the top-left corner anytime to go back to your full picture.',
-    tutorialStepIndex: 11,
+    tutorialStepIndex: 8,
   },
   saves_export: {
     id: 'saves_export',
     title: 'Saved Pictures',
     message:
       'Pin favorites, rename pictures, save backups, or print coloring pages here.',
-    tutorialStepIndex: 12,
+    tutorialStepIndex: 9,
+  },
+  settings_hints_tip: {
+    id: 'settings_hints_tip',
+    title: 'New Settings & Hints',
+    message:
+      'Settings are now grouped into clean sections, with a dedicated Hints tab to customize highlight style, color, and auto-pan.',
+    tutorialStepIndex: 10,
   },
 };
 
@@ -91,7 +105,7 @@ export class FeatureOffersService {
     try {
       const storageKey = resolveScopedStorageKey(FEATURE_OFFERS_KEY);
       const backupKey = resolveScopedBackupKey(FEATURE_OFFERS_KEY);
-      const rawLocal = localStorage.getItem(storageKey);
+      const rawLocal = SafeLocalStore.getItem(storageKey);
       const rawBackup = rawLocal ? null : NativeBridge.loadBackup(backupKey);
       const raw = rawLocal || rawBackup;
       if (!raw) return seen;
@@ -106,14 +120,10 @@ export class FeatureOffersService {
       }
 
       if (!rawLocal && seen.size > 0) {
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(Array.from(seen)));
-        } catch {
-          // Ignored
-        }
+        SafeLocalStore.setItem(storageKey, JSON.stringify(Array.from(seen)));
       }
-    } catch {
-      // Ignored
+    } catch (err) {
+      reportSwallowed('FeatureOffersService.loadSeenOffers', err);
     }
     return seen;
   }
@@ -127,21 +137,13 @@ export class FeatureOffersService {
     seen.add(id);
     const list = Array.from(seen);
     const serialized = JSON.stringify(list);
-    try {
-      localStorage.setItem(resolveScopedStorageKey(FEATURE_OFFERS_KEY), serialized);
-    } catch {
-      // Ignored
-    }
+    SafeLocalStore.setItem(resolveScopedStorageKey(FEATURE_OFFERS_KEY), serialized);
     NativeBridge.saveBackup(resolveScopedBackupKey(FEATURE_OFFERS_KEY), serialized);
     return list;
   }
 
   static resetSeenOffers(): void {
-    try {
-      localStorage.removeItem(resolveScopedStorageKey(FEATURE_OFFERS_KEY));
-    } catch {
-      // Ignored
-    }
+    SafeLocalStore.removeItem(resolveScopedStorageKey(FEATURE_OFFERS_KEY));
     NativeBridge.saveBackup(resolveScopedBackupKey(FEATURE_OFFERS_KEY), '[]');
   }
 }

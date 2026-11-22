@@ -63,10 +63,11 @@ class AndroidTvManifestAndBridgeTest {
 
         val appEl = directChildElements(manifestEl, "application").single()
         assertEquals("@drawable/tv_banner", androidAttr(appEl, "banner"))
+        assertEquals("false", androidAttr(appEl, "usesCleartextTraffic"))
     }
 
     @Test
-    fun `MainActivity exposes LEANBACK_LAUNCHER while preserving LAUNCHER SEND and VIEW filters`() {
+    fun `MainActivity exposes LEANBACK_LAUNCHER while preserving LAUNCHER SEND and split VIEW filters`() {
         val manifestFile = resolveRepoFile("app/src/main/AndroidManifest.xml")
         val docFactory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = true
@@ -111,29 +112,65 @@ class AndroidTvManifestAndBridgeTest {
             }
         )
 
-        val viewFilter = intentFilters.firstOrNull { filter ->
+        val viewFilters = intentFilters.filter { filter ->
             directChildElements(filter, "action").any {
                 androidAttr(it, "name") == "android.intent.action.VIEW"
             }
         }
-        assertNotNull(viewFilter)
-        val viewData = directChildElements(viewFilter!!, "data")
+        val autoVerifyFilter = viewFilters.firstOrNull { filter ->
+            androidAttr(filter, "autoVerify") == "\${appLinksAutoVerify}"
+        }
+        assertNotNull("Expected dedicated autoVerify App Links intent-filter", autoVerifyFilter)
+        val autoVerifyData = directChildElements(autoVerifyFilter!!, "data")
         assertTrue(
-            viewData.any {
+            autoVerifyData.any {
                 androidAttr(it, "scheme") == "https" && androidAttr(it, "host") == "capypaint.com"
             }
         )
         assertTrue(
-            viewData.any {
+            autoVerifyData.any {
+                androidAttr(it, "scheme") == "https" && androidAttr(it, "host") == "paint.capyboop.com"
+            }
+        )
+        assertTrue(
+            "autoVerify filter must not include redirecting www host",
+            autoVerifyData.none { androidAttr(it, "host") == "www.capypaint.com" }
+        )
+        assertTrue(
+            "autoVerify filter must not include GitHub Pages host",
+            autoVerifyData.none { androidAttr(it, "host").endsWith(".github.io") }
+        )
+
+        val fallbackHttpsViewData = viewFilters
+            .filter { androidAttr(it, "autoVerify").isEmpty() }
+            .flatMap { directChildElements(it, "data") }
+        assertTrue(
+            fallbackHttpsViewData.any {
                 androidAttr(it, "scheme") == "https" && androidAttr(it, "host") == "www.capypaint.com"
             }
         )
         assertTrue(
-            viewData.any {
+            fallbackHttpsViewData.any {
                 androidAttr(it, "scheme") == "https" &&
                     androidAttr(it, "host").endsWith(".github.io") &&
                     androidAttr(it, "pathPrefix") == "/capy"
             }
+        )
+
+        // Ensure game_services_project_id is declared only via Gradle resValue (never duplicated in strings.xml)
+        val stringsXml = resolveRepoFile("app/src/main/res/values/strings.xml").readText()
+        assertTrue(
+            "strings.xml must not statically declare game_services_project_id (would clash with Gradle resValue)",
+            !stringsXml.contains("game_services_project_id")
+        )
+        val buildGradle = resolveRepoFile("app/build.gradle.kts").readText()
+        assertTrue(
+            "app/build.gradle.kts must unconditionally emit resValue for game_services_project_id",
+            buildGradle.contains("""resValue("string", "game_services_project_id"""")
+        )
+        assertTrue(
+            "app/build.gradle.kts must enable buildFeatures.resValues = true for AGP 9+",
+            Regex("""resValues\s*=\s*true""").containsMatchIn(buildGradle)
         )
     }
 

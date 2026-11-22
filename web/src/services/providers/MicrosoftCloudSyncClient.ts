@@ -1,4 +1,9 @@
-import { resolveScopedStorageKey } from '../StorageNamespace';
+import { SafeLocalStore } from '../storage/SafeLocalStore';
+import {
+  MICROSOFT_CLIENT_ID_STORAGE_KEY,
+  MICROSOFT_TOKEN_STORAGE_KEY,
+  resolveScopedStorageKey,
+} from '../storage/StorageKeys';
 import { NativeBridge } from '../NativeBridge';
 import { isDebugEnvironmentEnabled } from '../../utils/debugEnvironment';
 import {
@@ -12,8 +17,7 @@ import {
   getWebOAuthRedirectUri,
 } from './OAuthPkceHelper';
 
-export const MICROSOFT_CLIENT_ID_STORAGE_KEY = 'capy_microsoft_oauth_client_id_v1';
-export const MICROSOFT_TOKEN_STORAGE_KEY = 'capy_microsoft_oauth_token_v1';
+export { MICROSOFT_CLIENT_ID_STORAGE_KEY, MICROSOFT_TOKEN_STORAGE_KEY };
 export const MICROSOFT_OAUTH_SCOPES =
   'openid profile email User.Read Files.ReadWrite.AppFolder';
 export const MICROSOFT_AUTHORIZE_ENDPOINT =
@@ -46,16 +50,8 @@ export function getAllowedMockMicrosoftOAuthToken(): string {
 }
 
 export function getConfiguredMicrosoftClientId(): string {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const stored = localStorage
-        .getItem(resolveScopedStorageKey(MICROSOFT_CLIENT_ID_STORAGE_KEY))
-        ?.trim();
-      if (stored) return stored;
-    }
-  } catch {
-    // Ignore storage read errors
-  }
+  const stored = SafeLocalStore.getScopedItem(MICROSOFT_CLIENT_ID_STORAGE_KEY)?.trim();
+  if (stored) return stored;
   const envClientId = (
     import.meta as unknown as { env?: Record<string, string | undefined> }
   ).env?.VITE_MICROSOFT_CLIENT_ID?.trim();
@@ -63,17 +59,11 @@ export function getConfiguredMicrosoftClientId(): string {
 }
 
 export function setConfiguredMicrosoftClientId(clientId: string): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    const key = resolveScopedStorageKey(MICROSOFT_CLIENT_ID_STORAGE_KEY);
-    const trimmed = clientId.trim();
-    if (trimmed) {
-      localStorage.setItem(key, trimmed);
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // Ignore storage write errors
+  const trimmed = clientId.trim();
+  if (trimmed) {
+    SafeLocalStore.setScopedItem(MICROSOFT_CLIENT_ID_STORAGE_KEY, trimmed);
+  } else {
+    SafeLocalStore.removeScopedItem(MICROSOFT_CLIENT_ID_STORAGE_KEY);
   }
 }
 

@@ -1,4 +1,18 @@
-### 3.0.8 - 2026-11-20 (Production, Beta)
+### 3.1.0 - 2026-11-22 (Production, Beta)
+
+- [#632](../../pull/632) Add a Browser Storage analyzer and targeted cleanup tool in Saves, automatically prune stale preview caches and slim down initial offline precaching, and compress oversized custom photo uploads to minimize browser storage usage
+- [#631](../../pull/631) Harden Content-Security-Policy and XSS defenses across Cloudflare `_headers`, Vite build-time `<meta>` CSP, standalone HTML pages, Worker API responses, OAuth/Feedback/Avatar URL validation, and Android WebView asset headers and `JSON.parse` bridge delivery
+- [#628](../../pull/628) Keep the interactive tutorial docked above Settings with live tab and control guidance, stabilize the Next button position across early tips, regroup Accessibility first with UI and Hints sections, and add independent Text Size and UI Size sliders
+
+### 3.0.9 - 2026-11-21
+
+- [#627](../../pull/627) Decompose the browser storage layer into focused modules, fail closed on IndexedDB quota and reclaimed-handle errors, lift the multi-puzzle `.capy` archive limit to 256 MiB, enforce legacy puzzle pixel bounds, centralize `localStorage` access, and clear Android stats backups on reset
+- [#622](../../pull/622) Pass OAuth build variables into `Playwright E2E`, gate `main` Production Pages deploys and `beta -> main` auto-merges on `Playwright E2E` and `Android APK`, guard stacked-PR merge fallbacks with `headChecksGreen()`, and retire the completed one-time issue migration step
+- [#621](../../pull/621) Polish Play Store UI with grouped responsive Settings, fixed defaults, 12-step modal-aware Settings and Hints tutorial, larger mobile touch targets with full ARIA accessibility, US English copy, and Android edge-to-edge and App Links updates
+- [#620](../../pull/620) Keep the fast-forward skip button visible (disabled at replay end) in ReplayControls so the replay scrubber and action buttons never shift horizontally when playback finishes
+- [#619](../../pull/619) Eliminate the Android Play Games `game_services_project_id` AAPT2 duplicate-resource conflict, disable cleartext HTTP on Android 7--8, split App Links `autoVerify` onto `capypaint.com` and `paint.capyboop.com`, and redirect `/capy.apk` to the public `capyboop/paint` release
+
+### 3.0.8 - 2026-11-20
 
 - [#612](../../pull/612) Reorganize repository documentation and harden CI workflow checks
 - [#610](../../pull/610) Standardize changelog formatting with sequential daily versions (`3.0.2`--`3.0.8`), leading PR links, and concise 1--2 sentence bullets, plus tooling, GitHub Releases gating, `SECURITY.md`, and project documentation sync

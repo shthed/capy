@@ -123,7 +123,11 @@ class CapyAndroidBridgeTest {
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/#s=abc123_XYZ-9"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/?room=ABC123#s=abc123"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://paint.capyboop.com/#s=abc123_XYZ-9"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://paint.capyboop.com/?room=ABC123#s=abc123"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://paint.capyboop.com"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://www.capypaint.com/#s=token"))
+        assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://capyboop.github.io/paint/#s=token"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/#s=abc123_XYZ-9"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy/?room=ABC123#s=abc123"))
         assertTrue(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/capy"))
@@ -135,10 +139,18 @@ class CapyAndroidBridgeTest {
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink(""))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("javascript:alert(1)"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://capypaint.com/#s=insecure"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://paint.capyboop.com/#s=insecure"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("http://shthed.github.io/capy/#s=insecure"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://evil.example.com/capy/#s=abc"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com.evil.example/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://paint.capyboop.com.evil.example/#s=abc"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://evil@paint.capyboop.com/#s=abc"))
         assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/other-repo/#s=abc"))
+        /* capy-dev-only:start */
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://shthed.github.io/paint/#s=abc"))
+        /* capy-dev-only:end */
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://capypaint.com/privacy-policy.html"))
+        assertFalse(CapyAndroidBridge.isAllowedCapyDeepLink("https://paint.capyboop.com/privacy-policy.html"))
     }
 
     @Test
@@ -700,5 +712,40 @@ class CapyAndroidBridgeTest {
             )
         )
     }
+
+    @Test
+    fun `buildWebViewAssetResponseHeaders attaches strict CSP on HTML assets and nosniff on all assets`() {
+        val indexHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+            mimeType = "text/html",
+            path = "/assets/www/index.html",
+        )
+        assertEquals("nosniff", indexHeaders["X-Content-Type-Options"])
+        assertEquals("strict-origin-when-cross-origin", indexHeaders["Referrer-Policy"])
+        assertEquals("SAMEORIGIN", indexHeaders["X-Frame-Options"])
+        val indexCsp = indexHeaders["Content-Security-Policy"] ?: ""
+        assertTrue(indexCsp.contains("script-src 'self'"))
+        assertTrue(indexCsp.contains("https://accounts.google.com/gsi/client"))
+        assertTrue(indexCsp.contains("script-src-attr 'none'"))
+        assertTrue(indexCsp.contains("https://capypaint.com"))
+        assertTrue(indexCsp.contains("object-src 'none'"))
+        assertFalse(indexCsp.contains("script-src 'unsafe-inline'"))
+        assertFalse(indexCsp.contains("'unsafe-eval'"))
+
+        val privacyHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+            mimeType = "text/html",
+            path = "/assets/www/privacy-policy.html",
+        )
+        assertEquals(CapyAndroidBridge.WEBVIEW_PRIVACY_POLICY_CSP, privacyHeaders["Content-Security-Policy"])
+        assertTrue(privacyHeaders["Content-Security-Policy"]?.contains("script-src 'none'") == true)
+
+        val jsHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+            mimeType = "application/javascript",
+            path = "/assets/www/assets/index.js",
+        )
+        assertEquals("nosniff", jsHeaders["X-Content-Type-Options"])
+        assertEquals("strict-origin-when-cross-origin", jsHeaders["Referrer-Policy"])
+        assertFalse(jsHeaders.containsKey("Content-Security-Policy"))
+    }
 }
+
 

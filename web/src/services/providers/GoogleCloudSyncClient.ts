@@ -1,14 +1,23 @@
-import { resolveScopedStorageKey } from '../StorageNamespace';
+import { SafeLocalStore } from '../storage/SafeLocalStore';
+import {
+  EXPLICIT_SIGNOUT_STORAGE_KEY,
+  GOOGLE_CLIENT_ID_STORAGE_KEY,
+  GOOGLE_TOKEN_STORAGE_KEY,
+  resolveScopedStorageKey,
+} from '../storage/StorageKeys';
+import { reportSwallowed } from '../telemetry';
 import {
   DEV_DEBUG_STORAGE_KEY,
   isDebugEnvironmentEnabled as isGoogleMockTokenEnvironmentAllowed,
 } from '../../utils/debugEnvironment';
 
-export { DEV_DEBUG_STORAGE_KEY, isGoogleMockTokenEnvironmentAllowed };
-
-export const GOOGLE_CLIENT_ID_STORAGE_KEY = 'capy_google_oauth_client_id_v1';
-export const GOOGLE_TOKEN_STORAGE_KEY = 'capy_google_oauth_token_v1';
-export const EXPLICIT_SIGNOUT_STORAGE_KEY = 'capy_cloud_explicit_signout_v1';
+export {
+  DEV_DEBUG_STORAGE_KEY,
+  EXPLICIT_SIGNOUT_STORAGE_KEY,
+  GOOGLE_CLIENT_ID_STORAGE_KEY,
+  GOOGLE_TOKEN_STORAGE_KEY,
+  isGoogleMockTokenEnvironmentAllowed,
+};
 export const GOOGLE_OAUTH_SCOPES =
   'openid profile email https://www.googleapis.com/auth/drive.appdata';
 
@@ -82,17 +91,34 @@ declare global {
   }
 }
 
-function sanitizeHttpsUrl(raw?: string): string | undefined {
+export function sanitizeGoogleAvatarUrl(raw?: string): string | undefined {
   if (!raw || typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
-  if (!/^https:\/\/[^\s]+$/i.test(trimmed)) return undefined;
+  if (!trimmed || /[\s\u0000-\u001F\u007F]/.test(trimmed)) return undefined;
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+    const host = parsed.hostname.toLowerCase();
+    const isGoogleAvatarHost =
+      host === 'googleusercontent.com' ||
+      (host.endsWith('.googleusercontent.com') &&
+        host.length > '.googleusercontent.com'.length &&
+        !host.startsWith('.'));
+    if (
+      parsed.protocol.toLowerCase() !== 'https:' ||
+      parsed.port !== '' ||
+      parsed.username !== '' ||
+      parsed.password !== '' ||
+      !isGoogleAvatarHost
+    ) {
+      return undefined;
+    }
+    return parsed.toString();
   } catch {
     return undefined;
   }
 }
+
+const sanitizeHttpsUrl = sanitizeGoogleAvatarUrl;
 
 export function getAllowedMockGoogleOAuthToken(): string {
   if (typeof window === 'undefined' || !isGoogleMockTokenEnvironmentAllowed()) {
@@ -104,42 +130,27 @@ export function getAllowedMockGoogleOAuthToken(): string {
 }
 
 export function isExplicitlySignedOut(): boolean {
-  try {
-    if (typeof localStorage === 'undefined') return false;
-    return localStorage.getItem(resolveScopedStorageKey(EXPLICIT_SIGNOUT_STORAGE_KEY)) === '1';
-  } catch {
-    return false;
-  }
+  return SafeLocalStore.getScopedItem(EXPLICIT_SIGNOUT_STORAGE_KEY) === '1';
 }
 
 export function setExplicitlySignedOut(signedOut: boolean): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    const key = resolveScopedStorageKey(EXPLICIT_SIGNOUT_STORAGE_KEY);
-    if (signedOut) {
-      localStorage.setItem(key, '1');
+  if (signedOut) {
+    SafeLocalStore.setScopedItem(EXPLICIT_SIGNOUT_STORAGE_KEY, '1');
+    try {
       if (typeof window !== 'undefined') {
         window.google?.accounts?.id?.disableAutoSelect?.();
       }
-    } else {
-      localStorage.removeItem(key);
+    } catch (err) {
+      reportSwallowed('GoogleCloudSyncClient.disableAutoSelect', err);
     }
-  } catch {
-    // Ignore storage errors
+  } else {
+    SafeLocalStore.removeScopedItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
   }
 }
 
 export function getConfiguredGoogleClientId(): string {
-  try {
-    if (typeof localStorage !== 'undefined') {
-      const stored = localStorage
-        .getItem(resolveScopedStorageKey(GOOGLE_CLIENT_ID_STORAGE_KEY))
-        ?.trim();
-      if (stored) return stored;
-    }
-  } catch {
-    // Ignore storage read errors
-  }
+  const stored = SafeLocalStore.getScopedItem(GOOGLE_CLIENT_ID_STORAGE_KEY)?.trim();
+  if (stored) return stored;
   const envClientId = (
     import.meta as unknown as { env?: Record<string, string | undefined> }
   ).env?.VITE_GOOGLE_CLIENT_ID?.trim();
@@ -147,17 +158,11 @@ export function getConfiguredGoogleClientId(): string {
 }
 
 export function setConfiguredGoogleClientId(clientId: string): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    const key = resolveScopedStorageKey(GOOGLE_CLIENT_ID_STORAGE_KEY);
-    const trimmed = clientId.trim();
-    if (trimmed) {
-      localStorage.setItem(key, trimmed);
-    } else {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // Ignore storage write errors
+  const trimmed = clientId.trim();
+  if (trimmed) {
+    SafeLocalStore.setScopedItem(GOOGLE_CLIENT_ID_STORAGE_KEY, trimmed);
+  } else {
+    SafeLocalStore.removeScopedItem(GOOGLE_CLIENT_ID_STORAGE_KEY);
   }
 }
 
@@ -197,39 +202,34 @@ function validateParsedGoogleSession(rawParsed: unknown): GoogleOAuthSession | n
 export function loadCachedGoogleSession(): GoogleOAuthSession | null {
   const scopedKey = resolveScopedStorageKey(GOOGLE_TOKEN_STORAGE_KEY);
   try {
-    if (typeof localStorage !== 'undefined') {
-      const legacyRaw = localStorage.getItem(scopedKey);
-      if (legacyRaw) {
-        localStorage.removeItem(scopedKey);
-        const migrated = validateParsedGoogleSession(JSON.parse(legacyRaw));
-        if (migrated) {
-          inMemoryGoogleSession = migrated;
-          if (typeof sessionStorage !== 'undefined') {
-            try {
-              sessionStorage.setItem(scopedKey, JSON.stringify(migrated));
-            } catch {
-              // Ignore sessionStorage restrictions
-            }
-          }
-          return migrated;
-        }
-        inMemoryGoogleSession = null;
+    const legacyRaw = SafeLocalStore.getItem(scopedKey);
+    if (legacyRaw) {
+      SafeLocalStore.removeItem(scopedKey);
+      const migrated = validateParsedGoogleSession(JSON.parse(legacyRaw));
+      if (migrated) {
+        inMemoryGoogleSession = migrated;
         if (typeof sessionStorage !== 'undefined') {
           try {
-            sessionStorage.removeItem(scopedKey);
-          } catch {
-            // Ignore
+            sessionStorage.setItem(scopedKey, JSON.stringify(migrated));
+          } catch (err) {
+            reportSwallowed('GoogleCloudSyncClient.migrateSessionSet', err);
           }
         }
-        return null;
+        return migrated;
       }
+      inMemoryGoogleSession = null;
+      if (typeof sessionStorage !== 'undefined') {
+        try {
+          sessionStorage.removeItem(scopedKey);
+        } catch (err) {
+          reportSwallowed('GoogleCloudSyncClient.migrateSessionRemove', err);
+        }
+      }
+      return null;
     }
-  } catch {
-    try {
-      localStorage?.removeItem(scopedKey);
-    } catch {
-      // Ignore
-    }
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.migrateLegacyToken', err);
+    SafeLocalStore.removeItem(scopedKey);
   }
 
   if (inMemoryGoogleSession) {
@@ -251,8 +251,8 @@ export function loadCachedGoogleSession(): GoogleOAuthSession | null {
         sessionStorage.removeItem(scopedKey);
       }
     }
-  } catch {
-    // Ignore malformed sessionStorage payload
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.loadSessionStorage', err);
   }
   return null;
 }
@@ -265,16 +265,10 @@ export function saveCachedGoogleSession(session: GoogleOAuthSession): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(scopedKey, JSON.stringify(normalized));
     }
-  } catch {
-    // Ignore sessionStorage restrictions
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.saveSessionStorage', err);
   }
-  try {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(scopedKey);
-    }
-  } catch {
-    // Ignore
-  }
+  SafeLocalStore.removeItem(scopedKey);
 }
 
 export function clearCachedGoogleSession(): void {
@@ -288,10 +282,9 @@ export function clearCachedGoogleSession(): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(scopedKey);
     }
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(scopedKey);
-    }
-  } catch {
+    SafeLocalStore.removeItem(scopedKey);
+  } catch (err) {
+    reportSwallowed('GoogleCloudSyncClient.clearCachedGoogleSession', err);
     inMemoryGoogleSession = null;
   }
 }

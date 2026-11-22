@@ -20,6 +20,8 @@ import {
   validateRootGuideIndex,
 } from './sanity.mjs';
 import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
+import { runStorageGatewayTests } from './storage-gateway.test.mjs';
+import { runStorageAnalyzerTests } from './storage-analyzer.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -2685,7 +2687,7 @@ async function runCodecAndEngineTests() {
     assert.equal(dailyA.config.paletteDetail, 'CUSTOM', 'Daily puzzle config must use CUSTOM paletteDetail for 64 colors');
     assert.ok(
       dailyA.presetDescription.includes('Max Detail') &&
-        !/\b(10|16|18|24) colours\b/.test(dailyA.presetDescription),
+        !/\b(10|16|18|24) colou?rs\b/.test(dailyA.presetDescription),
       `Daily presetDescription must not show contradictory low/medium counts: '${dailyA.presetDescription}'`
     );
 
@@ -2708,7 +2710,7 @@ async function runCodecAndEngineTests() {
         `Expected honest Max Detail copy for ${utcDate}, got '${featured.presetLabel}' / '${featured.presetDescription}'`
       );
       if (featured.sample.isFreeColor) {
-        assert.equal(featured.presetLabel, 'Free Colour Line Art • Max Detail');
+        assert.equal(featured.presetLabel, 'Free Color Line Art • Max Detail');
         assert.equal(featured.config.algorithm, 'LINE_ART');
         assert.equal(featured.config.isFreeColor, true);
       }
@@ -4093,6 +4095,21 @@ async function runCodecAndEngineTests() {
             }
           }
           assert.equal(
+            nativeBridgeMod.isValidAndroidDeepLink('https://paint.capyboop.com/#s=test'),
+            true,
+            'isValidAndroidDeepLink must allow paint.capyboop.com share links'
+          );
+          assert.equal(
+            nativeBridgeMod.isValidAndroidDeepLink('https://capypaint.com/privacy-policy.html'),
+            false,
+            'isValidAndroidDeepLink must exclude static /privacy-policy.html legal page'
+          );
+          assert.equal(
+            nativeBridgeMod.isValidAndroidDeepLink('https://paint.capyboop.com/privacy-policy.html'),
+            false,
+            'isValidAndroidDeepLink must exclude paint.capyboop.com /privacy-policy.html legal page'
+          );
+          assert.equal(
             typeof nativeBridgeMod.NativeBridge.showRewardedAd,
             'undefined',
             'NativeBridge.showRewardedAd must be removed for 100% ad-free Play Store parity'
@@ -4928,6 +4945,7 @@ async function runCodecAndEngineTests() {
         requestImpl = null,
         mergeableState = undefined,
         checkRuns = null,
+        changedFiles = null,
         expectCommitStatus = true,
       } = options;
       const body = 'body' in options ? options.body : validStrictPrBody;
@@ -5007,6 +5025,7 @@ async function runCodecAndEngineTests() {
               },
             }),
             listReviews: async () => ({ data: reviews }),
+            ...(changedFiles !== null ? { listFiles: async () => ({ data: changedFiles }) } : {}),
             createReview: async (payload) => {
               calls.createReview.push(payload);
               return { data: { id: 9001 } };
@@ -5026,7 +5045,15 @@ async function runCodecAndEngineTests() {
           checks: {
             listForRef: async () => {
               calls.listForRef.push(true);
-              return { data: { check_runs: checkRuns || [] } };
+              const resolvedRuns =
+                checkRuns !== null
+                  ? checkRuns
+                  : [
+                      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+                      { name: 'Android APK', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+                      { name: 'Playwright E2E', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+                    ];
+              return { data: { check_runs: resolvedRuns } };
             },
           },
           repos: {
@@ -7037,15 +7064,21 @@ async function runCodecAndEngineTests() {
     }
 
     // Auto-merge stuck `blocked` by non-check ruleset requirements must merge directly once
-    // `Build & Test` is green on the exact head SHA (no Owner approval required per Owner directive)
-    const greenHeadRuns = [
+    // required checks are green on the exact head SHA (Build & Test for beta; Build & Test +
+    // Android APK + Playwright E2E for main).
+    const greenBetaHeadRuns = [
       { name: 'Build & Test', status: 'completed', conclusion: 'cancelled', started_at: '2026-11-13T01:00:00Z' },
       { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
       { name: 'Playwright E2E', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' },
     ];
-    for (const [targetBase, expectedMergeMethod] of [
-      ['beta', 'squash'],
-      ['main', 'merge'],
+    const greenMainHeadRuns = [
+      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Android APK', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Playwright E2E', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+    ];
+    for (const [targetBase, expectedMergeMethod, runsForBase] of [
+      ['beta', 'squash', greenBetaHeadRuns],
+      ['main', 'merge', greenMainHeadRuns],
     ]) {
       const gateBlockedDirectMergeRes = await runReviewGateCase({
         prAuthor: 'shthed',
@@ -7054,7 +7087,7 @@ async function runCodecAndEngineTests() {
         body: validStrictPrBody,
         reviews: [],
         mergeableState: 'blocked',
-        checkRuns: greenHeadRuns,
+        checkRuns: runsForBase,
       });
       assert.equal(gateBlockedDirectMergeRes.status.state, 'success');
       assert.equal(gateBlockedDirectMergeRes.calls.graphql.length, 1);
@@ -7062,6 +7095,103 @@ async function runCodecAndEngineTests() {
       assert.equal(gateBlockedDirectMergeRes.calls.merge[0].merge_method, expectedMergeMethod);
       assert.equal(gateBlockedDirectMergeRes.calls.merge[0].sha, gateHeadSha);
     }
+
+    // `main` release promotions must stay pending (never auto-merge or direct-merge) until
+    // Build & Test, Android APK, and Playwright E2E all succeed on HEAD.
+    for (const incompleteMainRuns of [
+      greenBetaHeadRuns,
+      [
+        { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Playwright E2E', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      ],
+      [
+        { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Android APK', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+        { name: 'Playwright E2E', status: 'completed', conclusion: 'failure', started_at: '2026-11-13T01:01:00Z' },
+      ],
+    ]) {
+      const gateMainPendingReleaseChecksRes = await runReviewGateCase({
+        prAuthor: 'github-actions[bot]',
+        baseRef: 'main',
+        headSha: gateHeadSha,
+        body: validStrictPrBody,
+        reviews: [],
+        mergeableState: 'blocked',
+        checkRuns: incompleteMainRuns,
+      });
+      assert.equal(gateMainPendingReleaseChecksRes.status.state, 'pending');
+      assert.equal(
+        gateMainPendingReleaseChecksRes.status.description.includes('Playwright E2E / Android APK release checks'),
+        true
+      );
+      assert.equal(gateMainPendingReleaseChecksRes.calls.graphql.length, 0);
+      assert.equal(gateMainPendingReleaseChecksRes.calls.merge.length, 0);
+    }
+
+    // Stacked-PR fallback must NOT direct-merge or call /merge-async when Build & Test is not green
+    const gateStackedNotGreenRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'beta',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      checkRuns: [{ name: 'Build & Test', status: 'in_progress', conclusion: null, started_at: '2026-11-13T01:01:00Z' }],
+      graphqlImpl: async () => {
+        throw new Error('Auto-merge is not supported for stacked pull requests.');
+      },
+    });
+    assert.equal(gateStackedNotGreenRes.status.state, 'success');
+    assert.equal(gateStackedNotGreenRes.calls.merge.length, 0);
+    assert.equal(gateStackedNotGreenRes.calls.request.length, 0);
+
+    // Docs-only PRs targeting `main` pass when Build & Test succeeds and E2E/APK are skipped,
+    // whereas code PRs targeting `main` must stay pending when E2E/APK are skipped.
+    const skippedReleaseRuns = [
+      { name: 'Build & Test', status: 'completed', conclusion: 'success', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Android APK', status: 'completed', conclusion: 'skipped', started_at: '2026-11-13T01:01:00Z' },
+      { name: 'Playwright E2E', status: 'completed', conclusion: 'skipped', started_at: '2026-11-13T01:01:00Z' },
+    ];
+    const gateDocsOnlyMainRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      changedFiles: [{ filename: 'README.md' }, { filename: 'docs/guide.md' }],
+      checkRuns: skippedReleaseRuns,
+    });
+    assert.equal(gateDocsOnlyMainRes.status.state, 'success');
+
+    const gateCodeMainSkippedRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'main',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      changedFiles: [{ filename: 'web/src/App.tsx' }],
+      checkRuns: skippedReleaseRuns,
+    });
+    assert.equal(gateCodeMainSkippedRes.status.state, 'pending');
+    assert.equal(gateCodeMainSkippedRes.calls.graphql.length, 0);
+
+    // Non-main/non-beta stacked PRs (targeting a feature branch) must not require Production Release Checks
+    const gateStackedFeatureBaseRes = await runReviewGateCase({
+      prAuthor: 'github-actions[bot]',
+      baseRef: 'feature/parent-branch',
+      headSha: gateHeadSha,
+      body: validStrictPrBody,
+      reviews: [],
+      checkRuns: [],
+    });
+    assert.equal(gateStackedFeatureBaseRes.status.state, 'success');
+    assert.equal(
+      gateStackedFeatureBaseRes.calls.createComment.some((c) =>
+        c.body.includes('Production Release Checks')
+      ),
+      false
+    );
+
+    const greenHeadRuns = greenBetaHeadRuns;
 
     for (const blockingRuns of [
       [],
@@ -8390,8 +8520,21 @@ async function runCodecAndEngineTests() {
     assert.equal(deployYaml.includes('node scripts/test.mjs --unit'), true);
     assert.equal(deployYaml.includes('include-hidden-files: true'), true);
     assert.equal(deployYaml.includes('cp -a web/dist/. staging/web/'), true);
-    assert.equal(deployYaml.includes('needs: [prepare, build, android_build]'), true);
+    assert.equal(deployYaml.includes('needs: [prepare, build, android_build, e2e_release_gate]'), true);
+    assert.equal(deployYaml.includes("needs.e2e_release_gate.result == 'success'"), true);
+    assert.equal(
+      /e2e_release_gate:[\s\S]*?VITE_GOOGLE_CLIENT_ID:\s*\$\{\{\s*vars\.VITE_GOOGLE_CLIENT_ID\s*\}\}/.test(
+        deployYaml
+      ),
+      true
+    );
     assert.equal(deployYaml.includes("--exclude 'alpha/'"), true);
+
+    const publishCapyboopYaml = fs.readFileSync(
+      path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
+      'utf8'
+    );
+    assert.equal(publishCapyboopYaml.includes('migrate_issues'), false);
 
     const cleanupClosedPrYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/cleanup-closed-pr.yml'),
@@ -9122,6 +9265,7 @@ async function runCodecAndEngineTests() {
             'filters = []',
             'for flt in main_act.findall("intent-filter"):',
             '    filters.append({',
+            '        "autoVerify": flt.attrib.get(ns + "autoVerify"),',
             '        "actions": [e.attrib.get(ns + "name") for e in flt.findall("action")],',
             '        "categories": [e.attrib.get(ns + "name") for e in flt.findall("category")],',
             '        "data": [{"scheme": d.attrib.get(ns + "scheme"), "host": d.attrib.get(ns + "host"), "mimeType": d.attrib.get(ns + "mimeType"), "pathPrefix": d.attrib.get(ns + "pathPrefix")} for d in flt.findall("data")],',
@@ -9129,6 +9273,7 @@ async function runCodecAndEngineTests() {
             'print(json.dumps({',
             '    "features": features,',
             '    "banner": app.attrib.get(ns + "banner"),',
+            '    "usesCleartextTraffic": app.attrib.get(ns + "usesCleartextTraffic"),',
             '    "exported": main_act.attrib.get(ns + "exported"),',
             '    "launchMode": main_act.attrib.get(ns + "launchMode"),',
             '    "configChanges": main_act.attrib.get(ns + "configChanges"),',
@@ -9143,6 +9288,7 @@ async function runCodecAndEngineTests() {
     assert.equal(tvManifestInfo.features['android.hardware.touchscreen'], 'false');
     assert.equal(tvManifestInfo.features['android.software.leanback'], 'false');
     assert.equal(tvManifestInfo.banner, '@drawable/tv_banner');
+    assert.equal(tvManifestInfo.usesCleartextTraffic, 'false');
     assert.equal(tvManifestInfo.exported, 'true');
     assert.equal(tvManifestInfo.launchMode, 'singleTask');
     for (const cfgFlag of ['uiMode', 'navigation', 'keyboard', 'keyboardHidden', 'screenSize']) {
@@ -9169,23 +9315,102 @@ async function runCodecAndEngineTests() {
       sendIntentFilter.data.some((d) => d.mimeType === 'image/*'),
       true
     );
-    const viewIntentFilter = tvManifestInfo.filters.find((f) =>
+    const viewIntentFilters = tvManifestInfo.filters.filter((f) =>
       f.actions.includes('android.intent.action.VIEW')
     );
-    assert.ok(viewIntentFilter, 'MainActivity must preserve ACTION_VIEW App Links intent-filter');
+    const autoVerifyFilter = viewIntentFilters.find(
+      (f) => f.autoVerify === '${appLinksAutoVerify}'
+    );
+    assert.ok(autoVerifyFilter, 'MainActivity must preserve dedicated autoVerify App Links intent-filter');
     assert.equal(
-      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'capypaint.com'),
+      autoVerifyFilter.data.some((d) => d.scheme === 'https' && d.host === 'capypaint.com'),
       true
     );
     assert.equal(
-      viewIntentFilter.data.some((d) => d.scheme === 'https' && d.host === 'www.capypaint.com'),
+      autoVerifyFilter.data.some((d) => d.scheme === 'https' && d.host === 'paint.capyboop.com'),
       true
     );
     assert.equal(
-      viewIntentFilter.data.some(
+      autoVerifyFilter.data.some((d) => d.host === 'www.capypaint.com'),
+      false,
+      'autoVerify filter must exclude redirecting www.capypaint.com'
+    );
+    assert.equal(
+      autoVerifyFilter.data.some((d) => String(d.host || '').endsWith('.github.io')),
+      false,
+      'autoVerify filter must exclude GitHub Pages host'
+    );
+    const fallbackViewData = viewIntentFilters
+      .filter((f) => !f.autoVerify)
+      .flatMap((f) => f.data);
+    assert.equal(
+      fallbackViewData.some((d) => d.scheme === 'https' && d.host === 'www.capypaint.com'),
+      true
+    );
+    assert.equal(
+      fallbackViewData.some(
         (d) => d.scheme === 'https' && String(d.host || '').endsWith('.github.io') && d.pathPrefix === '/capy'
       ),
       true
+    );
+    const androidStringsXml = fs.readFileSync(
+      path.resolve(projectRoot, '../app/src/main/res/values/strings.xml'),
+      'utf8'
+    );
+    assert.equal(
+      androidStringsXml.includes('game_services_project_id'),
+      false,
+      'strings.xml must not statically declare game_services_project_id alongside Gradle resValue'
+    );
+    const androidBuildGradle = fs.readFileSync(
+      path.resolve(projectRoot, '../app/build.gradle.kts'),
+      'utf8'
+    );
+    assert.equal(
+      androidBuildGradle.includes('resValue("string", "game_services_project_id"'),
+      true,
+      'app/build.gradle.kts must emit resValue for game_services_project_id'
+    );
+    assert.equal(
+      /resValues\s*=\s*true/.test(androidBuildGradle),
+      true,
+      'app/build.gradle.kts must enable resValues = true for AGP 9+'
+    );
+
+    const capyBridgeKt = fs.readFileSync(
+      path.resolve(projectRoot, '../app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt'),
+      'utf8'
+    );
+    const rootHostsMatch = capyBridgeKt.match(/val\s+ROOT_DEEP_LINK_HOSTS\s*=\s*setOf\(([^)]+)\)/);
+    assert.ok(rootHostsMatch, 'CapyAndroidBridge.kt must define ROOT_DEEP_LINK_HOSTS');
+    assert.equal(
+      rootHostsMatch[1].includes('"paint.capyboop.com"'),
+      true,
+      'CapyAndroidBridge.kt ROOT_DEEP_LINK_HOSTS must include "paint.capyboop.com"'
+    );
+    assert.equal(
+      capyBridgeKt.includes('"/privacy-policy.html"'),
+      true,
+      'CapyAndroidBridge.kt isAllowedCapyDeepLink must exclude static /privacy-policy.html'
+    );
+
+    const mainActivityKt = fs.readFileSync(
+      path.resolve(projectRoot, '../app/src/main/java/com/capyboop/paint/MainActivity.kt'),
+      'utf8'
+    );
+    assert.equal(
+      mainActivityKt.includes('openExternalBrowserUrl(') &&
+        mainActivityKt.includes('queryIntentActivities(') &&
+        mainActivityKt.includes('it != packageName') &&
+        mainActivityKt.includes('setPackage(externalBrowserPkg)'),
+      true,
+      'MainActivity.kt must resolve an external browser package excluding packageName for OPEN_EXTERNAL URLs'
+    );
+    const rawManifestXml = fs.readFileSync(androidManifestPath, 'utf8');
+    assert.equal(
+      rawManifestXml.includes('<queries>') && rawManifestXml.includes('android.intent.category.BROWSABLE'),
+      true,
+      'AndroidManifest.xml must declare <queries> for HTTPS BROWSABLE external browser resolution'
     );
 
     const parseTvBannerPng = (buf) => {
@@ -9841,6 +10066,12 @@ async function runCodecAndEngineTests() {
       assert.equal(storageMod.DEFAULT_SETTINGS.paletteSort, 'HUE');
       assert.equal(storageMod.DEFAULT_SETTINGS.fatFingerAssist, true);
       assert.equal(storageMod.DEFAULT_SETTINGS.touchReachRadiusPx, 22);
+      assert.equal(storageMod.DEFAULT_SETTINGS.hintColorArgb, 0xfff59e0b);
+      assert.equal(storageMod.DEFAULT_SETTINGS.autoReplayOnLoad, false);
+      assert.equal(storageMod.DEFAULT_SETTINGS.raisePaletteDock, true);
+      assert.equal(storageMod.DEFAULT_SETTINGS.textScale, 1.0);
+      assert.equal(storageMod.DEFAULT_SETTINGS.uiScale, 1.0);
+      assert.equal('showSavePreviews' in storageMod.DEFAULT_SETTINGS, false);
       storageMod.StorageService.saveSettings({
         ...storageMod.DEFAULT_SETTINGS,
         difficulty: 'NORMAL',
@@ -9848,6 +10079,8 @@ async function runCodecAndEngineTests() {
         highlightStyle: 'CENTROID_GLOW',
         fatFingerAssist: false,
         touchReachRadiusPx: 34,
+        textScale: 1.35,
+        uiScale: 1.2,
       });
       const loadedNormalHue = storageMod.StorageService.loadSettings();
       assert.equal(loadedNormalHue.difficulty, 'NORMAL');
@@ -9855,6 +10088,47 @@ async function runCodecAndEngineTests() {
       assert.equal(loadedNormalHue.highlightStyle, 'CENTROID_GLOW');
       assert.equal(loadedNormalHue.fatFingerAssist, false);
       assert.equal(loadedNormalHue.touchReachRadiusPx, 34);
+      assert.equal(loadedNormalHue.textScale, 1.35);
+      assert.equal(loadedNormalHue.uiScale, 1.2);
+      assert.equal(loadedNormalHue.largeText, true);
+
+      // Verify legacy { largeText: true } without textScale/uiScale migrates to 1.25 / 1.25
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ largeText: true })
+      );
+      const migratedLargeText = storageMod.StorageService.loadSettings();
+      assert.equal(migratedLargeText.textScale, 1.25);
+      assert.equal(migratedLargeText.uiScale, 1.25);
+      assert.equal(migratedLargeText.largeText, true);
+
+      // Verify textScale [0.85, 1.5] and uiScale [0.85, 1.4] clamping and largeText sync
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ textScale: 0.4, uiScale: 2.5 })
+      );
+      const clampedScales = storageMod.StorageService.loadSettings();
+      assert.equal(clampedScales.textScale, 0.85);
+      assert.equal(clampedScales.uiScale, 1.4);
+      assert.equal(clampedScales.largeText, true);
+
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ textScale: 0.9, uiScale: 0.95, largeText: true })
+      );
+      const scaledDown = storageMod.StorageService.loadSettings();
+      assert.equal(scaledDown.textScale, 0.9);
+      assert.equal(scaledDown.uiScale, 0.95);
+      assert.equal(scaledDown.largeText, false);
+
+      // Verify legacy showSavePreviews key in stored JSON is safely ignored on load
+      mockStorage.set(
+        'capy_user_settings_v8',
+        JSON.stringify({ showSavePreviews: true, autoReplayOnLoad: true })
+      );
+      const legacyLoaded = storageMod.StorageService.loadSettings();
+      assert.equal('showSavePreviews' in legacyLoaded, false);
+      assert.equal(legacyLoaded.autoReplayOnLoad, true);
 
       // Verify [8, 40] clamping and absent fatFingerAssist fallback to DEFAULT_SETTINGS.fatFingerAssist (true) across both NORMAL & EASY
       mockStorage.set(
@@ -9891,8 +10165,19 @@ async function runCodecAndEngineTests() {
       // Verify FeatureOffersService persistence, NativeBridge backup fallback, channel sandboxing, and OnboardingTutorial step mapping
       const offersMod = await vite.ssrLoadModule('/src/services/FeatureOffersService.ts');
       const tutorialMod = await vite.ssrLoadModule('/src/components/OnboardingTutorial.tsx');
-      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 8);
-      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 14);
+      assert.equal(offersMod.FEATURE_OFFER_IDS.length, 9);
+      assert.equal(tutorialMod.TUTORIAL_STEPS.length, 12);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[7]?.key, 'free_color');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[7]?.modalTab, 1);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[8]?.key, 'create_gallery');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[8]?.modalTab, 3);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[9]?.key, 'saves_export');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[9]?.modalTab, 4);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[10]?.key, 'settings');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[10]?.modalTab, 1);
+      assert.equal(tutorialMod.TUTORIAL_STEPS[11]?.key, 'hints');
+      assert.equal(tutorialMod.TUTORIAL_STEPS[11]?.modalTab, 2);
+      assert.equal(offersMod.FEATURE_OFFERS.settings_hints_tip?.tutorialStepIndex, 10);
       for (const id of offersMod.FEATURE_OFFER_IDS) {
         const offer = offersMod.FEATURE_OFFERS[id];
         assert.equal(
@@ -11810,6 +12095,7 @@ async function runCodecAndEngineTests() {
       let coldReloadSeq = 0;
       const withColdStorage = async (fn) => {
         coldReloadSeq += 1;
+        coldGroupVite.moduleGraph.invalidateAll();
         const mod = await coldGroupVite.ssrLoadModule(`/src/services/StorageService.ts?cold=${coldReloadSeq}`);
         return await fn(mod);
       };
@@ -12779,7 +13065,9 @@ async function runCodecAndEngineTests() {
     }
 
     await runReleaseSafetyHardeningTests(vite);
-    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService & M1 release safety hardening verified.');
+    await runStorageGatewayTests(vite);
+    await runStorageAnalyzerTests(vite);
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer & M1 release safety hardening verified.');
 
     // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
     // createAutoCloudSyncScheduler & Cross-Provider CRDT Merge Parity
@@ -13107,7 +13395,7 @@ async function runBrowserBasicsSuite() {
     const page = await context.newPage();
     attachErrorListeners(page, 'main');
 
-    const e2eTotal = 23;
+    const e2eTotal = 24;
     const padE2e = (n) => String(n).padStart(2, '0');
     let e2eStep = 0;
     const logE2eStart = (label) => {
@@ -13182,7 +13470,7 @@ async function runBrowserBasicsSuite() {
     // Verify Interactive First-Run Tutorial appears on cold start, supports live try-it steps (auto-advance + badge), and persists completion
     const tutorialCard = page.getByTestId('onboarding-tutorial');
     await tutorialCard.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 14');
+    assert.equal(await page.getByTestId('tutorial-step-indicator').innerText(), 'STEP 1 OF 12');
     // Verify Large Text prompt in OnboardingTutorial toggles data-large-text cleanly
     const tutLargeTextBtn = page.getByTestId('tutorial-large-text-btn');
     await tutLargeTextBtn.waitFor({ state: 'visible', timeout: 3000 });
@@ -13202,7 +13490,7 @@ async function runBrowserBasicsSuite() {
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 12',
       undefined,
       { timeout: 3000 }
     );
@@ -13217,7 +13505,7 @@ async function runBrowserBasicsSuite() {
     }
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 12',
       undefined,
       { timeout: 3000 }
     );
@@ -13231,7 +13519,7 @@ async function runBrowserBasicsSuite() {
     await page.keyboard.press('+');
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 12',
       undefined,
       { timeout: 3000 }
     );
@@ -13240,11 +13528,11 @@ async function runBrowserBasicsSuite() {
     await page.getByTestId('tutorial-try-hint-btn').click();
     await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
     await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 14',
+      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 12',
       undefined,
       { timeout: 3000 }
     );
-    // Skip remaining steps on main page to preserve clean Capy Forest state; full 14-step tour runs in dedicated tutContext below
+    // Skip remaining steps on main page to preserve clean Capy Forest state; full 12-step tour runs in dedicated tutContext below
     await page.getByTestId('tutorial-skip-btn').click();
     await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
     const tutorialCompletedFlag = await page.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1'));
@@ -13271,9 +13559,9 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(escTutPage);
     await escTutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 5000 });
     await escTutPage.locator('button[title="Settings and Menu"]').click();
-    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'visible', timeout: 3000 });
+    await escTutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
     await escTutPage.keyboard.press('Escape');
-    await escTutPage.getByTestId('about-screen-card').waitFor({ state: 'hidden', timeout: 3000 });
+    await escTutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(
       await escTutPage.getByTestId('onboarding-tutorial').isVisible(),
       true,
@@ -13439,9 +13727,9 @@ async function runBrowserBasicsSuite() {
     };
 
     // -------------------------------------------------------------------------
-    // 2. Full 14-Step OnboardingTutorial Tour, Spotlight Alignment & Ctrl+Z Burst
+    // 2. Full 12-Step OnboardingTutorial Tour, Modal-Aware Settings/Hints & Spotlight Alignment
     // -------------------------------------------------------------------------
-    logE2eStart('Verifying 14-step OnboardingTutorial tour, TargetSpotlightOverlay alignment, [All Topics] drawer & rapid Ctrl+Z burst...');
+    logE2eStart('Verifying 12-step OnboardingTutorial tour, modal-docked Settings/Hints spotlight, [All Topics] drawer & rapid Ctrl+Z burst...');
     const tutContext = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
     const tutPage = await tutContext.newPage();
     attachErrorListeners(tutPage, 'tutPage');
@@ -13452,18 +13740,36 @@ async function runBrowserBasicsSuite() {
       await tutPage.waitForFunction(
         (expected) =>
           document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
-          `STEP ${expected} OF 14`,
+          `STEP ${expected} OF 12`,
         stepNum,
         { timeout: 5000 }
       );
     };
     await expectTutStep(1);
     const step1LargeBtnBox = await tutPage.getByTestId('tutorial-large-text-btn').boundingBox();
-    assert.ok(step1LargeBtnBox && step1LargeBtnBox.width > 200, 'Step 1 Large Text button must be full-width banner');
+    assert.ok(
+      step1LargeBtnBox && step1LargeBtnBox.width < 150 && step1LargeBtnBox.height <= 34,
+      `Step 1 Large Text button must be compact header pill matching Step 2+ (got ${JSON.stringify(step1LargeBtnBox)})`
+    );
+    const desktopNextRefBox = await tutPage.getByTestId('tutorial-next-btn').boundingBox();
+    assert.ok(desktopNextRefBox, 'Expected Step 1 tutorial-next-btn boundingBox on desktop');
+    const assertDesktopNextStable = async (stepNum) => {
+      const box = await tutPage.getByTestId('tutorial-next-btn').boundingBox();
+      assert.ok(box, `Expected tutorial-next-btn boundingBox on Step ${stepNum}`);
+      assert.equal(
+        Math.abs(box.x - desktopNextRefBox.x) <= 1 &&
+          Math.abs(box.y - desktopNextRefBox.y) <= 1 &&
+          Math.abs(box.width - desktopNextRefBox.width) <= 1 &&
+          Math.abs(box.height - desktopNextRefBox.height) <= 1,
+        true,
+        `Desktop Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(desktopNextRefBox)}, got=${JSON.stringify(box)})`
+      );
+    };
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 0 -> 1 (palette): tapping the ALREADY-active swatch on Step 1 must advance cleanly without triggering hint
     await tutPage.locator('[data-testid="palette-dock"] button[aria-pressed="true"]').first().click();
     await expectTutStep(2);
+    await assertDesktopNextStable(2);
     const step2PromptText = await tutPage.getByTestId('tutorial-try-pill').innerText();
     assert.equal(
       step2PromptText.includes('Try it: Tap a matching number on the picture') &&
@@ -13491,6 +13797,7 @@ async function runBrowserBasicsSuite() {
     }
     assert.ok(paintedOnTut >= 1, 'Expected at least 1 region painted on tutPage');
     await expectTutStep(3);
+    await assertDesktopNextStable(3);
     // Verify topbar-saves-btn exposes data-filled-count >= 1
     assert.ok(
       Number(await tutPage.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')) >= 1,
@@ -13499,22 +13806,25 @@ async function runBrowserBasicsSuite() {
     // Step 2 -> 3 (zoom)
     await tutPage.keyboard.press('+');
     await expectTutStep(4);
+    await assertDesktopNextStable(4);
     await tutPage.keyboard.press('0');
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 3 -> 4 (hint)
     await tutPage.getByTestId('tutorial-try-hint-btn').click();
     await expectTutStep(5);
+    await assertDesktopNextStable(5);
     await assertSpotlightAligned(tutPage, 'tutorial');
     // Step 4 -> 5 (undo_redo)
     await tutPage.getByTestId('undo-btn').click();
     await expectTutStep(6);
-    // Back onto already-tried Step 4 (STEP 5 OF 14) must wait for a fresh action (Redo) instead of auto-advancing immediately
+    await assertDesktopNextStable(6);
+    // Back onto already-tried Step 4 (STEP 5 OF 12) must wait for a fresh action (Redo) instead of auto-advancing immediately
     await tutPage.getByTestId('tutorial-prev-btn').click();
     await expectTutStep(5);
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 5 OF 14',
+      'STEP 5 OF 12',
       'Back onto already-tried Step 5 must wait for a fresh Undo/Redo action before advancing'
     );
     await tutPage.keyboard.press('Control+y');
@@ -13527,16 +13837,17 @@ async function runBrowserBasicsSuite() {
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
     await tutPage.mouse.up();
     await expectTutStep(7);
+    await assertDesktopNextStable(7);
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     const step7Metrics = await assertSpotlightAligned(tutPage, 'tutorial');
     assert.equal(step7Metrics.ringCount, 2, 'Step 7 (peek_fullscreen) must highlight both Eye and Full Screen');
     assert.equal(step7Metrics.pointerSpan >= 10, true, `Step 7 topbar pointer must have clean arrow stem (${step7Metrics.pointerSpan}px)`);
     assert.equal(
       (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes(
-        'Try it: Tap Eye or Expand above'
+        'Try it: Tap the Eye icon above'
       ),
       true,
-      'Step 7 tryPrompt must cleanly explain Eye or Expand'
+      'Step 7 tryPrompt must cleanly explain tapping the Eye icon'
     );
     await captureV3012Screenshot(tutPage, 'desktop_1280x800_step7_spotlight.png');
     // Step 6 -> 7 (peek_fullscreen): leaving Step 7 via preview auto-advance must automatically exit tutorial-triggered preview!
@@ -13548,101 +13859,196 @@ async function runBrowserBasicsSuite() {
       0,
       'Leaving Step 7 must automatically reset tutorial-triggered isPreviewMode'
     );
-    // Step 7 -> 8 (free_color in Settings; must pause while SettingsModal is open and hide spotlight)
+    // Step 8 (free_color in Settings; tutorial must dock at z-[60] & spotlight tab/control while SettingsModal is open)
     await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock above SettingsModal (data-modal-docked="true") on Step 8'
+    );
+    await tutPage.getByTestId('spotlight-overlay').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal on Step 8'
+    );
+    // Switch to wrong tab (About) -> prompt tells user which tab to press and shows Open Settings button
+    await tutPage.getByTestId('settings-tab-about').click();
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Tap the Settings tab at the top'),
+      true,
+      'Step 8 on wrong tab must instruct user to tap the Settings tab'
+    );
+    assert.equal(
+      await tutPage.getByTestId('tutorial-open-free-color-btn').isVisible(),
+      true,
+      'Step 8 on wrong tab must show Open Settings button'
+    );
+    // Switch to Tab 1 (Settings) -> prompt transitions to control guidance and hides redundant Open Settings button
     await tutPage.getByTestId('settings-tab-settings').click();
-    assert.equal(await tutPage.getByTestId('spotlight-overlay').count(), 0, 'Spotlight must hide while SettingsModal is open');
-    const tutFreeColorLabel = await tutPage.waitForSelector('text=Free Colour Mode');
-    await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Turn on Free Color Mode above'),
+      true,
+      'Step 8 on Settings tab must instruct user to turn on Free Color Mode'
+    );
+    assert.equal(
+      await tutPage.getByTestId('tutorial-open-free-color-btn').count(),
+      0,
+      'Step 8 on target Settings tab must hide redundant Open Settings button'
+    );
+    await tutPage.getByTestId('setting-free-color-mode').click();
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 8 OF 14',
+      'STEP 8 OF 12',
       'Auto-advance timer must stay paused while SettingsModal is open'
     );
-    await tutFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await tutPage.getByTestId('setting-free-color-mode').click();
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(9);
-    // Step 8 -> 9 (gallery_daily)
+    // Step 9 (create_gallery: Daily Puzzle, Gallery & Photos) — opening Settings lands on Tab 1 (wrong tab) then transitions on Tab 3 (Create)
     await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock above SettingsModal on Step 9'
+    );
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Tap the Create tab at the top'),
+      true,
+      'Step 9 on Settings tab must instruct user to tap the Create tab'
+    );
     await tutPage.getByTestId('settings-tab-create').click();
+    assert.equal(
+      (await tutPage.getByTestId('tutorial-try-pill').innerText()).includes('Tap Play Daily Puzzle'),
+      true,
+      'Step 9 on Create tab must transition to Play Daily Puzzle / Preset Gallery guidance'
+    );
     await tutPage.getByTestId('settings-modal-close').click();
     await expectTutStep(10);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 9 -> 10 (custom_photo)
-    const tutPngBytes = await tutPage.evaluate(async () => {
-      const c = document.createElement('canvas');
-      c.width = 160;
-      c.height = 120;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#ef4444';
-      ctx.fillRect(0, 0, 80, 120);
-      ctx.fillStyle = '#3b82f6';
-      ctx.fillRect(80, 0, 80, 120);
-      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-      return Array.from(new Uint8Array(await blob.arrayBuffer()));
-    });
-    const tutPhotoPath = path.join(os.tmpdir(), 'capy_tut_photo.png');
-    fs.writeFileSync(tutPhotoPath, Buffer.from(tutPngBytes));
-    try {
-      await tutPage.locator('input[type="file"][accept="image/*"]').setInputFiles(tutPhotoPath);
-      await tutPage.waitForFunction(
-        () =>
-          document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('capy_tut_photo') &&
-          !document.body.innerText.toLowerCase().includes('generating puzzle'),
-        undefined,
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(tutPage);
-    } finally {
-      fs.rmSync(tutPhotoPath, { force: true });
-    }
-    await expectTutStep(11);
-    // Step 11 -> 12 (puzzle_presets via Preset Style Gallery)
-    await tutPage.locator('button[title="Settings and Menu"]').click();
-    await tutPage.getByTestId('settings-tab-create').click();
-    await tutPage.getByTestId('preset-gallery-toggle').click();
-    await tutPage.getByTestId('preset-gallery-panel').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.getByTestId('preset-apply-algo-mosaic').click();
-    await tutPage.getByTestId('settings-modal-close').click();
-    await expectTutStep(12);
-    await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 12 -> 13 (infinite_zoom)
-    await tutPage.locator('button[title="Settings and Menu"]').click();
-    await tutPage.getByTestId('settings-tab-create').click();
-    await tutPage.getByTestId('infinite-zoom-subtile-btn').click();
-    await waitForPuzzleLoaded(tutPage);
-    await expectTutStep(13);
-    await assertSpotlightAligned(tutPage, 'tutorial');
-    // Step 13 -> 14 (saves_export)
+    // Step 10 (saves_export)
     await tutPage.getByTestId('topbar-saves-btn').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock above SettingsModal on Step 10'
+    );
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal on Step 10'
+    );
     await tutPage.getByTestId('settings-modal-close').click();
-    await expectTutStep(14);
+    await expectTutStep(11);
     await assertSpotlightAligned(tutPage, 'tutorial');
-    // [All Topics] drawer lists all 14 topics; jumping onto already-tried Step 1 waits for a fresh action
+    // Step 11 (settings, modalTab: 1): one-tap Open Settings button -> bottom-docked guide bar + in-modal spotlight
+    await tutPage.getByTestId('tutorial-open-settings-btn').click();
+    await tutPage.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
+      'true',
+      'tutorial-open-settings-btn must open SettingsModal on Tab 1 (Settings)'
+    );
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must dock at bottom (data-modal-docked="true") on settings step'
+    );
+    await tutPage.getByTestId('spotlight-overlay').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal (data-modal-spotlight="true") on settings step'
+    );
+    // Manually switch to Tab 0 (About) while SettingsModal stays open, then tap Open Settings -> must switch back to Tab 1 via initialTabRequestKey
+    await tutPage.getByTestId('settings-tab-about').click();
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-about').getAttribute('aria-selected'),
+      'true',
+      'Manual tab click must switch to Tab 0 (About)'
+    );
+    await tutPage.getByTestId('tutorial-open-settings-btn').click();
+    await tutPage.getByTestId('settings-section-accessibility').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
+      'true',
+      'Clicking tutorial-open-settings-btn while modal is already open must re-switch back to Tab 1 (Settings)'
+    );
+    // Step 11 -> 12 (hints, modalTab: 2): Next while modal is open automatically switches to Tab 2 (Hints)
+    await tutPage.getByTestId('tutorial-next-btn').click();
+    await expectTutStep(12);
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-hints').getAttribute('aria-selected'),
+      'true',
+      'Advancing to Step 12 (hints) while modal is open must switch to Tab 2 (Hints)'
+    );
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'OnboardingTutorial must remain docked at bottom on hints step'
+    );
+    assert.equal(
+      await tutPage.getByTestId('spotlight-overlay').getAttribute('data-modal-spotlight'),
+      'true',
+      'TargetSpotlightOverlay must stay active inside SettingsModal on hints step'
+    );
+    // [All Topics] drawer lists all 12 topics; jumping to Step 1 closes tutorial-opened SettingsModal and waits for fresh action
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 14);
+    assert.equal(await tutPage.locator('[data-testid^="tutorial-topic-item-"]').count(), 12);
     await tutPage.getByTestId('tutorial-topic-item-0').click();
     await expectTutStep(1);
+    await tutPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
     await tutPage.waitForTimeout(950);
     assert.equal(
       (await tutPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-      'STEP 1 OF 14',
+      'STEP 1 OF 12',
       'Jumping via All Topics onto already-tried Step 1 must wait for a fresh action'
     );
+    // Jump to Step 12 (hints), use one-tap Open Hints button, toggle a hint setting, close modal -> auto-completes tutorial
     await tutPage.getByTestId('tutorial-topics-btn').click();
-    await tutPage.getByTestId('tutorial-topic-item-13').click();
-    await expectTutStep(14);
-    // Step 14 (settings_a11y) auto-completes tutorial after 750ms via Large Text toggle
-    await tutPage.getByTestId('tutorial-large-text-btn').click();
-    await tutPage.getByTestId('tutorial-large-text-btn').click();
+    await tutPage.getByTestId('tutorial-topic-item-11').click();
+    await expectTutStep(12);
+    await tutPage.getByTestId('tutorial-open-hints-btn').click();
+    await tutPage.getByTestId('hints-section-style').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await tutPage.getByTestId('settings-tab-hints').getAttribute('aria-selected'),
+      'true',
+      'tutorial-open-hints-btn must open SettingsModal on Tab 2 (Hints)'
+    );
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'tutorial-open-hints-btn must dock OnboardingTutorial at bottom'
+    );
+    await tutPage.getByTestId('setting-animate-hint').click();
+    await tutPage.getByTestId('setting-animate-hint').click();
+    await tutPage.getByTestId('settings-modal-close').click();
     await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 4000 });
     assert.equal(
       await tutPage.evaluate(() => localStorage.getItem('capy_tutorial_completed_v1')),
       '1',
-      'Step 13 auto-completion must persist capy_tutorial_completed_v1="1"'
+      'Step 12 auto-completion must persist capy_tutorial_completed_v1="1"'
     );
+
+    // Verify compact '?' tour button (settings-tour-btn) in SettingsModal header launches Settings/Hints tour directly
+    await tutPage.locator('button[title="Settings and Menu"]').click();
+    await tutPage.getByTestId('settings-tab-settings').click();
+    await tutPage.getByTestId('settings-tour-btn').click();
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+    await expectTutStep(11);
+    assert.equal(
+      await tutPage.getByTestId('onboarding-tutorial').getAttribute('data-modal-docked'),
+      'true',
+      'settings-tour-btn from Tab 1 must launch bottom-docked tour at STEP 11 OF 12'
+    );
+    await tutPage.getByTestId('tutorial-skip-btn').click();
+    await tutPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
+    await tutPage.getByTestId('settings-modal-close').click();
 
     // Verify Jump and Skip from Step 6 auto-dismiss tutorial-opened Replay, while pre-existing manual Replay stays open across Step 6->7
     const tapSampleAndOpenTutorialAtStep6 = async () => {
@@ -13755,7 +14161,7 @@ async function runBrowserBasicsSuite() {
 
     await tutPage.close();
     await tutContext.close();
-    logE2ePass('14-step OnboardingTutorial tour, TargetSpotlightOverlay geometry, reducedMotion, [All Topics] drawer & rapid Ctrl+Z burst verified.');
+    logE2ePass('12-step OnboardingTutorial tour, modal-docked Settings/Hints spotlight, reducedMotion, [All Topics] drawer & rapid Ctrl+Z burst verified.');
 
     // -------------------------------------------------------------------------
     // 3. FeatureOfferBanner Quick Tips, Channel Isolation, #s= DoS Resilience & Play Store Saves
@@ -13793,12 +14199,12 @@ async function runBrowserBasicsSuite() {
       await offerPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`
+        `STEP ${expectedStepNum} OF 12`
       );
       await offerPage.waitForTimeout(950);
       assert.equal(
         (await offerPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
-        `STEP ${expectedStepNum} OF 14`,
+        `STEP ${expectedStepNum} OF 12`,
         `Jump to Guide onto step ${expectedStepNum} must wait for a fresh action before advancing`
       );
       await offerPage.getByTestId('tutorial-skip-btn').click();
@@ -13869,7 +14275,7 @@ async function runBrowserBasicsSuite() {
       await prefilledContext.close();
     }
     // 1) paint_mode -> Got it
-    const offerPaintBtn = offerPage.locator('button[aria-label="Toggle Paint Mode"]');
+    const offerPaintBtn = offerPage.locator('[data-testid="paint-mode-btn"]');
     await offerPaintBtn.click();
     await expectOfferBanner('paint_mode');
     await captureV3012Screenshot(offerPage, 'desktop_1280x800_offer_spotlight.png');
@@ -13892,8 +14298,8 @@ async function runBrowserBasicsSuite() {
     await expectOfferBanner('create_gallery');
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await expectOfferBanner('saves_export');
-    await jumpFromOfferAndAssertStep(13);
-    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 14
+    await jumpFromOfferAndAssertStep(10);
+    // 4) undo_replay (paint a region, then undo) -> Jump to Guide STEP 5 OF 12
     const offerCanvasBox = await offerPage.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
       const xFrac = 0.42 + (attempt % 3) * 0.08;
@@ -13908,7 +14314,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('undo-btn').click();
     await expectOfferBanner('undo_replay');
     await jumpFromOfferAndAssertStep(5);
-    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 14
+    // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 12
     await offerPage.getByTestId('redo-btn').click();
     const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
     assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
@@ -13919,11 +14325,10 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);
-    // 6) free_color (Settings -> Free Colour Mode ON) -> Jump to Guide STEP 8 OF 14
+    // 6) free_color (Settings -> Free Color Mode ON) -> Jump to Guide STEP 8 OF 12
     await offerPage.locator('button[title="Settings and Menu"]').click();
     await offerPage.getByTestId('settings-tab-settings').click();
-    const offerFreeColorLabel = await offerPage.waitForSelector('text=Free Colour Mode');
-    await offerFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await offerPage.getByTestId('setting-free-color-mode').click();
     await offerPage.getByTestId('settings-modal-close').click();
     await expectOfferBanner('free_color');
     await jumpFromOfferAndAssertStep(8);
@@ -13974,7 +14379,7 @@ async function runBrowserBasicsSuite() {
     await offerPage.getByTestId('feature-offer-dismiss-btn').click();
     await offerPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
 
-    // Verify all 8 offers persisted in both localStorage and NativeBridge.saveBackup spy
+    // Verify all 8 triggered offers persisted in both localStorage and NativeBridge.saveBackup spy
     const persistedOfferState = await offerPage.evaluate(() => ({
       ls: JSON.parse(localStorage.getItem('capy_feature_offers_v1') || '[]'),
       backup: JSON.parse(window.__capySavedBackups?.capy_feature_offers_v1 || '[]'),
@@ -14003,17 +14408,49 @@ async function runBrowserBasicsSuite() {
     // Seen offers persist across reload (toggling Paint Mode does not re-show paint_mode)
     await offerPage.reload({ waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(offerPage);
-    await offerPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await offerPage.locator('[data-testid="paint-mode-btn"]').click();
     await offerPage.waitForTimeout(150);
     assert.equal(await offerPage.getByTestId('feature-offer-banner').count(), 0);
     await offerPage.close();
+
+    // 9) One-time settings_hints_tip offer for returning v1 tutorial completers (without ?skipTutorial)
+    {
+      const returningCtx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      await returningCtx.addInitScript(() => {
+        localStorage.setItem('capy_tutorial_completed_v1', '1');
+      });
+      const returningPage = await returningCtx.newPage();
+      attachErrorListeners(returningPage, 'returningPage');
+      await returningPage.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(returningPage);
+      await returningPage.waitForFunction(
+        () => document.querySelector('[data-testid="feature-offer-banner"]')?.getAttribute('data-offer-id') === 'settings_hints_tip',
+        undefined,
+        { timeout: 5000 }
+      );
+      await returningPage.getByTestId('feature-offer-guide-btn').click();
+      await returningPage.getByTestId('onboarding-tutorial').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await returningPage.getByTestId('tutorial-step-indicator').innerText()).trim().toUpperCase(),
+        'STEP 11 OF 12',
+        'settings_hints_tip Jump to Guide must open STEP 11 OF 12 (settings)'
+      );
+      await returningPage.getByTestId('tutorial-skip-btn').click();
+      // Reloading must NOT re-show settings_hints_tip
+      await returningPage.reload({ waitUntil: 'networkidle' });
+      await waitForPuzzleLoaded(returningPage);
+      await returningPage.waitForTimeout(200);
+      assert.equal(await returningPage.getByTestId('feature-offer-banner').count(), 0, 'settings_hints_tip must only show once');
+      await returningPage.close();
+      await returningCtx.close();
+    }
 
     // Verify ?capy_channel=beta isolates capy_feature_offers_v1__sandbox_beta from root offers
     const betaOfferPage = await offerContext.newPage();
     attachErrorListeners(betaOfferPage, 'betaOfferPage');
     await betaOfferPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(betaOfferPage);
-    await betaOfferPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await betaOfferPage.locator('[data-testid="paint-mode-btn"]').click();
     await betaOfferPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await betaOfferPage.getByTestId('feature-offer-banner').getAttribute('data-offer-id'), 'paint_mode');
     const betaOfferState = await betaOfferPage.evaluate(() => ({
@@ -14076,8 +14513,25 @@ async function runBrowserBasicsSuite() {
       0,
       'Startup must NOT call signInPlayGames / attemptAutoSignIn when showCloudCoopUi === false'
     );
+    assert.equal(
+      await androidGatePage.getByTestId('topbar-fullscreen-btn').count(),
+      0,
+      'Android WebView must hide web-only topbar-fullscreen-btn'
+    );
     await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('settings-section-controls').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await androidGatePage.getByTestId('setting-fullscreen').count(),
+      0,
+      'Android WebView must hide web-only setting-fullscreen in Controls'
+    );
+    await androidGatePage.getByTestId('settings-tab-about').click();
     await androidGatePage.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await androidGatePage.getByTestId('about-privacy-policy-link').getAttribute('href'),
+      'https://capypaint.com/privacy-policy.html',
+      'Android About tab Privacy Policy link must point to https://capypaint.com/privacy-policy.html'
+    );
     assert.equal(
       await androidGatePage.getByTestId('release-channel-card').count(),
       0,
@@ -14096,6 +14550,7 @@ async function runBrowserBasicsSuite() {
     await androidGatePage.goto(`${BASE_URL}/?skipTutorial=1&capy_channel=beta`, { waitUntil: 'networkidle' });
     await waitForPuzzleLoaded(androidGatePage);
     await androidGatePage.locator('button[title="Settings and Menu"]').click();
+    await androidGatePage.getByTestId('settings-tab-about').click();
     await androidGatePage.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(
       await androidGatePage.getByTestId('release-channel-card').count(),
@@ -14238,7 +14693,7 @@ async function runBrowserBasicsSuite() {
       { x: startX, y: startY }
     );
 
-    const paintBtn = await page.waitForSelector('button[aria-label="Toggle Paint Mode"]');
+    const paintBtn = await page.waitForSelector('[data-testid="paint-mode-btn"]');
     await paintBtn.click();
     await paintBtn.click();
     logE2ePass('Palette selection, region tap coloring, double-tap zoom, pan momentum, and Paint Mode verified.');
@@ -14249,12 +14704,34 @@ async function runBrowserBasicsSuite() {
     logE2eStart('Verifying 5-tab SettingsModal (About, Settings, Hints, Create, Saves), Enable Undo toggle & tab persistence...');
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo visible by default for standard puzzles');
 
-    // Open Settings -> verify all 5 distinct tabs (About=0, Settings=1, Hints=2, Create=3, Saves=4), zero duplicates, and tab 4 persistence across reload
+    // Open Settings -> verify default first-time tab is Tab 1 (Settings), ARIA roles, all 5 distinct tabs, zero duplicates, and tab 4 persistence across reload
     const settingsBtn = page.locator('button[title="Settings and Menu"]');
     await settingsBtn.click();
-    await page.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.locator('[role="dialog"][aria-modal="true"]').count(),
+      1,
+      'SettingsModal must expose role="dialog" aria-modal="true"'
+    );
+    assert.equal(
+      await page.getByTestId('settings-modal-tabs').getAttribute('role'),
+      'tablist',
+      'settings-modal-tabs must expose role="tablist"'
+    );
+    assert.equal(
+      await page.getByTestId('settings-tab-settings').getAttribute('role'),
+      'tab',
+      'Settings tab button must expose role="tab"'
+    );
+    assert.equal(
+      await page.getByTestId('settings-tab-settings').getAttribute('aria-selected'),
+      'true',
+      'First-time gear icon tap must default to Tab 1 (Settings)'
+    );
 
     // Tab 0: About
+    await page.getByTestId('settings-tab-about').click();
+    await page.getByTestId('app-version-badge').waitFor({ state: 'visible', timeout: 3000 });
     const pkgVersion = JSON.parse(fs.readFileSync(path.resolve(projectRoot, 'package.json'), 'utf8')).version;
     const versionBadgeText = await page.locator('[data-testid="app-version-badge"]').textContent();
     assert.equal(versionBadgeText?.trim(), `v${pkgVersion}`, `Expected app-version-badge to equal v${pkgVersion}`);
@@ -14262,6 +14739,14 @@ async function runBrowserBasicsSuite() {
     assert.equal(await page.getByTestId('about-screen-card').isVisible(), true, 'About tab must render about-screen-card');
     assert.equal(await page.getByTestId('about-replay-tutorial-btn').isVisible(), true, 'About tab must render about-replay-tutorial-btn');
     assert.equal(await page.getByTestId('about-privacy-policy-link').isVisible(), true, 'About tab must render about-privacy-policy-link');
+    assert.equal(await page.getByTestId('about-licenses-section').isVisible(), true, 'About tab must render collapsible about-licenses-section');
+    await page.getByTestId('about-licenses-section').locator('summary').click();
+    assert.equal(
+      (await page.getByTestId('about-licenses-section').innerText()).includes('React'),
+      true,
+      'Expanded about-licenses-section must list Open Source Licenses (React, Tailwind, Lucide)'
+    );
+    await page.getByTestId('about-licenses-section').locator('summary').click();
     assert.equal(await page.getByTestId('about-report-issue-link').isVisible(), true, 'About tab must render about-report-issue-link');
     assert.equal(
       await page.getByTestId('about-report-issue-link').getAttribute('href'),
@@ -14302,11 +14787,11 @@ async function runBrowserBasicsSuite() {
       };
     });
     assert.ok(freeArtLayout, 'stat-free-color-creations tile and grid must exist');
-    assert.equal(freeArtLayout.hasColSpan2, true, 'Free Colour Art tile must apply col-span-2 when !showCloudCoopUi');
+    assert.equal(freeArtLayout.hasColSpan2, true, 'Free Color Art tile must apply col-span-2 when !showCloudCoopUi');
     assert.equal(
       Math.abs(freeArtLayout.tileWidth - freeArtLayout.gridWidth) <= 2,
       true,
-      `Free Colour Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
+      `Free Color Art tile (${freeArtLayout.tileWidth}px) must span full grid width (${freeArtLayout.gridWidth}px)`
     );
 
     // Tab 0 Anonymous In-Game Feedback form (validation, 201 created, 503 fallback preserving draft, 429 rate-limit)
@@ -14422,26 +14907,52 @@ async function runBrowserBasicsSuite() {
       await page.getByTestId('about-open-feedback-btn').click();
     }
 
-    // Tab 1: Settings (no duplicated About/Stats/Platforms and no leaked Hints content)
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    // Tab 1: Settings (Accessibility first, UI with Canvas Background, Gameplay, Controls, Navigation, Sound & Haptics + 2 collapsibles)
+    await page.getByTestId('settings-tab-settings').click();
     await page.getByText('Canvas Background').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.getByText('Canvas Background').isVisible(), true, 'Settings tab must render Canvas Background');
+    for (const secId of [
+      'settings-section-accessibility',
+      'settings-section-ui',
+      'settings-section-gameplay',
+      'settings-section-controls',
+      'settings-section-navigation',
+      'settings-section-audio',
+      'settings-section-replay',
+      'settings-section-labels',
+    ]) {
+      assert.equal(await page.getByTestId(secId).isVisible(), true, `Settings tab must render grouped section ${secId}`);
+    }
+    const a11ySecBox = await page.getByTestId('settings-section-accessibility').boundingBox();
+    const uiSecBox = await page.getByTestId('settings-section-ui').boundingBox();
+    assert.ok(a11ySecBox && uiSecBox && a11ySecBox.y < uiSecBox.y, 'Accessibility section must appear first above UI section on Tab 1');
+    assert.equal(
+      await page.locator('[data-testid="settings-section-ui"]').getByText('Canvas Background').isVisible(),
+      true,
+      'Canvas Background must live inside settings-section-ui'
+    );
+    assert.equal(await page.getByText('Tap Behavior', { exact: true }).count(), 0, 'Tap Behavior (Difficulty) must be relocated from Tab 1 Settings to Tab 2 Hints');
+    assert.equal(await page.getByText('Color Mode', { exact: true }).count(), 0, 'Color Mode must be relocated from Tab 1 Settings to Tab 2 Hints');
+    const replaySummaryText = (await page.getByTestId('settings-section-replay-summary').innerText()).trim();
+    assert.equal(/x\s*•\s*Auto-replay (On|Off)/i.test(replaySummaryText), true, `Expected live Replay summary badge (got "${replaySummaryText}")`);
+    const labelsSummaryText = (await page.getByTestId('settings-section-labels-summary').innerText()).trim();
+    assert.equal(/\d+–\d+px\s*•\s*\d+%/i.test(labelsSummaryText), true, `Expected live Number Label Sizing summary badge (got "${labelsSummaryText}")`);
+    assert.equal(await page.getByTestId('setting-detailed-progress').count(), 0, 'Detailed Generation Progress must be relocated out of Tab 1 Settings to Tab 3 Create');
     assert.equal(await page.getByTestId('app-version-badge').count(), 0, 'Settings tab must not duplicate app-version-badge');
     assert.equal(await page.getByTestId('lifetime-stats-card').count(), 0, 'Settings tab must not duplicate lifetime-stats-card');
     assert.equal(await page.getByTestId('release-channel-card').count(), 0, 'Settings tab must not duplicate release-channel-card');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'Settings tab must not leak Hints content');
 
     await page.locator('button[title="Charcoal"]').first().click();
-    for (const labelText of [
-      'Show Zoom (+ / -) Buttons',
-      'Show Reset View (Extent) Button',
-    ]) {
-      const labelEl = await page.waitForSelector(`text=${labelText}`);
-      await labelEl.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    for (const switchTestId of ['setting-show-zoom-buttons', 'setting-show-reset-view-button']) {
+      const sw = page.getByTestId(switchTestId);
+      assert.equal(await sw.getAttribute('role'), 'switch', `${switchTestId} must expose role="switch"`);
+      await sw.click();
     }
-    // Verify toggling Enable Undo Action OFF hides undo-btn & persists, then toggle back ON for Undo/Redo suite
-    const undoToggleLabel = await page.waitForSelector('text=Enable Undo Action');
-    await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    // Verify toggling Undo Button OFF hides undo-btn & persists, then toggle back ON for Undo/Redo suite
+    const undoSwitch = page.getByTestId('setting-enable-undo');
+    assert.equal(await undoSwitch.getAttribute('role'), 'switch', 'setting-enable-undo must expose role="switch"');
+    await undoSwitch.click();
     await page.getByTestId('undo-btn').waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await page.$('[data-testid="undo-btn"]'), null, 'Undo must hide when toggled off');
     const undoPersistedOff = await page.evaluate(() => {
@@ -14454,7 +14965,7 @@ async function runBrowserBasicsSuite() {
       return false;
     });
     assert.equal(undoPersistedOff, true, 'Opting out of enableUndo must persist to localStorage');
-    await undoToggleLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await undoSwitch.click();
     await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo must reappear when toggled back on');
 
@@ -14488,23 +14999,47 @@ async function runBrowserBasicsSuite() {
     );
     await page.getByTestId('setting-fat-finger-assist').click();
 
-    // Tab 2: Hints
-    await page.getByRole('button', { name: 'Hints', exact: true }).click();
-    await page.getByText('Highlight Style').waitFor({ state: 'visible', timeout: 3000 });
+    // Tab 2: Hints (grouped sections + fresh install Amber swatch #f59e0b selected + relocated Coloring Mode & Difficulty)
+    await page.getByTestId('settings-tab-hints').click();
+    await page.getByTestId('hints-section-style').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(await page.getByTestId('hints-section-style').isVisible(), true, 'Hints tab must render hints-section-style');
+    assert.equal(await page.getByTestId('hints-section-assist').isVisible(), true, 'Hints tab must render hints-section-assist');
+    assert.equal(await page.getByTestId('hints-section-mode-difficulty').isVisible(), true, 'Hints tab must render hints-section-mode-difficulty');
+    assert.equal(
+      await page.locator('[data-testid="hints-section-mode-difficulty"]').getByText('Tap Behavior').isVisible(),
+      true,
+      'Hints tab must render relocated Tap Behavior (Difficulty)'
+    );
+    assert.equal(
+      await page.locator('[data-testid="hints-section-mode-difficulty"]').getByText('Color Mode').isVisible(),
+      true,
+      'Hints tab must render relocated Color Mode'
+    );
     assert.equal(await page.getByText('Highlight Style').isVisible(), true, 'Hints tab must render Highlight Style');
     assert.equal(await page.getByText('Hint Fill Pattern').isVisible(), true, 'Hints tab must render Hint Fill Pattern');
     assert.equal(await page.getByText('Canvas Background').count(), 0, 'Hints tab must not render Settings content');
+    const amberSwatchActive = await page.evaluate(() => {
+      const amberBtn = document.querySelector('[data-testid="hints-section-style"] button[title="Amber"]');
+      return Boolean(amberBtn && amberBtn.className.includes('scale-110'));
+    });
+    assert.equal(amberSwatchActive, true, 'Fresh install hintColorArgb (0xfff59e0b) must match first Amber preset swatch');
 
-    // Tab 3: Create
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    // Tab 3: Create (includes relocated Detailed Generation Progress)
+    await page.getByTestId('settings-tab-create').click();
     await page.getByTestId('daily-puzzle-card').waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.getByTestId('daily-puzzle-card').isVisible(), true, 'Create tab must render daily-puzzle-card');
     assert.equal(await page.getByTestId('gallery-search-input').isVisible(), true, 'Create tab must render gallery-search-input');
+    assert.equal(await page.getByTestId('setting-detailed-progress').isVisible(), true, 'Create tab must render relocated setting-detailed-progress');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'Create tab must not render Hints content');
 
-    // Tab 4: Saves (persist tab 4 across full page reload; cold-start default must be THUMBNAILS with list first)
-    await page.getByRole('button', { name: 'Saves', exact: true }).click();
+    // Tab 4: Saves (no duplicate autoReplayOnLoad toggle; cold-start default must be THUMBNAILS with list first)
+    await page.getByTestId('settings-tab-saves').click();
     await page.getByTestId('saves-list-section').waitFor({ state: 'visible', timeout: 3000 });
+    assert.equal(
+      await page.getByTestId('toggle-auto-replay-saves-btn').count(),
+      0,
+      'Saves tab must not render removed duplicate toggle-auto-replay-saves-btn'
+    );
     assert.equal(
       await page.evaluate(() => localStorage.getItem('capy_saves_view_mode')),
       null,
@@ -14566,7 +15101,7 @@ async function runBrowserBasicsSuite() {
     );
 
     // Switch to Hints tab and close -> verify capy_last_settings_tab === '2'
-    await page.getByRole('button', { name: 'Hints', exact: true }).click();
+    await page.getByTestId('settings-tab-hints').click();
     await page.getByText('Highlight Style').waitFor({ state: 'visible', timeout: 3000 });
     await page.keyboard.press('Escape');
     await page.getByText('Highlight Style').waitFor({ state: 'hidden', timeout: 3000 });
@@ -14628,6 +15163,21 @@ async function runBrowserBasicsSuite() {
       valAfterDrag >= 0 && valAfterDrag < totalSteps && valAfterDrag <= Math.ceil(totalSteps * 0.35),
       true,
       `Expected instant pointer-drag scrub in compact mode (0..35% of ${totalSteps}), got ${valAfterDrag}`
+    );
+    // Verify Skip to End stays mounted (disabled) when playback reaches the end so sibling controls never shift
+    const skipBtn = page.getByTestId('replay-skip-btn');
+    const speedBtn = page.getByTestId('replay-speed-btn');
+    assert.equal(await skipBtn.isVisible(), true, 'replay-skip-btn must be visible mid-replay');
+    assert.equal(await skipBtn.isDisabled(), false, 'replay-skip-btn must be enabled mid-replay');
+    const speedBoxMid = await getStableBoundingBox(speedBtn);
+    await skipBtn.click();
+    assert.equal(await skipBtn.isVisible(), true, 'replay-skip-btn must stay visible at replay end');
+    assert.equal(await skipBtn.isDisabled(), true, 'replay-skip-btn must be disabled at replay end');
+    const speedBoxEnd = await getStableBoundingBox(speedBtn);
+    assert.equal(
+      Math.abs(speedBoxEnd.x - speedBoxMid.x) <= 1,
+      true,
+      `Replay controls must not shift horizontally at replay end (${speedBoxMid.x} -> ${speedBoxEnd.x})`
     );
     await page.locator('[data-testid="replay-exit-btn"]').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
@@ -14948,7 +15498,7 @@ async function runBrowserBasicsSuite() {
     // -------------------------------------------------------------------------
     logE2eStart('Verifying Create tab gallery filters, category chips & Community Puzzle Ideas moderation...');
     await settingsBtn.click();
-    const createTabBtn = page.getByRole('button', { name: 'Create', exact: true });
+    const createTabBtn = page.getByTestId('settings-tab-create');
     await createTabBtn.waitFor({ state: 'visible', timeout: 3000 });
     await createTabBtn.click();
     await page.getByTestId('gallery-tag-music').waitFor({ state: 'visible', timeout: 3000 });
@@ -15126,11 +15676,10 @@ async function runBrowserBasicsSuite() {
 
     // BF-1: Verify Free Colour repaint of an already-filled region preserves chronological order and Undo syncs restored color to Co-op peer
     await settingsBtn.click();
-    const settingsTabBtn = page.getByRole('button', { name: 'Settings', exact: true });
+    const settingsTabBtn = page.getByTestId('settings-tab-settings');
     await settingsTabBtn.waitFor({ state: 'visible', timeout: 3000 });
     await settingsTabBtn.click();
-    const freeColorLabel = await page.waitForSelector('text=Free Colour Mode');
-    await freeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.getByTestId('setting-free-color-mode').click();
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -15339,8 +15888,7 @@ async function runBrowserBasicsSuite() {
 
     // Turn Free Colour Mode back off before running Normal Mode burst and closing pageB
     await settingsBtn.click();
-    const freeColorLabelOff = await page.waitForSelector('text=Free Colour Mode');
-    await freeColorLabelOff.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+    await page.getByTestId('setting-free-color-mode').click();
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -15725,7 +16273,7 @@ async function runBrowserBasicsSuite() {
     // ------------------------------------------------------------------
     logE2eStart('Verifying Controls settings persistence (zoom sensitivity, magnetic stops, sound) & topbar-zoom-badge removal...');
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('settings-tab-settings').click();
 
     const zoomSensSlider = page.getByTestId('setting-zoom-sensitivity');
     await zoomSensSlider.waitFor({ state: 'visible', timeout: 5000 });
@@ -15734,11 +16282,16 @@ async function runBrowserBasicsSuite() {
     const snapZoomToggle = page.getByTestId('setting-snap-zoom-levels');
     await snapZoomToggle.click();
 
-    const soundEnabledToggle = page.getByTestId('setting-sound-enabled');
-    await soundEnabledToggle.click();
-
     const soundVolumeSlider = page.getByTestId('setting-sound-volume');
     await soundVolumeSlider.fill('0.45');
+
+    const soundEnabledToggle = page.getByTestId('setting-sound-enabled');
+    await soundEnabledToggle.click();
+    assert.equal(
+      await soundVolumeSlider.isDisabled(),
+      true,
+      'Sound Volume slider must disable when Sound Effects is toggled off'
+    );
 
     const persistedControls = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
@@ -15784,7 +16337,7 @@ async function runBrowserBasicsSuite() {
     await waitForPuzzleLoaded(page);
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').click();
     const snailCard = page.getByTestId('gallery-card-snail_guitar');
     await snailCard.waitFor({ state: 'visible', timeout: 5000 });
     await snailCard.getByRole('button', { name: 'Play', exact: true }).click();
@@ -15829,7 +16382,7 @@ async function runBrowserBasicsSuite() {
 
     // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').click();
 
     const dailyCard = page.getByTestId('daily-puzzle-card');
     await dailyCard.waitFor({ state: 'visible', timeout: 5000 });
@@ -15895,7 +16448,7 @@ async function runBrowserBasicsSuite() {
 
     // 10b. Reduced Motion toggle persistence in capy_user_settings_v8
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('settings-tab-settings').click();
     const reducedMotionToggle = page.getByTestId('setting-reduced-motion');
     await reducedMotionToggle.waitFor({ state: 'visible', timeout: 5000 });
     await reducedMotionToggle.click();
@@ -15926,7 +16479,7 @@ async function runBrowserBasicsSuite() {
 
     // Verify typing '2' inside Gallery search <input> does NOT change selected swatch
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').click();
     const gallerySearchInput = page.getByTestId('gallery-search-input');
     await gallerySearchInput.waitFor({ state: 'visible', timeout: 5000 });
     await gallerySearchInput.focus();
@@ -16049,7 +16602,7 @@ async function runBrowserBasicsSuite() {
     );
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'About', exact: true }).click();
+    await page.getByTestId('settings-tab-about').click();
     const statsCard = page.getByTestId('lifetime-stats-card');
     await statsCard.waitFor({ state: 'visible', timeout: 5000 });
     const renderedTotalText = (await page.getByTestId('stat-total-regions').innerText()).replace(/,/g, '').trim();
@@ -16099,8 +16652,8 @@ async function runBrowserBasicsSuite() {
     assert.ok(parentSnapId, 'Parent puzzle must have an activeSnapshotId');
 
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Create', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByTestId('settings-tab-create').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-create').click();
     await page.getByTestId('infinite-zoom-subtile-btn').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('infinite-zoom-subtile-btn').click();
     await page.waitForFunction(
@@ -16211,19 +16764,17 @@ async function runBrowserBasicsSuite() {
 
     // Ensure Enable Undo Action is ON and Free Colour Mode is OFF on Peer A
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'Settings', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-settings').click();
     const currentSettings11c = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
     });
     await page.locator('button:has(span:text-is("Settings"))').click();
     if (currentSettings11c.isFreeColorMode) {
-      const fcLabel = await page.waitForSelector('text=Free Colour Mode');
-      await fcLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+      await page.getByTestId('setting-free-color-mode').click();
     }
     if (!currentSettings11c.enableUndo) {
-      const undoSettingLabel = await page.waitForSelector('text=Enable Undo Action');
-      await undoSettingLabel.evaluate((el) => el.closest('.flex')?.querySelector('button')?.click());
+      await page.getByTestId('setting-enable-undo').click();
     }
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
@@ -16354,8 +16905,8 @@ async function runBrowserBasicsSuite() {
       'Default Stable/Dev root view must not display topbar-channel-badge clutter'
     );
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.getByRole('button', { name: 'About', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByRole('button', { name: 'About', exact: true }).click();
+    await page.getByTestId('settings-tab-about').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-about').click();
     const channelCard = page.getByTestId('release-channel-card');
     await channelCard.waitFor({ state: 'visible', timeout: 3000 });
     await channelCard.scrollIntoViewIfNeeded();
@@ -16661,10 +17212,15 @@ async function runBrowserBasicsSuite() {
     );
     await waitForPuzzleLoaded(page);
 
-    // Enable Auto-Loop Replay (true) + 0.5x speed in Settings Tab 0, and ensure Replay on Load is ON in Saves
+    // Enable Auto-Loop Replay (true), 0.5x speed, and Replay on Load (true) in Tab 1 collapsible Replay section
     await page.locator('button[title="Settings and Menu"]').click();
-    await page.locator('button', { hasText: /^Settings$/ }).first().waitFor({ state: 'visible', timeout: 3000 });
-    await page.locator('button', { hasText: /^Settings$/ }).first().click();
+    await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
+    await page.getByTestId('settings-tab-settings').click();
+    const replaySectionToggle = page.getByTestId('settings-section-replay-toggle');
+    await replaySectionToggle.scrollIntoViewIfNeeded();
+    if ((await replaySectionToggle.getAttribute('aria-expanded')) !== 'true') {
+      await replaySectionToggle.click();
+    }
     const settingsLoopToggle = page.getByTestId('toggle-replay-loop-btn');
     await settingsLoopToggle.scrollIntoViewIfNeeded();
     if ((await settingsLoopToggle.getAttribute('aria-checked')) !== 'true') {
@@ -16688,19 +17244,19 @@ async function runBrowserBasicsSuite() {
       undefined,
       { timeout: 3000 }
     );
-
-    // Switch to Saves tab, ensure Replay on Load is enabled, and load targetSnapId
-    await page.locator('button', { hasText: /^Saves$/ }).first().click();
-    const autoReplaySavesSwitch = page.getByTestId('toggle-auto-replay-saves-btn');
-    await autoReplaySavesSwitch.waitFor({ state: 'visible', timeout: 3000 });
-    if ((await autoReplaySavesSwitch.getAttribute('aria-checked')) !== 'true') {
-      await autoReplaySavesSwitch.click();
+    const autoReplaySwitch = page.getByTestId('toggle-auto-replay-btn');
+    await autoReplaySwitch.scrollIntoViewIfNeeded();
+    if ((await autoReplaySwitch.getAttribute('aria-checked')) !== 'true') {
+      await autoReplaySwitch.click();
       await page.waitForFunction(
-        () => document.querySelector('[data-testid="toggle-auto-replay-saves-btn"]')?.getAttribute('aria-checked') === 'true',
+        () => document.querySelector('[data-testid="toggle-auto-replay-btn"]')?.getAttribute('aria-checked') === 'true',
         undefined,
         { timeout: 3000 }
       );
     }
+
+    // Switch to Saves tab and load targetSnapId
+    await page.getByTestId('settings-tab-saves').click();
     await page.getByTestId(`save-card-${mobileReplaySetup.targetSnapId}`).click();
     await page.getByTestId('save-action-load').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('save-action-load').click();
@@ -16718,13 +17274,31 @@ async function runBrowserBasicsSuite() {
       'false',
       'Loading a puzzle save must immediately force replayLoop OFF (aria-pressed="false")'
     );
+    for (const replayBtnId of [
+      'replay-play-pause-btn',
+      'replay-follow-btn',
+      'replay-loop-btn',
+      'replay-skip-btn',
+      'replay-exit-btn',
+    ]) {
+      const rBtn = page.getByTestId(replayBtnId);
+      const rBox = await rBtn.boundingBox();
+      assert.ok(
+        rBox && rBox.width >= 38 && rBox.height >= 38,
+        `Mobile 360px ${replayBtnId} must be >=38x38px (got ${JSON.stringify(rBox)})`
+      );
+      assert.ok(
+        Boolean((await rBtn.getAttribute('aria-label'))?.trim()),
+        `Replay button ${replayBtnId} must expose descriptive aria-label`
+      );
+    }
 
     const windowBox360 = await mobileReplayWin.boundingBox();
     const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
     const headerBox360 = await page.locator('header').first().boundingBox();
     const zoomOutMin360 = await page.getByTestId('zoom-out-btn').boundingBox();
     const undoMin360 = await page.getByTestId('undo-btn').boundingBox();
-    const paintMin360 = await page.locator('[aria-label="Toggle Paint Mode"]').boundingBox();
+    const paintMin360 = await page.locator('[data-testid="paint-mode-btn"]').boundingBox();
     const paletteMin360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
     assert.ok(
       windowBox360 && exitBox360 && headerBox360 && zoomOutMin360 && undoMin360 && paintMin360 && paletteMin360,
@@ -16861,7 +17435,7 @@ async function runBrowserBasicsSuite() {
     await page.mouse.down();
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.mouse.up();
-    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await page.locator('[data-testid="paint-mode-btn"]').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(
       await mobileReplayWin.isVisible(),
@@ -16895,7 +17469,7 @@ async function runBrowserBasicsSuite() {
     assert.equal(await mobileReplayWin.isVisible(), false, 'First drag in Paint Mode after post-load replay must dismiss ReplayControls');
 
     // Flow 3: Post-load replay in Tap Mode -> 100% -> first tap dismisses ReplayControls
-    await page.locator('[aria-label="Toggle Paint Mode"]').click(); // Turn Paint Mode OFF -> Tap Mode
+    await page.locator('[data-testid="paint-mode-btn"]').click(); // Turn Paint Mode OFF -> Tap Mode
     await page.reload({ waitUntil: 'networkidle' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
@@ -16914,7 +17488,7 @@ async function runBrowserBasicsSuite() {
     await page.mouse.down();
     await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5 + 18, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5 + 12, { steps: 4 });
     await page.mouse.up();
-    await page.locator('[aria-label="Toggle Paint Mode"]').click();
+    await page.locator('[data-testid="paint-mode-btn"]').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
 
@@ -17070,6 +17644,104 @@ async function runBrowserBasicsSuite() {
       mobileTutorialBox.height <= 210,
       true,
       `Step 1 compact OnboardingTutorial card height (${mobileTutorialBox.height}px) must stay slim <= 210px on 360x780`
+    );
+    // Verify Next button stays at exact same (x, y, width, height) <= 1px across basic-feature Steps 1-7 on 360x780 mobile
+    const mobileNextRefBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+    assert.ok(mobileNextRefBox, 'Expected Step 1 tutorial-next-btn boundingBox on 360x780 mobile');
+    for (let stepNum = 2; stepNum <= 7; stepNum++) {
+      await mobileTopbarPage.getByTestId('tutorial-next-btn').click();
+      await mobileTopbarPage.waitForFunction(
+        (expected) =>
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+          `STEP ${expected} OF 12`,
+        stepNum,
+        { timeout: 3000 }
+      );
+      const nextBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+      assert.ok(nextBox, `Expected Step ${stepNum} tutorial-next-btn boundingBox on 360x780 mobile`);
+      assert.equal(
+        Math.abs(nextBox.x - mobileNextRefBox.x) <= 1 &&
+          Math.abs(nextBox.y - mobileNextRefBox.y) <= 1 &&
+          Math.abs(nextBox.width - mobileNextRefBox.width) <= 1 &&
+          Math.abs(nextBox.height - mobileNextRefBox.height) <= 1,
+        true,
+        `Mobile 360x780 Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(mobileNextRefBox)}, got=${JSON.stringify(nextBox)})`
+      );
+    }
+    // Verify Next button stays unclipped and <=1px stable across Steps 1-7 at 125%/125% (Large Text) and 150%/140% (max scale)
+    const verifyScaledTutorialSteps1To7 = async (label) => {
+      await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+      await mobileTopbarPage.getByTestId('tutorial-topic-item-0').click();
+      await mobileTopbarPage.waitForFunction(
+        () =>
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+          'STEP 1 OF 12',
+        undefined,
+        { timeout: 3000 }
+      );
+      const refBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+      assert.ok(refBox, `Expected Step 1 tutorial-next-btn boundingBox (${label})`);
+      for (let stepNum = 1; stepNum <= 7; stepNum++) {
+        if (stepNum > 1) {
+          await mobileTopbarPage.getByTestId('tutorial-next-btn').click();
+          await mobileTopbarPage.waitForFunction(
+            (expected) =>
+              document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+              `STEP ${expected} OF 12`,
+            stepNum,
+            { timeout: 3000 }
+          );
+        }
+        const metrics = await mobileTopbarPage.evaluate(() => {
+          const card = document.querySelector('[data-testid="onboarding-tutorial"]');
+          const next = document.querySelector('[data-testid="tutorial-next-btn"]');
+          if (!card || !next) return null;
+          const cr = card.getBoundingClientRect();
+          const nr = next.getBoundingClientRect();
+          return {
+            vOver: card.scrollHeight - card.clientHeight,
+            nextBottom: nr.bottom,
+            cardBottom: cr.bottom,
+            x: nr.x,
+            y: nr.y,
+            width: nr.width,
+            height: nr.height,
+          };
+        });
+        assert.ok(metrics, `Expected tutorial metrics on Step ${stepNum} (${label})`);
+        assert.equal(
+          metrics.vOver <= 1 && metrics.nextBottom <= metrics.cardBottom + 1,
+          true,
+          `${label} Step ${stepNum} tutorial-next-btn clipped or card overflowed (${JSON.stringify(metrics)})`
+        );
+        assert.equal(
+          Math.abs(metrics.x - refBox.x) <= 1 &&
+            Math.abs(metrics.y - refBox.y) <= 1 &&
+            Math.abs(metrics.width - refBox.width) <= 1 &&
+            Math.abs(metrics.height - refBox.height) <= 1,
+          true,
+          `${label} Step ${stepNum} tutorial-next-btn shifted beyond 1px (ref=${JSON.stringify(refBox)}, got=${JSON.stringify(metrics)})`
+        );
+      }
+    };
+    await mobileTopbarPage.getByTestId('tutorial-large-text-btn').click();
+    await mobileTopbarPage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+    await verifyScaledTutorialSteps1To7('360x780 Large Text 125%/125%');
+    await mobileTopbarPage.evaluate(() => {
+      document.documentElement.style.setProperty('--capy-text-scale', '1.5');
+      document.documentElement.style.setProperty('--capy-ui-scale', '1.4');
+    });
+    await verifyScaledTutorialSteps1To7('360x780 Max Scale 150%/140%');
+    await mobileTopbarPage.getByTestId('tutorial-large-text-btn').click();
+    await mobileTopbarPage.waitForFunction(() => document.documentElement.dataset.largeText === 'false', undefined, { timeout: 3000 });
+    await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
+    await mobileTopbarPage.getByTestId('tutorial-topic-item-0').click();
+    await mobileTopbarPage.waitForFunction(
+      () =>
+        document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+        'STEP 1 OF 12',
+      undefined,
+      { timeout: 3000 }
     );
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
@@ -17293,7 +17965,7 @@ async function runBrowserBasicsSuite() {
     await closeBtn.click();
     await mobileTopbarPage.getByTestId('tutorial-skip-btn').click();
     await mobileTopbarPage.getByTestId('onboarding-tutorial').waitFor({ state: 'hidden', timeout: 3000 });
-    await mobileTopbarPage.locator('button[aria-label="Toggle Paint Mode"]').click();
+    await mobileTopbarPage.locator('[data-testid="paint-mode-btn"]').click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
     await assertSpotlightAligned(mobileTopbarPage, 'offer');
     const mobileOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
@@ -17409,7 +18081,7 @@ async function runBrowserBasicsSuite() {
     await mobileHintBar.waitFor({ state: 'visible', timeout: 3000 });
     const defaultHintBarText = await mobileHintBar.innerText();
     assert.equal(
-      defaultHintBarText.includes('Gallery: Max (2048p)') && defaultHintBarText.includes('Uploads: Auto'),
+      defaultHintBarText.includes('Built-in Gallery: Max Detail') && defaultHintBarText.includes('Photo Uploads: Auto'),
       true,
       `create-style-hint-bar must clearly show Gallery Max vs Custom Uploads default mode (got '${defaultHintBarText}')`
     );
@@ -17457,9 +18129,9 @@ async function runBrowserBasicsSuite() {
     await mobileHighPresetBtn.click();
     const afterHighHintText = await mobileHintBar.innerText();
     assert.equal(
-      afterHighHintText.includes('38c') && afterHighHintText.includes('500 pcs'),
+      afterHighHintText.includes('38 colors') && afterHighHintText.includes('500 pieces'),
       true,
-      `Detail Level Preset High must sync 38c and 500 pcs (got '${afterHighHintText}')`
+      `Detail Level Preset High must sync 38 colors and 500 pieces (got '${afterHighHintText}')`
     );
 
     // Quick Max Detail button must jump directly to 64c / 2000 pcs / 2048p
@@ -17468,9 +18140,11 @@ async function runBrowserBasicsSuite() {
     await mobileMaxPresetBtn.click();
     const afterMaxHintText = await mobileHintBar.innerText();
     assert.equal(
-      afterMaxHintText.includes('Max Detail') && afterMaxHintText.includes('2048p'),
+      afterMaxHintText.includes('Max Detail') &&
+        afterMaxHintText.includes('64 colors') &&
+        afterMaxHintText.includes('2000 pieces'),
       true,
-      `Max Detail preset button must apply 64c/2000/2048p Max Detail config (got '${afterMaxHintText}')`
+      `Max Detail preset button must apply 64 colors / 2000 pieces Max Detail config (got '${afterMaxHintText}')`
     );
 
     assert.equal(await mobileTopbarPage.getByText('Optional Ad').count(), 0, '360x780 Create tab must hide Optional Ad');
@@ -17492,7 +18166,7 @@ async function runBrowserBasicsSuite() {
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     const reopenedHintBarText = await mobileTopbarPage.getByTestId('create-style-hint-bar').innerText();
     assert.equal(
-      reopenedHintBarText.includes('Gallery: Max (2048p)'),
+      reopenedHintBarText.includes('Built-in Gallery: Max Detail'),
       true,
       `Reopening SettingsModal without regenerating must resync localConfig to persisted settings (got '${reopenedHintBarText}')`
     );
@@ -18624,6 +19298,20 @@ async function runBrowserBasicsSuite() {
       }
     };
 
+    // Verify 360x780 normal-mode mobile topbar icon buttons meet >=38px touch targets & carry descriptive aria-labels
+    for (const topbarId of ['topbar-preview-btn', 'topbar-upload-btn', 'topbar-settings-btn']) {
+      const btn = ltMobilePage.getByTestId(topbarId);
+      const box = await btn.boundingBox();
+      assert.ok(
+        box && box.width >= 38 && box.height >= 38,
+        `Mobile 360x780 ${topbarId} must be >=38x38px (got ${JSON.stringify(box)})`
+      );
+      assert.ok(
+        Boolean((await btn.getAttribute('aria-label'))?.trim()),
+        `Icon-only ${topbarId} must expose descriptive aria-label`
+      );
+    }
+
     // Open SettingsModal, verify normal switch size & knob containment, test Fat-Finger preset auto-enable & Large Text coupling
     await ltMobilePage.getByTestId('topbar-settings-btn').click();
     await ltMobilePage.getByTestId('settings-tab-settings').click();
@@ -18688,12 +19376,131 @@ async function runBrowserBasicsSuite() {
     await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'Large Text Variant 1 fatFinger ON');
     await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'Large Text Variant 1 largeText ON');
 
-    // Fix 1: Verify Variant 2 switch (w-11 h-6 + translate-x-5) knob containment in both checked & unchecked states
+    // Verify independent Text Size and UI Size sliders scale text and buttons separately while maintaining switch knob containment
+    const setRangeSlider = async (page, testId, val) => {
+      await page.getByTestId(testId).evaluate((el, v) => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(el, String(v));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }, val);
+    };
+    // Reset to 100% / 100% via Large Text toggle OFF first
+    await ltSwitch.click();
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.largeText === 'false', undefined, { timeout: 3000 });
+    const baselineFontSize = await ltMobilePage
+      .locator('[data-testid="settings-section-accessibility"] .text-xs')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const baselineSwitchW = (await ltSwitch.boundingBox()).width;
+
+    // 1) Text Size 140%, UI Size 100%: font size grows, switch width unchanged, and Finger Reach does NOT boost to Large UI 34px
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.4);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'true', undefined, { timeout: 3000 });
+    assert.equal((await ltMobilePage.getByTestId('setting-text-size-value').innerText()).trim(), '140%');
+    assert.equal(await ltMobilePage.evaluate(() => document.documentElement.dataset.uiScaled), 'false');
+    const textOnlyReachLabel = (await ltMobilePage.getByTestId('setting-touch-reach-value').innerText()).trim();
+    assert.equal(
+      !textOnlyReachLabel.includes('Large UI') && textOnlyReachLabel === '22px',
+      true,
+      `Text Size 140% with UI Size 100% must not trigger 34px Large UI reach boost (got "${textOnlyReachLabel}")`
+    );
+    const textOnlyFontSize = await ltMobilePage
+      .locator('[data-testid="settings-section-accessibility"] .text-xs')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const textOnlySwitchW = (await ltSwitch.boundingBox()).width;
+    assert.ok(textOnlyFontSize > baselineFontSize + 2, `Text Size 140% must enlarge font (${baselineFontSize} -> ${textOnlyFontSize})`);
+    assert.ok(Math.abs(textOnlySwitchW - baselineSwitchW) <= 1, `Text Size 140% alone must not resize switch (${baselineSwitchW} vs ${textOnlySwitchW})`);
+
+    // 1b) Desktop >=640px sm:text-* monotonic scaling: 100% (14px) < 105% (14.7px) < 125% (17.5px)
+    await ltMobilePage.setViewportSize({ width: 1280, height: 800 });
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.0);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'false', undefined, { timeout: 3000 });
+    const desktopTabFont100 = await ltMobilePage
+      .getByTestId('settings-tab-settings')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.05);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.textScaled === 'true', undefined, { timeout: 3000 });
+    const desktopTabFont105 = await ltMobilePage
+      .getByTestId('settings-tab-settings')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.25);
+    const desktopTabFont125 = await ltMobilePage
+      .getByTestId('settings-tab-settings')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    assert.equal(
+      desktopTabFont105 > desktopTabFont100 + 0.4 && desktopTabFont125 > desktopTabFont105 + 2.0,
+      true,
+      `Desktop >=640px sm:text-sm must scale monotonically across 100% -> 105% -> 125% (got ${desktopTabFont100} -> ${desktopTabFont105} -> ${desktopTabFont125})`
+    );
+    await ltMobilePage.setViewportSize({ width: 360, height: 780 });
+
+    // 2) Text Size 100%, UI Size 140%: switch width grows & knob stays contained, font size back to baseline, and FAB clears PaletteDock
+    await setRangeSlider(ltMobilePage, 'setting-text-size', 1.0);
+    await setRangeSlider(ltMobilePage, 'setting-ui-size', 1.4);
+    await ltMobilePage.waitForFunction(() => document.documentElement.dataset.uiScaled === 'true', undefined, { timeout: 3000 });
+    assert.equal((await ltMobilePage.getByTestId('setting-ui-size-value').innerText()).trim(), '140%');
+    assert.equal(await ltMobilePage.evaluate(() => document.documentElement.dataset.textScaled), 'false');
+    const uiOnlyFontSize = await ltMobilePage
+      .locator('[data-testid="settings-section-accessibility"] .text-xs')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    const uiOnlySwitchW = (await ltSwitch.boundingBox()).width;
+    assert.ok(Math.abs(uiOnlyFontSize - baselineFontSize) <= 1, `UI Size 140% alone must not enlarge font (${baselineFontSize} vs ${uiOnlyFontSize})`);
+    assert.ok(uiOnlySwitchW > baselineSwitchW + 6, `UI Size 140% must enlarge switch (${baselineSwitchW} -> ${uiOnlySwitchW})`);
+    await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'UI Size 140% largeText ON');
+    await assertSwitchKnobContained(ltMobilePage, 'setting-fat-finger-assist', true, 'UI Size 140% fatFinger ON');
+
+    // Close Settings briefly at UI Size 140% to confirm FloatingActions clears PaletteDock without overlap
+    await ltMobilePage.getByTestId('settings-modal-close').click();
+    await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+    const ui140Clearance = await ltMobilePage.evaluate(() => {
+      const fab = document.querySelector('.capy-fab-stack');
+      const dock = document.querySelector('[data-testid="palette-dock"]');
+      if (!fab || !dock) return null;
+      return {
+        fabBottom: fab.getBoundingClientRect().bottom,
+        dockTop: dock.getBoundingClientRect().top,
+      };
+    });
+    assert.ok(ui140Clearance, 'Expected FloatingActions and PaletteDock bounding rects at UI Size 140%');
+    assert.equal(
+      ui140Clearance.fabBottom <= ui140Clearance.dockTop + 0.5,
+      true,
+      `FloatingActions must not overlap PaletteDock at UI Size 140% (${JSON.stringify(ui140Clearance)})`
+    );
+    await ltMobilePage.getByTestId('topbar-settings-btn').click();
+    await ltMobilePage.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
+
+    // Restore Large Text preset (125% / 125%) for remaining E2E 22 checks
+    await ltSwitch.click();
+    await ltSwitch.click();
+    await ltMobilePage.waitForFunction(
+      () =>
+        document.documentElement.dataset.largeText === 'true' &&
+        document.documentElement.dataset.textScaled === 'true' &&
+        document.documentElement.dataset.uiScaled === 'true',
+      undefined,
+      { timeout: 3000 }
+    );
+
+    // Fix 1: Expand collapsible Replay section and verify unified switch knob containment on follow & auto-replay toggles
+    const ltReplayToggle = ltMobilePage.getByTestId('settings-section-replay-toggle');
+    await ltReplayToggle.scrollIntoViewIfNeeded();
+    if ((await ltReplayToggle.getAttribute('aria-expanded')) !== 'true') {
+      await ltReplayToggle.click();
+    }
     const followInitial = (await ltMobilePage.getByTestId('toggle-replay-follow-btn').getAttribute('aria-checked')) === 'true';
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', followInitial, 'Large Text Variant 2 follow initial');
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', followInitial, 'Large Text follow initial');
     await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', !followInitial, 'Large Text Variant 2 follow toggled');
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-replay-follow-btn', !followInitial, 'Large Text follow toggled');
     await ltMobilePage.getByTestId('toggle-replay-follow-btn').click();
+    const autoReplayInitial = (await ltMobilePage.getByTestId('toggle-auto-replay-btn').getAttribute('aria-checked')) === 'true';
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-btn', autoReplayInitial, 'Large Text autoReplay initial');
+    await ltMobilePage.getByTestId('toggle-auto-replay-btn').click();
+    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-btn', !autoReplayInitial, 'Large Text autoReplay toggled');
+    await ltMobilePage.getByTestId('toggle-auto-replay-btn').click();
 
     // Fix 2: Enlarged range slider must compute appearance === 'none' so 24px custom thumb renders on Chromium/WebView
     const sliderAppearance = await ltMobilePage
@@ -18705,11 +19512,12 @@ async function runBrowserBasicsSuite() {
       `Large Text setting-touch-reach-radius must compute appearance: none (got '${sliderAppearance}')`
     );
 
-    // Measure enlarged SettingsModal controls & verify tabs zero-overflow and 40px/16px specificity at 360x780
+    // Measure enlarged SettingsModal controls & verify tabs zero-overflow, >=38-40px touch targets & ARIA labels at 360x780
     const largeSwitchBox = await ltSwitch.boundingBox();
     const largeFfSwitchBox = await ffSwitch.boundingBox();
     const largeCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
-    assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox);
+    const largeTourBox = await ltMobilePage.getByTestId('settings-tour-btn').boundingBox();
+    assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox && largeTourBox);
     assert.equal(
       largeSwitchBox.width >= 50 && largeSwitchBox.height >= 28 && largeSwitchBox.width > normalSwitchBox.width,
       true,
@@ -18721,10 +19529,17 @@ async function runBrowserBasicsSuite() {
       `Fat-Finger switch must enlarge to ~52x30px (got ${JSON.stringify(largeFfSwitchBox)})`
     );
     assert.equal(
-      largeCloseBox.width >= 40 && largeCloseBox.height >= 40 && largeCloseBox.width > normalCloseBox.width,
+      normalCloseBox.width >= 40 && normalCloseBox.height >= 40 && largeCloseBox.width >= 40 && largeCloseBox.height >= 40,
       true,
-      `Settings close button must enlarge to >=40px (got ${JSON.stringify(largeCloseBox)})`
+      `Settings close button must be >=40px in both normal & Large Text (normal=${JSON.stringify(normalCloseBox)}, large=${JSON.stringify(largeCloseBox)})`
     );
+    assert.equal(
+      largeTourBox.width >= 38 && largeTourBox.height >= 38,
+      true,
+      `Settings header '?' tour button must be >=38px (got ${JSON.stringify(largeTourBox)})`
+    );
+    assert.ok(await ltMobilePage.getByTestId('settings-modal-close').getAttribute('aria-label'), 'settings-modal-close must have aria-label');
+    assert.ok(await ltMobilePage.getByTestId('settings-tour-btn').getAttribute('aria-label'), 'settings-tour-btn must have aria-label');
 
     const ltTabsContainer = ltMobilePage.getByTestId('settings-modal-tabs');
     const ltTabsOverflow = await ltTabsContainer.evaluate((el) => ({
@@ -18762,13 +19577,13 @@ async function runBrowserBasicsSuite() {
       const tb = await ltMobilePage.getByTestId(`settings-tab-${tabKey}`).boundingBox();
       assert.ok(tb);
       assert.equal(
-        tb.x >= ltTabsBox.x - 1 && tb.x + tb.width <= largeCloseBox.x + 1,
+        tb.x >= ltTabsBox.x - 1 && tb.x + tb.width <= largeTourBox.x + 1,
         true,
-        `Large Text settings-tab-${tabKey} (${tb.x}..${tb.x + tb.width}) must fit inside tabsBox (${ltTabsBox.x}) left of close (${largeCloseBox.x})`
+        `Large Text settings-tab-${tabKey} (${tb.x}..${tb.x + tb.width}) must fit inside tabsBox (${ltTabsBox.x}) left of tour/close (${largeTourBox.x})`
       );
     }
 
-    // Check Tab 0 action button height (>=44px), Tab 3 (i) hint icon button size (>=32px), and Tab 4 Variant 3 switch knob containment
+    // Check Tab 0 action button height (>=44px), Tab 3 (i) hint icon button size (>=32px), and Tab 4 has no duplicate auto-replay switch
     await ltMobilePage.getByTestId('settings-tab-about').click();
     const replayTutBtnBox = await ltMobilePage.getByTestId('about-replay-tutorial-btn').boundingBox();
     assert.ok(replayTutBtnBox && replayTutBtnBox.height >= 44, `About CTA button must be >=44px tall in Large Text (got ${JSON.stringify(replayTutBtnBox)})`);
@@ -18776,13 +19591,11 @@ async function runBrowserBasicsSuite() {
     const hintToggleBox = await ltMobilePage.getByTestId('hint-toggle-daily-puzzle').boundingBox();
     assert.ok(hintToggleBox && hintToggleBox.width >= 31 && hintToggleBox.height >= 31, `(i) hint button must enlarge to ~32px in Large Text (got ${JSON.stringify(hintToggleBox)})`);
     await ltMobilePage.getByTestId('settings-tab-saves').click();
-    const savesAutoReplayBtn = ltMobilePage.getByTestId('toggle-auto-replay-saves-btn');
-    await savesAutoReplayBtn.waitFor({ state: 'visible', timeout: 3000 });
-    const savesInitial = (await savesAutoReplayBtn.getAttribute('aria-checked')) === 'true';
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', savesInitial, 'Large Text Variant 3 saves autoReplay initial');
-    await savesAutoReplayBtn.click();
-    await assertSwitchKnobContained(ltMobilePage, 'toggle-auto-replay-saves-btn', !savesInitial, 'Large Text Variant 3 saves autoReplay toggled');
-    await savesAutoReplayBtn.click();
+    assert.equal(
+      await ltMobilePage.getByTestId('toggle-auto-replay-saves-btn').count(),
+      0,
+      'Large Text Tab 4 Saves must not render removed duplicate toggle-auto-replay-saves-btn'
+    );
 
     // Enable Custom Color button for all puzzles so we can verify ColorPickerPopover in Large Text mode too
     await ltMobilePage.getByTestId('settings-tab-settings').click();
@@ -18839,21 +19652,26 @@ async function runBrowserBasicsSuite() {
         largeMobileBoxes.swatch1
     );
     assert.equal(
-      largeMobileBoxes.settingsBtn.width >= 36 &&
-        largeMobileBoxes.settingsBtn.height >= 36 &&
-        largeMobileBoxes.settingsBtn.width > normalMobileBoxes.settingsBtn.width,
+      normalMobileBoxes.settingsBtn.width >= 38 &&
+        largeMobileBoxes.settingsBtn.width >= 38 &&
+        largeMobileBoxes.settingsBtn.height >= 38 &&
+        largeMobileBoxes.settingsBtn.width >= normalMobileBoxes.settingsBtn.width,
       true,
-      `360px Large Text topbar-settings-btn must enlarge to >=36px (normal=${normalMobileBoxes.settingsBtn.width}, large=${largeMobileBoxes.settingsBtn.width})`
+      `360px topbar-settings-btn must be >=38px in Normal & Large Text (normal=${normalMobileBoxes.settingsBtn.width}, large=${largeMobileBoxes.settingsBtn.width})`
     );
     assert.equal(
-      largeMobileBoxes.previewBtn.width >= 36 && largeMobileBoxes.previewBtn.width > normalMobileBoxes.previewBtn.width,
+      normalMobileBoxes.previewBtn.width >= 38 &&
+        largeMobileBoxes.previewBtn.width >= 38 &&
+        largeMobileBoxes.previewBtn.width >= normalMobileBoxes.previewBtn.width,
       true,
-      `360px Large Text topbar-preview-btn must enlarge to >=36px`
+      `360px topbar-preview-btn must be >=38px in Normal & Large Text (normal=${normalMobileBoxes.previewBtn.width}, large=${largeMobileBoxes.previewBtn.width})`
     );
     assert.equal(
-      largeMobileBoxes.savesBtn.height >= 36 && largeMobileBoxes.savesBtn.height > normalMobileBoxes.savesBtn.height,
+      normalMobileBoxes.savesBtn.height >= 36 &&
+        largeMobileBoxes.savesBtn.height >= 36 &&
+        largeMobileBoxes.savesBtn.height >= normalMobileBoxes.savesBtn.height,
       true,
-      `360px Large Text topbar-saves-btn must be >=36px tall (normal=${normalMobileBoxes.savesBtn.height}, large=${largeMobileBoxes.savesBtn.height})`
+      `360px topbar-saves-btn must be >=36px tall in Normal & Large Text (normal=${normalMobileBoxes.savesBtn.height}, large=${largeMobileBoxes.savesBtn.height})`
     );
     assert.equal(
       largeMobileBoxes.paintBtn.width >= 58 && largeMobileBoxes.paintBtn.width > normalMobileBoxes.paintBtn.width,
@@ -19352,8 +20170,7 @@ async function runBrowserBasicsSuite() {
     await regPage.getByTestId('paint-mode-btn').click();
     await regPage.getByTestId('topbar-settings-btn').click();
     await regPage.getByTestId('settings-tab-settings').click();
-    const regFreeColorLabel = await regPage.waitForSelector('text=Free Colour Mode');
-    await regFreeColorLabel.evaluate((el) => el.closest('.flex')?.querySelector('button[role="switch"]')?.click());
+    await regPage.getByTestId('setting-free-color-mode').click();
     await regPage.getByTestId('settings-modal-close').click();
     await regPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -19506,6 +20323,467 @@ async function runBrowserBasicsSuite() {
     await byocPage.close();
     await byocContext.close();
     logE2ePass('M4 $0 BYOC multi-provider login UI, default-off gate, 360px zero-overflow & automatic background sync verified.');
+
+    // E2E Stage 24: Browser Storage Analyzer, Targeted Safe Cleanups, 360x780 Layout & Oversized Photo Compression
+    logE2eStart('Browser Storage Analyzer modal, 360x780 zero-overflow, safe cleanups (caches/orphans/previews) & oversized photo upload compression');
+    const storageContext = await browser.newContext({ viewport: { width: 360, height: 780 } });
+    const storagePage = await storageContext.newPage();
+    attachErrorListeners(storagePage, 'storage-analyzer');
+
+    await storagePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+    await waitForPuzzleLoaded(storagePage);
+    await storagePage.waitForFunction(
+      () => {
+        try {
+          const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+          return Array.isArray(snaps) && snaps.length >= 1;
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+
+    const liveSnapCountBefore = await storagePage.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return snaps.length;
+    });
+    assert.equal(liveSnapCountBefore >= 1, true, 'Expected at least 1 active snapshot before seeding bloat');
+
+    // Seed stale alpha caches, protected CapyGame cache/key, orphaned active IDB records, and sandboxed alpha preview DB
+    await storagePage.evaluate(async () => {
+      const c1 = await caches.open('capy-cache-v3.0.10:/capy/alpha/590/');
+      await c1.put(
+        new Request(`${location.origin}/capy/alpha/590/bundle.js`),
+        new Response('a'.repeat(65536), {
+          headers: { 'content-type': 'application/javascript', 'content-length': '65536' },
+        })
+      );
+      const c2 = await caches.open('capy-cache-v3.0.11:/capy/alpha/615/');
+      await c2.put(
+        new Request(`${location.origin}/capy/alpha/615/bundle.js`),
+        new Response('b'.repeat(32768), {
+          headers: { 'content-type': 'application/javascript', 'content-length': '32768' },
+        })
+      );
+      const otherCache = await caches.open('capygame-cache-v1');
+      await otherCache.put(
+        new Request(`${location.origin}/capygame/app.js`),
+        new Response('g'.repeat(4096), {
+          headers: { 'content-type': 'application/javascript', 'content-length': '4096' },
+        })
+      );
+
+      // Seed orphaned records in active capy_game_storage_v8
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open('capy_game_storage_v8', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('puzzles')) db.createObjectStore('puzzles');
+          if (!db.objectStoreNames.contains('images')) db.createObjectStore('images');
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['puzzles', 'images'], 'readwrite');
+          tx.objectStore('puzzles').put(
+            { __capyCompactV2: 2, rleRegionMap: new Uint8Array(4096) },
+            'orphan-snap-999'
+          );
+          tx.objectStore('images').put(
+            new Blob([new Uint8Array(32768)], { type: 'image/png' }),
+            'orphan-snap-999'
+          );
+          tx.objectStore('images').put(
+            `data:image/webp;base64,${'A'.repeat(1024)}`,
+            'preview_orphan-snap-999'
+          );
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+        req.onerror = () => reject(req.error);
+      });
+
+      // Seed sandboxed alpha preview DB + Local Storage keys + protected sibling CapyGame key
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open('capy_game_storage_v8_alpha', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('puzzles')) db.createObjectStore('puzzles');
+          if (!db.objectStoreNames.contains('images')) db.createObjectStore('images');
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['puzzles'], 'readwrite');
+          tx.objectStore('puzzles').put(
+            { __capyCompactV2: 2, rleRegionMap: new Uint8Array(2048) },
+            'alpha-snap-1'
+          );
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+        req.onerror = () => reject(req.error);
+      });
+
+      localStorage.setItem(
+        'capy_snapshots_v8__sandbox_alpha',
+        JSON.stringify([{ id: 'alpha-snap-1', title: 'Alpha Preview Save' }])
+      );
+      localStorage.setItem('capy_game_save_v3', JSON.stringify({ capyWorld: 'protected' }));
+    });
+
+    // Open Menu -> Saves at 360x780 and verify saves-storage-info-btn + zero horizontal overflow
+    await storagePage.getByTestId('topbar-settings-btn').click();
+    await storagePage.getByTestId('settings-tab-saves').click();
+    await storagePage.getByTestId('saves-storage-info-btn').waitFor({ state: 'visible', timeout: 5000 });
+
+    const savesOverflow = await storagePage.evaluate(() => {
+      const actionBar = document.querySelector('[data-testid="selected-save-action-bar"]');
+      const scrollContainer = actionBar?.closest('.overflow-y-auto');
+      return {
+        actionBarOverflow: actionBar ? actionBar.scrollWidth - actionBar.clientWidth : 999,
+        containerOverflow: scrollContainer
+          ? scrollContainer.scrollWidth - scrollContainer.clientWidth
+          : 999,
+      };
+    });
+    assert.equal(
+      savesOverflow.actionBarOverflow <= 1 && savesOverflow.containerOverflow <= 1,
+      true,
+      `Saves tab with Browser Storage button must have zero horizontal overflow at 360x780: ${JSON.stringify(savesOverflow)}`
+    );
+
+    // Open Browser Storage modal and verify breakdown sections + 360x780 zero overflow
+    await storagePage.getByTestId('saves-storage-info-btn').click();
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-quota-summary').waitFor({ state: 'visible', timeout: 10000 });
+    await storagePage.getByTestId('storage-section-caches').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-section-idb').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-section-local').waitFor({ state: 'visible', timeout: 5000 });
+
+    const modalText = await storagePage.getByTestId('browser-storage-modal').innerText();
+    assert.equal(
+      modalText.includes('Stale Alpha PR Previews (2)'),
+      true,
+      `Expected 2 stale alpha caches in Browser Storage modal, got:\n${modalText}`
+    );
+    assert.equal(
+      modalText.includes('Orphaned Records (3)'),
+      true,
+      `Expected 3 orphaned IDB records in Browser Storage modal, got:\n${modalText}`
+    );
+    assert.equal(
+      modalText.includes('Preview Channel DB (alpha)'),
+      true,
+      `Expected Preview Channel DB (alpha) in Browser Storage modal, got:\n${modalText}`
+    );
+
+    const modalOverflow = await storagePage.evaluate(() => {
+      const modal = document.querySelector('[data-testid="browser-storage-modal"]');
+      const body = modal?.querySelector('.overflow-y-auto');
+      return {
+        modalOverflow: modal ? modal.scrollWidth - modal.clientWidth : 999,
+        bodyOverflow: body ? body.scrollWidth - body.clientWidth : 999,
+      };
+    });
+    assert.equal(
+      modalOverflow.modalOverflow <= 1 && modalOverflow.bodyOverflow <= 1,
+      true,
+      `BrowserStorageModal must have zero horizontal overflow at 360x780: ${JSON.stringify(modalOverflow)}`
+    );
+
+    // 24a. Safe Cleanup 1: Clear Stale & Offline Caches (zero save loss, preserves CapyGame cache)
+    await storagePage.getByTestId('storage-clean-caches-btn').click();
+    await storagePage.getByTestId('storage-clean-caches-confirm').click();
+    await storagePage.getByTestId('storage-action-notice').waitFor({ state: 'visible', timeout: 10000 });
+    const afterCacheClean = await storagePage.evaluate(async () => ({
+      cacheNames: await caches.keys(),
+      snapCount: JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length,
+    }));
+    assert.equal(
+      afterCacheClean.cacheNames.some((n) => n.includes('/alpha/')),
+      false,
+      `Stale alpha caches must be deleted, remaining: ${afterCacheClean.cacheNames.join(', ')}`
+    );
+    assert.equal(
+      afterCacheClean.cacheNames.includes('capygame-cache-v1'),
+      true,
+      'Non-Capy origin cache capygame-cache-v1 must stay protected'
+    );
+    assert.equal(
+      afterCacheClean.snapCount,
+      liveSnapCountBefore,
+      'Clearing caches must preserve 100% of saved puzzles'
+    );
+
+    // 24b. Safe Cleanup 2: Clean Orphaned Save Data (zero save loss)
+    await storagePage.getByTestId('storage-clean-orphans-btn').click();
+    await storagePage.getByTestId('storage-clean-orphans-confirm').click();
+    await storagePage.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="storage-clean-orphans-btn"]');
+        return Boolean(btn && btn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+    const afterOrphanClean = await storagePage.evaluate(async () => {
+      const idbKeys = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('capy_game_storage_v8', 1);
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['puzzles', 'images'], 'readonly');
+          const pReq = tx.objectStore('puzzles').getAllKeys();
+          const iReq = tx.objectStore('images').getAllKeys();
+          let pKeys = [];
+          let iKeys = [];
+          pReq.onsuccess = () => {
+            pKeys = pReq.result.map(String);
+          };
+          iReq.onsuccess = () => {
+            iKeys = iReq.result.map(String);
+          };
+          tx.oncomplete = () => {
+            db.close();
+            resolve({ pKeys, iKeys });
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+        req.onerror = () => reject(req.error);
+      });
+      return {
+        ...idbKeys,
+        snapCount: JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length,
+      };
+    });
+    assert.equal(afterOrphanClean.pKeys.includes('orphan-snap-999'), false);
+    assert.equal(afterOrphanClean.iKeys.includes('orphan-snap-999'), false);
+    assert.equal(afterOrphanClean.iKeys.includes('preview_orphan-snap-999'), false);
+    assert.equal(afterOrphanClean.pKeys.length >= 1, true, 'Active puzzles must remain in IDB');
+    assert.equal(afterOrphanClean.snapCount, liveSnapCountBefore);
+
+    // 24c. Safe Cleanup 3: Clear Preview Channel Data (zero Production save loss & protects CapyGame)
+    await storagePage.getByTestId('storage-clean-previews-btn').click();
+    await storagePage.getByTestId('storage-clean-previews-confirm').click();
+    await storagePage.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="storage-clean-previews-btn"]');
+        return (
+          Boolean(btn && btn.hasAttribute('disabled')) &&
+          localStorage.getItem('capy_snapshots_v8__sandbox_alpha') === null
+        );
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+    const afterPreviewClean = await storagePage.evaluate(async () => {
+      const dbList = typeof indexedDB.databases === 'function' ? await indexedDB.databases() : [];
+      return {
+        alphaLs: localStorage.getItem('capy_snapshots_v8__sandbox_alpha'),
+        capyGameLs: localStorage.getItem('capy_game_save_v3'),
+        prodSnapCount: JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length,
+        hasAlphaDb: dbList.some((d) => d.name === 'capy_game_storage_v8_alpha'),
+      };
+    });
+    assert.equal(afterPreviewClean.alphaLs, null);
+    assert.equal(afterPreviewClean.hasAlphaDb, false);
+    assert.equal(afterPreviewClean.prodSnapCount, liveSnapCountBefore);
+    assert.equal(
+      afterPreviewClean.capyGameLs !== null,
+      true,
+      'CapyGame capy_game_save_v3 must remain protected'
+    );
+
+    // 24d. Escape closes BrowserStorageModal while keeping SettingsModal open
+    await storagePage.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="storage-close-btn"]');
+        return Boolean(btn && !btn.hasAttribute('disabled'));
+      },
+      null,
+      { timeout: 5000 }
+    );
+    await storagePage.keyboard.press('Escape');
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'hidden', timeout: 5000 });
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
+    await storagePage.getByTestId('settings-modal-close').click();
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // 24e. Oversized custom photo upload compression (2400x1800 noisy PNG -> downscaled <= 2048px & smaller WebP)
+    const oversizedPngBytes = await storagePage.evaluate(async () => {
+      const w = 2400;
+      const h = 1800;
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      const imgData = ctx.createImageData(w, h);
+      const data = imgData.data;
+      let seed = 0x12345678;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const idx = (y * w + x) * 4;
+          data[idx] = (x * 7 + (seed & 0x3f)) & 0xff;
+          data[idx + 1] = (y * 5 + ((seed >> 8) & 0x3f)) & 0xff;
+          data[idx + 2] = ((x + y) * 3 + ((seed >> 16) & 0x3f)) & 0xff;
+          data[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    });
+    assert.equal(
+      oversizedPngBytes.length > 400_000,
+      true,
+      `Expected synthetic oversized PNG > 400 KB, got ${oversizedPngBytes.length} B`
+    );
+
+    const snapIdBeforeOversized = await storagePage.evaluate(
+      () => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null
+    );
+    await storagePage.locator('input[type="file"][accept="image/*"]').setInputFiles({
+      name: 'oversized_test_photo.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(oversizedPngBytes),
+    });
+    await storagePage.waitForFunction(
+      (prevId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Boolean(active.activeSnapshotId && active.activeSnapshotId !== prevId);
+      },
+      snapIdBeforeOversized,
+      { timeout: 25000 }
+    );
+    await waitForPuzzleLoaded(storagePage);
+
+    const compressedUploadInfo = await storagePage.evaluate(async () => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snapId = active.activeSnapshotId;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const blob = await new Promise((resolve) => {
+          const req = indexedDB.open('capy_game_storage_v8', 1);
+          req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction('images', 'readonly');
+            const g = tx.objectStore('images').get(snapId);
+            g.onsuccess = () => {
+              db.close();
+              resolve(g.result || null);
+            };
+            g.onerror = () => {
+              db.close();
+              resolve(null);
+            };
+          };
+          req.onerror = () => resolve(null);
+        });
+        if (blob instanceof Blob) {
+          const bmp = await createImageBitmap(blob);
+          const dims = { width: bmp.width, height: bmp.height };
+          bmp.close();
+          return { size: blob.size, type: blob.type, ...dims };
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return null;
+    });
+    assert.ok(compressedUploadInfo, 'Compressed custom upload blob must persist in STORE_IMAGES');
+    assert.equal(
+      compressedUploadInfo.size < oversizedPngBytes.length,
+      true,
+      `Expected compressed blob (${compressedUploadInfo.size} B) < raw PNG (${oversizedPngBytes.length} B)`
+    );
+    assert.equal(
+      compressedUploadInfo.width <= 2048 && compressedUploadInfo.height <= 2048,
+      true,
+      `Expected compressed dimensions <= 2048px, got ${compressedUploadInfo.width}x${compressedUploadInfo.height}`
+    );
+
+    // 24f. Cleanup 4: Clear All Capy Storage resets custom settings, reloads starter sample & protects CapyGame
+    await storagePage.getByTestId('topbar-settings-btn').click();
+    await storagePage.getByTestId('settings-tab-settings').click();
+    await storagePage.getByTestId('setting-free-color-mode').click();
+    const freeColorBeforeClear = await storagePage.evaluate(
+      () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').isFreeColorMode)
+    );
+    assert.equal(freeColorBeforeClear, true, 'Expected Free Color Mode setting persisted before Clear All');
+
+    await storagePage.getByTestId('settings-tab-saves').click();
+    await storagePage.getByTestId('saves-storage-info-btn').click();
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-clean-all-btn').waitFor({ state: 'visible', timeout: 10000 });
+    await storagePage.getByTestId('storage-clean-all-btn').click();
+    await storagePage.getByTestId('storage-clean-all-confirm').click();
+    await storagePage.getByTestId('storage-action-notice').waitFor({ state: 'visible', timeout: 15000 });
+    await storagePage.waitForFunction(
+      () => {
+        const closeBtn = document.querySelector('[data-testid="storage-close-btn"]');
+        return Boolean(closeBtn && !closeBtn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+    await storagePage.keyboard.press('Escape');
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'hidden', timeout: 5000 });
+    await storagePage.getByTestId('settings-modal-close').click();
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+    await waitForPuzzleLoaded(storagePage);
+    await storagePage.waitForFunction(
+      () => {
+        try {
+          const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+          return Array.isArray(snaps) && snaps.length === 1;
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+    const afterClearAll = await storagePage.evaluate(async () => {
+      const settingsRaw = localStorage.getItem('capy_user_settings_v8');
+      const parsedSettings = settingsRaw ? JSON.parse(settingsRaw) : null;
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const cacheNames = await caches.keys();
+      return {
+        isFreeColorMode: parsedSettings ? Boolean(parsedSettings.isFreeColorMode) : false,
+        snapCount: snaps.length,
+        capyGameLs: localStorage.getItem('capy_game_save_v3'),
+        hasCapyGameCache: cacheNames.includes('capygame-cache-v1'),
+      };
+    });
+    assert.equal(
+      afterClearAll.isFreeColorMode,
+      false,
+      'Clear All Capy Storage must reset custom settings instead of resurrecting isFreeColorMode'
+    );
+    assert.equal(afterClearAll.snapCount, 1, 'Clear All must reload a fresh starter sample snapshot');
+    assert.equal(
+      afterClearAll.capyGameLs !== null && afterClearAll.hasCapyGameCache,
+      true,
+      'Clear All Capy Storage must preserve CapyGame localStorage key and CacheStorage'
+    );
+
+    await storagePage.close();
+    await storageContext.close();
+    logE2ePass('Browser Storage Analyzer modal, 360x780 zero-overflow, all 4 cleanups, Escape isolation & oversized photo upload compression verified.');
 
     assert.equal(
       e2eStep,

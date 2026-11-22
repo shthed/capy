@@ -1,7 +1,13 @@
 import { NativeBridge } from './NativeBridge';
-import { resolveScopedBackupKey, resolveScopedStorageKey } from './StorageNamespace';
+import { reportSwallowed } from './telemetry';
+import { SafeLocalStore } from './storage/SafeLocalStore';
+import {
+  PLAYER_STATS_STORAGE_KEY,
+  resolveScopedBackupKey,
+  resolveScopedStorageKey,
+} from './storage/StorageKeys';
 
-export const PLAYER_STATS_STORAGE_KEY = 'capy_player_stats_v1';
+export { PLAYER_STATS_STORAGE_KEY };
 
 export interface PlayerLifetimeStats {
   totalRegionsColored: number;
@@ -96,19 +102,11 @@ export function formatFastestCompletion(ms: number | null): string {
 export class PlayerStatsService {
   private static memoryFallback: PlayerLifetimeStats = { ...DEFAULT_PLAYER_STATS };
 
-  private static hasLocalStorage(): boolean {
-    try {
-      return typeof localStorage !== 'undefined' && localStorage !== null;
-    } catch {
-      return false;
-    }
-  }
-
   static loadStats(): PlayerLifetimeStats {
     try {
-      if (this.hasLocalStorage()) {
+      if (SafeLocalStore.hasLocalStorage()) {
         const raw =
-          localStorage.getItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY)) ||
+          SafeLocalStore.getItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY)) ||
           NativeBridge.loadBackup(resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY));
         if (!raw) {
           return { ...DEFAULT_PLAYER_STATS };
@@ -117,8 +115,8 @@ export class PlayerStatsService {
         this.memoryFallback = sanitized;
         return sanitized;
       }
-    } catch {
-      // Fall back to SSR / restricted-context memory store
+    } catch (err) {
+      reportSwallowed('PlayerStatsService.loadStats', err);
     }
     return { ...this.memoryFallback };
   }
@@ -128,24 +126,31 @@ export class PlayerStatsService {
     this.memoryFallback = sanitized;
     try {
       const serialized = JSON.stringify(sanitized);
-      if (this.hasLocalStorage()) {
-        localStorage.setItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY), serialized);
+      if (SafeLocalStore.hasLocalStorage()) {
+        SafeLocalStore.setItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY), serialized);
       }
       NativeBridge.saveBackup(resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY), serialized);
-    } catch {
-      // Keep memoryFallback updated if storage quota or sandbox blocks writes
+    } catch (err) {
+      reportSwallowed('PlayerStatsService.saveStats', err);
     }
     return { ...sanitized };
   }
 
   static resetStats(): PlayerLifetimeStats {
     this.memoryFallback = { ...DEFAULT_PLAYER_STATS };
+    const zeroedJson = JSON.stringify(DEFAULT_PLAYER_STATS);
+    const storageKey = resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY);
+    const backupKey = resolveScopedBackupKey(PLAYER_STATS_STORAGE_KEY);
     try {
-      if (this.hasLocalStorage()) {
-        localStorage.removeItem(resolveScopedStorageKey(PLAYER_STATS_STORAGE_KEY));
+      if (SafeLocalStore.hasLocalStorage()) {
+        const wroteLocal = SafeLocalStore.setItem(storageKey, zeroedJson);
+        if (!wroteLocal) {
+          SafeLocalStore.removeItem(storageKey);
+        }
       }
-    } catch {
-      // Ignored
+      NativeBridge.saveBackup(backupKey, zeroedJson);
+    } catch (err) {
+      reportSwallowed('PlayerStatsService.resetStats', err);
     }
     return { ...DEFAULT_PLAYER_STATS };
   }
