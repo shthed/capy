@@ -188,13 +188,20 @@ function resolveIdbError(
 export async function runTransaction(
   storeNames: string | string[],
   work: (tx: IDBTransaction) => void,
-  targetDbName?: string
+  targetDbName?: string,
+  shouldCancel?: () => boolean
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (shouldCancel?.()) return;
     const { dbName, dbPromise } = getDBWithHandle(targetDbName);
     try {
       const db = await dbPromise;
+      if (shouldCancel?.()) return;
       await new Promise<void>((resolve, reject) => {
+        if (shouldCancel?.()) {
+          resolve();
+          return;
+        }
         let tx: IDBTransaction;
         try {
           tx = db.transaction(storeNames, 'readwrite');
@@ -209,6 +216,7 @@ export async function runTransaction(
       });
       return;
     } catch (err) {
+      if (shouldCancel?.()) return;
       if (attempt === 0 && isInvalidStateError(err)) {
         evictDbHandle(dbName, dbPromise);
         continue;
@@ -498,10 +506,19 @@ export async function clearAllStores(
   const clearPromise = runTransaction(
     [STORE_PUZZLES, STORE_IMAGES],
     (tx) => {
+      if (timedOut) {
+        try {
+          tx.abort();
+        } catch (err) {
+          reportSwallowed('IndexedDbStore:clearAllStoresAbort', err, { dbName: effectiveDbName });
+        }
+        return;
+      }
       tx.objectStore(STORE_PUZZLES).clear();
       tx.objectStore(STORE_IMAGES).clear();
     },
-    effectiveDbName
+    effectiveDbName,
+    () => timedOut
   ).then(
     () => !timedOut,
     (err) => {

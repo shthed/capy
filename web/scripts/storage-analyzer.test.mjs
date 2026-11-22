@@ -120,6 +120,9 @@ function createMockIndexedDb({
         this.closed = true;
       },
       transaction(requestedStores, _mode = 'readonly') {
+        if (this.closed) {
+          throw new DOMException('The database connection is closing.', 'InvalidStateError');
+        }
         const names = Array.isArray(requestedStores) ? requestedStores : [requestedStores];
         const tx = {
           error: null,
@@ -1501,6 +1504,295 @@ async function runStorageAnalyzerCoreTests(vite) {
       corruptSnapClean.warnings.some((w) => w.includes('Skipped IDB orphan cleanup')),
       true
     );
+
+    // 16. Regression: Post-blocked analyzeBrowserStorage({ blockedTimeoutMs }) when open() hangs behind blocked deleteDatabase() must resolve within bounded timeout and close late-opened handle
+    await resetCachedHandles();
+    const postBlockedLs = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([{ id: 'prod-ok', title: 'Prod OK' }]),
+    });
+    const basePostBlockedIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'prod-ok': { data: new Uint8Array(512) } },
+          images: {},
+        },
+        capy_game_storage_v8_alpha: {
+          puzzles: { 'alpha-stuck': { data: new Uint8Array(2048) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+      blockedDbNames: new Set(['capy_game_storage_v8_alpha']),
+    });
+    const deferredAlphaOpens = [];
+    let alphaDeleteCalled = false;
+    const postBlockedIdb = {
+      ...basePostBlockedIdb,
+      deleteDatabase(dbName) {
+        if (dbName === 'capy_game_storage_v8_alpha') {
+          alphaDeleteCalled = true;
+        }
+        return basePostBlockedIdb.deleteDatabase(dbName);
+      },
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8_alpha' && alphaDeleteCalled) {
+          const req = {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+          deferredAlphaOpens.push(req);
+          return req;
+        }
+        return basePostBlockedIdb.open(dbName, version);
+      },
+    };
+    globalThis.localStorage = postBlockedLs;
+    globalThis.indexedDB = postBlockedIdb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const postBlockedClearRes = await analyzerMod.clearPreviewChannelData({
+      ...opts,
+      channels: ['alpha'],
+      blockedTimeoutMs: 60,
+    });
+    assert.deepEqual(postBlockedClearRes.blockedDatabases, ['capy_game_storage_v8_alpha']);
+    const scanStartMs = Date.now();
+    const postBlockedReport = await analyzerMod.analyzeBrowserStorage({
+      ...opts,
+      blockedTimeoutMs: 60,
+    });
+    const scanElapsedMs = Date.now() - scanStartMs;
+    assert.equal(
+      scanElapsedMs < 1500,
+      true,
+      `Post-blocked analyzeBrowserStorage() must resolve within bounded timeout (took ${scanElapsedMs}ms)`
+    );
+    assert.equal(postBlockedReport.indexedDb.activeDb?.dbName, 'capy_game_storage_v8');
+    assert.equal(
+      deferredAlphaOpens.length >= 2,
+      true,
+      'Expected hanging open() calls for blocked clearAllStores and post-cleanup analyzeBrowserStorage'
+    );
+    // Simulate stalled readonly open() completing after timeout and verify the late handle is immediately closed
+    const lastReadonlyReq = deferredAlphaOpens[deferredAlphaOpens.length - 1];
+    const trackedLateHandle = {
+      name: 'capy_game_storage_v8_alpha',
+      closed: false,
+      onversionchange: null,
+      close() {
+        this.closed = true;
+      },
+    };
+    lastReadonlyReq.result = trackedLateHandle;
+    lastReadonlyReq.onsuccess?.({ target: lastReadonlyReq });
+    assert.equal(
+      trackedLateHandle.closed,
+      true,
+      'Late-opening readonly handle after openExistingIdbReadonly() timeout must be closed immediately'
+    );
+
+    // 17. Regression: Timed-out clearAllStores(dbName, 60) where stalled open() resolves later (BOTH unclosed FIFO wakeup AND InvalidStateError retry paths) must NOT wipe new post-timeout saves
+    // 17a: Unclosed FIFO wakeup path
+    await resetCachedHandles();
+    const zombieFifoBaseIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'old-save': { data: new Uint8Array(256) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    let fifoHangFirstOpen = true;
+    let fifoStalledReq = null;
+    const zombieFifoIdb = {
+      ...zombieFifoBaseIdb,
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8' && fifoHangFirstOpen) {
+          fifoHangFirstOpen = false;
+          fifoStalledReq = {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+          return fifoStalledReq;
+        }
+        return zombieFifoBaseIdb.open(dbName, version);
+      },
+    };
+    globalThis.indexedDB = zombieFifoIdb;
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const fifoTimedOutOk = await idbMod.clearAllStores('capy_game_storage_v8', 60);
+    assert.equal(fifoTimedOutOk, false, 'Stalled clearAllStores() must time out and return false');
+    await idbMod.saveCompactPuzzleRecord('post-timeout-fifo', { data: new Uint8Array(128) });
+    assert.equal(
+      zombieFifoBaseIdb._getStoreKeys('capy_game_storage_v8', 'puzzles').includes('post-timeout-fifo'),
+      true
+    );
+    // Deliver a real unclosed DB handle to the timed-out open() request (FIFO wakeup)
+    const lateFifoOpenReq = zombieFifoBaseIdb.open('capy_game_storage_v8');
+    const lateFifoDb = await new Promise((resolve) => {
+      lateFifoOpenReq.onsuccess = () => resolve(lateFifoOpenReq.result);
+    });
+    fifoStalledReq.result = lateFifoDb;
+    fifoStalledReq.onsuccess?.({ target: fifoStalledReq });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(
+      zombieFifoBaseIdb._getStoreKeys('capy_game_storage_v8', 'puzzles').includes('post-timeout-fifo'),
+      true,
+      'Late-resolving FIFO open() after clearAllStores() timeout must NOT wipe post-timeout saves'
+    );
+    assert.equal(
+      lateFifoDb.closed,
+      true,
+      'Stalled DB handle delivered after clearAllStores() timeout must be closed'
+    );
+
+    // 17b: Already-closed handle / InvalidStateError retry path
+    await resetCachedHandles();
+    const zombieRetryBaseIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'old-save': { data: new Uint8Array(256) } },
+          images: {},
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    let retryHangFirstOpen = true;
+    let retryStalledReq = null;
+    const zombieRetryIdb = {
+      ...zombieRetryBaseIdb,
+      open(dbName, version) {
+        if (dbName === 'capy_game_storage_v8' && retryHangFirstOpen) {
+          retryHangFirstOpen = false;
+          retryStalledReq = {
+            result: null,
+            error: null,
+            transaction: null,
+            onupgradeneeded: null,
+            onsuccess: null,
+            onerror: null,
+            onblocked: null,
+          };
+          return retryStalledReq;
+        }
+        return zombieRetryBaseIdb.open(dbName, version);
+      },
+    };
+    globalThis.indexedDB = zombieRetryIdb;
+    const retryTimedOutOk = await idbMod.clearAllStores('capy_game_storage_v8', 60);
+    assert.equal(retryTimedOutOk, false, 'Stalled clearAllStores() must time out and return false');
+    await idbMod.saveCompactPuzzleRecord('post-timeout-invalidstate', { data: new Uint8Array(128) });
+    // Deliver an InvalidStateError rejection to the timed-out open() to exercise runTransaction's catch/retry path
+    retryStalledReq.error = new DOMException('The database connection is closing.', 'InvalidStateError');
+    retryStalledReq.onerror?.({ target: retryStalledReq });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(
+      zombieRetryBaseIdb
+        ._getStoreKeys('capy_game_storage_v8', 'puzzles')
+        .includes('post-timeout-invalidstate'),
+      true,
+      'Late InvalidStateError after clearAllStores() timeout must NOT trigger attempt=1 retry wipe'
+    );
+    // Also verify already-closed handle delivered to onsuccess cannot trigger retry wipe
+    await resetCachedHandles();
+    retryHangFirstOpen = true;
+    retryStalledReq = null;
+    const closedTimedOutOk = await idbMod.clearAllStores('capy_game_storage_v8', 60);
+    assert.equal(closedTimedOutOk, false);
+    await idbMod.saveCompactPuzzleRecord('post-timeout-closed-handle', { data: new Uint8Array(128) });
+    const preClosedReq = zombieRetryBaseIdb.open('capy_game_storage_v8');
+    const preClosedDb = await new Promise((resolve) => {
+      preClosedReq.onsuccess = () => resolve(preClosedReq.result);
+    });
+    preClosedDb.close();
+    retryStalledReq.result = preClosedDb;
+    retryStalledReq.onsuccess?.({ target: retryStalledReq });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.equal(
+      zombieRetryBaseIdb
+        ._getStoreKeys('capy_game_storage_v8', 'puzzles')
+        .includes('post-timeout-closed-handle'),
+      true,
+      'Late already-closed DB handle after clearAllStores() timeout must NOT trigger retry wipe'
+    );
+
+    // 18. Regression: computeOrphanedKeys / cleanOrphanedSaveData with rawSnapshotsJson='[null, {}]' fails closed while '[]' succeeds
+    const corruptElemOrphan = analyzerMod.computeOrphanedKeys({
+      puzzleKeys: ['live-1'],
+      imageKeys: ['preview_live-1'],
+      rawSnapshotsJson: '[null, {}]',
+      rawActiveStateJson: null,
+    });
+    assert.equal(
+      corruptElemOrphan.skipped,
+      true,
+      'Non-empty snapshots array with zero valid IDs ("[null, {}]") must fail closed'
+    );
+    assert.deepEqual(corruptElemOrphan.orphanedPuzzleKeys, []);
+    assert.deepEqual(corruptElemOrphan.orphanedImageKeys, []);
+
+    const validEmptyOrphan = analyzerMod.computeOrphanedKeys({
+      puzzleKeys: ['orphan-empty-1'],
+      imageKeys: ['preview_orphan-empty-1'],
+      rawSnapshotsJson: '[]',
+      rawActiveStateJson: null,
+    });
+    assert.equal(validEmptyOrphan.skipped, false, 'Empty snapshots array ("[]") must remain valid');
+    assert.deepEqual(validEmptyOrphan.orphanedPuzzleKeys, ['orphan-empty-1']);
+    assert.deepEqual(validEmptyOrphan.orphanedImageKeys, ['preview_orphan-empty-1']);
+
+    await resetCachedHandles();
+    const corruptElemLs = createMockLocalStorage({
+      capy_snapshots_v8: '[null, {}]',
+    });
+    const corruptElemIdb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: { 'live-1': { data: new Uint8Array(512) } },
+          images: { 'preview_live-1': new Blob([new Uint8Array(128)]) },
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = corruptElemLs;
+    globalThis.indexedDB = corruptElemIdb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+    const corruptElemReport = await analyzerMod.analyzeBrowserStorage(opts);
+    assert.equal(corruptElemReport.indexedDb.activeDb.orphanDetectionSkipped, true);
+    const corruptElemClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(
+      corruptElemClean.deletedIdbRecords,
+      0,
+      'cleanOrphanedSaveData must delete 0 IDB records when rawSnapshotsJson is "[null, {}]"'
+    );
+    assert.deepEqual(corruptElemIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'), ['live-1']);
+
+    corruptElemLs.setItem('capy_snapshots_v8', '[]');
+    const emptyArrValidClean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(
+      emptyArrValidClean.deletedIdbRecords,
+      2,
+      'cleanOrphanedSaveData must still clean orphaned records when rawSnapshotsJson is valid "[]"'
+    );
+    assert.deepEqual(corruptElemIdb._getStoreKeys('capy_game_storage_v8', 'puzzles'), []);
   } finally {
     await resetCachedHandles();
     globalThis.localStorage = prevLs;

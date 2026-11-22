@@ -326,11 +326,13 @@ function collectLiveSnapshotRefs(
     if (!Array.isArray(parsed)) {
       return false;
     }
+    let validIdCount = 0;
     for (const item of parsed) {
       if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
       const rec = item as { id?: unknown; sourceRef?: { kind?: unknown; uri?: unknown } };
       if (typeof rec.id === 'string' && rec.id.length > 0) {
         liveIds.add(rec.id);
+        validIdCount += 1;
       }
       if (
         rec.sourceRef &&
@@ -340,6 +342,9 @@ function collectLiveSnapshotRefs(
       ) {
         liveBlobUris.add(rec.sourceRef.uri);
       }
+    }
+    if (parsed.length > 0 && validIdCount === 0) {
+      return false;
     }
     return true;
   } catch {
@@ -647,16 +652,28 @@ async function inspectCacheStorage(
   }
 }
 
-async function openExistingIdbReadonly(dbName: string): Promise<IDBDatabase | null> {
+async function openExistingIdbReadonly(
+  dbName: string,
+  timeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS
+): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined' || typeof indexedDB.open !== 'function') {
     return null;
   }
+  const effectiveTimeoutMs =
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : DEFAULT_BLOCKED_TIMEOUT_MS;
   return await new Promise<IDBDatabase | null>((resolve) => {
     let createdDuringProbe = false;
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const finish = (db: IDBDatabase | null) => {
       if (settled) return;
       settled = true;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
       resolve(db);
     };
     let req: IDBOpenDBRequest;
@@ -667,8 +684,19 @@ async function openExistingIdbReadonly(dbName: string): Promise<IDBDatabase | nu
       finish(null);
       return;
     }
+    timer = setTimeout(() => {
+      timer = null;
+      finish(null);
+    }, effectiveTimeoutMs);
+    if (
+      typeof timer === 'object' &&
+      timer !== null &&
+      typeof (timer as { unref?: () => void }).unref === 'function'
+    ) {
+      (timer as { unref: () => void }).unref();
+    }
     req.onupgradeneeded = (ev) => {
-      if (ev.oldVersion === 0) {
+      if (settled || ev.oldVersion === 0) {
         createdDuringProbe = true;
         try {
           req.transaction?.abort();
@@ -679,9 +707,11 @@ async function openExistingIdbReadonly(dbName: string): Promise<IDBDatabase | nu
     };
     req.onsuccess = () => {
       const db = req.result;
-      if (createdDuringProbe) {
+      if (settled || createdDuringProbe) {
         try {
-          db.close();
+          if (db && typeof db.close === 'function') {
+            db.close();
+          }
         } catch (err) {
           reportSwallowed('StorageAnalyzer.closeCreatedProbeDb', err, { dbName });
         }
@@ -841,9 +871,10 @@ function readChannelMetadataForOrphanCheck(
 
 async function inspectSingleIdbDatabase(
   dbName: string,
-  activeDbName: string
+  activeDbName: string,
+  blockedTimeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS
 ): Promise<IdbDatabaseReport | null> {
-  const db = await openExistingIdbReadonly(dbName);
+  const db = await openExistingIdbReadonly(dbName, blockedTimeoutMs);
   if (!db) return null;
   try {
     const puzzleEntries = await readStoreEntries(db, STORE_PUZZLES);
@@ -963,7 +994,10 @@ async function discoverIdbNames(activeDbName: string): Promise<{
   };
 }
 
-async function inspectIndexedDb(activeDbName: string): Promise<IndexedDbReport> {
+async function inspectIndexedDb(
+  activeDbName: string,
+  blockedTimeoutMs: number = DEFAULT_BLOCKED_TIMEOUT_MS
+): Promise<IndexedDbReport> {
   const empty: IndexedDbReport = {
     supported: false,
     totalBytes: 0,
@@ -980,7 +1014,7 @@ async function inspectIndexedDb(activeDbName: string): Promise<IndexedDbReport> 
   const { capyDbNames, otherOriginDbNames } = await discoverIdbNames(activeDbName);
   const report: IndexedDbReport = { ...empty, supported: true, otherOriginDbNames };
   const inspected = await Promise.all(
-    capyDbNames.map((dbName) => inspectSingleIdbDatabase(dbName, activeDbName))
+    capyDbNames.map((dbName) => inspectSingleIdbDatabase(dbName, activeDbName, blockedTimeoutMs))
   );
   for (const dbReport of inspected) {
     if (!dbReport) continue;
@@ -1089,10 +1123,12 @@ export async function analyzeBrowserStorage(
   const activeCacheName = resolvePwaCacheName(options?.scopeUrl, options?.version);
   const activeScopePath = resolveActiveScopePath(options);
 
+  const blockedTimeoutMs = options?.blockedTimeoutMs ?? DEFAULT_BLOCKED_TIMEOUT_MS;
+
   const [browserEstimate, cacheStorage, indexedDb] = await Promise.all([
     readBrowserStorageEstimate(),
     inspectCacheStorage(activeCacheName, activeScopePath),
-    inspectIndexedDb(activeDbName),
+    inspectIndexedDb(activeDbName, blockedTimeoutMs),
   ]);
   const localStore = inspectLocalStore(ns.sandboxSuffix);
 
@@ -1302,8 +1338,10 @@ export async function cleanOrphanedSaveData(
   const ns = resolveStorageNamespace(options?.pathname, options?.origin, options?.search);
   const activeDbName = resolveScopedDbName(options?.pathname, options?.origin, options?.search);
 
+  const blockedTimeoutMs = options?.blockedTimeoutMs ?? DEFAULT_BLOCKED_TIMEOUT_MS;
+
   // Recompute live references fail-closed right before deleting to prevent TOCTOU races
-  const activeReport = await inspectSingleIdbDatabase(activeDbName, activeDbName);
+  const activeReport = await inspectSingleIdbDatabase(activeDbName, activeDbName, blockedTimeoutMs);
   if (activeReport?.orphanDetectionSkipped) {
     result.warnings.push(
       'Skipped IDB orphan cleanup because save metadata could not be verified safely.'
@@ -1464,7 +1502,7 @@ export async function clearPreviewChannelData(
   const preMeasuredDbSizes = new Map<string, number>();
   for (const channel of targetChannels) {
     const dbName = `capy_game_storage_v8_${channel}`;
-    const inspected = await inspectSingleIdbDatabase(dbName, ns.dbName);
+    const inspected = await inspectSingleIdbDatabase(dbName, ns.dbName, blockedTimeoutMs);
     if (inspected) {
       preMeasuredDbSizes.set(dbName, inspected.totalBytes);
     }
@@ -1557,7 +1595,7 @@ export async function clearAllCapyStorage(
   const { capyDbNames } = await discoverIdbNames(activeDbName);
   const dbSizes = new Map<string, number>();
   for (const dbName of capyDbNames) {
-    const inspected = await inspectSingleIdbDatabase(dbName, activeDbName);
+    const inspected = await inspectSingleIdbDatabase(dbName, activeDbName, blockedTimeoutMs);
     if (inspected) {
       dbSizes.set(dbName, inspected.totalBytes);
     }

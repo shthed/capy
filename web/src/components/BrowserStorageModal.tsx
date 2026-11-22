@@ -658,6 +658,7 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
   const handleClose = useCallback(() => {
     if (busyActionRef.current !== null) return;
     scanSeqRef.current += 1;
+    setIsLoading(false);
     setConfirmingAction(null);
     setActionNotice(null);
     onClose();
@@ -702,6 +703,7 @@ export const BrowserStorageModal: React.FC<BrowserStorageModalProps> = ({
     async (actionId: CleanupActionId) => {
       if (busyActionRef.current !== null) return;
       scanSeqRef.current += 1;
+      setIsLoading(false);
       busyActionRef.current = actionId;
       setBusyAction(actionId);
       setErrorMsg(null);
