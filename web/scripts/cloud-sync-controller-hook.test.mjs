@@ -247,6 +247,40 @@ export async function runCloudSyncControllerHookTests(vite) {
     assert.equal(resolveSnapshotSampleUri({ sourceRef: { kind: 'sample', uri: 99 } }), undefined);
     assert.equal(resolveSnapshotSampleUri({ sampleAssetPath: './' }), undefined);
     assert.equal(resolveSnapshotSampleUri({ sourceRef: { kind: 'catalog', uri: './' } }), undefined);
+
+    // Whitespace-only sample/catalog URIs must be rejected and never false-match
+    for (const wsUri of ['   ', './   ', '\t\n', ' ./ \t ']) {
+      assert.equal(
+        resolveSnapshotSampleUri({ sampleAssetPath: wsUri }),
+        undefined,
+        `Whitespace-only sampleAssetPath (${JSON.stringify(wsUri)}) must return undefined`
+      );
+      assert.equal(
+        resolveSnapshotSampleUri({ sourceRef: { kind: 'sample', uri: wsUri } }),
+        undefined,
+        `Whitespace-only sourceRef sample uri (${JSON.stringify(wsUri)}) must return undefined`
+      );
+      assert.equal(
+        resolveSnapshotSampleUri({ sourceRef: { kind: 'catalog', uri: wsUri } }),
+        undefined,
+        `Whitespace-only sourceRef catalog uri (${JSON.stringify(wsUri)}) must return undefined`
+      );
+      assert.equal(
+        findMatchingSnapshotForActiveSlot(
+          [
+            makeSnapshot({
+              id: 'ws-snap',
+              sampleAssetPath: wsUri,
+              sourceRef: { kind: 'sample', uri: wsUri },
+            }),
+          ],
+          'missing-id',
+          wsUri
+        ),
+        undefined,
+        `Whitespace-only URI (${JSON.stringify(wsUri)}) must never false-match in findMatchingSnapshotForActiveSlot`
+      );
+    }
   }
 
   // 1c. Regression: normalizeResetEpoch edge cases

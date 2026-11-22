@@ -228,7 +228,7 @@ export function normalizeResetEpoch(raw: unknown): number {
 
 function normalizeComparableSampleUri(uri: unknown): string | null {
   if (typeof uri !== 'string') return null;
-  const stripped = uri.replace(/^\.\//, '');
+  const stripped = uri.trim().replace(/^\.\//, '').trim();
   return stripped.length > 0 ? stripped : null;
 }
 
@@ -245,7 +245,7 @@ export function resolveSnapshotSampleUri(
     typeof activeSave.sampleAssetPath === 'string' &&
     normalizeComparableSampleUri(activeSave.sampleAssetPath) !== null
   ) {
-    return activeSave.sampleAssetPath;
+    return activeSave.sampleAssetPath.trim();
   }
   const kind = activeSave.sourceRef?.kind;
   const sourceUri = activeSave.sourceRef?.uri;
@@ -254,7 +254,7 @@ export function resolveSnapshotSampleUri(
     typeof sourceUri === 'string' &&
     normalizeComparableSampleUri(sourceUri) !== null
   ) {
-    return sourceUri;
+    return sourceUri.trim();
   }
   return undefined;
 }
