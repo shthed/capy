@@ -949,6 +949,78 @@ export async function runWorkerCoopSecurityTests(vite) {
         expectedTtlAlarm2,
         '24h ROOM_STATE_TTL_MS alarm must be restored when unjoined socket disconnects early'
       );
+
+      // (c) Unjoined socket connects within final 10s window [T_24h - 10s, T_24h] on hibernated room
+      const host3Up = await upgrade('HIB003', '198.51.100.45');
+      assert.equal(host3Up.status, 101);
+      const room3 = ctx.rooms.get('HIB003');
+      await room3.instance.webSocketMessage(
+        host3Up.webSocket.peer,
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'HIB003',
+          sender: { playerId: 'hib-host-3', displayName: 'HibHost3', avatarColorHex: '#34d399' },
+          seedToken: seedA,
+        })
+      );
+      fakeNow += 1_000;
+      await room3.instance.webSocketClose(host3Up.webSocket.peer, 1000, 'host_left', true);
+      const expectedTtlAlarm3 = fakeNow + protoMod.ROOM_STATE_TTL_MS;
+      assert.equal(room3.getAlarm(), expectedTtlAlarm3);
+
+      // Simulate DO hibernation
+      room3.instance = new workerMod.CoopRoomDurableObject(room3.state, ctx.env);
+      fakeNow = expectedTtlAlarm3 - 5_000;
+      const sqlCountBeforeBoundary = room3.sqlExecCalls.length;
+
+      // Unjoined socket U1 connects 5s before T_24h (existingAlarm <= handshakeDeadline)
+      const boundaryUnjoined = await upgrade('HIB003', '198.51.100.46');
+      assert.equal(boundaryUnjoined.status, 101);
+      assert.equal(
+        room3.sqlExecCalls.length,
+        sqlCountBeforeBoundary,
+        'Boundary unjoined connect on hibernated room must perform zero SQLite calls'
+      );
+      assert.equal(
+        room3.getAlarm(),
+        expectedTtlAlarm3,
+        'Boundary unjoined connect must keep earlier T_24h alarm'
+      );
+
+      // Alarm fires at T_24h -> cleans up expired room_state immediately AND keeps U1 scheduled for T_24h + 5_000
+      fakeNow = expectedTtlAlarm3;
+      await room3.state.storage.deleteAlarm();
+      await room3.instance.alarm();
+      assert.equal(
+        room3.state.storage.sql.exec('SELECT key FROM room_state').toArray().length,
+        0,
+        'Alarm at T_24h must clean up expired room_state even when an unjoined socket is still open'
+      );
+      assert.equal(
+        boundaryUnjoined.webSocket.peer.closedCode,
+        null,
+        'Unjoined socket U1 must not be evicted before its 10s handshake deadline'
+      );
+      assert.equal(
+        room3.getAlarm(),
+        expectedTtlAlarm3 + 5_000,
+        'Alarm after T_24h cleanup must remain scheduled for U1 handshake deadline (T_24h + 5_000)'
+      );
+
+      // Alarm fires at T_24h + 5_000 -> evicts U1 with 1008 and leaves no further alarm scheduled
+      fakeNow = expectedTtlAlarm3 + 5_000;
+      await room3.state.storage.deleteAlarm();
+      await room3.instance.alarm();
+      assert.equal(
+        boundaryUnjoined.webSocket.peer.closedCode,
+        1008,
+        'Unjoined socket U1 must be evicted with 1008 at T_24h + 5_000'
+      );
+      assert.equal(
+        room3.getAlarm(),
+        null,
+        'Final alarm after U1 eviction and room_state cleanup must be null'
+      );
     }
   } finally {
     Date.now = OrigDateNow;

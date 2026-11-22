@@ -203,9 +203,15 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       }
 
       const handshakeDeadline = now + UNJOINED_HANDSHAKE_TIMEOUT_MS;
+      const existingUnjoinedDeadline = this.getEarliestUnjoinedDeadline(now);
       const existingAlarm = await this.ctx.storage.getAlarm();
       let displacedAlarmAt = carriedDisplacedAlarmAt;
-      if (existingAlarm !== null && existingAlarm > handshakeDeadline) {
+      if (
+        existingAlarm !== null &&
+        (existingAlarm > handshakeDeadline ||
+          activeSockets.length === 0 ||
+          (existingUnjoinedDeadline !== null && existingAlarm < existingUnjoinedDeadline))
+      ) {
         displacedAlarmAt =
           displacedAlarmAt === null ? existingAlarm : Math.min(displacedAlarmAt, existingAlarm);
       }
@@ -535,7 +541,8 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
     if (!this.sqlInitialized) {
       if (hadUnjoined && !this.hasAnyJoinedSocket()) {
         const earliestUnjoinedAt = this.getEarliestUnjoinedDeadline(now);
-        if (earliestUnjoinedAt !== null) {
+        const displacedDue = displacedAlarmAt !== null && displacedAlarmAt <= now;
+        if (earliestUnjoinedAt !== null && !displacedDue) {
           if (displacedAlarmAt !== null) {
             this.propagateDisplacedAlarm(displacedAlarmAt);
           }
@@ -547,8 +554,10 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
             await this.ctx.storage.setAlarm(displacedAlarmAt);
             return;
           }
-          // Displaced room TTL alarm is already due; fall through to ensureSqlInitialized(now)
-          // so expired room_state is cleaned up.
+          // Displaced room TTL alarm is already due; clear it from any remaining unjoined
+          // sockets and fall through to ensureSqlInitialized(now) so expired room_state
+          // is cleaned up immediately while scheduleNextRoomAlarm() keeps unjoined eviction.
+          this.clearDisplacedAlarms();
         } else {
           return;
         }
@@ -699,6 +708,15 @@ export class CoopRoomDurableObject extends DurableObject<Env> {
       propagated = true;
     }
     return propagated;
+  }
+
+  private clearDisplacedAlarms(): void {
+    for (const peer of this.ctx.getWebSockets()) {
+      const att = (peer.deserializeAttachment() as SocketAttachment | null) ?? null;
+      if (!att || att.joinedAt || att.displacedAlarmAt === null) continue;
+      att.displacedAlarmAt = null;
+      peer.serializeAttachment(att);
+    }
   }
 
   private async restoreOrPropagateDisplacedAlarm(
