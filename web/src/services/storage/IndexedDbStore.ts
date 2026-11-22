@@ -10,6 +10,7 @@ import { isQuotaError, notifyQuotaWarning } from './SafeLocalStore';
 import { DB_VERSION, resolveScopedDbName, STORE_IMAGES, STORE_PUZZLES } from './StorageKeys';
 
 export const MAX_PREVIEW_CACHE_ENTRIES = 128;
+const DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS = 2500;
 
 const dbPromises = new Map<string, Promise<IDBDatabase>>();
 const previewCache = new Map<string, string>();
@@ -60,6 +61,10 @@ export function clearScopedPreviewCache(): void {
   }
 }
 
+export function clearAllPreviewCaches(): void {
+  previewCache.clear();
+}
+
 export function getPreviewCacheSize(): number {
   return previewCache.size;
 }
@@ -93,8 +98,62 @@ export function evictDbHandle(dbName: string, expectedPromise?: Promise<IDBDatab
     });
 }
 
-function getDBWithHandle(): { dbName: string; dbPromise: Promise<IDBDatabase> } {
-  const dbName = resolveScopedDbName();
+export async function closeDbHandle(
+  dbName: string,
+  timeoutMs: number = DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS
+): Promise<void> {
+  const current = dbPromises.get(dbName);
+  if (!current) return;
+  dbPromises.delete(dbName);
+
+  const effectiveTimeoutMs =
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS;
+
+  const closeWhenReady = current.then(
+    (db) => {
+      try {
+        if (db && typeof db.close === 'function') {
+          db.close();
+        }
+      } catch (err) {
+        reportSwallowed('IndexedDbStore:closeDbHandle', err, { dbName });
+      }
+    },
+    (err) => {
+      reportSwallowed('IndexedDbStore:closeDbHandlePending', err, { dbName });
+    }
+  );
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      timer = null;
+      resolve();
+    }, effectiveTimeoutMs);
+    if (
+      typeof timer === 'object' &&
+      timer !== null &&
+      typeof (timer as { unref?: () => void }).unref === 'function'
+    ) {
+      (timer as { unref: () => void }).unref();
+    }
+  });
+
+  try {
+    await Promise.race([closeWhenReady, timeoutPromise]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+  await Promise.resolve();
+}
+
+function getDBWithHandle(targetDbName?: string): { dbName: string; dbPromise: Promise<IDBDatabase> } {
+  const dbName = targetDbName || resolveScopedDbName();
   const existing = dbPromises.get(dbName);
   if (existing) {
     return { dbName, dbPromise: existing };
@@ -168,13 +227,21 @@ function resolveIdbError(
 
 export async function runTransaction(
   storeNames: string | string[],
-  work: (tx: IDBTransaction) => void
+  work: (tx: IDBTransaction) => void,
+  targetDbName?: string,
+  shouldCancel?: () => boolean
 ): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { dbName, dbPromise } = getDBWithHandle();
+    if (shouldCancel?.()) return;
+    const { dbName, dbPromise } = getDBWithHandle(targetDbName);
     try {
       const db = await dbPromise;
+      if (shouldCancel?.()) return;
       await new Promise<void>((resolve, reject) => {
+        if (shouldCancel?.()) {
+          resolve();
+          return;
+        }
         let tx: IDBTransaction;
         try {
           tx = db.transaction(storeNames, 'readwrite');
@@ -189,6 +256,7 @@ export async function runTransaction(
       });
       return;
     } catch (err) {
+      if (shouldCancel?.()) return;
       if (attempt === 0 && isInvalidStateError(err)) {
         evictDbHandle(dbName, dbPromise);
         continue;
@@ -416,15 +484,126 @@ export async function deleteSnapshotEntries(id: string): Promise<void> {
   }
 }
 
-export async function clearAllStores(): Promise<void> {
-  clearScopedPreviewCache();
+export async function deleteOrphanedEntries(
+  puzzleKeys: string[],
+  imageKeys: string[],
+  targetDbName?: string
+): Promise<void> {
+  if (puzzleKeys.length === 0 && imageKeys.length === 0) return;
+  const effectiveDbName = targetDbName || resolveScopedDbName();
+  for (const key of imageKeys) {
+    if (key.startsWith('preview_')) {
+      previewCache.delete(`${effectiveDbName}::${key.slice('preview_'.length)}`);
+    }
+  }
   if (typeof indexedDB === 'undefined') return;
-  try {
-    await runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
+  const storesToOpen: string[] = [];
+  if (puzzleKeys.length > 0) storesToOpen.push(STORE_PUZZLES);
+  if (imageKeys.length > 0) storesToOpen.push(STORE_IMAGES);
+  await runTransaction(
+    storesToOpen,
+    (tx) => {
+      if (puzzleKeys.length > 0) {
+        const puzzleStore = tx.objectStore(STORE_PUZZLES);
+        for (const key of puzzleKeys) {
+          puzzleStore.delete(key);
+        }
+      }
+      if (imageKeys.length > 0) {
+        const imageStore = tx.objectStore(STORE_IMAGES);
+        for (const key of imageKeys) {
+          imageStore.delete(key);
+        }
+      }
+    },
+    effectiveDbName
+  );
+}
+
+export async function clearAllStores(
+  targetDbName?: string,
+  timeoutMs: number = DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS
+): Promise<boolean> {
+  const effectiveDbName = targetDbName || resolveScopedDbName();
+  const dbPrefix = `${effectiveDbName}::`;
+  for (const key of Array.from(previewCache.keys())) {
+    if (key.startsWith(dbPrefix)) {
+      previewCache.delete(key);
+    }
+  }
+  if (typeof indexedDB === 'undefined') return false;
+
+  const effectiveTimeoutMs =
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? timeoutMs
+      : DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS;
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let timedOut = false;
+
+  const clearPromise = runTransaction(
+    [STORE_PUZZLES, STORE_IMAGES],
+    (tx) => {
+      if (timedOut) {
+        try {
+          tx.abort();
+        } catch (err) {
+          reportSwallowed('IndexedDbStore:clearAllStoresAbort', err, { dbName: effectiveDbName });
+        }
+        return;
+      }
       tx.objectStore(STORE_PUZZLES).clear();
       tx.objectStore(STORE_IMAGES).clear();
-    });
-  } catch (err) {
-    reportSwallowed('IndexedDbStore.clearAllStores', err);
+    },
+    effectiveDbName,
+    () => timedOut
+  ).then(
+    () => !timedOut,
+    (err) => {
+      reportSwallowed('IndexedDbStore.clearAllStores', err, { dbName: effectiveDbName });
+      return false;
+    }
+  );
+
+  const timeoutPromise = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => {
+      timer = null;
+      timedOut = true;
+      const stuckHandle = dbPromises.get(effectiveDbName);
+      if (stuckHandle) {
+        dbPromises.delete(effectiveDbName);
+        void stuckHandle.then(
+          (db) => {
+            try {
+              if (db && typeof db.close === 'function') {
+                db.close();
+              }
+            } catch (err) {
+              reportSwallowed('IndexedDbStore.clearAllStoresTimeoutClose', err, {
+                dbName: effectiveDbName,
+              });
+            }
+          },
+          () => {}
+        );
+      }
+      resolve(false);
+    }, effectiveTimeoutMs);
+    if (
+      typeof timer === 'object' &&
+      timer !== null &&
+      typeof (timer as { unref?: () => void }).unref === 'function'
+    ) {
+      (timer as { unref: () => void }).unref();
+    }
+  });
+
+  try {
+    return await Promise.race([clearPromise, timeoutPromise]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
   }
 }

@@ -1,6 +1,7 @@
 import { SafeLocalStore } from '../storage/SafeLocalStore';
 import {
   MICROSOFT_CLIENT_ID_STORAGE_KEY,
+  MICROSOFT_TOKEN_STORAGE_KEY,
   resolveScopedStorageKey,
 } from '../storage/StorageKeys';
 import { NativeBridge } from '../NativeBridge';
@@ -16,8 +17,7 @@ import {
   getWebOAuthRedirectUri,
 } from './OAuthPkceHelper';
 
-export { MICROSOFT_CLIENT_ID_STORAGE_KEY };
-export const MICROSOFT_TOKEN_STORAGE_KEY = 'capy_microsoft_oauth_token_v1';
+export { MICROSOFT_CLIENT_ID_STORAGE_KEY, MICROSOFT_TOKEN_STORAGE_KEY };
 export const MICROSOFT_OAUTH_SCOPES =
   'openid profile email User.Read Files.ReadWrite.AppFolder';
 export const MICROSOFT_AUTHORIZE_ENDPOINT =

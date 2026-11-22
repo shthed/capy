@@ -715,6 +715,41 @@ function readPendingAndNativeBackup(
   return { pendingRaw, nativeRaw };
 }
 
+/**
+ * Pure read-only snapshot of non-empty backup candidates for orphan GC.
+ * NEVER mutates Web Storage, quarantine keys, or pending write queues.
+ */
+export function peekBackupCandidatesReadOnly(
+  storageKey: string,
+  backupKey: string
+): { ok: boolean; candidates: string[] } {
+  const candidates: string[] = [];
+  const pushCandidate = (raw: string | null | undefined) => {
+    if (typeof raw === 'string' && raw.trim().length > 0 && !candidates.includes(raw)) {
+      candidates.push(raw);
+    }
+  };
+
+  pushCandidate(pendingLocalHealWrites.get(storageKey));
+  pushCandidate(pendingBackupWrites.get(backupKey));
+
+  if (
+    hasReadableNativeBackup() &&
+    !staleNativeBackupKeys.has(backupKey) &&
+    !pendingForcedBackupKeys.has(backupKey)
+  ) {
+    try {
+      const nativeRaw = window.CapyAndroid?.loadBackup?.(backupKey) ?? null;
+      pushCandidate(nativeRaw);
+    } catch (err) {
+      reportSwallowed('BackupEngine.peekBackupCandidatesReadOnly', err, { storageKey, backupKey });
+      return { ok: false, candidates: [] };
+    }
+  }
+
+  return { ok: true, candidates };
+}
+
 function resolveCompetingCandidates(
   storageKey: string,
   backupKey: string,

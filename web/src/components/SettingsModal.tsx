@@ -39,12 +39,14 @@ import {
   Type,
   Film,
   BookOpen,
+  HardDrive,
 } from 'lucide-react';
 import {
   CollapsibleSettingSection,
   SettingSectionCard,
   SettingSwitchRow,
 } from './SettingsControls';
+import { BrowserStorageModal } from './BrowserStorageModal';
 import { PwaService } from '../services/PwaService';
 import { NativeBridge } from '../services/NativeBridge';
 import { resolveSafeSnapshotThumbnail } from '../utils/snapshotPaths';
@@ -121,6 +123,10 @@ interface SettingsModalProps {
   onTogglePinSnapshot?: (id: string) => void;
   onDeleteSnapshot: (id: string) => void;
   onClearAllSnapshots: () => void;
+  onAfterStorageClear?: (opts: {
+    clearedActiveChannel: boolean;
+    clearedSettings?: boolean;
+  }) => Promise<void> | void;
   onResetProgress?: () => void;
   onRegenerate: (config: GeneratorConfig) => void;
   onSelectSample: (sample: SampleArtwork, config?: GeneratorConfig, prebakedSnapshotId?: string) => void;
@@ -338,6 +344,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onTogglePinSnapshot,
   onDeleteSnapshot,
   onClearAllSnapshots,
+  onAfterStorageClear,
   onResetProgress,
   onRegenerate,
   onSelectSample,
@@ -390,6 +397,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [renameText, setRenameText] = useState<string>('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [isStorageAnalyzerOpen, setIsStorageAnalyzerOpen] = useState(false);
   const [selectedSaveId, setSelectedSaveId] = useState<string | null>(null);
   const [savesViewMode, setSavesViewMode] = useState<'DETAIL' | 'THUMBNAILS'>(() => {
     const stored = SafeLocalStore.getScopedItem(SAVES_VIEW_MODE_KEY);
@@ -544,11 +552,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialTab, initialTabRequestKey]);
 
-  // Close on Escape key (cancel inline rename first if active)
+  // Reset sub-modal when Settings closes or active tab changes away from Saves
+  useEffect(() => {
+    if (!isOpen || activeTab !== 4) {
+      setIsStorageAnalyzerOpen(false);
+    }
+  }, [isOpen, activeTab]);
+
+  // Close on Escape key (BrowserStorageModal owns Escape when open; otherwise cancel inline rename first)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (isStorageAnalyzerOpen) {
+          return;
+        }
         if (renamingId) {
           setRenamingId(null);
           return;
@@ -558,7 +576,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, renamingId]);
+  }, [isOpen, isStorageAnalyzerOpen, onClose, renamingId]);
 
   // Artwork resolution and snapping calculations
   const nativeW = sourceImage?.naturalWidth || sourceImage?.width || 0;
@@ -669,14 +687,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer sm:cursor-default"
-    >
+    <>
+      <div
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            onClose();
+          }
+        }}
+        className="fixed inset-0 z-50 flex sm:items-center sm:justify-center sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 select-none cursor-pointer sm:cursor-default"
+      >
       <div
         role="dialog"
         aria-modal="true"
@@ -3831,9 +3850,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {/* Row 3: Global Library Actions (Import, Export All, Delete All Saves) */}
+                {/* Row 3: Global Library Actions (Import, Export All, Reset Progress, Browser Storage, Delete All Saves) */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {onImportSnapshots && (
                       <button
                         type="button"
@@ -3872,6 +3891,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span>Reset Progress</span>
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsStorageAnalyzerOpen(true)}
+                      aria-haspopup="dialog"
+                      title="Inspect and manage browser storage usage"
+                      data-testid="saves-storage-info-btn"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow active:scale-95 cursor-pointer"
+                    >
+                      <HardDrive size={13} className="text-amber-400" />
+                      <span>Browser Storage</span>
+                    </button>
                   </div>
 
                   {snapshots.length > 0 && (
@@ -4229,6 +4260,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+      </div>
+
+      <BrowserStorageModal
+        isOpen={isStorageAnalyzerOpen}
+        onClose={() => setIsStorageAnalyzerOpen(false)}
+        onAfterStorageClear={onAfterStorageClear}
+      />
+    </>
   );
 };

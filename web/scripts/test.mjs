@@ -21,6 +21,7 @@ import {
 } from './sanity.mjs';
 import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
 import { runStorageGatewayTests } from './storage-gateway.test.mjs';
+import { runStorageAnalyzerTests } from './storage-analyzer.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -13065,7 +13066,8 @@ async function runCodecAndEngineTests() {
 
     await runReleaseSafetyHardeningTests(vite);
     await runStorageGatewayTests(vite);
-    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway & M1 release safety hardening verified.');
+    await runStorageAnalyzerTests(vite);
+    logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer & M1 release safety hardening verified.');
 
     // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
     // createAutoCloudSyncScheduler & Cross-Provider CRDT Merge Parity
@@ -13393,7 +13395,7 @@ async function runBrowserBasicsSuite() {
     const page = await context.newPage();
     attachErrorListeners(page, 'main');
 
-    const e2eTotal = 23;
+    const e2eTotal = 24;
     const padE2e = (n) => String(n).padStart(2, '0');
     let e2eStep = 0;
     const logE2eStart = (label) => {
@@ -20321,6 +20323,459 @@ async function runBrowserBasicsSuite() {
     await byocPage.close();
     await byocContext.close();
     logE2ePass('M4 $0 BYOC multi-provider login UI, default-off gate, 360px zero-overflow & automatic background sync verified.');
+
+    // E2E Stage 24: Browser Storage Analyzer, Targeted Safe Cleanups, 360x780 Layout & Oversized Photo Compression
+    logE2eStart('Browser Storage Analyzer modal, 360x780 zero-overflow, safe cleanups (caches/orphans/previews) & oversized photo upload compression');
+    const storageContext = await browser.newContext({ viewport: { width: 360, height: 780 } });
+    const storagePage = await storageContext.newPage();
+    attachErrorListeners(storagePage, 'storage-analyzer');
+
+    await storagePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+    await waitForPuzzleLoaded(storagePage);
+    await storagePage.waitForFunction(
+      () => {
+        try {
+          const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+          return Array.isArray(snaps) && snaps.length >= 1;
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+
+    const liveSnapCountBefore = await storagePage.evaluate(() => {
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      return snaps.length;
+    });
+    assert.equal(liveSnapCountBefore >= 1, true, 'Expected at least 1 active snapshot before seeding bloat');
+
+    // Seed stale alpha caches, protected CapyGame cache/key, orphaned active IDB records, and sandboxed alpha preview DB
+    await storagePage.evaluate(async () => {
+      const c1 = await caches.open('capy-cache-v3.0.10:/capy/alpha/590/');
+      await c1.put(
+        new Request(`${location.origin}/capy/alpha/590/bundle.js`),
+        new Response('a'.repeat(65536), {
+          headers: { 'content-type': 'application/javascript', 'content-length': '65536' },
+        })
+      );
+      const c2 = await caches.open('capy-cache-v3.0.11:/capy/alpha/615/');
+      await c2.put(
+        new Request(`${location.origin}/capy/alpha/615/bundle.js`),
+        new Response('b'.repeat(32768), {
+          headers: { 'content-type': 'application/javascript', 'content-length': '32768' },
+        })
+      );
+      const otherCache = await caches.open('capygame-cache-v1');
+      await otherCache.put(
+        new Request(`${location.origin}/capygame/app.js`),
+        new Response('g'.repeat(4096), {
+          headers: { 'content-type': 'application/javascript', 'content-length': '4096' },
+        })
+      );
+
+      // Seed orphaned records in active capy_game_storage_v8
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open('capy_game_storage_v8', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('puzzles')) db.createObjectStore('puzzles');
+          if (!db.objectStoreNames.contains('images')) db.createObjectStore('images');
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['puzzles', 'images'], 'readwrite');
+          tx.objectStore('puzzles').put(
+            { __capyCompactV2: 2, rleRegionMap: new Uint8Array(4096) },
+            'orphan-snap-999'
+          );
+          tx.objectStore('images').put(
+            new Blob([new Uint8Array(32768)], { type: 'image/png' }),
+            'orphan-snap-999'
+          );
+          tx.objectStore('images').put(
+            `data:image/webp;base64,${'A'.repeat(1024)}`,
+            'preview_orphan-snap-999'
+          );
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+        req.onerror = () => reject(req.error);
+      });
+
+      // Seed sandboxed alpha preview DB + Local Storage keys + protected sibling CapyGame key
+      await new Promise((resolve, reject) => {
+        const req = indexedDB.open('capy_game_storage_v8_alpha', 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('puzzles')) db.createObjectStore('puzzles');
+          if (!db.objectStoreNames.contains('images')) db.createObjectStore('images');
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['puzzles'], 'readwrite');
+          tx.objectStore('puzzles').put(
+            { __capyCompactV2: 2, rleRegionMap: new Uint8Array(2048) },
+            'alpha-snap-1'
+          );
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+        req.onerror = () => reject(req.error);
+      });
+
+      localStorage.setItem(
+        'capy_snapshots_v8__sandbox_alpha',
+        JSON.stringify([{ id: 'alpha-snap-1', title: 'Alpha Preview Save' }])
+      );
+      localStorage.setItem('capy_game_save_v3', JSON.stringify({ capyWorld: 'protected' }));
+    });
+
+    // Open Menu -> Saves at 360x780 and verify saves-storage-info-btn + zero horizontal overflow
+    await storagePage.getByTestId('topbar-settings-btn').click();
+    await storagePage.getByTestId('settings-tab-saves').click();
+    await storagePage.getByTestId('saves-storage-info-btn').waitFor({ state: 'visible', timeout: 5000 });
+
+    const savesOverflow = await storagePage.evaluate(() => {
+      const actionBar = document.querySelector('[data-testid="selected-save-action-bar"]');
+      const scrollContainer = actionBar?.closest('.overflow-y-auto');
+      return {
+        actionBarOverflow: actionBar ? actionBar.scrollWidth - actionBar.clientWidth : 999,
+        containerOverflow: scrollContainer
+          ? scrollContainer.scrollWidth - scrollContainer.clientWidth
+          : 999,
+      };
+    });
+    assert.equal(
+      savesOverflow.actionBarOverflow <= 1 && savesOverflow.containerOverflow <= 1,
+      true,
+      `Saves tab with Browser Storage button must have zero horizontal overflow at 360x780: ${JSON.stringify(savesOverflow)}`
+    );
+
+    // Open Browser Storage modal and verify breakdown sections + 360x780 zero overflow
+    await storagePage.getByTestId('saves-storage-info-btn').click();
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-quota-summary').waitFor({ state: 'visible', timeout: 10000 });
+    await storagePage.getByTestId('storage-section-caches').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-section-idb').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-section-local').waitFor({ state: 'visible', timeout: 5000 });
+
+    const modalText = await storagePage.getByTestId('browser-storage-modal').innerText();
+    assert.equal(
+      modalText.includes('Stale Alpha PR Previews (2)'),
+      true,
+      `Expected 2 stale alpha caches in Browser Storage modal, got:\n${modalText}`
+    );
+    assert.equal(
+      modalText.includes('Orphaned Records (3)'),
+      true,
+      `Expected 3 orphaned IDB records in Browser Storage modal, got:\n${modalText}`
+    );
+    assert.equal(
+      modalText.includes('Preview Channel DB (alpha)'),
+      true,
+      `Expected Preview Channel DB (alpha) in Browser Storage modal, got:\n${modalText}`
+    );
+
+    const modalOverflow = await storagePage.evaluate(() => {
+      const modal = document.querySelector('[data-testid="browser-storage-modal"]');
+      const body = modal?.querySelector('.overflow-y-auto');
+      return {
+        modalOverflow: modal ? modal.scrollWidth - modal.clientWidth : 999,
+        bodyOverflow: body ? body.scrollWidth - body.clientWidth : 999,
+      };
+    });
+    assert.equal(
+      modalOverflow.modalOverflow <= 1 && modalOverflow.bodyOverflow <= 1,
+      true,
+      `BrowserStorageModal must have zero horizontal overflow at 360x780: ${JSON.stringify(modalOverflow)}`
+    );
+
+    // 24a. Safe Cleanup 1: Clear Stale & Offline Caches (zero save loss, preserves CapyGame cache)
+    await storagePage.getByTestId('storage-clean-caches-btn').click();
+    await storagePage.getByTestId('storage-clean-caches-confirm').click();
+    await storagePage.getByTestId('storage-action-notice').waitFor({ state: 'visible', timeout: 10000 });
+    const afterCacheClean = await storagePage.evaluate(async () => ({
+      cacheNames: await caches.keys(),
+      snapCount: JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length,
+    }));
+    assert.equal(
+      afterCacheClean.cacheNames.some((n) => n.includes('/alpha/')),
+      false,
+      `Stale alpha caches must be deleted, remaining: ${afterCacheClean.cacheNames.join(', ')}`
+    );
+    assert.equal(
+      afterCacheClean.cacheNames.includes('capygame-cache-v1'),
+      true,
+      'Non-Capy origin cache capygame-cache-v1 must stay protected'
+    );
+    assert.equal(
+      afterCacheClean.snapCount,
+      liveSnapCountBefore,
+      'Clearing caches must preserve 100% of saved puzzles'
+    );
+
+    // 24b. Safe Cleanup 2: Clean Orphaned Save Data (zero save loss)
+    await storagePage.getByTestId('storage-clean-orphans-btn').click();
+    await storagePage.getByTestId('storage-clean-orphans-confirm').click();
+    await storagePage.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="storage-clean-orphans-btn"]');
+        return Boolean(btn && btn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+    const afterOrphanClean = await storagePage.evaluate(async () => {
+      const idbKeys = await new Promise((resolve, reject) => {
+        const req = indexedDB.open('capy_game_storage_v8', 1);
+        req.onsuccess = () => {
+          const db = req.result;
+          const tx = db.transaction(['puzzles', 'images'], 'readonly');
+          const pReq = tx.objectStore('puzzles').getAllKeys();
+          const iReq = tx.objectStore('images').getAllKeys();
+          let pKeys = [];
+          let iKeys = [];
+          pReq.onsuccess = () => {
+            pKeys = pReq.result.map(String);
+          };
+          iReq.onsuccess = () => {
+            iKeys = iReq.result.map(String);
+          };
+          tx.oncomplete = () => {
+            db.close();
+            resolve({ pKeys, iKeys });
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(tx.error);
+          };
+        };
+        req.onerror = () => reject(req.error);
+      });
+      return {
+        ...idbKeys,
+        snapCount: JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length,
+      };
+    });
+    assert.equal(afterOrphanClean.pKeys.includes('orphan-snap-999'), false);
+    assert.equal(afterOrphanClean.iKeys.includes('orphan-snap-999'), false);
+    assert.equal(afterOrphanClean.iKeys.includes('preview_orphan-snap-999'), false);
+    assert.equal(afterOrphanClean.pKeys.length >= 1, true, 'Active puzzles must remain in IDB');
+    assert.equal(afterOrphanClean.snapCount, liveSnapCountBefore);
+
+    // 24c. Safe Cleanup 3: Clear Preview Channel Data (zero Production save loss & protects CapyGame)
+    await storagePage.getByTestId('storage-clean-previews-btn').click();
+    await storagePage.getByTestId('storage-clean-previews-confirm').click();
+    await storagePage.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="storage-clean-previews-btn"]');
+        return (
+          Boolean(btn && btn.hasAttribute('disabled')) &&
+          localStorage.getItem('capy_snapshots_v8__sandbox_alpha') === null
+        );
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+    const afterPreviewClean = await storagePage.evaluate(async () => {
+      const dbList = typeof indexedDB.databases === 'function' ? await indexedDB.databases() : [];
+      return {
+        alphaLs: localStorage.getItem('capy_snapshots_v8__sandbox_alpha'),
+        capyGameLs: localStorage.getItem('capy_game_save_v3'),
+        prodSnapCount: JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length,
+        hasAlphaDb: dbList.some((d) => d.name === 'capy_game_storage_v8_alpha'),
+      };
+    });
+    assert.equal(afterPreviewClean.alphaLs, null);
+    assert.equal(afterPreviewClean.hasAlphaDb, false);
+    assert.equal(afterPreviewClean.prodSnapCount, liveSnapCountBefore);
+    assert.equal(
+      afterPreviewClean.capyGameLs !== null,
+      true,
+      'CapyGame capy_game_save_v3 must remain protected'
+    );
+
+    // 24d. Escape closes BrowserStorageModal while keeping SettingsModal open
+    await storagePage.keyboard.press('Escape');
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'hidden', timeout: 5000 });
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
+    await storagePage.getByTestId('settings-modal-close').click();
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // 24e. Oversized custom photo upload compression (2400x1800 noisy PNG -> downscaled <= 2048px & smaller WebP)
+    const oversizedPngBytes = await storagePage.evaluate(async () => {
+      const w = 2400;
+      const h = 1800;
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext('2d');
+      const imgData = ctx.createImageData(w, h);
+      const data = imgData.data;
+      let seed = 0x12345678;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          const idx = (y * w + x) * 4;
+          data[idx] = (x * 7 + (seed & 0x3f)) & 0xff;
+          data[idx + 1] = (y * 5 + ((seed >> 8) & 0x3f)) & 0xff;
+          data[idx + 2] = ((x + y) * 3 + ((seed >> 16) & 0x3f)) & 0xff;
+          data[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+      return Array.from(new Uint8Array(await blob.arrayBuffer()));
+    });
+    assert.equal(
+      oversizedPngBytes.length > 400_000,
+      true,
+      `Expected synthetic oversized PNG > 400 KB, got ${oversizedPngBytes.length} B`
+    );
+
+    const snapIdBeforeOversized = await storagePage.evaluate(
+      () => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null
+    );
+    await storagePage.locator('input[type="file"][accept="image/*"]').setInputFiles({
+      name: 'oversized_test_photo.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(oversizedPngBytes),
+    });
+    await storagePage.waitForFunction(
+      (prevId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Boolean(active.activeSnapshotId && active.activeSnapshotId !== prevId);
+      },
+      snapIdBeforeOversized,
+      { timeout: 25000 }
+    );
+    await waitForPuzzleLoaded(storagePage);
+
+    const compressedUploadInfo = await storagePage.evaluate(async () => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      const snapId = active.activeSnapshotId;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const blob = await new Promise((resolve) => {
+          const req = indexedDB.open('capy_game_storage_v8', 1);
+          req.onsuccess = () => {
+            const db = req.result;
+            const tx = db.transaction('images', 'readonly');
+            const g = tx.objectStore('images').get(snapId);
+            g.onsuccess = () => {
+              db.close();
+              resolve(g.result || null);
+            };
+            g.onerror = () => {
+              db.close();
+              resolve(null);
+            };
+          };
+          req.onerror = () => resolve(null);
+        });
+        if (blob instanceof Blob) {
+          const bmp = await createImageBitmap(blob);
+          const dims = { width: bmp.width, height: bmp.height };
+          bmp.close();
+          return { size: blob.size, type: blob.type, ...dims };
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return null;
+    });
+    assert.ok(compressedUploadInfo, 'Compressed custom upload blob must persist in STORE_IMAGES');
+    assert.equal(
+      compressedUploadInfo.size < oversizedPngBytes.length,
+      true,
+      `Expected compressed blob (${compressedUploadInfo.size} B) < raw PNG (${oversizedPngBytes.length} B)`
+    );
+    assert.equal(
+      compressedUploadInfo.width <= 2048 && compressedUploadInfo.height <= 2048,
+      true,
+      `Expected compressed dimensions <= 2048px, got ${compressedUploadInfo.width}x${compressedUploadInfo.height}`
+    );
+
+    // 24f. Cleanup 4: Clear All Capy Storage resets custom settings, reloads starter sample & protects CapyGame
+    await storagePage.getByTestId('topbar-settings-btn').click();
+    await storagePage.getByTestId('settings-tab-settings').click();
+    await storagePage.getByTestId('setting-free-color-mode').click();
+    const freeColorBeforeClear = await storagePage.evaluate(
+      () => Boolean(JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}').isFreeColorMode)
+    );
+    assert.equal(freeColorBeforeClear, true, 'Expected Free Color Mode setting persisted before Clear All');
+
+    await storagePage.getByTestId('settings-tab-saves').click();
+    await storagePage.getByTestId('saves-storage-info-btn').click();
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'visible', timeout: 5000 });
+    await storagePage.getByTestId('storage-clean-all-btn').waitFor({ state: 'visible', timeout: 10000 });
+    await storagePage.getByTestId('storage-clean-all-btn').click();
+    await storagePage.getByTestId('storage-clean-all-confirm').click();
+    await storagePage.getByTestId('storage-action-notice').waitFor({ state: 'visible', timeout: 15000 });
+    await storagePage.waitForFunction(
+      () => {
+        const closeBtn = document.querySelector('[data-testid="storage-close-btn"]');
+        return Boolean(closeBtn && !closeBtn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+    await storagePage.keyboard.press('Escape');
+    await storagePage.getByTestId('browser-storage-modal').waitFor({ state: 'hidden', timeout: 5000 });
+    await storagePage.getByTestId('settings-modal-close').click();
+    await storagePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+    await waitForPuzzleLoaded(storagePage);
+    await storagePage.waitForFunction(
+      () => {
+        try {
+          const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+          return Array.isArray(snaps) && snaps.length === 1;
+        } catch {
+          return false;
+        }
+      },
+      undefined,
+      { timeout: 15000 }
+    );
+    const afterClearAll = await storagePage.evaluate(async () => {
+      const settingsRaw = localStorage.getItem('capy_user_settings_v8');
+      const parsedSettings = settingsRaw ? JSON.parse(settingsRaw) : null;
+      const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
+      const cacheNames = await caches.keys();
+      return {
+        isFreeColorMode: parsedSettings ? Boolean(parsedSettings.isFreeColorMode) : false,
+        snapCount: snaps.length,
+        capyGameLs: localStorage.getItem('capy_game_save_v3'),
+        hasCapyGameCache: cacheNames.includes('capygame-cache-v1'),
+      };
+    });
+    assert.equal(
+      afterClearAll.isFreeColorMode,
+      false,
+      'Clear All Capy Storage must reset custom settings instead of resurrecting isFreeColorMode'
+    );
+    assert.equal(afterClearAll.snapCount, 1, 'Clear All must reload a fresh starter sample snapshot');
+    assert.equal(
+      afterClearAll.capyGameLs !== null && afterClearAll.hasCapyGameCache,
+      true,
+      'Clear All Capy Storage must preserve CapyGame localStorage key and CacheStorage'
+    );
+
+    await storagePage.close();
+    await storageContext.close();
+    logE2ePass('Browser Storage Analyzer modal, 360x780 zero-overflow, all 4 cleanups, Escape isolation & oversized photo upload compression verified.');
 
     assert.equal(
       e2eStep,

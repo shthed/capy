@@ -92,14 +92,20 @@ export const SafeLocalStore = {
     }
   },
 
-  getItem(storageKey: string): string | null {
+  tryGetItem(storageKey: string): { ok: boolean; value: string | null } {
     try {
-      if (typeof localStorage === 'undefined' || localStorage === null) return null;
-      return localStorage.getItem(storageKey);
+      if (typeof localStorage === 'undefined' || localStorage === null) {
+        return { ok: false, value: null };
+      }
+      return { ok: true, value: localStorage.getItem(storageKey) };
     } catch (err) {
-      reportSwallowed('SafeLocalStore.getItem', err, { key: storageKey });
-      return null;
+      reportSwallowed('SafeLocalStore.tryGetItem', err, { key: storageKey });
+      return { ok: false, value: null };
     }
+  },
+
+  getItem(storageKey: string): string | null {
+    return this.tryGetItem(storageKey).value;
   },
 
   setItem(storageKey: string, value: string, options?: SafeLocalWriteOptions): boolean {
@@ -143,5 +149,43 @@ export const SafeLocalStore = {
 
   removeScopedItem(baseKey: string, options?: { rethrow?: boolean }): boolean {
     return this.removeItem(resolveScopedStorageKey(baseKey), options);
+  },
+
+  keys(): string[] {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return [];
+      const result: string[] = [];
+      const len = typeof localStorage.length === 'number' ? localStorage.length : 0;
+      for (let i = 0; i < len; i++) {
+        const k = localStorage.key(i);
+        if (typeof k === 'string') {
+          result.push(k);
+        }
+      }
+      return result;
+    } catch (err) {
+      reportSwallowed('SafeLocalStore.keys', err);
+      return [];
+    }
+  },
+
+  entries(): Array<[string, string]> {
+    try {
+      if (typeof localStorage === 'undefined' || localStorage === null) return [];
+      const result: Array<[string, string]> = [];
+      const len = typeof localStorage.length === 'number' ? localStorage.length : 0;
+      for (let i = 0; i < len; i++) {
+        const k = localStorage.key(i);
+        if (typeof k !== 'string') continue;
+        const v = localStorage.getItem(k);
+        if (typeof v === 'string') {
+          result.push([k, v]);
+        }
+      }
+      return result;
+    } catch (err) {
+      reportSwallowed('SafeLocalStore.entries', err);
+      return [];
+    }
   },
 };

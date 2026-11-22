@@ -463,12 +463,12 @@ export async function deleteSnapshot(id: string): Promise<SavedSnapshot[]> {
   return updated;
 }
 
-export async function clearAllSnapshots(): Promise<void> {
+export async function clearAllSnapshots(timeoutMs?: number): Promise<void> {
   saveSnapshots([], {
     allowEmptyBackup: true,
     immediateBackup: true,
     clearLocalOnFailure: true,
   });
   clearActiveState();
-  await clearAllStores();
+  await clearAllStores(undefined, timeoutMs);
 }
