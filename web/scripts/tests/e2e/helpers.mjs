@@ -244,11 +244,37 @@ export async function tapCanvasGrid(page, startFrac = 0.32, count = 8, delayMs =
 
 export async function getStableBoundingBox(locator, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
+  const hasRunningCssTransition = async () => {
+    try {
+      return await locator.evaluate((el) => {
+        let node = el;
+        while (node && node !== document.body && node !== document.documentElement) {
+          if (typeof node.getAnimations === 'function') {
+            for (const anim of node.getAnimations()) {
+              if (
+                typeof CSSTransition !== 'undefined' &&
+                anim instanceof CSSTransition &&
+                anim.playState === 'running'
+              ) {
+                return true;
+              }
+            }
+          }
+          node = node.parentElement;
+        }
+        return false;
+      });
+    } catch {
+      return false;
+    }
+  };
   let prev = await locator.boundingBox();
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 60));
     const cur = await locator.boundingBox();
+    const transitioning = await hasRunningCssTransition();
     if (
+      !transitioning &&
       prev &&
       cur &&
       Math.abs(cur.x - prev.x) < 0.5 &&

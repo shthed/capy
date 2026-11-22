@@ -892,6 +892,15 @@ export async function runSvgCoopChannelsE2e(ctx) {
     // Re-open ReplayControls on 360x800 mobile, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
     const mobileUndoLocator = page.getByTestId('undo-btn');
     await mobileUndoLocator.waitFor({ state: 'visible', timeout: 5000 });
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="undo-btn"]');
+        return Boolean(btn && !btn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 5000 }
+    );
+    await waitForAnimationFrames(page, 2);
     const mobileUndoBox = await getStableBoundingBox(mobileUndoLocator);
     await page.mouse.move(
       mobileUndoBox.x + mobileUndoBox.width / 2,
