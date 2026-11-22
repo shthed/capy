@@ -93,6 +93,7 @@ function createHarness(overrides = {}) {
     setShowTutorial: [],
     setCoopRoomState: [],
     loadArtworkFromImage: [],
+    setActiveBlobUrl: [],
     revokeObjectUrl: [],
     clearShareHash: [],
     saveActiveState: [],
@@ -109,6 +110,7 @@ function createHarness(overrides = {}) {
     getActiveBlobUrl: () => activeBlobUrl,
     setActiveBlobUrl: (url) => {
       activeBlobUrl = url;
+      calls.setActiveBlobUrl.push(url);
     },
     resolveSnapshotImageSrc: async (snap) => ({
       src: snap.sampleAssetPath || './assets/capybara.webp',
@@ -294,6 +296,46 @@ export async function runSessionRestorePipelineTests(vite) {
       ],
       'mergeCustomPalette must override matching IDs and append custom colors'
     );
+
+    // Duplicate IDs (both generated and extra IDs) must use last-wins consistently
+    const dupMerged = mod.mergeCustomPalette(base, [
+      { id: 1, hex: '#010101', r: 1, g: 1, b: 1, isLight: false, argb: 0xff010101 },
+      { id: 1, hex: '#020202', r: 2, g: 2, b: 2, isLight: false, argb: 0xff020202 },
+      { id: 99, hex: '#0B0B0B', r: 11, g: 11, b: 11, isLight: false, argb: 0xff0b0b0b },
+      { id: 99, hex: '#161616', r: 22, g: 22, b: 22, isLight: false, argb: 0xff161616 },
+    ]);
+    assert.deepEqual(
+      dupMerged.map((c) => [c.id, c.hex]),
+      [
+        [1, '#020202'],
+        [2, '#222222'],
+        [99, '#161616'],
+      ],
+      'mergeCustomPalette must apply last-wins consistently for duplicate generated and extra IDs'
+    );
+
+    // Default revokeObjectUrl must ignore non-blob: strings and forward blob: URLs
+    {
+      const revoked = [];
+      const origRevoke = URL.revokeObjectURL;
+      URL.revokeObjectURL = (u) => {
+        revoked.push(u);
+      };
+      try {
+        const defaultDeps = mod.createDefaultSessionRestoreDeps();
+        defaultDeps.revokeObjectUrl('./assets/capybara.webp');
+        defaultDeps.revokeObjectUrl('https://capypaint.com/img.png');
+        defaultDeps.revokeObjectUrl('');
+        defaultDeps.revokeObjectUrl('blob:https://capypaint.com/valid-id');
+      } finally {
+        URL.revokeObjectURL = origRevoke;
+      }
+      assert.deepEqual(
+        revoked,
+        ['blob:https://capypaint.com/valid-id'],
+        'default revokeObjectUrl must guard on blob: prefix'
+      );
+    }
 
     const prevSnaps = [makeTestSnapshot({ id: 'a' }), makeTestSnapshot({ id: 'b' })];
     const unchanged = mod.mergeSnapshotPreviews(prevSnaps, [makeTestSnapshot({ id: 'a' })]);
@@ -669,13 +711,15 @@ export async function runSessionRestorePipelineTests(vite) {
     assert.equal(h.calls.setSnapshots.length, 0);
   }
 
-  // 9. Mid-flight AbortController cancellation during cache-eviction loadImageBlob revokes active blob URL
+  // 9. Mid-flight AbortController cancellation during cache-eviction loadImageBlob:
+  //    revokes usedObjectUrl immediately, does NOT prematurely revoke prevBlobUrl, and does NOT mutate setActiveBlobUrl
   {
     const snap = makeTestSnapshot({ id: 'snap-evict-abort', sampleAssetPath: undefined });
     const blobDeferred = makeDeferred();
     const controller = new AbortController();
 
     const h = createHarness({
+      initialBlobUrl: 'blob:existing-active',
       callbacks: {
         resolveSnapshotImageSrc: async () => ({
           src: 'blob:evict-leak-check',
@@ -705,8 +749,169 @@ export async function runSessionRestorePipelineTests(vite) {
 
     assert.equal(res, 'cancelled');
     assert.deepEqual(h.calls.revokeObjectUrl, ['blob:evict-leak-check']);
-    assert.equal(h.getActiveBlobUrl(), null);
+    assert.equal(h.getActiveBlobUrl(), 'blob:existing-active');
+    assert.deepEqual(h.calls.setActiveBlobUrl, []);
     assert.equal(h.calls.loadArtworkFromImage.length, 0);
+  }
+
+  // 9b. Mid-flight transitionSeq bump during cache-eviction loadImageBlob (without signal.abort):
+  //     revokes usedObjectUrl immediately, preserves prevBlobUrl, zero setActiveBlobUrl mutations
+  {
+    const snap = makeTestSnapshot({ id: 'snap-evict-seq-race', sampleAssetPath: undefined });
+    const blobDeferred = makeDeferred();
+
+    const h = createHarness({
+      initialBlobUrl: 'blob:prev-active',
+      callbacks: {
+        resolveSnapshotImageSrc: async () => ({
+          src: 'blob:stale-evicted',
+          objectUrl: 'blob:stale-evicted',
+        }),
+      },
+      deps: {
+        loadHtmlImage: async (src) => makeFakeImage(src),
+      },
+      storage: {
+        loadSnapshots: () => [snap],
+        loadPuzzleData: async () => null,
+        loadImageBlob: () => blobDeferred.promise,
+      },
+    });
+
+    const runPromise = mod.runSessionRestorePipeline({
+      signal: new AbortController().signal,
+      callbacks: h.callbacks,
+      deps: h.deps,
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    h.bumpTransitionSeq();
+    blobDeferred.resolve(new Uint8Array([7]));
+    const res = await runPromise;
+
+    assert.equal(res, 'cancelled');
+    assert.deepEqual(h.calls.revokeObjectUrl, ['blob:stale-evicted']);
+    assert.equal(h.getActiveBlobUrl(), 'blob:prev-active');
+    assert.deepEqual(h.calls.setActiveBlobUrl, []);
+    assert.equal(h.calls.loadArtworkFromImage.length, 0);
+  }
+
+  // 9c. Cache-eviction loadImageBlob rejection revokes usedObjectUrl without mutating activeBlobUrl
+  {
+    const snap = makeTestSnapshot({ id: 'snap-evict-throw', sampleAssetPath: undefined });
+    const h = createHarness({
+      initialBlobUrl: 'blob:prev-active-err',
+      callbacks: {
+        resolveSnapshotImageSrc: async () => ({
+          src: 'blob:evict-throw-url',
+          objectUrl: 'blob:evict-throw-url',
+        }),
+      },
+      deps: {
+        loadHtmlImage: async (src) => makeFakeImage(src),
+      },
+      storage: {
+        loadSnapshots: () => [snap],
+        loadPuzzleData: async () => null,
+        loadImageBlob: async () => {
+          throw new Error('idb read failed');
+        },
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        mod.runSessionRestorePipeline({
+          signal: new AbortController().signal,
+          callbacks: h.callbacks,
+          deps: h.deps,
+        }),
+      /idb read failed/
+    );
+    assert.deepEqual(h.calls.revokeObjectUrl, ['blob:evict-throw-url']);
+    assert.equal(h.getActiveBlobUrl(), 'blob:prev-active-err');
+    assert.deepEqual(h.calls.setActiveBlobUrl, []);
+  }
+
+  // 9d. Share-link ?room= join skipped when transitionSeq bumps during parseShareLinkFromUrl
+  {
+    const parseDeferred = makeDeferred();
+    let nextCoopJoinCalled = 0;
+    const h = createHarness({
+      callbacks: {
+        nextCoopJoinSeq: () => {
+          nextCoopJoinCalled += 1;
+          return nextCoopJoinCalled;
+        },
+      },
+      deps: {
+        parseShareLinkFromUrl: () => parseDeferred.promise,
+      },
+    });
+
+    const runPromise = mod.runSessionRestorePipeline({
+      signal: new AbortController().signal,
+      callbacks: h.callbacks,
+      deps: h.deps,
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    h.bumpTransitionSeq();
+    parseDeferred.resolve({
+      hasToken: false,
+      tokenError: false,
+      roomCode: 'STALE99',
+      matchedSample: null,
+      delta: null,
+    });
+    const res = await runPromise;
+
+    assert.equal(res, 'cancelled');
+    assert.equal(nextCoopJoinCalled, 0, 'nextCoopJoinSeq must not run after transitionSeq bump');
+    assert.equal(h.calls.joinRoom.length, 0, 'realtimeRoom.joinRoom must not run after transitionSeq bump');
+    assert.equal(h.calls.setCoopRoomState.length, 0, 'onSetCoopRoomState must not run after transitionSeq bump');
+  }
+
+  // 9e. Phase 2 snapEpochNewer with undefined paintedRegionColors must NOT resurrect stale activeState.paintedRegionColors
+  {
+    const snap = makeTestSnapshot({
+      id: 'snap-reset-epoch',
+      filledRegionIds: [],
+      paintedRegionColors: undefined,
+      resetEpoch: 2,
+      isFreeColor: true,
+    });
+    const h = createHarness({
+      storage: {
+        loadActiveState: () => ({
+          activeSnapshotId: 'snap-reset-epoch',
+          activeColorId: 1,
+          filledRegionIds: [101, 102],
+          paintedRegionColors: { 101: 1, 102: 2 },
+          isFreeColorMode: true,
+          resetEpoch: 1,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        }),
+        loadSnapshots: () => [snap],
+        loadPuzzleData: async () => makeTestPuzzle({ isFreeColor: true }),
+      },
+    });
+
+    const res = await mod.runSessionRestorePipeline({
+      signal: new AbortController().signal,
+      callbacks: h.callbacks,
+      deps: h.deps,
+    });
+
+    assert.equal(res, 'active_cached');
+    assert.deepEqual([...h.calls.setFilledRegionIds[0]], []);
+    assert.equal(
+      h.calls.setPaintedRegionColors[0].size,
+      0,
+      'stale pre-reset activeState.paintedRegionColors must not resurrect when snapEpochNewer is true'
+    );
   }
 
   // 10. snapshotTransitionSeqRef bump mid-flight cancels restore and revokes created blob URL

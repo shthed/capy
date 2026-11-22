@@ -196,7 +196,7 @@ export function mergeCustomPalette(
   for (let i = 0; i < customPalette.length; i++) {
     const col = customPalette[i];
     if (!seenIds.has(col.id)) {
-      merged.push(col);
+      merged.push(customById.get(col.id) ?? col);
       seenIds.add(col.id);
     }
   }
@@ -272,7 +272,12 @@ export function createDefaultSessionRestoreDeps(): SessionRestoreDeps {
       }),
     loadHtmlImage,
     revokeObjectUrl: (url: string) => {
-      if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      if (
+        typeof url === 'string' &&
+        url.startsWith('blob:') &&
+        typeof URL !== 'undefined' &&
+        typeof URL.revokeObjectURL === 'function'
+      ) {
         URL.revokeObjectURL(url);
       }
     },
@@ -303,6 +308,15 @@ function buildUndoEntries(orderedIds: number[]): SessionUndoEntry[] {
   }));
 }
 
+function revokeBlobUrlIfNeeded(
+  url: string | null,
+  revokeObjectUrl: (url: string) => void
+): void {
+  if (url && url.startsWith('blob:')) {
+    revokeObjectUrl(url);
+  }
+}
+
 function commitActiveBlobUrl(
   usedObjectUrl: string | null,
   callbacks: SessionRestoreCallbacks,
@@ -317,10 +331,11 @@ function commitActiveBlobUrl(
 
 async function joinSharedCoopRoom(
   roomCode: string,
-  signal: AbortSignal,
+  isCancelled: () => boolean,
   callbacks: SessionRestoreCallbacks,
   deps: SessionRestoreDeps
 ): Promise<void> {
+  if (isCancelled()) return;
   const joinSeq = callbacks.nextCoopJoinSeq();
   try {
     const id = deps.auth.getCurrentIdentity();
@@ -330,7 +345,7 @@ async function joinSharedCoopRoom(
       avatarColorHex: id.avatarColorHex,
       lastActiveAt: Date.now(),
     });
-    if (!signal.aborted && joinSeq === callbacks.getCoopJoinSeq()) {
+    if (!isCancelled() && joinSeq === callbacks.getCoopJoinSeq()) {
       callbacks.onSetCoopRoomState(
         deps.realtimeRoom.activeRoomCode,
         deps.realtimeRoom.getParticipants()
@@ -476,15 +491,15 @@ function applyPrebakedShareRestore(
 export async function restoreShareLinkPhase(
   context: PipelineContext
 ): Promise<SessionRestorePhaseResult | null> {
-  const { signal, isCancelled, skipBootstrap, callbacks, deps } = context;
+  const { isCancelled, skipBootstrap, callbacks, deps } = context;
   const href = deps.getWindowLocationHref();
   if (!href) return null;
 
   const parsedLink = await deps.parseShareLinkFromUrl(href);
-  if (signal.aborted) return 'cancelled';
+  if (isCancelled()) return 'cancelled';
 
   if (parsedLink.roomCode) {
-    await joinSharedCoopRoom(parsedLink.roomCode, signal, callbacks, deps);
+    await joinSharedCoopRoom(parsedLink.roomCode, isCancelled, callbacks, deps);
   }
   if (isCancelled()) return 'cancelled';
 
@@ -568,7 +583,8 @@ function buildRestoredActiveProgress(
   const orderedIds = activeFilled ?? candidateSnap.filledRegionIds ?? [];
   const filledSet = new Set(orderedIds);
   const restoredView = resolveRestoredViewport(candidateSnap, matchingActive);
-  const rawPainted = candidateSnap.paintedRegionColors ?? matchingActive?.paintedRegionColors;
+  const activePainted = !snapEpochNewer ? matchingActive?.paintedRegionColors : undefined;
+  const rawPainted = candidateSnap.paintedRegionColors ?? activePainted;
   const restoredPaintedMap = rawPainted
     ? new Map(Object.entries(rawPainted).map(([k, v]) => [Number(k), v]))
     : new Map<number, number>();
@@ -696,9 +712,8 @@ async function loadSnapshotImageWithBlobGuard(
   const usedObjectUrl =
     resolved.objectUrl && img.src === resolved.objectUrl ? resolved.objectUrl : null;
   if (resolved.objectUrl && !usedObjectUrl) {
-    deps.revokeObjectUrl(resolved.objectUrl);
+    revokeBlobUrlIfNeeded(resolved.objectUrl, deps.revokeObjectUrl);
   }
-  commitActiveBlobUrl(usedObjectUrl, callbacks, deps.revokeObjectUrl);
   return { status: 'ok', img, usedObjectUrl };
 }
 
@@ -709,21 +724,27 @@ async function regenerateEvictedSnapshot(
   activeState: ActiveSessionState | null,
   context: PipelineContext
 ): Promise<SessionRestorePhaseResult> {
-  const { signal, isCancelled, callbacks, deps } = context;
+  const { isCancelled, callbacks, deps } = context;
   const safeCandidateSamplePath = isAllowedSampleAssetPath(candidateSnap.sampleAssetPath)
     ? candidateSnap.sampleAssetPath
     : undefined;
   const blobKey =
     candidateSnap.sourceRef?.kind === 'blob' ? candidateSnap.sourceRef.uri : candidateSnap.id;
-  const storedBlob = safeCandidateSamplePath ? null : await deps.storage.loadImageBlob(blobKey);
-  if (isCancelled()) {
-    if (signal.aborted && usedObjectUrl && callbacks.getActiveBlobUrl() === usedObjectUrl) {
-      deps.revokeObjectUrl(usedObjectUrl);
-      callbacks.setActiveBlobUrl(null);
+  let storedBlob: Blob | null = null;
+  if (!safeCandidateSamplePath) {
+    try {
+      storedBlob = await deps.storage.loadImageBlob(blobKey);
+    } catch (err) {
+      revokeBlobUrlIfNeeded(usedObjectUrl, deps.revokeObjectUrl);
+      throw err;
     }
+  }
+  if (isCancelled()) {
+    revokeBlobUrlIfNeeded(usedObjectUrl, deps.revokeObjectUrl);
     return 'cancelled';
   }
 
+  commitActiveBlobUrl(usedObjectUrl, callbacks, deps.revokeObjectUrl);
   const progress = buildRestoredActiveProgress(candidateSnap, activeState);
   const settings = callbacks.getSettings();
   callbacks.loadArtworkFromImage(
@@ -769,6 +790,7 @@ export async function restoreActiveSnapshotPhase(
   if (loaded.status !== 'ok') return loaded.status;
 
   if (cachedPuzzle) {
+    commitActiveBlobUrl(loaded.usedObjectUrl, callbacks, deps.revokeObjectUrl);
     applyCachedSnapshotRestore(candidateSnap, cachedPuzzle, loaded.img, activeState, callbacks);
     return 'active_cached';
   }
