@@ -1,0 +1,857 @@
+/**
+ * [Unit 05] ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService.
+ */
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+export async function runCoopSharePwaTests({ vite, projectRoot, logUnitStart, logUnitPass }) {
+    const versionMod = await vite.ssrLoadModule('/src/version.ts');
+    logUnitStart('Testing ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService...');
+    const shareLinkMod = await vite.ssrLoadModule('/src/services/ShareLinkService.ts');
+    const providerMod = await vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts');
+    const relayProtoMod = await vite.ssrLoadModule(
+      path.resolve(projectRoot, '../worker/coopRoomProtocol.ts')
+    );
+
+    assert.equal(shareLinkMod.CANONICAL_PRODUCTION_URL, 'https://capypaint.com/');
+    const builtShare = await shareLinkMod.buildShareProgressUrl({
+      sourceRef: { kind: 'sample', uri: 'assets/capybara.webp' },
+      filledRegionIds: [1, 2, 3],
+      roomCode: 'abc123',
+    });
+    assert.equal(
+      builtShare.url.startsWith('https://capypaint.com/?room=ABC123#s='),
+      true,
+      `SSR canonical share URL must target https://capypaint.com/, got ${builtShare.url}`
+    );
+    for (const hostBase of [
+      'https://capypaint.com/',
+      'https://shthed.github.io/capy/',
+    ]) {
+      const parsedLink = await shareLinkMod.parseShareLinkFromUrl(
+        `${hostBase}?room=abc123#s=${builtShare.token}`
+      );
+      assert.equal(parsedLink.roomCode, 'ABC123');
+      assert.deepEqual(parsedLink.delta?.filledRegionIds, [1, 2, 3]);
+      assert.equal(parsedLink.matchedSample?.id, 'capybara_sample');
+    }
+
+    // Corrupt/invalid #s= token must preserve ?room= code and surface tokenError without throwing
+    const corruptTokenLink = await shareLinkMod.parseShareLinkFromUrl(
+      'https://capypaint.com/?room=xy9876#s=not_a_valid_token_!!!'
+    );
+    assert.equal(corruptTokenLink.roomCode, 'XY9876');
+    assert.equal(corruptTokenLink.delta, null);
+    assert.equal(corruptTokenLink.matchedSample, null);
+    assert.equal(corruptTokenLink.hasToken, true);
+    assert.equal(typeof corruptTokenLink.tokenError, 'string');
+
+    // BroadcastChannel Co-op room namespacing across /capy/, /capy/beta/, and /capy/alpha/<num>/ on shared origin
+    const prevChanWindow = globalThis.window;
+    try {
+      globalThis.window = {
+        location: { pathname: '/capy/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const stableChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/beta/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const betaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      globalThis.window = {
+        location: { pathname: '/capy/alpha/495/', origin: 'https://shthed.github.io', search: '' },
+      };
+      const alphaChan = providerMod.resolveCoopBroadcastChannelName('ABC123');
+      assert.equal(stableChan, 'capy_coop_room_stable_ABC123');
+      assert.equal(betaChan, 'capy_coop_room_beta_ABC123');
+      assert.equal(alphaChan, 'capy_coop_room_alpha_495_ABC123');
+      assert.notEqual(stableChan, betaChan);
+      assert.notEqual(betaChan, alphaChan);
+    } finally {
+      globalThis.window = prevChanWindow;
+    }
+
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'capypaint.com',
+        hostname: 'capypaint.com',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'www.capypaint.com',
+        hostname: 'www.capypaint.com',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'paint.capyboop.com',
+        hostname: 'paint.capyboop.com',
+      }),
+      'wss://paint.capyboop.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'capy-paint.example.workers.dev',
+        hostname: 'capy-paint.example.workers.dev',
+      }),
+      null,
+      'Third-party .workers.dev origins must NOT auto-connect without explicit VITE_CAPY_ROOM_WS_URL'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'preview.capypaint.com',
+        hostname: 'preview.capypaint.com',
+      }),
+      'wss://preview.capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'https:',
+        host: 'appassets.androidplatform.net',
+        hostname: 'appassets.androidplatform.net',
+      }),
+      'wss://capypaint.com/api/room'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl(undefined, {
+        protocol: 'http:',
+        host: 'localhost:3000',
+        hostname: 'localhost',
+      }),
+      null,
+      'Localhost without VITE_CAPY_ROOM_WS_URL must stay null so BroadcastChannel runs without spurious WS errors'
+    );
+    assert.equal(
+      providerMod.resolveCoopRoomWsUrl('wss://custom-relay.example/ws', {
+        protocol: 'https:',
+        host: 'capypaint.com',
+        hostname: 'capypaint.com',
+      }),
+      'wss://custom-relay.example/ws'
+    );
+
+    for (let attempt = 0; attempt <= 10; attempt++) {
+      const minBackoff = providerMod.computeCoopReconnectDelayMs(attempt, 0);
+      const maxBackoff = providerMod.computeCoopReconnectDelayMs(attempt, 1);
+      assert.equal(minBackoff >= 1000 && minBackoff <= 15_000, true);
+      assert.equal(maxBackoff >= 1000 && maxBackoff <= 15_000, true);
+      assert.equal(maxBackoff >= minBackoff, true);
+    }
+
+    // Transport-aware peer pruning & PONG handling on HybridCoopRoomAdapter
+    {
+      const prevWS = globalThis.WebSocket;
+      const prevWin = globalThis.window;
+      const sentWsFrames = [];
+      let latestMockSocket = null;
+      class MockRoomSocket {
+        static OPEN = 1;
+        static CLOSED = 3;
+        constructor(url) {
+          this.url = url;
+          this.readyState = 1;
+          latestMockSocket = this;
+        }
+        send(payload) {
+          sentWsFrames.push(payload);
+        }
+        close() {
+          this.readyState = 3;
+        }
+      }
+      globalThis.WebSocket = MockRoomSocket;
+      globalThis.window = {
+        location: { protocol: 'https:', host: 'capypaint.com', hostname: 'capypaint.com' },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+      const adapter = new providerMod.HybridCoopRoomAdapter();
+      try {
+        await adapter.joinRoom(
+          'rmtest',
+          {
+            playerId: 'self-1',
+            displayName: 'Self Capy',
+            avatarColorHex: '#38bdf8',
+            lastActiveAt: Date.now(),
+          },
+          builtShare.token
+        );
+        assert.ok(latestMockSocket, 'HybridCoopRoomAdapter must open WebSocket on capypaint.com');
+        latestMockSocket.onopen?.();
+        assert.equal(sentWsFrames.length, 1, 'onopen must send initial HELLO over WebSocket');
+        assert.equal(JSON.parse(sentWsFrames[0]).type, 'HELLO');
+
+        // Raw PONG frame from C++ edge auto-response must be ignored cleanly without JSON parse error
+        latestMockSocket.onmessage?.({ data: 'PONG' });
+
+        // Remote WS peer joins and ages past 18s without 5s HEARTBEAT frames
+        latestMockSocket.onmessage?.({
+          data: JSON.stringify({
+            type: 'WELCOME_STATE',
+            roomCode: 'RMTEST',
+            sender: {
+              playerId: 'ws-peer-2',
+              displayName: 'Remote Peer',
+              avatarColorHex: '#f59e0b',
+              lastActiveAt: Date.now() - 25_000,
+            },
+            seedToken: builtShare.token,
+            sentAt: Date.now(),
+          }),
+        });
+        adapter.participants.get('ws-peer-2').lastActiveAt = Date.now() - 25_000;
+        adapter.pruneStaleParticipants();
+        assert.equal(
+          adapter.participants.has('ws-peer-2'),
+          true,
+          'Remote WebSocket peers must NOT be dropped at 18s when 5s HEARTBEAT is local-only'
+        );
+
+        // Local BroadcastChannel peer DOES prune after 18s inactivity
+        adapter.handleWireMessage(
+          {
+            type: 'HEARTBEAT',
+            roomCode: 'RMTEST',
+            sender: {
+              playerId: 'bc-peer-3',
+              displayName: 'Local Tab',
+              avatarColorHex: '#10b981',
+              lastActiveAt: Date.now(),
+            },
+            sentAt: Date.now(),
+          },
+          'channel'
+        );
+        adapter.participants.get('bc-peer-3').lastActiveAt = Date.now() - 25_000;
+        adapter.pruneStaleParticipants();
+        assert.equal(
+          adapter.participants.has('bc-peer-3'),
+          false,
+          'Stale BroadcastChannel peers must still prune cleanly past 18s'
+        );
+
+        // Socket close clears WS peers and schedules reconnect
+        latestMockSocket.onclose?.();
+        assert.equal(adapter.participants.has('ws-peer-2'), false);
+        assert.equal(Boolean(adapter.wsReconnectTimer), true);
+      } finally {
+        adapter.leaveRoom();
+        globalThis.WebSocket = prevWS;
+        globalThis.window = prevWin;
+      }
+    }
+
+    assert.equal(relayProtoMod.normalizeRoomCode(' ab-c_123! '), 'ABC123');
+    assert.equal(relayProtoMod.normalizeRoomCode('!!!'), null);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin(null), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin(''), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('   '), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://www.capypaint.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://paint.capyboop.com'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://capyboop.github.io'), true);
+    /* capy-dev-only:start */
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://shthed.github.io'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://shthed.github.io'), false);
+    /* capy-dev-only:end */
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://appassets.androidplatform.net'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://localhost:5173'), true);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.workers.dev'), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('http://capypaint.com'), false);
+    assert.equal(relayProtoMod.isAllowedRelayOrigin('https://evil.example.com'), false);
+    assert.equal(
+      relayProtoMod.isAllowedRelayOrigin(
+        'https://preview.example.com',
+        'https://other.example.com, https://preview.example.com'
+      ),
+      true
+    );
+
+    assert.equal(relayProtoMod.MAX_COOP_FRAME_BYTES, 6144);
+    assert.equal(relayProtoMod.MAX_SEED_TOKEN_CHARS, 4096);
+    assert.equal(relayProtoMod.isValidSeedToken(builtShare.token), true);
+    assert.equal(relayProtoMod.isValidSeedToken('not!valid!base64'), false);
+    assert.equal(
+      relayProtoMod.isValidSeedToken(Buffer.from([0x99, 0x02, 0x00]).toString('base64url')),
+      false
+    );
+
+    const maxLenValidSeed = 'AAI' + 'A'.repeat(4093);
+    assert.equal(maxLenValidSeed.length, 4096);
+    const maxSeedHello = relayProtoMod.validateCoopFrame(
+      JSON.stringify({
+        type: 'HELLO',
+        roomCode: 'ABC123',
+        sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#38bdf8', lastActiveAt: 1 },
+        seedToken: maxLenValidSeed,
+        sentAt: 100,
+      }),
+      'ABC123'
+    );
+    assert.equal(maxSeedHello.ok, true, '4096-char valid seedToken frame must fit under 6144 bytes');
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'ABC123',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#38bdf8', lastActiveAt: 1 },
+          seedToken: maxLenValidSeed + 'A',
+          sentAt: 100,
+        }),
+        'ABC123'
+      ).reason,
+      'seed_token_too_large'
+    );
+
+    const validRelayFrame = relayProtoMod.validateCoopFrame(
+      JSON.stringify({
+        type: 'PAINT_EVENT',
+        roomCode: 'abc123',
+        sender: {
+          playerId: 'p1',
+          displayName: 'Sunny Capy',
+          avatarColorHex: '#38bdf8',
+          lastActiveAt: 1000,
+        },
+        paintEvent: { eventId: 'ev1', regionIds: [4, 5], action: 'FILL' },
+        sentAt: 1234,
+      }),
+      'ABC123'
+    );
+    assert.equal(validRelayFrame.ok, true);
+    assert.equal(validRelayFrame.message?.roomCode, 'ABC123');
+    assert.equal(
+      relayProtoMod.validateCoopFrame('x'.repeat(6145), 'ABC123').reason,
+      'frame_size_exceeded',
+      'Worker Co-op relay must enforce <= 6144 byte frame cap'
+    );
+    for (const badPaintEvent of [
+      { eventId: '', regionIds: [1], action: 'FILL' },
+      { eventId: 'x'.repeat(97), regionIds: [1], action: 'FILL' },
+      { eventId: 'ev-empty', regionIds: [], action: 'FILL' },
+      { eventId: 'ev-neg', regionIds: [-1], action: 'FILL' },
+      { eventId: 'ev-many', regionIds: Array.from({ length: 513 }, (_, i) => i), action: 'FILL' },
+    ]) {
+      assert.equal(
+        relayProtoMod.validateCoopFrame(
+          JSON.stringify({
+            type: 'PAINT_EVENT',
+            roomCode: 'ABC123',
+            sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+            paintEvent: badPaintEvent,
+            sentAt: 1,
+          }),
+          'ABC123'
+        ).reason,
+        'invalid_event_payload'
+      );
+    }
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'UNFILL_EVENT',
+          roomCode: 'ABC123',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+          unfillEvent: { eventId: 'uf1', regionIds: [-2] },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'invalid_event_payload'
+    );
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'OTHER1',
+          sender: { playerId: 'p1', displayName: 'Capy', avatarColorHex: '#fff', lastActiveAt: 1 },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'room_mismatch'
+    );
+    assert.equal(relayProtoMod.RESERVED_RELAY_PLAYER_ID, '__capy_room_relay__');
+    assert.equal(
+      relayProtoMod.validateCoopFrame(
+        JSON.stringify({
+          type: 'HELLO',
+          roomCode: 'ABC123',
+          sender: { playerId: ' __capy_room_relay__ ', displayName: 'Fake', avatarColorHex: '#fff', lastActiveAt: 1 },
+          sentAt: 1,
+        }),
+        'ABC123'
+      ).reason,
+      'reserved_sender_id'
+    );
+    assert.deepEqual(
+      relayProtoMod.resolveBoundSocketSender(null, {
+        playerId: 'p1',
+        displayName: 'Capy',
+        avatarColorHex: '#fff',
+        lastActiveAt: 1,
+      }),
+      { ok: true, boundPlayerId: 'p1' }
+    );
+    assert.deepEqual(
+      relayProtoMod.resolveBoundSocketSender('p1', {
+        playerId: 'p2',
+        displayName: 'Spoofer',
+        avatarColorHex: '#fff',
+        lastActiveAt: 1,
+      }),
+      { ok: false, reason: 'sender_mismatch' }
+    );
+    const workerIndexSrc = fs.readFileSync(path.resolve(projectRoot, '../worker/index.ts'), 'utf8');
+    assert.equal(
+      workerIndexSrc.includes('resolveBoundSocketSender') &&
+        workerIndexSrc.includes('RESERVED_RELAY_PLAYER_ID') &&
+        workerIndexSrc.includes("'pending_seed'"),
+      true,
+      'worker/index.ts must bind socket sender IDs, block reserved relay IDs, and checkpoint pending_seed in SQLite'
+    );
+
+    // Rate limiting (40 frames / 5000ms) & write-once initial HELLO seedToken policy
+    let rlTimestamps = [];
+    for (let i = 0; i < 40; i++) {
+      const rl = relayProtoMod.checkSocketRateLimit(rlTimestamps, 1000 + i * 10);
+      assert.equal(rl.allowed, true);
+      rlTimestamps = rl.timestamps;
+    }
+    assert.equal(relayProtoMod.checkSocketRateLimit(rlTimestamps, 1500).allowed, false);
+    assert.equal(relayProtoMod.checkSocketRateLimit(rlTimestamps, 6001).allowed, true);
+
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'HELLO',
+        incomingSeedToken: builtShare.token,
+        hasSocketJoined: true,
+        existingSeedToken: null,
+        lastSavedSeedToken: null,
+        lastWriteAtMs: 0,
+        nowMs: 1000,
+      }),
+      'write_now'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'HELLO',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 9000,
+      }),
+      'ignore',
+      'Late HELLO must never overwrite an existing room seed_token (F-03)'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'WELCOME_STATE',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 3000,
+      }),
+      'debounce'
+    );
+    assert.equal(
+      relayProtoMod.evaluateRoomSeedAction({
+        messageType: 'WELCOME_STATE',
+        incomingSeedToken: maxLenValidSeed,
+        hasSocketJoined: true,
+        existingSeedToken: builtShare.token,
+        lastSavedSeedToken: builtShare.token,
+        lastWriteAtMs: 1000,
+        nowMs: 6500,
+      }),
+      'write_now'
+    );
+
+    const wranglerRaw = fs.readFileSync(path.resolve(projectRoot, '../wrangler.jsonc'), 'utf8');
+    const wranglerJson = JSON.parse(wranglerRaw.replace(/^\s*\/\/.*$/gm, ''));
+    assert.equal(wranglerJson.name, 'capy-paint');
+    assert.equal(wranglerJson.workers_dev, false);
+    assert.equal(wranglerJson.preview_urls, false);
+    assert.equal(wranglerJson.assets?.directory, './web/dist');
+    assert.equal(wranglerJson.assets?.not_found_handling, 'single-page-application');
+    assert.deepEqual(wranglerJson.assets?.run_worker_first, ['/api/*']);
+    assert.deepEqual(wranglerJson.migrations?.[0]?.new_sqlite_classes, ['CoopRoomDurableObject']);
+    assert.equal(
+      wranglerJson.routes?.some((r) => r.pattern === 'capypaint.com' && r.custom_domain === true),
+      true
+    );
+
+    // PwaService scoped cache naming, vite.config fingerprint parser & stamped dist/sw.js check
+    const pwaMod = await vite.ssrLoadModule('/src/services/PwaService.ts');
+    const viteConfigMod = await vite.ssrLoadModule('/vite.config.ts');
+    assert.equal(
+      pwaMod.resolvePwaCacheName('https://shthed.github.io/capy/beta/', '2.6.0'),
+      'capy-cache-v2.6.0:/capy/beta/'
+    );
+    assert.equal(
+      pwaMod.resolvePwaCacheName('https://capypaint.com/', '2.6.0'),
+      'capy-cache-v2.6.0:/'
+    );
+    assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints(''), []);
+    assert.deepEqual(
+      viteConfigMod.parseAndroidSha256Fingerprints('00:'.repeat(31) + '00'),
+      []
+    );
+    assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints('ab'.repeat(32)), [
+      Array(32).fill('AB').join(':'),
+    ]);
+    assert.equal(
+      typeof viteConfigMod.computeDistAssetsDigest,
+      'function',
+      'vite.config.ts must export computeDistAssetsDigest'
+    );
+    const publicAssetsDigestA = viteConfigMod.computeDistAssetsDigest(path.join(projectRoot, 'public/assets'));
+    const publicAssetsDigestB = viteConfigMod.computeDistAssetsDigest(path.join(projectRoot, 'public/assets'));
+    assert.match(publicAssetsDigestA, /^[0-9a-f]{16}$/, 'computeDistAssetsDigest must emit 16-char SHA-256 hex digest');
+    assert.equal(publicAssetsDigestA, publicAssetsDigestB, 'computeDistAssetsDigest must be deterministic');
+    assert.equal(
+      viteConfigMod.computeDistAssetsDigest(path.join(projectRoot, 'nonexistent-assets-dir-check')),
+      'empty'
+    );
+
+    const srcSwText = fs.readFileSync(path.join(projectRoot, 'public/sw.js'), 'utf8');
+    assert.equal(
+      srcSwText.includes('SW_ASSETS_DIGEST') &&
+        srcSwText.includes(".endsWith('.capy')") &&
+        srcSwText.includes("cache: 'no-cache'"),
+      true,
+      'public/sw.js must define SW_ASSETS_DIGEST and Network-First cache:no-cache routing for .capy archives'
+    );
+
+    const distSwPath = path.join(projectRoot, 'dist/sw.js');
+    if (fs.existsSync(distSwPath)) {
+      const distSwText = fs.readFileSync(distSwPath, 'utf8');
+      assert.equal(
+        distSwText.includes(`const SW_BUILD_VERSION = '${versionMod.APP_VERSION}';`),
+        true,
+        'Built dist/sw.js must stamp SW_BUILD_VERSION with package.json version'
+      );
+      assert.equal(
+        distSwText.includes('__CAPY_SW_VERSION__'),
+        false,
+        'Built dist/sw.js must not retain unstamped __CAPY_SW_VERSION__ placeholder'
+      );
+      assert.equal(
+        distSwText.includes('__CAPY_SW_ASSETS_DIGEST__'),
+        false,
+        'Built dist/sw.js must not retain unstamped __CAPY_SW_ASSETS_DIGEST__ placeholder'
+      );
+      assert.match(
+        distSwText,
+        /const SW_ASSETS_DIGEST = '[0-9a-f]{16}';/,
+        'Built dist/sw.js must stamp SW_ASSETS_DIGEST with a 16-char SHA-256 hex digest'
+      );
+      assert.equal(
+        distSwText.includes(".endsWith('.apk')"),
+        true,
+        'Service Worker must bypass .apk binary downloads'
+      );
+      assert.equal(
+        distSwText.includes(".endsWith('.capy')") && distSwText.includes("cache: 'no-cache'"),
+        true,
+        'Built dist/sw.js must use Network-First cache:no-cache routing for .capy archives'
+      );
+    }
+    // Anonymous In-Game Feedback protocol (worker/feedbackProtocol.ts) & client service (FeedbackService.ts)
+    {
+      const feedbackProtoMod = await vite.ssrLoadModule(
+        path.resolve(projectRoot, '../worker/feedbackProtocol.ts')
+      );
+      const feedbackSvcMod = await vite.ssrLoadModule('/src/services/FeedbackService.ts');
+
+      // Valid payload + @mention neutralization + triple-backtick sanitization + label mapping
+      const validResult = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'puzzle_idea',
+          title: '  Capybara\u0007 in Space @admin  ',
+          details: 'Please add a cozy astronaut capybara!\n```js\nalert(1)\n```\ncc @everyone',
+          website: '',
+          context: {
+            appVersion: 'v3.0.45',
+            channel: 'beta',
+            platform: 'Web',
+            viewport: '390x844',
+          },
+        })
+      );
+      assert.equal(validResult.ok, true, 'Valid feedback payload must pass validation');
+      assert.equal(validResult.payload.category, 'puzzle_idea');
+      assert.equal(validResult.payload.title.includes('@admin'), false, 'Title must not contain raw @admin mention');
+      assert.equal(
+        validResult.payload.title.includes('@\u200Badmin'),
+        true,
+        'Title must neutralize @mentions with zero-width space'
+      );
+      assert.equal(validResult.payload.details.includes('```'), false, 'Details must sanitize triple backticks');
+      assert.equal(
+        validResult.payload.details.includes('@everyone'),
+        false,
+        'Details must not contain raw @everyone mention'
+      );
+      assert.equal(
+        validResult.payload.details.includes('@\u200Beveryone'),
+        true,
+        'Details must neutralize @mentions with zero-width space'
+      );
+
+      // Adversarial @mention bypasses + email preservation
+      for (const adversarialMention of [
+        '**@shthed**',
+        '>@shthed',
+        '"@shthed"',
+        '[@shthed]',
+        ',@shthed',
+        ':@shthed',
+        '/@shthed',
+        '`@shthed',
+      ]) {
+        const sanitized = feedbackProtoMod.sanitizeFeedbackText(adversarialMention, true);
+        assert.equal(
+          sanitized.includes('@shthed'),
+          false,
+          `Adversarial mention ${adversarialMention} must be neutralized (got ${sanitized})`
+        );
+        assert.equal(
+          sanitized.includes('@\u200Bshthed'),
+          true,
+          `Adversarial mention ${adversarialMention} must insert zero-width space (got ${sanitized})`
+        );
+      }
+      assert.equal(
+        feedbackProtoMod.sanitizeFeedbackText('Contact a@b.com or foo.bar@example.com for help', true),
+        'Contact a@b.com or foo.bar@example.com for help',
+        'Email addresses must be preserved untouched'
+      );
+
+      // resolveFeedbackRepo path traversal protection
+      for (const badRepo of ['../..', '../evil', 'evil/..', './.', 'foo/.', './bar', '-bad/repo', 'a/b/c']) {
+        assert.equal(
+          feedbackProtoMod.resolveFeedbackRepo(badRepo),
+          'capyboop/paint',
+          `Invalid/traversal repo "${badRepo}" must fall back to capyboop/paint`
+        );
+      }
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('capyboop/paint'), 'capyboop/paint');
+      assert.equal(feedbackProtoMod.resolveFeedbackRepo('shthed/capy'), 'shthed/capy');
+
+      const issuePayload = feedbackProtoMod.buildGitHubIssuePayload(validResult.payload);
+      assert.equal(issuePayload.title.startsWith('[Puzzle Idea]: '), true);
+      assert.deepEqual(issuePayload.labels, ['enhancement']);
+      assert.equal(issuePayload.body.includes('Anonymous in-game feedback'), true);
+      assert.equal(issuePayload.body.includes('v3.0.45'), true);
+
+      // Category label mapping for bug, feature, general
+      for (const [cat, expectedPrefix, expectedLabels] of [
+        ['bug', '[Bug]: ', ['bug']],
+        ['feature', '[Feature]: ', ['enhancement']],
+        ['general', '[Feedback]: ', ['question']],
+      ]) {
+        const res = feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({
+            category: cat,
+            title: 'Sample headline',
+            details: 'Detailed description of more than ten characters.',
+          })
+        );
+        assert.equal(res.ok, true, `Category ${cat} must validate`);
+        const built = feedbackProtoMod.buildGitHubIssuePayload(res.payload);
+        assert.equal(built.title.startsWith(expectedPrefix), true);
+        assert.deepEqual(built.labels, expectedLabels);
+      }
+
+      // Honeypot detection
+      const honey = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'bug',
+          title: 'Bot title',
+          details: 'Bot spam message content here.',
+          website: 'https://spam.example',
+        })
+      );
+      assert.equal(honey.ok, false);
+      assert.equal(honey.honeypot, true, 'Non-empty website field must trigger honeypot');
+
+      // Invalid payloads: malformed JSON, invalid category, short title, short details, > 8192 bytes
+      assert.equal(feedbackProtoMod.validateFeedbackPayload('{bad-json').ok, false);
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'unknown', title: 'Valid title', details: 'Long enough details.' })
+        ).ok,
+        false
+      );
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'bug', title: 'Hi', details: 'Long enough details.' })
+        ).ok,
+        false
+      );
+      assert.equal(
+        feedbackProtoMod.validateFeedbackPayload(
+          JSON.stringify({ category: 'bug', title: 'Valid title', details: 'short' })
+        ).ok,
+        false
+      );
+      const oversized = feedbackProtoMod.validateFeedbackPayload(
+        JSON.stringify({
+          category: 'bug',
+          title: 'Oversized payload test',
+          details: 'A'.repeat(9000),
+        })
+      );
+      assert.equal(oversized.ok, false);
+      assert.equal(oversized.status, 413, 'Payload > 8192 bytes must return status 413');
+
+      // CORS allow/deny including paint.capyboop.com and path-suffixed origin rejection
+      const capyCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://capypaint.com', undefined, false);
+      assert.equal(capyCors['Access-Control-Allow-Origin'], 'https://capypaint.com');
+      const paintBoopCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://paint.capyboop.com',
+        undefined,
+        false
+      );
+      assert.equal(paintBoopCors['Access-Control-Allow-Origin'], 'https://paint.capyboop.com');
+      const androidCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://appassets.androidplatform.net',
+        undefined,
+        false
+      );
+      assert.equal(androidCors['Access-Control-Allow-Origin'], 'https://appassets.androidplatform.net');
+      const evilCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://evil.example', undefined, false);
+      assert.equal(evilCors['Access-Control-Allow-Origin'], undefined, 'Disallowed origin must not receive ACAO');
+      const pathSuffixedCors = feedbackProtoMod.buildFeedbackCorsHeaders(
+        'https://capypaint.com/evil',
+        undefined,
+        false
+      );
+      assert.equal(
+        pathSuffixedCors['Access-Control-Allow-Origin'],
+        undefined,
+        'Path-suffixed origin must not receive ACAO'
+      );
+
+      // Worker buildFallbackIssueUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const workerCjkFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'bug',
+        title: '漢'.repeat(120),
+        details: '漢'.repeat(1200),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerCjkFallback.length <= 4000,
+        true,
+        `Worker CJK fallback URL must be <= 4000 chars (got ${workerCjkFallback.length})`
+      );
+      assert.equal(workerCjkFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      const workerEmojiFallback = feedbackProtoMod.buildFallbackIssueUrl({
+        category: 'feature',
+        title: '😀'.repeat(60),
+        details: '😀'.repeat(600),
+        context: { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' },
+      });
+      assert.equal(
+        workerEmojiFallback.length <= 4000,
+        true,
+        `Worker emoji fallback URL must be <= 4000 chars (got ${workerEmojiFallback.length})`
+      );
+      assert.equal(workerEmojiFallback.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+
+      // FeedbackService URL resolution & fallback URL
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'capypaint.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'paint.capyboop.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'beta.capypaint.com' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'www.capypaint.com' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'localhost' }),
+        '/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'appassets.androidplatform.net' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl(undefined, { hostname: 'capyboop.github.io' }),
+        'https://capypaint.com/api/feedback'
+      );
+      assert.equal(
+        feedbackSvcMod.resolveFeedbackApiUrl('https://custom.example/api/feedback', { hostname: 'localhost' }),
+        'https://custom.example/api/feedback'
+      );
+
+      const fallbackUrl = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: 'Zoom stutter', details: 'Pinch zoom stutters on tablet.' },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(fallbackUrl.startsWith('https://github.com/capyboop/paint/issues/new?'), true);
+      assert.equal(fallbackUrl.includes('template=bug_report.yml'), true);
+      assert.equal(fallbackUrl.includes('Zoom+stutter'), true);
+
+      // Client buildGitHubIssueFallbackUrl hard <= 4000 char encoded URL cap for CJK & emoji
+      const clientCjkFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'bug', title: '漢'.repeat(120), details: '漢'.repeat(1200) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientCjkFallback.length <= 4000,
+        true,
+        `Client CJK fallback URL must be <= 4000 chars (got ${clientCjkFallback.length})`
+      );
+      const clientEmojiFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl(
+        { category: 'feature', title: '😀'.repeat(60), details: '😀'.repeat(600) },
+        { appVersion: 'v3.0.45', channel: 'beta', platform: 'Web' }
+      );
+      assert.equal(
+        clientEmojiFallback.length <= 4000,
+        true,
+        `Client emoji fallback URL must be <= 4000 chars (got ${clientEmojiFallback.length})`
+      );
+
+      // Prototype-key category lookup falls back safely to 'general' ([Feedback])
+      for (const protoCat of ['toString', 'constructor', '__proto__']) {
+        const protoFallback = feedbackSvcMod.buildGitHubIssueFallbackUrl({
+          category: protoCat,
+          title: 'Proto test',
+          details: 'Prototype lookup should safely fall back to general.',
+        });
+        const parsedProto = new URL(protoFallback);
+        assert.equal(
+          parsedProto.searchParams.get('title'),
+          '[Feedback]: Proto test',
+          `Prototype category "${protoCat}" must fall back to general [Feedback] prefix`
+        );
+      }
+    }
+
+    logUnitPass('ShareLinkService, HybridCoopRoomAdapter, Cloudflare Worker relay & PwaService verified.');
+}

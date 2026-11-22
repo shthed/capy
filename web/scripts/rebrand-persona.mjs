@@ -28,6 +28,8 @@ export const DEV_ONLY_RELATIVE_PATHS = new Set([
   'capy.prompt.yml',
   'docs/ai',
   'web/scripts/rebrand-persona.mjs',
+  'web/scripts/tests/unit/ci-dev-gates.test.mjs',
+  'web/scripts/tests/unit/ci-review-gate.test.mjs',
   '.github/copilot-instructions.md',
   '.github/workflows/publish-capyboop.yml',
   '.github/workflows/pr-review-gate.yml',
