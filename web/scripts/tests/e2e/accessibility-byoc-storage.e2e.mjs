@@ -69,9 +69,25 @@ export async function runAccessibilityByocE2e(ctx) {
         String(expectedChecked),
         `${label}: expected aria-checked=${expectedChecked}`
       );
-      await getStableBoundingBox(sw.locator('.capy-switch-knob'));
+      const knobLoc = sw.locator('.capy-switch-knob');
+      const isLargeText = await page.evaluate(() => document.documentElement.dataset.largeText === 'true');
+      await waitForCondition(async () => {
+        const settled = await knobLoc.evaluate((el) => {
+          if (typeof el.getAnimations !== 'function') return true;
+          return el.getAnimations().every((a) => a.playState !== 'running');
+        });
+        if (!settled) return false;
+        const sb = await sw.boundingBox();
+        const kb = await knobLoc.boundingBox();
+        if (!sb || !kb) return false;
+        if (!isLargeText) return true;
+        return expectedChecked
+          ? sb.x + sb.width - (kb.x + kb.width) <= 4.5
+          : kb.x - sb.x <= 4.5;
+      }, 2000, 30);
+      await getStableBoundingBox(knobLoc);
       const swBox = await sw.boundingBox();
-      const knobBox = await sw.locator('.capy-switch-knob').boundingBox();
+      const knobBox = await knobLoc.boundingBox();
       assert.ok(swBox && knobBox, `${label}: expected visible switch and knob boxes`);
       assert.equal(
         knobBox.x >= swBox.x - 0.5 &&
@@ -81,7 +97,6 @@ export async function runAccessibilityByocE2e(ctx) {
         true,
         `${label}: knob ${JSON.stringify(knobBox)} must stay strictly inside switch track ${JSON.stringify(swBox)}`
       );
-      const isLargeText = await page.evaluate(() => document.documentElement.dataset.largeText === 'true');
       if (isLargeText) {
         if (expectedChecked) {
           const rightGap = swBox.x + swBox.width - (knobBox.x + knobBox.width);
