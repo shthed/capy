@@ -307,6 +307,31 @@ async function readJsonObjectSafely(response: Response): Promise<Record<string, 
   return null;
 }
 
+const GITHUB_ISSUES_PATH_PATTERN = /^\/[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?\/[a-zA-Z0-9_.-]{1,100}\/issues(?:\/|$)/;
+
+/**
+ * Validates that an upstream feedback issue/fallback link is strictly an HTTPS URL on
+ * `github.com` under `/<owner>/<repo>/issues`, rejecting phishing redirects, credentials,
+ * non-default ports, and control characters.
+ */
+export function sanitizeGitHubIssueUrl(rawUrl: unknown): string | undefined {
+  if (typeof rawUrl !== 'string') return undefined;
+  const trimmed = rawUrl.trim();
+  if (!trimmed || /[\s\u0000-\u001F\u007F]/.test(trimmed)) return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol.toLowerCase() !== 'https:') return undefined;
+    if (parsed.hostname.toLowerCase() !== 'github.com') return undefined;
+    if (parsed.port !== '' || parsed.username !== '' || parsed.password !== '') return undefined;
+    if (!GITHUB_ISSUES_PATH_PATTERN.test(parsed.pathname) || parsed.pathname.includes('..')) {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function interpretFeedbackResponse(
   response: Response,
   payload: Record<string, unknown> | null,
@@ -316,18 +341,12 @@ function interpretFeedbackResponse(
     return {
       ok: true,
       issueNumber: typeof payload?.issueNumber === 'number' ? payload.issueNumber : undefined,
-      issueUrl:
-        typeof payload?.issueUrl === 'string' && payload.issueUrl.startsWith('https://')
-          ? payload.issueUrl
-          : undefined,
+      issueUrl: sanitizeGitHubIssueUrl(payload?.issueUrl),
       accepted: payload?.accepted === true ? true : undefined,
     };
   }
 
-  const serverFallback =
-    typeof payload?.fallbackUrl === 'string' && payload.fallbackUrl.startsWith('https://')
-      ? payload.fallbackUrl
-      : fallbackUrl;
+  const serverFallback = sanitizeGitHubIssueUrl(payload?.fallbackUrl) ?? fallbackUrl;
   const serverCode = typeof payload?.code === 'string' ? payload.code : undefined;
 
   if (response.status === 429) {

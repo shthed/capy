@@ -58,6 +58,49 @@ export function parseAndroidSha256Fingerprints(rawEnv?: string): string[] {
   return valid;
 }
 
+export function extractInlineScriptHashes(htmlContent: string): string[] {
+  const hashes: string[] = [];
+  const scriptRe = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scriptRe.exec(htmlContent)) !== null) {
+    const body = match[1];
+    if (!body || body.trim().length === 0) continue;
+    const digest = crypto.createHash('sha256').update(body, 'utf8').digest('base64');
+    const token = `'sha256-${digest}'`;
+    if (!hashes.includes(token)) {
+      hashes.push(token);
+    }
+  }
+  return hashes;
+}
+
+/**
+ * Builds the strict meta Content-Security-Policy injected into production `dist/index.html`
+ * so hosts that do not honor Cloudflare `_headers` (GitHub Pages, Android WebView) still
+ * enforce identical script/connect/img/worker/object restrictions without breaking Vite dev HMR.
+ * Omits `frame-ancestors` (ignored in `<meta>`) and `upgrade-insecure-requests` (preserves local `http://localhost` preview/E2E).
+ */
+export function buildMetaCspPolicy(htmlContent: string): string {
+  const scriptHashes = extractInlineScriptHashes(htmlContent);
+  const scriptSrcTokens = ["'self'", ...scriptHashes, 'https://accounts.google.com/gsi/client'];
+  return [
+    "default-src 'self'",
+    `script-src ${scriptSrcTokens.join(' ')}`,
+    "script-src-attr 'none'",
+    "style-src 'self' 'unsafe-inline' https://accounts.google.com",
+    "img-src 'self' data: blob: https://*.googleusercontent.com",
+    "font-src 'self' data:",
+    "connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com https://graph.microsoft.com https://login.microsoftonline.com wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com",
+    "worker-src 'self' blob:",
+    'frame-src https://accounts.google.com',
+    "manifest-src 'self'",
+    "media-src 'none'",
+    "form-action 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+  ].join('; ') + ';';
+}
+
 function capyPostBuildStampPlugin(): Plugin {
   let outDirAbs = path.resolve(__dirname, 'dist');
   return {
@@ -65,6 +108,23 @@ function capyPostBuildStampPlugin(): Plugin {
     apply: 'build',
     configResolved(config) {
       outDirAbs = path.resolve(config.root, config.build.outDir);
+    },
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        if (/http-equiv=["']?Content-Security-Policy["']?/i.test(html)) {
+          return html;
+        }
+        const csp = buildMetaCspPolicy(html);
+        const metaTag = `    <meta http-equiv="Content-Security-Policy" content="${csp}" />`;
+        if (/<meta\s+charset=["']?UTF-8["']?\s*\/?>/i.test(html)) {
+          return html.replace(
+            /(<meta\s+charset=["']?UTF-8["']?\s*\/?>)/i,
+            `$1\n${metaTag}`
+          );
+        }
+        return html.replace(/<head>/i, `<head>\n${metaTag}`);
+      },
     },
     closeBundle() {
       const pkgPath = path.resolve(__dirname, 'package.json');

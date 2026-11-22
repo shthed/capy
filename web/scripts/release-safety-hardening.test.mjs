@@ -59,7 +59,7 @@ function parseCspDirectives(cspHeader) {
 }
 
 export async function runReleaseSafetyHardeningTests(vite) {
-  // 1. Strict CSP verification on web/public/_headers against real inline scripts
+  // 1. Strict CSP verification on web/public/_headers, standalone HTML meta CSPs, Vite build meta CSP, and XSS guards
   {
     const headersPath = path.join(WEB_ROOT, 'public/_headers');
     const headersText = fs.readFileSync(headersPath, 'utf8');
@@ -80,19 +80,45 @@ export async function runReleaseSafetyHardeningTests(vite) {
       "CSP script-src must NOT contain 'unsafe-eval'"
     );
     assert.equal(
-      scriptSrc.includes('https://accounts.google.com'),
+      scriptSrc.includes('https://accounts.google.com/gsi/client'),
       true,
-      'CSP script-src must allow https://accounts.google.com for GIS'
+      'CSP script-src must narrow GIS script allowance to https://accounts.google.com/gsi/client'
+    );
+    assert.equal(
+      scriptSrc.includes('https://accounts.google.com'),
+      false,
+      'CSP script-src must NOT allow the broad https://accounts.google.com origin'
+    );
+    assert.deepEqual(
+      directives.get('script-src-attr'),
+      ["'none'"],
+      "CSP script-src-attr must be 'none' to block inline event handlers"
+    );
+    assert.equal(
+      directives.has('upgrade-insecure-requests'),
+      true,
+      'HTTP _headers CSP must include upgrade-insecure-requests'
     );
 
-    const indexHashes = extractInlineScriptHashes(
-      fs.readFileSync(path.join(WEB_ROOT, 'index.html'), 'utf8')
+    const indexHtml = fs.readFileSync(path.join(WEB_ROOT, 'index.html'), 'utf8');
+    const notFoundHtml = fs.readFileSync(path.join(WEB_ROOT, 'public/404.html'), 'utf8');
+    const privacyHtml = fs.readFileSync(path.join(WEB_ROOT, 'public/privacy-policy.html'), 'utf8');
+    const prIndexHtml = fs.readFileSync(
+      path.join(REPO_ROOT, '.github/scripts/pr-index.html'),
+      'utf8'
     );
-    const notFoundHashes = extractInlineScriptHashes(
-      fs.readFileSync(path.join(WEB_ROOT, 'public/404.html'), 'utf8')
-    );
+
+    const indexHashes = extractInlineScriptHashes(indexHtml);
+    const notFoundHashes = extractInlineScriptHashes(notFoundHtml);
+    const prIndexHashes = extractInlineScriptHashes(prIndexHtml);
     assert.equal(indexHashes.length > 0, true, 'Expected inline boot script in web/index.html');
     assert.equal(notFoundHashes.length > 0, true, 'Expected inline script in web/public/404.html');
+    assert.equal(
+      extractInlineScriptHashes(privacyHtml).length,
+      0,
+      'web/public/privacy-policy.html must contain zero inline scripts'
+    );
+    assert.equal(prIndexHashes.length > 0, true, 'Expected inline script in .github/scripts/pr-index.html');
     for (const h of [...indexHashes, ...notFoundHashes]) {
       assert.equal(
         scriptSrc.includes(h),
@@ -123,6 +149,8 @@ export async function runReleaseSafetyHardeningTests(vite) {
       "'self'",
       'data:',
       'blob:',
+      'https://capypaint.com',
+      'https://paint.capyboop.com',
       'https://www.googleapis.com',
       'https://accounts.google.com',
       'wss://capypaint.com',
@@ -134,6 +162,113 @@ export async function runReleaseSafetyHardeningTests(vite) {
     for (const required of ["'self'", 'data:', 'blob:', 'https://*.googleusercontent.com']) {
       assert.equal(imgSrc.includes(required), true, `CSP img-src missing ${required}`);
     }
+
+    assert.match(
+      headersText,
+      /\/privacy-policy\.html\r?\n\s+!\s*Content-Security-Policy\r?\n\s+Content-Security-Policy:[^\n]*script-src 'none'/m,
+      'web/public/_headers must lock down /privacy-policy.html with script-src none'
+    );
+
+    const extractMetaCsp = (html) => {
+      const m = /<meta\b[^>]*http-equiv=["']?Content-Security-Policy["']?[^>]*content=(["'])([\s\S]*?)\1/i.exec(
+        html
+      );
+      return m ? m[2] : null;
+    };
+
+    const notFoundMetaCsp = extractMetaCsp(notFoundHtml);
+    assert.ok(notFoundMetaCsp, 'web/public/404.html must define a meta Content-Security-Policy');
+    for (const h of notFoundHashes) {
+      assert.equal(
+        notFoundMetaCsp.includes(h),
+        true,
+        `404.html meta CSP missing SHA-256 hash ${h}`
+      );
+    }
+
+    const privacyMetaCsp = extractMetaCsp(privacyHtml);
+    assert.ok(privacyMetaCsp, 'web/public/privacy-policy.html must define a meta Content-Security-Policy');
+    assert.equal(
+      privacyMetaCsp.includes("script-src 'none'"),
+      true,
+      "privacy-policy.html meta CSP must set script-src 'none'"
+    );
+
+    const prIndexMetaCsp = extractMetaCsp(prIndexHtml);
+    assert.ok(prIndexMetaCsp, '.github/scripts/pr-index.html must define a meta Content-Security-Policy');
+    for (const h of prIndexHashes) {
+      assert.equal(
+        prIndexMetaCsp.includes(h),
+        true,
+        `pr-index.html meta CSP missing SHA-256 hash ${h}`
+      );
+    }
+    assert.equal(
+      prIndexHtml.includes('/^\\/capy\\/alpha\\/\\d+\\/$/'),
+      true,
+      'pr-index.html must strictly validate PR preview href paths against /^\\/capy\\/alpha\\/\\d+\\/$/'
+    );
+
+    // Verify Vite build-time meta CSP generator matches web/index.html hashes and excludes meta-invalid directives
+    const viteConfigMod = await vite.ssrLoadModule('/vite.config.ts');
+    const builtMetaCsp = viteConfigMod.buildMetaCspPolicy(indexHtml);
+    const builtDirectives = parseCspDirectives(builtMetaCsp);
+    assert.equal(builtDirectives.has('frame-ancestors'), false, 'meta CSP must omit frame-ancestors');
+    assert.equal(
+      builtDirectives.has('upgrade-insecure-requests'),
+      false,
+      'meta CSP must omit upgrade-insecure-requests so local http://localhost preview/E2E works'
+    );
+    assert.deepEqual(builtDirectives.get('script-src-attr'), ["'none'"]);
+    for (const h of indexHashes) {
+      assert.equal(
+        (builtDirectives.get('script-src') || []).includes(h),
+        true,
+        `buildMetaCspPolicy missing web/index.html inline script hash ${h}`
+      );
+    }
+
+    // Verify Worker API_SECURITY_HEADERS includes strict CSP and www redirect sets HSTS + nosniff
+    const workerSrc = fs.readFileSync(path.join(REPO_ROOT, 'worker/index.ts'), 'utf8');
+    assert.equal(
+      workerSrc.includes(`['Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'"]`),
+      true,
+      'worker/index.ts API_SECURITY_HEADERS must enforce Content-Security-Policy default-src none'
+    );
+
+    // Verify FeedbackService GitHub URL pinning, Google avatar host pinning, and OAuth authorize URL guard
+    const feedbackMod = await vite.ssrLoadModule('/src/services/FeedbackService.ts');
+    assert.equal(
+      feedbackMod.sanitizeGitHubIssueUrl('https://github.com/capyboop/paint/issues/42'),
+      'https://github.com/capyboop/paint/issues/42'
+    );
+    assert.equal(
+      feedbackMod.sanitizeGitHubIssueUrl('https://github.com/capyboop/paint/issues/new?title=test'),
+      'https://github.com/capyboop/paint/issues/new?title=test'
+    );
+    assert.equal(feedbackMod.sanitizeGitHubIssueUrl('https://evil.example/capyboop/paint/issues/1'), undefined);
+    assert.equal(feedbackMod.sanitizeGitHubIssueUrl('https://github.com/login'), undefined);
+    assert.equal(feedbackMod.sanitizeGitHubIssueUrl('javascript:alert(1)'), undefined);
+    assert.equal(feedbackMod.sanitizeGitHubIssueUrl('https://user:pass@github.com/capyboop/paint/issues/1'), undefined);
+
+    const gClientCspMod = await vite.ssrLoadModule('/src/services/providers/GoogleCloudSyncClient.ts');
+    assert.equal(
+      gClientCspMod.sanitizeGoogleAvatarUrl('https://lh3.googleusercontent.com/a/avatar123'),
+      'https://lh3.googleusercontent.com/a/avatar123'
+    );
+    assert.equal(gClientCspMod.sanitizeGoogleAvatarUrl('https://evil.example/pixel.png'), undefined);
+    assert.equal(gClientCspMod.sanitizeGoogleAvatarUrl('https://googleusercontent.com.evil.example/a'), undefined);
+    assert.equal(gClientCspMod.sanitizeGoogleAvatarUrl('https://lh3.googleusercontent.com:8443/a'), undefined);
+    assert.equal(gClientCspMod.sanitizeGoogleAvatarUrl('javascript:alert(1)'), undefined);
+
+    const pkceCspMod = await vite.ssrLoadModule('/src/services/providers/OAuthPkceHelper.ts');
+    assert.equal(
+      pkceCspMod.isSafeOAuthAuthorizeUrl('https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize'),
+      true
+    );
+    assert.equal(pkceCspMod.isSafeOAuthAuthorizeUrl('javascript:alert(1)'), false);
+    assert.equal(pkceCspMod.isSafeOAuthAuthorizeUrl('http://login.microsoftonline.com/authorize'), false);
+    assert.equal(pkceCspMod.isSafeOAuthAuthorizeUrl('https://user:pass@login.microsoftonline.com/authorize'), false);
 
     assert.match(
       headersText,

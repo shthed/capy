@@ -91,17 +91,34 @@ declare global {
   }
 }
 
-function sanitizeHttpsUrl(raw?: string): string | undefined {
+export function sanitizeGoogleAvatarUrl(raw?: string): string | undefined {
   if (!raw || typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
-  if (!/^https:\/\/[^\s]+$/i.test(trimmed)) return undefined;
+  if (!trimmed || /[\s\u0000-\u001F\u007F]/.test(trimmed)) return undefined;
   try {
     const parsed = new URL(trimmed);
-    return parsed.protocol === 'https:' ? parsed.toString() : undefined;
+    const host = parsed.hostname.toLowerCase();
+    const isGoogleAvatarHost =
+      host === 'googleusercontent.com' ||
+      (host.endsWith('.googleusercontent.com') &&
+        host.length > '.googleusercontent.com'.length &&
+        !host.startsWith('.'));
+    if (
+      parsed.protocol.toLowerCase() !== 'https:' ||
+      parsed.port !== '' ||
+      parsed.username !== '' ||
+      parsed.password !== '' ||
+      !isGoogleAvatarHost
+    ) {
+      return undefined;
+    }
+    return parsed.toString();
   } catch {
     return undefined;
   }
 }
+
+const sanitizeHttpsUrl = sanitizeGoogleAvatarUrl;
 
 export function getAllowedMockGoogleOAuthToken(): string {
   if (typeof window === 'undefined' || !isGoogleMockTokenEnvironmentAllowed()) {

@@ -36,6 +36,7 @@ interface RoomSeedRecord {
 }
 
 const API_SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
+  ['Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'"],
   ['X-Content-Type-Options', 'nosniff'],
   ['Cache-Control', 'no-store'],
   ['Strict-Transport-Security', 'max-age=31536000; includeSubDomains'],
@@ -764,7 +765,15 @@ export default {
       // Redirect www.capypaint.com -> capypaint.com so localStorage/IndexedDB origin stays canonical
       if (url.hostname.toLowerCase() === 'www.capypaint.com') {
         url.hostname = 'capypaint.com';
-        return Response.redirect(url.toString(), 301);
+        return new Response(null, {
+          status: 301,
+          headers: {
+            Location: url.toString(),
+            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+            'X-Content-Type-Options': 'nosniff',
+            'Cache-Control': 'public, max-age=3600',
+          },
+        });
       }
 
       if (url.pathname === '/api/health') {
@@ -981,10 +990,24 @@ export default {
 
           const created = await ghRes.json<{ number?: number; html_url?: string }>();
           const issueNumber = typeof created?.number === 'number' ? created.number : undefined;
-          const issueUrl =
-            typeof created?.html_url === 'string' && created.html_url.startsWith('https://')
-              ? created.html_url
-              : `https://github.com/${repo}/issues`;
+          let issueUrl = `https://github.com/${repo}/issues`;
+          if (typeof created?.html_url === 'string') {
+            try {
+              const parsedIssueUrl = new URL(created.html_url.trim());
+              if (
+                parsedIssueUrl.protocol.toLowerCase() === 'https:' &&
+                parsedIssueUrl.hostname.toLowerCase() === 'github.com' &&
+                parsedIssueUrl.port === '' &&
+                parsedIssueUrl.username === '' &&
+                parsedIssueUrl.password === '' &&
+                parsedIssueUrl.pathname.toLowerCase().startsWith(`/${repo.toLowerCase()}/issues`)
+              ) {
+                issueUrl = parsedIssueUrl.toString();
+              }
+            } catch {
+              // Fall back to canonical repo issues URL
+            }
+          }
 
           return apiJsonResponse(
             {

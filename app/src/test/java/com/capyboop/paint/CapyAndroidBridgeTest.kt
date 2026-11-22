@@ -712,5 +712,40 @@ class CapyAndroidBridgeTest {
             )
         )
     }
+
+    @Test
+    fun `buildWebViewAssetResponseHeaders attaches strict CSP on HTML assets and nosniff on all assets`() {
+        val indexHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+            mimeType = "text/html",
+            path = "/assets/www/index.html",
+        )
+        assertEquals("nosniff", indexHeaders["X-Content-Type-Options"])
+        assertEquals("strict-origin-when-cross-origin", indexHeaders["Referrer-Policy"])
+        assertEquals("SAMEORIGIN", indexHeaders["X-Frame-Options"])
+        val indexCsp = indexHeaders["Content-Security-Policy"] ?: ""
+        assertTrue(indexCsp.contains("script-src 'self'"))
+        assertTrue(indexCsp.contains("https://accounts.google.com/gsi/client"))
+        assertTrue(indexCsp.contains("script-src-attr 'none'"))
+        assertTrue(indexCsp.contains("https://capypaint.com"))
+        assertTrue(indexCsp.contains("object-src 'none'"))
+        assertFalse(indexCsp.contains("script-src 'unsafe-inline'"))
+        assertFalse(indexCsp.contains("'unsafe-eval'"))
+
+        val privacyHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+            mimeType = "text/html",
+            path = "/assets/www/privacy-policy.html",
+        )
+        assertEquals(CapyAndroidBridge.WEBVIEW_PRIVACY_POLICY_CSP, privacyHeaders["Content-Security-Policy"])
+        assertTrue(privacyHeaders["Content-Security-Policy"]?.contains("script-src 'none'") == true)
+
+        val jsHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
+            mimeType = "application/javascript",
+            path = "/assets/www/assets/index.js",
+        )
+        assertEquals("nosniff", jsHeaders["X-Content-Type-Options"])
+        assertEquals("strict-origin-when-cross-origin", jsHeaders["Referrer-Policy"])
+        assertFalse(jsHeaders.containsKey("Content-Security-Policy"))
+    }
 }
+
 
