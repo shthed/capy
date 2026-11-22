@@ -914,6 +914,90 @@ export async function runSessionRestorePipelineTests(vite) {
     );
   }
 
+  // 9f. Phase 2 activeEpochNewer: newer activeState.paintedRegionColors wins over stale candidateSnap.paintedRegionColors
+  {
+    const snap = makeTestSnapshot({
+      id: 'snap-older-epoch-defined',
+      filledRegionIds: [101],
+      paintedRegionColors: { 101: 1 },
+      resetEpoch: 1,
+      isFreeColor: true,
+    });
+    const h = createHarness({
+      storage: {
+        loadActiveState: () => ({
+          activeSnapshotId: 'snap-older-epoch-defined',
+          activeColorId: 2,
+          filledRegionIds: [102],
+          paintedRegionColors: { 102: 2 },
+          isFreeColorMode: true,
+          resetEpoch: 2,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        }),
+        loadSnapshots: () => [snap],
+        loadPuzzleData: async () => makeTestPuzzle({ isFreeColor: true }),
+      },
+    });
+
+    const res = await mod.runSessionRestorePipeline({
+      signal: new AbortController().signal,
+      callbacks: h.callbacks,
+      deps: h.deps,
+    });
+
+    assert.equal(res, 'active_cached');
+    assert.deepEqual([...h.calls.setFilledRegionIds[0]], [102]);
+    assert.deepEqual(
+      [...h.calls.setPaintedRegionColors[0].entries()],
+      [[102, 2]],
+      'newer activeState.paintedRegionColors must override stale lower-epoch candidateSnap.paintedRegionColors'
+    );
+  }
+
+  // 9g. Phase 2 activeEpochNewer with undefined activeState.paintedRegionColors must NOT resurrect stale candidateSnap.paintedRegionColors
+  {
+    const snap = makeTestSnapshot({
+      id: 'snap-older-epoch-undef',
+      filledRegionIds: [101],
+      paintedRegionColors: { 101: 1 },
+      resetEpoch: 1,
+      isFreeColor: true,
+    });
+    const h = createHarness({
+      storage: {
+        loadActiveState: () => ({
+          activeSnapshotId: 'snap-older-epoch-undef',
+          activeColorId: 1,
+          filledRegionIds: [],
+          paintedRegionColors: undefined,
+          isFreeColorMode: true,
+          resetEpoch: 2,
+          zoomScale: 1,
+          panOffsetX: 0,
+          panOffsetY: 0,
+        }),
+        loadSnapshots: () => [snap],
+        loadPuzzleData: async () => makeTestPuzzle({ isFreeColor: true }),
+      },
+    });
+
+    const res = await mod.runSessionRestorePipeline({
+      signal: new AbortController().signal,
+      callbacks: h.callbacks,
+      deps: h.deps,
+    });
+
+    assert.equal(res, 'active_cached');
+    assert.deepEqual([...h.calls.setFilledRegionIds[0]], []);
+    assert.equal(
+      h.calls.setPaintedRegionColors[0].size,
+      0,
+      'stale lower-epoch candidateSnap.paintedRegionColors must not resurrect when activeEpochNewer is true and activeState.paintedRegionColors is undefined'
+    );
+  }
+
   // 10. snapshotTransitionSeqRef bump mid-flight cancels restore and revokes created blob URL
   {
     const snap = makeTestSnapshot({ id: 'snap-seq-race' });

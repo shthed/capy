@@ -571,6 +571,17 @@ function resolveRestoredViewport(
   };
 }
 
+function resolveRawPaintedColors(
+  candidateSnap: SavedSnapshot,
+  matchingActive: ActiveSessionState | null,
+  snapEpochNewer: boolean,
+  activeEpochNewer: boolean
+): Record<number, number> | undefined {
+  if (activeEpochNewer) return matchingActive?.paintedRegionColors;
+  if (snapEpochNewer) return candidateSnap.paintedRegionColors;
+  return candidateSnap.paintedRegionColors ?? matchingActive?.paintedRegionColors;
+}
+
 function buildRestoredActiveProgress(
   candidateSnap: SavedSnapshot,
   activeState: ActiveSessionState | null,
@@ -578,13 +589,20 @@ function buildRestoredActiveProgress(
 ): RestoredActiveProgress {
   const isMatchingActive = activeState?.activeSnapshotId === candidateSnap.id;
   const matchingActive = isMatchingActive ? activeState : null;
-  const snapEpochNewer = (candidateSnap.resetEpoch ?? 0) > (activeState?.resetEpoch ?? 0);
+  const snapEpoch = candidateSnap.resetEpoch ?? 0;
+  const activeEpoch = matchingActive?.resetEpoch ?? 0;
+  const snapEpochNewer = snapEpoch > activeEpoch;
+  const activeEpochNewer = Boolean(matchingActive) && activeEpoch > snapEpoch;
   const activeFilled = !snapEpochNewer ? matchingActive?.filledRegionIds : undefined;
   const orderedIds = activeFilled ?? candidateSnap.filledRegionIds ?? [];
   const filledSet = new Set(orderedIds);
   const restoredView = resolveRestoredViewport(candidateSnap, matchingActive);
-  const activePainted = !snapEpochNewer ? matchingActive?.paintedRegionColors : undefined;
-  const rawPainted = candidateSnap.paintedRegionColors ?? activePainted;
+  const rawPainted = resolveRawPaintedColors(
+    candidateSnap,
+    matchingActive,
+    snapEpochNewer,
+    activeEpochNewer
+  );
   const restoredPaintedMap = rawPainted
     ? new Map(Object.entries(rawPainted).map(([k, v]) => [Number(k), v]))
     : new Map<number, number>();
