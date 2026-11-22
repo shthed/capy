@@ -682,7 +682,7 @@ export async function runProviderDomainHardeningTests(vite) {
 
       const sampleSnapA = {
         id: 'sample_capy_a',
-        sampleId: 'sample_capy_shared',
+        sampleAssetPath: './samples/capy_shared.png',
         title: 'Shared Sample A',
         timestamp: Date.now() - 5_000,
         lastOpened: Date.now() - 5_000,
@@ -723,7 +723,7 @@ export async function runProviderDomainHardeningTests(vite) {
 
       const sampleSnapB = {
         id: 'sample_capy_b',
-        sampleId: 'sample_capy_shared',
+        sampleAssetPath: './samples/capy_shared.png',
         title: 'Shared Sample B',
         timestamp: Date.now() - 20_000,
         lastOpened: Date.now() - 20_000,
@@ -731,6 +731,11 @@ export async function runProviderDomainHardeningTests(vite) {
         totalCount: 5,
         filledRegionIds: [1, 2],
       };
+      assert.equal(
+        slotKeyMod.computeSlotKeyForSnapshot(sampleSnapA),
+        slotKeyMod.computeSlotKeyForSnapshot(sampleSnapB),
+        'sampleSnapA and sampleSnapB must map to the exact same colliding sample slot key'
+      );
       storageMod.StorageService.saveSnapshots([sampleSnapB]);
       remoteManifestStore = null;
       const mockDriverB401 = createMockDriver('google', 'google_user_B_401', 'User B 401');
@@ -747,6 +752,110 @@ export async function runProviderDomainHardeningTests(vite) {
         storageMod.StorageService.loadSnapshots()[0].id,
         'sample_capy_b',
         'User B sample snapshot must remain intact after syncFullLibrary'
+      );
+
+      // 5e-2D-sync401: HTTP 401 on Drive readManifest INSIDE syncFullLibrary() must abort without re-writing User A tombstones/manifest to guest keys
+      ls.clear();
+      ss.clear();
+      googleClientMod.clearCachedGoogleSession();
+      googleClientMod.setExplicitlySignedOut(false);
+      googleClientMod.saveCachedGoogleSession({
+        accessToken: 'expired-drive-token-user-a',
+        sub: 'user_a_sync401',
+        displayName: 'User A Sync401',
+        expiresAt: Date.now() + 3_600_000,
+      });
+
+      const authSync401 = new authMod.MultiProviderAuthManager();
+      const cloudSync401 = new cloudMod.CloudLibrarySyncOrchestrator(authSync401);
+      authSync401.onSignOut((prev) => cloudSync401.clearLocalCloudCache(prev));
+
+      assert.equal(
+        authSync401.getCurrentIdentity().isAuthenticated,
+        true,
+        'User A should be authenticated via cached Google Drive session'
+      );
+      assert.equal(authSync401.getCurrentIdentity().provider, 'google');
+
+      const sampleSnapSyncA = {
+        id: 'sample_capy_sync401_a',
+        sampleAssetPath: './samples/capy_sync401.png',
+        title: 'Sync401 Sample A',
+        timestamp: Date.now() - 5_000,
+        lastOpened: Date.now() - 5_000,
+        filledCount: 1,
+        totalCount: 5,
+        filledRegionIds: [1],
+      };
+      const sync401SlotKey = slotKeyMod.computeSlotKeyForSnapshot(sampleSnapSyncA);
+      storageMod.StorageService.saveSnapshots([sampleSnapSyncA]);
+      await storageMod.StorageService.deleteSnapshot('sample_capy_sync401_a');
+      cloudSync401.recordSlotDeletion(sync401SlotKey);
+
+      const prevFetchForSync401 = globalThis.fetch;
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ error: { code: 401, message: 'Invalid Credentials' } }), {
+          status: 401,
+        });
+      try {
+        await cloudSync401.syncFullLibrary([]);
+      } finally {
+        globalThis.fetch = prevFetchForSync401;
+      }
+
+      assert.equal(
+        authSync401.getCurrentIdentity().isAuthenticated,
+        false,
+        'Drive readManifest 401 inside syncFullLibrary() must downgrade User A to guest'
+      );
+      assert.equal(
+        googleClientMod.isExplicitlySignedOut(),
+        false,
+        'Drive readManifest 401 must NOT set EXPLICIT_SIGNOUT_STORAGE_KEY'
+      );
+      const remainingAfterSync401 = Array.from(ls._map.keys()).filter(
+        (k) =>
+          k.includes(keysMod.CLOUD_VAULT_STORAGE_KEY) ||
+          k.includes(keysMod.CLOUD_MANIFEST_STORAGE_KEY) ||
+          k.includes(keysMod.CLOUD_TOMBSTONES_STORAGE_KEY)
+      );
+      assert.deepEqual(
+        remainingAfterSync401,
+        [],
+        'Drive readManifest 401 inside syncFullLibrary() must leave zero vault/manifest/tombstone keys in localStorage'
+      );
+
+      const sampleSnapSyncB = {
+        id: 'sample_capy_sync401_b',
+        sampleAssetPath: './samples/capy_sync401.png',
+        title: 'Sync401 Sample B',
+        timestamp: Date.now() - 20_000,
+        lastOpened: Date.now() - 20_000,
+        filledCount: 2,
+        totalCount: 5,
+        filledRegionIds: [1, 2],
+      };
+      assert.equal(
+        slotKeyMod.computeSlotKeyForSnapshot(sampleSnapSyncA),
+        slotKeyMod.computeSlotKeyForSnapshot(sampleSnapSyncB),
+        'sampleSnapSyncA and sampleSnapSyncB must map to the exact same colliding sample slot key'
+      );
+      storageMod.StorageService.saveSnapshots([sampleSnapSyncB]);
+      remoteManifestStore = null;
+      const mockDriverBSync401 = createMockDriver('google', 'google_user_B_sync401', 'User B Sync401');
+      authSync401.registerDriver(mockDriverBSync401);
+      await authSync401.signInWithProvider('google');
+      await cloudSync401.syncFullLibrary([sampleSnapSyncB]);
+
+      assert.equal(
+        storageMod.StorageService.loadSnapshots().length,
+        1,
+        'User B sample snapshot must survive syncFullLibrary after User A mid-sync Drive 401'
+      );
+      assert.equal(
+        storageMod.StorageService.loadSnapshots()[0].id,
+        'sample_capy_sync401_b',
+        'User B sample snapshot must remain intact after User A mid-sync Drive 401'
       );
     }
 

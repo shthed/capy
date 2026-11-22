@@ -123,6 +123,10 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     return `${identity.provider}_${baseId}`;
   }
 
+  private isScopeInvalidated(initialScope: string | null): boolean {
+    return Boolean(initialScope && this.getAccountScope() !== initialScope);
+  }
+
   private getVaultStorageKey(identity?: PlayerIdentity): string {
     return resolveAccountScopedKey(CLOUD_VAULT_STORAGE_KEY, this.getAccountScope(identity));
   }
@@ -432,6 +436,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     backend: CloudBackendKind;
     tombstones: Record<string, number>;
   }> {
+    const initialScope = this.getAccountScope();
     const mergedEntries: Record<string, CloudSaveEntryV2> = {};
     const mergedTombstones: Record<string, number> = this.readLocalTombstones();
     let backend: CloudBackendKind = 'local_cache';
@@ -451,6 +456,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     if (playGamesDriver && NativeBridge.isAndroid) {
       try {
         const nativeManifest = await playGamesDriver.readManifest();
+        if (this.isScopeInvalidated(initialScope)) {
+          return { manifest: null, backend, tombstones: {} };
+        }
         if (nativeManifest) {
           backend = 'play_games_snapshots';
           const ts = await this.mergeIncomingManifestInto(
@@ -462,6 +470,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         }
       } catch (err) {
         reportSwallowed('CloudLibrarySyncOrchestrator.pullPlayGamesManifest', err);
+        if (this.isScopeInvalidated(initialScope)) {
+          return { manifest: null, backend, tombstones: {} };
+        }
       }
     }
 
@@ -469,6 +480,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     if (activeDriver) {
       try {
         const remoteManifest = await activeDriver.readManifest();
+        if (this.isScopeInvalidated(initialScope)) {
+          return { manifest: null, backend, tombstones: {} };
+        }
         backend = mapProviderToBackendKind(activeDriver.id);
         if (remoteManifest) {
           const ts = await this.mergeIncomingManifestInto(
@@ -482,6 +496,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         reportSwallowed('CloudLibrarySyncOrchestrator.pullRemoteManifest', err, {
           provider: activeDriver.id,
         });
+        if (this.isScopeInvalidated(initialScope)) {
+          return { manifest: null, backend, tombstones: {} };
+        }
       }
     }
 
@@ -510,6 +527,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     pushed: boolean;
     backend: CloudBackendKind;
   }> {
+    const initialScope = this.getAccountScope();
     const resolvedManifest: CloudLibraryManifestV2 = manifest ??
       this.readLocalManifest() ?? {
         version: 2,
@@ -526,12 +544,18 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         reportSwallowed('CloudLibrarySyncOrchestrator.pushPlayGamesManifest', err);
         return false;
       });
+      if (this.isScopeInvalidated(initialScope)) {
+        return { pushed: false, backend: 'local_cache' };
+      }
     }
 
     const activeDriver = this.auth.getActiveCloudDriver();
     if (activeDriver) {
       try {
         const ok = await activeDriver.writeManifest(resolvedManifest);
+        if (this.isScopeInvalidated(initialScope)) {
+          return { pushed: false, backend: 'local_cache' };
+        }
         return {
           pushed: Boolean(ok),
           backend: mapProviderToBackendKind(activeDriver.id),
@@ -540,6 +564,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         reportSwallowed('CloudLibrarySyncOrchestrator.pushRemoteManifest', err, {
           provider: activeDriver.id,
         });
+        if (this.isScopeInvalidated(initialScope)) {
+          return { pushed: false, backend: 'local_cache' };
+        }
         return {
           pushed: false,
           backend: mapProviderToBackendKind(activeDriver.id),
@@ -1150,9 +1177,28 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     return serializeTombstonesKey(afterPushTombstones) !== pushedTombstoneKey;
   }
 
+  private buildAbortedSyncSummary(
+    importedSavesFromCloud = 0,
+    mergedRegionsFromCloud = 0
+  ): CloudLibrarySyncSummary {
+    return {
+      syncedAt: Date.now(),
+      totalSavesSynced: 0,
+      importedSavesFromCloud,
+      mergedRegionsFromCloud,
+      pushedToCloud: false,
+      cloudBackend: 'local_cache',
+      hasPendingLocalChanges: false,
+    };
+  }
+
   async syncFullLibrary(localSnapshots: SavedSnapshot[]): Promise<CloudLibrarySyncSummary> {
+    const initialScope = this.getAccountScope();
     const ctx = this.createSnapshotSyncContext(localSnapshots);
     const { manifest: remoteManifest, tombstones } = await this.pullRemoteLibraryManifest();
+    if (this.isScopeInvalidated(initialScope)) {
+      return this.buildAbortedSyncSummary();
+    }
     const activeDriver = this.auth.getActiveCloudDriver();
 
     await this.reconcileTombstonesWithLocalSnapshots(tombstones, ctx);
@@ -1161,6 +1207,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       await this.reconcileRemoteManifest(remoteManifest, tombstones, activeDriver, ctx);
     const legacyMergedRegions = await this.mergeLegacyVaultEnvelopes(tombstones, ctx);
     const mergedRegionsFromCloud = manifestMergedRegions + legacyMergedRegions;
+    if (this.isScopeInvalidated(initialScope)) {
+      return this.buildAbortedSyncSummary(importedSavesFromCloud, mergedRegionsFromCloud);
+    }
 
     const { nextEntries, pushedFingerprints } = await this.buildUpdatedManifestEntries(
       remoteManifest,
@@ -1168,6 +1217,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       activeDriver,
       ctx
     );
+    if (this.isScopeInvalidated(initialScope)) {
+      return this.buildAbortedSyncSummary(importedSavesFromCloud, mergedRegionsFromCloud);
+    }
 
     const cleanTombstones = sanitizeTombstoneMap(tombstones);
     this.writeLocalTombstones(cleanTombstones);
@@ -1184,6 +1236,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     };
 
     const { pushed, backend } = await this.pushRemoteLibraryManifest(updatedManifest);
+    if (this.isScopeInvalidated(initialScope)) {
+      return this.buildAbortedSyncSummary(importedSavesFromCloud, mergedRegionsFromCloud);
+    }
     if (pushed) {
       this.auth.markSynced(syncedAt);
     }
