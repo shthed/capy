@@ -7,7 +7,6 @@ interface GameTopBarProps {
   activeTitle?: string | null;
   progressPercentage: number;
   filledCount?: number;
-  zoomScale?: number;
   isPreviewMode: boolean;
   isCompleted: boolean;
   isFullscreen?: boolean;
@@ -21,7 +20,6 @@ interface GameTopBarProps {
   onOpenSettings: () => void;
   onOpenSaves: () => void;
   onOpenCoop?: () => void;
-  onStepZoom?: () => void;
   onBackToParentPuzzle?: () => void;
   onOpenReleaseChannel?: () => void;
 }
@@ -30,7 +28,6 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
   activeTitle,
   progressPercentage,
   filledCount = 0,
-  zoomScale: _zoomScale = 1,
   isPreviewMode,
   isCompleted,
   isFullscreen,
@@ -44,7 +41,6 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
   onOpenSettings,
   onOpenSaves,
   onOpenCoop,
-  onStepZoom: _onStepZoom,
   onBackToParentPuzzle,
   onOpenReleaseChannel,
 }) => {
@@ -58,7 +54,7 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
         paddingRight: 'max(0.5rem, calc(var(--sar, 0px) + 0.5rem))',
       }}
     >
-      {/* Top Left: Progress % / Title Pill, Channel Badge, Parent Breadcrumb & Zoom Stepper */}
+      {/* Top Left: Progress % / Title Pill, Channel Badge & Parent Breadcrumb */}
       <div
         data-testid="topbar-left-lane"
         className="pointer-events-auto flex items-center gap-0.5 sm:gap-1.5 min-w-0 flex-1 overflow-x-auto no-scrollbar"

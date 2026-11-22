@@ -26,6 +26,7 @@ import { runProviderDomainHardeningTests } from './provider-domain-hardening.tes
 import { runSettingsDecompositionTests } from './settings-decomposition.test.mjs';
 import { runWorkerCoopSecurityTests } from './worker-coop-security.test.mjs';
 import { runEngineCanvasPerfTests } from './engine-canvas-perf.test.mjs';
+import { runAppHooksQuickwinTests } from './app-hooks-quickwin.test.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
@@ -13090,6 +13091,7 @@ async function runCodecAndEngineTests() {
     await runSettingsDecompositionTests(vite);
     await runWorkerCoopSecurityTests(vite);
     await runEngineCanvasPerfTests(vite);
+    await runAppHooksQuickwinTests(vite);
     logUnitPass('.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening, SettingsModal Decomposition & M1 release safety hardening verified.');
 
     // M4 ($0 BYOC Account Login & Cloud Sync): PKCE S256, MicrosoftCloudDriver, AppleCloudDriver,
