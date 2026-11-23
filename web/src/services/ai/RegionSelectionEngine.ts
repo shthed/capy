@@ -299,7 +299,12 @@ export function addContiguousDragRegions(
   regionById?: ReadonlyMap<number, Region>
 ): Set<number> {
   const map = regionById ?? buildRegionByIdMap(puzzle);
-  const next = new Set<number>(currentSelected);
+  const next = new Set<number>();
+  for (const id of currentSelected) {
+    if (isValidRegionId(id, map)) {
+      next.add(id);
+    }
+  }
   const pending: number[] = [];
   const seenPending = new Set<number>();
 
@@ -605,6 +610,8 @@ export function buildSelectionMask(
 ): Uint8Array {
   if (
     !bbox ||
+    !Number.isFinite(bbox.minX) ||
+    !Number.isFinite(bbox.minY) ||
     !Number.isFinite(bbox.width) ||
     !Number.isFinite(bbox.height) ||
     Math.floor(bbox.width) <= 0 ||

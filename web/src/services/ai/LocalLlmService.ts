@@ -34,7 +34,8 @@ export const VALID_MOTIF_KINDS: readonly InfiniteZoomMotifKind[] = [
 
 const VALID_MOTIF_KIND_SET: ReadonlySet<string> = new Set(VALID_MOTIF_KINDS);
 const HEX_6_RE = /^#[0-9A-Fa-f]{6}$/;
-const UNSAFE_MARKUP_RE = /<svg\b|<script\b|javascript\s*:|\bon[a-z]+\s*=/i;
+const UNSAFE_MARKUP_RE =
+  /<svg\b|<script\b|<\s*\/?\s*[a-z][^>]*>|javascript\s*:|data\s*:\s*text\/html|\bon[a-z]+\s*=|\beval\s*\(|\b(?:new\s+)?Function\s*\(/i;
 const DEFAULT_THEME = 'Harmonious Cel Detail';
 const DEFAULT_FALLBACK_PALETTE: readonly string[] = [
   '#60A5FA',
@@ -242,7 +243,7 @@ function containsBlockedPattern(text: string): boolean {
 function stripZeroWidthAndControls(raw: string): string {
   const nfkc = raw
     .normalize('NFKC')
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '');
+    .replace(/[\u00AD\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, '');
   let out = '';
   for (let i = 0; i < nfkc.length; i++) {
     const code = nfkc.charCodeAt(i);
@@ -289,23 +290,26 @@ export function sanitizeUserPrompt(rawPrompt: string): PromptSanitizationResult 
   return { sanitized: truncated, blocked: false };
 }
 
+function isApiHost(val: unknown): val is ChromeLanguageModelApi {
+  return val !== null && (typeof val === 'object' || typeof val === 'function');
+}
+
 function getChromeLanguageModelApi(): ChromeLanguageModelApi | null {
   try {
     const g = globalThis as Record<string, unknown>;
-    const direct = g.LanguageModel;
-    if (direct && typeof direct === 'object') {
-      return direct as ChromeLanguageModelApi;
+    if (isApiHost(g.LanguageModel)) {
+      return g.LanguageModel;
     }
     if (typeof self !== 'undefined') {
       const fromSelf = (self as unknown as Record<string, unknown>).LanguageModel;
-      if (fromSelf && typeof fromSelf === 'object') {
-        return fromSelf as ChromeLanguageModelApi;
+      if (isApiHost(fromSelf)) {
+        return fromSelf;
       }
     }
     if (typeof window !== 'undefined') {
       const fromWin = (window as unknown as Record<string, unknown>).LanguageModel;
-      if (fromWin && typeof fromWin === 'object') {
-        return fromWin as ChromeLanguageModelApi;
+      if (isApiHost(fromWin)) {
+        return fromWin;
       }
     }
   } catch (err) {
@@ -329,29 +333,34 @@ async function probeChromeAi(): Promise<{
   if (!api || typeof api.availability !== 'function') {
     return { chromeAi: 'unavailable', chromeAiMultimodal: false };
   }
+  let multiStatus: ChromeAiAvailability = 'unavailable';
   try {
     const multiRaw = await api.availability({
       expectedInputs: [{ type: 'image' }, { type: 'text' }],
     });
-    const multiStatus = normalizeChromeAvailability(multiRaw);
-    if (multiStatus !== 'unavailable') {
-      return { chromeAi: multiStatus, chromeAiMultimodal: true };
+    multiStatus = normalizeChromeAvailability(multiRaw);
+    if (multiStatus === 'available') {
+      return { chromeAi: 'available', chromeAiMultimodal: true };
     }
   } catch (err) {
     reportSwallowed('LocalLlmService.probeChromeAiMultimodal', err);
   }
+  let textStatus: ChromeAiAvailability = 'unavailable';
   try {
     const textRaw = await api.availability({
       expectedInputs: [{ type: 'text' }],
     });
-    return {
-      chromeAi: normalizeChromeAvailability(textRaw),
-      chromeAiMultimodal: false,
-    };
+    textStatus = normalizeChromeAvailability(textRaw);
   } catch (err) {
     reportSwallowed('LocalLlmService.probeChromeAiText', err);
-    return { chromeAi: 'unavailable', chromeAiMultimodal: false };
   }
+  if (textStatus === 'available') {
+    return { chromeAi: 'available', chromeAiMultimodal: false };
+  }
+  if (multiStatus === 'downloadable' || multiStatus === 'downloading') {
+    return { chromeAi: multiStatus, chromeAiMultimodal: true };
+  }
+  return { chromeAi: textStatus, chromeAiMultimodal: false };
 }
 
 async function probeLocalWasmStatus(): Promise<LocalLlmWorkerStatus> {
@@ -412,12 +421,23 @@ function normalizeHexList(raw: unknown, maxCount: number): string[] {
   return out;
 }
 
+function containsUnsafeMarkupText(raw: string): boolean {
+  return (
+    UNSAFE_MARKUP_RE.test(raw) ||
+    UNSAFE_MARKUP_RE.test(stripZeroWidthAndControls(raw))
+  );
+}
+
 function sanitizeThemeText(raw: unknown): string {
   if (typeof raw !== 'string') return DEFAULT_THEME;
-  const cleaned = stripHtmlAndInjectionFraming(stripZeroWidthAndControls(raw))
+  const normalized = stripZeroWidthAndControls(raw);
+  if (UNSAFE_MARKUP_RE.test(raw) || UNSAFE_MARKUP_RE.test(normalized)) {
+    return DEFAULT_THEME;
+  }
+  const cleaned = stripHtmlAndInjectionFraming(normalized)
     .slice(0, 80)
     .trim();
-  if (!cleaned || containsBlockedPattern(cleaned)) {
+  if (!cleaned || UNSAFE_MARKUP_RE.test(cleaned) || containsBlockedPattern(cleaned)) {
     return DEFAULT_THEME;
   }
   return cleaned;
@@ -432,7 +452,7 @@ function unwrapJsonString(raw: string): string {
 function parseRawPlanObject(raw: unknown): Record<string, unknown> | null {
   let candidate: unknown = raw;
   if (typeof raw === 'string') {
-    if (UNSAFE_MARKUP_RE.test(raw)) return null;
+    if (containsUnsafeMarkupText(raw)) return null;
     try {
       candidate = JSON.parse(unwrapJsonString(raw));
     } catch {
@@ -445,27 +465,33 @@ function parseRawPlanObject(raw: unknown): Record<string, unknown> | null {
   return candidate as Record<string, unknown>;
 }
 
-function objectContainsUnsafeMarkup(obj: Record<string, unknown>): boolean {
-  if (typeof obj.theme === 'string' && UNSAFE_MARKUP_RE.test(obj.theme)) {
-    return true;
+function valueContainsUnsafeMarkup(val: unknown, depth: number): boolean {
+  if (depth > 8) return false;
+  if (typeof val === 'string') {
+    return containsUnsafeMarkupText(val);
   }
-  if (Array.isArray(obj.paletteAccentsHex)) {
-    for (const item of obj.paletteAccentsHex) {
-      if (typeof item === 'string' && UNSAFE_MARKUP_RE.test(item)) return true;
+  if (Array.isArray(val)) {
+    for (let i = 0; i < val.length; i++) {
+      if (valueContainsUnsafeMarkup(val[i], depth + 1)) return true;
     }
+    return false;
   }
-  if (Array.isArray(obj.elements)) {
-    for (const item of obj.elements) {
-      if (item && typeof item === 'object' && !Array.isArray(item)) {
-        const rec = item as Record<string, unknown>;
-        for (const key of ['kind', 'fillHex', 'strokeHex'] as const) {
-          const val = rec[key];
-          if (typeof val === 'string' && UNSAFE_MARKUP_RE.test(val)) return true;
-        }
+  if (val && typeof val === 'object') {
+    const rec = val as Record<string, unknown>;
+    for (const key of Object.keys(rec)) {
+      if (
+        containsUnsafeMarkupText(key) ||
+        valueContainsUnsafeMarkup(rec[key], depth + 1)
+      ) {
+        return true;
       }
     }
   }
   return false;
+}
+
+function objectContainsUnsafeMarkup(obj: Record<string, unknown>): boolean {
+  return valueContainsUnsafeMarkup(obj, 0);
 }
 
 function sanitizeSceneElement(
@@ -552,7 +578,7 @@ function tryValidateExternalScenePlan(
 
   return {
     theme: sanitizeThemeText(parsed.theme),
-    paletteAccentsHex: parsedAccents.length > 0 ? parsedAccents : fallbackAccents,
+    paletteAccentsHex: effectiveAccents,
     elements,
     tierUsed: tier,
     sanitizedPrompt,
@@ -1110,7 +1136,7 @@ function buildOfflineScenePlan(
       x: clamp(cellX, 0.06, 0.94),
       y: clamp(cellY, 0.06, 0.94),
       scale: clamp(0.14 + rand() * 0.26, 0.12, 0.44),
-      rotationDeg: Math.round(clamp(rand() * 360 - 180, -180, 180)),
+      rotationDeg: normalizeZero(Math.round(clamp(rand() * 360 - 180, -180, 180))),
       fillHex,
       strokeHex,
       count: 2 + Math.floor(rand() * 5),
@@ -1118,10 +1144,10 @@ function buildOfflineScenePlan(
   }
 
   const theme = sanitizedPrompt
-    ? sanitizedPrompt.slice(0, 80)
+    ? sanitizeThemeText(sanitizedPrompt)
     : request.direction === 'extend-out'
       ? 'Seamless Scenic Horizon'
-      : 'Harmonious Cel Detail';
+      : DEFAULT_THEME;
 
   return {
     theme,

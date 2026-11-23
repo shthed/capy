@@ -98,18 +98,19 @@ interface EdgeProfile {
 const HEX_6_RE = /^#[0-9A-Fa-f]{6}$/;
 
 function clampByte(value: number): number {
-  if (value <= 0) return 0;
+  if (Number.isNaN(value) || value <= 0) return 0;
   if (value >= 255) return 255;
   return Math.round(value);
 }
 
 function clamp01(value: number): number {
-  if (value <= 0) return 0;
+  if (Number.isNaN(value) || value <= 0) return 0;
   if (value >= 1) return 1;
   return value;
 }
 
 function clampRange(value: number, min: number, max: number): number {
+  if (Number.isNaN(value)) return min;
   return value < min ? min : value > max ? max : value;
 }
 
@@ -667,7 +668,11 @@ function computeSobelEdgeProtection(
           Math.abs(c - ml),
           Math.abs(c - mr),
           Math.abs(c - tc),
-          Math.abs(c - bc)
+          Math.abs(c - bc),
+          Math.abs(c - tl),
+          Math.abs(c - tr),
+          Math.abs(c - bl),
+          Math.abs(c - br)
         ) * 2;
       raw[idx] = smoothstep(48, 160, Math.max(sobelMag, ridgeContrast));
     }
@@ -1511,6 +1516,14 @@ export function synthesizeExtendedBorderRgba(
   params: SynthesizeExtendedBorderRgbaParams
 ): SynthesizeExtendedBorderRgbaResult {
   const { sourceRgba, sourceWidth, sourceHeight, sides, scenePlan } = params;
+  if (
+    !Number.isInteger(sourceWidth) ||
+    !Number.isInteger(sourceHeight) ||
+    sourceWidth < 1 ||
+    sourceHeight < 1
+  ) {
+    throw new Error('Invalid source dimensions for border extension.');
+  }
   const check = canExtendSides(sourceWidth, sourceHeight, sides);
   if (!check.allowed) {
     throw new Error(
@@ -1669,12 +1682,31 @@ export function synthesizeInfillCanvas(
       'synthesizeInfillCanvas requires a browser DOM environment; use synthesizeInfillRgba in headless runtimes.'
     );
   }
+  if (
+    !bbox ||
+    !Number.isFinite(bbox.minX) ||
+    !Number.isFinite(bbox.minY) ||
+    !Number.isFinite(bbox.width) ||
+    !Number.isFinite(bbox.height)
+  ) {
+    throw new Error('Invalid bounding box for infill canvas synthesis.');
+  }
+  const cropMinX = Math.floor(bbox.minX);
+  const cropMinY = Math.floor(bbox.minY);
   const cropWidth = Math.floor(bbox.width);
   const cropHeight = Math.floor(bbox.height);
+  if (
+    !Number.isInteger(cropWidth) ||
+    !Number.isInteger(cropHeight) ||
+    cropWidth < 1 ||
+    cropHeight < 1
+  ) {
+    throw new Error('Invalid crop dimensions for infill canvas synthesis.');
+  }
   const cropRgba = extractRgbaFromSource(
     sourceCanvas,
-    Math.floor(bbox.minX),
-    Math.floor(bbox.minY),
+    cropMinX,
+    cropMinY,
     cropWidth,
     cropHeight
   );
