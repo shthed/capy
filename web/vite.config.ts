@@ -82,17 +82,22 @@ export function extractInlineScriptHashes(htmlContent: string): string[] {
  */
 export function buildMetaCspPolicy(htmlContent: string): string {
   const scriptHashes = extractInlineScriptHashes(htmlContent);
-  const scriptSrcTokens = ["'self'", ...scriptHashes, 'https://accounts.google.com/gsi/client'];
+  const scriptSrcTokens = [
+    "'self'",
+    ...scriptHashes,
+    'https://accounts.google.com/gsi/client',
+    'https://js.puter.com/v2/',
+  ];
   return [
     "default-src 'self'",
     `script-src ${scriptSrcTokens.join(' ')}`,
     "script-src-attr 'none'",
     "style-src 'self' 'unsafe-inline' https://accounts.google.com",
-    "img-src 'self' data: blob: https://*.googleusercontent.com",
+    "img-src 'self' data: blob: https://*.googleusercontent.com https://*.puter.com",
     "font-src 'self' data:",
-    "connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com https://graph.microsoft.com https://login.microsoftonline.com wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com",
+    "connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com https://generativelanguage.googleapis.com https://api.puter.com https://puter.com https://*.puter.com https://graph.microsoft.com https://login.microsoftonline.com wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com",
     "worker-src 'self' blob:",
-    'frame-src https://accounts.google.com',
+    'frame-src https://accounts.google.com https://puter.com https://*.puter.com',
     "manifest-src 'self'",
     "media-src 'none'",
     "form-action 'self'",

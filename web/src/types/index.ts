@@ -22,6 +22,36 @@ export interface Region {
   pixels: Int32Array;
 }
 
+export interface NormalizedRect {
+  /** Normalized [0..1] rectangle inside root world space */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export type InfiniteZoomProviderMode = 'PUTER' | 'GUIDED_GEMINI' | 'GEMINI_BYOK';
+export type NanoBananaModelId =
+  | 'gemini-nano-banana-2.1'
+  | 'gemini-3.1-flash-lite-image'
+  | 'gemini-3.1-flash-image';
+export type NanoBananaResolution = '512' | '1K' | '2K';
+
+export interface NestedPuzzleLayer {
+  layerId: string;
+  depth: number;
+  worldBounds: NormalizedRect;
+  width: number;
+  height: number;
+  regions: Region[];
+  regionMap: Int32Array;
+  borderMap: Uint8Array;
+  imageBlobKey: string;
+  promptHint?: string;
+  providerUsed?: InfiniteZoomProviderMode;
+  modelUsed?: NanoBananaModelId;
+}
+
 export interface PuzzleData {
   width: number;
   height: number;
@@ -30,6 +60,8 @@ export interface PuzzleData {
   regionMap: Int32Array;
   borderMap: Uint8Array; // 1 if border pixel, 0 otherwise
   isFreeColor?: boolean;
+  nestedLayers?: NestedPuzzleLayer[];
+  maxZoomDepth?: number;
 }
 
 export type ImageType = 'AUTO' | 'DRAWING' | 'PHOTO';
@@ -148,6 +180,9 @@ export interface UserSettings {
   uiScale: number;
   detailedLoadingProgress: boolean;
   localAiMode: LocalAiMode;
+  infiniteZoomProvider: InfiniteZoomProviderMode;
+  nanoBananaModel: NanoBananaModelId;
+  nanoBananaResolution: NanoBananaResolution;
   generatorConfig: GeneratorConfig;
 }
 
@@ -246,13 +281,7 @@ export interface BorderExtensionSides {
   right: boolean;
 }
 
-export interface InfiniteZoomBounds {
-  /** Normalized [0..1] rectangle inside the parent/outer puzzle */
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export type InfiniteZoomBounds = NormalizedRect;
 
 export interface InfiniteZoomNodeMeta {
   /** 0 = root; positive = deeper child tile; negative = extended outer puzzle */

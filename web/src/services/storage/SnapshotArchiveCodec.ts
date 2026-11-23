@@ -1,6 +1,7 @@
 import { PuzzleData, SavedSnapshot } from '../../types';
 import {
   ArchiveSavePayloadV2,
+  assertSafeLayerImageKey,
   assertValidSavedSnapshot,
   CompactPuzzleRecordV2,
   decodeBinarySaveV2,
@@ -8,15 +9,18 @@ import {
   encodeArchiveSaveBinaryV2,
   encodeSingleSaveBinaryV2,
   hasBinaryMagicHeader,
+  isReservedSnapshotId,
   serializableToRecord,
   SingleSavePayloadV2,
 } from '../CapyCodec';
 import { getMaxPersistedSnapshotTimestamp, parseTimestampMs } from './BackupEngine';
 import {
+  collectReferencedLayerImageKeysStrict,
   loadCompactPuzzleRecord,
   loadImageBlob,
   loadPreviewDataUrl,
   loadPuzzleData,
+  previewStoreKey,
   saveCompactPuzzleRecord,
   saveImageBlob,
   saveMultipleCompactPuzzleRecords,
@@ -35,7 +39,14 @@ import {
   saveSnapshotsInternal,
   stripInternalSnapshotMeta,
 } from './SnapshotStorage';
-import { resolveScopedBackupKey, resolveScopedStorageKey, SNAPSHOTS_KEY } from './StorageKeys';
+import {
+  buildCanonicalLayerImageKey,
+  isLayerImageKey,
+  LAYER_IMAGE_KEY_PREFIX,
+  resolveScopedBackupKey,
+  resolveScopedStorageKey,
+  SNAPSHOTS_KEY,
+} from './StorageKeys';
 
 export interface ImportSnapshotResult {
   importedCount: number;
@@ -53,6 +64,21 @@ function isZeroCopySnapshotRef(snapshot: SavedSnapshot): boolean {
   );
 }
 
+async function collectNestedLayerBlobs(
+  compactRecord: CompactPuzzleRecordV2 | null,
+  into: Record<string, Blob>
+): Promise<void> {
+  if (!compactRecord?.nestedLayers?.length) return;
+  for (const layer of compactRecord.nestedLayers) {
+    const key = layer.imageBlobKey;
+    if (!key || Object.prototype.hasOwnProperty.call(into, key)) continue;
+    const blob = await loadImageBlob(key);
+    if (blob) {
+      into[key] = blob;
+    }
+  }
+}
+
 export async function exportSnapshotBinary(
   id: string,
   options?: { exportDate?: number }
@@ -65,8 +91,13 @@ export async function exportSnapshotBinary(
 
   const compactRecord = await loadCompactPuzzleRecord(id);
   const imageBlob = isZeroCopySnapshotRef(snapshot) ? null : await loadImageBlob(id);
+  const layerImageBlobs: Record<string, Blob> = {};
+  await collectNestedLayerBlobs(compactRecord, layerImageBlobs);
 
-  return encodeSingleSaveBinaryV2(snapshot, compactRecord, imageBlob, options);
+  return encodeSingleSaveBinaryV2(snapshot, compactRecord, imageBlob, {
+    ...options,
+    ...(Object.keys(layerImageBlobs).length > 0 ? { layerImageBlobs } : {}),
+  });
 }
 
 export async function exportAllSnapshotsBinary(options?: {
@@ -75,11 +106,13 @@ export async function exportAllSnapshotsBinary(options?: {
   const snapshots = await hydrateSnapshotPreviews(loadSnapshots());
   const compactRecords: Record<string, CompactPuzzleRecordV2> = {};
   const imageBlobs: Record<string, Blob> = {};
+  const layerImageBlobs: Record<string, Blob> = {};
 
   for (const snap of snapshots) {
     const rec = await loadCompactPuzzleRecord(snap.id);
     if (rec) {
       compactRecords[snap.id] = rec;
+      await collectNestedLayerBlobs(rec, layerImageBlobs);
     }
     if (!isZeroCopySnapshotRef(snap)) {
       const blob = await loadImageBlob(snap.id);
@@ -89,7 +122,10 @@ export async function exportAllSnapshotsBinary(options?: {
     }
   }
 
-  return encodeArchiveSaveBinaryV2(snapshots, compactRecords, imageBlobs, options);
+  return encodeArchiveSaveBinaryV2(snapshots, compactRecords, imageBlobs, {
+    ...options,
+    ...(Object.keys(layerImageBlobs).length > 0 ? { layerImageBlobs } : {}),
+  });
 }
 
 export async function exportSnapshot(id: string): Promise<string> {
@@ -225,6 +261,234 @@ async function persistPreviews(snapshots: SavedSnapshot[]): Promise<void> {
   }
 }
 
+const FORBIDDEN_IMPORT_MAP_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+interface NestedLayerLike {
+  layerId: string;
+  imageBlobKey: string;
+}
+
+interface ImportBatchItem<TLayer extends NestedLayerLike> {
+  snapshot: SavedSnapshot;
+  nestedLayers?: TLayer[];
+}
+
+interface ValidatedImportBatchResult<TLayer extends NestedLayerLike> {
+  remappedLayersBySnapshotId: Map<string, TLayer[]>;
+  layerBlobs: Array<{ key: string; blob: Blob }>;
+}
+
+function getOwnMapValue<T>(
+  map: Record<string, T> | undefined,
+  key: string
+): T | undefined {
+  if (!map || !Object.prototype.hasOwnProperty.call(map, key)) {
+    return undefined;
+  }
+  return map[key];
+}
+
+function assertNoDuplicateSnapshotIds(snapshots: SavedSnapshot[]): void {
+  const seen = new Set<string>();
+  for (const snap of snapshots) {
+    if (seen.has(snap.id)) {
+      throw new Error(`Duplicate snapshot id "${snap.id}" in import batch`);
+    }
+    seen.add(snap.id);
+  }
+}
+
+async function collectOtherLiveProtectedImageKeysStrict(
+  existingSnapshots: SavedSnapshot[],
+  replacingIds: Set<string>
+): Promise<Set<string>> {
+  const protectedKeys = new Set<string>();
+  const otherSnapshots = existingSnapshots.filter((s) => !replacingIds.has(s.id));
+  for (const snap of otherSnapshots) {
+    protectedKeys.add(snap.id);
+    protectedKeys.add(previewStoreKey(snap.id));
+    if (snap.sourceRef?.kind === 'blob' && typeof snap.sourceRef.uri === 'string') {
+      const trimmedUri = snap.sourceRef.uri.trim();
+      if (trimmedUri.length > 0) {
+        protectedKeys.add(trimmedUri);
+      }
+    }
+  }
+  const layerRead = await collectReferencedLayerImageKeysStrict(
+    otherSnapshots.map((s) => s.id)
+  );
+  if (!layerRead.ok) {
+    throw new Error('Failed to verify existing snapshot layer keys');
+  }
+  for (const key of layerRead.keys) {
+    protectedKeys.add(key);
+  }
+  return protectedKeys;
+}
+
+function validateIncomingSnapshotKeys(
+  snap: SavedSnapshot,
+  otherProtectedImageKeys: Set<string>,
+  allLiveRootIds: Set<string>,
+  allLivePreviewKeys: Set<string>,
+  claimedBatchBlobUris: Set<string>
+): void {
+  if (isReservedSnapshotId(snap.id)) {
+    throw new Error(`Invalid snapshot id "${snap.id}": reserved prefix or key`);
+  }
+  const snapPreviewKey = previewStoreKey(snap.id);
+  if (
+    otherProtectedImageKeys.has(snap.id) ||
+    otherProtectedImageKeys.has(snapPreviewKey)
+  ) {
+    throw new Error(`Snapshot id "${snap.id}" collides with an existing snapshot image key`);
+  }
+  if (snap.sourceRef?.kind !== 'blob') return;
+  const uri = snap.sourceRef.uri.trim();
+  if (
+    FORBIDDEN_IMPORT_MAP_KEYS.has(uri) ||
+    isLayerImageKey(uri) ||
+    uri.startsWith(LAYER_IMAGE_KEY_PREFIX)
+  ) {
+    throw new Error(`Invalid snapshot sourceRef blob id "${uri}"`);
+  }
+  const isSelfKey = uri === snap.id || uri === snapPreviewKey;
+  if (isSelfKey) return;
+  if (
+    otherProtectedImageKeys.has(uri) ||
+    allLiveRootIds.has(uri) ||
+    allLivePreviewKeys.has(uri) ||
+    claimedBatchBlobUris.has(uri)
+  ) {
+    throw new Error(
+      `Snapshot sourceRef blob id "${uri}" collides with another snapshot image key`
+    );
+  }
+  claimedBatchBlobUris.add(uri);
+}
+
+function remapAndValidateSnapshotLayers<TLayer extends NestedLayerLike>(
+  snapId: string,
+  nestedLayers: TLayer[],
+  decodedLayerImages: Record<string, { mimeType: string; bytes: Uint8Array }> | undefined,
+  otherProtectedImageKeys: Set<string>,
+  allLiveRootIds: Set<string>,
+  allLivePreviewKeys: Set<string>,
+  batchBlobUris: Set<string>,
+  claimedLayerKeys: Map<string, string>,
+  outLayerBlobs: Array<{ key: string; blob: Blob }>
+): TLayer[] {
+  const seenLayerIds = new Set<string>();
+  const remapped: TLayer[] = [];
+
+  for (const layer of nestedLayers) {
+    if (seenLayerIds.has(layer.layerId)) {
+      throw new Error(`Duplicate nested layerId "${layer.layerId}" in snapshot "${snapId}"`);
+    }
+    seenLayerIds.add(layer.layerId);
+
+    const oldKey = layer.imageBlobKey;
+    const canonicalKey = buildCanonicalLayerImageKey(snapId, layer.layerId);
+    assertSafeLayerImageKey(canonicalKey, 'imageBlobKey');
+
+    if (
+      otherProtectedImageKeys.has(canonicalKey) ||
+      allLiveRootIds.has(canonicalKey) ||
+      allLivePreviewKeys.has(canonicalKey) ||
+      batchBlobUris.has(canonicalKey)
+    ) {
+      throw new Error(
+        `Nested layer image key "${canonicalKey}" collides with an existing snapshot`
+      );
+    }
+    const prevOwner = claimedLayerKeys.get(canonicalKey);
+    if (prevOwner !== undefined && prevOwner !== snapId) {
+      throw new Error(
+        `Nested layer image key "${canonicalKey}" collides across imported snapshots`
+      );
+    }
+    claimedLayerKeys.set(canonicalKey, snapId);
+    remapped.push({ ...layer, imageBlobKey: canonicalKey });
+
+    const entry = getOwnMapValue(decodedLayerImages, oldKey);
+    if (entry && entry.bytes.byteLength > 0) {
+      outLayerBlobs.push({
+        key: canonicalKey,
+        blob: new Blob([new Uint8Array(entry.bytes)], {
+          type: entry.mimeType || 'image/webp',
+        }),
+      });
+    }
+  }
+
+  return remapped;
+}
+
+async function validateAndRemapImportBatch<TLayer extends NestedLayerLike>(params: {
+  existingSnapshots: SavedSnapshot[];
+  incomingItems: Array<ImportBatchItem<TLayer>>;
+  decodedLayerImages?: Record<string, { mimeType: string; bytes: Uint8Array }>;
+}): Promise<ValidatedImportBatchResult<TLayer>> {
+  const { existingSnapshots, incomingItems, decodedLayerImages } = params;
+  const incomingSnapshots = incomingItems.map((item) => item.snapshot);
+  assertNoDuplicateSnapshotIds(incomingSnapshots);
+
+  const replacingIds = new Set(incomingSnapshots.map((s) => s.id));
+  const otherProtectedImageKeys = await collectOtherLiveProtectedImageKeysStrict(
+    existingSnapshots,
+    replacingIds
+  );
+
+  const allLiveRootIds = new Set<string>([
+    ...existingSnapshots.map((s) => s.id),
+    ...incomingSnapshots.map((s) => s.id),
+  ]);
+  const allLivePreviewKeys = new Set<string>([
+    ...existingSnapshots.map((s) => previewStoreKey(s.id)),
+    ...incomingSnapshots.map((s) => previewStoreKey(s.id)),
+  ]);
+
+  const claimedBatchBlobUris = new Set<string>();
+  const batchBlobUris = new Set<string>();
+  for (const snap of incomingSnapshots) {
+    validateIncomingSnapshotKeys(
+      snap,
+      otherProtectedImageKeys,
+      allLiveRootIds,
+      allLivePreviewKeys,
+      claimedBatchBlobUris
+    );
+    if (snap.sourceRef?.kind === 'blob') {
+      const uri = snap.sourceRef.uri.trim();
+      if (uri.length > 0) {
+        batchBlobUris.add(uri);
+      }
+    }
+  }
+
+  const claimedLayerKeys = new Map<string, string>();
+  const remappedLayersBySnapshotId = new Map<string, TLayer[]>();
+  const layerBlobs: Array<{ key: string; blob: Blob }> = [];
+
+  for (const item of incomingItems) {
+    if (!item.nestedLayers || item.nestedLayers.length === 0) continue;
+    const remapped = remapAndValidateSnapshotLayers(
+      item.snapshot.id,
+      item.nestedLayers,
+      decodedLayerImages,
+      otherProtectedImageKeys,
+      allLiveRootIds,
+      allLivePreviewKeys,
+      batchBlobUris,
+      claimedLayerKeys,
+      layerBlobs
+    );
+    remappedLayersBySnapshotId.set(item.snapshot.id, remapped);
+  }
+
+  return { remappedLayersBySnapshotId, layerBlobs };
+}
+
 async function importBinarySingleSave(
   decoded: SingleSavePayloadV2,
   options?: { refreshTimestamps?: boolean }
@@ -236,10 +500,24 @@ async function importBinarySingleSave(
     ? { ...rawSnap, timestamp: now, lastOpened: now }
     : rawSnap;
 
-  let preparedRecord: CompactPuzzleRecordV2 | null = null;
+  const existingSnapshots = loadSnapshots();
+  let preparedRecord: CompactPuzzleRecordV2 | null = decoded.compactPuzzle
+    ? serializableToRecord(decoded.compactPuzzle)
+    : null;
+
+  const { remappedLayersBySnapshotId, layerBlobs: preparedLayerBlobs } =
+    await validateAndRemapImportBatch({
+      existingSnapshots,
+      incomingItems: [{ snapshot: snap, nestedLayers: preparedRecord?.nestedLayers }],
+      decodedLayerImages: decoded.layerImages,
+    });
+
   let firstPuzzle: PuzzleData | undefined;
-  if (decoded.compactPuzzle) {
-    preparedRecord = serializableToRecord(decoded.compactPuzzle);
+  if (preparedRecord) {
+    const remappedLayers = remappedLayersBySnapshotId.get(snap.id);
+    if (remappedLayers) {
+      preparedRecord = { ...preparedRecord, nestedLayers: remappedLayers };
+    }
     firstPuzzle = decompressPuzzleRecord(preparedRecord);
   }
   const preparedBlob =
@@ -249,12 +527,15 @@ async function importBinarySingleSave(
         })
       : null;
 
-  // Fail-closed: commit IndexedDB payloads BEFORE writing localStorage metadata.
+  // Fail-closed: commit IndexedDB payloads (including all nested layer blobs) BEFORE writing localStorage metadata.
   if (preparedRecord) {
     await saveCompactPuzzleRecord(snap.id, preparedRecord);
   }
   if (preparedBlob) {
     await saveImageBlob(snap.id, preparedBlob);
+  }
+  for (const layerImg of preparedLayerBlobs) {
+    await saveImageBlob(layerImg.key, layerImg.blob);
   }
   if (snap.previewDataUrl) {
     await savePreviewDataUrl(snap.id, snap.previewDataUrl);
@@ -276,6 +557,7 @@ async function importBinaryArchiveSave(
   if (validSnapshots.length === 0) {
     return { importedCount: 0, error: 'No valid snapshots in binary archive' };
   }
+  assertNoDuplicateSnapshotIds(validSnapshots);
 
   const { snapshots: existing, metaTsById } = loadSnapshotsWithMeta();
   const { mergedList, toPersist } = mergeImportedSnapshots(
@@ -284,22 +566,40 @@ async function importBinaryArchiveSave(
     options?.refreshTimestamps
   );
 
+  const rawRecordsBySnapId = new Map<string, CompactPuzzleRecordV2>();
+  const incomingItems = toPersist.map((snap) => {
+    const comp = getOwnMapValue(decoded.compactPuzzles, snap.id);
+    const record = comp ? serializableToRecord(comp) : undefined;
+    if (record) {
+      rawRecordsBySnapId.set(snap.id, record);
+    }
+    return { snapshot: snap, nestedLayers: record?.nestedLayers };
+  });
+
+  const { remappedLayersBySnapshotId, layerBlobs: layerImageEntries } =
+    await validateAndRemapImportBatch({
+      existingSnapshots: existing,
+      incomingItems,
+      decodedLayerImages: decoded.layerImages,
+    });
+
   const compactEntries: Array<{ id: string; record: CompactPuzzleRecordV2 }> = [];
   const imageEntries: Array<{ id: string; blob: Blob }> = [];
   let firstPuzzle: PuzzleData | undefined;
 
   for (let i = 0; i < toPersist.length; i++) {
     const snap = toPersist[i];
-    const comp = decoded.compactPuzzles?.[snap.id];
-    if (comp) {
-      const record = serializableToRecord(comp);
+    const baseRecord = rawRecordsBySnapId.get(snap.id);
+    if (baseRecord) {
+      const remappedLayers = remappedLayersBySnapshotId.get(snap.id);
+      const record = remappedLayers ? { ...baseRecord, nestedLayers: remappedLayers } : baseRecord;
       const decompressed = decompressPuzzleRecord(record);
       if (i === 0) {
         firstPuzzle = decompressed;
       }
       compactEntries.push({ id: snap.id, record });
     }
-    const imgEntry = decoded.images?.[snap.id];
+    const imgEntry = getOwnMapValue(decoded.images, snap.id);
     if (imgEntry && imgEntry.bytes.byteLength > 0) {
       imageEntries.push({
         id: snap.id,
@@ -310,10 +610,13 @@ async function importBinaryArchiveSave(
     }
   }
 
-  // Fail-closed: commit IndexedDB payloads BEFORE writing localStorage metadata.
+  // Fail-closed: commit IndexedDB payloads (including all nested layer blobs) BEFORE writing localStorage metadata.
   await saveMultipleCompactPuzzleRecords(compactEntries);
   for (const imgEntry of imageEntries) {
     await saveImageBlob(imgEntry.id, imgEntry.blob);
+  }
+  for (const layerImg of layerImageEntries) {
+    await saveImageBlob(layerImg.key, layerImg.blob);
   }
   await persistPreviews(toPersist);
 
@@ -371,11 +674,23 @@ async function importSingleJsonBundle(
   const snap: SavedSnapshot = options?.refreshTimestamps
     ? { ...rawSnap, timestamp: now, lastOpened: now }
     : rawSnap;
+
+  const existingSnapshots = loadSnapshots();
   let firstPuzzle: PuzzleData | undefined;
   if (data.puzzle !== undefined && data.puzzle !== null) {
     firstPuzzle = deserializePuzzle(data.puzzle as SerializedPuzzleData);
   }
+
+  const { remappedLayersBySnapshotId } = await validateAndRemapImportBatch({
+    existingSnapshots,
+    incomingItems: [{ snapshot: snap, nestedLayers: firstPuzzle?.nestedLayers }],
+  });
+
   if (firstPuzzle) {
+    const remappedLayers = remappedLayersBySnapshotId.get(snap.id);
+    if (remappedLayers) {
+      firstPuzzle = { ...firstPuzzle, nestedLayers: remappedLayers };
+    }
     await savePuzzleData(snap.id, firstPuzzle);
   }
   if (snap.previewDataUrl) {
@@ -397,6 +712,7 @@ async function importArchiveJsonBundle(
     assertValidSavedSnapshot(s, { strictV2: false });
   }
   const validSnapshots = rawSnapshots as SavedSnapshot[];
+  assertNoDuplicateSnapshotIds(validSnapshots);
 
   if (
     data.puzzles !== undefined &&
@@ -413,20 +729,37 @@ async function importArchiveJsonBundle(
     options?.refreshTimestamps
   );
 
+  const deserializedBySnapId = new Map<string, PuzzleData>();
+  const puzzlesMap = data.puzzles as Record<string, SerializedPuzzleData> | undefined;
+  const incomingItems = toPersist.map((snap) => {
+    const serialized = getOwnMapValue(puzzlesMap, snap.id);
+    const puzzle =
+      serialized !== undefined && serialized !== null ? deserializePuzzle(serialized) : undefined;
+    if (puzzle) {
+      deserializedBySnapId.set(snap.id, puzzle);
+    }
+    return { snapshot: snap, nestedLayers: puzzle?.nestedLayers };
+  });
+
+  const { remappedLayersBySnapshotId } = await validateAndRemapImportBatch({
+    existingSnapshots: existing,
+    incomingItems,
+  });
+
   let firstPuzzle: PuzzleData | undefined;
   const puzzleEntries: Array<{ id: string; puzzle: PuzzleData }> = [];
-  const puzzlesMap = data.puzzles as Record<string, SerializedPuzzleData> | undefined;
-  if (puzzlesMap) {
-    for (let i = 0; i < toPersist.length; i++) {
-      const snap = toPersist[i];
-      const serialized = puzzlesMap[snap.id];
-      if (serialized !== undefined && serialized !== null) {
-        const puzzle = deserializePuzzle(serialized);
-        if (i === 0) {
-          firstPuzzle = puzzle;
-        }
-        puzzleEntries.push({ id: snap.id, puzzle });
+  for (let i = 0; i < toPersist.length; i++) {
+    const snap = toPersist[i];
+    const basePuzzle = deserializedBySnapId.get(snap.id);
+    if (basePuzzle) {
+      const remappedLayers = remappedLayersBySnapshotId.get(snap.id);
+      const puzzle = remappedLayers
+        ? { ...basePuzzle, nestedLayers: remappedLayers }
+        : basePuzzle;
+      if (i === 0) {
+        firstPuzzle = puzzle;
       }
+      puzzleEntries.push({ id: snap.id, puzzle });
     }
   }
 
@@ -457,12 +790,20 @@ async function importSnapshotArrayBundle(
     assertValidSavedSnapshot(s, { strictV2: false });
   }
   const validSnapshots = data as SavedSnapshot[];
+  assertNoDuplicateSnapshotIds(validSnapshots);
+
   const { snapshots: existing, metaTsById } = loadSnapshotsWithMeta();
   const { mergedList, toPersist } = mergeImportedSnapshots(
     existing,
     validSnapshots,
     options?.refreshTimestamps
   );
+
+  await validateAndRemapImportBatch({
+    existingSnapshots: existing,
+    incomingItems: toPersist.map((snapshot) => ({ snapshot })),
+  });
+
   await persistPreviews(toPersist);
   const persistedMaxTs = getMaxPersistedSnapshotTimestamp(
     resolveScopedStorageKey(SNAPSHOTS_KEY),

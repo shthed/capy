@@ -82,6 +82,11 @@ export async function runHardeningCspSecurityTests(vite) {
       'CSP script-src must narrow GIS script allowance to https://accounts.google.com/gsi/client'
     );
     assert.equal(
+      scriptSrc.includes('https://js.puter.com/v2/'),
+      true,
+      'Web CSP script-src must allow https://js.puter.com/v2/ for opt-in Web Puter.js Nano Banana'
+    );
+    assert.equal(
       scriptSrc.includes('https://accounts.google.com'),
       false,
       'CSP script-src must NOT allow the broad https://accounts.google.com origin'
@@ -131,11 +136,14 @@ export async function runHardeningCspSecurityTests(vite) {
       ["'self'"],
       "CSP frame-ancestors must be 'self'"
     );
-    assert.equal(
-      (directives.get('frame-src') || []).includes('https://accounts.google.com'),
-      true,
-      'CSP frame-src must allow https://accounts.google.com'
-    );
+    const frameSrc = directives.get('frame-src') || [];
+    for (const required of [
+      'https://accounts.google.com',
+      'https://puter.com',
+      'https://*.puter.com',
+    ]) {
+      assert.equal(frameSrc.includes(required), true, `CSP frame-src missing ${required}`);
+    }
     assert.equal(
       (directives.get('worker-src') || []).includes('blob:'),
       true,
@@ -150,13 +158,23 @@ export async function runHardeningCspSecurityTests(vite) {
       'https://paint.capyboop.com',
       'https://www.googleapis.com',
       'https://accounts.google.com',
+      'https://generativelanguage.googleapis.com',
+      'https://api.puter.com',
+      'https://puter.com',
+      'https://*.puter.com',
       'wss://capypaint.com',
       'wss://*.capypaint.com',
     ]) {
       assert.equal(connectSrc.includes(required), true, `CSP connect-src missing ${required}`);
     }
     const imgSrc = directives.get('img-src') || [];
-    for (const required of ["'self'", 'data:', 'blob:', 'https://*.googleusercontent.com']) {
+    for (const required of [
+      "'self'",
+      'data:',
+      'blob:',
+      'https://*.googleusercontent.com',
+      'https://*.puter.com',
+    ]) {
       assert.equal(imgSrc.includes(required), true, `CSP img-src missing ${required}`);
     }
 
@@ -217,13 +235,79 @@ export async function runHardeningCspSecurityTests(vite) {
       'meta CSP must omit upgrade-insecure-requests so local http://localhost preview/E2E works'
     );
     assert.deepEqual(builtDirectives.get('script-src-attr'), ["'none'"]);
+    const builtScriptSrc = builtDirectives.get('script-src') || [];
+    assert.equal(
+      builtScriptSrc.includes("'unsafe-inline'"),
+      false,
+      "buildMetaCspPolicy script-src must NOT contain 'unsafe-inline'"
+    );
+    assert.equal(
+      builtScriptSrc.includes("'unsafe-eval'"),
+      false,
+      "buildMetaCspPolicy script-src must NOT contain 'unsafe-eval'"
+    );
+    assert.equal(
+      builtScriptSrc.includes('https://js.puter.com/v2/'),
+      true,
+      'buildMetaCspPolicy script-src must include https://js.puter.com/v2/'
+    );
+    for (const required of [
+      'https://generativelanguage.googleapis.com',
+      'https://api.puter.com',
+      'https://puter.com',
+      'https://*.puter.com',
+    ]) {
+      assert.equal(
+        (builtDirectives.get('connect-src') || []).includes(required),
+        true,
+        `buildMetaCspPolicy connect-src missing ${required}`
+      );
+    }
+    for (const required of ['https://puter.com', 'https://*.puter.com']) {
+      assert.equal(
+        (builtDirectives.get('frame-src') || []).includes(required),
+        true,
+        `buildMetaCspPolicy frame-src missing ${required}`
+      );
+    }
+    assert.equal(
+      (builtDirectives.get('img-src') || []).includes('https://*.puter.com'),
+      true,
+      'buildMetaCspPolicy img-src missing https://*.puter.com'
+    );
     for (const h of indexHashes) {
       assert.equal(
-        (builtDirectives.get('script-src') || []).includes(h),
+        builtScriptSrc.includes(h),
         true,
         `buildMetaCspPolicy missing web/index.html inline script hash ${h}`
       );
     }
+
+    // Verify Android WebView CSP allows Direct Gemini BYOK connect-src and strictly forbids Puter.js
+    const androidBridgePath = path.join(
+      REPO_ROOT,
+      'app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt'
+    );
+    const androidBridgeSrc = fs.readFileSync(androidBridgePath, 'utf8');
+    const androidCspMatch =
+      /const val WEBVIEW_CONTENT_SECURITY_POLICY\s*=\s*([\s\S]*?)\n\s*const val WEBVIEW_PRIVACY_POLICY_CSP/m.exec(
+        androidBridgeSrc
+      );
+    assert.ok(androidCspMatch, 'CapyAndroidBridge.kt must define WEBVIEW_CONTENT_SECURITY_POLICY');
+    const androidCsp = androidCspMatch[1].replace(/"\s*\+\s*\n?\s*"/g, '').replace(/^[\s"]+|[\s"]+$/g, '');
+    const androidDirectives = parseCspDirectives(androidCsp);
+    assert.equal(
+      (androidDirectives.get('connect-src') || []).includes(
+        'https://generativelanguage.googleapis.com'
+      ),
+      true,
+      'Android WEBVIEW_CONTENT_SECURITY_POLICY connect-src must allow https://generativelanguage.googleapis.com'
+    );
+    assert.equal(
+      androidCsp.includes('puter.com'),
+      false,
+      'Android WEBVIEW_CONTENT_SECURITY_POLICY must NEVER allow js.puter.com or puter.com'
+    );
 
     // Verify Worker API_SECURITY_HEADERS includes strict CSP and www redirect sets HSTS + nosniff
     const workerSrc = fs.readFileSync(path.join(REPO_ROOT, 'worker/index.ts'), 'utf8');

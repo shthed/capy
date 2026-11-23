@@ -34,7 +34,15 @@ import {
   QuotaWarning,
   requestPersistentStorageOnce,
 } from './storage/SafeLocalStore';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './storage/SettingsStorage';
+import {
+  clearGeminiByokApiKey,
+  DEFAULT_SETTINGS,
+  hasGeminiByokApiKey,
+  loadGeminiByokApiKey,
+  loadSettings,
+  saveGeminiByokApiKey,
+  saveSettings,
+} from './storage/SettingsStorage';
 import {
   exportAllSnapshots,
   exportAllSnapshotsBinary,
@@ -61,11 +69,24 @@ import {
   updateSnapshotViewport,
 } from './storage/SnapshotStorage';
 
+import {
+  buildCanonicalLayerImageKey,
+  isLayerImageKey,
+  LAYER_IMAGE_KEY_PREFIX,
+} from './storage/StorageKeys';
+
 export {
+  buildCanonicalLayerImageKey,
+  clearGeminiByokApiKey,
   DEFAULT_SETTINGS,
   deserializePuzzle,
   DEV_DEBUG_STORAGE_KEY,
+  hasGeminiByokApiKey,
   isDebugStorageExposed,
+  isLayerImageKey,
+  LAYER_IMAGE_KEY_PREFIX,
+  loadGeminiByokApiKey,
+  saveGeminiByokApiKey,
   serializePuzzle,
 };
 export type { QuotaWarning, SerializedPuzzleData };
@@ -98,6 +119,22 @@ export class StorageService {
 
   static saveSettings(settings: UserSettings): void {
     saveSettings(settings);
+  }
+
+  static loadGeminiByokApiKey(): string {
+    return loadGeminiByokApiKey();
+  }
+
+  static saveGeminiByokApiKey(rawKey: string): boolean {
+    return saveGeminiByokApiKey(rawKey);
+  }
+
+  static clearGeminiByokApiKey(): boolean {
+    return clearGeminiByokApiKey();
+  }
+
+  static hasGeminiByokApiKey(): boolean {
+    return hasGeminiByokApiKey();
   }
 
   static savePreviewDataUrl(id: string, previewDataUrl: string): Promise<void> {

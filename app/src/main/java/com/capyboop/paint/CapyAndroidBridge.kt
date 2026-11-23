@@ -554,6 +554,7 @@ class CapyAndroidBridge(
                 "font-src 'self' data:; " +
                 "connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com " +
                 "https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com " +
+                "https://generativelanguage.googleapis.com " +
                 "https://graph.microsoft.com https://login.microsoftonline.com " +
                 "wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com; " +
                 "worker-src 'self' blob:; " +

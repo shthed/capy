@@ -973,7 +973,8 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     snapEpoch: number,
     existingRemote?: CloudSaveEntryV2,
     cloudBinaryRef?: string,
-    inlineBinaryB64?: string
+    inlineBinaryB64?: string,
+    options?: { preserveExistingInline?: boolean }
   ): Promise<CloudSaveEntryV2> {
     const safeSourceRef =
       snap.sourceRef ||
@@ -993,7 +994,19 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     });
     const resolvedBinaryRef =
       cloudBinaryRef || existingRemote?.cloudBinaryRef || existingRemote?.driveBinaryFileId;
-    const resolvedInlineB64 = inlineBinaryB64 || existingRemote?.inlineBinaryB64;
+    const remoteResetEpoch =
+      typeof existingRemote?.resetEpoch === 'number' && Number.isFinite(existingRemote.resetEpoch)
+        ? existingRemote.resetEpoch
+        : 0;
+    const geometryChanged = Boolean(
+      existingRemote && (snap.totalCount !== existingRemote.totalCount || snapEpoch !== remoteResetEpoch)
+    );
+    const shouldPreserveExistingInline =
+      options?.preserveExistingInline ??
+      (cloudBinaryRef === undefined && inlineBinaryB64 === undefined && !geometryChanged);
+    const resolvedInlineB64 = shouldPreserveExistingInline
+      ? inlineBinaryB64 || existingRemote?.inlineBinaryB64
+      : inlineBinaryB64;
     return {
       snapshotId: snap.id,
       slotKey,
@@ -1028,8 +1041,23 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         snap.sourceRef?.kind === 'catalog'
     );
 
-    if (isBuiltInSample || (cloudBinaryRef && inlineBinaryB64)) {
+    const localResetEpoch =
+      typeof snap.resetEpoch === 'number' && Number.isFinite(snap.resetEpoch) ? snap.resetEpoch : 0;
+    const remoteResetEpoch =
+      typeof existingRemote?.resetEpoch === 'number' && Number.isFinite(existingRemote.resetEpoch)
+        ? existingRemote.resetEpoch
+        : 0;
+    const geometryChanged = Boolean(
+      existingRemote &&
+        (snap.totalCount !== existingRemote.totalCount || localResetEpoch !== remoteResetEpoch)
+    );
+
+    if (isBuiltInSample || (!geometryChanged && cloudBinaryRef && inlineBinaryB64)) {
       return { cloudBinaryRef, inlineBinaryB64 };
+    }
+
+    if (geometryChanged) {
+      inlineBinaryB64 = undefined;
     }
 
     try {
@@ -1037,7 +1065,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       if (binaryBytes.byteLength <= 180_000) {
         inlineBinaryB64 = uint8ToBase64(binaryBytes);
       }
-      if (activeDriver && !cloudBinaryRef) {
+      if (activeDriver && (!cloudBinaryRef || geometryChanged)) {
         const binFileName = `capy_save_${snap.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.capy`;
         const uploadedRef = await activeDriver.writeBinaryBlob(slotKey, binFileName, binaryBytes);
         if (uploadedRef) {
@@ -1090,7 +1118,8 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         snapEpoch,
         existingRemote,
         cloudBinaryRef,
-        inlineBinaryB64
+        inlineBinaryB64,
+        { preserveExistingInline: false }
       );
       pushedFingerprints.set(slotKey, computeSnapshotContentFingerprint(snap));
     }

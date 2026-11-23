@@ -7,7 +7,13 @@ import {
 } from '../CapyCodec';
 import { reportSwallowed } from '../telemetry';
 import { isQuotaError, notifyQuotaWarning } from './SafeLocalStore';
-import { DB_VERSION, resolveScopedDbName, STORE_IMAGES, STORE_PUZZLES } from './StorageKeys';
+import {
+  DB_VERSION,
+  PREVIEW_IMAGE_KEY_PREFIX,
+  resolveScopedDbName,
+  STORE_IMAGES,
+  STORE_PUZZLES,
+} from './StorageKeys';
 
 export const MAX_PREVIEW_CACHE_ENTRIES = 128;
 const DEFAULT_CLEAR_ALL_STORES_TIMEOUT_MS = 2500;
@@ -20,7 +26,7 @@ export function previewCacheKey(id: string): string {
 }
 
 export function previewStoreKey(id: string): string {
-  return `preview_${id}`;
+  return `${PREVIEW_IMAGE_KEY_PREFIX}${id}`;
 }
 
 export function getCachedPreview(id: string): string | undefined {
@@ -469,15 +475,170 @@ export async function saveMultiplePuzzleData(
   );
 }
 
-export async function deleteSnapshotEntries(id: string): Promise<void> {
-  deleteCachedPreview(id);
+export function extractNestedLayerKeysFromRawRecord(raw: unknown): string[] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return [];
+  }
+  const nested = (raw as { nestedLayers?: unknown }).nestedLayers;
+  if (!Array.isArray(nested) || nested.length === 0) {
+    return [];
+  }
+  const keys: string[] = [];
+  for (const layer of nested) {
+    if (!layer || typeof layer !== 'object' || Array.isArray(layer)) continue;
+    const blobKey = (layer as { imageBlobKey?: unknown }).imageBlobKey;
+    if (typeof blobKey === 'string' && blobKey.length > 0) {
+      keys.push(blobKey);
+    }
+  }
+  return keys;
+}
+
+export interface ReferencedLayerKeysReadResult {
+  ok: boolean;
+  keys: Set<string>;
+  targetKeys: Map<string, string[]>;
+}
+
+function readLayerKeysInSingleTx(
+  db: IDBDatabase,
+  uniqueIds: string[]
+): Promise<{ keys: Set<string>; targetKeys: Map<string, string[]> }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    let tx: IDBTransaction;
+    try {
+      tx = db.transaction(STORE_PUZZLES, 'readonly');
+    } catch (err) {
+      fail(err);
+      return;
+    }
+
+    tx.onerror = (ev) => fail(resolveIdbError(tx.error, ev, 'IndexedDB read failed'));
+    tx.onabort = (ev) => fail(resolveIdbError(tx.error, ev, 'IndexedDB read aborted'));
+
+    let store: IDBObjectStore;
+    try {
+      store = tx.objectStore(STORE_PUZZLES);
+    } catch (err) {
+      fail(err);
+      return;
+    }
+
+    const keys = new Set<string>();
+    const targetKeys = new Map<string, string[]>();
+    let pending = uniqueIds.length;
+
+    for (const snapId of uniqueIds) {
+      let req: IDBRequest;
+      try {
+        req = store.get(snapId);
+      } catch (err) {
+        fail(err);
+        return;
+      }
+      req.onsuccess = () => {
+        if (settled) return;
+        const extracted = extractNestedLayerKeysFromRawRecord(req.result);
+        if (extracted.length > 0) {
+          targetKeys.set(snapId, extracted);
+          for (const key of extracted) {
+            keys.add(key);
+          }
+        }
+        pending -= 1;
+        if (pending === 0) {
+          settled = true;
+          resolve({ keys, targetKeys });
+        }
+      };
+      req.onerror = (ev) => fail(resolveIdbError(req.error, ev, 'IndexedDB read failed'));
+    }
+  });
+}
+
+export async function collectReferencedLayerImageKeysStrict(
+  snapshotIds: string[]
+): Promise<ReferencedLayerKeysReadResult> {
+  if (snapshotIds.length === 0 || typeof indexedDB === 'undefined') {
+    return { ok: true, keys: new Set<string>(), targetKeys: new Map<string, string[]>() };
+  }
+  const uniqueIds = Array.from(
+    new Set(snapshotIds.filter((id): id is string => typeof id === 'string' && id.length > 0))
+  );
+  if (uniqueIds.length === 0) {
+    return { ok: true, keys: new Set<string>(), targetKeys: new Map<string, string[]>() };
+  }
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { dbName, dbPromise } = getDBWithHandle();
+    try {
+      const db = await dbPromise;
+      const result = await readLayerKeysInSingleTx(db, uniqueIds);
+      return { ok: true, keys: result.keys, targetKeys: result.targetKeys };
+    } catch (err) {
+      if (attempt === 0 && isInvalidStateError(err)) {
+        evictDbHandle(dbName, dbPromise);
+        continue;
+      }
+      reportSwallowed('IndexedDbStore.collectReferencedLayerImageKeysStrict', err, {
+        count: uniqueIds.length,
+      });
+      return { ok: false, keys: new Set<string>(), targetKeys: new Map<string, string[]>() };
+    }
+  }
+  return { ok: false, keys: new Set<string>(), targetKeys: new Map<string, string[]>() };
+}
+
+export interface DeleteSnapshotEntriesOptions {
+  preserveRootImageKey?: boolean;
+  preservePreviewKey?: boolean;
+}
+
+export async function deleteSnapshotEntries(
+  id: string,
+  extraImageKeys?: string[],
+  options?: DeleteSnapshotEntriesOptions
+): Promise<void> {
+  const preserveRootImageKey = options?.preserveRootImageKey === true;
+  const preservePreviewKey = options?.preservePreviewKey === true;
+  if (!preservePreviewKey) {
+    deleteCachedPreview(id);
+  }
   if (typeof indexedDB === 'undefined') return;
   try {
     const previewKey = previewStoreKey(id);
+    const uniqueExtraKeys = Array.isArray(extraImageKeys)
+      ? Array.from(
+          new Set(
+            extraImageKeys.filter(
+              (k): k is string =>
+                typeof k === 'string' &&
+                k.length > 0 &&
+                !(preserveRootImageKey && k === id) &&
+                !(preservePreviewKey && k === previewKey)
+            )
+          )
+        )
+      : [];
     await runTransaction([STORE_PUZZLES, STORE_IMAGES], (tx) => {
       tx.objectStore(STORE_PUZZLES).delete(id);
-      tx.objectStore(STORE_IMAGES).delete(id);
-      tx.objectStore(STORE_IMAGES).delete(previewKey);
+      const imageStore = tx.objectStore(STORE_IMAGES);
+      if (!preserveRootImageKey) {
+        imageStore.delete(id);
+      }
+      if (!preservePreviewKey) {
+        imageStore.delete(previewKey);
+      }
+      for (const extraKey of uniqueExtraKeys) {
+        imageStore.delete(extraKey);
+      }
     });
   } catch (err) {
     reportSwallowed('IndexedDbStore.deleteSnapshotEntries', err, { id });
@@ -492,8 +653,8 @@ export async function deleteOrphanedEntries(
   if (puzzleKeys.length === 0 && imageKeys.length === 0) return;
   const effectiveDbName = targetDbName || resolveScopedDbName();
   for (const key of imageKeys) {
-    if (key.startsWith('preview_')) {
-      previewCache.delete(`${effectiveDbName}::${key.slice('preview_'.length)}`);
+    if (key.startsWith(PREVIEW_IMAGE_KEY_PREFIX)) {
+      previewCache.delete(`${effectiveDbName}::${key.slice(PREVIEW_IMAGE_KEY_PREFIX.length)}`);
     }
   }
   if (typeof indexedDB === 'undefined') return;

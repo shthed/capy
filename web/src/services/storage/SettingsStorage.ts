@@ -1,4 +1,10 @@
-import { DEFAULT_GENERATOR_CONFIG, GeneratorConfig, UserSettings } from '../../types';
+import {
+  DEFAULT_GENERATOR_CONFIG,
+  GeneratorConfig,
+  InfiniteZoomProviderMode,
+  UserSettings,
+} from '../../types';
+import { NativeBridge } from '../NativeBridge';
 import { reportSwallowed } from '../telemetry';
 import {
   BackupCandidateValidator,
@@ -8,6 +14,7 @@ import {
 } from './BackupEngine';
 import { SafeLocalStore } from './SafeLocalStore';
 import {
+  GEMINI_BYOK_KEY_STORAGE_KEY,
   resolveScopedBackupKey,
   resolveScopedStorageKey,
   SETTINGS_KEY,
@@ -62,6 +69,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   uiScale: 1.0,
   detailedLoadingProgress: false,
   localAiMode: 'AUTO',
+  infiniteZoomProvider: 'PUTER',
+  nanoBananaModel: 'gemini-nano-banana-2.1',
+  nanoBananaResolution: '1K',
   generatorConfig: { ...DEFAULT_GENERATOR_CONFIG },
 };
 
@@ -121,6 +131,13 @@ const SETTINGS_ENUM_VALUES: Record<string, readonly string[]> = {
   hintFillStyle: ['CHECKER', 'STRIPES', 'SOLID'],
   paletteSort: ['NUMBER', 'REMAINING', 'HUE', 'LIGHTNESS'],
   localAiMode: ['AUTO', 'LOCAL_ONLY', 'OFFLINE_FAST'],
+  infiniteZoomProvider: ['PUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK'],
+  nanoBananaModel: [
+    'gemini-nano-banana-2.1',
+    'gemini-3.1-flash-lite-image',
+    'gemini-3.1-flash-image',
+  ],
+  nanoBananaResolution: ['512', '1K', '2K'],
 };
 
 const GEN_CONFIG_ENUM_VALUES: Record<string, readonly string[]> = {
@@ -253,6 +270,21 @@ function pickSettingsEnum<K extends keyof UserSettings>(
   return DEFAULT_SETTINGS[key];
 }
 
+function resolvePlatformInfiniteZoomProvider(raw: unknown): InfiniteZoomProviderMode {
+  const isAndroid = NativeBridge.isAndroidNative();
+  const allowed = SETTINGS_ENUM_VALUES.infiniteZoomProvider;
+  const candidate: InfiniteZoomProviderMode =
+    typeof raw === 'string' && allowed.includes(raw)
+      ? (raw as InfiniteZoomProviderMode)
+      : isAndroid
+        ? 'GUIDED_GEMINI'
+        : DEFAULT_SETTINGS.infiniteZoomProvider;
+  if (isAndroid && candidate === 'PUTER') {
+    return 'GUIDED_GEMINI';
+  }
+  return candidate;
+}
+
 function resolveUserSettings(
   parsed: Record<string, unknown>,
   systemReducedMotion: boolean,
@@ -355,12 +387,16 @@ function resolveUserSettings(
       DEFAULT_SETTINGS.detailedLoadingProgress
     ),
     localAiMode: pickSettingsEnum(parsed, 'localAiMode'),
+    infiniteZoomProvider: resolvePlatformInfiniteZoomProvider(parsed.infiniteZoomProvider),
+    nanoBananaModel: pickSettingsEnum(parsed, 'nanoBananaModel'),
+    nanoBananaResolution: pickSettingsEnum(parsed, 'nanoBananaResolution'),
     generatorConfig: sanitizeGeneratorConfig(parsed.generatorConfig),
   };
 }
 
 export function loadSettings(): UserSettings {
   const systemReducedMotion = detectSystemReducedMotion();
+  const defaultProvider = resolvePlatformInfiniteZoomProvider(undefined);
   try {
     const storageKey = resolveScopedStorageKey(SETTINGS_KEY);
     const backupKey = resolveScopedBackupKey(SETTINGS_KEY);
@@ -373,6 +409,7 @@ export function loadSettings(): UserSettings {
     if (!raw) {
       return {
         ...DEFAULT_SETTINGS,
+        infiniteZoomProvider: defaultProvider,
         reducedMotion: systemReducedMotion,
       };
     }
@@ -380,6 +417,7 @@ export function loadSettings(): UserSettings {
     if (parsedRes.status !== 'ok' || !parsedRes.parsed) {
       return {
         ...DEFAULT_SETTINGS,
+        infiniteZoomProvider: defaultProvider,
         reducedMotion: systemReducedMotion,
       };
     }
@@ -396,6 +434,7 @@ export function loadSettings(): UserSettings {
     reportSwallowed('SettingsStorage.loadSettings', err);
     return {
       ...DEFAULT_SETTINGS,
+      infiniteZoomProvider: defaultProvider,
       reducedMotion: systemReducedMotion,
     };
   }
@@ -408,11 +447,41 @@ export function saveSettings(settings: UserSettings): void {
     const now = Date.now();
     const prevSavedAt = getMaxPersistedObjectTimestamp(storageKey, backupKey);
     const savedAt = prevSavedAt >= now ? prevSavedAt + 1 : now;
-    const payload = { ...settings, undoDefaultMigrated: true, savedAt };
+    const normalizedSettings: UserSettings = {
+      ...settings,
+      infiniteZoomProvider: resolvePlatformInfiniteZoomProvider(settings.infiniteZoomProvider),
+    };
+    const payload = { ...normalizedSettings, undoDefaultMigrated: true, savedAt };
     const serialized = JSON.stringify(payload);
     writeLocalAndScheduleBackup(storageKey, backupKey, serialized);
     SafeLocalStore.setScopedItem(UNDO_DEFAULT_MIGRATED_KEY, '1', { notifyQuota: true });
   } catch (err) {
     reportSwallowed('SettingsStorage.saveSettings', err);
   }
+}
+
+/**
+ * Device-local Gemini API BYOK helpers.
+ * Strictly stored via SafeLocalStore ONLY (never BackupEngine / Google Auto Backup,
+ * never UserSettings, never `.capy` exports, and never cloud sync).
+ */
+export function loadGeminiByokApiKey(): string {
+  const raw = SafeLocalStore.getScopedItem(GEMINI_BYOK_KEY_STORAGE_KEY);
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+export function clearGeminiByokApiKey(): boolean {
+  return SafeLocalStore.removeScopedItem(GEMINI_BYOK_KEY_STORAGE_KEY);
+}
+
+export function saveGeminiByokApiKey(rawKey: string): boolean {
+  const trimmed = typeof rawKey === 'string' ? rawKey.trim() : '';
+  if (!trimmed) {
+    return clearGeminiByokApiKey();
+  }
+  return SafeLocalStore.setScopedItem(GEMINI_BYOK_KEY_STORAGE_KEY, trimmed);
+}
+
+export function hasGeminiByokApiKey(): boolean {
+  return loadGeminiByokApiKey().length > 0;
 }

@@ -736,11 +736,14 @@ class CapyAndroidBridgeTest {
         val indexCsp = indexHeaders["Content-Security-Policy"] ?: ""
         assertTrue(indexCsp.contains("script-src 'self'"))
         assertTrue(indexCsp.contains("https://accounts.google.com/gsi/client"))
+        assertTrue(indexCsp.contains("https://generativelanguage.googleapis.com"))
         assertTrue(indexCsp.contains("script-src-attr 'none'"))
         assertTrue(indexCsp.contains("https://capypaint.com"))
         assertTrue(indexCsp.contains("object-src 'none'"))
         assertFalse(indexCsp.contains("script-src 'unsafe-inline'"))
         assertFalse(indexCsp.contains("'unsafe-eval'"))
+        assertFalse(indexCsp.contains("js.puter.com"))
+        assertFalse(indexCsp.contains("puter.com"))
 
         val privacyHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
             mimeType = "text/html",

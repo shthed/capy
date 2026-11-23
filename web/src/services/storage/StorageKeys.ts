@@ -34,6 +34,7 @@ export const CLOUD_TOMBSTONES_STORAGE_KEY = 'capy_cloud_tombstones_v1';
 export const TAB_SESSION_SUFFIX_KEY = 'capy_tab_peer_suffix_v1';
 export const COMMUNITY_IDEAS_STORAGE_KEY = 'capy_community_ideas_v1';
 export const AI_CREDITS_STORAGE_KEY = 'capy_ai_credits_v1';
+export const GEMINI_BYOK_KEY_STORAGE_KEY = 'capy_gemini_byok_key_v1';
 
 export const STORAGE_KEYS = {
   SETTINGS: SETTINGS_KEY,
@@ -60,11 +61,27 @@ export const STORAGE_KEYS = {
   CLOUD_TOMBSTONES: CLOUD_TOMBSTONES_STORAGE_KEY,
   COMMUNITY_IDEAS: COMMUNITY_IDEAS_STORAGE_KEY,
   AI_CREDITS: AI_CREDITS_STORAGE_KEY,
+  GEMINI_BYOK_KEY: GEMINI_BYOK_KEY_STORAGE_KEY,
 } as const;
 
 export const DB_VERSION = 1;
 export const STORE_PUZZLES = 'puzzles';
 export const STORE_IMAGES = 'images';
+
+export const LAYER_IMAGE_KEY_PREFIX = 'layer_';
+export const PREVIEW_IMAGE_KEY_PREFIX = 'preview_';
+
+export function isLayerImageKey(key: string): boolean {
+  return key.startsWith(LAYER_IMAGE_KEY_PREFIX) && key.length > LAYER_IMAGE_KEY_PREFIX.length;
+}
+
+export function isPreviewImageKey(key: string): boolean {
+  return key.startsWith(PREVIEW_IMAGE_KEY_PREFIX) && key.length > PREVIEW_IMAGE_KEY_PREFIX.length;
+}
+
+export function buildCanonicalLayerImageKey(snapshotId: string, layerId: string): string {
+  return `${LAYER_IMAGE_KEY_PREFIX}${snapshotId}_${layerId}`;
+}
 
 export function matchesScopedKey(candidateKey: string, baseKey: string): boolean {
   return candidateKey === baseKey || candidateKey.startsWith(`${baseKey}__`);

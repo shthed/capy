@@ -122,6 +122,8 @@ export class NativeBridgeService {
   private primaryModalCloseHandler: (() => void) | null = null;
   private overlayBackStack: Array<() => void> = [];
   private sharedImageHandler: ((title: string, dataUrl: string) => void) | null = null;
+  private sharedImageInterceptors: Array<{ handler: (title: string, dataUrl: string) => void }> =
+    [];
   private deepLinkHandler: ((url: string) => void) | null = null;
   private playGamesProfileHandlers = new Set<
     (profile: { playerId: string; displayName: string }) => boolean | void
@@ -208,7 +210,11 @@ export class NativeBridgeService {
           typeof title === 'string' && title.trim().length > 0
             ? title.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 80) || 'Shared Photo'
             : 'Shared Photo';
-        if (this.sharedImageHandler) {
+        if (this.sharedImageInterceptors.length > 0) {
+          const topInterceptor =
+            this.sharedImageInterceptors[this.sharedImageInterceptors.length - 1];
+          topInterceptor.handler(resolvedTitle, dataUrl);
+        } else if (this.sharedImageHandler) {
           this.sharedImageHandler(resolvedTitle, dataUrl);
         } else {
           NativeBridgeService.pushBounded(this.pendingSharedImages, {
@@ -356,6 +362,10 @@ export class NativeBridgeService {
 
   get isAndroid(): boolean {
     return this.platform === 'android';
+  }
+
+  isAndroidNative(): boolean {
+    return this.isAndroid;
   }
 
   getSafeAreaInsets(): { top: number; bottom: number; left: number; right: number } {
@@ -510,6 +520,25 @@ export class NativeBridgeService {
     return () => {
       if (this.sharedImageHandler === handler) {
         this.sharedImageHandler = null;
+      }
+    };
+  }
+
+  /**
+   * Pushes a transient shared-image interceptor onto a LIFO stack above the base
+   * `onSharedImage` subscriber (e.g. Guided Gemini Handoff modal) without draining
+   * unrelated cold-start shared photos or clobbering the base handler on unmount.
+   */
+  pushSharedImageInterceptor(handler: (title: string, dataUrl: string) => void): () => void {
+    const entry = { handler };
+    this.sharedImageInterceptors.push(entry);
+    let removed = false;
+    return () => {
+      if (removed) return;
+      removed = true;
+      const idx = this.sharedImageInterceptors.indexOf(entry);
+      if (idx >= 0) {
+        this.sharedImageInterceptors.splice(idx, 1);
       }
     };
   }
