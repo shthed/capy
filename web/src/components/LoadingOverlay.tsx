@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -18,6 +18,7 @@ import {
   GENERATION_PIPELINE_STEPS,
   GenerationProgressPayload,
 } from '../types';
+import { NativeBridge } from '../services/NativeBridge';
 
 interface LoadingOverlayProps {
   isLoading: boolean;
@@ -39,6 +40,22 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   onCancel,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isLoading || !onCancel) return;
+    const popBack = NativeBridge.pushBackHandler(onCancel);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      popBack();
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isLoading, onCancel]);
 
   if (!isLoading && !isExpanded) return null;
   if (!isLoading) return null;

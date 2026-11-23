@@ -64,6 +64,7 @@ export interface InfiniteZoomLoadOptions {
   peerZoomTreePatch?: Partial<InfiniteZoomNodeMeta>;
   preserveLosslessAlpha?: boolean;
   onRegistered?: (snapId: string) => void;
+  onFinished?: () => void;
 }
 
 function applyInfiniteZoomTreeLinks(
@@ -741,6 +742,13 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       };
       applyViewport(targetView);
 
+      let finishedCalled = false;
+      const notifyFinished = () => {
+        if (finishedCalled) return;
+        finishedCalled = true;
+        infiniteZoomOptions?.onFinished?.();
+      };
+
       let canvas: HTMLCanvasElement;
       let snapId: string;
       try {
@@ -800,17 +808,18 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
           setLoadingStatus('Failed to generate puzzle.');
           abortFailedTransition();
         }
+        notifyFinished();
         return;
       }
 
       setTimeout(async () => {
-        if (
-          currentSeq !== generationSeqRef.current ||
-          transitionSeq !== snapshotTransitionSeqRef.current
-        ) {
-          return;
-        }
         try {
+          if (
+            currentSeq !== generationSeqRef.current ||
+            transitionSeq !== snapshotTransitionSeqRef.current
+          ) {
+            return;
+          }
           const isDetailed = Boolean(settings.detailedLoadingProgress);
           const puzzleData = await PuzzleWorkerService.generate(
             canvas,
@@ -877,6 +886,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
             clearPendingViewportSave();
             snapshotTransitioningRef.current = false;
           }
+          notifyFinished();
         }
       }, 50);
     },

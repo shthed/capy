@@ -164,6 +164,12 @@ function maskCutoutExteriorTransparent(
   ctx.putImageData(imgData, 0, 0);
 }
 
+function releaseTempCanvas(canvas: HTMLCanvasElement | null | undefined): void {
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
 /**
  * Generate a <= 320px JPEG thumbnail data URL for snapshot cards.
  */
@@ -179,44 +185,56 @@ export function generatePreviewDataUrl(
   const canvas = document.createElement('canvas');
   canvas.width = dims.width;
   canvas.height = dims.height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
+  try {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
 
-  const isCutout = hasCutoutExteriorMask(puzzleData);
-  const isFreeOrCustom = Boolean(
-    puzzleData.isFreeColor || (customColors && customColors.size > 0)
-  );
+    const isCutout = hasCutoutExteriorMask(puzzleData);
+    const isFreeOrCustom = Boolean(
+      puzzleData.isFreeColor || (customColors && customColors.size > 0)
+    );
 
-  if (isCutout) {
-    ctx.fillStyle = '#18181b';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const fullCanvas = document.createElement('canvas');
-    fullCanvas.width = puzzleData.width;
-    fullCanvas.height = puzzleData.height;
-    const fCtx = fullCanvas.getContext('2d');
-    if (fCtx) {
-      if (isFreeOrCustom) {
-        renderFreeColorCanvas(fCtx, puzzleData, sourceImg, filledSet, customColors);
-      } else {
-        fCtx.drawImage(sourceImg, 0, 0, puzzleData.width, puzzleData.height);
+    if (isCutout) {
+      ctx.fillStyle = '#18181b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const fullCanvas = document.createElement('canvas');
+      fullCanvas.width = puzzleData.width;
+      fullCanvas.height = puzzleData.height;
+      try {
+        const fCtx = fullCanvas.getContext('2d');
+        if (fCtx) {
+          if (isFreeOrCustom) {
+            renderFreeColorCanvas(fCtx, puzzleData, sourceImg, filledSet, customColors);
+          } else {
+            fCtx.drawImage(sourceImg, 0, 0, puzzleData.width, puzzleData.height);
+          }
+          maskCutoutExteriorTransparent(fCtx, puzzleData);
+          ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
+        }
+      } finally {
+        releaseTempCanvas(fullCanvas);
       }
-      maskCutoutExteriorTransparent(fCtx, puzzleData);
-      ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
+    } else if (isFreeOrCustom) {
+      const fullCanvas = document.createElement('canvas');
+      fullCanvas.width = puzzleData.width;
+      fullCanvas.height = puzzleData.height;
+      try {
+        const fCtx = fullCanvas.getContext('2d');
+        if (fCtx) {
+          renderFreeColorCanvas(fCtx, puzzleData, sourceImg, filledSet, customColors);
+          ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
+        }
+      } finally {
+        releaseTempCanvas(fullCanvas);
+      }
+    } else {
+      ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
     }
-  } else if (isFreeOrCustom) {
-    const fullCanvas = document.createElement('canvas');
-    fullCanvas.width = puzzleData.width;
-    fullCanvas.height = puzzleData.height;
-    const fCtx = fullCanvas.getContext('2d');
-    if (fCtx) {
-      renderFreeColorCanvas(fCtx, puzzleData, sourceImg, filledSet, customColors);
-      ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
-    }
-  } else {
-    ctx.drawImage(sourceImg, 0, 0, canvas.width, canvas.height);
-  }
 
-  return canvas.toDataURL('image/jpeg', 0.85);
+    return canvas.toDataURL('image/jpeg', 0.85);
+  } finally {
+    releaseTempCanvas(canvas);
+  }
 }
 
 /**
@@ -238,55 +256,71 @@ export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): v
   canvas.width = puzzle.width;
   canvas.height = puzzle.height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (!ctx) {
+    releaseTempCanvas(canvas);
+    return;
+  }
 
-  if (puzzle.isFreeColor || paintedRegionColors.size > 0) {
-    renderFreeColorCanvas(ctx, puzzle, sourceImage, filledRegionIds, paintedRegionColors);
-  } else {
-    ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
-    if (filledRegionIds.size < puzzle.regions.length) {
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = puzzle.width;
-      maskCanvas.height = puzzle.height;
-      const mCtx = maskCanvas.getContext('2d');
-      if (mCtx) {
-        const imgData = mCtx.createImageData(puzzle.width, puzzle.height);
-        const data = imgData.data;
-        const totalPixels = puzzle.width * puzzle.height;
-        for (let i = 0; i < totalPixels; i++) {
-          const rId = puzzle.regionMap[i];
-          if (rId > 0 && !filledRegionIds.has(rId)) {
-            const idx = i * 4;
-            data[idx] = 248;
-            data[idx + 1] = 250;
-            data[idx + 2] = 252;
-            data[idx + 3] = 230;
+  let handedToBlob = false;
+  try {
+    if (puzzle.isFreeColor || paintedRegionColors.size > 0) {
+      renderFreeColorCanvas(ctx, puzzle, sourceImage, filledRegionIds, paintedRegionColors);
+    } else {
+      ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+      if (filledRegionIds.size < puzzle.regions.length) {
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = puzzle.width;
+        maskCanvas.height = puzzle.height;
+        try {
+          const mCtx = maskCanvas.getContext('2d');
+          if (mCtx) {
+            const imgData = mCtx.createImageData(puzzle.width, puzzle.height);
+            const data = imgData.data;
+            const totalPixels = puzzle.width * puzzle.height;
+            for (let i = 0; i < totalPixels; i++) {
+              const rId = puzzle.regionMap[i];
+              if (rId > 0 && !filledRegionIds.has(rId)) {
+                const idx = i * 4;
+                data[idx] = 248;
+                data[idx + 1] = 250;
+                data[idx + 2] = 252;
+                data[idx + 3] = 230;
+              }
+            }
+            mCtx.putImageData(imgData, 0, 0);
+            ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
           }
+        } finally {
+          releaseTempCanvas(maskCanvas);
         }
-        mCtx.putImageData(imgData, 0, 0);
-        ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
       }
     }
-  }
 
-  if (hasCutoutExteriorMask(puzzle)) {
-    maskCutoutExteriorTransparent(ctx, puzzle);
-  }
+    if (hasCutoutExteriorMask(puzzle)) {
+      maskCutoutExteriorTransparent(ctx, puzzle);
+    }
 
-  const titleStr = title || 'capy-artwork';
-  const fileName = buildArtworkPngFileName(titleStr);
-  canvas.toBlob((blob) => {
-    if (!blob) return;
-    void NativeBridge.exportOrShareFile({
-      title: titleStr,
-      fileName,
-      mimeType: 'image/png',
-      data: blob,
-    }).catch((err) => {
-      reportSwallowed('artworkExporter.exportColoredArtworkPng.share', err);
-    });
-    NativeBridge.haptic('tick', hapticsEnabled);
-  }, 'image/png');
+    const titleStr = title || 'capy-artwork';
+    const fileName = buildArtworkPngFileName(titleStr);
+    handedToBlob = true;
+    canvas.toBlob((blob) => {
+      releaseTempCanvas(canvas);
+      if (!blob) return;
+      void NativeBridge.exportOrShareFile({
+        title: titleStr,
+        fileName,
+        mimeType: 'image/png',
+        data: blob,
+      }).catch((err) => {
+        reportSwallowed('artworkExporter.exportColoredArtworkPng.share', err);
+      });
+      NativeBridge.haptic('tick', hapticsEnabled);
+    }, 'image/png');
+  } finally {
+    if (!handedToBlob) {
+      releaseTempCanvas(canvas);
+    }
+  }
 }
 
 /**

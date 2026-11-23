@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { BorderExtensionSides, LocalAiMode } from '../types';
 import { NativeBridge } from '../services/NativeBridge';
+import { useIsomorphicLayoutEffect } from '../hooks/useLatest';
 import {
   detectLocalAiCapabilities,
   LocalAiCapabilities,
@@ -169,8 +171,24 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
   }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [showExtendConfig, setShowExtendConfig] = useState(false);
+    const [prevDisabled, setPrevDisabled] = useState(disabled);
     const [sides, setSides] = useState<BorderExtensionSides>(DEFAULT_EXTEND_SIDES);
-    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [popoverStyle, setPopoverStyle] = useState<{
+      right: number;
+      bottom: number;
+      maxWidth: number;
+      maxHeight: number;
+    } | null>(null);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const popoverRef = useRef<HTMLDivElement | null>(null);
+
+    if (disabled !== prevDisabled) {
+      setPrevDisabled(disabled);
+      if (disabled) {
+        if (isOpen) setIsOpen(false);
+        if (showExtendConfig) setShowExtendConfig(false);
+      }
+    }
 
     const closePopover = useCallback(() => {
       setIsOpen(false);
@@ -178,7 +196,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     }, []);
 
     useEffect(() => {
-      if (!isOpen) return;
+      if (!isOpen || disabled) return;
       const popBack = NativeBridge.pushBackHandler(closePopover);
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
@@ -187,9 +205,11 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
         }
       };
       const handlePointerDown = (e: PointerEvent) => {
-        if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-          closePopover();
-        }
+        const target = e.target as Node | null;
+        if (!target) return;
+        if (triggerRef.current?.contains(target)) return;
+        if (popoverRef.current?.contains(target)) return;
+        closePopover();
       };
       window.addEventListener('keydown', handleKeyDown, true);
       window.addEventListener('pointerdown', handlePointerDown, true);
@@ -198,12 +218,58 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
         window.removeEventListener('keydown', handleKeyDown, true);
         window.removeEventListener('pointerdown', handlePointerDown, true);
       };
-    }, [isOpen, closePopover]);
+    }, [isOpen, disabled, closePopover]);
 
     const extendCheck: ExtendSidesCheck = useMemo(
       () => canExtendSides(sourceWidth, sourceHeight, sides),
       [sourceWidth, sourceHeight, sides]
     );
+
+    useIsomorphicLayoutEffect(() => {
+      if (!isOpen || disabled || typeof window === 'undefined') {
+        setPopoverStyle(null);
+        return;
+      }
+      const updatePosition = () => {
+        const triggerEl = triggerRef.current;
+        if (!triggerEl) return;
+        const triggerRect = triggerEl.getBoundingClientRect();
+        const headerBottom =
+          document.querySelector('header')?.getBoundingClientRect()?.bottom ?? 56;
+        const minTop = Math.max(8, Math.ceil(headerBottom) + 6);
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+        const rawRight = Math.max(8, Math.round(viewportW - triggerRect.left + 8));
+        const right = Math.min(rawRight, Math.max(8, viewportW - 188));
+        const maxWidth = Math.min(288, Math.max(180, Math.floor(viewportW - right - 8)));
+
+        const triggerFlushBottom = Math.max(8, Math.round(viewportH - triggerRect.bottom));
+        const measuredHeight = popoverRef.current ? popoverRef.current.scrollHeight : 220;
+        const spaceAboveTriggerBottom = viewportH - triggerFlushBottom - minTop;
+        const bottom =
+          measuredHeight <= spaceAboveTriggerBottom
+            ? triggerFlushBottom
+            : Math.max(8, triggerFlushBottom - (measuredHeight - spaceAboveTriggerBottom));
+        const maxHeight = Math.max(80, Math.floor(viewportH - bottom - minTop));
+
+        setPopoverStyle((prev) =>
+          prev &&
+          prev.right === right &&
+          prev.bottom === bottom &&
+          prev.maxWidth === maxWidth &&
+          prev.maxHeight === maxHeight
+            ? prev
+            : { right, bottom, maxWidth, maxHeight }
+        );
+      };
+      updatePosition();
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, { capture: true, passive: true });
+      return () => {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition, true);
+      };
+    }, [isOpen, disabled, showExtendConfig, extendCheck.allowed, extendCheck.reason]);
 
     const handleToggleSide = useCallback((key: keyof BorderExtensionSides) => {
       setSides((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -220,13 +286,151 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
       onConfirmExtendBorders(sides, prompt);
     }, [closePopover, disabled, extendCheck.allowed, onConfirmExtendBorders, prompt, sides]);
 
+    const popoverNode =
+      isOpen && !disabled ? (
+        <div
+          ref={popoverRef}
+          role="dialog"
+          aria-label="Infinite Zoom Controls"
+          className="capy-iz-popover fixed z-40 w-72 overflow-y-auto overscroll-contain rounded-2xl bg-slate-900/95 border border-slate-700/80 shadow-2xl backdrop-blur-xl p-3 space-y-2.5 text-slate-100"
+          style={
+            popoverStyle
+              ? {
+                  right: `${popoverStyle.right}px`,
+                  bottom: `${popoverStyle.bottom}px`,
+                  maxWidth: `${popoverStyle.maxWidth}px`,
+                  maxHeight: `${popoverStyle.maxHeight}px`,
+                }
+              : {
+                  right: '4.5rem',
+                  bottom: '4.5rem',
+                  maxWidth: 'min(18rem, calc(100vw - 5.25rem))',
+                  maxHeight: 'calc(100dvh - 5rem)',
+                }
+          }
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Sparkles size={14} className="text-sky-400 flex-shrink-0" />
+              <span className="text-xs font-extrabold tracking-wide text-slate-100 truncate">
+                Infinite Zoom
+              </span>
+            </div>
+            <button
+              type="button"
+              aria-label="Close Infinite Zoom menu"
+              onClick={closePopover}
+              className="capy-icon-btn inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+            >
+              <X size={13} />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            data-testid="toolbar-infinite-zoom-in-btn"
+            onClick={handleStartZoomIn}
+            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/45 text-sky-200 text-xs font-bold transition-colors text-left cursor-pointer"
+          >
+            <ZoomIn size={15} className="flex-shrink-0 text-sky-300" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate">Infill Detail (Select Regions)</div>
+              <div className="text-[10px] font-normal text-sky-200/75 truncate">
+                Subdivide in-place or zoom deeper
+              </div>
+            </div>
+          </button>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              data-testid="toolbar-infinite-zoom-out-btn"
+              aria-expanded={showExtendConfig}
+              onClick={() => setShowExtendConfig((prev) => !prev)}
+              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors text-left cursor-pointer ${
+                showExtendConfig
+                  ? 'bg-amber-400/20 border-amber-400/60 text-amber-200'
+                  : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'
+              }`}
+            >
+              <Expand size={15} className="flex-shrink-0 text-amber-300" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate">Extend Borders</div>
+                <div className="text-[10px] font-normal text-slate-400 truncate">
+                  Expand canvas outward (0.35x/side)
+                </div>
+              </div>
+            </button>
+
+            {showExtendConfig && (
+              <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5 space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Sides to Extend
+                </div>
+                <SideToggleRow
+                  sides={sides}
+                  testIdPrefix="extend-side"
+                  onToggle={handleToggleSide}
+                />
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="toolbar-zoom-out-prompt"
+                    className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"
+                  >
+                    Guide Prompt (Optional)
+                  </label>
+                  <input
+                    id="toolbar-zoom-out-prompt"
+                    type="text"
+                    maxLength={MAX_USER_PROMPT_LENGTH}
+                    data-testid="infinite-zoom-out-prompt-input"
+                    value={prompt}
+                    onChange={(e) => onPromptChange(e.target.value)}
+                    placeholder="e.g. Starry hills, calm lake..."
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                  <PromptChipsRow
+                    chips={ZOOM_OUT_CHIPS}
+                    activePrompt={prompt}
+                    onSelect={onPromptChange}
+                  />
+                </div>
+
+                {!extendCheck.allowed && extendCheck.reason && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-[10px] text-amber-200 leading-snug"
+                  >
+                    <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-300" />
+                    <span>{extendCheck.reason}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  data-testid="toolbar-infinite-zoom-out-confirm-btn"
+                  disabled={!extendCheck.allowed}
+                  onClick={handleConfirmExtend}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+                >
+                  <Expand size={13} />
+                  <span>Extend</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null;
+
     return (
-      <div ref={containerRef} className="relative flex items-center justify-end">
+      <div className="relative flex items-center justify-end">
         <button
+          ref={triggerRef}
           type="button"
           data-testid="infinite-zoom-menu-btn"
           disabled={disabled}
-          aria-expanded={isOpen}
+          aria-expanded={isOpen && !disabled}
           aria-haspopup="dialog"
           aria-label={disabled && disabledReason ? disabledReason : 'Infinite Zoom Tools'}
           title={disabled && disabledReason ? disabledReason : 'Infinite Zoom: Add Detail or Extend Borders'}
@@ -245,125 +449,9 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
           <Sparkles size={18} />
         </button>
 
-        {isOpen && !disabled && (
-          <div
-            role="dialog"
-            aria-label="Infinite Zoom Controls"
-            className="absolute right-full mr-2 bottom-0 z-30 w-[min(17rem,calc(100vw-5.25rem))] sm:w-72 max-h-[calc(100dvh-6rem)] overflow-y-auto rounded-2xl bg-slate-900/95 border border-slate-700/80 shadow-2xl backdrop-blur-xl p-3 space-y-2.5 text-slate-100"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Sparkles size={14} className="text-sky-400 flex-shrink-0" />
-                <span className="text-xs font-extrabold tracking-wide text-slate-100 truncate">
-                  Infinite Zoom
-                </span>
-              </div>
-              <button
-                type="button"
-                aria-label="Close Infinite Zoom menu"
-                onClick={closePopover}
-                className="capy-icon-btn inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-              >
-                <X size={13} />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              data-testid="toolbar-infinite-zoom-in-btn"
-              onClick={handleStartZoomIn}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/45 text-sky-200 text-xs font-bold transition-colors text-left cursor-pointer"
-            >
-              <ZoomIn size={15} className="flex-shrink-0 text-sky-300" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate">Infill Detail (Select Regions)</div>
-                <div className="text-[10px] font-normal text-sky-200/75 truncate">
-                  Subdivide in-place or zoom deeper
-                </div>
-              </div>
-            </button>
-
-            <div className="space-y-2">
-              <button
-                type="button"
-                data-testid="toolbar-infinite-zoom-out-btn"
-                aria-expanded={showExtendConfig}
-                onClick={() => setShowExtendConfig((prev) => !prev)}
-                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors text-left cursor-pointer ${
-                  showExtendConfig
-                    ? 'bg-amber-400/20 border-amber-400/60 text-amber-200'
-                    : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'
-                }`}
-              >
-                <Expand size={15} className="flex-shrink-0 text-amber-300" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate">Extend Borders</div>
-                  <div className="text-[10px] font-normal text-slate-400 truncate">
-                    Expand canvas outward (0.35x/side)
-                  </div>
-                </div>
-              </button>
-
-              {showExtendConfig && (
-                <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5 space-y-2">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Sides to Extend
-                  </div>
-                  <SideToggleRow
-                    sides={sides}
-                    testIdPrefix="extend-side"
-                    onToggle={handleToggleSide}
-                  />
-
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="toolbar-zoom-out-prompt"
-                      className="block text-[10px] font-bold uppercase tracking-wider text-slate-400"
-                    >
-                      Guide Prompt (Optional)
-                    </label>
-                    <input
-                      id="toolbar-zoom-out-prompt"
-                      type="text"
-                      maxLength={MAX_USER_PROMPT_LENGTH}
-                      data-testid="infinite-zoom-out-prompt-input"
-                      value={prompt}
-                      onChange={(e) => onPromptChange(e.target.value)}
-                      placeholder="e.g. Starry hills, calm lake..."
-                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
-                    />
-                    <PromptChipsRow
-                      chips={ZOOM_OUT_CHIPS}
-                      activePrompt={prompt}
-                      onSelect={onPromptChange}
-                    />
-                  </div>
-
-                  {!extendCheck.allowed && extendCheck.reason && (
-                    <div
-                      role="alert"
-                      className="flex items-start gap-1.5 px-2 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-[10px] text-amber-200 leading-snug"
-                    >
-                      <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-300" />
-                      <span>{extendCheck.reason}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    data-testid="toolbar-infinite-zoom-out-confirm-btn"
-                    disabled={!extendCheck.allowed}
-                    onClick={handleConfirmExtend}
-                    className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
-                  >
-                    <Expand size={13} />
-                    <span>Extend</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {popoverNode && typeof document !== 'undefined'
+          ? createPortal(popoverNode, document.body)
+          : popoverNode}
       </div>
     );
   }
@@ -401,6 +489,9 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
     onClear,
     onCancel,
   }) => {
+    const barRef = useRef<HTMLDivElement | null>(null);
+    const [maxHeightPx, setMaxHeightPx] = useState<number | undefined>(undefined);
+
     useEffect(() => {
       if (!isOpen) return;
       const popBack = NativeBridge.pushBackHandler(onCancel);
@@ -417,6 +508,28 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
       };
     }, [isOpen, onCancel]);
 
+    useIsomorphicLayoutEffect(() => {
+      if (!isOpen || typeof window === 'undefined') {
+        setMaxHeightPx(undefined);
+        return;
+      }
+      const updateMaxHeight = () => {
+        const barEl = barRef.current;
+        if (!barEl) return;
+        const barRect = barEl.getBoundingClientRect();
+        const headerBottom =
+          document.querySelector('header')?.getBoundingClientRect()?.bottom ?? 56;
+        const minTop = Math.max(8, Math.ceil(headerBottom) + 6);
+        const availHeight = Math.max(96, Math.floor(barRect.bottom - minTop));
+        setMaxHeightPx((prev) => (prev === availHeight ? prev : availHeight));
+      };
+      updateMaxHeight();
+      window.addEventListener('resize', updateMaxHeight);
+      return () => {
+        window.removeEventListener('resize', updateMaxHeight);
+      };
+    }, [isOpen, raiseDock, isCompleted, metrics.paintedCount, pendingSwitchRegionId, notice]);
+
     if (!isOpen) return null;
 
     const hasSelection = metrics.regionCount > 0;
@@ -431,12 +544,14 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
 
     return (
       <div
+        ref={barRef}
         data-testid="region-selection-bar"
         role="region"
         aria-label="Region Selection Controls"
-        className="fixed left-1/2 -translate-x-1/2 z-30 w-[min(32rem,calc(100vw-1rem))] rounded-2xl bg-slate-900/95 border border-sky-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 text-slate-100 space-y-2"
+        className="fixed left-1/2 -translate-x-1/2 z-30 w-[min(32rem,calc(100vw-1rem))] overflow-y-auto overscroll-contain rounded-2xl bg-slate-900/95 border border-sky-400/50 shadow-2xl backdrop-blur-xl px-3 py-2.5 text-slate-100 space-y-2"
         style={{
           bottom: `calc(${bottomExpr} + var(--sab, 0px))`,
+          ...(maxHeightPx !== undefined ? { maxHeight: `${maxHeightPx}px` } : {}),
         }}
       >
         <div className="flex flex-wrap items-center justify-between gap-1.5">

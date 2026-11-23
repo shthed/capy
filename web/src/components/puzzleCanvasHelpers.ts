@@ -26,11 +26,6 @@ export interface DrawPuzzleLayersParams {
   reducedMotion: boolean;
   hintIntensity: number;
   currentPulseAlpha: number;
-  artScreenX: number;
-  artScreenY: number;
-  artScreenW: number;
-  artScreenH: number;
-  effScale: number;
   baseCanvas: HTMLCanvasElement | null;
   borderCanvas: HTMLCanvasElement | null;
   highlightCanvas: HTMLCanvasElement | null;
@@ -231,10 +226,20 @@ export function collectLineRegionIds(
 ): boolean {
   outSet.clear();
   const { width, height, regionMap } = puzzle;
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    !Number.isFinite(x1) ||
+    !Number.isFinite(y1) ||
+    !Number.isFinite(x2) ||
+    !Number.isFinite(y2)
+  ) {
+    return false;
+  }
   const dx = x2 - x1;
   const dy = y2 - y1;
-  const dist = Math.hypot(dx, dy);
-  const steps = Math.max(1, Math.floor(dist * 0.8));
+  const maxSteps = Math.max(1, (width + height) * 2);
+  const steps = Math.min(Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)))), maxSteps);
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -257,41 +262,37 @@ function applyArtworkShadow(ctx: CanvasRenderingContext2D): void {
   ctx.shadowOffsetY = 6;
 }
 
+function drawMainPreview(
+  ctx: CanvasRenderingContext2D,
+  params: DrawPuzzleLayersParams
+): void {
+  const { puzzle, sourceImage, hasTransparentMask, baseCanvas, maskedPreviewCanvas } = params;
+  if (hasTransparentMask) {
+    if (maskedPreviewCanvas) {
+      ctx.drawImage(maskedPreviewCanvas, 0, 0);
+    } else if (baseCanvas) {
+      ctx.drawImage(baseCanvas, 0, 0);
+    }
+  } else if (sourceImage && sourceImage.complete) {
+    ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
+  } else if (baseCanvas) {
+    ctx.drawImage(baseCanvas, 0, 0);
+  }
+}
+
 function drawPreviewLayers(
   ctx: CanvasRenderingContext2D,
   params: DrawPuzzleLayersParams
 ): void {
-  const {
-    puzzle,
-    sourceImage,
-    hasTransparentMask,
-    showPreviewBorders,
-    baseCanvas,
-    borderCanvas,
-    maskedPreviewCanvas,
-  } = params;
-
-  const drawMainPreview = () => {
-    if (hasTransparentMask) {
-      if (maskedPreviewCanvas) {
-        ctx.drawImage(maskedPreviewCanvas, 0, 0);
-      } else if (baseCanvas) {
-        ctx.drawImage(baseCanvas, 0, 0);
-      }
-    } else if (sourceImage && sourceImage.complete) {
-      ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-    } else if (baseCanvas) {
-      ctx.drawImage(baseCanvas, 0, 0);
-    }
-  };
+  const { hasTransparentMask, showPreviewBorders, borderCanvas } = params;
 
   if (hasTransparentMask) {
     ctx.save();
     applyArtworkShadow(ctx);
-    drawMainPreview();
+    drawMainPreview(ctx, params);
     ctx.restore();
   } else {
-    drawMainPreview();
+    drawMainPreview(ctx, params);
   }
 
   if (showPreviewBorders && borderCanvas) {

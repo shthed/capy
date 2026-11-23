@@ -21,6 +21,7 @@ import {
 import {
   buildMaskedPreviewCanvas,
   collectLineRegionIds,
+  DrawPuzzleLayersParams,
   drawPuzzleBackdropIfOpaque,
   drawPuzzleCompositeLayers,
   hasTransparentExterior,
@@ -529,6 +530,27 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const selectionImageDataRef = useRef<ImageData | null>(null);
   const hasSelectionPixelsRef = useRef<boolean>(false);
   const selectionLineScratchRef = useRef<Set<number>>(new Set());
+  const drawLayersParamsRef = useRef<DrawPuzzleLayersParams>({
+    puzzle: null as unknown as PuzzleData,
+    sourceImage: null,
+    hasTransparentMask: false,
+    isEffectivePreview: false,
+    showPreviewBorders: false,
+    isFreeColorMode: false,
+    isRegionSelectionMode: false,
+    hasHighlightPixels: false,
+    hasSelectionPixels: false,
+    highlightStyle: 'FULL_REGION',
+    animateHint: false,
+    reducedMotion: false,
+    hintIntensity: 0.7,
+    currentPulseAlpha: 0.7,
+    baseCanvas: null,
+    borderCanvas: null,
+    highlightCanvas: null,
+    maskedPreviewCanvas: null,
+    selectionCanvas: null,
+  });
 
   // Cached canvas bounding rect for zero-layout-thrash pointer coordinate mapping
   const canvasRectRef = useRef<DOMRect | null>(null);
@@ -1537,6 +1559,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       !sourceImage.complete ||
       (sourceImage.naturalWidth <= 0 && sourceImage.width <= 0)
     ) {
+      if (
+        lastMaskedPreviewPuzzleRef.current !== puzzle ||
+        lastMaskedPreviewImageRef.current !== sourceImage
+      ) {
+        lastMaskedPreviewPuzzleRef.current = null;
+        lastMaskedPreviewImageRef.current = null;
+      }
       return;
     }
     if (
@@ -1553,6 +1582,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       lastMaskedPreviewPuzzleRef.current = puzzle;
       lastMaskedPreviewImageRef.current = sourceImage;
       scheduleCanvasRedraw();
+    } else {
+      lastMaskedPreviewPuzzleRef.current = null;
+      lastMaskedPreviewImageRef.current = null;
     }
   }, [puzzle, sourceImage, isPreviewMode, isFreeColorMode, scheduleCanvasRedraw]);
 
@@ -1882,32 +1914,31 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
       const isEffectivePreview = isPreviewMode;
 
-      drawPuzzleCompositeLayers(ctx, {
-        puzzle,
-        sourceImage,
-        hasTransparentMask: hasTransparentMaskRef.current,
-        isEffectivePreview,
-        showPreviewBorders,
-        isFreeColorMode,
-        isRegionSelectionMode,
-        hasHighlightPixels: hasHighlightPixelsRef.current,
-        hasSelectionPixels: hasSelectionPixelsRef.current,
-        highlightStyle,
-        animateHint,
-        reducedMotion,
-        hintIntensity,
-        currentPulseAlpha,
-        artScreenX,
-        artScreenY,
-        artScreenW,
-        artScreenH,
-        effScale,
-        baseCanvas: baseCanvasRef.current,
-        borderCanvas: borderCanvasRef.current,
-        highlightCanvas: highlightCanvasRef.current,
-        maskedPreviewCanvas: maskedPreviewCanvasRef.current,
-        selectionCanvas: selectionCanvasRef.current,
-      });
+      const layerParams = drawLayersParamsRef.current;
+      layerParams.puzzle = puzzle;
+      layerParams.sourceImage = sourceImage;
+      layerParams.hasTransparentMask = hasTransparentMaskRef.current;
+      layerParams.isEffectivePreview = isEffectivePreview;
+      layerParams.showPreviewBorders = showPreviewBorders;
+      layerParams.isFreeColorMode = isFreeColorMode;
+      layerParams.isRegionSelectionMode = isRegionSelectionMode;
+      layerParams.hasHighlightPixels = hasHighlightPixelsRef.current;
+      layerParams.hasSelectionPixels = hasSelectionPixelsRef.current;
+      layerParams.highlightStyle = highlightStyle;
+      layerParams.animateHint = animateHint;
+      layerParams.reducedMotion = reducedMotion;
+      layerParams.hintIntensity = hintIntensity;
+      layerParams.currentPulseAlpha = currentPulseAlpha;
+      layerParams.baseCanvas = baseCanvasRef.current;
+      layerParams.borderCanvas = borderCanvasRef.current;
+      layerParams.highlightCanvas = highlightCanvasRef.current;
+      layerParams.maskedPreviewCanvas =
+        lastMaskedPreviewPuzzleRef.current === puzzle &&
+        lastMaskedPreviewImageRef.current === sourceImage
+          ? maskedPreviewCanvasRef.current
+          : null;
+      layerParams.selectionCanvas = selectionCanvasRef.current;
+      drawPuzzleCompositeLayers(ctx, layerParams);
 
       // 3. Draw Visible Number Labels & Centroid Glows (suppress active-color highlight & hints in Region Selection Mode)
       const drawLabelsNow = isEffectivePreview
