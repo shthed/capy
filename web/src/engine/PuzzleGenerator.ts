@@ -264,6 +264,37 @@ function recalibrateCutoutRegionColors(
   }
 }
 
+function tryGenerateAlphaCutout(
+  proxy: { data: Uint8ClampedArray; width: number; height: number },
+  rgbaData: Uint8ClampedArray,
+  width: number,
+  height: number,
+  targetRes: number,
+  config: GeneratorConfig,
+  inspection: GenerationInspectionDetails,
+  emitProgress: (
+    rawProgress: number,
+    status: string,
+    paletteColors?: Array<{ r: number; g: number; b: number }>
+  ) => void
+): PuzzleData | null {
+  const proxyAlpha = extractOpaqueAlphaMask(proxy.data, proxy.width, proxy.height);
+  if (!proxyAlpha.hasCutoutAlpha) return null;
+  const scaled = scaleRgba(rgbaData, width, height, targetRes);
+  const targetAlpha = extractOpaqueAlphaMask(scaled.data, scaled.width, scaled.height);
+  if (targetAlpha.opaqueCount === 0) return null;
+  return generateAlphaCutoutPuzzle(
+    scaled.data,
+    scaled.width,
+    scaled.height,
+    targetAlpha.opaqueMask,
+    targetAlpha.opaqueCount,
+    config,
+    inspection,
+    emitProgress
+  );
+}
+
 function generateAlphaCutoutPuzzle(
   rawRgba: Uint8ClampedArray,
   width: number,
@@ -1153,11 +1184,12 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     onProgress?: ProgressCallback,
     detailedProgress: boolean = false
   ): PuzzleData {
+    const targetRes = config.resolution || 1024;
     let highestProgress = 0.02;
     const inspection: GenerationInspectionDetails = {
       sourceWidth: width,
       sourceHeight: height,
-      resolution: config.resolution || 1024,
+      resolution: targetRes,
       paletteDetail: config.paletteDetail || 'AUTO',
     };
 
@@ -1182,23 +1214,17 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
 
     // Downsample oversized inputs to a fast <= 512px proxy for style and ink detection
     const proxy = scaleRgba(rgbaData, width, height, 512);
-    const proxyAlpha = extractOpaqueAlphaMask(proxy.data, proxy.width, proxy.height);
-    if (proxyAlpha.hasCutoutAlpha) {
-      const scaled = scaleRgba(rgbaData, width, height, config.resolution || 1024);
-      const targetAlpha = extractOpaqueAlphaMask(scaled.data, scaled.width, scaled.height);
-      if (targetAlpha.opaqueCount > 0) {
-        return generateAlphaCutoutPuzzle(
-          scaled.data,
-          scaled.width,
-          scaled.height,
-          targetAlpha.opaqueMask,
-          targetAlpha.opaqueCount,
-          config,
-          inspection,
-          emitProgress
-        );
-      }
-    }
+    const cutoutResult = tryGenerateAlphaCutout(
+      proxy,
+      rgbaData,
+      width,
+      height,
+      targetRes,
+      config,
+      inspection,
+      emitProgress
+    );
+    if (cutoutResult) return cutoutResult;
     const lineAnalysis = LineArtExtractor.extract(proxy.data, proxy.width, proxy.height);
 
     const fakeImgData = { width: proxy.width, height: proxy.height, data: proxy.data } as ImageData;
@@ -1295,7 +1321,6 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
       }
     }
 
-    const targetRes = config.resolution || 1024;
     const maxSrc = Math.max(width, height);
     const scale = maxSrc > targetRes ? targetRes / maxSrc : 1.0;
     const targetW = Math.max(1, Math.floor(width * scale));

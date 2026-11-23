@@ -843,8 +843,7 @@ function enforceMaxRegionCap(state: MaskedMergeState, targetMaxRegions: number):
   if (activeCount <= targetMaxRegions) return;
 
   const isolated = new Uint8Array(compCount);
-  let mergeableCount = activeCount;
-  while (mergeableCount > targetMaxRegions && heap.size > 0) {
+  while (activeCount > targetMaxRegions && heap.size > 0) {
     const { area, root } = heap.pop();
     if (findRoot(state.parent, root) !== root || isolated[root] === 1) continue;
     if (state.areas[root] !== area) {
@@ -854,17 +853,15 @@ function enforceMaxRegionCap(state: MaskedMergeState, targetMaxRegions: number):
     const touches = collectMaskedNeighborTouches(root, state);
     if (touches.size === 0) {
       isolated[root] = 1;
-      mergeableCount--;
       continue;
     }
     const dst = pickBestMaskedNeighbor(root, touches, state);
     if (dst >= 0 && dst !== root) {
       mergeRootInto(root, dst, state);
-      mergeableCount--;
+      activeCount--;
       heap.push(state.areas[dst], dst);
     } else {
       isolated[root] = 1;
-      mergeableCount--;
     }
   }
 }
@@ -1285,6 +1282,10 @@ function clusterUnmatchedColors(
   return seeds;
 }
 
+function sanitizeFiniteNumber(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 function assignHarmoniousPaletteColors(
   regions: Region[],
   rgbaData: Uint8ClampedArray,
@@ -1294,14 +1295,19 @@ function assignHarmoniousPaletteColors(
 ): { palette: PaletteColor[]; addedSwatches: PaletteColor[] } {
   const finalPalette = existingPalette.map((c) => ({ ...c }));
   let nextPaletteId = existingPalette.reduce((m, c) => Math.max(m, c.id), 0);
+  const safeMaxNewSwatches = Math.max(
+    0,
+    Math.floor(sanitizeFiniteNumber(maxNewSwatches, DEFAULT_MAX_NEW_SWATCHES))
+  );
+  const safeReuseDeltaE = Math.max(0, sanitizeFiniteNumber(reuseDeltaE, DEFAULT_REUSE_DELTA_E));
   const remainingSlots = Math.max(0, MAX_TOTAL_PALETTE_SWATCHES - existingPalette.length);
-  let allowedNew = Math.min(Math.max(0, Math.floor(maxNewSwatches)), remainingSlots);
+  let allowedNew = Math.min(safeMaxNewSwatches, remainingSlots);
   if (existingPalette.length === 0 && allowedNew === 0) {
     allowedNew = 1;
   }
 
   const unmatched: UnmatchedRegionColor[] = [];
-  const reuseThresholdSq = reuseDeltaE * reuseDeltaE;
+  const reuseThresholdSq = safeReuseDeltaE * safeReuseDeltaE;
 
   for (let i = 0; i < regions.length; i++) {
     const reg = regions[i];
@@ -1330,7 +1336,7 @@ function assignHarmoniousPaletteColors(
 
   const addedSwatches: PaletteColor[] = [];
   if (unmatched.length > 0 && allowedNew > 0) {
-    const accents = clusterUnmatchedColors(unmatched, allowedNew, reuseDeltaE);
+    const accents = clusterUnmatchedColors(unmatched, allowedNew, safeReuseDeltaE);
     for (let i = 0; i < accents.length; i++) {
       const swatch = createPaletteColor(++nextPaletteId, accents[i].r, accents[i].g, accents[i].b);
       addedSwatches.push(swatch);
@@ -1375,10 +1381,16 @@ export function subdivideMaskedRegion(
     };
   }
 
-  const targetSubRegions = Math.max(1, Math.min(256, Math.floor(params.targetSubRegions ?? 12)));
-  const minRegionArea = Math.max(1, Math.floor(params.minRegionArea ?? 24));
-  const maxNewSwatches = params.maxNewSwatches ?? DEFAULT_MAX_NEW_SWATCHES;
-  const reuseDeltaE = params.reuseDeltaE ?? DEFAULT_REUSE_DELTA_E;
+  const targetSubRegions = Math.max(
+    1,
+    Math.min(256, Math.floor(sanitizeFiniteNumber(params.targetSubRegions, 12)))
+  );
+  const minRegionArea = Math.max(1, Math.floor(sanitizeFiniteNumber(params.minRegionArea, 24)));
+  const maxNewSwatches = Math.max(
+    0,
+    Math.floor(sanitizeFiniteNumber(params.maxNewSwatches, DEFAULT_MAX_NEW_SWATCHES))
+  );
+  const reuseDeltaE = Math.max(0, sanitizeFiniteNumber(params.reuseDeltaE, DEFAULT_REUSE_DELTA_E));
 
   const rawDesiredK =
     targetSubRegions <= 1
@@ -1462,6 +1474,7 @@ function resolveOrphanSelectedPixels(
   nextRegionMap: Int32Array,
   width: number,
   height: number,
+  selectedRegionIds: ReadonlySet<number>,
   globalIdToSlot: Map<number, number>,
   slotPixels: number[][],
   slotGlobalIds: number[],
@@ -1471,6 +1484,8 @@ function resolveOrphanSelectedPixels(
   const fallbackGlobalId = slotGlobalIds[fallbackSlot];
   for (let i = 0; i < orphans.length; i++) {
     const gIdx = orphans[i];
+    const currentId = nextRegionMap[gIdx];
+    if (!selectedRegionIds.has(currentId) || globalIdToSlot.has(currentId)) continue;
     const gx = gIdx % width;
     const gy = (gIdx - gx) / width;
     let chosenSlot = -1;
@@ -1647,10 +1662,11 @@ function collectOutOfBoundsSelectedOrphans(
     if (reg.minX >= startX && reg.maxX < endX && reg.minY >= startY && reg.maxY < endY) continue;
     for (let p = 0; p < reg.pixels.length; p++) {
       const gIdx = reg.pixels[p];
-      if (!selectedRegionIds.has(nextRegionMap[gIdx])) continue;
-      orphanedSelectedPixels.push(gIdx);
       const ox = gIdx % width;
       const oy = (gIdx - ox) / width;
+      if (ox >= startX && ox < endX && oy >= startY && oy < endY) continue;
+      if (!selectedRegionIds.has(nextRegionMap[gIdx])) continue;
+      orphanedSelectedPixels.push(gIdx);
       if (ox < dirtyMinX) dirtyMinX = ox;
       if (ox > dirtyMaxX) dirtyMaxX = ox;
       if (oy < dirtyMinY) dirtyMinY = oy;
@@ -1660,13 +1676,34 @@ function collectOutOfBoundsSelectedOrphans(
   return { dirtyMinX, dirtyMinY, dirtyMaxX, dirtyMaxY };
 }
 
+function normalizeSubdivisionBbox(bbox: SubdivisionBbox): SubdivisionBbox | null {
+  if (
+    !Number.isFinite(bbox.minX) ||
+    !Number.isFinite(bbox.minY) ||
+    !Number.isFinite(bbox.width) ||
+    !Number.isFinite(bbox.height)
+  ) {
+    return null;
+  }
+  const width = Math.floor(bbox.width);
+  const height = Math.floor(bbox.height);
+  if (width <= 0 || height <= 0) return null;
+  return {
+    minX: Math.floor(bbox.minX),
+    minY: Math.floor(bbox.minY),
+    width,
+    height,
+  };
+}
+
 export function mergeSubdividedRegionIntoPuzzle(
   basePuzzle: PuzzleData,
   selectedRegionIds: ReadonlySet<number>,
   subResult: MaskedSubdivisionResult,
   bbox: SubdivisionBbox
 ): PuzzleData {
-  if (selectedRegionIds.size === 0 || subResult.regions.length === 0) {
+  const normBbox = normalizeSubdivisionBbox(bbox);
+  if (selectedRegionIds.size === 0 || subResult.regions.length === 0 || !normBbox) {
     return cloneBasePuzzle(basePuzzle);
   }
 
@@ -1676,10 +1713,10 @@ export function mergeSubdividedRegionIntoPuzzle(
   const { localToGlobalId, localToSlot, slotGlobalIds, slotPixels, globalIdToSlot } =
     buildGlobalIdMapping(basePuzzle.regions, subResult.regions);
 
-  const startX = Math.max(0, Math.floor(bbox.minX));
-  const startY = Math.max(0, Math.floor(bbox.minY));
-  const endX = Math.min(width, Math.floor(bbox.minX) + Math.min(Math.floor(bbox.width), subResult.width));
-  const endY = Math.min(height, Math.floor(bbox.minY) + Math.min(Math.floor(bbox.height), subResult.height));
+  const startX = Math.max(0, normBbox.minX);
+  const startY = Math.max(0, normBbox.minY);
+  const endX = Math.min(width, normBbox.minX + Math.min(normBbox.width, subResult.width));
+  const endY = Math.min(height, normBbox.minY + Math.min(normBbox.height, subResult.height));
 
   const orphanedSelectedPixels = spliceSubdivisionIntoMap(
     basePuzzle.regionMap,
@@ -1687,7 +1724,7 @@ export function mergeSubdividedRegionIntoPuzzle(
     width,
     selectedRegionIds,
     subResult,
-    bbox,
+    normBbox,
     startX,
     startY,
     endX,
@@ -1720,6 +1757,7 @@ export function mergeSubdividedRegionIntoPuzzle(
           nextRegionMap,
           width,
           height,
+          selectedRegionIds,
           globalIdToSlot,
           slotPixels,
           slotGlobalIds,
@@ -1738,7 +1776,7 @@ export function mergeSubdividedRegionIntoPuzzle(
         nextRegionMap,
         width,
         height,
-        bbox,
+        normBbox,
         dirtySlots.has(s)
       )
     );

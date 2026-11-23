@@ -292,9 +292,17 @@ export class PuzzleWorkerService {
         return;
       }
 
+      let activeWorker: Worker | null = null;
+      let onMsg: ((e: MessageEvent) => void) | null = null;
+      let onErr: ((err: ErrorEvent) => void) | null = null;
+      const cleanupListeners = () => {
+        if (activeWorker && onMsg) activeWorker.removeEventListener('message', onMsg);
+        if (activeWorker && onErr) activeWorker.removeEventListener('error', onErr);
+      };
       try {
         this.cancelActive();
         const worker = this.getWorker();
+        activeWorker = worker;
         const requestId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         this.activeReject = reject;
 
@@ -305,21 +313,18 @@ export class PuzzleWorkerService {
           if (data.type === 'PROGRESS') {
             effectiveOnProgress?.(data.progress, data.status);
           } else if (data.type === 'SUBDIVIDE_SUCCESS') {
-            worker.removeEventListener('message', handleMessage);
-            worker.removeEventListener('error', handleError);
+            cleanupListeners();
             this.activeReject = null;
             resolve(unpackSubdivisionFromWorker(data.result as WorkerSubdivisionPayload));
           } else if (data.type === 'ERROR') {
-            worker.removeEventListener('message', handleMessage);
-            worker.removeEventListener('error', handleError);
+            cleanupListeners();
             this.activeReject = null;
             reject(new Error(data.error || 'Worker masked subdivision failed'));
           }
         };
 
         const handleError = (err: ErrorEvent) => {
-          worker.removeEventListener('message', handleMessage);
-          worker.removeEventListener('error', handleError);
+          cleanupListeners();
           this.activeReject = null;
           worker.terminate();
           this.worker = null;
@@ -327,6 +332,8 @@ export class PuzzleWorkerService {
           this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
         };
 
+        onMsg = handleMessage;
+        onErr = handleError;
         worker.addEventListener('message', handleMessage);
         worker.addEventListener('error', handleError);
 
@@ -351,6 +358,10 @@ export class PuzzleWorkerService {
           [rgbaCopy.buffer, maskCopy.buffer]
         );
       } catch (err) {
+        cleanupListeners();
+        if (this.activeReject === reject) {
+          this.activeReject = null;
+        }
         console.warn('Failed to dispatch masked subdivision task, falling back to local:', err);
         this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
       }

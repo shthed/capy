@@ -21,6 +21,25 @@ import {
 import { resolveScopedBackupKey, resolveScopedStorageKey, SNAPSHOTS_KEY } from './StorageKeys';
 
 const MAX_ZOOM_TREE_CHILDREN = 64;
+const REQUIRED_SNAPSHOT_KEYS = new Set<string>([
+  'id',
+  'title',
+  'timestamp',
+  'lastOpened',
+  'filledCount',
+  'totalCount',
+  'filledRegionIds',
+  'zoomScale',
+  'panOffsetX',
+  'panOffsetY',
+]);
+const FORBIDDEN_PATCH_KEYS = new Set<string>([
+  'id',
+  'metaUpdatedAt',
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
 
 function mergeZoomTreePatch(
   base: InfiniteZoomNodeMeta | undefined,
@@ -34,6 +53,7 @@ function mergeZoomTreePatch(
   };
   if (patch) {
     for (const key of Object.keys(patch) as Array<keyof InfiniteZoomNodeMeta>) {
+      if (FORBIDDEN_PATCH_KEYS.has(key as string)) continue;
       const val = patch[key];
       if (val !== undefined) {
         (merged as unknown as Record<string, unknown>)[key] = val;
@@ -586,9 +606,10 @@ export function updateSnapshotMetadata(
     matched = true;
     const next: Record<string, unknown> = { ...s };
     for (const key of Object.keys(patch)) {
-      if (key === 'id' || key === 'metaUpdatedAt') continue;
+      if (FORBIDDEN_PATCH_KEYS.has(key)) continue;
       const val = (patch as Record<string, unknown>)[key];
       if (val === undefined) {
+        if (REQUIRED_SNAPSHOT_KEYS.has(key)) continue;
         delete next[key];
       } else {
         next[key] = val;
