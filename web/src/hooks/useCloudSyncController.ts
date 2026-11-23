@@ -37,6 +37,7 @@ import { useAuthProvider, useCloudSaveProvider } from '../context/ProviderContex
 import { CloudSyncLiveStatus } from '../components/CloudAccountCard';
 import { CoopLiveState } from './useCoopSession';
 import { UndoHistoryEntry } from './useUndoRedo';
+import { buildUnifiedRegionIndex, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import { useLatest } from './useLatest';
 
 export { isManifestCloudSnapshotSlot };
@@ -526,7 +527,7 @@ function flushActiveStateBeforeSync(
   storage.updateSnapshotProgress(
     activeSnapshotId,
     filledRegionIds.size,
-    puzzle.regions.length,
+    getTotalRegionCount(puzzle),
     Array.from(filledRegionIds),
     viewport.zoomScale,
     viewport.panOffsetX,
@@ -583,7 +584,7 @@ async function syncActiveSlotEnvelope(params: {
     payload.slotKey,
     startTitle,
     payload.localDelta,
-    startPuzzle.regions.length
+    getTotalRegionCount(startPuzzle)
   );
   return {
     slotAdded: res.addedFromCloud,
@@ -648,7 +649,7 @@ function applyActiveSlotReconciliationIfStillActive(params: {
   const updatedSnapshots = storage.updateSnapshotProgress(
     startSnapshotId,
     reconciled.combinedFilled.size,
-    startPuzzle.regions.length,
+    getTotalRegionCount(startPuzzle),
     orderedList,
     zoomScale,
     panOffsetX,
@@ -877,7 +878,13 @@ export function useCloudSyncController(
           };
         },
         getViewport: () => opts.viewportRef.current,
-        getValidRegionIds: () => opts.regionByIdRef.current,
+        getValidRegionIds: () => {
+          const livePuzzle = opts.liveCoopRef.current.puzzle;
+          if (livePuzzle?.nestedLayers && livePuzzle.nestedLayers.length > 0) {
+            return buildUnifiedRegionIndex(livePuzzle).byId;
+          }
+          return opts.regionByIdRef.current;
+        },
         isSnapshotTransitioning: () => opts.snapshotTransitioningRef.current,
         getTransitionSeq: () => opts.snapshotTransitionSeqRef.current,
         applySnapshots: (refreshed) => {

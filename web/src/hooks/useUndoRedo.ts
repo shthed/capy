@@ -3,6 +3,7 @@ import { PuzzleData, Region, SavedSnapshot, UserSettings } from '../types';
 import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
 import { FeatureOfferId } from '../services/FeatureOffersService';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import { useLatest } from './useLatest';
 
 export interface UndoHistoryEntry {
@@ -80,9 +81,15 @@ export function resolveUndoRedoRegion(
   regionById?: Map<number, Region>
 ): Region | undefined {
   if (currentPuzzle && puzzle === currentPuzzle && regionById) {
-    return regionById.get(regionId);
+    const cached = regionById.get(regionId);
+    if (cached) return cached;
+    if (!puzzle.nestedLayers?.length) return undefined;
   }
-  return puzzle.regions.find((r) => r.id === regionId);
+  const allRegions = getAllPuzzleRegions(puzzle);
+  for (let i = 0; i < allRegions.length; i++) {
+    if (allRegions[i].id === regionId) return allRegions[i];
+  }
+  return undefined;
 }
 
 export function applyUndoTransition(
@@ -378,7 +385,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
         const updated = StorageService.updateSnapshotProgress(
           curSnapshotId,
           transition.nextFilledRegionIds.size,
-          curPuzzle.regions.length,
+          getTotalRegionCount(curPuzzle),
           filledList,
           zoomScale,
           panOffsetX,

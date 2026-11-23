@@ -39,7 +39,14 @@ import {
   exportSnapshotPrintableSvg,
   generatePreviewDataUrl,
   importSnapshotsArchive,
+  LayerCanvasImageSource,
+  LayerImageLookup,
 } from '../services/artworkExporter';
+import {
+  getAllPuzzleRegions,
+  getTotalRegionCount,
+  isSafeLayerImageKey,
+} from '../engine/UnifiedPuzzleLayers';
 import { loadHtmlImage, mergeCustomPalette } from '../services/sessionRestorePipeline';
 import {
   resolveSafeSampleAssetPath,
@@ -304,6 +311,131 @@ function revokeBlobUrlSafely(url: string | null): void {
   }
 }
 
+export interface HydratedLayerImagesHandle {
+  layerImages: Map<string, LayerCanvasImageSource> | undefined;
+  dispose: () => void;
+}
+
+/**
+ * Loads and decodes all unique nested-layer image blobs from IndexedDB for
+ * preview/PNG compositing, with deterministic cleanup via dispose().
+ */
+export async function hydrateLayerImagesForPuzzle(
+  puzzle: PuzzleData | null | undefined,
+  reportScope: string
+): Promise<HydratedLayerImagesHandle> {
+  const layers = puzzle?.nestedLayers;
+  if (!Array.isArray(layers) || layers.length === 0) {
+    return { layerImages: undefined, dispose: () => {} };
+  }
+
+  const uniqueKeys = new Set<string>();
+  for (let i = 0; i < layers.length; i++) {
+    const key = layers[i]?.imageBlobKey;
+    if (typeof key === 'string' && isSafeLayerImageKey(key)) {
+      uniqueKeys.add(key);
+    }
+  }
+  if (uniqueKeys.size === 0) {
+    return { layerImages: undefined, dispose: () => {} };
+  }
+
+  const layerImages = new Map<string, LayerCanvasImageSource>();
+  const cleanups: Array<() => void> = [];
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    for (let i = 0; i < cleanups.length; i++) {
+      try {
+        cleanups[i]();
+      } catch (err) {
+        reportSwallowed(`${reportScope}.dispose`, err);
+      }
+    }
+    cleanups.length = 0;
+    layerImages.clear();
+  };
+
+  const canCreateBitmap = typeof createImageBitmap === 'function';
+  const canLoadHtmlImg =
+    typeof Image !== 'undefined' &&
+    typeof URL !== 'undefined' &&
+    typeof URL.createObjectURL === 'function';
+
+  await Promise.all(
+    Array.from(uniqueKeys).map(async (key) => {
+      try {
+        const blob = await StorageService.loadImageBlob(key);
+        if (!blob) return;
+        if (canCreateBitmap) {
+          try {
+            const bitmap = await createImageBitmap(blob);
+            if (disposed) {
+              bitmap.close();
+              return;
+            }
+            cleanups.push(() => bitmap.close());
+            layerImages.set(key, bitmap);
+            return;
+          } catch (bitmapErr) {
+            reportSwallowed(`${reportScope}.createImageBitmap`, bitmapErr, { key });
+          }
+        }
+        if (canLoadHtmlImg) {
+          const objectUrl = URL.createObjectURL(blob);
+          try {
+            const img = await loadHtmlImage(objectUrl);
+            if (img && !disposed) {
+              cleanups.push(() => revokeBlobUrlSafely(objectUrl));
+              layerImages.set(key, img);
+            } else {
+              revokeBlobUrlSafely(objectUrl);
+            }
+          } catch (imgErr) {
+            revokeBlobUrlSafely(objectUrl);
+            reportSwallowed(`${reportScope}.loadHtmlImage`, imgErr, { key });
+          }
+        }
+      } catch (err) {
+        reportSwallowed(`${reportScope}.loadImageBlob`, err, { key });
+      }
+    })
+  );
+
+  if (layerImages.size === 0) {
+    dispose();
+    return { layerImages: undefined, dispose: () => {} };
+  }
+  return { layerImages, dispose };
+}
+
+async function generateHydratedPreviewUrl(
+  puzzleData: PuzzleData,
+  img: HTMLImageElement,
+  filledIds: Set<number>,
+  paintedMap: Map<number, number>,
+  reportScope: string,
+  isStillCurrent: () => boolean
+): Promise<string | null> {
+  if (!puzzleData.nestedLayers || puzzleData.nestedLayers.length === 0) {
+    return generatePreviewDataUrl(puzzleData, img, filledIds, paintedMap);
+  }
+  const hydratedLayers = await hydrateLayerImagesForPuzzle(puzzleData, reportScope);
+  try {
+    if (!isStillCurrent()) return null;
+    return generatePreviewDataUrl(
+      puzzleData,
+      img,
+      filledIds,
+      paintedMap,
+      hydratedLayers.layerImages
+    );
+  } finally {
+    hydratedLayers.dispose();
+  }
+}
+
 function findPrebakedSnapshot(
   snaps: SavedSnapshot[],
   cleanSamplePath: string,
@@ -351,7 +483,7 @@ export function resolvePrebakedSampleProgress(opts: {
     deltaIsFreeColor,
     deltaResetEpoch,
   } = opts;
-  const validIds = new Set(cachedPuzzle.regions.map((r) => r.id));
+  const validIds = new Set(getAllPuzzleRegions(cachedPuzzle).map((r) => r.id));
   const mergedSampleDelta =
     deltaFilledIds !== undefined
       ? mergeProgressDeltas(
@@ -589,9 +721,11 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
           ? { replayLoop: false }
           : {}),
       }));
+      const allRegions = getAllPuzzleRegions(puzzleData);
+      const totalRegionCount = getTotalRegionCount(puzzleData);
       resetActivePuzzleSessionStats(
         snapId,
-        initialFilledRegionIds.size >= puzzleData.regions.length
+        totalRegionCount > 0 && initialFilledRegionIds.size >= totalRegionCount
       );
       if (!existingSnapshotId && initialFilledRegionIds.size === 0 && isFree) {
         setLifetimeStats(PlayerStatsService.recordFreeColorCreation());
@@ -599,28 +733,37 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
       const availableColors = getVisiblePalette(
         puzzleData.palette,
-        puzzleData.regions,
+        allRegions,
         initialFilledRegionIds,
         settings.paletteSort
       );
-      const targetColor =
-        initialActiveColorId && availableColors.some((c) => c.id === initialActiveColorId)
-          ? initialActiveColorId
-          : availableColors[0]?.id || puzzleData.palette[0]?.id || 1;
+      const hasInitialColor =
+        initialActiveColorId !== undefined &&
+        availableColors.some((c) => c.id === initialActiveColorId);
+      const targetColor = hasInitialColor
+        ? initialActiveColorId
+        : (availableColors[0] ?? puzzleData.palette[0])?.id ?? 1;
       setActiveColorId(targetColor);
       setHintRegionId(null);
 
-      const previewUrl = generatePreviewDataUrl(
+      const previewUrl = await generateHydratedPreviewUrl(
         puzzleData,
         img,
         initialFilledRegionIds,
-        restoredPaintedMap
+        restoredPaintedMap,
+        'useSnapshotLibrary.finalizeGeneratedPuzzle',
+        () =>
+          currentSeq === generationSeqRef.current &&
+          transitionSeq === snapshotTransitionSeqRef.current
       );
+      if (previewUrl === null) {
+        return;
+      }
       const estSaveBytes = StorageService.estimatePuzzleSaveBytes(puzzleData, previewUrl);
       const baseSnapshots = StorageService.updateSnapshotProgress(
         snapId,
         initialFilledRegionIds.size,
-        puzzleData.regions.length,
+        totalRegionCount,
         initialOrder,
         targetView.zoomScale,
         targetView.panOffsetX,
@@ -1008,9 +1151,11 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         isFreeColorMode: isFree,
         ...(prev.replayLoop ? { replayLoop: false } : {}),
       }));
+      const allRegions = getAllPuzzleRegions(cachedPuzzle);
+      const totalRegionCount = getTotalRegionCount(cachedPuzzle);
       const availableColors = getVisiblePalette(
         cachedPuzzle.palette,
-        cachedPuzzle.regions,
+        allRegions,
         filledSet,
         settings.paletteSort
       );
@@ -1040,7 +1185,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       syncRedoStack([]);
       resetActivePuzzleSessionStats(
         snapshot.id,
-        cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
+        totalRegionCount > 0 && filledSet.size >= totalRegionCount
       );
       StorageService.saveActiveState({
         activeSnapshotId: snapshot.id,
@@ -1311,6 +1456,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       deltaPaintedColors?: Record<number, number>;
       deltaIsFreeColor?: boolean;
       deltaResetEpoch?: number;
+      layerImages?: LayerImageLookup;
     }) => {
       const {
         sample,
@@ -1321,6 +1467,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         deltaPaintedColors,
         deltaIsFreeColor,
         deltaResetEpoch,
+        layerImages,
       } = opts;
       const { orderedIds, filledSet, restoredPaintedMap, mergedEpoch, isFree } =
         resolvePrebakedSampleProgress({
@@ -1335,21 +1482,23 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       if (prebakedSnap.customPalette && prebakedSnap.customPalette.length > 0) {
         cachedPuzzle.palette = prebakedSnap.customPalette;
       }
+      const allRegions = getAllPuzzleRegions(cachedPuzzle);
+      const totalRegionCount = getTotalRegionCount(cachedPuzzle);
       const availableColors = getVisiblePalette(
         cachedPuzzle.palette,
-        cachedPuzzle.regions,
+        allRegions,
         filledSet,
         liveCoopRef.current.settings.paletteSort
       );
       const initialColor = availableColors[0]?.id || cachedPuzzle.palette[0]?.id || 1;
       const previewUrl =
         deltaFilledIds !== undefined
-          ? generatePreviewDataUrl(cachedPuzzle, img, filledSet, restoredPaintedMap)
+          ? generatePreviewDataUrl(cachedPuzzle, img, filledSet, restoredPaintedMap, layerImages)
           : prebakedSnap.previewDataUrl;
       const updatedList = StorageService.updateSnapshotProgress(
         prebakedSnap.id,
         filledSet.size,
-        cachedPuzzle.regions.length,
+        totalRegionCount,
         orderedIds,
         1.0,
         0,
@@ -1391,7 +1540,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       setHintRegionId(null);
       resetActivePuzzleSessionStats(
         prebakedSnap.id,
-        cachedPuzzle.regions.length > 0 && filledSet.size >= cachedPuzzle.regions.length
+        totalRegionCount > 0 && filledSet.size >= totalRegionCount
       );
       if (isFree && deltaFilledIds === undefined) {
         setLifetimeStats(PlayerStatsService.recordFreeColorCreation());
@@ -1497,6 +1646,34 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
               const img = await loadHtmlImage(sample.assetPath);
               if (sampleSeq !== snapshotTransitionSeqRef.current) return;
               if (img) {
+                if (
+                  deltaFilledIds !== undefined &&
+                  cachedPuzzle.nestedLayers &&
+                  cachedPuzzle.nestedLayers.length > 0
+                ) {
+                  const hydratedLayers = await hydrateLayerImagesForPuzzle(
+                    cachedPuzzle,
+                    'useSnapshotLibrary.loadPrebakedSample'
+                  );
+                  try {
+                    if (sampleSeq !== snapshotTransitionSeqRef.current) return;
+                    applyPrebakedSampleToState({
+                      sample,
+                      prebakedSnap,
+                      cachedPuzzle,
+                      img,
+                      deltaFilledIds,
+                      deltaPaintedColors,
+                      deltaIsFreeColor,
+                      deltaResetEpoch,
+                      layerImages: hydratedLayers.layerImages,
+                    });
+                    handedOffToAsync = true;
+                  } finally {
+                    hydratedLayers.dispose();
+                  }
+                  return;
+                }
                 applyPrebakedSampleToState({
                   sample,
                   prebakedSnap,
@@ -1590,7 +1767,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
           StorageService.updateSnapshotProgress(
             parentId,
             filledRegionIds.size,
-            puzzle.regions.length,
+            getTotalRegionCount(puzzle),
             orderedIds,
             currentView.zoomScale,
             currentView.panOffsetX,
@@ -1624,7 +1801,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         timestamp: now,
         lastOpened: now,
         filledCount: filledRegionIds.size,
-        totalCount: puzzle?.regions.length || 100,
+        totalCount: getTotalRegionCount(puzzle) || 100,
         filledRegionIds: orderedIds,
         ...(paintedRegionColors.size > 0 ? { paintedRegionColors: paintedObj } : {}),
         ...(puzzle?.palette ? { customPalette: puzzle.palette } : {}),
@@ -2191,7 +2368,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       const updated = StorageService.updateSnapshotProgress(
         activeSnapshotId,
         0,
-        puzzle.regions.length,
+        getTotalRegionCount(puzzle),
         [],
         zoomScale,
         panOffsetX,
@@ -2265,16 +2442,36 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
   ]);
 
   // Export & Import wrappers delegating to artworkExporter.ts
-  const handleExportArtwork = useCallback(() => {
+  const handleExportArtwork = useCallback(async (): Promise<void> => {
     if (!puzzle || !sourceImage) return;
-    exportColoredArtworkPng({
+    if (!puzzle.nestedLayers || puzzle.nestedLayers.length === 0) {
+      exportColoredArtworkPng({
+        puzzle,
+        sourceImage,
+        filledRegionIds,
+        paintedRegionColors,
+        title: activeTitle,
+        hapticsEnabled: settings.hapticsEnabled,
+      });
+      return;
+    }
+    const hydratedLayers = await hydrateLayerImagesForPuzzle(
       puzzle,
-      sourceImage,
-      filledRegionIds,
-      paintedRegionColors,
-      title: activeTitle,
-      hapticsEnabled: settings.hapticsEnabled,
-    });
+      'useSnapshotLibrary.handleExportArtwork'
+    );
+    try {
+      exportColoredArtworkPng({
+        puzzle,
+        sourceImage,
+        filledRegionIds,
+        paintedRegionColors,
+        title: activeTitle,
+        hapticsEnabled: settings.hapticsEnabled,
+        layerImages: hydratedLayers.layerImages,
+      });
+    } finally {
+      hydratedLayers.dispose();
+    }
   }, [
     puzzle,
     sourceImage,

@@ -4,6 +4,7 @@ import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
 import { getVisiblePalette } from '../components/PaletteDock';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import type { CoopLiveState, CoopViewport } from './useCoopSession';
 import { useIsomorphicLayoutEffect, useLatest } from './useLatest';
 
@@ -460,10 +461,10 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
       const cur = liveCoopRef.current;
       const curPuzzle = cur.puzzle ?? activePuzzle;
       const curFilled = cur.filledRegionIds;
-      if ((isReplaying && !wasAwaiting) || curFilled.size >= curPuzzle.regions.length) return;
+      if ((isReplaying && !wasAwaiting) || curFilled.size >= getTotalRegionCount(curPuzzle)) return;
       const selectablePalette = getVisiblePalette(
         curPuzzle.palette,
-        curPuzzle.regions,
+        getAllPuzzleRegions(curPuzzle),
         curFilled,
         cur.settings.paletteSort,
         cur.isFreeColorMode

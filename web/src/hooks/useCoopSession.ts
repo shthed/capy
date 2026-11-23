@@ -46,6 +46,12 @@ import { useAuthProvider, useRealtimeRoomProvider } from '../context/ProviderCon
 import { CoopRippleBuffer } from '../engine/CoopRippleBuffer';
 import { getVisiblePalette } from '../components/PaletteDock';
 import { TutorialStepKey } from '../components/OnboardingTutorial';
+import {
+  buildUnifiedRegionIndex,
+  getAllPuzzleRegions,
+  getTotalRegionCount,
+  UnifiedRegionRef,
+} from '../engine/UnifiedPuzzleLayers';
 import { useLatest } from './useLatest';
 
 export interface CoopViewport {
@@ -183,16 +189,48 @@ export function buildCoopProgressDelta(params: {
   };
 }
 
+interface ResolvedCoopRegion {
+  region: Region;
+  worldCentroidX: number;
+  worldCentroidY: number;
+}
+
+function resolveEffectiveWorldById(
+  puzzle: PuzzleData,
+  worldById?: Map<number, UnifiedRegionRef> | null
+): Map<number, UnifiedRegionRef> | null {
+  if (worldById) return worldById;
+  if (puzzle.nestedLayers && puzzle.nestedLayers.length > 0) {
+    return buildUnifiedRegionIndex(puzzle).worldById;
+  }
+  return null;
+}
+
 function lookupCoopRegion(
   puzzle: PuzzleData,
   regionId: number,
   currentPuzzle?: PuzzleData | null,
-  regionById?: Map<number, Region>
-): Region | undefined {
-  if (currentPuzzle && puzzle === currentPuzzle && regionById) {
-    return regionById.get(regionId);
+  regionById?: Map<number, Region>,
+  effectiveWorldById?: Map<number, UnifiedRegionRef> | null
+): ResolvedCoopRegion | undefined {
+  if (effectiveWorldById) {
+    const ref = effectiveWorldById.get(regionId);
+    if (ref) {
+      return {
+        region: ref.region,
+        worldCentroidX: ref.worldCentroidX,
+        worldCentroidY: ref.worldCentroidY,
+      };
+    }
+    return undefined;
   }
-  return puzzle.regions.find((r) => r.id === regionId);
+  const reg =
+    currentPuzzle && puzzle === currentPuzzle && regionById
+      ? regionById.get(regionId)
+      : puzzle.regions.find((r) => r.id === regionId);
+  return reg
+    ? { region: reg, worldCentroidX: reg.centroidX, worldCentroidY: reg.centroidY }
+    : undefined;
 }
 
 export function applyCoopPaintEvent(params: {
@@ -200,10 +238,19 @@ export function applyCoopPaintEvent(params: {
   puzzle: PuzzleData | null;
   currentPuzzle?: PuzzleData | null;
   regionById?: Map<number, Region>;
+  worldById?: Map<number, UnifiedRegionRef> | null;
   filledRegionIds: Set<number>;
   paintedRegionColors: Map<number, number>;
 }): CoopPaintTransitionResult | null {
-  const { event, puzzle, currentPuzzle, regionById, filledRegionIds, paintedRegionColors } = params;
+  const {
+    event,
+    puzzle,
+    currentPuzzle,
+    regionById,
+    worldById,
+    filledRegionIds,
+    paintedRegionColors,
+  } = params;
   if (!puzzle) return null;
 
   const nextFilled = new Set(filledRegionIds);
@@ -212,9 +259,10 @@ export function applyCoopPaintEvent(params: {
   let changed = false;
 
   if (event.action === 'FILL') {
+    const effectiveWorldById = resolveEffectiveWorldById(puzzle, worldById);
     for (const rId of event.regionIds) {
-      const reg = lookupCoopRegion(puzzle, rId, currentPuzzle, regionById);
-      if (!reg) continue;
+      const resolved = lookupCoopRegion(puzzle, rId, currentPuzzle, regionById, effectiveWorldById);
+      if (!resolved) continue;
       if (!nextFilled.has(rId)) {
         nextFilled.add(rId);
         changed = true;
@@ -225,7 +273,11 @@ export function applyCoopPaintEvent(params: {
           changed = true;
         }
       }
-      ripples.push({ x: reg.centroidX, y: reg.centroidY, colorHex: event.avatarColorHex });
+      ripples.push({
+        x: resolved.worldCentroidX,
+        y: resolved.worldCentroidY,
+        colorHex: event.avatarColorHex,
+      });
     }
   } else if (event.action === 'UNFILL') {
     for (const rId of event.regionIds) {
@@ -246,6 +298,7 @@ export function applyCoopUnfillEvent(params: {
   puzzle: PuzzleData | null;
   currentPuzzle?: PuzzleData | null;
   regionById?: Map<number, Region>;
+  worldById?: Map<number, UnifiedRegionRef> | null;
   filledRegionIds: Set<number>;
   paintedRegionColors: Map<number, number>;
   activeColorId: number;
@@ -256,6 +309,7 @@ export function applyCoopUnfillEvent(params: {
     puzzle,
     currentPuzzle,
     regionById,
+    worldById,
     filledRegionIds,
     paintedRegionColors,
     activeColorId,
@@ -277,6 +331,7 @@ export function applyCoopUnfillEvent(params: {
   let changed = false;
   let firstUnfilledColorId: number | null = null;
   let ripple: CoopRipplePoint | null = null;
+  const effectiveWorldById = resolveEffectiveWorldById(puzzle, worldById);
 
   for (const rId of targetIds) {
     if (!nextFilled.has(rId)) continue;
@@ -284,18 +339,22 @@ export function applyCoopUnfillEvent(params: {
     nextPainted.delete(rId);
     changed = true;
     if (firstUnfilledColorId === null) {
-      const reg = lookupCoopRegion(puzzle, rId, currentPuzzle, regionById);
-      if (reg) {
-        firstUnfilledColorId = reg.colorId;
-        ripple = { x: reg.centroidX, y: reg.centroidY, colorHex: event.avatarColorHex };
+      const resolved = lookupCoopRegion(puzzle, rId, currentPuzzle, regionById, effectiveWorldById);
+      if (resolved) {
+        firstUnfilledColorId = resolved.region.colorId;
+        ripple = {
+          x: resolved.worldCentroidX,
+          y: resolved.worldCentroidY,
+          colorHex: event.avatarColorHex,
+        };
       }
     }
   }
 
   if (!changed) return null;
 
-  const wasCompleted =
-    puzzle.regions.length > 0 && filledRegionIds.size >= puzzle.regions.length;
+  const totalRegionCount = getTotalRegionCount(puzzle);
+  const wasCompleted = totalRegionCount > 0 && filledRegionIds.size >= totalRegionCount;
   const nextActiveColorId =
     (wasCompleted || activeColorId === 0) && firstUnfilledColorId !== null
       ? firstUnfilledColorId
@@ -345,7 +404,9 @@ export function applyCoopWelcomeMerge(params: {
     now,
   } = params;
 
-  const validIds = new Set(puzzle.regions.map((r) => r.id));
+  const allRegions = getAllPuzzleRegions(puzzle);
+  const totalRegionCount = getTotalRegionCount(puzzle);
+  const validIds = new Set(allRegions.map((r) => r.id));
   const localEpoch = activeSave?.resetEpoch ?? 0;
   const localDelta = buildCoopProgressDelta({
     filledRegionIds,
@@ -381,14 +442,14 @@ export function applyCoopWelcomeMerge(params: {
 
   let nextActiveColorId = activeColorId;
   let shouldUpdateActiveColor = false;
-  if (stateChanged && !isFreeColorMode && nextFilled.size < puzzle.regions.length) {
-    const curStillAvailable = puzzle.regions.some(
+  if (stateChanged && !isFreeColorMode && nextFilled.size < totalRegionCount) {
+    const curStillAvailable = allRegions.some(
       (r) => r.colorId === activeColorId && !nextFilled.has(r.id)
     );
     if (!curStillAvailable) {
       const fallback = getVisiblePalette(
         puzzle.palette,
-        puzzle.regions,
+        allRegions,
         nextFilled,
         paletteSort
       )[0];
@@ -665,7 +726,7 @@ function persistCoopSnapshotProgress(params: {
   const updated = StorageService.updateSnapshotProgress(
     params.activeSnapshotId,
     params.orderedList.length,
-    params.puzzle.regions.length,
+    getTotalRegionCount(params.puzzle),
     params.orderedList,
     zoomScale,
     panOffsetX,
@@ -862,6 +923,11 @@ export function useCoopSession(options: UseCoopSessionOptions): UseCoopSessionRe
   const [coopParticipants, setCoopParticipants] = useState<CoopParticipant[]>([]);
   const coopRoomCodeRef = useLatest(coopRoomCode);
   const puzzleRef = useLatest(puzzle);
+  const unifiedWorldById = useMemo<Map<number, UnifiedRegionRef> | null>(() => {
+    if (!puzzle?.nestedLayers?.length) return null;
+    return buildUnifiedRegionIndex(puzzle).worldById;
+  }, [puzzle]);
+  const unifiedWorldByIdRef = useLatest(unifiedWorldById);
   const loadSampleRef = useLatest(loadSampleFromPrebakedOrGenerate);
   const prevCoopSnapRef = useRef<string | null>(null);
   const prevCoopResetEpochRef = useRef<number>(0);
@@ -913,6 +979,7 @@ export function useCoopSession(options: UseCoopSessionOptions): UseCoopSessionRe
         puzzle: cur.puzzle,
         currentPuzzle: puzzleRef.current,
         regionById: regionByIdRef.current,
+        worldById: cur.puzzle === puzzleRef.current ? unifiedWorldByIdRef.current : null,
         filledRegionIds: cur.filledRegionIds,
         paintedRegionColors: cur.paintedRegionColors,
       });
@@ -955,6 +1022,7 @@ export function useCoopSession(options: UseCoopSessionOptions): UseCoopSessionRe
         puzzle: cur.puzzle,
         currentPuzzle: puzzleRef.current,
         regionById: regionByIdRef.current,
+        worldById: cur.puzzle === puzzleRef.current ? unifiedWorldByIdRef.current : null,
         filledRegionIds: cur.filledRegionIds,
         paintedRegionColors: cur.paintedRegionColors,
         activeColorId: cur.activeColorId,
@@ -1024,6 +1092,7 @@ export function useCoopSession(options: UseCoopSessionOptions): UseCoopSessionRe
     viewportRef,
     regionByIdRef,
     puzzleRef,
+    unifiedWorldByIdRef,
     loadSampleRef,
     setFilledRegionIds,
     setPaintedRegionColors,
