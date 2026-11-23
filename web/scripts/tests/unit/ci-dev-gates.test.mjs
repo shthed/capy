@@ -128,14 +128,11 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
       const stagedReadme = fs.readFileSync(path.join(tmpCleanStage, 'README.md'), 'utf8');
       assert.equal(stagedReadme.includes('capyboop.github.io/capy/beta/'), false);
       assert.equal(stagedReadme.includes('https://github.com/capyboop/paint/releases'), true);
-      const stagedTodo = fs.readFileSync(path.join(tmpCleanStage, 'TODO.md'), 'utf8');
-      assert.equal(stagedTodo.includes('CAPYBOOP_SYNC_TOKEN'), false);
-      assert.equal(stagedTodo.includes('capyboop.github.io/capy/beta'), false);
-      assert.equal(stagedTodo.includes('https://capyboop.github.io/capy/'), true);
+      assert.equal(fs.existsSync(path.join(tmpCleanStage, 'TODO.md')), false);
       const stagedRoadmap = fs.readFileSync(path.join(tmpCleanStage, 'ROADMAP.md'), 'utf8');
       assert.equal(stagedRoadmap.includes('CAPYBOOP_SYNC_TOKEN'), false);
       assert.equal(stagedRoadmap.includes('capyboop.github.io/capy/beta'), false);
-      assert.equal(stagedRoadmap.includes('https://capyboop.github.io/capy/'), true);
+      assert.equal(stagedRoadmap.includes('https://github.com/capyboop/paint/issues'), true);
       const stagedReleaseYaml = fs.readFileSync(
         path.join(tmpCleanStage, '.github/workflows/release.yml'),
         'utf8'
@@ -501,7 +498,12 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
       );
       assert.equal(stagedProviders.includes('AiArtworkProvider'), true);
       assert.equal(stagedProviders.includes('AiCreditLedger'), true);
-      assert.equal(stagedRoadmap.includes('EPIC-5'), true);
+      assert.equal(
+        stagedRoadmap.includes('## Now') &&
+          stagedRoadmap.includes('## Next') &&
+          stagedRoadmap.includes('## Later'),
+        true
+      );
 
       // Verify cross-ref guardrail presence & regex behavior in open-pr.yml, open-issue.yml & pr-review-gate.yml
       const crossRefRe =
