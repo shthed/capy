@@ -1,6 +1,6 @@
 {
   "name": "capy-paint",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,10 +21,10 @@
   "dependencies": {
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.72.0",
+    "lucide-react": "^1.77.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.0.2"
+    "tailwind-merge": "^3.7.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
@@ -34,7 +34,7 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^6.3.0",
     "oxlint": "1.94.0",
-    "playwright": "^1.65.0",
+    "playwright": "^1.65.1",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"

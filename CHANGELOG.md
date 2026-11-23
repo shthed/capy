@@ -1,4 +1,10 @@
-### 3.1.1 - 2026-11-22 (Production, Beta)
+### 3.1.2 - 2026-11-23 (Production, Beta)
+
+- [#657](../../pull/657) Remove the redundant TODO.md backlog file and slim ROADMAP.md into a concise Now, Next, and Later vision doc linked to GitHub Issues and CHANGELOG.md
+- [#655](../../pull/655) Update Android Gradle plugin (9.5.2), `fragment-ktx` (1.9.1), and Gradle wrapper (9.9.2)
+- [#654](../../pull/654) Update web dependencies `lucide-react` (1.77.0), `tailwind-merge` (3.7.1), and `playwright` (1.65.1)
+
+### 3.1.1 - 2026-11-22
 
 - [#651](../../pull/651) Retire umbrella GitHub Epic tracking issues and epic label rules, standardizing planning around ROADMAP.md milestones and focused GitHub Issues
 - [#650](../../pull/650) Parallelized the 24-stage Playwright E2E suite across 10 isolated worker suites with targeted `--suite`/`--smoke` CLI controls, smart tiered CI path gating, and unblocked Alpha/Beta Pages previews

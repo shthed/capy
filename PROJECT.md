@@ -1,8 +1,8 @@
 # Project Management & Release Governance Guide -- Capy Monorepo (`PROJECT.md`)
 
-Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./app/), and [`worker/`](./worker/)). Defines contributor roles, Lean Agile backlog governance across [`ROADMAP.md`](./ROADMAP.md), GitHub Epics, and [`TODO.md`](./TODO.md), sprint execution cadence, pull request lifecycle and description sync, release promotion (`beta -> main`), [`CHANGELOG.md`](./CHANGELOG.md) channel markers, documentation sync, and continuous process improvement.
+Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./app/), and [`worker/`](./worker/)). Defines contributor roles, lightweight issue governance across [`ROADMAP.md`](./ROADMAP.md) and focused GitHub Issues, pull request lifecycle and description sync, release promotion (`beta -> main`), [`CHANGELOG.md`](./CHANGELOG.md) channel markers, documentation sync, and continuous process improvement.
 
-**Related Guides**: [`README.md`](./README.md) | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | [`SUPPORT.md`](./SUPPORT.md) | [`SECURITY.md`](./SECURITY.md) | [`ROADMAP.md`](./ROADMAP.md) | [`TODO.md`](./TODO.md) | [`DEV.md`](./DEV.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
+**Related Guides**: [`README.md`](./README.md) | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | [`SUPPORT.md`](./SUPPORT.md) | [`SECURITY.md`](./SECURITY.md) | [`ROADMAP.md`](./ROADMAP.md) | [`DEV.md`](./DEV.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
 
 **Table of Contents**:
 1. [Roles, Ownership and Coordination](#1-roles-ownership-and-coordination)
@@ -15,14 +15,14 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 
 > [!IMPORTANT]
 > **Division Between `PROJECT.md` and `DEV.md`**:
-> - [`PROJECT.md`](./PROJECT.md) (this file) is the **canonical Project Management manual** governing backlog lifecycle, Epic triage, PR metadata sync, release promotion, `CHANGELOG.md` channel markers, and process retrospectives.
+> - [`PROJECT.md`](./PROJECT.md) (this file) is the **canonical Project Management manual** governing GitHub Issue lifecycle, PR metadata sync, release promotion, `CHANGELOG.md` channel markers, and process retrospectives.
 > - [`DEV.md`](./DEV.md) is the **engineering manual** covering Section 2 technical guardrails, local build/test CLI, CI/CD workflow architecture, SemVer/dependencies/assets, and troubleshooting.
 
 ---
 
 ## 1. Roles, Ownership and Coordination
 
-- **Project Maintainers**: Set product vision and Epic priority in [`ROADMAP.md`](./ROADMAP.md), approve unblocked work entering [`TODO.md`](./TODO.md), evaluate tactile and visual feel on Alpha `/alpha/<number>/` and Beta `/beta/` previews, and hold final merge authority into `beta` and `main`.
+- **Project Maintainers**: Set high-level product direction in [`ROADMAP.md`](./ROADMAP.md), prioritize focused GitHub Issues, evaluate tactile and visual feel on Alpha `/alpha/<number>/` and Beta `/beta/` previews, and hold final merge authority into `beta` and `main`.
 - **External / Public Contributors**: Open bug reports, feature requests, puzzle ideas, and community pull requests on [`capyboop/paint`](https://github.com/capyboop/paint) following [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`SUPPORT.md`](./SUPPORT.md), and [`SECURITY.md`](./SECURITY.md).
 - **Worktree & Diff Hygiene**: Keep concurrent feature branches isolated in clean working trees, avoid blind `git add -A` over untracked scratch files, and verify `git status` plus `git show --stat HEAD` before every push.
 
@@ -31,7 +31,7 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 
 - **Private AI Operational Docs**: AI-assisted workflow, model routing, session hygiene, PR Readiness Checklist specs, and cross-repo guardrails live in [`AGENTS.md`](./AGENTS.md), [`CAPYBOOP.md`](./CAPYBOOP.md), [`docs/ai/workflow-and-models.md`](./docs/ai/workflow-and-models.md), [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md), and [`docs/ai/cross-repo-guardrail.md`](./docs/ai/cross-repo-guardrail.md).
 - **Project Manager (`PM`) Ownership**:
-  - Owns [`PROJECT.md`](./PROJECT.md), [`ROADMAP.md`](./ROADMAP.md), [`TODO.md`](./TODO.md), focused GitHub Issues and Sprint Milestones, continuous **PR Description Stewardship** across all open PRs, and `beta -> main` Release Promotion readiness verification.
+  - Owns [`PROJECT.md`](./PROJECT.md), [`ROADMAP.md`](./ROADMAP.md), focused GitHub Issues and optional Sprint Milestones, continuous **PR Description Stewardship** across all open PRs, and `beta -> main` Release Promotion readiness verification.
 - **Development Manager (`Dev Manager`) Ownership**:
   - Owns application source (`web/`, `app/`, `worker/`), test & hygiene tooling ([`web/scripts/test.mjs`](./web/scripts/test.mjs), [`web/scripts/sanity.mjs`](./web/scripts/sanity.mjs), [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs)), subsystem technical docs when modified alongside code/CI PRs, `.github/workflows/*`, [`web/package.json`](./web/package.json) SemVer bumps, technical PR conflict rebases, and engineering sprint execution.
 - **Strict Git Worktree Isolation**:
@@ -42,45 +42,37 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 
 ## 2. Lean Agile Lifecycle and Backlog Governance
 
-Capy separates strategic multi-sprint planning from day-to-day execution across the **3-Artefact Agile Triad** ([`ROADMAP.md`](./ROADMAP.md) <-> Focused GitHub Issues & Milestones <-> [`TODO.md`](./TODO.md)).
+Capy keeps planning lightweight across two complementary places: a concise high-level [`ROADMAP.md`](./ROADMAP.md) (`Now / Next / Later`) and actionable **GitHub Issues & Pull Requests** (with [`CHANGELOG.md`](./CHANGELOG.md) owning shipped history).
 
 ### Plain-English Agile & Release Terminology
 
-- **Roadmap Theme / Epic (`EPIC-1`..`EPIC-5`)**: A multi-week product theme grouping related player capabilities inside [`ROADMAP.md`](./ROADMAP.md) (no separate GitHub Parent Epic Tracking Issues or `epic:*` labels). Never bundle an entire theme into one mega-PR.
-- **User Story (`US-X.Y`)**: A cohesive, player-visible outcome inside a Roadmap theme written around player value.
-- **Task / Subtask (`TASK-X.Ya`)**: An independently testable `1-PR` coding slice implementing part or all of a User Story. Active-sprint slices live in [`TODO.md`](./TODO.md) and are deleted immediately upon merge.
-- **Bug (`BUG-N`)**: A verified defect, lifecycle guard, or CI reliability fix scheduled at Priority 0 in a Sprint.
-- **Sprint (`Sprint 0`..`Sprint 3`)**: A focused batch of `~8--10` unblocked Tasks and Bugs pulled into [`TODO.md`](./TODO.md), integrated onto `beta`, play-tested on `/beta/`, and promoted to `main`.
+- **Roadmap (`ROADMAP.md`)**: Short, high-level Now / Next / Later product direction (zero Sprint/Epic boilerplate or shipped PR duplication).
 - **GitHub Issue**: A focused, actionable bug report, feature request, player issue, ops checklist, or reviewable implementation plan—closed automatically via `Closes #NNN` when its PR merges.
-- **GitHub Milestone (`Sprint N: ...`)**: Optional native Sprint progress bar (`closed PRs / total PRs %`) assigned to PRs and issues in that Sprint.
+- **GitHub Milestone**: Optional native progress bar (`closed issues & PRs %`) when batching a multi-PR release theme.
 - **GitHub Label (`web`, `android`, `feature`, `fix`, `ui`, `testing`, `ci`, `docs`, `deps`)**: Taxonomy tags allowing PR titles to remain clean and prefix-free.
 - **Channels (`Alpha` / `Beta` / `Production`)**: Isolated PR previews at `/alpha/<number>/` (`Alpha`, indexed under `/alpha/`), integration soak branch `beta` at `/beta/` (`Beta`), and live stable `main` at `/` (`Production`).
 - **Git Tag (`vX.Y.Z`) & GitHub Release**: Immutable release tag triggering [`release.yml`](./.github/workflows/release.yml) for APK, Play Store `.aab`, `.tgz`, and release notes.
 
 ### Canonical Reference Formatting (PRs & Issues)
 
-- **PR References Always Use Clickable `#NNN` Links**: Always write PR numbers across docs (`PROJECT.md`, `ROADMAP.md`, `TODO.md`, `CHANGELOG.md`) as relative clickable Markdown links `[#NNN](../../pull/NNN)` (never plain `#NNN` or backticked `` `#NNN` ``, and without hardcoded repository owner URLs).
-- **Focused Issue References**: Link focused GitHub Issues with their title (`[#NNN — Issue Title](../../issues/NNN)`) when referencing active plans, bugs, or ops checklists. Historical archived Epic links in [`ROADMAP.md`](./ROADMAP.md) keep `[EPIC-N](../../issues/<num>)` formatting for backwards clarity.
+- **PR References Always Use Clickable `#NNN` Links**: Always write PR numbers across docs (`PROJECT.md`, `ROADMAP.md`, `CHANGELOG.md`) as relative clickable Markdown links `[#NNN](../../pull/NNN)` (never plain `#NNN` or backticked `` `#NNN` ``, and without hardcoded repository owner URLs).
+- **Focused Issue References**: Link focused GitHub Issues with their title (`[#NNN — Issue Title](../../issues/NNN)`) when referencing active plans, bugs, or ops checklists.
 
-### 3-Artefact Agile Triad & Triage Rules
+### Backlog & Triage Rules
 
-1. **[`ROADMAP.md`](./ROADMAP.md) (*Strategic Themes, Stories, Icebox & Shipped Archive*)**:
-   - Owns multi-sprint Roadmap themes (`EPIC-2`..`EPIC-5`), User Stories (`US-N.M`), readiness status (`Active in Sprint N`, `Ready for Next Sprint`, `Awaiting Review & Approval`, or `Blocked -- External Infra`), Platform Icebox (`ICE-1`..`ICE-3`), and the collapsed `<details>` **Shipped Epics & Stories** archive in Section 6.
-   - Blocked items (OAuth/Play Console secrets, hosted WebSocket relays, paid AI endpoints) remain in `ROADMAP.md` with explicit **Unblock Prerequisite** notes until ready.
+1. **[`ROADMAP.md`](./ROADMAP.md) (*High-Level Product Vision*)**:
+   - Stays short (`~35--50` lines) with **Now**, **Next**, and **Later** bullets pointing contributors to GitHub Issues for active work and [`CHANGELOG.md`](./CHANGELOG.md) for shipped history.
 2. **Focused GitHub Issues & Milestones**:
-   - Use standard focused GitHub Issues for concrete player bugs, feature requests, ops checklists (e.g., Play Store release steps), and reviewable specs rather than umbrella Epic wrapper issues.
+   - Use standard focused GitHub Issues for concrete player bugs, feature requests, ops checklists (e.g., Play Store release steps), and reviewable specs rather than umbrella Epic wrapper issues or a separate `TODO.md` file.
 <!-- capy-dev-only:start -->
    - **Owner-Review Plans & Review/Audit Documents (Mandatory Issue Logging)**: Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, it MUST log that plan or review as a bot-authored GitHub Issue on the private development repository via `open-issue.yml` (as `github-actions[bot]`, including a clickable Antigravity web session URL `` `[<Role> (<short-id>)](https://antigravity.google.com/remote/<session-id>?project=<project-id>)` `` and a structured summary/checklist) so the Project Owner can review, coordinate, and comment directly on GitHub.
 <!-- capy-dev-only:end -->
-3. **[`TODO.md`](./TODO.md) (*Focused 1-Sprint Ready Queue*)**:
-   - Holds **only** active-sprint approved items (`~8--10` max). Separate **dev slices** (`[quick-win]` for `1--3` file slices) clearly from any **Release & Ops Gates** subsection (DNS cutover, Play Store keystore/console uploads).
-4. **Definition of Ready (Anti-Busywork Gate)**:
-   - A task enters [`TODO.md`](./TODO.md) only when it delivers concrete player or reliability value (`Why Now`), satisfies all external prerequisites, and verifies exact file/symbol paths against `origin/beta`/`origin/main`.
-5. **Definition of Done**:
-   - **Delete from `TODO.md` Immediately**: Never leave `[x]` items in [`TODO.md`](./TODO.md); delete shipped `BUG-*` / `TASK-*` items in the PR that completes them.
+3. **Definition of Ready (Anti-Busywork Gate)**:
+   - Start coding on an issue only when it delivers concrete player or reliability value, satisfies all external prerequisites, and verifies exact file/symbol paths against `origin/beta`/`origin/main`.
+4. **Definition of Done**:
    - **Close Resolved Focused Issues**: Close resolved focused issues via `Closes #NNN` on the PR (or `gh issue close` after shipping to Production `main`).
-   - **Archive in `ROADMAP.md`**: Move completed Stories into Section 6 `<details>` with clickable `[#NNN](../../pull/NNN)` links; close Sprint Milestones once `100%` of their scope ships to Production `main`.
-6. **Issue Linking (`Closes #NNN` vs. `Refs #NNN`)**:
+   - **Sync `ROADMAP.md` & `CHANGELOG.md`**: Drop a concise `.changelog/` fragment on feature/bugfix PRs targeting `beta` and update [`ROADMAP.md`](./ROADMAP.md) whenever high-level `Now / Next / Later` priorities shift.
+5. **Issue Linking (`Closes #NNN` vs. `Refs #NNN`)**:
    - Use `Closes #NNN` on PRs that completely resolve a focused GitHub Issue, and `Refs #NNN` on partial slices so open multi-PR issues stay open until finished.
 7. **Canonical Mobile-First Card & `<details>` Template**:
    - Keep **Description**, **Value**, **Why Now**, and 1-line **Tasks** visible; wrap verbose metadata inside `<details><summary>...</summary></details>` with blank lines after `</summary>` and before `</details>`:
@@ -124,8 +116,8 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 ## 3. Sprint Cadence and Execution
 
 - **Atomic Single-Task PRs (`1-Task = 1-PR` -> `beta`, Default)**: Branch cleanly from updated `origin/beta` (`feature/*`, `fix/*`, or `docs/*`), verify locally with `npm run test:sanity && npm run lint && npm run build && npm test`, open a PR targeting `beta`, and merge once checks and review pass.
-- **Cohesive Story / Sprint-Slice PRs**: Group atomic per-task commits for a cohesive Story or P0 bug batch on one `feature/*` branch off `origin/beta` with full local verification before opening one PR targeting `beta`.
-- **Sprint Replenishment**: When dev-ready items in [`TODO.md`](./TODO.md) drain (`<= 2` dev tasks remaining), open a lightweight `docs/*` sprint-planning PR pulling the next approved Stories from [`ROADMAP.md`](./ROADMAP.md) and opening the next GitHub Sprint Milestone.
+- **Cohesive Story / Feature-Slice PRs**: Group atomic per-task commits for a cohesive feature or P0 bug batch on one `feature/*` branch off `origin/beta` with full local verification before opening one PR targeting `beta`.
+- **Backlog Replenishment**: Prioritize and open focused GitHub Issues aligned with [`ROADMAP.md`](./ROADMAP.md) rather than maintaining a separate `TODO.md` queue.
 
 ---
 
@@ -152,7 +144,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 - **Pre-Promotion (`beta -> main`) Checklist**:
   1. Play-test the Beta build and APK.
   2. Compile any pending [`.changelog/`](./.changelog/README.md) fragments via `npm run changelog:compile -- --promote` (or reconcile [`CHANGELOG.md`](./CHANGELOG.md) top headings manually):
-     - Compiles `.changelog/*.md` (`bump: patch|minor|major`, `<= 320` chars) into `### <ver> - <YYYY-MM-DD> (Beta)` (or appends into an existing same-day `(Beta)` heading without double-bumping), syncs [`web/package.json`](./web/package.json) and `web/package-lock.json`, removes finished `task` sections from [`TODO.md`](./TODO.md), promotes the current `(Beta)` heading to `(Production, Beta)` when `main` and `beta` serve the identical version, and removes `(Production)` from the superseded prior Production release (`sanity.mjs` requires `exactly 1` Production heading, `<= 1` Beta heading, `<= 1` Alpha heading, and line 1 starting with `### `).
+     - Compiles `.changelog/*.md` (`bump: patch|minor|major`, `<= 320` chars) into `### <ver> - <YYYY-MM-DD> (Beta)` (or appends into an existing same-day `(Beta)` heading without double-bumping), syncs [`web/package.json`](./web/package.json) and `web/package-lock.json`, promotes the current `(Beta)` heading to `(Production, Beta)` when `main` and `beta` serve the identical version, and removes `(Production)` from the superseded prior Production release (`sanity.mjs` requires `exactly 1` Production heading, `<= 1` Beta heading, `<= 1` Alpha heading, and line 1 starting with `### `).
      - **Daily / Promotion Release Batching**: Prefer dropping a `.changelog/<slug>.md` fragment on feature/bugfix PRs targeting `beta` and compiling once per day (or per `beta -> main` promotion) via `npm run changelog:compile` so version numbers stay cleanly batched (~1 release per day) rather than creating one version per PR. Whenever `main` and `beta` diverge on patch versions (e.g., `main` serves `3.0.7` while `beta` advances to `3.0.8`), use distinct `### MAJOR.MINOR.PATCH - YYYY-MM-DD` headings (`(Production)` on `main`, `(Beta)` **only** on the single newest Beta head, untagged on superseded releases; `sanity.mjs` enforces `betaHeadingCount <= 1`).
      - **Relative Clickable PR Link Bullet Contract**: Every entry must be a single flat bullet (`- [#NNN](../../pull/NNN) <summary>`) starting with the relative clickable Markdown PR link followed by **1--2 concise plain-English sentences** with no trailing period (zero nested bullets, zero category subheadings, never unlinked `#NNN` or `(PR #NNN)`).
   3. Open the `beta -> main` Release Promotion PR **with the target version number (`v<MAJOR.MINOR.PATCH>`) included in both the PR title and PR description** (e.g., `Promote Capy Paint v3.0.8 to main`) so `Build & Test` and async `Playwright E2E` in [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) execute cleanly.
@@ -169,7 +161,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 ## 6. Documentation Sync and Markdown Hygiene Matrix
 
 - **Canonical Root `.md` Files** (indexed in [`README.md`](./README.md), [`DEV.md`](./DEV.md), and this guide):
-  - **Product & Community**: [`README.md`](./README.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`SUPPORT.md`](./SUPPORT.md), [`SECURITY.md`](./SECURITY.md), [`ROADMAP.md`](./ROADMAP.md), [`TODO.md`](./TODO.md), [`CHANGELOG.md`](./CHANGELOG.md), [`LICENSE.md`](./LICENSE.md).
+  - **Product & Community**: [`README.md`](./README.md), [`CONTRIBUTING.md`](./CONTRIBUTING.md), [`SUPPORT.md`](./SUPPORT.md), [`SECURITY.md`](./SECURITY.md), [`ROADMAP.md`](./ROADMAP.md), [`CHANGELOG.md`](./CHANGELOG.md), [`LICENSE.md`](./LICENSE.md).
   - **Governance & Engineering**: [`PROJECT.md`](./PROJECT.md), [`DEV.md`](./DEV.md)<!-- capy-dev-only:start -->, [`CAPYBOOP.md`](./CAPYBOOP.md), [`AGENTS.md`](./AGENTS.md)<!-- capy-dev-only:end -->.
   - **Technical Subsystem Guides**: [`WEB.md`](./WEB.md), [`PUZZLE.md`](./PUZZLE.md), [`APP.md`](./APP.md), [`CLOUD.md`](./CLOUD.md), [`TESTING.md`](./TESTING.md).
   - **Storefront Privacy Policy**: [`web/public/privacy-policy.html`](./web/public/privacy-policy.html).
