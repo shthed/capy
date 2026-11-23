@@ -35,7 +35,10 @@ export const VALID_MOTIF_KINDS: readonly InfiniteZoomMotifKind[] = [
 const VALID_MOTIF_KIND_SET: ReadonlySet<string> = new Set(VALID_MOTIF_KINDS);
 const HEX_6_RE = /^#[0-9A-Fa-f]{6}$/;
 const UNSAFE_MARKUP_RE =
-  /<svg\b|<script\b|<\s*(?:\/\s*)?[a-z][^>]*>|javascript\s*:|data\s*:\s*text\/html|\bon[a-z]+\s*=|\beval\s*\(|\b(?:new\s+)?Function\s*\(/i;
+  /<svg\b|<script\b|javascript\s*:|data\s*:\s*text\/html|\bon[a-z]+\s*=|\beval\s*\(|\b(?:new\s+)?Function\s*\(/i;
+const HTML_TAG_OPEN_RE = /<\s*(?:\/\s*)?[a-z]/i;
+const MAX_MARKUP_SCAN_DEPTH = 8;
+const MAX_INSPECTED_NODES = 4096;
 const DEFAULT_THEME = 'Harmonious Cel Detail';
 const DEFAULT_FALLBACK_PALETTE: readonly string[] = [
   '#60A5FA',
@@ -252,12 +255,53 @@ function stripZeroWidthAndControls(raw: string): string {
   return out;
 }
 
+function isAsciiWordChar(code: number): boolean {
+  return (
+    (code >= 97 && code <= 122) ||
+    (code >= 48 && code <= 57) ||
+    code === 95
+  );
+}
+
+function stripPairedTag(text: string, tagName: string): string {
+  const rawLower = text.toLowerCase();
+  const lower =
+    rawLower.length === text.length
+      ? rawLower
+      : text.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
+  const openPrefix = `<${tagName}`;
+  const closeTag = `</${tagName}>`;
+  const parts: string[] = [];
+  let cursor = 0;
+  let pos = 0;
+
+  while (pos < lower.length) {
+    const openIdx = lower.indexOf(openPrefix, pos);
+    if (openIdx === -1) break;
+    const afterName = openIdx + openPrefix.length;
+    if (isAsciiWordChar(lower.charCodeAt(afterName))) {
+      pos = afterName;
+      continue;
+    }
+    const openEnd = lower.indexOf('>', afterName);
+    if (openEnd === -1) break;
+    const closeIdx = lower.indexOf(closeTag, openEnd + 1);
+    if (closeIdx === -1) break;
+    parts.push(text.slice(cursor, openIdx), ' ');
+    cursor = closeIdx + closeTag.length;
+    pos = cursor;
+  }
+
+  if (parts.length === 0) return text;
+  parts.push(text.slice(cursor));
+  return parts.join('');
+}
+
 function stripHtmlAndInjectionFraming(text: string): string {
-  return text
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, ' ')
-    .replace(/<\|[^|]*\|>/g, ' ')
-    .replace(/<[^>]*>/g, ' ')
+  const withoutPaired = stripPairedTag(stripPairedTag(text, 'script'), 'svg');
+  return withoutPaired
+    .replace(/<\|[^<>|]*\|>/g, ' ')
+    .replace(/<[^<>]*>/g, ' ')
     .replace(/[<>]/g, '')
     .replace(/```[a-z0-9_-]*/gi, ' ')
     .replace(/"""/g, ' ')
@@ -421,23 +465,29 @@ function normalizeHexList(raw: unknown, maxCount: number): string[] {
   return out;
 }
 
+function matchesUnsafeMarkupPattern(text: string): boolean {
+  if (UNSAFE_MARKUP_RE.test(text)) return true;
+  const lastGt = text.lastIndexOf('>');
+  return lastGt >= 2 && HTML_TAG_OPEN_RE.test(text.slice(0, lastGt));
+}
+
 function containsUnsafeMarkupText(raw: string): boolean {
   return (
-    UNSAFE_MARKUP_RE.test(raw) ||
-    UNSAFE_MARKUP_RE.test(stripZeroWidthAndControls(raw))
+    matchesUnsafeMarkupPattern(raw) ||
+    matchesUnsafeMarkupPattern(stripZeroWidthAndControls(raw))
   );
 }
 
 function sanitizeThemeText(raw: unknown): string {
   if (typeof raw !== 'string') return DEFAULT_THEME;
   const normalized = stripZeroWidthAndControls(raw);
-  if (UNSAFE_MARKUP_RE.test(raw) || UNSAFE_MARKUP_RE.test(normalized)) {
+  if (matchesUnsafeMarkupPattern(raw) || matchesUnsafeMarkupPattern(normalized)) {
     return DEFAULT_THEME;
   }
   const cleaned = stripHtmlAndInjectionFraming(normalized)
     .slice(0, 80)
     .trim();
-  if (!cleaned || UNSAFE_MARKUP_RE.test(cleaned) || containsBlockedPattern(cleaned)) {
+  if (!cleaned || matchesUnsafeMarkupPattern(cleaned) || containsBlockedPattern(cleaned)) {
     return DEFAULT_THEME;
   }
   return cleaned;
@@ -445,8 +495,14 @@ function sanitizeThemeText(raw: unknown): string {
 
 function unwrapJsonString(raw: string): string {
   const trimmed = raw.trim();
-  const fenceMatch = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
-  return fenceMatch ? fenceMatch[1].trim() : trimmed;
+  if (!trimmed.startsWith('```') || !trimmed.endsWith('```') || trimmed.length < 6) {
+    return trimmed;
+  }
+  let inner = trimmed.slice(3, -3);
+  if (/^json(?=\s|$)/i.test(inner)) {
+    inner = inner.slice(4);
+  }
+  return inner.trim();
 }
 
 function parseRawPlanObject(raw: unknown): Record<string, unknown> | null {
@@ -465,43 +521,70 @@ function parseRawPlanObject(raw: unknown): Record<string, unknown> | null {
   return candidate as Record<string, unknown>;
 }
 
-function valueContainsUnsafeMarkup(
-  val: unknown,
-  depth: number,
-  seen: Set<object>
+interface MarkupScanNode {
+  value: object;
+  depth: number;
+}
+
+function enqueueChildIfNeeded(
+  child: unknown,
+  nextDepth: number,
+  seen: Set<object>,
+  queue: MarkupScanNode[]
 ): boolean {
-  if (depth > 8) return false;
-  if (typeof val === 'string') {
-    return containsUnsafeMarkupText(val);
-  }
-  if (!val || typeof val !== 'object') {
+  if (!child || typeof child !== 'object') {
     return false;
   }
-  if (seen.has(val)) {
+  if (nextDepth > MAX_MARKUP_SCAN_DEPTH || seen.has(child)) {
     return false;
   }
-  seen.add(val);
-  if (Array.isArray(val)) {
-    for (let i = 0; i < val.length; i++) {
-      if (valueContainsUnsafeMarkup(val[i], depth + 1, seen)) return true;
-    }
-    return false;
+  if (seen.size >= MAX_INSPECTED_NODES) {
+    return true;
   }
-  const rec = val as Record<string, unknown>;
-  for (const key of Object.keys(rec)) {
-    if (
-      containsUnsafeMarkupText(key) ||
-      valueContainsUnsafeMarkup(rec[key], depth + 1, seen)
-    ) {
-      return true;
-    }
-  }
+  seen.add(child);
+  queue.push({ value: child, depth: nextDepth });
   return false;
 }
 
+function inspectMarkupScanValue(
+  val: unknown,
+  nextDepth: number,
+  seen: Set<object>,
+  queue: MarkupScanNode[]
+): boolean {
+  if (typeof val === 'string') {
+    return containsUnsafeMarkupText(val);
+  }
+  return enqueueChildIfNeeded(val, nextDepth, seen, queue);
+}
+
 function objectContainsUnsafeMarkup(obj: Record<string, unknown>): boolean {
-  const seen = new Set<object>();
-  return valueContainsUnsafeMarkup(obj, 0, seen);
+  const seen = new Set<object>([obj]);
+  const queue: MarkupScanNode[] = [{ value: obj, depth: 0 }];
+  let head = 0;
+
+  while (head < queue.length) {
+    const curr = queue[head++];
+    const nextDepth = curr.depth + 1;
+    if (Array.isArray(curr.value)) {
+      for (let i = 0; i < curr.value.length; i++) {
+        if (inspectMarkupScanValue(curr.value[i], nextDepth, seen, queue)) {
+          return true;
+        }
+      }
+      continue;
+    }
+    const rec = curr.value as Record<string, unknown>;
+    for (const key of Object.keys(rec)) {
+      if (
+        containsUnsafeMarkupText(key) ||
+        inspectMarkupScanValue(rec[key], nextDepth, seen, queue)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function sanitizeSceneElement(
