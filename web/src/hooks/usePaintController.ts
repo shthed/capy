@@ -66,6 +66,7 @@ export interface UsePaintControllerParams {
   setSnapshots: Dispatch<SetStateAction<SavedSnapshot[]>>;
   setLifetimeStats: Dispatch<SetStateAction<PlayerLifetimeStats>>;
   markTutorialActionTried: (action: keyof TutorialTriedActions) => void;
+  onPaintCommitted?: () => void;
 }
 
 const HEX_COLOR_RE = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -182,6 +183,7 @@ export function usePaintController(params: UsePaintControllerParams) {
     setSnapshots,
     setLifetimeStats,
     markTutorialActionTried,
+    onPaintCommitted,
   } = params;
 
   const hintsUsedInSessionRef = useRef<number>(0);
@@ -385,6 +387,7 @@ export function usePaintController(params: UsePaintControllerParams) {
         },
       ]);
       syncRedoStack([]);
+      onPaintCommitted?.();
 
       const nextPainted = new Map(cur.paintedRegionColors);
       nextPainted.set(region.id, cur.activeColorId);
@@ -419,6 +422,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       setFilledRegionIds,
       setHintRegionId,
       setLifetimeStats,
@@ -462,6 +466,7 @@ export function usePaintController(params: UsePaintControllerParams) {
         },
       ]);
       syncRedoStack([]);
+      onPaintCommitted?.();
 
       const nextFilled = new Set(cur.filledRegionIds);
       nextFilled.add(regionId);
@@ -496,6 +501,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       puzzle,
       regionByIdRef,
       setActiveColorId,
@@ -543,6 +549,7 @@ export function usePaintController(params: UsePaintControllerParams) {
 
       syncUndoStack((prev) => [...prev, ...newUndoEntries]);
       syncRedoStack([]);
+      onPaintCommitted?.();
       liveCoopRef.current = {
         ...cur,
         filledRegionIds: nextFilled,
@@ -578,6 +585,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       puzzle,
       regionByIdRef,
       setFilledRegionIds,
@@ -630,6 +638,7 @@ export function usePaintController(params: UsePaintControllerParams) {
 
       syncUndoStack((prev) => [...prev, ...newUndoEntries]);
       syncRedoStack([]);
+      onPaintCommitted?.();
       liveCoopRef.current = {
         ...cur,
         filledRegionIds: nextFilled,
@@ -667,6 +676,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       puzzle,
       regionByIdRef,
       setActiveColorId,

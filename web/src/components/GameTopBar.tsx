@@ -1,7 +1,18 @@
 import React from 'react';
-import { CornerUpLeft, Eye, EyeOff, ImagePlus, Maximize2, Minimize2, Settings, Users } from 'lucide-react';
+import {
+  CornerDownRight,
+  CornerUpLeft,
+  Eye,
+  EyeOff,
+  ImagePlus,
+  Maximize2,
+  Minimize2,
+  Settings,
+  Users,
+} from 'lucide-react';
 import { CoopParticipant } from '../services/providers/types';
 import { NativeBridge } from '../services/NativeBridge';
+import { InfiniteZoomDirection } from '../types';
 
 interface GameTopBarProps {
   activeTitle?: string | null;
@@ -13,6 +24,8 @@ interface GameTopBarProps {
   coopRoomCode?: string | null;
   coopParticipants?: CoopParticipant[];
   parentPuzzleTitle?: string | null;
+  parentPuzzleDirection?: InfiniteZoomDirection | null;
+  childPuzzleTitle?: string | null;
   releaseChannelBadge?: string | null;
   onPickImage: () => void;
   onTogglePreview: () => void;
@@ -21,6 +34,7 @@ interface GameTopBarProps {
   onOpenSaves: () => void;
   onOpenCoop?: () => void;
   onBackToParentPuzzle?: () => void;
+  onJumpToChildPuzzle?: () => void;
   onOpenReleaseChannel?: () => void;
 }
 
@@ -34,6 +48,8 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
   coopRoomCode,
   coopParticipants = [],
   parentPuzzleTitle,
+  parentPuzzleDirection,
+  childPuzzleTitle,
   releaseChannelBadge,
   onPickImage,
   onTogglePreview,
@@ -42,9 +58,11 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
   onOpenSaves,
   onOpenCoop,
   onBackToParentPuzzle,
+  onJumpToChildPuzzle,
   onOpenReleaseChannel,
 }) => {
   const showFullscreenBtn = Boolean(onToggleFullscreen) && !NativeBridge.isAndroid;
+  const isOuterParent = parentPuzzleDirection === 'extend-out';
 
   return (
     <header
@@ -66,19 +84,48 @@ export const GameTopBar: React.FC<GameTopBarProps> = React.memo(({
             onClick={onBackToParentPuzzle}
             title={
               parentPuzzleTitle
-                ? `Back to Parent Puzzle (${parentPuzzleTitle})`
-                : 'Back to Parent Puzzle'
+                ? `Back to ${isOuterParent ? 'Outer' : 'Parent'} Puzzle (${parentPuzzleTitle})`
+                : isOuterParent
+                  ? 'Back to Outer Puzzle'
+                  : 'Back to Parent Puzzle'
             }
             aria-label={
               parentPuzzleTitle
-                ? `Back to Parent Puzzle: ${parentPuzzleTitle}`
-                : 'Back to Parent Puzzle'
+                ? `Back to ${isOuterParent ? 'Outer' : 'Parent'} Puzzle: ${parentPuzzleTitle}`
+                : isOuterParent
+                  ? 'Back to Outer Puzzle'
+                  : 'Back to Parent Puzzle'
             }
-            className="capy-topbar-pill flex items-center gap-1 min-h-[36px] sm:min-h-[38px] px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-xs font-extrabold bg-sky-950/90 text-sky-300 border border-sky-400/60 shadow-lg backdrop-blur-md hover:bg-sky-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0"
+            className="capy-topbar-pill flex items-center gap-1 min-h-[36px] sm:min-h-[38px] px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-xs font-extrabold bg-sky-950/90 text-sky-300 border border-sky-400/60 shadow-lg backdrop-blur-md hover:bg-sky-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0 whitespace-nowrap"
           >
             <CornerUpLeft size={13} />
-            <span className="hidden sm:inline">Parent Puzzle</span>
-            <span className="sm:hidden">Parent</span>
+            <span className="hidden sm:inline">
+              {isOuterParent ? 'Outer Puzzle' : 'Parent Puzzle'}
+            </span>
+            <span className="sm:hidden">{isOuterParent ? 'Outer' : 'Parent'}</span>
+          </button>
+        )}
+
+        {onJumpToChildPuzzle && (
+          <button
+            type="button"
+            data-testid="topbar-child-puzzle-btn"
+            onClick={onJumpToChildPuzzle}
+            title={
+              childPuzzleTitle
+                ? `Jump to Inner Detail (${childPuzzleTitle})`
+                : 'Jump to Inner Detail'
+            }
+            aria-label={
+              childPuzzleTitle
+                ? `Jump to Inner Detail: ${childPuzzleTitle}`
+                : 'Jump to Inner Detail'
+            }
+            className="capy-topbar-pill flex items-center gap-1 min-h-[36px] sm:min-h-[38px] px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full text-xs font-extrabold bg-amber-950/90 text-amber-300 border border-amber-400/60 shadow-lg backdrop-blur-md hover:bg-amber-900/90 transition-all active:scale-95 cursor-pointer flex-shrink-0 whitespace-nowrap"
+          >
+            <CornerDownRight size={13} />
+            <span className="hidden sm:inline">Inner Detail</span>
+            <span className="sm:hidden">Inner</span>
           </button>
         )}
 

@@ -18,6 +18,17 @@ import {
   RegionColorMode,
   RegionHighlightStyle,
 } from '../types';
+import {
+  buildMaskedPreviewCanvas,
+  collectLineRegionIds,
+  drawPuzzleBackdropIfOpaque,
+  drawPuzzleCompositeLayers,
+  hasTransparentExterior,
+  renderSelectionOverlayToImageData,
+  resolveAnyRegionAtPoint,
+} from './puzzleCanvasHelpers';
+
+export { resolveAnyRegionAtPoint } from './puzzleCanvasHelpers';
 
 interface PuzzleCanvasProps {
   puzzle: PuzzleData | null;
@@ -88,6 +99,11 @@ interface PuzzleCanvasProps {
   onVisibleColorsChanged: (colorIds: Set<number>) => void;
   onVisibleRegionsChanged: (regionIds: Set<number>) => void;
   onTogglePreview: () => void;
+  activeSnapshotId?: string | null;
+  isRegionSelectionMode?: boolean;
+  selectedRegionIds?: ReadonlySet<number>;
+  onRegionSelectTap?: (regionId: number) => void;
+  onRegionSelectDragAdd?: (regionIds: Set<number>) => void;
 }
 
 export const ZOOM_DETENT_STOPS = [1, 2, 4, 8, 12] as const;
@@ -303,8 +319,15 @@ export function writeBaseCanvasPixels(
   const total = regionMap.length;
   for (let i = 0; i < total; i++) {
     const rId = regionMap[i];
-    const isFilled = filledRegionIds.has(rId);
     const idx = i * 4;
+    if (rId <= 0) {
+      data[idx] = 0;
+      data[idx + 1] = 0;
+      data[idx + 2] = 0;
+      data[idx + 3] = 0;
+      continue;
+    }
+    const isFilled = filledRegionIds.has(rId);
 
     if (isFilled) {
       const reg = regMap.get(rId);
@@ -471,6 +494,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   onVisibleColorsChanged,
   onVisibleRegionsChanged,
   onTogglePreview,
+  activeSnapshotId = null,
+  isRegionSelectionMode = false,
+  selectedRegionIds,
+  onRegionSelectTap,
+  onRegionSelectDragAdd,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -487,12 +515,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const lastBaseImageRef = useRef<HTMLImageElement | null>(null);
   const lastBaseFreeColorRef = useRef<boolean>(false);
   const prevColorsRef = useRef<Map<number, number>>(new Map());
+  const hasTransparentMaskRef = useRef<boolean>(false);
 
   const highlightCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const highlightImageDataRef = useRef<ImageData | null>(null);
   const hasHighlightPixelsRef = useRef<boolean>(false);
   const borderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastBorderPuzzleRef = useRef<PuzzleData | null>(null);
+  const maskedPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastMaskedPreviewPuzzleRef = useRef<PuzzleData | null>(null);
+  const lastMaskedPreviewImageRef = useRef<HTMLImageElement | null>(null);
+  const selectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const selectionImageDataRef = useRef<ImageData | null>(null);
+  const hasSelectionPixelsRef = useRef<boolean>(false);
+  const selectionLineScratchRef = useRef<Set<number>>(new Set());
 
   // Cached canvas bounding rect for zero-layout-thrash pointer coordinate mapping
   const canvasRectRef = useRef<DOMRect | null>(null);
@@ -662,18 +698,21 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     };
   }, [stopMomentum]);
 
-  // Reset or restore zoom/offset when a brand-new puzzle geometry is loaded or viewport restoration triggers
+  const puzzleWidth = puzzle?.width ?? 0;
+  const puzzleHeight = puzzle?.height ?? 0;
+
+  // Reset or restore zoom/offset when a brand-new puzzle geometry or snapshot is loaded or viewport restoration triggers
   useEffect(() => {
     stopMomentum();
     let targetOffset = { x: initialPanOffsetX, y: initialPanOffsetY };
     const w = containerRef.current?.clientWidth || window.innerWidth;
     const h = containerRef.current?.clientHeight || window.innerHeight;
-    if (containerRef.current && puzzle && w > 0 && h > 0) {
+    if (containerRef.current && puzzleWidth > 0 && puzzleHeight > 0 && w > 0 && h > 0) {
       targetOffset = clampCanvasOffset(
         targetOffset,
         initialZoomScale,
-        puzzle.width,
-        puzzle.height,
+        puzzleWidth,
+        puzzleHeight,
         w,
         h
       );
@@ -683,7 +722,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     setScale(initialZoomScale);
     setOffset(targetOffset);
     onViewExtentChangedRef.current?.(initialZoomScale, targetOffset.x, targetOffset.y, w, h);
-  }, [puzzle?.regionMap, initialZoomScale, initialPanOffsetX, initialPanOffsetY, restoreViewTrigger, stopMomentum]);
+  }, [
+    puzzleWidth,
+    puzzleHeight,
+    activeSnapshotId,
+    initialZoomScale,
+    initialPanOffsetX,
+    initialPanOffsetY,
+    restoreViewTrigger,
+    stopMomentum,
+  ]);
 
   // Handle FloatingActions & keyboard zoom in/out triggers synchronously on discrete events
   useIsomorphicLayoutEffect(() => {
@@ -1179,6 +1227,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       baseCanvasRef.current = null;
       baseImageDataRef.current = null;
       lastBasePuzzleRef.current = null;
+      hasTransparentMaskRef.current = false;
       return;
     }
 
@@ -1194,6 +1243,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       !baseImageDataRef.current;
 
     if (needsFullRebuild) {
+      hasTransparentMaskRef.current = hasTransparentExterior(regionMap);
       // Cache lookup maps
       const regMap = new Map<number, Region>();
       for (const r of regions) regMap.set(r.id, r);
@@ -1447,7 +1497,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     if (!puzzle || !showPreviewBorders) return;
     if (lastBorderPuzzleRef.current === puzzle && borderCanvasRef.current) return;
 
-    const { width, height, borderMap } = puzzle;
+    const { width, height, borderMap, regionMap } = puzzle;
     if (!borderCanvasRef.current) {
       borderCanvasRef.current = document.createElement('canvas');
     }
@@ -1459,7 +1509,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     const total = width * height;
 
     for (let i = 0; i < total; i++) {
-      if (borderMap[i] === 1) {
+      if (borderMap[i] === 1 && regionMap[i] > 0) {
         const idx = i * 4;
         data[idx] = 51;
         data[idx + 1] = 65;
@@ -1470,6 +1520,92 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     bCtx.putImageData(imgData, 0, 0);
     lastBorderPuzzleRef.current = puzzle;
   }, [puzzle, showPreviewBorders]);
+
+  // 4. Lazily build alpha-masked preview canvas for organic cutouts (Preview & Free Colour multiply)
+  useEffect(() => {
+    if (!puzzle || !hasTransparentMaskRef.current) {
+      lastMaskedPreviewPuzzleRef.current = null;
+      lastMaskedPreviewImageRef.current = null;
+      return;
+    }
+    const needsMaskedPreview = Boolean(
+      isPreviewMode || isFreeColorMode || puzzle.isFreeColor
+    );
+    if (
+      !needsMaskedPreview ||
+      !sourceImage ||
+      !sourceImage.complete ||
+      (sourceImage.naturalWidth <= 0 && sourceImage.width <= 0)
+    ) {
+      return;
+    }
+    if (
+      lastMaskedPreviewPuzzleRef.current === puzzle &&
+      lastMaskedPreviewImageRef.current === sourceImage &&
+      maskedPreviewCanvasRef.current
+    ) {
+      return;
+    }
+    if (!maskedPreviewCanvasRef.current) {
+      maskedPreviewCanvasRef.current = document.createElement('canvas');
+    }
+    if (buildMaskedPreviewCanvas(maskedPreviewCanvasRef.current, sourceImage, puzzle)) {
+      lastMaskedPreviewPuzzleRef.current = puzzle;
+      lastMaskedPreviewImageRef.current = sourceImage;
+      scheduleCanvasRedraw();
+    }
+  }, [puzzle, sourceImage, isPreviewMode, isFreeColorMode, scheduleCanvasRedraw]);
+
+  // 5. Zero-allocation Region Selection Overlay Layer (rebuilt only when selection changes)
+  useEffect(() => {
+    if (!puzzle || !isRegionSelectionMode || !selectedRegionIds || selectedRegionIds.size === 0) {
+      if (hasSelectionPixelsRef.current) {
+        hasSelectionPixelsRef.current = false;
+        scheduleCanvasRedraw();
+      }
+      return;
+    }
+
+    const { width, height } = puzzle;
+    if (!selectionCanvasRef.current) {
+      selectionCanvasRef.current = document.createElement('canvas');
+    }
+    if (selectionCanvasRef.current.width !== width || selectionCanvasRef.current.height !== height) {
+      selectionCanvasRef.current.width = width;
+      selectionCanvasRef.current.height = height;
+      selectionImageDataRef.current = null;
+    }
+
+    const sCtx = selectionCanvasRef.current.getContext('2d');
+    if (!sCtx) return;
+
+    let imgData = selectionImageDataRef.current;
+    if (!imgData || imgData.width !== width || imgData.height !== height) {
+      imgData = sCtx.createImageData(width, height);
+      selectionImageDataRef.current = imgData;
+    } else {
+      imgData.data.fill(0);
+    }
+
+    let regMap = regionByIdRef.current;
+    if (regMap.size !== puzzle.regions.length) {
+      const fresh = new Map<number, Region>();
+      for (const r of puzzle.regions) fresh.set(r.id, r);
+      regMap = fresh;
+    }
+
+    const anyPixel = renderSelectionOverlayToImageData(
+      imgData.data,
+      puzzle,
+      selectedRegionIds,
+      regMap
+    );
+    if (anyPixel) {
+      sCtx.putImageData(imgData, 0, 0);
+    }
+    hasSelectionPixelsRef.current = anyPixel;
+    scheduleCanvasRedraw();
+  }, [puzzle, isRegionSelectionMode, selectedRegionIds, scheduleCanvasRedraw]);
 
   // Pan to center hinted region
   useEffect(() => {
@@ -1589,6 +1725,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     [puzzle, onBatchRegionsClicked, isFreeColorMode, filledRegionIds, difficulty, activeColorId]
   );
 
+  // Zero-allocation Bresenham line selection collector for Region Selection Mode drag
+  const hitTestAndSelectLine = useCallback(
+    (x1: number, y1: number, x2: number, y2: number): boolean => {
+      if (!puzzle || !onRegionSelectDragAdd) return false;
+      const scratch = selectionLineScratchRef.current;
+      if (collectLineRegionIds(puzzle, x1, y1, x2, y2, scratch)) {
+        onRegionSelectDragAdd(scratch);
+        return true;
+      }
+      return false;
+    },
+    [puzzle, onRegionSelectDragAdd]
+  );
+
   // Calculate visible regions/colors with debouncing
   useEffect(() => {
     if (!puzzle || !containerRef.current) return;
@@ -1690,19 +1840,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           const artW = imgW * baseScale;
           const artH = imgH * baseScale;
 
-          // Draw artwork drop shadow framing on stage
+          // Draw source image cleanly with alpha-conforming drop shadow (supports transparent cutouts)
           ctx.save();
+          ctx.translate(baseOffsetX, baseOffsetY);
           ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
           ctx.shadowBlur = 24;
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 6;
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(baseOffsetX, baseOffsetY, artW, artH);
-          ctx.restore();
-
-          // Draw source image cleanly
-          ctx.save();
-          ctx.translate(baseOffsetX, baseOffsetY);
           ctx.drawImage(sourceImage, 0, 0, artW, artH);
           ctx.restore();
         }
@@ -1717,20 +1861,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const baseOffsetY = (h - puzzle.height * baseScale) / 2;
       const effScale = curScale * baseScale;
 
-      // Draw artwork drop shadow framing on stage
+      // Draw opaque rectangular artwork drop shadow framing only for non-cutout puzzles
       const artScreenX = curOffset.x + baseOffsetX;
       const artScreenY = curOffset.y + baseOffsetY;
       const artScreenW = puzzle.width * effScale;
       const artScreenH = puzzle.height * effScale;
 
-      ctx.save();
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-      ctx.shadowBlur = 24;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 6;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(artScreenX, artScreenY, artScreenW, artScreenH);
-      ctx.restore();
+      drawPuzzleBackdropIfOpaque(
+        ctx,
+        hasTransparentMaskRef.current,
+        artScreenX,
+        artScreenY,
+        artScreenW,
+        artScreenH
+      );
 
       ctx.save();
       ctx.translate(curOffset.x + baseOffsetX, curOffset.y + baseOffsetY);
@@ -1738,63 +1882,43 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
       const isEffectivePreview = isPreviewMode;
 
-      // 1. Draw Base Layer from cached offscreen canvas (0 CPU pixel loops!)
-      if (isEffectivePreview) {
-        if (sourceImage && sourceImage.complete) {
-          ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-        } else if (baseCanvasRef.current) {
-          ctx.drawImage(baseCanvasRef.current, 0, 0);
-        }
+      drawPuzzleCompositeLayers(ctx, {
+        puzzle,
+        sourceImage,
+        hasTransparentMask: hasTransparentMaskRef.current,
+        isEffectivePreview,
+        showPreviewBorders,
+        isFreeColorMode,
+        isRegionSelectionMode,
+        hasHighlightPixels: hasHighlightPixelsRef.current,
+        hasSelectionPixels: hasSelectionPixelsRef.current,
+        highlightStyle,
+        animateHint,
+        reducedMotion,
+        hintIntensity,
+        currentPulseAlpha,
+        artScreenX,
+        artScreenY,
+        artScreenW,
+        artScreenH,
+        effScale,
+        baseCanvas: baseCanvasRef.current,
+        borderCanvas: borderCanvasRef.current,
+        highlightCanvas: highlightCanvasRef.current,
+        maskedPreviewCanvas: maskedPreviewCanvasRef.current,
+        selectionCanvas: selectionCanvasRef.current,
+      });
 
-        if (showPreviewBorders && borderCanvasRef.current) {
-          ctx.drawImage(borderCanvasRef.current, 0, 0);
-        }
-      } else {
-        if (baseCanvasRef.current) {
-          ctx.drawImage(baseCanvasRef.current, 0, 0);
-        }
-
-        // 2. Draw Highlight Overlay Layer with hardware-accelerated alpha pulse (steady high-contrast when reducedMotion is enabled)
-        const effectiveAnimateHint = Boolean(animateHint && !reducedMotion);
-        if (
-          hasHighlightPixelsRef.current &&
-          highlightCanvasRef.current &&
-          (highlightStyle === 'FULL_REGION' || highlightStyle === 'BOUNDARY_ONLY')
-        ) {
-          ctx.save();
-          ctx.globalAlpha = effectiveAnimateHint
-            ? Math.min(1, Math.max(0.05, currentPulseAlpha * hintIntensity))
-            : Math.min(
-                1,
-                Math.max(0.05, reducedMotion ? Math.max(0.88, hintIntensity) : hintIntensity * 0.78)
-              );
-          ctx.drawImage(highlightCanvasRef.current, 0, 0);
-          ctx.restore();
-        }
-
-        // 3. For coloring book / free color mode: composite authentic ink artwork on top with multiply blend!
-        const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
-        if (
-          isColoring &&
-          sourceImage &&
-          sourceImage.complete &&
-          (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
-        ) {
-          ctx.save();
-          ctx.globalCompositeOperation = 'multiply';
-          ctx.drawImage(sourceImage, 0, 0, puzzle.width, puzzle.height);
-          ctx.restore();
-        }
-      }
-
-      // 3. Draw Visible Number Labels & Centroid Glows
+      // 3. Draw Visible Number Labels & Centroid Glows (suppress active-color highlight & hints in Region Selection Mode)
       const drawLabelsNow = isEffectivePreview
         ? showRegionLabels && showPreviewLabels
         : isFreeColorMode
         ? false
         : showRegionLabels;
+      const effectiveHighlightMatching = isRegionSelectionMode ? false : highlightMatching;
+      const effectiveHintRegionId = isRegionSelectionMode ? null : hintRegionId;
 
-      if (drawLabelsNow || highlightMatching || hintRegionId !== null) {
+      if (drawLabelsNow || effectiveHighlightMatching || effectiveHintRegionId !== null) {
         const visLeft = (-curOffset.x - baseOffsetX) / effScale;
         const visTop = (-curOffset.y - baseOffsetY) / effScale;
         const visRight = visLeft + w / effScale;
@@ -1805,10 +1929,10 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           puzzle,
           filledRegionIds,
           activeColorId,
-          hintRegionId,
+          effectiveHintRegionId,
           displayNumberMap,
           drawLabelsNow,
-          highlightMatching,
+          effectiveHighlightMatching,
           highlightStyle,
           hintColorArgb,
           hintIntensity,
@@ -1872,6 +1996,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       hintRegionId,
       isPreviewMode,
       isFreeColorMode,
+      isRegionSelectionMode,
       canvasBgColor,
       canvasBgArgb,
       regionColorMode,
@@ -1976,7 +2101,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   // Release offscreen canvas backing buffers cleanly on unmount
   useEffect(() => {
     return () => {
-      for (const ref of [baseCanvasRef, highlightCanvasRef, borderCanvasRef]) {
+      for (const ref of [
+        baseCanvasRef,
+        highlightCanvasRef,
+        borderCanvasRef,
+        maskedPreviewCanvasRef,
+        selectionCanvasRef,
+      ]) {
         if (ref.current) {
           ref.current.width = 0;
           ref.current.height = 0;
@@ -1985,6 +2116,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       }
       baseImageDataRef.current = null;
       highlightImageDataRef.current = null;
+      selectionImageDataRef.current = null;
+      lastMaskedPreviewPuzzleRef.current = null;
+      lastMaskedPreviewImageRef.current = null;
+      hasSelectionPixelsRef.current = false;
+      hasTransparentMaskRef.current = false;
       canvasRectRef.current = null;
       sourcePixelsRef.current = null;
       if (tapDotRafIdRef.current !== null && typeof cancelAnimationFrame === 'function') {
@@ -2027,6 +2163,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       Boolean(puzzle) &&
       !isPreviewMode &&
       !isGenerating &&
+      !isRegionSelectionMode &&
       (hintRegionId !== null ||
         (!isFreeColorMode &&
           highlightMatching &&
@@ -2064,6 +2201,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     puzzle,
     isPreviewMode,
     isGenerating,
+    isRegionSelectionMode,
     hintRegionId,
     isFreeColorMode,
     highlightMatching,
@@ -2146,8 +2284,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     if (!coords || !puzzle) return;
 
-    // Only start continuous paint if touching inside the image region
-    if (!isRightClick && isPaintMode && !isPreviewMode && isInsideImage) {
+    // Only start continuous paint if touching inside the image region (defer in Region Selection Mode so taps can toggle cleanly)
+    if (!isRightClick && isPaintMode && !isPreviewMode && !isRegionSelectionMode && isInsideImage) {
       onPuzzleInteractionRef.current?.();
       if (hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y)) {
         paintedInGestureRef.current = true;
@@ -2307,10 +2445,21 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     // If touching outside the image region on the background canvas, drag always pans!
     if (!isPinchPanningRef.current && !isRightClick && !isTouchingOutsideImage && isPaintMode && !isPreviewMode && prevCoords && currCoords) {
-      if (hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y)) {
-        paintedInGestureRef.current = true;
+      if (isRegionSelectionMode) {
+        if (totalDragDistanceRef.current >= 6) {
+          const startCoords = paintedInGestureRef.current
+            ? prevCoords
+            : screenToCanvasCoords(dragStartRef.current.x, dragStartRef.current.y) || prevCoords;
+          hitTestAndSelectLine(startCoords.x, startCoords.y, currCoords.x, currCoords.y);
+          paintedInGestureRef.current = true;
+          triggerTapDot(currCoords.x, currCoords.y);
+        }
+      } else {
+        if (hitTestAndPaintLine(prevCoords.x, prevCoords.y, currCoords.x, currCoords.y)) {
+          paintedInGestureRef.current = true;
+        }
+        triggerTapDot(currCoords.x, currCoords.y);
       }
-      triggerTapDot(currCoords.x, currCoords.y);
     } else {
       const container = containerRef.current;
       if (!container || !puzzle) return;
@@ -2516,35 +2665,47 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         const coords = screenToCanvasCoords(e.clientX, e.clientY);
         if (coords && puzzle) {
           triggerTapDot(coords.x, coords.y);
-          const lx = Math.floor(coords.x);
-          const ly = Math.floor(coords.y);
           onPuzzleInteractionRef.current?.();
-          const rId = resolveNearTapRegionId({
-            width: puzzle.width,
-            height: puzzle.height,
-            regionMap: puzzle.regionMap,
-            regionById: regionByIdRef.current,
-            filledRegionIds,
-            canvasX: coords.x,
-            canvasY: coords.y,
-            activeColorId,
-            difficulty,
-            fatFingerAssist,
-            touchReachRadiusPx,
-            totalScreenScale: coords.effScale,
-            isFreeColorMode,
-          });
-          const inBounds = lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height;
-          const exactId = inBounds ? puzzle.regionMap[ly * puzzle.width + lx] : 0;
-          if (rId > 0) {
-            if (isPaintMode) {
-              if (inBounds && exactId === rId) {
+          if (isRegionSelectionMode) {
+            const selId = resolveAnyRegionAtPoint({
+              width: puzzle.width,
+              height: puzzle.height,
+              regionMap: puzzle.regionMap,
+              canvasX: coords.x,
+              canvasY: coords.y,
+              fatFingerAssist,
+              touchReachRadiusPx,
+              totalScreenScale: coords.effScale,
+            });
+            if (selId > 0) {
+              onRegionSelectTap?.(selId);
+            }
+          } else {
+            const lx = Math.floor(coords.x);
+            const ly = Math.floor(coords.y);
+            const rId = resolveNearTapRegionId({
+              width: puzzle.width,
+              height: puzzle.height,
+              regionMap: puzzle.regionMap,
+              regionById: regionByIdRef.current,
+              filledRegionIds,
+              canvasX: coords.x,
+              canvasY: coords.y,
+              activeColorId,
+              difficulty,
+              fatFingerAssist,
+              touchReachRadiusPx,
+              totalScreenScale: coords.effScale,
+              isFreeColorMode,
+            });
+            const inBounds = lx >= 0 && lx < puzzle.width && ly >= 0 && ly < puzzle.height;
+            const exactId = inBounds ? puzzle.regionMap[ly * puzzle.width + lx] : 0;
+            if (rId > 0) {
+              if (isPaintMode && inBounds && exactId === rId) {
                 hitTestAndPaintLine(coords.x, coords.y, coords.x, coords.y);
               } else {
                 onRegionClicked(rId);
               }
-            } else {
-              onRegionClicked(rId);
             }
           }
         }
@@ -2792,7 +2953,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     <div
       ref={containerRef}
       className={`relative w-full h-full overflow-hidden select-none touch-none ${
-        isPaintMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
+        isPaintMode || isRegionSelectionMode ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
       }`}
       onContextMenu={(e) => e.preventDefault()}
       onPointerDown={handlePointerDown}

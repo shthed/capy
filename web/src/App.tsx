@@ -15,6 +15,7 @@ import { PlayerLifetimeStats, PlayerStatsService } from './services/PlayerStatsS
 import { PuzzleWorkerService } from './services/PuzzleWorkerService';
 import { useCloudSyncController } from './hooks/useCloudSyncController';
 import { CoopLoadSampleFn, useCoopSession } from './hooks/useCoopSession';
+import { useInfiniteZoomController } from './hooks/useInfiniteZoomController';
 import { useIsomorphicLayoutEffect, useLatest } from './hooks/useLatest';
 import { usePaintController } from './hooks/usePaintController';
 import { useReplayController } from './hooks/useReplayController';
@@ -29,6 +30,10 @@ import { PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
+import {
+  InfiniteZoomToolbarButton,
+  RegionSelectionBar,
+} from './components/InfiniteZoomControls';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
 import { OnboardingTutorial, TUTORIAL_STEPS } from './components/OnboardingTutorial';
@@ -186,6 +191,14 @@ export const App: React.FC = () => {
   const activeBlobUrlRef = useRef<string | null>(null);
   const flushPendingViewportSaveRef = useRef<() => void>(() => {});
   const exitTutorialReplayRef = useRef<() => void>(() => {});
+  const clearUndoSubdivisionRef = useRef<() => void>(() => {});
+  const beforeSnapshotResetOrSwitchRef = useRef<() => void>(() => {});
+  const handleClearUndoSubdivisionBridge = useCallback(() => {
+    clearUndoSubdivisionRef.current();
+  }, []);
+  const handleBeforeSnapshotResetOrSwitchBridge = useCallback(() => {
+    beforeSnapshotResetOrSwitchRef.current();
+  }, []);
 
   useEffect(() => {
     StorageService.requestPersistentStorageOnce();
@@ -448,6 +461,7 @@ export const App: React.FC = () => {
     undoStack,
     redoStack,
     undoStackRef,
+    redoStackRef,
     syncUndoStack,
     syncRedoStack,
     isUndoEnabled,
@@ -470,6 +484,7 @@ export const App: React.FC = () => {
     setSnapshots,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onTransitionCommitted: handleClearUndoSubdivisionBridge,
   });
 
   const handleLongPressUndo = useCallback(() => {
@@ -561,6 +576,7 @@ export const App: React.FC = () => {
     setSnapshots,
     setLifetimeStats,
     markTutorialActionTried,
+    onPaintCommitted: handleClearUndoSubdivisionBridge,
   });
 
   // 7. Snapshot Library, Sample Loader, Detail Tile & Export/Import Controller
@@ -570,6 +586,7 @@ export const App: React.FC = () => {
     loadArtworkFromImage,
     handleLoadSnapshot,
     handleLoadSnapshotRef,
+    persistParentSnapshotBeforeDetailTile,
     handleZoomIntoDetailTile,
     handleFileUpload,
     handlePickImage,
@@ -631,7 +648,82 @@ export const App: React.FC = () => {
     setLifetimeStats,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onBeforeSnapshotResetOrSwitch: handleBeforeSnapshotResetOrSwitchBridge,
   });
+
+  // 7b. Bidirectional Local AI Infinite Zoom Controller
+  const {
+    isRegionSelectionMode,
+    selectedRegionIds,
+    selectionMetrics,
+    pendingSwitchRegionId,
+    selectionNotice,
+    infiniteZoomPrompt,
+    setInfiniteZoomPrompt,
+    isInfiniteZoomRunning,
+    isInfiniteZoomDisabled,
+    infiniteZoomDisabledReason,
+    undoSubdivisionState,
+    childSave,
+    handleJumpToChildPuzzle,
+    handleEnterRegionSelectionMode,
+    exitRegionSelectionMode,
+    handleRegionSelectTap,
+    handleRegionSelectDragAdd,
+    handleSwitchSelectionToPending,
+    handleClearSelection,
+    handleConfirmRegionSubdivision,
+    handleConfirmExtendBorders,
+    handleUndoSubdivision,
+    clearUndoSubdivision,
+    cancelActiveInfiniteZoom,
+    handleBeforeSnapshotResetOrSwitch,
+  } = useInfiniteZoomController({
+    puzzle,
+    sourceImage,
+    snapshots,
+    activeSnapshotId,
+    activeSave,
+    activeTitle,
+    activeColorId,
+    filledRegionIds,
+    paintedRegionColors,
+    isFreeColorMode,
+    isLoading,
+    isReplaying,
+    coopRoomCode,
+    settings,
+    visibleColorIdsRef,
+    regionByIdRef,
+    liveCoopRef,
+    viewportRef,
+    activeBlobUrlRef,
+    undoStackRef,
+    redoStackRef,
+    handleLoadSnapshotRef,
+    persistParentSnapshotBeforeDetailTile,
+    loadArtworkFromImage,
+    syncUndoStack,
+    syncRedoStack,
+    setSnapshots,
+    setPuzzle,
+    setSourceImage,
+    setFilledRegionIds,
+    setPaintedRegionColors,
+    setActiveColorId,
+    setHintRegionId,
+    setIsLoading,
+    setLoadingProgress,
+    setLoadingStatus,
+    setLoadingPayload,
+    markTutorialActionTried,
+    triggerFeatureOffer,
+  });
+
+  useIsomorphicLayoutEffect(() => {
+    clearUndoSubdivisionRef.current = clearUndoSubdivision;
+    beforeSnapshotResetOrSwitchRef.current = handleBeforeSnapshotResetOrSwitch;
+  }, [clearUndoSubdivision, handleBeforeSnapshotResetOrSwitch]);
 
   // 8. Session Restore Pipeline on Launch
   useSessionRestore({
@@ -952,6 +1044,8 @@ export const App: React.FC = () => {
         coopRoomCode={coopRoomCode}
         coopParticipants={coopParticipants}
         parentPuzzleTitle={parentSave?.title ?? null}
+        parentPuzzleDirection={parentSave?.zoomTree?.direction ?? null}
+        childPuzzleTitle={childSave?.title ?? null}
         releaseChannelBadge={releaseChannelInfo.badgeLabel}
         onPickImage={handlePickImage}
         onTogglePreview={handleTopBarTogglePreview}
@@ -960,6 +1054,7 @@ export const App: React.FC = () => {
         onOpenSaves={handleOpenSaves}
         onOpenCoop={showCloudCoopUi ? handleOpenCoop : undefined}
         onBackToParentPuzzle={parentSave ? handleBackToParentPuzzle : undefined}
+        onJumpToChildPuzzle={childSave ? handleJumpToChildPuzzle : undefined}
         onOpenReleaseChannel={handleOpenReleaseChannel}
       />
 
@@ -1026,9 +1121,14 @@ export const App: React.FC = () => {
         onVisibleColorsChanged={handleVisibleColorsChanged}
         onVisibleRegionsChanged={handleVisibleRegionsChanged}
         onTogglePreview={handleCanvasTogglePreview}
+        activeSnapshotId={activeSnapshotId}
+        isRegionSelectionMode={isRegionSelectionMode}
+        selectedRegionIds={selectedRegionIds}
+        onRegionSelectTap={handleRegionSelectTap}
+        onRegionSelectDragAdd={handleRegionSelectDragAdd}
       />
 
-      {/* Floating Action Controls (Undo, Redo, Replay, Zoom, Paint Mode) */}
+      {/* Floating Action Controls (Undo, Redo, Infinite Zoom, Replay, Zoom, Paint Mode) */}
       {viewProps.showActiveHud && (
         <FloatingActions
           isPaintMode={settings.isPaintMode}
@@ -1049,6 +1149,39 @@ export const App: React.FC = () => {
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetView={handleResetView}
+          infiniteZoomSlot={
+            !isRegionSelectionMode ? (
+              <InfiniteZoomToolbarButton
+                disabled={isInfiniteZoomDisabled}
+                disabledReason={infiniteZoomDisabledReason}
+                sourceWidth={sourceImage ? sourceImage.naturalWidth || sourceImage.width : 0}
+                sourceHeight={sourceImage ? sourceImage.naturalHeight || sourceImage.height : 0}
+                prompt={infiniteZoomPrompt}
+                onPromptChange={setInfiniteZoomPrompt}
+                onEnterSelectionMode={() => handleEnterRegionSelectionMode()}
+                onConfirmExtendBorders={handleConfirmExtendBorders}
+              />
+            ) : null
+          }
+        />
+      )}
+
+      {/* Region Selection Bar (Infinite Zoom In) */}
+      {viewProps.showActiveHud && isRegionSelectionMode && (
+        <RegionSelectionBar
+          isOpen={isRegionSelectionMode}
+          raiseDock={settings.raisePaletteDock}
+          isCompleted={isCompleted}
+          metrics={selectionMetrics}
+          pendingSwitchRegionId={pendingSwitchRegionId}
+          notice={selectionNotice}
+          prompt={infiniteZoomPrompt}
+          isBusy={isInfiniteZoomRunning}
+          onPromptChange={setInfiniteZoomPrompt}
+          onConfirm={handleConfirmRegionSubdivision}
+          onSwitchSelection={handleSwitchSelectionToPending}
+          onClear={handleClearSelection}
+          onCancel={exitRegionSelectionMode}
         />
       )}
 
@@ -1126,6 +1259,7 @@ export const App: React.FC = () => {
         payload={loadingPayload}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
         onToggleDetailedProgress={handleToggleDetailedProgress}
+        onCancel={isInfiniteZoomRunning ? cancelActiveInfiniteZoom : undefined}
       />
 
       {/* Settings Modal Sheet */}
@@ -1158,6 +1292,10 @@ export const App: React.FC = () => {
             onSelectSample: handleSelectSample,
             onUploadImage: handlePickImage,
             onZoomIntoDetailTile: handleZoomIntoDetailTile,
+            isInfiniteZoomDisabled,
+            infiniteZoomDisabledReason,
+            onStartInfiniteZoomIn: handleEnterRegionSelectionMode,
+            onStartInfiniteZoomOut: handleConfirmExtendBorders,
           }}
           saves={{
             snapshots,
@@ -1232,6 +1370,43 @@ export const App: React.FC = () => {
         activeSettingsTab={activeSettingsTab}
         zIndexClass={spotlightState.zIndexClass}
       />
+
+      {undoSubdivisionState && !isRegionSelectionMode && (
+        <div
+          role="status"
+          data-testid="undo-subdivision-toast"
+          className="fixed left-1/2 -translate-x-1/2 z-[55] max-w-sm w-[calc(100%-1.5rem)] bg-slate-900/95 border border-sky-400/60 text-slate-100 px-3.5 py-2.5 rounded-xl shadow-2xl flex items-center justify-between gap-3 text-xs backdrop-blur-md"
+          style={{
+            bottom: `calc(${
+              settings.raisePaletteDock
+                ? 'var(--capy-replay-bottom-raised, 6.25rem)'
+                : 'var(--capy-replay-bottom, 4.625rem)'
+            } + var(--sab, 0px))`,
+          }}
+        >
+          <span className="font-semibold text-sky-200 truncate">
+            Added {undoSubdivisionState.addedRegionCount} detail regions
+          </span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              data-testid="undo-subdivision-btn"
+              onClick={() => void handleUndoSubdivision()}
+              className="px-2.5 py-1 rounded-lg bg-sky-400 hover:bg-sky-300 text-slate-950 text-xs font-extrabold cursor-pointer"
+            >
+              Undo Split
+            </button>
+            <button
+              type="button"
+              aria-label="Dismiss subdivision notice"
+              onClick={clearUndoSubdivision}
+              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
 
       {storageQuotaWarning && (
         <div

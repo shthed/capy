@@ -321,7 +321,11 @@ export const FEATURE_OFFER_TARGETS: Record<FeatureOfferId, SpotlightTargetSpec[]
   infinite_zoom: [
     {
       selector: '[data-testid="topbar-parent-puzzle-btn"]',
-      fallbackSelector: '[data-testid="topbar-saves-btn"]',
+      fallbackSelectors: [
+        '[data-testid="topbar-child-puzzle-btn"]',
+        '[data-testid="infinite-zoom-menu-btn"]',
+        '[data-testid="topbar-saves-btn"]',
+      ],
       padding: 3,
       borderRadius: 9999,
     },

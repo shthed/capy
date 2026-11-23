@@ -123,6 +123,48 @@ function renderFreeColorCanvas(
 }
 
 /**
+ * Returns true iff puzzleData.regionMap contains both interior region pixels (rId > 0)
+ * and transparent cutout exterior pixels (rId <= 0).
+ */
+export function hasCutoutExteriorMask(puzzleData: PuzzleData): boolean {
+  const total = puzzleData.width * puzzleData.height;
+  if (total <= 0 || !puzzleData.regionMap || puzzleData.regionMap.length < total) {
+    return false;
+  }
+  let hasInterior = false;
+  let hasExterior = false;
+  for (let i = 0; i < total; i++) {
+    if (puzzleData.regionMap[i] > 0) {
+      hasInterior = true;
+    } else {
+      hasExterior = true;
+    }
+    if (hasInterior && hasExterior) return true;
+  }
+  return false;
+}
+
+function maskCutoutExteriorTransparent(
+  ctx: CanvasRenderingContext2D,
+  puzzleData: PuzzleData
+): void {
+  if (typeof ctx.getImageData !== 'function') return;
+  const imgData = ctx.getImageData(0, 0, puzzleData.width, puzzleData.height);
+  const data = imgData.data;
+  const total = puzzleData.width * puzzleData.height;
+  for (let i = 0; i < total; i++) {
+    if (puzzleData.regionMap[i] <= 0) {
+      const idx = i * 4;
+      data[idx] = 0;
+      data[idx + 1] = 0;
+      data[idx + 2] = 0;
+      data[idx + 3] = 0;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+/**
  * Generate a <= 320px JPEG thumbnail data URL for snapshot cards.
  */
 export function generatePreviewDataUrl(
@@ -140,7 +182,28 @@ export function generatePreviewDataUrl(
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
-  if (puzzleData.isFreeColor || (customColors && customColors.size > 0)) {
+  const isCutout = hasCutoutExteriorMask(puzzleData);
+  const isFreeOrCustom = Boolean(
+    puzzleData.isFreeColor || (customColors && customColors.size > 0)
+  );
+
+  if (isCutout) {
+    ctx.fillStyle = '#18181b';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const fullCanvas = document.createElement('canvas');
+    fullCanvas.width = puzzleData.width;
+    fullCanvas.height = puzzleData.height;
+    const fCtx = fullCanvas.getContext('2d');
+    if (fCtx) {
+      if (isFreeOrCustom) {
+        renderFreeColorCanvas(fCtx, puzzleData, sourceImg, filledSet, customColors);
+      } else {
+        fCtx.drawImage(sourceImg, 0, 0, puzzleData.width, puzzleData.height);
+      }
+      maskCutoutExteriorTransparent(fCtx, puzzleData);
+      ctx.drawImage(fullCanvas, 0, 0, canvas.width, canvas.height);
+    }
+  } else if (isFreeOrCustom) {
     const fullCanvas = document.createElement('canvas');
     fullCanvas.width = puzzleData.width;
     fullCanvas.height = puzzleData.height;
@@ -192,7 +255,7 @@ export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): v
         const totalPixels = puzzle.width * puzzle.height;
         for (let i = 0; i < totalPixels; i++) {
           const rId = puzzle.regionMap[i];
-          if (!filledRegionIds.has(rId)) {
+          if (rId > 0 && !filledRegionIds.has(rId)) {
             const idx = i * 4;
             data[idx] = 248;
             data[idx + 1] = 250;
@@ -204,6 +267,10 @@ export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): v
         ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
       }
     }
+  }
+
+  if (hasCutoutExteriorMask(puzzle)) {
+    maskCutoutExteriorTransparent(ctx, puzzle);
   }
 
   const titleStr = title || 'capy-artwork';

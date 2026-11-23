@@ -11,6 +11,7 @@ import {
   Loader2,
   Palette,
   Sparkles,
+  X,
   Zap,
 } from 'lucide-react';
 import {
@@ -25,6 +26,7 @@ interface LoadingOverlayProps {
   payload?: GenerationProgressPayload | null;
   detailedProgress?: boolean;
   onToggleDetailedProgress?: (enabled: boolean) => void;
+  onCancel?: () => void;
 }
 
 export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
@@ -34,6 +36,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
   payload,
   detailedProgress = false,
   onToggleDetailedProgress,
+  onCancel,
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
@@ -85,7 +88,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                   Generating Puzzle...
                 </h3>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                 {onToggleDetailedProgress && (
                   <button
                     type="button"
@@ -100,6 +103,19 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                 <span className="text-xs font-extrabold text-amber-400 tabular-nums flex-shrink-0">
                   {pct}%
                 </span>
+                {onCancel && (
+                  <button
+                    type="button"
+                    data-testid="loading-cancel-btn"
+                    onClick={onCancel}
+                    aria-label="Cancel operation"
+                    title="Cancel operation"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-400/40 transition-colors flex-shrink-0 cursor-pointer"
+                  >
+                    <X size={11} />
+                    <span>Cancel</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -135,7 +151,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                   {stepName}
                 </h3>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                 {onToggleDetailedProgress && (
                   <button
                     type="button"
@@ -150,6 +166,19 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                 <span className="text-xs font-extrabold text-amber-400 tabular-nums flex-shrink-0">
                   {pct}%
                 </span>
+                {onCancel && (
+                  <button
+                    type="button"
+                    data-testid="loading-cancel-btn"
+                    onClick={onCancel}
+                    aria-label="Cancel operation"
+                    title="Cancel operation"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 border border-rose-400/40 transition-colors flex-shrink-0 cursor-pointer"
+                  >
+                    <X size={11} />
+                    <span>Cancel</span>
+                  </button>
+                )}
               </div>
             </div>
 

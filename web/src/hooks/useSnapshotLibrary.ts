@@ -10,6 +10,7 @@ import {
   DEFAULT_GENERATOR_CONFIG,
   GenerationProgressPayload,
   GeneratorConfig,
+  InfiniteZoomNodeMeta,
   MAX_GENERATOR_CONFIG,
   matchesGeneratorConfig,
   PaletteColor,
@@ -54,6 +55,77 @@ import { useIsomorphicLayoutEffect, useLatest } from './useLatest';
 export interface BlobUrlCommitPlan {
   nextActiveBlobUrl: string | null;
   urlsToRevoke: string[];
+}
+
+export interface InfiniteZoomLoadOptions {
+  zoomTree?: InfiniteZoomNodeMeta;
+  linkParentId?: string;
+  linkChildId?: string;
+  peerZoomTreePatch?: Partial<InfiniteZoomNodeMeta>;
+  preserveLosslessAlpha?: boolean;
+  onRegistered?: (snapId: string) => void;
+}
+
+function applyInfiniteZoomTreeLinks(
+  snapshots: SavedSnapshot[],
+  snapId: string,
+  opts?: InfiniteZoomLoadOptions
+): SavedSnapshot[] {
+  if (opts?.linkParentId) {
+    return StorageService.linkZoomTreeSnapshots(
+      opts.linkParentId,
+      snapId,
+      opts.peerZoomTreePatch,
+      opts.zoomTree
+    );
+  }
+  if (opts?.linkChildId) {
+    return StorageService.linkZoomTreeSnapshots(
+      snapId,
+      opts.linkChildId,
+      opts.zoomTree,
+      opts.peerZoomTreePatch
+    );
+  }
+  return snapshots;
+}
+
+function persistSnapshotSourceBlob(params: {
+  snapId: string;
+  sourceBlob: Blob | null | undefined;
+  img: HTMLImageElement;
+  width: number;
+  height: number;
+  preserveLosslessAlpha: boolean;
+  expectedTransitionSeq: number;
+  snapshotTransitionSeqRef: MutableRefObject<number>;
+}): void {
+  const {
+    snapId,
+    sourceBlob,
+    img,
+    width,
+    height,
+    preserveLosslessAlpha,
+    expectedTransitionSeq,
+    snapshotTransitionSeqRef,
+  } = params;
+  const persistBlobPromise =
+    preserveLosslessAlpha && sourceBlob
+      ? Promise.resolve(sourceBlob)
+      : compressImageForStorage({ blob: sourceBlob, image: img, width, height });
+  void persistBlobPromise
+    .then((blob) => {
+      if (
+        !blob ||
+        expectedTransitionSeq !== snapshotTransitionSeqRef.current ||
+        !StorageService.loadSnapshots().some((s) => s.id === snapId)
+      ) {
+        return;
+      }
+      return StorageService.saveImageBlob(snapId, blob);
+    })
+    .catch((err) => console.warn('Failed to persist source image blob:', err));
 }
 
 export interface UseSnapshotLibraryParams {
@@ -107,6 +179,7 @@ export interface UseSnapshotLibraryParams {
   setLifetimeStats: Dispatch<SetStateAction<PlayerLifetimeStats>>;
   markTutorialActionTried: (action: keyof TutorialTriedActions) => void;
   triggerFeatureOffer: (id: FeatureOfferId) => void;
+  onBeforeSnapshotResetOrSwitch?: () => void;
 }
 
 /**
@@ -373,6 +446,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     setLifetimeStats,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onBeforeSnapshotResetOrSwitch,
   } = params;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -459,6 +533,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       initialIsFreeColor?: boolean;
       currentSeq: number;
       transitionSeq: number;
+      infiniteZoomOptions?: InfiniteZoomLoadOptions;
     }) => {
       const {
         puzzleData,
@@ -475,6 +550,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         initialIsFreeColor,
         currentSeq,
         transitionSeq,
+        infiniteZoomOptions,
       } = opts;
 
       if (initialCustomPalette && initialCustomPalette.length > 0) {
@@ -540,7 +616,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         restoredPaintedMap
       );
       const estSaveBytes = StorageService.estimatePuzzleSaveBytes(puzzleData, previewUrl);
-      const finalizedSnapshots = StorageService.updateSnapshotProgress(
+      const baseSnapshots = StorageService.updateSnapshotProgress(
         snapId,
         initialFilledRegionIds.size,
         puzzleData.regions.length,
@@ -553,6 +629,11 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         puzzleData.palette,
         isFree,
         estSaveBytes
+      );
+      const finalizedSnapshots = applyInfiniteZoomTreeLinks(
+        baseSnapshots,
+        snapId,
+        infiniteZoomOptions
       );
       const syncedLoadedSave = finalizedSnapshots.find((s) => s.id === snapId);
       liveCoopRef.current = {
@@ -634,8 +715,10 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       initialViewportOverride?: CoopViewport,
       initialCustomPalette?: PaletteColor[],
       initialIsFreeColor?: boolean,
-      parentSnapshotId?: string
+      parentSnapshotId?: string,
+      infiniteZoomOptions?: InfiniteZoomLoadOptions
     ) => {
+      onBeforeSnapshotResetOrSwitch?.();
       const currentSeq = ++generationSeqRef.current;
       const transitionSeq = ++snapshotTransitionSeqRef.current;
       clearPendingViewportSave();
@@ -687,6 +770,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
             : {}),
           ...(initialIsFreeColor !== undefined ? { isFreeColor: initialIsFreeColor } : {}),
           ...(parentSnapshotId ? { parentSnapshotId } : {}),
+          ...(infiniteZoomOptions?.zoomTree ? { zoomTree: infiniteZoomOptions.zoomTree } : {}),
           zoomScale: targetView.zoomScale,
           panOffsetX: targetView.panOffsetX,
           panOffsetY: targetView.panOffsetY,
@@ -696,26 +780,19 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
         setActiveSnapshotId(snapId);
         setSnapshots(StorageService.addSnapshot(newSnapshot));
+        infiniteZoomOptions?.onRegistered?.(snapId);
 
         if (!sampleAssetPath) {
-          const expectedTransitionSeq = snapshotTransitionSeqRef.current;
-          void compressImageForStorage({
-            blob: sourceBlob,
-            image: img,
+          persistSnapshotSourceBlob({
+            snapId,
+            sourceBlob,
+            img,
             width: canvas.width,
             height: canvas.height,
-          })
-            .then((blob) => {
-              if (
-                !blob ||
-                expectedTransitionSeq !== snapshotTransitionSeqRef.current ||
-                !StorageService.loadSnapshots().some((s) => s.id === snapId)
-              ) {
-                return;
-              }
-              return StorageService.saveImageBlob(snapId, blob);
-            })
-            .catch((err) => console.warn('Failed to persist source image blob:', err));
+            preserveLosslessAlpha: Boolean(infiniteZoomOptions?.preserveLosslessAlpha),
+            expectedTransitionSeq: snapshotTransitionSeqRef.current,
+            snapshotTransitionSeqRef,
+          });
         }
       } catch (err) {
         console.error('Failed to prepare puzzle generation:', err);
@@ -773,6 +850,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
             initialIsFreeColor,
             currentSeq,
             transitionSeq,
+            infiniteZoomOptions,
           });
         } catch (err) {
           if (
@@ -808,6 +886,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       clearPendingViewportSave,
       finalizeGeneratedPuzzle,
       liveCoopRef,
+      onBeforeSnapshotResetOrSwitch,
       resetReplayState,
       setActiveSnapshotId,
       setHintRegionId,
@@ -1011,6 +1090,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       }
 
       clearPendingViewportSave();
+      onBeforeSnapshotResetOrSwitch?.();
       if (activeSnapshotId && puzzle && !snapshotTransitioningRef.current) {
         const updated = StorageService.updateSnapshotViewport(
           activeSnapshotId,
@@ -1150,7 +1230,8 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
             },
             snapshot.customPalette,
             snapshot.isFreeColor,
-            snapshot.parentSnapshotId
+            snapshot.parentSnapshotId,
+            snapshot.zoomTree ? { zoomTree: snapshot.zoomTree } : undefined
           );
         };
         attachImageErrorFallback(img);
@@ -1187,6 +1268,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       handleUpdateSettings,
       latestRenderCoopRef,
       liveCoopRef,
+      onBeforeSnapshotResetOrSwitch,
       loadArtworkFromImage,
       puzzle,
       resetReplayState,
@@ -1621,7 +1703,20 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
               undefined,
               undefined,
               undefined,
-              parentId
+              parentId,
+              {
+                linkParentId: parentId,
+                zoomTree: {
+                  depth: (activeSave?.zoomTree?.depth ?? 0) + 1,
+                  direction: 'child-in',
+                  boundsInParent: {
+                    x: cropX / srcW,
+                    y: cropY / srcH,
+                    width: cropW / srcW,
+                    height: cropH / srcH,
+                  },
+                },
+              }
             );
           };
           detailImg.onerror = () => {
@@ -1638,6 +1733,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       unlockDetailTransition();
     }
   }, [
+    activeSave?.zoomTree?.depth,
     activeSnapshotId,
     activeTitle,
     clearPendingViewportSave,
@@ -2029,6 +2125,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
   const handleResetProgress = useCallback(() => {
     clearPendingViewportSave();
+    onBeforeSnapshotResetOrSwitch?.();
     const previouslyFilled = Array.from(filledRegionIds);
     if (previouslyFilled.length > 0) {
       emitCoopUnfill(previouslyFilled);
@@ -2117,6 +2214,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     clearPendingViewportSave,
     emitCoopUnfill,
     filledRegionIds,
+    onBeforeSnapshotResetOrSwitch,
     isFreeColorMode,
     liveCoopRef,
     puzzle,
@@ -2228,6 +2326,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     handleLoadSnapshot,
     handleLoadSnapshotRef,
     loadSampleFromPrebakedOrGenerate,
+    persistParentSnapshotBeforeDetailTile,
     handleZoomIntoDetailTile,
     handleFileUpload,
     handlePickImage,

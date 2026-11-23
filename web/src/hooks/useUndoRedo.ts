@@ -262,6 +262,7 @@ export interface UseUndoRedoOptions<TLive extends UndoRedoLiveState> {
   setSnapshots: Dispatch<SetStateAction<SavedSnapshot[]>>;
   markTutorialActionTried: (action: 'undo_redo') => void;
   triggerFeatureOffer: (offerId: FeatureOfferId) => void;
+  onTransitionCommitted?: () => void;
 }
 
 export interface UseUndoRedoResult {
@@ -297,6 +298,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
   setSnapshots,
   markTutorialActionTried,
   triggerFeatureOffer,
+  onTransitionCommitted,
 }: UseUndoRedoOptions<TLive>): UseUndoRedoResult {
   const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoHistoryEntry[]>([]);
@@ -334,6 +336,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
     ) => {
       syncUndoStack(transition.nextUndoStack);
       syncRedoStack(transition.nextRedoStack);
+      onTransitionCommitted?.();
 
       if (transition.coopEmission) {
         if (transition.coopEmission.kind === 'FILL') {
@@ -403,6 +406,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
       emitCoopUnfill,
       liveCoopRef,
       markTutorialActionTried,
+      onTransitionCommitted,
       setActiveColorId,
       setFilledRegionIds,
       setHintRegionId,
