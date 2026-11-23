@@ -35,7 +35,7 @@ export const VALID_MOTIF_KINDS: readonly InfiniteZoomMotifKind[] = [
 const VALID_MOTIF_KIND_SET: ReadonlySet<string> = new Set(VALID_MOTIF_KINDS);
 const HEX_6_RE = /^#[0-9A-Fa-f]{6}$/;
 const UNSAFE_MARKUP_RE =
-  /<svg\b|<script\b|<\s*\/?\s*[a-z][^>]*>|javascript\s*:|data\s*:\s*text\/html|\bon[a-z]+\s*=|\beval\s*\(|\b(?:new\s+)?Function\s*\(/i;
+  /<svg\b|<script\b|<\s*(?:\/\s*)?[a-z][^>]*>|javascript\s*:|data\s*:\s*text\/html|\bon[a-z]+\s*=|\beval\s*\(|\b(?:new\s+)?Function\s*\(/i;
 const DEFAULT_THEME = 'Harmonious Cel Detail';
 const DEFAULT_FALLBACK_PALETTE: readonly string[] = [
   '#60A5FA',
@@ -465,33 +465,43 @@ function parseRawPlanObject(raw: unknown): Record<string, unknown> | null {
   return candidate as Record<string, unknown>;
 }
 
-function valueContainsUnsafeMarkup(val: unknown, depth: number): boolean {
+function valueContainsUnsafeMarkup(
+  val: unknown,
+  depth: number,
+  seen: Set<object>
+): boolean {
   if (depth > 8) return false;
   if (typeof val === 'string') {
     return containsUnsafeMarkupText(val);
   }
+  if (!val || typeof val !== 'object') {
+    return false;
+  }
+  if (seen.has(val)) {
+    return false;
+  }
+  seen.add(val);
   if (Array.isArray(val)) {
     for (let i = 0; i < val.length; i++) {
-      if (valueContainsUnsafeMarkup(val[i], depth + 1)) return true;
+      if (valueContainsUnsafeMarkup(val[i], depth + 1, seen)) return true;
     }
     return false;
   }
-  if (val && typeof val === 'object') {
-    const rec = val as Record<string, unknown>;
-    for (const key of Object.keys(rec)) {
-      if (
-        containsUnsafeMarkupText(key) ||
-        valueContainsUnsafeMarkup(rec[key], depth + 1)
-      ) {
-        return true;
-      }
+  const rec = val as Record<string, unknown>;
+  for (const key of Object.keys(rec)) {
+    if (
+      containsUnsafeMarkupText(key) ||
+      valueContainsUnsafeMarkup(rec[key], depth + 1, seen)
+    ) {
+      return true;
     }
   }
   return false;
 }
 
 function objectContainsUnsafeMarkup(obj: Record<string, unknown>): boolean {
-  return valueContainsUnsafeMarkup(obj, 0);
+  const seen = new Set<object>();
+  return valueContainsUnsafeMarkup(obj, 0, seen);
 }
 
 function sanitizeSceneElement(
