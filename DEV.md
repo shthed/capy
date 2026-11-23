@@ -2,7 +2,7 @@
 
 This guide defines the engineering workflow, shared architectural guardrails, CI/CD architecture, and ongoing maintenance playbooks for **Capy** ([`https://github.com/capyboop/paint`](https://github.com/capyboop/paint), live at [`https://capypaint.com/`](https://capypaint.com/)<!-- capy-dev-only:start -->; developed in [`https://github.com/shthed/capy`](https://github.com/shthed/capy) with PR previews at [`https://shthed.github.io/capy/`](https://shthed.github.io/capy/) and private AI operational guides in [`docs/ai/workflow-and-models.md`](./docs/ai/workflow-and-models.md)<!-- capy-dev-only:end -->).
 
-**Related Guides**: [`README.md`](./README.md) | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | [`SUPPORT.md`](./SUPPORT.md) | [`SECURITY.md`](./SECURITY.md) | [`PROJECT.md`](./PROJECT.md) | [`ROADMAP.md`](./ROADMAP.md) | [`TODO.md`](./TODO.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
+**Related Guides**: [`README.md`](./README.md) | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | [`SUPPORT.md`](./SUPPORT.md) | [`SECURITY.md`](./SECURITY.md) | [`PROJECT.md`](./PROJECT.md) | [`ROADMAP.md`](./ROADMAP.md) | [`WEB.md`](./WEB.md) | [`PUZZLE.md`](./PUZZLE.md) | [`APP.md`](./APP.md) | [`CLOUD.md`](./CLOUD.md) | [`TESTING.md`](./TESTING.md) | [`CHANGELOG.md`](./CHANGELOG.md) | [`LICENSE.md`](./LICENSE.md)
 
 **Table of Contents**:
 1. [Documentation Map & Architecture](#1-documentation-map--architecture)
@@ -14,7 +14,7 @@ This guide defines the engineering workflow, shared architectural guardrails, CI
 
 > [!IMPORTANT]
 > **Division Between `PROJECT.md` and `DEV.md`**:
-> - [`PROJECT.md`](./PROJECT.md) is the **canonical Project Management manual** owning backlog governance, Epic triage, PR sync, release promotion, `CHANGELOG.md` channel governance, and the retro log.
+> - [`PROJECT.md`](./PROJECT.md) is the **canonical Project Management manual** owning GitHub Issues governance, PR sync, release promotion, `CHANGELOG.md` channel governance, and the retro log.
 > - [`DEV.md`](./DEV.md) (this file) is the **engineering manual** covering shared technical guardrails, local build/test CLI, CI/CD architecture, SemVer/dependencies/assets, and troubleshooting.
 
 ---
@@ -23,12 +23,11 @@ This guide defines the engineering workflow, shared architectural guardrails, CI
 
 ```mermaid
 flowchart TD
-    subgraph GovernanceAndPlanning["PM Governance, Roadmap, GitHub Agile & Sprint Queue"]
-        PROJECT["PROJECT.md (Agile Triad, PR Sync, Release Promotion & Retro)"]
+    subgraph GovernanceAndPlanning["PM Governance, Roadmap & GitHub Issues"]
+        PROJECT["PROJECT.md (Issue Governance, PR Sync, Release Promotion & Retro)"]
         DEV["DEV.md (Engineering Workflow, Guardrails, CI/CD & Maintenance)"]
-        ROADMAP["ROADMAP.md (Epics, User Stories, Icebox & Shipped Archive)"]
-        GH_AGILE["GitHub Epic Issues (EPIC-1..EPIC-5) & Sprint Milestones"]
-        TODO["TODO.md (Focused 1-Sprint Ready-for-Dev Queue)"]
+        ROADMAP["ROADMAP.md (Concise Now / Next / Later Product Vision)"]
+        GH_ISSUES["GitHub Issues & Pull Requests (Active Bugs, Features & Plans)"]
         CHANGELOG["CHANGELOG.md (SemVer Rules, Channel Markers & History)"]
     end
 
@@ -40,10 +39,8 @@ flowchart TD
         TESTING["TESTING.md (Unified Vite SSR + Playwright E2E & JUnit4)"]
     end
 
-    ROADMAP <--> GH_AGILE
-    ROADMAP --> TODO
-    GH_AGILE <--> TODO
-    PROJECT --> TODO
+    ROADMAP <--> GH_ISSUES
+    PROJECT --> GH_ISSUES
     PROJECT --> CHANGELOG
     DEV --> WEB
     DEV --> PUZZLE
@@ -59,9 +56,8 @@ flowchart TD
 - **[`CAPYBOOP.md`](./CAPYBOOP.md)** (*Studio Structure & AI Onboarding*): CapyBoop Games organizational chart, standing AI chat roles, and cross-chat coordination rules.
 - **[`AGENTS.md`](./AGENTS.md)** (*Auto-Loaded AI Playbook*): AI-specific guardrails, context discipline, task routing, and links to [`docs/ai/`](./docs/ai/workflow-and-models.md).
 <!-- capy-dev-only:end -->
-- **[`PROJECT.md`](./PROJECT.md)** (*Project Management & Maintainers*): Canonical Lean Agile triad ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), sprint cadence, Epic triage, PR sync, release promotion, `CHANGELOG.md` channel governance, and continuous improvement retro log.
-- **[`ROADMAP.md`](./ROADMAP.md)** (*Contributors & Maintainers*): Strategic product Epics ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), User Stories (`US-*`), external dependency readiness gates, Platform Icebox (`ICE-*`), and collapsed Shipped Epics & Stories.
-- **[`TODO.md`](./TODO.md)** (*Contributors & Maintainers*): Focused **1-Sprint Execution Queue** containing only active sprint `BUG-*` and `TASK-*` items under the active GitHub Sprint Milestone.
+- **[`PROJECT.md`](./PROJECT.md)** (*Project Management & Maintainers*): Focused GitHub Issues governance, PR sync, release promotion, `CHANGELOG.md` channel governance, and continuous improvement retro log.
+- **[`ROADMAP.md`](./ROADMAP.md)** (*Contributors & Maintainers*): Concise Now / Next / Later product vision linked to GitHub Issues and [`CHANGELOG.md`](./CHANGELOG.md).
 - **[`DEV.md`](./DEV.md)** (*Contributors & Maintainers*): Engineering workflow, shared technical guardrails, 3-tier CI/CD, SemVer/dependencies/assets, and troubleshooting.
 - **[`WEB.md`](./WEB.md)** (*Engineering Reference*): React 19 UI hierarchy, `PuzzleCanvas.tsx` 3-tier offscreen caching, 6-mode touch gesture engine, Worker IPC, `NativeBridge`, storage keys, and `UserSettings` dictionary.
 - **[`PUZZLE.md`](./PUZZLE.md)** (*Engineering Reference*): `puzzle.worker.ts` 5-strategy computer-vision pipeline, Red-Mean K-Means++ clustering, adaptive Otsu/Sobel contours, watershed absorption, and 6-stage telemetry.

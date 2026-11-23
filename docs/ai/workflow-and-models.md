@@ -2,7 +2,7 @@
 
 Private AI-assisted development guide for the Capy monorepo. Excluded wholesale from public `capyboop/paint` clean-room exports via [`rebrand-persona.mjs`](../../web/scripts/rebrand-persona.mjs).
 
-**Related Guides**: [`AGENTS.md`](../../AGENTS.md) | [`CAPYBOOP.md`](../../CAPYBOOP.md) | [`pr-readiness.md`](./pr-readiness.md) | [`cross-repo-guardrail.md`](./cross-repo-guardrail.md) | [`DEV.md`](../../DEV.md) | [`PROJECT.md`](../../PROJECT.md) | [`ROADMAP.md`](../../ROADMAP.md) | [`TODO.md`](../../TODO.md)
+**Related Guides**: [`AGENTS.md`](../../AGENTS.md) | [`CAPYBOOP.md`](../../CAPYBOOP.md) | [`pr-readiness.md`](./pr-readiness.md) | [`cross-repo-guardrail.md`](./cross-repo-guardrail.md) | [`DEV.md`](../../DEV.md) | [`PROJECT.md`](../../PROJECT.md) | [`ROADMAP.md`](../../ROADMAP.md)
 
 ---
 
@@ -11,7 +11,7 @@ Private AI-assisted development guide for the Capy monorepo. Excluded wholesale 
 Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vision, binary RLE/CRDT codecs, and a native Kotlin Android wrapper. Human developers and AI agents hold complementary responsibilities across these layers.
 
 ### Human Project Owner Focus
-1. **Product Vision & Sprint Pull Governance**: Curate Roadmap themes and Stories in [`ROADMAP.md`](../../ROADMAP.md) (governance in [`PROJECT.md`](../../PROJECT.md)) and promote only unblocked, high-impact tasks into [`TODO.md`](../../TODO.md) for the active sprint.
+1. **Product Vision & Prioritization**: Curate high-level direction in [`ROADMAP.md`](../../ROADMAP.md) (governance in [`PROJECT.md`](../../PROJECT.md)) and prioritize concrete work in GitHub Issues.
 2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness.
 3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve implementation plans before code generation begins.
 4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/teamwork`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.
@@ -22,7 +22,7 @@ Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vi
 2. **Transparent Live Reasoning**: Continuously surface clear, high-level working status updates explaining *what* file or system is being inspected, *why* each step is being taken, and *what* was learned.
 3. **Invariant-First Engineering**: Enforce zero per-frame heap allocations in `requestAnimationFrame` hot paths, strict Web Worker isolation in `puzzle.worker.ts`, relative `./assets/...` paths, and defensive `NativeBridge` fallbacks per [`DEV.md`](../../DEV.md).
 4. **Thorough Local VM Verification**: Run `npm run test:sanity && npm run lint && npm run build && npm test` (plus `./gradlew app:testDebugUnitTest` when available) inside the local VM before pushing, keeping GitHub Actions fast and lightweight.
-5. **Zero-Drift Documentation & Traceability**: Synchronize subsystem `.md` files, [`TODO.md`](../../TODO.md), and [`ROADMAP.md`](../../ROADMAP.md) in the same PR as the code change, drop a concise `.changelog/<slug>.md` fragment on feature/bugfix PRs targeting `beta`, and pin code references to immutable commit SHAs.
+5. **Zero-Drift Documentation & Traceability**: Synchronize affected subsystem `.md` files and [`ROADMAP.md`](../../ROADMAP.md) in the same PR as the code change, drop a concise `.changelog/<slug>.md` fragment on feature/bugfix PRs targeting `beta`, and pin code references to immutable commit SHAs.
 
 ---
 
@@ -33,24 +33,24 @@ Selecting the right capability tier and slash workflow maximizes code quality on
 ### A. Capability Tiers & Named Frontier Models
 - **Deep-Verification Frontier (`Carbon` -- ~15% of PRs)**:
   - *Antigravity Selection / Subagent Tier*: **Gemini 4 Carbon** (`gemini-4-carbon`, default `medium` thinking; `high` only for hardest math/security specs) or **Claude Opus 5.5 (Thinking)** (`pro` subagent tier).
-  - *Ideal Use Cases*: `/grill-me` + `/plan` architecture interviews, zero-allocation 2D affine and circular-clip rendering math in `PuzzleCanvas.tsx`, `puzzle.worker.ts` segmentation invariants, CRDT/concurrency race audits, and `EPIC-5` OAuth/WebCrypto security specs.
+  - *Ideal Use Cases*: `/grill-me` + `/plan` architecture interviews, zero-allocation 2D affine and circular-clip rendering math in `PuzzleCanvas.tsx`, `puzzle.worker.ts` segmentation invariants, CRDT/concurrency race audits, and OAuth/WebCrypto security specs.
 - **Efficient Frontier Daily Driver (`Argon` -- ~65--70% of PRs)**:
   - *Antigravity Selection / Subagent Tier*: **Gemini 4 Argon** (`gemini-4-argon`, `pro` / `inherit` subagent tier).
   - *Ideal Use Cases*: Default daily driver for multi-file feature stories, `/goal` and `/teamwork` sprint execution, Co-op/IndexedDB bugfixes, and Android Kotlin + `NativeBridge.ts` integration.
 - **Fast Frontier Workhorse (`Flash` -- ~15--20% of PRs)**:
   - *Antigravity Selection / Subagent Tier*: **Gemini 3.8 Flash** (`gemini-3.8-flash`, `flash` subagent tier) or **Claude Sonnet / Haiku**.
-  - *Ideal Use Cases*: `[quick-win]` tasks in [`TODO.md`](../../TODO.md), React 19 modal/settings controls, CI workflow wiring, parallel `research` subagent codebase sweeps, and `.md` / `ROADMAP.md` / `CHANGELOG.md` synchronization.
+  - *Ideal Use Cases*: Small quick-win issues, React 19 modal/settings controls, CI workflow wiring, parallel `research` subagent codebase sweeps, and `.md` / `ROADMAP.md` / `CHANGELOG.md` synchronization.
 - **Ultra-Light (`Flash-Lite`)**:
   - *Antigravity Subagent Tier*: `flash_lite` (**Gemini 3.5 Flash-Lite**).
   - *Ideal Use Cases*: Mechanical log extraction, PR label/title audits, link checks, and copy tweaks; never use for canvas math or concurrency logic.
 
 ### B. Task-to-Model & Slash-Command Routing
-- **Ambiguous New Feature, UX Redesign, or Sprint Charter**: Use **Gemini 4 Carbon** (or **Argon**) with `/grill-me` + `/plan`.
+- **Ambiguous New Feature, UX Redesign, or Architecture Plan**: Use **Gemini 4 Carbon** (or **Argon**) with `/grill-me` + `/plan`.
 - **Canvas Gestures, Zero-Alloc Ring Buffers, or Security/Crypto**: Use **Gemini 4 Carbon** (`medium` thinking) with `/plan`.
-- **Cohesive Story or P0 Bug Batch (`2--4` Sprint Tasks)**: Use **Gemini 4 Argon** with `/goal` (sequential self-healing loop) or `/teamwork` (parallel file-scoped workers + verifier) onto one `automation/sprint-*` or `feature/*` PR branch.
+- **Cohesive Feature or P0 Bug Batch (`2--4` Issues)**: Use **Gemini 4 Argon** with `/goal` (sequential self-healing loop) or `/teamwork` (parallel file-scoped workers + verifier) onto one `feature/*` PR branch.
 - **Large Multi-Subsystem Campaign (`web/` + `app/` + `worker/`)**: Use **Gemini 4 Carbon** or **Argon** with `/teamwork` for milestone-gated proposer + adversarial verifier execution.
-- **Single Ready `TASK-*` or `BUG-*` from `TODO.md`**: Use **Gemini 4 Argon** (or **Gemini 3.8 Flash** for `[quick-win]` items) in a fresh `#NNN` chat.
-- **Documentation Sync, Sprint Replenishment, or Link Audit**: Use **Gemini 3.8 Flash** (or `Flash-Lite`) via `npm run test:sanity` and the `< 2s` docs-only CI fast-path.
+- **Single Ready GitHub Issue or Bugfix**: Use **Gemini 4 Argon** (or **Gemini 3.8 Flash** for small quick-win items) in a fresh `#NNN` chat.
+- **Documentation Sync or Link Audit**: Use **Gemini 3.8 Flash** (or `Flash-Lite`) via `npm run test:sanity` and the `< 2s` docs-only CI fast-path.
 
 ### C. Subagent Delegation Rules
 - **Default Model Inheritance**: Pass `Model: 'inherit'` when invoking subagents unless a specific tier (`pro`, `flash`, `flash_lite`) is explicitly requested.
