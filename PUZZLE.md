@@ -174,7 +174,7 @@ When opening black-and-white line art or hybrid coloring book pages:
 ## 5. Web Worker Execution & 6-Stage Pipeline Telemetry
 
 To guarantee **zero UI frame drops and smooth touch responsiveness**:
-* Puzzle generation runs inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts).
+* Puzzle generation (`GENERATE`) and masked Infinite Zoom subdivision (`SUBDIVIDE_MASKED_REGION`, delegating to [`MaskedRegionSubdivider.ts`](./web/src/engine/MaskedRegionSubdivider.ts)) run inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts).
 * Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads** (`rgbaBuffer` inbound; `regionMap`, `borderMap`, and a single contiguous `packedPixelsBuffer` outbound, unpacked into zero-copy `Int32Array.subarray` views via `pixelsOffset`/`pixelsLength`). Pole-of-inaccessibility label placement in [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) reuses a single `Int32Array(total)` `distGrid` and `bfsQueue` across regions to eliminate per-region `Map` heap spikes.
 * Progress updates stream back via `onProgress(pct, status, payload)` with a **strictly monotonic high-water mark** (`0.00` $\rightarrow$ `1.00`). In default **Simple Progress (Fast Mode)** (`detailedProgress = false`), progress IPC is throttled and diagnostic swatch cloning is skipped for maximum generation throughput; toggling **Detailed Progress** sends `{ type: 'SET_DETAILED_PROGRESS', detailed: true }` live to the running worker.
 
@@ -195,6 +195,15 @@ When `detailedProgress` is enabled, `GenerationProgressPayload.inspection` (`Gen
 * **Style & Heuristics**: `detectedType` (`'Line Art / Illustration' | 'Photograph / Realism' | 'Flat Vector / Graphic'`), `isLineArt`, `isBlackAndWhite`, `edgeRatio`, `localVariance`, `globalVariance`, `colorClusterCount`, and `strategyRationale`.
 * **Palette & Region Metrics**: `paletteDetail`, `colorCount`, `paletteColors` (live emerging hex swatches), `maxRegions`, `finalRegionCount`, `minActualArea`, and `maxActualArea`.
 * **Canvas & Footprint Metrics**: `sourceWidth`, `sourceHeight`, `targetWidth`, `targetHeight`, `resolution`, and `estimatedSaveSizeKb`.
+
+### 5.3 Masked Region Subdivision & Alpha-Cutout Generation (`MaskedRegionSubdivider.ts`)
+
+Bidirectional Infinite Zoom extends the worker pipeline with masked subdivision and transparent organic cutout support while preserving zero UI frame drops:
+
+- **Masked Red-Mean K-Means++ & Local Flood Fill (`SUBDIVIDE_MASKED_REGION`)**: Transfers the cropped `rgbaBuffer` and binary `cropMaskBuffer` zero-copy to [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts), clustering strictly over `cropMask === 1` pixels in perceptual Red-Mean space (`collectMaskedPixels`, `quantizeMaskedPixels`), running 4-connected flood-fill segmentation (`segmentMaskedComponents`), and computing Pole-of-Inaccessibility centroids via BFS strictly inside the masked silhouette (`computeLocalRegionGeometry`).
+- **Harmonious Palette Growth**: Reuses existing puzzle swatches whenever perceptual distance satisfies `deltaE <= 22` (`DEFAULT_REUSE_DELTA_E`), appends up to `2`--`6` harmonious accent swatches (`DEFAULT_MAX_NEW_SWATCHES = 6`) capped at `MAX_TOTAL_PALETTE_SWATCHES = 64` in Color-by-Number mode (with duplicate-distance rejection and post-assignment pruning of any zero-region orphan swatches), and preserves custom palettes unchanged in Free Colour Mode (utilizing all swatches cleanly via `assignFreeColorIds`).
+- **Pure `< 3ms` Sparse Monotonic Splice (`mergeSubdividedRegionIntoPuzzle`)**: Allocates strictly monotonic region IDs starting at `maxExistingId + 1` (preventing ID collisions across repeated subdivisions), removes replaced regions, and recomputes `borderMap` strictly within the bounded `(bbox +/- 1 px)` dirty window.
+- **Transparent Alpha-Cutout Support (`AutoPuzzleGenerator` in [`PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts))**: `GENERATE` automatically detects exterior `alpha < 128` transparency (`extractOpaqueAlphaMask`) on deep organic child cutout tiles and leaves exterior cells as `rId <= 0` while decoupling dark/colorful cutout segmentation from Free Colour Mode so irregular shapes render and export cleanly without rectangular white corners.
 
 ---
 
