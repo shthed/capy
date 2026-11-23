@@ -1,4 +1,4 @@
-import { PaletteColor, PuzzleData, SavedSnapshot } from '../../types';
+import { InfiniteZoomNodeMeta, PaletteColor, PuzzleData, SavedSnapshot } from '../../types';
 import { estimateCompactPuzzleBytes } from '../CapyCodec';
 import { computeSlotKeyForSnapshot, recordLocalSlotTombstone } from '../cloud/slotKey';
 import { reportSwallowed } from '../telemetry';
@@ -19,6 +19,90 @@ import {
   setCachedPreview,
 } from './IndexedDbStore';
 import { resolveScopedBackupKey, resolveScopedStorageKey, SNAPSHOTS_KEY } from './StorageKeys';
+
+const MAX_ZOOM_TREE_CHILDREN = 64;
+
+function mergeZoomTreePatch(
+  base: InfiniteZoomNodeMeta | undefined,
+  patch: Partial<InfiniteZoomNodeMeta> | undefined,
+  defaults: { depth: number; direction: InfiniteZoomNodeMeta['direction'] }
+): InfiniteZoomNodeMeta {
+  const merged: InfiniteZoomNodeMeta = {
+    ...base,
+    depth: base?.depth ?? defaults.depth,
+    direction: base?.direction ?? defaults.direction,
+  };
+  if (patch) {
+    for (const key of Object.keys(patch) as Array<keyof InfiniteZoomNodeMeta>) {
+      const val = patch[key];
+      if (val !== undefined) {
+        (merged as unknown as Record<string, unknown>)[key] = val;
+      }
+    }
+  }
+  return merged;
+}
+
+function combineChildSnapshotIds(
+  existing: string[] | undefined,
+  patched: string[] | undefined,
+  parentId: string,
+  childId: string
+): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  const addId = (cid: unknown) => {
+    if (typeof cid !== 'string') return;
+    const trimmed = cid.trim();
+    if (!trimmed || trimmed === parentId || seen.has(trimmed)) return;
+    seen.add(trimmed);
+    ordered.push(trimmed);
+  };
+  if (Array.isArray(existing)) {
+    for (const cid of existing) addId(cid);
+  }
+  if (Array.isArray(patched)) {
+    for (const cid of patched) addId(cid);
+  }
+  addId(childId);
+  if (ordered.length <= MAX_ZOOM_TREE_CHILDREN) {
+    return ordered;
+  }
+  const tail = ordered.slice(-MAX_ZOOM_TREE_CHILDREN);
+  if (!tail.includes(childId)) {
+    return [...tail.slice(-(MAX_ZOOM_TREE_CHILDREN - 1)), childId];
+  }
+  return tail;
+}
+
+function pruneDeletedZoomTreeLinks(
+  snapshots: SavedSnapshot[],
+  deletedId: string
+): { prunedUpdated: SavedSnapshot[]; prunedIds: string[] } {
+  const prunedIds: string[] = [];
+  const prunedUpdated = snapshots.map((s) => {
+    const clearParent = s.parentSnapshotId === deletedId;
+    const hasChildRef =
+      Array.isArray(s.zoomTree?.childSnapshotIds) &&
+      s.zoomTree.childSnapshotIds.includes(deletedId);
+    if (!clearParent && !hasChildRef) {
+      return s;
+    }
+    prunedIds.push(s.id);
+    const next: SavedSnapshot = { ...s };
+    if (clearParent) {
+      delete next.parentSnapshotId;
+    }
+    if (hasChildRef && next.zoomTree) {
+      next.zoomTree = {
+        ...next.zoomTree,
+        childSnapshotIds: next.zoomTree.childSnapshotIds!.filter((cid) => cid !== deletedId),
+      };
+    }
+    return next;
+  });
+  return { prunedUpdated, prunedIds };
+}
 
 export async function hydrateSnapshotPreviews(
   snapshots: SavedSnapshot[]
@@ -436,6 +520,94 @@ export function togglePinSnapshot(id: string): SavedSnapshot[] {
   return updated;
 }
 
+export function linkZoomTreeSnapshots(
+  parentId: string,
+  childId: string,
+  parentPatch?: Partial<InfiniteZoomNodeMeta>,
+  childPatch?: Partial<InfiniteZoomNodeMeta>
+): SavedSnapshot[] {
+  if (!parentId || !childId || parentId === childId) {
+    return loadSnapshots();
+  }
+  const { snapshots: list, metaTsById } = loadSnapshotsWithMeta();
+  const parentSnap = list.find((s) => s.id === parentId);
+  const childSnap = list.find((s) => s.id === childId);
+  if (!parentSnap || !childSnap) {
+    return list;
+  }
+
+  const nextChildIds = combineChildSnapshotIds(
+    parentSnap.zoomTree?.childSnapshotIds,
+    parentPatch?.childSnapshotIds,
+    parentId,
+    childId
+  );
+  const nextParentZoomTree: InfiniteZoomNodeMeta = {
+    ...mergeZoomTreePatch(parentSnap.zoomTree, parentPatch, { depth: 0, direction: 'in-place' }),
+    childSnapshotIds: nextChildIds,
+  };
+  const nextChildZoomTree = mergeZoomTreePatch(childSnap.zoomTree, childPatch, {
+    depth: nextParentZoomTree.depth + 1,
+    direction: 'child-in',
+  });
+
+  const updated = list.map((s) => {
+    if (s.id === parentId) {
+      return { ...s, zoomTree: nextParentZoomTree };
+    }
+    if (s.id === childId) {
+      return { ...s, parentSnapshotId: parentId, zoomTree: nextChildZoomTree };
+    }
+    return s;
+  });
+
+  const persistedMaxTs = getMaxPersistedSnapshotTimestamp(
+    resolveScopedStorageKey(SNAPSHOTS_KEY),
+    resolveScopedBackupKey(SNAPSHOTS_KEY)
+  );
+  const nextMetaTs = computeNextSnapshotMetaTs(list, metaTsById, persistedMaxTs);
+  metaTsById.set(parentId, nextMetaTs);
+  metaTsById.set(childId, nextMetaTs);
+  saveSnapshotsInternal(updated, { metaTsById });
+  return updated;
+}
+
+export function updateSnapshotMetadata(
+  id: string,
+  patch: Partial<SavedSnapshot>
+): SavedSnapshot[] {
+  if (!id) {
+    return loadSnapshots();
+  }
+  const { snapshots: list, metaTsById } = loadSnapshotsWithMeta();
+  let matched = false;
+  const updated = list.map((s) => {
+    if (s.id !== id) return s;
+    matched = true;
+    const next: Record<string, unknown> = { ...s };
+    for (const key of Object.keys(patch)) {
+      if (key === 'id' || key === 'metaUpdatedAt') continue;
+      const val = (patch as Record<string, unknown>)[key];
+      if (val === undefined) {
+        delete next[key];
+      } else {
+        next[key] = val;
+      }
+    }
+    return stripInternalSnapshotMeta(next as unknown as SavedSnapshot);
+  });
+  if (!matched) {
+    return list;
+  }
+  const persistedMaxTs = getMaxPersistedSnapshotTimestamp(
+    resolveScopedStorageKey(SNAPSHOTS_KEY),
+    resolveScopedBackupKey(SNAPSHOTS_KEY)
+  );
+  metaTsById.set(id, computeNextSnapshotMetaTs(list, metaTsById, persistedMaxTs));
+  saveSnapshotsInternal(updated, { metaTsById });
+  return updated;
+}
+
 export interface DeleteSnapshotOptions {
   skipTombstone?: boolean;
   tombstoneAt?: number;
@@ -457,21 +629,27 @@ export async function deleteSnapshot(
         : Date.now();
     recordLocalSlotTombstone(computeSlotKeyForSnapshot(target), deletedAt);
   }
+  let resultList = updated;
   if (updated.length < list.length) {
-    if (updated.length > 0) {
+    const { prunedUpdated, prunedIds } = pruneDeletedZoomTreeLinks(updated, id);
+    resultList = prunedUpdated;
+    if (prunedUpdated.length > 0) {
       const storageKey = resolveScopedStorageKey(SNAPSHOTS_KEY);
       const backupKey = resolveScopedBackupKey(SNAPSHOTS_KEY);
       const persistedMaxTs = getMaxPersistedSnapshotTimestamp(storageKey, backupKey);
       const prevListMaxTs = Math.max(getMaxSnapshotListTs(list, metaTsById), persistedMaxTs);
       const nextMetaTs = computeNextSnapshotMetaTs(list, metaTsById, prevListMaxTs);
       metaTsById.delete(id);
-      metaTsById.set(updated[0].id, nextMetaTs);
+      metaTsById.set(prunedUpdated[0].id, nextMetaTs);
+      for (const prunedId of prunedIds) {
+        metaTsById.set(prunedId, nextMetaTs);
+      }
     }
-    saveSnapshotsInternal(updated, {
+    saveSnapshotsInternal(prunedUpdated, {
       immediateBackup: true,
-      allowEmptyBackup: updated.length === 0,
+      allowEmptyBackup: prunedUpdated.length === 0,
       clearLocalOnFailure: true,
-      metaTsById: updated.length > 0 ? metaTsById : undefined,
+      metaTsById: prunedUpdated.length > 0 ? metaTsById : undefined,
     });
   }
   const active = loadActiveState();
@@ -479,7 +657,7 @@ export async function deleteSnapshot(
     clearActiveState();
   }
   await deleteSnapshotEntries(id);
-  return updated;
+  return resultList;
 }
 
 export async function clearAllSnapshots(timeoutMs?: number): Promise<void> {

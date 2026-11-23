@@ -44,6 +44,7 @@ export type RegionColorMode = 'DETAIL' | 'SOLID';
 export type RegionHighlightStyle = 'CENTROID_GLOW' | 'NUMBER_ONLY' | 'FULL_REGION' | 'BOUNDARY_ONLY';
 export type HintFillStyle = 'SOLID' | 'CHECKER' | 'STRIPES';
 export type SaveSortOrder = 'LAST_ACTIVE' | 'DATE' | 'PERCENT_COMPLETE';
+export type LocalAiMode = 'AUTO' | 'LOCAL_ONLY' | 'OFFLINE_FAST';
 
 export interface GeneratorConfig {
   algorithm?: GeneratorAlgorithm;
@@ -146,6 +147,7 @@ export interface UserSettings {
   textScale: number;
   uiScale: number;
   detailedLoadingProgress: boolean;
+  localAiMode: LocalAiMode;
   generatorConfig: GeneratorConfig;
 }
 
@@ -235,6 +237,72 @@ export interface PuzzleSourceRef {
   contentHash?: string;
 }
 
+export type InfiniteZoomDirection = 'in-place' | 'child-in' | 'extend-out';
+
+export interface BorderExtensionSides {
+  top: boolean;
+  bottom: boolean;
+  left: boolean;
+  right: boolean;
+}
+
+export interface InfiniteZoomBounds {
+  /** Normalized [0..1] rectangle inside the parent/outer puzzle */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface InfiniteZoomNodeMeta {
+  /** 0 = root; positive = deeper child tile; negative = extended outer puzzle */
+  depth: number;
+  direction: InfiniteZoomDirection;
+  boundsInParent?: InfiniteZoomBounds;
+  childSnapshotIds?: string[];
+  extendedSides?: BorderExtensionSides;
+  selectedRegionIds?: number[];
+  promptHint?: string;
+  aiTierUsed?: 'chrome-ai' | 'local-wasm' | 'offline-procedural';
+  inPlaceSubdivisionCount?: number;
+}
+
+export type InfiniteZoomMotifKind =
+  | 'petals'
+  | 'leaves'
+  | 'pebbles'
+  | 'ripples'
+  | 'stars'
+  | 'clouds'
+  | 'hills'
+  | 'trees'
+  | 'mushrooms'
+  | 'waves'
+  | 'sparkles'
+  | 'vines'
+  | 'geometric'
+  | 'organic-blobs';
+
+export interface InfiniteZoomSceneElement {
+  kind: InfiniteZoomMotifKind;
+  /** Normalized [0..1] coordinates within target canvas/bbox */
+  x: number;
+  y: number;
+  scale: number;
+  rotationDeg: number;
+  fillHex: string;
+  strokeHex?: string;
+  count?: number;
+}
+
+export interface InfiniteZoomScenePlan {
+  theme: string;
+  paletteAccentsHex: string[];
+  elements: InfiniteZoomSceneElement[];
+  tierUsed: 'chrome-ai' | 'local-wasm' | 'offline-procedural';
+  sanitizedPrompt: string;
+}
+
 export interface SavedSnapshot {
   id: string;
   title: string;
@@ -254,6 +322,7 @@ export interface SavedSnapshot {
   sampleAssetPath?: string | null;
   sourceRef?: PuzzleSourceRef;
   parentSnapshotId?: string;
+  zoomTree?: InfiniteZoomNodeMeta;
   zoomScale: number;
   panOffsetX: number;
   panOffsetY: number;

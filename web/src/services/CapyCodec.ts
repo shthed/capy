@@ -1,4 +1,15 @@
-import { PaletteColor, PuzzleData, PuzzleSourceRef, Region, SAMPLE_GALLERY, SavedSnapshot } from '../types';
+import {
+  BorderExtensionSides,
+  InfiniteZoomBounds,
+  InfiniteZoomDirection,
+  InfiniteZoomNodeMeta,
+  PaletteColor,
+  PuzzleData,
+  PuzzleSourceRef,
+  Region,
+  SAMPLE_GALLERY,
+  SavedSnapshot,
+} from '../types';
 import { base64ToUint8, uint8ToBase64 } from '../utils/base64';
 
 export { base64ToUint8, uint8ToBase64 };
@@ -329,6 +340,168 @@ export function assertValidSourceRef(sourceRef: unknown): asserts sourceRef is P
   }
 }
 
+const ZOOM_TREE_MIN_DEPTH = -32;
+const ZOOM_TREE_MAX_DEPTH = 32;
+const ZOOM_TREE_MAX_CHILDREN = 64;
+const ZOOM_TREE_MAX_ID_LEN = 256;
+const ZOOM_TREE_MAX_SELECTED_REGIONS = 2600;
+const ZOOM_TREE_MAX_PROMPT_HINT_LEN = 200;
+const ZOOM_TREE_MAX_IN_PLACE_SUBDIVISIONS = 1000;
+
+const ALLOWED_ZOOM_DIRECTIONS = new Set<InfiniteZoomDirection>([
+  'in-place',
+  'child-in',
+  'extend-out',
+]);
+
+const ALLOWED_AI_TIERS = new Set<NonNullable<InfiniteZoomNodeMeta['aiTierUsed']>>([
+  'chrome-ai',
+  'local-wasm',
+  'offline-procedural',
+]);
+
+function clampUnit(val: unknown): number {
+  if (typeof val !== 'number' || !Number.isFinite(val)) return 0;
+  const clamped = Math.min(1, Math.max(0, val));
+  return clamped === 0 ? 0 : clamped;
+}
+
+function sanitizeZoomBounds(raw: unknown): InfiniteZoomBounds | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const b = raw as Record<string, unknown>;
+  const x = clampUnit(b.x);
+  const y = clampUnit(b.y);
+  const width = Math.min(Math.max(0, 1 - x), clampUnit(b.width));
+  const height = Math.min(Math.max(0, 1 - y), clampUnit(b.height));
+  return {
+    x,
+    y,
+    width: width === 0 ? 0 : width,
+    height: height === 0 ? 0 : height,
+  };
+}
+
+function sanitizeZoomChildIds(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.length > ZOOM_TREE_MAX_ID_LEN || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+    if (out.length >= ZOOM_TREE_MAX_CHILDREN) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function sanitizeZoomExtendedSides(raw: unknown): BorderExtensionSides | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const e = raw as Record<string, unknown>;
+  return {
+    top: Boolean(e.top),
+    bottom: Boolean(e.bottom),
+    left: Boolean(e.left),
+    right: Boolean(e.right),
+  };
+}
+
+function sanitizeZoomSelectedRegions(raw: unknown): number[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const id = raw[i];
+    if (
+      typeof id !== 'number' ||
+      !Number.isInteger(id) ||
+      id < 1 ||
+      id > MAX_PUZZLE_PIXELS ||
+      seen.has(id)
+    ) {
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+    if (out.length >= ZOOM_TREE_MAX_SELECTED_REGIONS) break;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function sanitizeZoomPromptHint(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim().slice(0, ZOOM_TREE_MAX_PROMPT_HINT_LEN);
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function sanitizeZoomAiTier(raw: unknown): InfiniteZoomNodeMeta['aiTierUsed'] | undefined {
+  if (typeof raw !== 'string') return undefined;
+  return ALLOWED_AI_TIERS.has(raw as NonNullable<InfiniteZoomNodeMeta['aiTierUsed']>)
+    ? (raw as InfiniteZoomNodeMeta['aiTierUsed'])
+    : undefined;
+}
+
+function sanitizeZoomSubdivisionCount(raw: unknown): number | undefined {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
+  const clamped = Math.min(ZOOM_TREE_MAX_IN_PLACE_SUBDIVISIONS, Math.max(0, Math.round(raw)));
+  return clamped === 0 ? 0 : clamped;
+}
+
+export function sanitizeZoomTreeMeta(raw: unknown): InfiniteZoomNodeMeta | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Invalid snapshot zoomTree metadata');
+  }
+  const z = raw as Record<string, unknown>;
+  const rawDepth =
+    typeof z.depth === 'number' && Number.isFinite(z.depth)
+      ? Math.min(ZOOM_TREE_MAX_DEPTH, Math.max(ZOOM_TREE_MIN_DEPTH, Math.round(z.depth)))
+      : 0;
+  const depth = rawDepth === 0 ? 0 : rawDepth;
+  const direction: InfiniteZoomDirection =
+    typeof z.direction === 'string' &&
+    ALLOWED_ZOOM_DIRECTIONS.has(z.direction as InfiniteZoomDirection)
+      ? (z.direction as InfiniteZoomDirection)
+      : 'child-in';
+
+  const result: InfiniteZoomNodeMeta = { depth, direction };
+  const boundsInParent = sanitizeZoomBounds(z.boundsInParent);
+  if (boundsInParent !== undefined) result.boundsInParent = boundsInParent;
+  const childSnapshotIds = sanitizeZoomChildIds(z.childSnapshotIds);
+  if (childSnapshotIds !== undefined) result.childSnapshotIds = childSnapshotIds;
+  const extendedSides = sanitizeZoomExtendedSides(z.extendedSides);
+  if (extendedSides !== undefined) result.extendedSides = extendedSides;
+  const selectedRegionIds = sanitizeZoomSelectedRegions(z.selectedRegionIds);
+  if (selectedRegionIds !== undefined) result.selectedRegionIds = selectedRegionIds;
+  const promptHint = sanitizeZoomPromptHint(z.promptHint);
+  if (promptHint !== undefined) result.promptHint = promptHint;
+  const aiTierUsed = sanitizeZoomAiTier(z.aiTierUsed);
+  if (aiTierUsed !== undefined) result.aiTierUsed = aiTierUsed;
+  const inPlaceSubdivisionCount = sanitizeZoomSubdivisionCount(z.inPlaceSubdivisionCount);
+  if (inPlaceSubdivisionCount !== undefined) {
+    result.inPlaceSubdivisionCount = inPlaceSubdivisionCount;
+  }
+  return result;
+}
+
+function validateSnapshotZoomFields(s: Record<string, unknown>): void {
+  if (s.parentSnapshotId !== undefined) {
+    if (
+      typeof s.parentSnapshotId !== 'string' ||
+      s.parentSnapshotId.length > ZOOM_TREE_MAX_ID_LEN ||
+      s.parentSnapshotId.trim().length === 0
+    ) {
+      throw new Error('Invalid snapshot parentSnapshotId');
+    }
+    s.parentSnapshotId = s.parentSnapshotId.trim();
+  }
+  if (s.zoomTree !== undefined) {
+    s.zoomTree = sanitizeZoomTreeMeta(s.zoomTree);
+  }
+}
+
 export function assertValidSavedSnapshot(
   snap: unknown,
   options?: { strictV2?: boolean }
@@ -418,6 +591,7 @@ export function assertValidSavedSnapshot(
       throw new Error('Invalid snapshot previewDataUrl');
     }
   }
+  validateSnapshotZoomFields(s);
 }
 
 function validateRegionMetaFloat32(regionMeta: Float32Array, maxAllowedRegionId: number): number {

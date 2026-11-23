@@ -61,6 +61,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   textScale: 1.0,
   uiScale: 1.0,
   detailedLoadingProgress: false,
+  localAiMode: 'AUTO',
   generatorConfig: { ...DEFAULT_GENERATOR_CONFIG },
 };
 
@@ -119,6 +120,7 @@ const SETTINGS_ENUM_VALUES: Record<string, readonly string[]> = {
   highlightStyle: ['CENTROID_GLOW', 'NUMBER_ONLY', 'FULL_REGION', 'BOUNDARY_ONLY'],
   hintFillStyle: ['CHECKER', 'STRIPES', 'SOLID'],
   paletteSort: ['NUMBER', 'REMAINING', 'HUE', 'LIGHTNESS'],
+  localAiMode: ['AUTO', 'LOCAL_ONLY', 'OFFLINE_FAST'],
 };
 
 const GEN_CONFIG_ENUM_VALUES: Record<string, readonly string[]> = {
@@ -352,6 +354,7 @@ function resolveUserSettings(
       'detailedLoadingProgress',
       DEFAULT_SETTINGS.detailedLoadingProgress
     ),
+    localAiMode: pickSettingsEnum(parsed, 'localAiMode'),
     generatorConfig: sanitizeGeneratorConfig(parsed.generatorConfig),
   };
 }

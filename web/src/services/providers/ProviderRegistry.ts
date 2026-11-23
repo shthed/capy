@@ -1,6 +1,6 @@
 import { MultiProviderAuthManager } from '../auth/AuthManager';
 import {
-  DefaultAiArtworkAdapter,
+  LocalBrowserAiArtworkAdapter,
   NoOpMonetizationAdapter,
   StaticAndCommunityCatalogAdapter,
 } from '../catalog/CatalogIdeasService';
@@ -16,6 +16,7 @@ export {
   CatalogIdeasService,
   ConsentRewardedAdAdapter,
   DefaultAiArtworkAdapter,
+  LocalBrowserAiArtworkAdapter,
   NoOpMonetizationAdapter,
   StaticAndCommunityCatalogAdapter,
 } from '../catalog/CatalogIdeasService';
@@ -37,7 +38,7 @@ export {
   WS_PEER_STALE_MS,
 } from '../coop/HybridCoopRoomClient';
 export type { LocationLike };
-export type { AiArtworkProvider, AiCreditLedger } from './types';
+export type { AiArtworkProvider, AiCreditLedger, InfiniteZoomTileSpec } from './types';
 
 // ---------------------------------------------------------------------------
 // Singleton Provider Registry Facade
@@ -51,7 +52,7 @@ auth.onSignOut((previousIdentity) => {
 
 const realtimeRoom = new HybridCoopRoomClient();
 const catalog = new StaticAndCommunityCatalogAdapter();
-const aiArtwork = new DefaultAiArtworkAdapter();
+const aiArtwork = new LocalBrowserAiArtworkAdapter();
 const monetization = new NoOpMonetizationAdapter();
 
 export const ProviderRegistry = {

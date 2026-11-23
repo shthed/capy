@@ -13,7 +13,381 @@ import { encodeRegionMapRle } from '../services/CapyCodec';
 import { ColorQuantizer } from './ColorQuantizer';
 import { ImageAnalyzer } from './ImageAnalyzer';
 import { LineArtExtractor } from './LineArtExtractor';
+import {
+  assignFreeColorIds,
+  buildBorderMap,
+  collectMaskedPixels,
+  computeLocalRegionGeometry,
+  createPaletteColor,
+  quantizeMaskedPixels,
+  segmentMaskedComponents,
+} from './MaskedRegionSubdivider';
 import { RegionSegmenter } from './RegionSegmenter';
+
+const COLORING_BOOK_PALETTE_DEF: ReadonlyArray<{
+  hex: string;
+  isLight: boolean;
+  r: number;
+  g: number;
+  b: number;
+}> = [
+  { hex: '#EF4444', isLight: false, r: 239, g: 68, b: 68 },
+  { hex: '#F97316', isLight: false, r: 249, g: 115, b: 22 },
+  { hex: '#F59E0B', isLight: true, r: 245, g: 158, b: 11 },
+  { hex: '#EAB308', isLight: true, r: 234, g: 179, b: 8 },
+  { hex: '#84CC16', isLight: true, r: 132, g: 204, b: 22 },
+  { hex: '#22C55E', isLight: false, r: 34, g: 197, b: 94 },
+  { hex: '#10B981', isLight: false, r: 16, g: 185, b: 129 },
+  { hex: '#06B6D4', isLight: true, r: 6, g: 182, b: 212 },
+  { hex: '#3B82F6', isLight: false, r: 59, g: 130, b: 246 },
+  { hex: '#6366F1', isLight: false, r: 99, g: 102, b: 241 },
+  { hex: '#8B5CF6', isLight: false, r: 139, g: 92, b: 246 },
+  { hex: '#A855F7', isLight: false, r: 168, g: 85, b: 247 },
+  { hex: '#EC4899', isLight: false, r: 236, g: 72, b: 153 },
+  { hex: '#F43F5E', isLight: false, r: 244, g: 63, b: 94 },
+  { hex: '#B45309', isLight: false, r: 180, g: 83, b: 9 },
+  { hex: '#78350F', isLight: false, r: 120, g: 53, b: 15 },
+  { hex: '#14B8A6', isLight: true, r: 20, g: 184, b: 166 },
+  { hex: '#E0E7FF', isLight: true, r: 224, g: 231, b: 255 },
+  { hex: '#94A3B8', isLight: true, r: 148, g: 163, b: 184 },
+  { hex: '#1E293B', isLight: false, r: 30, g: 41, b: 59 },
+];
+
+function createColoringBookPalette(): PaletteColor[] {
+  return COLORING_BOOK_PALETTE_DEF.map((c, idx) => ({
+    id: idx + 1,
+    hex: c.hex,
+    isLight: c.isLight,
+    argb: ((0xff << 24) | (c.r << 16) | (c.g << 8) | c.b) >>> 0,
+    r: c.r,
+    g: c.g,
+    b: c.b,
+  }));
+}
+
+export function extractOpaqueAlphaMask(
+  rgbaData: Uint8ClampedArray,
+  width: number,
+  height: number
+): {
+  hasCutoutAlpha: boolean;
+  opaqueMask: Uint8Array;
+  opaqueCount: number;
+  transparentCount: number;
+} {
+  const total = Math.max(0, width * height);
+  const opaqueMask = new Uint8Array(total);
+  const limit = Math.min(total, Math.floor(rgbaData.length / 4));
+  let opaqueCount = 0;
+  let transparentCount = 0;
+  for (let i = 0; i < limit; i++) {
+    if (rgbaData[i * 4 + 3] >= 128) {
+      opaqueMask[i] = 1;
+      opaqueCount++;
+    } else {
+      transparentCount++;
+    }
+  }
+  const hasCutoutAlpha = opaqueCount > 0 && transparentCount * 100 >= total;
+  return { hasCutoutAlpha, opaqueMask, opaqueCount, transparentCount };
+}
+
+function analyzeCutoutOpaqueStats(
+  rgbaData: Uint8ClampedArray,
+  opaqueMask: Uint8Array,
+  opaqueCount: number
+): { coloredRatio: number; uniqueBuckets: number } {
+  const buckets = new Uint8Array(32768);
+  let coloredCount = 0;
+  let uniqueBuckets = 0;
+  const total = opaqueMask.length;
+  for (let i = 0; i < total; i++) {
+    if (opaqueMask[i] !== 1) continue;
+    const off = i * 4;
+    const r = rgbaData[off];
+    const g = rgbaData[off + 1];
+    const b = rgbaData[off + 2];
+    const maxC = Math.max(r, g, b);
+    const minC = Math.min(r, g, b);
+    if (maxC - minC > 28) coloredCount++;
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    if (buckets[key] === 0) {
+      buckets[key] = 1;
+      uniqueBuckets++;
+    }
+  }
+  return {
+    coloredRatio: opaqueCount > 0 ? coloredCount / opaqueCount : 0,
+    uniqueBuckets,
+  };
+}
+
+function resolveCutoutColorCount(config: GeneratorConfig, uniqueBuckets: number): number {
+  if (config.paletteDetail === 'CUSTOM') {
+    return Math.max(2, Math.min(64, Math.floor(config.colorCount || 16)));
+  }
+  const baseFromBuckets = Math.max(6, Math.min(36, Math.round(Math.sqrt(uniqueBuckets) * 1.4)));
+  if (config.paletteDetail === 'LOW') {
+    return Math.max(6, Math.min(12, Math.round(baseFromBuckets * 0.65)));
+  }
+  if (config.paletteDetail === 'HIGH') {
+    return Math.max(12, Math.min(36, Math.round(baseFromBuckets * 1.3)));
+  }
+  return Math.max(6, Math.min(24, baseFromBuckets));
+}
+
+function pickMedianByte(buf: Uint8Array, count: number): number {
+  for (let i = 1; i < count; i++) {
+    const val = buf[i];
+    let j = i - 1;
+    while (j >= 0 && buf[j] > val) {
+      buf[j + 1] = buf[j];
+      j--;
+    }
+    buf[j + 1] = val;
+  }
+  return buf[count >> 1];
+}
+
+function applyMaskedMedianFilter(
+  rawRgba: Uint8ClampedArray,
+  opaqueMask: Uint8Array,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(rawRgba);
+  const rWin = new Uint8Array(9);
+  const gWin = new Uint8Array(9);
+  const bWin = new Uint8Array(9);
+
+  for (let y = 0; y < height; y++) {
+    const y0 = y > 0 ? y - 1 : 0;
+    const y1 = y < height - 1 ? y + 1 : height - 1;
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      if (opaqueMask[idx] !== 1) continue;
+      const x0 = x > 0 ? x - 1 : 0;
+      const x1 = x < width - 1 ? x + 1 : width - 1;
+      let count = 0;
+      for (let ny = y0; ny <= y1; ny++) {
+        const rowOff = ny * width;
+        for (let nx = x0; nx <= x1; nx++) {
+          const nIdx = rowOff + nx;
+          if (opaqueMask[nIdx] !== 1) continue;
+          const off = nIdx * 4;
+          rWin[count] = rawRgba[off];
+          gWin[count] = rawRgba[off + 1];
+          bWin[count] = rawRgba[off + 2];
+          count++;
+        }
+      }
+      if (count > 0) {
+        const outOff = idx * 4;
+        out[outOff] = pickMedianByte(rWin, count);
+        out[outOff + 1] = pickMedianByte(gWin, count);
+        out[outOff + 2] = pickMedianByte(bWin, count);
+      }
+    }
+  }
+  return out;
+}
+
+function buildBwCutoutAssignments(
+  rawRgba: Uint8ClampedArray,
+  maskedIndices: Int32Array,
+  total: number,
+  palette: PaletteColor[]
+): Int32Array {
+  const assignments = new Int32Array(total).fill(-1);
+  const inkCluster = palette.length - 1;
+  for (let m = 0; m < maskedIndices.length; m++) {
+    const idx = maskedIndices[m];
+    const off = idx * 4;
+    const r = rawRgba[off];
+    const g = rawRgba[off + 1];
+    const b = rawRgba[off + 2];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (lum <= 115) {
+      assignments[idx] = inkCluster;
+      continue;
+    }
+    const maxC = Math.max(r, g, b);
+    const minC = Math.min(r, g, b);
+    if (maxC - minC > 35 && maxC > 50) {
+      let bestDist = Number.MAX_VALUE;
+      let bestC = 0;
+      for (let c = 0; c < inkCluster; c++) {
+        const d = ColorQuantizer.perceptualDistanceSq(r, g, b, palette[c].r, palette[c].g, palette[c].b);
+        if (d < bestDist) {
+          bestDist = d;
+          bestC = c;
+        }
+      }
+      assignments[idx] = bestC;
+    } else {
+      assignments[idx] = 0;
+    }
+  }
+  return assignments;
+}
+
+function recalibrateCutoutRegionColors(
+  regions: PuzzleData['regions'],
+  rawRgba: Uint8ClampedArray,
+  palette: PaletteColor[]
+): void {
+  if (palette.length === 0) return;
+  for (let i = 0; i < regions.length; i++) {
+    const reg = regions[i];
+    let sR = 0;
+    let sG = 0;
+    let sB = 0;
+    for (let p = 0; p < reg.pixels.length; p++) {
+      const off = reg.pixels[p] * 4;
+      sR += rawRgba[off];
+      sG += rawRgba[off + 1];
+      sB += rawRgba[off + 2];
+    }
+    const meanR = sR / Math.max(1, reg.pixels.length);
+    const meanG = sG / Math.max(1, reg.pixels.length);
+    const meanB = sB / Math.max(1, reg.pixels.length);
+    let bestId = palette[0].id;
+    let bestD = ColorQuantizer.perceptualDistanceSq(meanR, meanG, meanB, palette[0].r, palette[0].g, palette[0].b);
+    for (let c = 1; c < palette.length; c++) {
+      const d = ColorQuantizer.perceptualDistanceSq(meanR, meanG, meanB, palette[c].r, palette[c].g, palette[c].b);
+      if (d < bestD) {
+        bestD = d;
+        bestId = palette[c].id;
+      }
+    }
+    reg.colorId = bestId;
+  }
+}
+
+function generateAlphaCutoutPuzzle(
+  rawRgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  opaqueMask: Uint8Array,
+  opaqueCount: number,
+  config: GeneratorConfig,
+  inspection: GenerationInspectionDetails,
+  emitProgress: (
+    rawProgress: number,
+    status: string,
+    paletteColors?: Array<{ r: number; g: number; b: number }>
+  ) => void
+): PuzzleData {
+  const stats = analyzeCutoutOpaqueStats(rawRgba, opaqueMask, opaqueCount);
+  const isBw = stats.coloredRatio < 0.08 || Boolean(config.isFreeColor);
+  const resolvedColors = resolveCutoutColorCount(config, stats.uniqueBuckets);
+  const minArea = config.minRegionArea ? Math.max(12, config.minRegionArea) : isBw ? 12 : 36;
+  const maxRegs = config.maxRegions || (isBw ? 800 : 200);
+
+  inspection.targetWidth = width;
+  inspection.targetHeight = height;
+  inspection.isBlackAndWhite = isBw;
+  inspection.colorClusterCount = stats.uniqueBuckets;
+  inspection.detectedType = isBw ? 'B&W Alpha Cutout' : 'Organic Alpha Cutout';
+  inspection.chosenStrategy = 'ALPHA_CUTOUT';
+  inspection.strategyRationale =
+    'Detected transparent alpha exterior (< 128). Segmenting strictly inside opaque silhouette pixels with transparent exterior preservation.';
+  inspection.colorCount = isBw ? 20 : resolvedColors;
+  inspection.minRegionArea = minArea;
+  inspection.maxRegions = maxRegs;
+
+  emitProgress(0.18, 'Preparing organic alpha cutout mask...');
+  const collected = collectMaskedPixels(rawRgba, width, height, opaqueMask);
+
+  let palette: PaletteColor[];
+  let assignments: Int32Array;
+  if (isBw) {
+    emitProgress(0.45, 'Configuring coloring book cutout palette...');
+    palette = createColoringBookPalette();
+    assignments = buildBwCutoutAssignments(rawRgba, collected.maskedIndices, width * height, palette);
+  } else {
+    const denoised =
+      config.smoothingPasses > 0
+        ? applyMaskedMedianFilter(rawRgba, opaqueMask, width, height)
+        : rawRgba;
+    const quantPixels =
+      denoised === rawRgba ? collected : collectMaskedPixels(denoised, width, height, opaqueMask);
+    emitProgress(0.45, `Clustering ${resolvedColors} opaque cutout colors...`);
+    const quant = quantizeMaskedPixels(
+      denoised,
+      width,
+      height,
+      opaqueMask,
+      quantPixels.maskedIndices,
+      quantPixels.rArr,
+      quantPixels.gArr,
+      quantPixels.bArr,
+      resolvedColors,
+      config.smoothingPasses > 0
+    );
+    palette = [];
+    for (let c = 0; c < quant.effectiveK; c++) {
+      palette.push(
+        createPaletteColor(c + 1, quant.centroidsR[c], quant.centroidsG[c], quant.centroidsB[c])
+      );
+    }
+    assignments = quant.assignments;
+  }
+
+  emitProgress(
+    0.72,
+    'Segmenting opaque cutout regions...',
+    palette.map((p) => ({ r: p.r, g: p.g, b: p.b }))
+  );
+  const { localRegionMap, segments } = segmentMaskedComponents(
+    assignments,
+    opaqueMask,
+    collected.maskedIndices,
+    rawRgba,
+    width,
+    height,
+    minArea,
+    maxRegs
+  );
+
+  emitProgress(0.88, 'Placing cutout region labels...');
+  const regions = computeLocalRegionGeometry(segments, localRegionMap, opaqueMask, width, height);
+  if (isBw) {
+    assignFreeColorIds(regions, localRegionMap, width, height, palette);
+  } else {
+    recalibrateCutoutRegionColors(regions, rawRgba, palette);
+  }
+
+  const borderMap = buildBorderMap(localRegionMap, width, height);
+  inspection.finalRegionCount = regions.length;
+  inspection.colorCount = palette.length;
+  inspection.paletteColors = palette.map((p) => ({ r: p.r, g: p.g, b: p.b }));
+  if (regions.length > 0) {
+    let minA = Number.MAX_SAFE_INTEGER;
+    let maxA = 0;
+    for (const r of regions) {
+      if (r.area < minA) minA = r.area;
+      if (r.area > maxA) maxA = r.area;
+    }
+    inspection.minActualArea = minA;
+    inspection.maxActualArea = maxA;
+  }
+  const rleBytes = encodeRegionMapRle(localRegionMap).byteLength;
+  const actualCompactBytes = rleBytes + regions.length * 20 + palette.length * 48 + 24576;
+  inspection.estimatedSaveSizeKb = Math.max(8, Math.round(actualCompactBytes / 1024));
+
+  emitProgress(1.0, `Generated ${regions.length} cutout regions across ${palette.length} colors!`);
+
+  return {
+    width,
+    height,
+    palette,
+    regions,
+    regionMap: localRegionMap,
+    borderMap,
+    ...(isBw ? { isFreeColor: true } : {}),
+  };
+}
 
 export type ProgressCallback = (
   progress: number,
@@ -174,38 +548,7 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
 
     if (isBwColoring) {
       onProgress?.(0.45, 'Configuring coloring book palette...');
-      const coloringPaletteDef = [
-        { hex: '#EF4444', isLight: false, r: 239, g: 68, b: 68 },
-        { hex: '#F97316', isLight: false, r: 249, g: 115, b: 22 },
-        { hex: '#F59E0B', isLight: true, r: 245, g: 158, b: 11 },
-        { hex: '#EAB308', isLight: true, r: 234, g: 179, b: 8 },
-        { hex: '#84CC16', isLight: true, r: 132, g: 204, b: 22 },
-        { hex: '#22C55E', isLight: false, r: 34, g: 197, b: 94 },
-        { hex: '#10B981', isLight: false, r: 16, g: 185, b: 129 },
-        { hex: '#06B6D4', isLight: true, r: 6, g: 182, b: 212 },
-        { hex: '#3B82F6', isLight: false, r: 59, g: 130, b: 246 },
-        { hex: '#6366F1', isLight: false, r: 99, g: 102, b: 241 },
-        { hex: '#8B5CF6', isLight: false, r: 139, g: 92, b: 246 },
-        { hex: '#A855F7', isLight: false, r: 168, g: 85, b: 247 },
-        { hex: '#EC4899', isLight: false, r: 236, g: 72, b: 153 },
-        { hex: '#F43F5E', isLight: false, r: 244, g: 63, b: 94 },
-        { hex: '#B45309', isLight: false, r: 180, g: 83, b: 9 },
-        { hex: '#78350F', isLight: false, r: 120, g: 53, b: 15 },
-        { hex: '#14B8A6', isLight: true, r: 20, g: 184, b: 166 },
-        { hex: '#E0E7FF', isLight: true, r: 224, g: 231, b: 255 },
-        { hex: '#94A3B8', isLight: true, r: 148, g: 163, b: 184 },
-        { hex: '#1E293B', isLight: false, r: 30, g: 41, b: 59 },
-      ];
-
-      palette = coloringPaletteDef.map((c, idx) => ({
-        id: idx + 1,
-        hex: c.hex,
-        isLight: c.isLight,
-        argb: (((0xff << 24) | (c.r << 16) | (c.g << 8) | c.b) >>> 0),
-        r: c.r,
-        g: c.g,
-        b: c.b,
-      }));
+      palette = createColoringBookPalette();
 
       effectiveAssignments = new Int32Array(total);
       const inkCluster = palette.length - 1;
@@ -839,6 +1182,23 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
 
     // Downsample oversized inputs to a fast <= 512px proxy for style and ink detection
     const proxy = scaleRgba(rgbaData, width, height, 512);
+    const proxyAlpha = extractOpaqueAlphaMask(proxy.data, proxy.width, proxy.height);
+    if (proxyAlpha.hasCutoutAlpha) {
+      const scaled = scaleRgba(rgbaData, width, height, config.resolution || 1024);
+      const targetAlpha = extractOpaqueAlphaMask(scaled.data, scaled.width, scaled.height);
+      if (targetAlpha.opaqueCount > 0) {
+        return generateAlphaCutoutPuzzle(
+          scaled.data,
+          scaled.width,
+          scaled.height,
+          targetAlpha.opaqueMask,
+          targetAlpha.opaqueCount,
+          config,
+          inspection,
+          emitProgress
+        );
+      }
+    }
     const lineAnalysis = LineArtExtractor.extract(proxy.data, proxy.width, proxy.height);
 
     const fakeImgData = { width: proxy.width, height: proxy.height, data: proxy.data } as ImageData;

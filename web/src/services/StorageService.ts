@@ -1,4 +1,4 @@
-import { PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
+import { InfiniteZoomNodeMeta, PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
 import { CompactPuzzleRecordV2 } from './CapyCodec';
 import {
   DEV_DEBUG_STORAGE_KEY,
@@ -50,11 +50,13 @@ import {
   deleteSnapshot,
   estimatePuzzleSaveBytes,
   hydrateSnapshotPreviews,
+  linkZoomTreeSnapshots,
   loadSnapshots,
   normalizeSnapshotTitle,
   renameSnapshot,
   saveSnapshots,
   togglePinSnapshot,
+  updateSnapshotMetadata,
   updateSnapshotProgress,
   updateSnapshotViewport,
 } from './storage/SnapshotStorage';
@@ -182,6 +184,19 @@ export class StorageService {
 
   static togglePinSnapshot(id: string): SavedSnapshot[] {
     return togglePinSnapshot(id);
+  }
+
+  static linkZoomTreeSnapshots(
+    parentId: string,
+    childId: string,
+    parentPatch?: Partial<InfiniteZoomNodeMeta>,
+    childPatch?: Partial<InfiniteZoomNodeMeta>
+  ): SavedSnapshot[] {
+    return linkZoomTreeSnapshots(parentId, childId, parentPatch, childPatch);
+  }
+
+  static updateSnapshotMetadata(id: string, patch: Partial<SavedSnapshot>): SavedSnapshot[] {
+    return updateSnapshotMetadata(id, patch);
   }
 
   static deleteSnapshot(

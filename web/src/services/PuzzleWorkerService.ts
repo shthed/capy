@@ -1,4 +1,8 @@
-import { GenerationProgressPayload, GeneratorConfig, PuzzleData } from '../types';
+import { GenerationProgressPayload, GeneratorConfig, PaletteColor, PuzzleData } from '../types';
+import type {
+  MaskedSubdivisionResult,
+  SubdivideMaskedRegionParams,
+} from '../engine/MaskedRegionSubdivider';
 
 export interface WorkerPuzzlePayload {
   width: number;
@@ -67,6 +71,55 @@ export function unpackPuzzleFromWorker(pd: WorkerPuzzlePayload): PuzzleData {
   };
 }
 
+export interface WorkerSubdivisionPayload {
+  width: number;
+  height: number;
+  localRegionMap: ArrayBuffer;
+  packedPixelsBuffer?: ArrayBuffer;
+  regions: WorkerPuzzlePayload['regions'];
+  palette: PaletteColor[];
+  addedSwatches: PaletteColor[];
+}
+
+export function unpackSubdivisionFromWorker(
+  pd: WorkerSubdivisionPayload
+): MaskedSubdivisionResult {
+  const packedPixels = pd.packedPixelsBuffer ? new Int32Array(pd.packedPixelsBuffer) : null;
+  const regions = pd.regions.map((r) => {
+    let pixels: Int32Array;
+    if (packedPixels && typeof r.pixelsOffset === 'number' && typeof r.pixelsLength === 'number') {
+      pixels = packedPixels.subarray(r.pixelsOffset, r.pixelsOffset + r.pixelsLength);
+    } else if (r.pixelsBuffer) {
+      pixels = new Int32Array(r.pixelsBuffer);
+    } else {
+      pixels = new Int32Array(0);
+    }
+
+    return {
+      id: r.id,
+      colorId: r.colorId,
+      centroidX: r.centroidX,
+      centroidY: r.centroidY,
+      area: r.area,
+      minX: r.minX,
+      maxX: r.maxX,
+      minY: r.minY,
+      maxY: r.maxY,
+      maxRadius: r.maxRadius,
+      pixels,
+    };
+  });
+
+  return {
+    width: pd.width,
+    height: pd.height,
+    localRegionMap: new Int32Array(pd.localRegionMap),
+    regions,
+    palette: pd.palette,
+    addedSwatches: pd.addedSwatches,
+  };
+}
+
 export class GenerationCancelledError extends Error {
   constructor(message = 'Generation cancelled by newer request') {
     super(message);
@@ -87,6 +140,17 @@ export class PuzzleWorkerService {
     const { AutoPuzzleGenerator } = await import('../engine/PuzzleGenerator');
     const generator = new AutoPuzzleGenerator();
     return generator.generate(sourceCanvas, config, onProgress, detailedProgress);
+  }
+
+  private static async subdivideOnMainThreadFallback(
+    params: SubdivideMaskedRegionParams,
+    onProgress?: (progress: number, status: string) => void
+  ): Promise<MaskedSubdivisionResult> {
+    const { subdivideMaskedRegion } = await import('../engine/MaskedRegionSubdivider');
+    return subdivideMaskedRegion({
+      ...params,
+      onProgress: onProgress ?? params.onProgress,
+    });
   }
 
   private static getWorker(): Worker {
@@ -207,6 +271,88 @@ export class PuzzleWorkerService {
           resolve,
           reject
         );
+      }
+    });
+  }
+
+  /**
+   * Subdivides a masked region off-thread using the puzzle Web Worker, copying caller
+   * TypedArrays prior to transfer so main-thread fallback remains intact on worker error.
+   */
+  static subdivideMaskedRegion(
+    params: Omit<SubdivideMaskedRegionParams, 'onProgress'> & {
+      onProgress?: (progress: number, status: string) => void;
+    },
+    onProgress?: (progress: number, status: string) => void
+  ): Promise<MaskedSubdivisionResult> {
+    const effectiveOnProgress = onProgress ?? params.onProgress;
+    return new Promise((resolve, reject) => {
+      if (typeof Worker === 'undefined') {
+        this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
+        return;
+      }
+
+      try {
+        this.cancelActive();
+        const worker = this.getWorker();
+        const requestId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        this.activeReject = reject;
+
+        const handleMessage = (e: MessageEvent) => {
+          const data = e.data;
+          if (!data || data.id !== requestId) return;
+
+          if (data.type === 'PROGRESS') {
+            effectiveOnProgress?.(data.progress, data.status);
+          } else if (data.type === 'SUBDIVIDE_SUCCESS') {
+            worker.removeEventListener('message', handleMessage);
+            worker.removeEventListener('error', handleError);
+            this.activeReject = null;
+            resolve(unpackSubdivisionFromWorker(data.result as WorkerSubdivisionPayload));
+          } else if (data.type === 'ERROR') {
+            worker.removeEventListener('message', handleMessage);
+            worker.removeEventListener('error', handleError);
+            this.activeReject = null;
+            reject(new Error(data.error || 'Worker masked subdivision failed'));
+          }
+        };
+
+        const handleError = (err: ErrorEvent) => {
+          worker.removeEventListener('message', handleMessage);
+          worker.removeEventListener('error', handleError);
+          this.activeReject = null;
+          worker.terminate();
+          this.worker = null;
+          console.warn('Worker error during masked subdivision, falling back to local thread:', err);
+          this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
+        };
+
+        worker.addEventListener('message', handleMessage);
+        worker.addEventListener('error', handleError);
+
+        const rgbaCopy = params.rgbaData.slice();
+        const maskCopy = params.cropMask.slice();
+
+        worker.postMessage(
+          {
+            type: 'SUBDIVIDE_MASKED_REGION',
+            id: requestId,
+            cropWidth: params.cropWidth,
+            cropHeight: params.cropHeight,
+            rgbaBuffer: rgbaCopy.buffer,
+            cropMaskBuffer: maskCopy.buffer,
+            existingPalette: params.existingPalette,
+            isFreeColor: params.isFreeColor,
+            targetSubRegions: params.targetSubRegions,
+            minRegionArea: params.minRegionArea,
+            maxNewSwatches: params.maxNewSwatches,
+            reuseDeltaE: params.reuseDeltaE,
+          },
+          [rgbaCopy.buffer, maskCopy.buffer]
+        );
+      } catch (err) {
+        console.warn('Failed to dispatch masked subdivision task, falling back to local:', err);
+        this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
       }
     });
   }
