@@ -1,8 +1,21 @@
-### 3.1.1 - 2026-11-22 (Beta)
+### 3.1.1 - 2026-11-22 (Production, Beta)
 
+- [#651](../../pull/651) Retire umbrella GitHub Epic tracking issues and epic label rules, standardizing planning around ROADMAP.md milestones and focused GitHub Issues
+- [#650](../../pull/650) Parallelized the 24-stage Playwright E2E suite across 10 isolated worker suites with targeted `--suite`/`--smoke` CLI controls, smart tiered CI path gating, and unblocked Alpha/Beta Pages previews
+- [#649](../../pull/649) Complete Stage 5 modularization by extracting tutorial/offers, viewport/shortcuts, paint controller, snapshot library hooks, and artwork exporter from App.tsx
+- [#648](../../pull/648) Extracted cloud library and active-slot sync controller, auto-sync scheduler, and startup auth sync effects from App.tsx into useCloudSyncController wired via ProviderContext with resetEpoch reconciliation and fast unit tests
+- [#646](../../pull/646) Extracted Co-op session management, room subscriptions, seed-token sync, and share-link actions from App.tsx into useCoopSession wired via ProviderContext with reportSwallowed telemetry and fast unit tests
+- [#645](../../pull/645) Extracted undo/redo history management and animated replay playback from App.tsx into dedicated useUndoRedo and useReplayController hooks with pure transition and zero-allocation viewport-follow helpers plus fast unit tests
+- [#644](../../pull/644) Extracted app-launch session restoration into a modular, AbortController-guarded 4-phase pipeline and useSessionRestore hook with unit tests covering share-link merges, active snapshot hydration, cache-eviction fallback, starter bootstrap, and cancellation
+- [#642](../../pull/642) Modularized the web unit, release-hardening, and browser E2E test suites into domain modules, replaced Python workflow/manifest test subprocesses with pure Node.js parsers, and swapped fixed E2E sleeps for deterministic waits
+- [#640](../../pull/640) Eliminated unnecessary zoom re-renders, deduplicated ColorPickerPopover back-button handling, replaced render-time ref mirrors with useLatest, memoized hot child callbacks, and unified paint completion and persistence into finishPaintStroke
+- [#639](../../pull/639) Optimized puzzle engine memory and canvas hot paths with reusable RegionSegmenter BFS buffers, multi-centroid K-Means++ distance initialization, symmetric LineArtExtractor watershed seeding, single-buffer worker pixel transfers, and zero-allocation PuzzleCanvas tap-dot/highlight/wheel/gesture updates
+- [#638](../../pull/638) Hardened Co-op relay rooms against unjoined eavesdropping, duplicate player spoofing, and slot squatting while adding server-issued host tokens, automatic host handoff on disconnect, deferred room storage, dynamic health hostname, and declarative frame validation
+- [#637](../../pull/637) Decomposed Android CapyAndroidBridge into four internal delegates, offloaded Play Games snapshot I/O off the UI thread, hardened incoming ACTION_SEND image validation and shareFile exports, allowlisted capy_saves in Auto Backup rules, and made consumePending bridge reads atomic
+- [#636](../../pull/636) Decomposed SettingsModal into focused per-tab modules, reusable toggle/slider/save-card primitives, and preset gallery data while completing dialog aria-labelledby, focus restoration on close, and accessible slider labeling
 - [#635](../../pull/635) Decompose `ProviderRegistry` into focused auth, cloud sync, Co-op, and catalog domain modules, enforce per-slot deletion tombstones and cross-account `signOut()` isolation, harden OAuth 401/One Tap validation, Drive 404 retry, and Co-op wire whitelisting, and instrument swallowed catches with `reportSwallowed`
 
-### 3.1.0 - 2026-11-22 (Production)
+### 3.1.0 - 2026-11-22
 
 - [#632](../../pull/632) Add a Browser Storage analyzer and targeted cleanup tool in Saves, automatically prune stale preview caches and slim down initial offline precaching, and compress oversized custom photo uploads to minimize browser storage usage
 - [#631](../../pull/631) Harden Content-Security-Policy and XSS defenses across Cloudflare `_headers`, Vite build-time `<meta>` CSP, standalone HTML pages, Worker API responses, OAuth/Feedback/Avatar URL validation, and Android WebView asset headers and `JSON.parse` bridge delivery
