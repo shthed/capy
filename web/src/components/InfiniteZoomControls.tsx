@@ -466,6 +466,8 @@ export interface RegionSelectionBarProps {
   notice: string | null;
   prompt: string;
   isBusy: boolean;
+  isDisabled?: boolean;
+  isOverlayModalOpen?: boolean;
   onPromptChange: (next: string) => void;
   onConfirm: () => void;
   onSwitchSelection: () => void;
@@ -483,6 +485,8 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
     notice,
     prompt,
     isBusy,
+    isDisabled = false,
+    isOverlayModalOpen = false,
     onPromptChange,
     onConfirm,
     onSwitchSelection,
@@ -497,6 +501,12 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
       const popBack = NativeBridge.pushBackHandler(onCancel);
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
+          if (
+            isOverlayModalOpen ||
+            (typeof document !== 'undefined' && document.querySelector('[role="dialog"]'))
+          ) {
+            return;
+          }
           e.stopPropagation();
           onCancel();
         }
@@ -506,7 +516,7 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
         popBack();
         window.removeEventListener('keydown', handleKeyDown, true);
       };
-    }, [isOpen, onCancel]);
+    }, [isOpen, isOverlayModalOpen, onCancel]);
 
     useIsomorphicLayoutEffect(() => {
       if (!isOpen || typeof window === 'undefined') {
@@ -653,7 +663,7 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
           <button
             type="button"
             data-testid="region-selection-confirm-btn"
-            disabled={!hasSelection || isBusy}
+            disabled={!hasSelection || isBusy || isDisabled}
             onClick={onConfirm}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
           >

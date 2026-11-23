@@ -724,11 +724,15 @@ function createFakeCanvas(initialWidth = 300, initialHeight = 150) {
   return canvas;
 }
 
-function createFakeDocument() {
+function createFakeDocument(onCanvasCreated) {
   return {
     createElement(tag) {
       if (String(tag).toLowerCase() === 'canvas') {
-        return createFakeCanvas(300, 150);
+        const c = createFakeCanvas(300, 150);
+        if (typeof onCanvasCreated === 'function') {
+          onCanvasCreated(c);
+        }
+        return c;
       }
       return {};
     },
@@ -996,8 +1000,8 @@ async function testLocalLlmService(llmMod) {
       `Blocked prompt must return empty sanitized string, got "${unsafeRes.sanitized}"`
     );
 
-    // 1b. validateScenePlan: element cap <= 16, [0,1] coords, hex/motif validation, zero markup, fallback
-    const oversizedRaw = {
+    // 1b-i. validateScenePlan: XSS-tainted payload MUST reject into safe 2-element fallback with zero markup
+    const xssTaintedRaw = {
       theme: '<svg><script>alert(1)</script>meadow</svg>',
       paletteAccentsHex: ['#e76f51', 'javascript:alert(1)', '<svg>bad</svg>'],
       elements: Array.from({ length: 24 }, (_, idx) => ({
@@ -1011,44 +1015,68 @@ async function testLocalLlmService(llmMod) {
         innerHTML: '<img src=x onerror=alert(1)>',
       })),
     };
-    const validated = validateScenePlan(oversizedRaw, 'offline-procedural', 'tiny wildflowers');
-    assert.ok(validated && Array.isArray(validated.elements), 'validateScenePlan must return elements array');
-    assert.ok(
-      validated.elements.length >= 1 && validated.elements.length <= 16,
-      `validateScenePlan must clamp elements to 1..16, got ${validated.elements.length}`
-    );
-    for (const el of validated.elements) {
-      assert.ok(
-        typeof el.x === 'number' && el.x >= 0 && el.x <= 1,
-        `Element x must be clamped to [0, 1], got ${el.x}`
-      );
-      assert.ok(
-        typeof el.y === 'number' && el.y >= 0 && el.y <= 1,
-        `Element y must be clamped to [0, 1], got ${el.y}`
-      );
-      const hexCandidate = el.fillHex ?? el.colorHex ?? el.color;
-      assert.equal(
-        typeof hexCandidate,
-        'string',
-        `Element fillHex must be a valid 6-digit hex string, got ${typeof hexCandidate}`
-      );
-      assert.match(
-        hexCandidate,
-        /^#[0-9a-f]{6}$/i,
-        `Element fillHex must be valid 6-digit hex, got ${hexCandidate}`
-      );
-      const kindCandidate = el.kind ?? el.motif;
-      assert.ok(
-        typeof kindCandidate === 'string' && kindCandidate.length > 0 && !/[<>]/.test(kindCandidate),
-        `Element motif/kind must be clean enum string, got ${kindCandidate}`
-      );
-    }
-    const serializedPlan = JSON.stringify(validated);
+    const validatedXss = validateScenePlan(xssTaintedRaw, 'offline-procedural', 'tiny wildflowers');
+    assert.ok(validatedXss && Array.isArray(validatedXss.elements), 'XSS payload must still return safe fallback');
+    assert.equal(validatedXss.elements.length, 2, 'XSS payload must reject into safe 2-element fallback');
+    assert.equal(validatedXss.theme, 'Harmonious Cel Detail', 'XSS payload must reject to safe fallback theme');
+    const serializedPlan = JSON.stringify(validatedXss);
     assert.equal(
       /<svg|<script|innerHTML|onerror=|onload=|javascript:/i.test(serializedPlan),
       false,
       `Validated scene plan must never contain raw SVG/script payloads: ${serializedPlan}`
     );
+
+    // 1b-ii. validateScenePlan: clean-markup 24-element payload exercises sanitizeSceneElement capping & clamping
+    const cleanOversizedRaw = {
+      theme: 'Sunlit Botanical Meadow',
+      paletteAccentsHex: ['#e76f51', '#2a9d8f', 'not-a-hex'],
+      elements: Array.from({ length: 24 }, (_, idx) => ({
+        kind: idx % 2 === 0 ? 'petals' : 'unknown-alien-motif',
+        x: idx % 2 === 0 ? -0.75 : 2.4,
+        y: idx % 2 === 0 ? 1.9 : -0.3,
+        scale: idx % 2 === 0 ? 9.5 : -2,
+        rotationDeg: idx % 2 === 0 ? 720 : -540,
+        fillHex: idx % 2 === 0 ? '#e76f51' : 'not-a-hex',
+        strokeHex: idx % 2 === 0 ? '#264653' : 'bad-stroke',
+        count: idx % 2 === 0 ? 99 : -5,
+      })),
+    };
+    const validatedClean = validateScenePlan(cleanOversizedRaw, 'chrome-ai', 'tiny wildflowers');
+    assert.equal(validatedClean.theme, 'Sunlit Botanical Meadow', 'Clean theme must be preserved');
+    assert.equal(validatedClean.tierUsed, 'chrome-ai');
+    assert.equal(validatedClean.elements.length, 16, '24 clean elements must be capped at exactly 16');
+    assert.equal(validatedClean.elements[0].kind, 'petals');
+    assert.equal(validatedClean.elements[0].x, 0, 'x < 0 must clamp to 0');
+    assert.equal(validatedClean.elements[0].y, 1, 'y > 1 must clamp to 1');
+    assert.equal(validatedClean.elements[0].scale, 0.6, 'scale > 0.6 must clamp to 0.6');
+    assert.equal(validatedClean.elements[0].rotationDeg, 180, 'rotationDeg > 180 must clamp to 180');
+    assert.equal(validatedClean.elements[0].count, 12, 'count > 12 must clamp to 12');
+    assert.equal(validatedClean.elements[0].fillHex, '#E76F51');
+    assert.equal(validatedClean.elements[0].strokeHex, '#264653');
+
+    assert.equal(validatedClean.elements[1].kind, 'organic-blobs', 'Unknown motif must fall back to organic-blobs');
+    assert.equal(validatedClean.elements[1].x, 1, 'x > 1 must clamp to 1');
+    assert.equal(validatedClean.elements[1].y, 0, 'y < 0 must clamp to 0');
+    assert.equal(validatedClean.elements[1].scale, 0.05, 'scale < 0.05 must clamp to 0.05');
+    assert.equal(validatedClean.elements[1].rotationDeg, -180, 'rotationDeg < -180 must clamp to -180');
+    assert.equal(validatedClean.elements[1].count, 1, 'count < 1 must clamp to 1');
+    assert.equal(validatedClean.elements[1].fillHex, '#2A9D8F', 'Invalid hex must fall back to palette accent');
+    assert.equal(validatedClean.elements[1].strokeHex, undefined, 'Invalid strokeHex must be omitted');
+
+    // 1b-iii. Fenced ```json ... ``` string input must parse and validate cleanly
+    const fencedJson =
+      '```json\n' +
+      JSON.stringify({
+        theme: 'Starry Hills',
+        paletteAccentsHex: ['#f4a261', '#264653'],
+        elements: [{ kind: 'stars', x: 0.4, y: 0.3, scale: 0.2, rotationDeg: 15, fillHex: '#f4a261', count: 5 }],
+      }) +
+      '\n```';
+    const validatedFenced = validateScenePlan(fencedJson, 'chrome-ai', 'starry hills');
+    assert.equal(validatedFenced.theme, 'Starry Hills');
+    assert.equal(validatedFenced.elements.length, 1);
+    assert.equal(validatedFenced.elements[0].kind, 'stars');
+    assert.equal(validatedFenced.elements[0].count, 5);
 
     const nullFallback = validateScenePlan(null, 'offline-procedural', 'rippling pond');
     assert.ok(
@@ -1376,6 +1404,186 @@ async function testLocalLlmService(llmMod) {
         'offline-procedural'
       );
     });
+
+    // 1g. Multi-tier fallback cascade (Tier 1 -> Tier 2 -> Tier 3), OFFLINE_FAST bypass, LOCAL_ONLY, abort, late create destroy, multimodal bitmap lifecycle
+    const baseCascadeReq = {
+      direction: 'in-place',
+      userPrompt: 'forest leaves',
+      localAiMode: 'AUTO',
+      existingPaletteHex: ['#4a7c59', '#e9c46a'],
+      neighborPaletteHex: ['#4a7c59'],
+    };
+
+    // Tier 1 throw, invalid JSON, and XSS JSON must cascade to registered Tier 2
+    for (const [label, promptBehavior] of [
+      ['throws', async () => { throw new Error('Tier 1 boom'); }],
+      ['invalid JSON', async () => 'not valid json {{{'],
+      ['XSS JSON', async () => JSON.stringify({ theme: '<script>x</script>', elements: [{ kind: 'leaves', x: 0.5, y: 0.5, scale: 0.2, rotationDeg: 0, fillHex: '#4a7c59' }] })],
+    ]) {
+      let t1Destroy = 0;
+      let t2Calls = 0;
+      const tier1Mock = {
+        async availability() { return 'available'; },
+        async create() {
+          return {
+            prompt: promptBehavior,
+            destroy() { t1Destroy += 1; },
+          };
+        },
+      };
+      const tier2Mock = {
+        id: `t2-after-${label}`,
+        getStatus: async () => 'ready',
+        async generateScenePlan() {
+          t2Calls += 1;
+          return {
+            theme: 'Tier 2 Recovery',
+            paletteAccentsHex: ['#4a7c59'],
+            elements: [{ kind: 'leaves', x: 0.4, y: 0.4, scale: 0.2, rotationDeg: 0, fillHex: '#4a7c59' }],
+          };
+        },
+      };
+      await withGlobalOverrides(createAiScopeOverrides(tier1Mock), async () => {
+        registerLocalLlmWorkerProvider(tier2Mock);
+        try {
+          const plan = await generateScenePlan(baseCascadeReq);
+          assert.equal(t1Destroy, 1, `Tier 1 (${label}) must destroy session in finally`);
+          assert.equal(t2Calls, 1, `Tier 1 (${label}) must cascade to Tier 2`);
+          assert.equal(plan.tierUsed, 'local-wasm', `Tier 1 (${label}) fallback must resolve via Tier 2`);
+        } finally {
+          registerLocalLlmWorkerProvider(null);
+        }
+      });
+    }
+
+    // Tier 2 failure / invalid plan -> Tier 3; Tier 2 abort -> AbortError; OFFLINE_FAST bypasses Tier 2; LOCAL_ONLY cascades
+    await withGlobalOverrides(ABSENT_AI_GLOBALS, async () => {
+      let t2ThrowCalls = 0;
+      registerLocalLlmWorkerProvider({
+        id: 't2-throwing',
+        getStatus: async () => 'ready',
+        async generateScenePlan() {
+          t2ThrowCalls += 1;
+          throw new Error('WASM worker crash');
+        },
+      });
+      try {
+        const plan = await generateScenePlan(baseCascadeReq);
+        assert.equal(t2ThrowCalls, 1);
+        assert.equal(plan.tierUsed, 'offline-procedural', 'Tier 2 throw must fall back to Tier 3');
+
+        const offlineFastPlan = await generateScenePlan({ ...baseCascadeReq, localAiMode: 'OFFLINE_FAST' });
+        assert.equal(t2ThrowCalls, 1, 'OFFLINE_FAST must bypass registered Tier 2 provider');
+        assert.equal(offlineFastPlan.tierUsed, 'offline-procedural');
+
+        const localOnlyFallback = await generateScenePlan({ ...baseCascadeReq, localAiMode: 'LOCAL_ONLY' });
+        assert.equal(t2ThrowCalls, 2, 'LOCAL_ONLY must still attempt Tier 2 before Tier 3 fallback');
+        assert.equal(localOnlyFallback.tierUsed, 'offline-procedural');
+      } finally {
+        registerLocalLlmWorkerProvider(null);
+      }
+
+      // Tier 2 AbortError propagation
+      const ac = new AbortController();
+      registerLocalLlmWorkerProvider({
+        id: 't2-abortable',
+        getStatus: async () => 'ready',
+        async generateScenePlan(_req, signal) {
+          return new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => {
+              const err = new Error('Aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+            ac.abort();
+          });
+        },
+      });
+      try {
+        await assert.rejects(
+          () => generateScenePlan(baseCascadeReq, ac.signal),
+          (err) => err && err.name === 'AbortError',
+          'Tier 2 abort must reject with AbortError'
+        );
+      } finally {
+        registerLocalLlmWorkerProvider(null);
+      }
+    });
+
+    // Late LanguageModel.create() resolving AFTER abort must still destroy the late session
+    {
+      let resolveLateCreate;
+      let lateDestroyed = 0;
+      const lateCreateMock = {
+        async availability() { return 'available'; },
+        create() {
+          return new Promise((resolve) => {
+            resolveLateCreate = resolve;
+          });
+        },
+      };
+      const lateAbort = new AbortController();
+      await withGlobalOverrides(createAiScopeOverrides(lateCreateMock), async () => {
+        const p = generateScenePlan(baseCascadeReq, lateAbort.signal);
+        await new Promise((r) => setTimeout(r, 10));
+        lateAbort.abort();
+        await assert.rejects(() => p, (err) => err && err.name === 'AbortError');
+        resolveLateCreate({
+          prompt: async () => '{}',
+          destroy() { lateDestroyed += 1; },
+        });
+        await new Promise((r) => setTimeout(r, 15));
+        assert.equal(lateDestroyed, 1, 'Late-resolved LanguageModel session after abort must be destroyed');
+      });
+    }
+
+    // Multimodal oversized bitmap (> 256px) resize + close() in finally (both success and error)
+    for (const shouldThrow of [false, true]) {
+      let resizeOpts = null;
+      let ownedClosed = 0;
+      let capturedPromptArg = null;
+      const oversizedBmp = { width: 512, height: 256, close() { throw new Error('caller bitmap must not be closed'); } };
+      const multimodalMock = {
+        async availability() { return 'available'; },
+        async create() {
+          return {
+            async prompt(input) {
+              capturedPromptArg = input;
+              if (shouldThrow) throw new Error('multimodal error');
+              return JSON.stringify({
+                theme: 'Multimodal OK',
+                paletteAccentsHex: ['#4a7c59'],
+                elements: [{ kind: 'leaves', x: 0.5, y: 0.5, scale: 0.2, rotationDeg: 0, fillHex: '#4a7c59' }],
+              });
+            },
+            destroy() {},
+          };
+        },
+      };
+      await withGlobalOverrides(
+        createAiScopeOverrides(multimodalMock, {
+          createImageBitmap: async (_src, opts) => {
+            resizeOpts = opts;
+            return {
+              width: opts?.resizeWidth ?? 256,
+              height: opts?.resizeHeight ?? 128,
+              close() { ownedClosed += 1; },
+            };
+          },
+        }),
+        async () => {
+          const plan = await generateScenePlan({ ...baseCascadeReq, contextBitmap: oversizedBmp });
+          assert.deepEqual(
+            { w: resizeOpts?.resizeWidth, h: resizeOpts?.resizeHeight },
+            { w: 256, h: 128 },
+            'Oversized 512x256 contextBitmap must be resized to 256x128'
+          );
+          assert.ok(Array.isArray(capturedPromptArg), 'Multimodal prompt must pass message array with image content');
+          assert.equal(ownedClosed, 1, `Owned resized ImageBitmap must be closed in finally (shouldThrow=${shouldThrow})`);
+          assert.equal(plan.tierUsed, shouldThrow ? 'offline-procedural' : 'chrome-ai');
+        }
+      );
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1815,7 +2023,7 @@ function assertSynthesizeInfillMaskContainment(synthesizeInfillCanvas, srcCanvas
   }
 }
 
-async function testInfiniteZoomSynthesizer(synthMod, llmMod) {
+async function testInfiniteZoomSynthesizer(synthMod, llmMod, quantizerMod) {
   await withGlobalOverrides(
     {
       document: createFakeDocument(),
@@ -1825,10 +2033,16 @@ async function testInfiniteZoomSynthesizer(synthMod, llmMod) {
       const {
         BORDER_EXTEND_RATIO,
         MAX_EXTENDED_ASPECT_RATIO,
+        CHILD_TILE_MAX_DIM_PX,
+        MAX_EXTENDED_DIMENSION_PX,
+        INFILL_MAX_DELTA_E,
         canExtendSides,
+        synthesizeInfillRgba,
+        synthesizeExtendedBorderRgba,
         synthesizeInfillCanvas,
         synthesizeExtendedBorderCanvas,
       } = synthMod;
+      const { ColorQuantizer } = quantizerMod;
 
       assert.equal(BORDER_EXTEND_RATIO, 0.35, 'BORDER_EXTEND_RATIO must equal 0.35');
       assert.equal(MAX_EXTENDED_ASPECT_RATIO, 2.5, 'MAX_EXTENDED_ASPECT_RATIO must equal 2.5');
@@ -1942,6 +2156,203 @@ async function testInfiniteZoomSynthesizer(synthMod, llmMod) {
         }
       }
       assert.ok(coreChecked > 0);
+
+      // 3d. Bug #3 regression: synthesizeExtendedBorderRgba on organic transparent-exterior cutout
+      const cutW = 64;
+      const cutH = 64;
+      const cutoutRgba = new Uint8ClampedArray(cutW * cutH * 4);
+      for (let y = 0; y < cutH; y++) {
+        for (let x = 0; x < cutW; x++) {
+          const dx = x - 32;
+          const dy = y - 32;
+          const o = (y * cutW + x) * 4;
+          if (dx * dx + dy * dy <= 20 * 20) {
+            cutoutRgba[o] = 230;
+            cutoutRgba[o + 1] = 180;
+            cutoutRgba[o + 2] = 90;
+            cutoutRgba[o + 3] = 255;
+          }
+        }
+      }
+      const cutoutExtPure = synthesizeExtendedBorderRgba({
+        sourceRgba: cutoutRgba,
+        sourceWidth: cutW,
+        sourceHeight: cutH,
+        sides: { top: true, bottom: true, left: true, right: true },
+        scenePlan: { ...scenePlan, paletteAccentsHex: ['#e6b45a'], elements: [] },
+      });
+      for (let i = 0; i < cutoutExtPure.width * cutoutExtPure.height; i++) {
+        assert.equal(
+          cutoutExtPure.rgba[i * 4 + 3],
+          255,
+          `Extended cutout pixel ${i} must be fully opaque (no transparent moat)`
+        );
+      }
+      assert.ok(
+        cutoutExtPure.rgba[0] > 180 && cutoutExtPure.rgba[1] > 130,
+        `Extended cutout outer corner must extrapolate warm gold, not black (got rgb(${cutoutExtPure.rgba[0]},${cutoutExtPure.rgba[1]},${cutoutExtPure.rgba[2]}))`
+      );
+      const moatIdx =
+        (cutoutExtPure.check.offsetY * cutoutExtPure.width + cutoutExtPure.check.offsetX) * 4;
+      assert.equal(cutoutExtPure.rgba[moatIdx + 3], 255, 'Inner cutout corner moat must be filled opaque');
+      assert.ok(
+        cutoutExtPure.rgba[moatIdx] > 180,
+        `Inner moat R must extrapolate warm gold without black bias (got ${cutoutExtPure.rgba[moatIdx]})`
+      );
+
+      const cutoutExt = synthesizeExtendedBorderRgba({
+        sourceRgba: cutoutRgba,
+        sourceWidth: cutW,
+        sourceHeight: cutH,
+        sides: { top: true, bottom: true, left: true, right: true },
+        scenePlan,
+      });
+      for (let i = 0; i < cutoutExt.width * cutoutExt.height; i++) {
+        assert.equal(
+          cutoutExt.rgba[i * 4 + 3],
+          255,
+          `Extended cutout pixel ${i} with motifs must be fully opaque`
+        );
+      }
+      const centerIdx =
+        ((cutoutExt.check.offsetY + 32) * cutoutExt.width + (cutoutExt.check.offsetX + 32)) * 4;
+      assert.deepEqual(
+        Array.from(cutoutExt.rgba.subarray(centerIdx, centerIdx + 4)),
+        [230, 180, 90, 255],
+        'Opaque inner cutout subject pixel must remain preserved'
+      );
+
+      // 3e. Gap #7: synthesizeInfillRgba genuine RGB change, deltaE <= 35 continuity, Sobel edge protection, child-tile upscale cap, and >2048px border downscaling
+      const infW = 96;
+      const infH = 96;
+      const infBase = new Uint8ClampedArray(infW * infH * 4);
+      const infMask = new Uint8Array(infW * infH);
+      for (let y = 0; y < infH; y++) {
+        for (let x = 0; x < infW; x++) {
+          const i = y * infW + x;
+          const o = i * 4;
+          const inside = x >= 8 && x < infW - 8 && y >= 8 && y < infH - 8;
+          infMask[i] = inside ? 1 : 0;
+          // Sharp vertical line at x === 48 to verify Sobel edge protection
+          if (x === 48 || x === 49) {
+            infBase[o] = 20;
+            infBase[o + 1] = 20;
+            infBase[o + 2] = 20;
+          } else {
+            infBase[o] = 120;
+            infBase[o + 1] = 165;
+            infBase[o + 2] = 125;
+          }
+          infBase[o + 3] = 255;
+        }
+      }
+      const vividPlan = {
+        theme: 'Vivid Blossoms',
+        paletteAccentsHex: ['#ff2200', '#0044ff'],
+        tierUsed: 'offline-procedural',
+        sanitizedPrompt: 'vivid blossoms',
+        elements: [
+          { kind: 'petals', x: 0.5, y: 0.5, scale: 0.45, rotationDeg: 0, fillHex: '#FF2200', count: 8 },
+          { kind: 'organic-blobs', x: 0.35, y: 0.4, scale: 0.35, rotationDeg: 30, fillHex: '#0044FF', count: 6 },
+        ],
+      };
+      const infRes = synthesizeInfillRgba({
+        cropRgba: infBase,
+        cropMask: infMask,
+        cropWidth: infW,
+        cropHeight: infH,
+        scenePlan: vividPlan,
+        mode: 'in-place',
+        maxDeltaE: INFILL_MAX_DELTA_E,
+      });
+      let changedInterior = 0;
+      const maxSqAllowed = INFILL_MAX_DELTA_E * INFILL_MAX_DELTA_E + 25;
+      for (let i = 0; i < infW * infH; i++) {
+        const o = i * 4;
+        if (infMask[i] === 1) {
+          if (
+            infRes.rgba[o] !== infBase[o] ||
+            infRes.rgba[o + 1] !== infBase[o + 1] ||
+            infRes.rgba[o + 2] !== infBase[o + 2]
+          ) {
+            changedInterior += 1;
+          }
+          const dSq = ColorQuantizer.perceptualDistanceSq(
+            infRes.rgba[o],
+            infRes.rgba[o + 1],
+            infRes.rgba[o + 2],
+            infBase[o],
+            infBase[o + 1],
+            infBase[o + 2]
+          );
+          assert.ok(
+            dSq <= maxSqAllowed,
+            `Interior pixel ${i} exceeded deltaE<=${INFILL_MAX_DELTA_E} continuity (dist=${Math.sqrt(dSq).toFixed(2)})`
+          );
+        }
+      }
+      assert.ok(changedInterior > 20, `synthesizeInfillRgba must genuinely modify interior RGB pixels (changed=${changedInterior})`);
+
+      // Verify Sobel edge protection keeps the sharp vertical dark line protected
+      let lineDriftSum = 0;
+      let lineSamples = 0;
+      for (let y = 20; y < 76; y++) {
+        const o = (y * infW + 48) * 4;
+        lineDriftSum +=
+          Math.abs(infRes.rgba[o] - infBase[o]) +
+          Math.abs(infRes.rgba[o + 1] - infBase[o + 1]) +
+          Math.abs(infRes.rgba[o + 2] - infBase[o + 2]);
+        lineSamples += 1;
+      }
+      assert.ok(
+        lineDriftSum / lineSamples < 30,
+        `Sobel edge protection must preserve high-contrast interior line (mean drift=${(lineDriftSum / lineSamples).toFixed(1)})`
+      );
+
+      // Child-tile upscale (> bbox) & 1024px cap
+      const smallChild = synthesizeInfillRgba({
+        cropRgba: new Uint8ClampedArray(64 * 48 * 4).fill(180),
+        cropMask: new Uint8Array(64 * 48).fill(1),
+        cropWidth: 64,
+        cropHeight: 48,
+        scenePlan: vividPlan,
+        mode: 'child-tile',
+      });
+      assert.ok(smallChild.width > 64 && smallChild.width <= CHILD_TILE_MAX_DIM_PX, `Small child-tile must upscale within 1024px (got ${smallChild.width})`);
+      const hugeChild = synthesizeInfillRgba({
+        cropRgba: new Uint8ClampedArray(1200 * 600 * 4).fill(180),
+        cropMask: new Uint8Array(1200 * 600).fill(1),
+        cropWidth: 1200,
+        cropHeight: 600,
+        scenePlan: vividPlan,
+        mode: 'child-tile',
+      });
+      assert.ok(
+        Math.max(hugeChild.width, hugeChild.height) <= CHILD_TILE_MAX_DIM_PX,
+        `Large child-tile must cap at ${CHILD_TILE_MAX_DIM_PX}px (got ${hugeChild.width}x${hugeChild.height})`
+      );
+
+      // > 2048px border extension downscaling & post-rounding 2.5:1 guard
+      const bigCheck = canExtendSides(2000, 1360, { top: false, bottom: false, left: true, right: true });
+      assert.equal(bigCheck.allowed, true, '2000x1360 left+right extension should be allowed after downscaling');
+      assert.ok(bigCheck.scaleFactor < 1, `Expected scaleFactor < 1 for >2048px extend (got ${bigCheck.scaleFactor})`);
+      assert.ok(bigCheck.nextWidth <= MAX_EXTENDED_DIMENSION_PX, `nextWidth must cap at ${MAX_EXTENDED_DIMENSION_PX}`);
+      assert.ok(
+        Math.max(bigCheck.nextWidth / bigCheck.nextHeight, bigCheck.nextHeight / bigCheck.nextWidth) <=
+          MAX_EXTENDED_ASPECT_RATIO,
+        'Post-rounding aspect ratio must respect 2.5:1 guard'
+      );
+      const bigRgba = new Uint8ClampedArray(2000 * 1360 * 4);
+      bigRgba.fill(160);
+      const bigExt = synthesizeExtendedBorderRgba({
+        sourceRgba: bigRgba,
+        sourceWidth: 2000,
+        sourceHeight: 1360,
+        sides: { top: false, bottom: false, left: true, right: true },
+        scenePlan,
+      });
+      assert.equal(bigExt.width, bigCheck.nextWidth);
+      assert.equal(bigExt.height, bigCheck.nextHeight);
     }
   );
 }
@@ -2269,6 +2680,190 @@ function testMergeAndDoubleSubdivide(subdividerMod, selectionMod, codecMod, base
       expectedBorder2,
       'Double-subdivision borderMap must match full buildBorderMapFromRegionMap pixel-for-pixel'
     );
+
+    // 4d-ii. Bug #4, Bug #5, and Gap #10: deduplication, Free Colour 2-swatch custom palette, exact deltaE=22 vs 24, 64-cap, empty palette, and merge corner cases
+    const { assignFreeColorIds } = subdividerMod;
+    const makeSplitRgba = (w, h, leftRgb, rightRgb) => {
+      const buf = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const rgb = x < w / 2 ? leftRgb : rightRgb;
+          const o = (y * w + x) * 4;
+          buf[o] = rgb[0];
+          buf[o + 1] = rgb[1];
+          buf[o + 2] = rgb[2];
+          buf[o + 3] = 255;
+        }
+      }
+      return buf;
+    };
+
+    // Bug #4 regression: opposing unmatched colors under maxNewSwatches=1 whose mean equals existing swatch
+    const oppRgba = makeSplitRgba(32, 32, [128, 150, 128], [128, 106, 128]);
+    const fullMask32 = new Uint8Array(32 * 32).fill(1);
+    const grayExisting = [makePaletteColor(1, 128, 128, 128)];
+    const oppRes = subdivideMaskedRegion({
+      rgbaData: oppRgba,
+      cropWidth: 32,
+      cropHeight: 32,
+      cropMask: fullMask32,
+      existingPalette: grayExisting,
+      isFreeColor: false,
+      targetSubRegions: 4,
+      minRegionArea: 16,
+      maxNewSwatches: 1,
+      reuseDeltaE: 22,
+    });
+    const oppHexes = oppRes.palette.map((c) => c.hex.toUpperCase());
+    assert.equal(new Set(oppHexes).size, oppHexes.length, `Palette must contain zero duplicate hex swatches: ${oppHexes}`);
+    const oppUsedIds = new Set(oppRes.regions.map((r) => r.colorId));
+    for (const added of oppRes.addedSwatches) {
+      assert.ok(oppUsedIds.has(added.id), `Every added swatch (${added.id}) must be used by >= 1 region`);
+    }
+
+    // Bug #5 regression: Free Colour Mode 2-swatch custom palette must assign BOTH swatches [1, 2]
+    const twoColorRgba = makeSplitRgba(32, 32, [220, 40, 40], [40, 80, 220]);
+    const customTwoPal = [makePaletteColor(1, 220, 40, 40), makePaletteColor(2, 40, 80, 220)];
+    const freeSub = subdivideMaskedRegion({
+      rgbaData: twoColorRgba,
+      cropWidth: 32,
+      cropHeight: 32,
+      cropMask: fullMask32,
+      existingPalette: customTwoPal,
+      isFreeColor: true,
+      targetSubRegions: 4,
+      minRegionArea: 16,
+    });
+    const freeAssignedIds = new Set(freeSub.regions.map((r) => r.colorId));
+    assert.equal(freeSub.addedSwatches.length, 0, 'Free Colour subdivision must not add swatches');
+    assert.ok(
+      freeAssignedIds.has(1) && freeAssignedIds.has(2),
+      `Free Colour 2-swatch custom palette must assign both [1, 2], got [${Array.from(freeAssignedIds)}]`
+    );
+    // Direct check of reserveLastInkSwatch=true vs false
+    const clonedRegs = freeSub.regions.map((r) => ({ ...r }));
+    assignFreeColorIds(clonedRegs, freeSub.localRegionMap, 32, 32, customTwoPal, true);
+    assert.equal(
+      clonedRegs.every((r) => r.colorId === 1),
+      true,
+      'reserveLastInkSwatch=true must reserve final ink swatch'
+    );
+
+    // Exact deltaE = 22 (dg=11 -> reuse) vs deltaE = 24 (dg=12 -> add accent)
+    const solid22Rgba = makeSplitRgba(24, 24, [128, 139, 128], [128, 139, 128]);
+    const solid24Rgba = makeSplitRgba(24, 24, [128, 140, 128], [128, 140, 128]);
+    const fullMask24 = new Uint8Array(24 * 24).fill(1);
+    const res22 = subdivideMaskedRegion({
+      rgbaData: solid22Rgba,
+      cropWidth: 24,
+      cropHeight: 24,
+      cropMask: fullMask24,
+      existingPalette: grayExisting,
+      targetSubRegions: 2,
+      minRegionArea: 16,
+      maxNewSwatches: 2,
+      reuseDeltaE: 22,
+    });
+    assert.equal(res22.addedSwatches.length, 0, 'Exact deltaE === 22 must reuse existing swatch');
+    const res24 = subdivideMaskedRegion({
+      rgbaData: solid24Rgba,
+      cropWidth: 24,
+      cropHeight: 24,
+      cropMask: fullMask24,
+      existingPalette: grayExisting,
+      targetSubRegions: 2,
+      minRegionArea: 16,
+      maxNewSwatches: 2,
+      reuseDeltaE: 22,
+    });
+    assert.equal(res24.addedSwatches.length, 1, 'deltaE === 24 (> 22) must add 1 harmonious accent swatch');
+
+    // Starting already at 64 swatches & empty existingPalette: []
+    const full64Pal = Array.from({ length: 64 }, (_, i) =>
+      makePaletteColor(i + 1, (i * 3) % 180, (i * 5) % 180, (i * 7) % 180)
+    );
+    const at64Res = subdivideMaskedRegion({
+      rgbaData: makeSplitRgba(24, 24, [255, 255, 255], [255, 250, 240]),
+      cropWidth: 24,
+      cropHeight: 24,
+      cropMask: fullMask24,
+      existingPalette: full64Pal,
+      targetSubRegions: 2,
+      minRegionArea: 16,
+      maxNewSwatches: 4,
+    });
+    assert.equal(at64Res.palette.length, 64, 'Palette at 64-cap must never exceed 64');
+    assert.equal(at64Res.addedSwatches.length, 0, 'Palette at 64-cap must add 0 swatches');
+
+    const emptyPalRes = subdivideMaskedRegion({
+      rgbaData: twoColorRgba,
+      cropWidth: 32,
+      cropHeight: 32,
+      cropMask: fullMask32,
+      existingPalette: [],
+      targetSubRegions: 4,
+      minRegionArea: 16,
+    });
+    assert.ok(emptyPalRes.palette.length >= 1, 'Empty existingPalette must synthesize >= 1 swatch');
+    assert.ok(emptyPalRes.regions.every((r) => r.colorId >= 1));
+
+    // Merge corner cases: corner-touching (0,0)/(w-1,h-1), multi-region contiguous merge, cutout rId===0 exterior preservation, Free Colour merge, empty selection/mask
+    const cMap = new Int32Array(32 * 32);
+    for (let y = 0; y < 32; y++) {
+      for (let x = 0; x < 32; x++) {
+        if (x < 4 && y < 4) cMap[y * 32 + x] = 0; // cutout exterior corner
+        else if (x < 16 && y < 16) cMap[y * 32 + x] = 1;
+        else if (x >= 16 && y < 16) cMap[y * 32 + x] = 2;
+        else cMap[y * 32 + x] = 3;
+      }
+    }
+    const cornerCutoutPuzzle = buildPuzzleFromRegionMap(
+      32,
+      32,
+      cMap,
+      customTwoPal,
+      new Map([[1, 1], [2, 2], [3, 1]]),
+      buildBorderMapFromRegionMap
+    );
+    cornerCutoutPuzzle.isFreeColor = true;
+    const multiBbox = { minX: 0, minY: 0, maxX: 31, maxY: 15, width: 32, height: 16 };
+    const multiMask = selectionMod.buildSelectionMask(cornerCutoutPuzzle, new Set([1, 2]), multiBbox);
+    const multiSub = subdivideMaskedRegion({
+      rgbaData: makeSplitRgba(32, 16, [220, 40, 40], [40, 80, 220]),
+      cropWidth: 32,
+      cropHeight: 16,
+      cropMask: multiMask,
+      existingPalette: customTwoPal,
+      isFreeColor: true,
+      targetSubRegions: 4,
+      minRegionArea: 12,
+    });
+    const mergedMulti = mergeSubdividedRegionIntoPuzzle(
+      cornerCutoutPuzzle,
+      new Set([1, 2]),
+      multiSub,
+      multiBbox
+    );
+    assert.equal(mergedMulti.isFreeColor, true, 'Free Colour flag must survive in-place merge');
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        assert.equal(mergedMulti.regionMap[y * 32 + x], 0, 'Cutout rId===0 exterior must remain 0 after merge');
+      }
+    }
+    assert.deepEqual(
+      mergedMulti.borderMap,
+      buildBorderMapFromRegionMap(mergedMulti.regionMap, 32, 32),
+      'Corner-touching multi-region cutout merge borderMap must match full recompute'
+    );
+    // Empty selection & empty mask safety
+    const emptyMerge = mergeSubdividedRegionIntoPuzzle(
+      cornerCutoutPuzzle,
+      new Set(),
+      { ...multiSub, regions: [], localRegionMap: new Int32Array(32 * 16) },
+      multiBbox
+    );
+    assert.notEqual(emptyMerge, cornerCutoutPuzzle, 'Empty merge must return safe non-mutating clone');
+    assert.equal(emptyMerge.regions.length, cornerCutoutPuzzle.regions.length);
 }
 
 function testAlphaMaskPuzzleGenerator(generatorMod, typesMod) {
@@ -2278,31 +2873,26 @@ function testAlphaMaskPuzzleGenerator(generatorMod, typesMod) {
     // 4e. Alpha-mask cutout support in AutoPuzzleGenerator.generateFromRgba
     const gw = 128;
     const gh = 128;
-    const alphaRgba = new Uint8ClampedArray(gw * gh * 4);
-    for (let y = 0; y < gh; y++) {
-      for (let x = 0; x < gw; x++) {
-        const dx = x - 64;
-        const dy = y - 64;
-        const o = (y * gw + x) * 4;
-        if (dx * dx + dy * dy <= 46 * 46) {
-          if (x < 64) {
-            alphaRgba[o] = 220;
-            alphaRgba[o + 1] = 60;
-            alphaRgba[o + 2] = 60;
-          } else {
-            alphaRgba[o] = 50;
-            alphaRgba[o + 1] = 120;
-            alphaRgba[o + 2] = 220;
+    const buildCircleCutoutRgba = (leftRgb, rightRgb) => {
+      const buf = new Uint8ClampedArray(gw * gh * 4);
+      for (let y = 0; y < gh; y++) {
+        for (let x = 0; x < gw; x++) {
+          const dx = x - 64;
+          const dy = y - 64;
+          const o = (y * gw + x) * 4;
+          if (dx * dx + dy * dy <= 46 * 46) {
+            const rgb = x < 64 ? leftRgb : rightRgb;
+            buf[o] = rgb[0];
+            buf[o + 1] = rgb[1];
+            buf[o + 2] = rgb[2];
+            buf[o + 3] = 255;
           }
-          alphaRgba[o + 3] = 255;
-        } else {
-          alphaRgba[o] = 0;
-          alphaRgba[o + 1] = 0;
-          alphaRgba[o + 2] = 0;
-          alphaRgba[o + 3] = 0;
         }
       }
-    }
+      return buf;
+    };
+
+    const alphaRgba = buildCircleCutoutRgba([220, 60, 60], [50, 120, 220]);
     const cutoutPuzzle = new AutoPuzzleGenerator().generateFromRgba(alphaRgba, gw, gh, {
       ...DEFAULT_GENERATOR_CONFIG,
       resolution: 128,
@@ -2322,6 +2912,45 @@ function testAlphaMaskPuzzleGenerator(generatorMod, typesMod) {
       'Opaque interior circle pixels must belong to positive regions'
     );
     assert.ok(cutoutPuzzle.regions.length >= 2, 'Opaque 2-color circle should generate >= 2 regions');
+
+    // Bug #2 regression (a): dark colorful cutout with isFreeColor: true must segment >= 2 regions & keep isFreeColor === true
+    const darkColorfulRgba = buildCircleCutoutRgba([20, 40, 150], [20, 100, 35]);
+    const darkFreePuzzle = new AutoPuzzleGenerator().generateFromRgba(darkColorfulRgba, gw, gh, {
+      ...DEFAULT_GENERATOR_CONFIG,
+      resolution: 128,
+      colorCount: 4,
+      minRegionArea: 24,
+      maxRegions: 50,
+      isFreeColor: true,
+    });
+    assert.ok(
+      darkFreePuzzle.regions.length >= 2,
+      `Dark colorful cutout with isFreeColor: true must segment >= 2 regions (got ${darkFreePuzzle.regions.length})`
+    );
+    assert.equal(darkFreePuzzle.isFreeColor, true, 'Dark colorful cutout with isFreeColor: true must preserve isFreeColor === true');
+    for (const ci of cornerIndices) {
+      assert.ok(darkFreePuzzle.regionMap[ci] <= 0);
+    }
+
+    // Bug #2 regression (b): 2-tone gray cutout with explicit isFreeColor: false must segment >= 2 regions & NOT flip to Free Colour Mode
+    const twoToneGrayRgba = buildCircleCutoutRgba([220, 220, 220], [150, 150, 150]);
+    const grayCbnPuzzle = new AutoPuzzleGenerator().generateFromRgba(twoToneGrayRgba, gw, gh, {
+      ...DEFAULT_GENERATOR_CONFIG,
+      resolution: 128,
+      colorCount: 4,
+      minRegionArea: 24,
+      maxRegions: 50,
+      isFreeColor: false,
+    });
+    assert.ok(
+      grayCbnPuzzle.regions.length >= 2,
+      `2-tone gray cutout with isFreeColor: false must segment >= 2 regions (got ${grayCbnPuzzle.regions.length})`
+    );
+    assert.notEqual(
+      grayCbnPuzzle.isFreeColor,
+      true,
+      '2-tone gray cutout with explicit isFreeColor: false must not silently flip to isFreeColor: true'
+    );
 }
 
 // -------------------------------------------------------------------------
@@ -2402,6 +3031,76 @@ async function testCapyCodecZoomTree(codecMod) {
 
     const clampedNaN = sanitizeZoomTreeMeta({ depth: Number.NaN, direction: 'in-place' });
     assert.equal(clampedNaN.depth, 0, 'NaN depth must fall back to 0');
+
+    // Gap #11: malformed zoomTree & parentSnapshotId edge cases
+    assert.throws(() => sanitizeZoomTreeMeta([]), 'Array zoomTree must throw');
+    const malformedMeta = sanitizeZoomTreeMeta({
+      depth: 2,
+      direction: 'sideways',
+      aiTierUsed: 'cloud-gpt',
+      boundsInParent: { x: Number.NaN, y: Number.POSITIVE_INFINITY, width: 0.5, height: 0.5 },
+      selectedRegionIds: [
+        -5,
+        0,
+        1.5,
+        Number.NaN,
+        7,
+        7,
+        ...Array.from({ length: 2700 }, (_, i) => i + 10),
+      ],
+      childSnapshotIds: ['valid-child', 'a'.repeat(257)],
+      inPlaceSubdivisionCount: -4,
+    });
+    assert.equal(malformedMeta.direction, 'child-in', 'Invalid direction must fall back to child-in');
+    assert.equal(malformedMeta.aiTierUsed, undefined, 'Invalid aiTierUsed must be stripped');
+    assert.deepEqual(
+      malformedMeta.boundsInParent,
+      { x: 0, y: 0, width: 0.5, height: 0.5 },
+      'NaN/Infinity x/y in boundsInParent must sanitize to 0'
+    );
+    const nanDimsMeta = sanitizeZoomTreeMeta({
+      depth: 0,
+      direction: 'in-place',
+      boundsInParent: { x: Number.NaN, y: Number.NaN, width: Number.NaN, height: Number.POSITIVE_INFINITY },
+    });
+    assertNormalizedBounds(nanDimsMeta.boundsInParent, 'nanDimsBounds');
+    assert.equal(malformedMeta.selectedRegionIds.length, 2600, 'selectedRegionIds must cap at 2600');
+    assert.equal(malformedMeta.selectedRegionIds[0], 7, 'Non-positive/float/NaN selectedRegionIds must be filtered');
+    assert.equal(
+      new Set(malformedMeta.selectedRegionIds).size,
+      malformedMeta.selectedRegionIds.length,
+      'selectedRegionIds must be deduplicated'
+    );
+    assert.deepEqual(
+      malformedMeta.childSnapshotIds,
+      ['valid-child'],
+      'childSnapshotIds entries > 256 chars must be stripped'
+    );
+    assert.equal(malformedMeta.inPlaceSubdivisionCount, 0, 'inPlaceSubdivisionCount < 0 must clamp to 0');
+    assert.equal(
+      sanitizeZoomTreeMeta({ depth: 0, direction: 'in-place', inPlaceSubdivisionCount: 5000 }).inPlaceSubdivisionCount,
+      1000,
+      'inPlaceSubdivisionCount > 1000 must clamp to 1000'
+    );
+    assert.equal(
+      sanitizeZoomTreeMeta({ depth: 0, direction: 'in-place', inPlaceSubdivisionCount: Number.NaN })
+        .inPlaceSubdivisionCount,
+      undefined,
+      'NaN inPlaceSubdivisionCount must become undefined'
+    );
+
+    // assertValidSavedSnapshot parentSnapshotId validation & trimming
+    const baseValidSnap = makeBaselineSnapshot('parent-val-test');
+    assert.throws(() => assertValidSavedSnapshot({ ...baseValidSnap, parentSnapshotId: '' }), 'Empty parentSnapshotId must reject');
+    assert.throws(() => assertValidSavedSnapshot({ ...baseValidSnap, parentSnapshotId: '   ' }), 'Whitespace parentSnapshotId must reject');
+    assert.throws(() => assertValidSavedSnapshot({ ...baseValidSnap, parentSnapshotId: 123 }), 'Non-string parentSnapshotId must reject');
+    assert.throws(
+      () => assertValidSavedSnapshot({ ...baseValidSnap, parentSnapshotId: 'p'.repeat(257) }),
+      '>256-char parentSnapshotId must reject'
+    );
+    const paddedSnap = { ...baseValidSnap, parentSnapshotId: '  parent-ok  ' };
+    assertValidSavedSnapshot(paddedSnap);
+    assert.equal(paddedSnap.parentSnapshotId, 'parent-ok', 'Valid padded parentSnapshotId must be trimmed');
 
     // 5b. Binary .capy v2 round-trip: legacy (no zoomTree) + modern (zoomTree + sparse IDs)
     const pal = [makePaletteColor(1, 200, 90, 80), makePaletteColor(2, 80, 150, 210)];
@@ -2587,6 +3286,39 @@ async function testStorageAndProviders(storageMod, idbMod, keysMod, providerMod,
             'Deleting parent snapshot must prune child.parentSnapshotId to undefined'
           );
 
+          // 6d-ii. Gap #12: 3-level + sibling deleteSnapshot orphan pruning & monotonic metaUpdatedAt bump
+          StorageService.addSnapshot(makeBaselineSnapshot('zt-grandparent', { title: 'Grandparent' }));
+          StorageService.addSnapshot(makeBaselineSnapshot('zt-middle', { title: 'Middle' }));
+          StorageService.addSnapshot(makeBaselineSnapshot('zt-middle2', { title: 'Middle Sibling' }));
+          StorageService.addSnapshot(makeBaselineSnapshot('zt-grandchild', { title: 'Grandchild' }));
+          StorageService.linkZoomTreeSnapshots('zt-grandparent', 'zt-middle', { direction: 'extend-out' }, { direction: 'child-in', depth: 1 });
+          StorageService.linkZoomTreeSnapshots('zt-grandparent', 'zt-middle2', undefined, { direction: 'child-in', depth: 1 });
+          StorageService.linkZoomTreeSnapshots('zt-middle', 'zt-grandchild', undefined, { direction: 'child-in', depth: 2 });
+
+          const snapsStorageKey = keysMod.resolveScopedStorageKey(keysMod.SNAPSHOTS_KEY);
+          const rawBeforeDelete = JSON.parse(memLs.getItem(snapsStorageKey) || '[]');
+          const gpTsBefore = rawBeforeDelete.find((s) => s.id === 'zt-grandparent')?.metaUpdatedAt ?? 0;
+          const gcTsBefore = rawBeforeDelete.find((s) => s.id === 'zt-grandchild')?.metaUpdatedAt ?? 0;
+
+          await StorageService.deleteSnapshot('zt-middle');
+          const afterMidDelete = StorageService.loadSnapshots();
+          const gpAfter = afterMidDelete.find((s) => s.id === 'zt-grandparent');
+          const mid2After = afterMidDelete.find((s) => s.id === 'zt-middle2');
+          const gcAfter = afterMidDelete.find((s) => s.id === 'zt-grandchild');
+          assert.deepEqual(
+            gpAfter?.zoomTree?.childSnapshotIds,
+            ['zt-middle2'],
+            'Deleting middle must prune middle from grandparent while keeping sibling middle2'
+          );
+          assert.equal(gcAfter?.parentSnapshotId, undefined, 'Deleting middle must clear grandchild.parentSnapshotId');
+          assert.equal(mid2After?.parentSnapshotId, 'zt-grandparent', 'Sibling middle2.parentSnapshotId must stay intact');
+
+          const rawAfterDelete = JSON.parse(memLs.getItem(snapsStorageKey) || '[]');
+          const gpTsAfter = rawAfterDelete.find((s) => s.id === 'zt-grandparent')?.metaUpdatedAt ?? 0;
+          const gcTsAfter = rawAfterDelete.find((s) => s.id === 'zt-grandchild')?.metaUpdatedAt ?? 0;
+          assert.ok(gpTsAfter > gpTsBefore, `grandparent metaUpdatedAt must increase monotonically (${gpTsBefore} -> ${gpTsAfter})`);
+          assert.ok(gcTsAfter > gcTsBefore, `grandchild metaUpdatedAt must increase monotonically (${gcTsBefore} -> ${gcTsAfter})`);
+
           // 6e. updateSnapshotMetadata: updates title/isAutoSample/sampleAssetPath/sourceRef/zoomTree, persists, leaves others untouched, safe no-op on unknown ID
           assert.equal(
             typeof StorageService.updateSnapshotMetadata,
@@ -2729,6 +3461,562 @@ async function testStorageAndProviders(storageMod, idbMod, keysMod, providerMod,
     );
 }
 
+// -------------------------------------------------------------------------
+// 7. PuzzleWorkerService & Subdivision Worker IPC (Bug #1 + Gap #8)
+// -------------------------------------------------------------------------
+async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod, subdividerMod) {
+  const { PuzzleWorkerService, GenerationCancelledError, unpackSubdivisionFromWorker } = workerSvcMod;
+  const { packSubdivisionForTransfer } = workerMod;
+  const { subdivideMaskedRegion } = subdividerMod;
+
+  const w = 24;
+  const h = 24;
+  const rgba = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4;
+      rgba[o] = x < 12 ? 220 : 40;
+      rgba[o + 1] = x < 12 ? 60 : 120;
+      rgba[o + 2] = x < 12 ? 60 : 210;
+      rgba[o + 3] = 255;
+    }
+  }
+  const mask = new Uint8Array(w * h).fill(1);
+  const existingPalette = [makePaletteColor(1, 220, 60, 60)];
+
+  // 7a. packSubdivisionForTransfer / unpackSubdivisionFromWorker round-trip
+  const direct = subdivideMaskedRegion({
+    rgbaData: rgba,
+    cropWidth: w,
+    cropHeight: h,
+    cropMask: mask,
+    existingPalette,
+    targetSubRegions: 4,
+    minRegionArea: 12,
+  });
+  const { payload, transferList } = packSubdivisionForTransfer(direct);
+  assert.equal(transferList.length, 2, 'packSubdivisionForTransfer must emit 2 transferables');
+  const unpacked = unpackSubdivisionFromWorker(payload);
+  assert.equal(unpacked.width, direct.width);
+  assert.equal(unpacked.height, direct.height);
+  assert.deepEqual(Array.from(unpacked.localRegionMap), Array.from(direct.localRegionMap));
+  assert.equal(unpacked.regions.length, direct.regions.length);
+  for (let i = 0; i < direct.regions.length; i++) {
+    assert.deepEqual(Array.from(unpacked.regions[i].pixels), Array.from(direct.regions[i].pixels));
+  }
+
+  // 7b. typeof Worker === 'undefined' main-thread fallback
+  await withGlobalOverrides({ Worker: undefined }, async () => {
+    const progressCalls = [];
+    const fallbackRes = await PuzzleWorkerService.subdivideMaskedRegion(
+      {
+        rgbaData: rgba,
+        cropWidth: w,
+        cropHeight: h,
+        cropMask: mask,
+        existingPalette,
+        targetSubRegions: 4,
+        minRegionArea: 12,
+      },
+      (p, s) => progressCalls.push([p, s])
+    );
+    assert.ok(fallbackRes.regions.length >= 2);
+    assert.ok(progressCalls.length >= 2);
+  });
+
+  // 7c. Mock Worker: PROGRESS -> SUBDIVIDE_SUCCESS, ERROR, worker error fallback preserving caller buffers, cancelActive, and Bug #1 late error race
+  const createdWorkers = [];
+  class MockWorker {
+    constructor() {
+      this.listeners = { message: new Set(), error: new Set() };
+      this.capturedErrorListeners = [];
+      this.terminated = false;
+      this.posted = [];
+      createdWorkers.push(this);
+    }
+    addEventListener(type, fn) {
+      this.listeners[type]?.add(fn);
+      if (type === 'error') this.capturedErrorListeners.push(fn);
+    }
+    removeEventListener(type, fn) {
+      this.listeners[type]?.delete(fn);
+    }
+    postMessage(msg, transfer) {
+      this.posted.push({ msg, transfer });
+    }
+    terminate() {
+      this.terminated = true;
+    }
+    emitMessage(data) {
+      for (const fn of Array.from(this.listeners.message)) {
+        fn({ data });
+      }
+    }
+    emitError(err) {
+      for (const fn of Array.from(this.listeners.error)) {
+        fn(err);
+      }
+    }
+  }
+
+  await withGlobalOverrides({ Worker: MockWorker }, async () => {
+    PuzzleWorkerService.cancelActive();
+    createdWorkers.length = 0;
+
+    // PROGRESS + SUBDIVIDE_SUCCESS
+    const progressSeen = [];
+    const pSuccess = PuzzleWorkerService.subdivideMaskedRegion(
+      {
+        rgbaData: rgba,
+        cropWidth: w,
+        cropHeight: h,
+        cropMask: mask,
+        existingPalette,
+        targetSubRegions: 4,
+        minRegionArea: 12,
+      },
+      (prog, status) => progressSeen.push([prog, status])
+    );
+    const wSuccess = createdWorkers[createdWorkers.length - 1];
+    const reqId1 = wSuccess.posted[0].msg.id;
+    wSuccess.emitMessage({ type: 'PROGRESS', id: reqId1, progress: 0.5, status: 'Halfway' });
+    const packed = packSubdivisionForTransfer(
+      subdivideMaskedRegion({
+        rgbaData: rgba,
+        cropWidth: w,
+        cropHeight: h,
+        cropMask: mask,
+        existingPalette,
+        targetSubRegions: 4,
+        minRegionArea: 12,
+      })
+    );
+    wSuccess.emitMessage({ type: 'SUBDIVIDE_SUCCESS', id: reqId1, result: packed.payload });
+    const okRes = await pSuccess;
+    assert.equal(progressSeen.length, 1);
+    assert.ok(okRes.regions.length >= 2);
+
+    // Worker ERROR message rejects cleanly
+    const pErrMsg = PuzzleWorkerService.subdivideMaskedRegion({
+      rgbaData: rgba,
+      cropWidth: w,
+      cropHeight: h,
+      cropMask: mask,
+      existingPalette,
+    });
+    const wErrMsg = createdWorkers[createdWorkers.length - 1];
+    wErrMsg.emitMessage({ type: 'ERROR', id: wErrMsg.posted[wErrMsg.posted.length - 1].msg.id, error: 'Simulated worker failure' });
+    await assert.rejects(() => pErrMsg, /Simulated worker failure/);
+
+    // Worker error event falls back to main thread AND keeps caller TypedArrays non-detached
+    const callerRgba = rgba.slice();
+    const callerMask = mask.slice();
+    const pFallback = PuzzleWorkerService.subdivideMaskedRegion({
+      rgbaData: callerRgba,
+      cropWidth: w,
+      cropHeight: h,
+      cropMask: callerMask,
+      existingPalette,
+      targetSubRegions: 4,
+      minRegionArea: 12,
+    });
+    const wCrash = createdWorkers[createdWorkers.length - 1];
+    wCrash.emitError(new Error('Worker crashed'));
+    const recovered = await pFallback;
+    assert.ok(recovered.regions.length >= 2, 'Worker error event must fall back cleanly to main thread');
+    assert.equal(callerRgba.byteLength, rgba.byteLength, 'Caller rgbaData must remain non-detached');
+    assert.equal(callerMask.byteLength, mask.byteLength, 'Caller cropMask must remain non-detached');
+
+    // Bug #1 regression: Request 1 cancelled by Request 2 + late error event on worker1 MUST NOT clobber Request 2 or leak worker2
+    const p1 = PuzzleWorkerService.subdivideMaskedRegion({
+      rgbaData: rgba,
+      cropWidth: w,
+      cropHeight: h,
+      cropMask: mask,
+      existingPalette,
+    });
+    const worker1 = createdWorkers[createdWorkers.length - 1];
+    const p2 = PuzzleWorkerService.subdivideMaskedRegion({
+      rgbaData: rgba,
+      cropWidth: w,
+      cropHeight: h,
+      cropMask: mask,
+      existingPalette,
+    });
+    const worker2 = createdWorkers[createdWorkers.length - 1];
+    assert.notEqual(worker1, worker2, 'Request 2 must spawn a fresh worker after Request 1 cancellation');
+    assert.equal(worker1.terminated, true, 'worker1 must be terminated on superseding request');
+    await assert.rejects(() => p1, (err) => err instanceof GenerationCancelledError);
+    assert.equal(worker1.listeners.error.size, 0, 'cancelActive must detach error listener on worker1');
+    assert.equal(worker1.listeners.message.size, 0, 'cancelActive must detach message listener on worker1');
+    // Even if a queued error handler from worker1 fires directly, it MUST NOT touch Request 2 or worker2
+    for (const staleErrFn of worker1.capturedErrorListeners) {
+      staleErrFn(new Error('Late queued error on worker1'));
+    }
+    PuzzleWorkerService.cancelActive();
+    await assert.rejects(
+      () => p2,
+      (err) => err instanceof GenerationCancelledError,
+      'Request 2 must still cancel cleanly with GenerationCancelledError after late error on worker1'
+    );
+    assert.equal(worker2.terminated, true, 'worker2 must be terminated by cancelActive() (zero worker leak)');
+  });
+}
+
+// -------------------------------------------------------------------------
+// 8. artworkExporter Cutout & Free Colour Scaling Tests (Bug #6 + Gap #7)
+// -------------------------------------------------------------------------
+async function testArtworkExporterCutouts(exporterMod, bridgeMod, codecMod) {
+  const { hasCutoutExteriorMask, exportColoredArtworkPng, generatePreviewDataUrl } = exporterMod;
+  const { NativeBridge } = bridgeMod;
+  const { buildBorderMapFromRegionMap } = codecMod;
+
+  const pal = [makePaletteColor(1, 220, 40, 40), makePaletteColor(2, 40, 120, 220)];
+  const pw = 40;
+  const ph = 20;
+  const cutoutMap = new Int32Array(pw * ph);
+  for (let y = 0; y < ph; y++) {
+    for (let x = 0; x < pw; x++) {
+      if (x < 4 || x >= pw - 4 || y < 2 || y >= ph - 2) {
+        cutoutMap[y * pw + x] = 0;
+      } else {
+        cutoutMap[y * pw + x] = x < pw / 2 ? 1 : 2;
+      }
+    }
+  }
+  const cutoutPuzzle = buildPuzzleFromRegionMap(pw, ph, cutoutMap, pal, new Map([[1, 1], [2, 2]]), buildBorderMapFromRegionMap);
+  const allInteriorPuzzle = { ...cutoutPuzzle, regionMap: new Int32Array(pw * ph).fill(1) };
+  const allExteriorPuzzle = { ...cutoutPuzzle, regionMap: new Int32Array(pw * ph).fill(0) };
+  const emptyPuzzle = { ...cutoutPuzzle, width: 0, height: 0, regionMap: new Int32Array(0) };
+
+  assert.equal(hasCutoutExteriorMask(cutoutPuzzle), true);
+  assert.equal(hasCutoutExteriorMask(allInteriorPuzzle), false);
+  assert.equal(hasCutoutExteriorMask(allExteriorPuzzle), false);
+  assert.equal(hasCutoutExteriorMask(emptyPuzzle), false);
+
+  // Build mismatched 80x40 sourceImage (2x puzzle dims): left half white (255,255,255), right half mid-gray (100,100,100)
+  const srcImg = createFakeCanvas(80, 40);
+  const srcCtx = srcImg.getContext('2d');
+  const srcData = srcCtx.createImageData(80, 40);
+  for (let y = 0; y < 40; y++) {
+    for (let x = 0; x < 80; x++) {
+      const o = (y * 80 + x) * 4;
+      const v = x < 40 ? 255 : 100;
+      srcData.data[o] = v;
+      srcData.data[o + 1] = v;
+      srcData.data[o + 2] = v;
+      srcData.data[o + 3] = 255;
+    }
+  }
+  srcCtx.putImageData(srcData, 0, 0);
+
+  let lastBlobPixels = null;
+  let lastDataUrlPixels = null;
+  let lastDataUrlDims = null;
+  const origExport = NativeBridge.exportOrShareFile;
+  const origHaptic = NativeBridge.haptic;
+  const exportedCalls = [];
+
+  const fakeDoc = createFakeDocument((canvas) => {
+    const origToBlob = canvas.toBlob.bind(canvas);
+    canvas.toBlob = (cb, mime) => {
+      lastBlobPixels = new Uint8ClampedArray(canvas._getBackingData());
+      return origToBlob(cb, mime);
+    };
+    const origToDataURL = canvas.toDataURL.bind(canvas);
+    canvas.toDataURL = (mime, q) => {
+      lastDataUrlPixels = new Uint8ClampedArray(canvas._getBackingData());
+      lastDataUrlDims = { width: canvas.width, height: canvas.height };
+      return origToDataURL(mime, q);
+    };
+  });
+
+  await withGlobalOverrides({ document: fakeDoc, ImageData: FakeImageData }, async () => {
+    NativeBridge.exportOrShareFile = async (opts) => {
+      exportedCalls.push(opts);
+    };
+    NativeBridge.haptic = () => {};
+    try {
+      // Standard mode partial cutout PNG export
+      exportColoredArtworkPng({
+        puzzle: cutoutPuzzle,
+        sourceImage: srcImg,
+        filledRegionIds: new Set([1]),
+        paintedRegionColors: new Map(),
+        title: 'Cutout Standard',
+        hapticsEnabled: false,
+      });
+      assert.ok(lastBlobPixels, 'Standard export must render toBlob');
+      for (let i = 0; i < pw * ph; i++) {
+        const expectedA = cutoutMap[i] <= 0 ? 0 : 255;
+        assert.equal(lastBlobPixels[i * 4 + 3], expectedA, `Standard cutout PNG alpha mismatch at pixel ${i}`);
+      }
+      // Standard mode complete cutout PNG export
+      exportColoredArtworkPng({
+        puzzle: cutoutPuzzle,
+        sourceImage: srcImg,
+        filledRegionIds: new Set([1, 2]),
+        paintedRegionColors: new Map(),
+        title: 'Cutout Complete',
+        hapticsEnabled: false,
+      });
+      const completeRightIdx = (10 * pw + 30) * 4;
+      assert.equal(lastBlobPixels[completeRightIdx], 100, 'Complete standard export must scale sourceImg to puzzle dims');
+
+      // Bug #6 regression: Free Colour Mode cutout PNG export with 2x larger sourceImage
+      const freeCutoutPuzzle = { ...cutoutPuzzle, isFreeColor: true };
+      exportColoredArtworkPng({
+        puzzle: freeCutoutPuzzle,
+        sourceImage: srcImg,
+        filledRegionIds: new Set([1, 2]),
+        paintedRegionColors: new Map([[1, 1], [2, 2]]),
+        title: 'Cutout FreeColor',
+        hapticsEnabled: false,
+      });
+      for (let i = 0; i < pw * ph; i++) {
+        const expectedA = cutoutMap[i] <= 0 ? 0 : 255;
+        assert.equal(lastBlobPixels[i * 4 + 3], expectedA, `Free Colour cutout PNG alpha mismatch at pixel ${i}`);
+      }
+      // Right-half pixel (x=30 in 40px puzzle) MUST multiply against scaled right-half of 80px sourceImg (100/255 * 220 ~= 86), NOT unscaled left-half (255/255 * 220 = 220)!
+      const freeRightBlue = lastBlobPixels[(10 * pw + 30) * 4 + 2];
+      assert.ok(
+        freeRightBlue < 130,
+        `Free Colour export must scale sourceImg to puzzle dimensions (got B=${freeRightBlue}, expected ~86 not 220)`
+      );
+
+      // generatePreviewDataUrl on cutout in Standard & Free Colour Mode: charcoal #18181b exterior backdrop
+      for (const targetPuzzle of [cutoutPuzzle, freeCutoutPuzzle]) {
+        const dataUrl = generatePreviewDataUrl(
+          targetPuzzle,
+          srcImg,
+          new Set([1, 2]),
+          targetPuzzle.isFreeColor ? new Map([[1, 1], [2, 2]]) : undefined
+        );
+        assert.ok(dataUrl.startsWith('data:image/jpeg'), 'generatePreviewDataUrl must return JPEG data URL');
+        assert.ok(lastDataUrlPixels && lastDataUrlDims.width === pw && lastDataUrlDims.height === ph);
+        assert.deepEqual(
+          Array.from(lastDataUrlPixels.subarray(0, 4)),
+          [24, 24, 27, 255],
+          'Cutout preview corner must render charcoal #18181b backdrop'
+        );
+        const innerR = lastDataUrlPixels[(10 * pw + 10) * 4];
+        assert.ok(innerR > 150, `Cutout preview interior must remain visible (got R=${innerR})`);
+      }
+      assert.ok(exportedCalls.length >= 3);
+    } finally {
+      NativeBridge.exportOrShareFile = origExport;
+      NativeBridge.haptic = origHaptic;
+    }
+  });
+}
+
+// -------------------------------------------------------------------------
+// 9. M3 Pure Helpers: puzzleCanvasHelpers & useInfiniteZoomController (Gap #8)
+// -------------------------------------------------------------------------
+async function testM3CanvasAndControllerHelpers(canvasHelpersMod, controllerMod, codecMod) {
+  const {
+    hasTransparentExterior,
+    buildMaskedPreviewCanvas,
+    renderSelectionOverlayToImageData,
+    resolveAnyRegionAtPoint,
+    collectLineRegionIds,
+    drawPuzzleBackdropIfOpaque,
+    drawPuzzleCompositeLayers,
+  } = canvasHelpersMod;
+  const {
+    computeSelectionMeanChroma,
+    scrubUndoHistoryForRemovedRegions,
+    resolvePostSubdivisionActiveColor,
+    resolveLatestChildSave,
+    buildInPlaceUpdatedSourceCanvas,
+  } = controllerMod;
+  const { buildBorderMapFromRegionMap } = codecMod;
+
+  await withGlobalOverrides({ document: createFakeDocument(), ImageData: FakeImageData }, async () => {
+    const pal = [makePaletteColor(1, 220, 60, 60), makePaletteColor(2, 60, 180, 90), makePaletteColor(3, 60, 90, 220)];
+    const w = 20;
+    const h = 20;
+    const rMap = new Int32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (x < 2 || y < 2) rMap[y * w + x] = 0;
+        else if (x < 11) rMap[y * w + x] = 1;
+        else rMap[y * w + x] = 2;
+      }
+    }
+    const puzzle = buildPuzzleFromRegionMap(w, h, rMap, pal, new Map([[1, 1], [2, 2]]), buildBorderMapFromRegionMap);
+    const regionById = new Map(puzzle.regions.map((r) => [r.id, r]));
+
+    assert.equal(hasTransparentExterior(rMap), true);
+    assert.equal(hasTransparentExterior(new Int32Array(16).fill(1)), false);
+    assert.equal(hasTransparentExterior(new Int32Array(16).fill(0)), false);
+    assert.equal(hasTransparentExterior(new Int32Array(0)), false);
+
+    // buildMaskedPreviewCanvas
+    const srcCanvas = createFakeCanvas(w, h);
+    const sCtx = srcCanvas.getContext('2d');
+    sCtx.fillStyle = '#cc6633';
+    sCtx.fillRect(0, 0, w, h);
+    const maskedCanvas = createFakeCanvas(1, 1);
+    assert.equal(buildMaskedPreviewCanvas(maskedCanvas, srcCanvas, puzzle), true);
+    const maskedPx = maskedCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+    assert.equal(maskedPx[3], 0, 'Exterior (0,0) must be masked transparent');
+    assert.equal(maskedPx[(10 * w + 6) * 4 + 3], 255, 'Interior (6,10) must remain opaque');
+
+    // renderSelectionOverlayToImageData (2px rim alpha=250 vs interior alpha=92)
+    const overlayData = new Uint8ClampedArray(w * h * 4);
+    assert.equal(renderSelectionOverlayToImageData(overlayData, puzzle, new Set([1]), regionById), true);
+    assert.equal(overlayData[(2 * w + 2) * 4 + 3], 250, 'Selection rim pixel must have alpha=250');
+    assert.equal(overlayData[(10 * w + 6) * 4 + 3], 92, 'Selection interior pixel must have alpha=92');
+    assert.equal(overlayData[(10 * w + 15) * 4 + 3], 0, 'Unselected region must remain alpha=0');
+
+    // resolveAnyRegionAtPoint: direct hit, fat-finger radial fallback, non-finite/out-of-bounds
+    assert.equal(
+      resolveAnyRegionAtPoint({ width: w, height: h, regionMap: rMap, canvasX: 6.4, canvasY: 10.2, fatFingerAssist: false, touchReachRadiusPx: 0, totalScreenScale: 1 }),
+      1
+    );
+    assert.equal(
+      resolveAnyRegionAtPoint({ width: w, height: h, regionMap: rMap, canvasX: 1, canvasY: 10, fatFingerAssist: true, touchReachRadiusPx: 8, totalScreenScale: 1 }),
+      1,
+      'Fat-finger radial fallback must find nearest positive region'
+    );
+    assert.equal(
+      resolveAnyRegionAtPoint({ width: w, height: h, regionMap: rMap, canvasX: Number.NaN, canvasY: 5, fatFingerAssist: true, touchReachRadiusPx: 8, totalScreenScale: 1 }),
+      0
+    );
+
+    // collectLineRegionIds: Bresenham crossing & scratch set reuse
+    const lineSet = new Set([999]);
+    assert.equal(collectLineRegionIds(puzzle, 0, 10, 18, 10, lineSet), true);
+    assert.deepEqual(Array.from(lineSet).sort((a, b) => a - b), [1, 2]);
+
+    // drawPuzzleBackdropIfOpaque
+    const bgCanvas1 = createFakeCanvas(20, 20);
+    drawPuzzleBackdropIfOpaque(bgCanvas1.getContext('2d'), false, 0, 0, 20, 20);
+    assert.equal(bgCanvas1._getBackingData()[0], 255, 'Opaque puzzle must draw #ffffff backdrop');
+    const bgCanvas2 = createFakeCanvas(20, 20);
+    drawPuzzleBackdropIfOpaque(bgCanvas2.getContext('2d'), true, 0, 0, 20, 20);
+    assert.equal(bgCanvas2._getBackingData()[3], 0, 'Cutout puzzle must skip #ffffff backdrop');
+
+    // drawPuzzleCompositeLayers (Preview cutout & Free Colour cutout multiply)
+    const compCanvas = createFakeCanvas(w, h);
+    const baseCanvas = createFakeCanvas(w, h);
+    baseCanvas.getContext('2d').fillStyle = '#ffffff';
+    baseCanvas.getContext('2d').fillRect(2, 2, w - 2, h - 2);
+    drawPuzzleCompositeLayers(compCanvas.getContext('2d'), {
+      puzzle,
+      sourceImage: null,
+      hasTransparentMask: true,
+      isEffectivePreview: true,
+      showPreviewBorders: false,
+      isFreeColorMode: false,
+      isRegionSelectionMode: false,
+      hasHighlightPixels: false,
+      hasSelectionPixels: false,
+      highlightStyle: 'FULL_REGION',
+      animateHint: false,
+      reducedMotion: false,
+      hintIntensity: 0.7,
+      currentPulseAlpha: 0.5,
+      baseCanvas,
+      borderCanvas: null,
+      highlightCanvas: null,
+      maskedPreviewCanvas: maskedCanvas,
+      selectionCanvas: null,
+    });
+    assert.equal(compCanvas._getBackingData()[3], 0, 'Cutout preview composite must leave exterior transparent');
+    assert.equal(compCanvas._getBackingData()[(10 * w + 6) * 4 + 3], 255, 'Cutout preview composite must draw masked interior');
+
+    const compFree = createFakeCanvas(w, h);
+    drawPuzzleCompositeLayers(compFree.getContext('2d'), {
+      puzzle: { ...puzzle, isFreeColor: true },
+      sourceImage: null,
+      hasTransparentMask: true,
+      isEffectivePreview: false,
+      showPreviewBorders: false,
+      isFreeColorMode: true,
+      isRegionSelectionMode: false,
+      hasHighlightPixels: false,
+      hasSelectionPixels: false,
+      highlightStyle: 'FULL_REGION',
+      animateHint: false,
+      reducedMotion: false,
+      hintIntensity: 0.7,
+      currentPulseAlpha: 0.5,
+      baseCanvas,
+      borderCanvas: null,
+      highlightCanvas: null,
+      maskedPreviewCanvas: maskedCanvas,
+      selectionCanvas: null,
+    });
+    assert.equal(compFree._getBackingData()[3], 0, 'Cutout Free Colour multiply must keep exterior transparent');
+    assert.equal(compFree._getBackingData()[(10 * w + 6) * 4], 0xcc, 'Cutout Free Colour multiply must apply maskedPreviewCanvas');
+
+    // useInfiniteZoomController pure helpers
+    const chromaRgba = new Uint8ClampedArray([
+      255, 0, 0, 255, // masked out (mask=0)
+      120, 120, 120, 255, // gray (chroma 0)
+      200, 100, 100, 255, // chroma 100
+    ]);
+    assert.equal(computeSelectionMeanChroma(chromaRgba, new Uint8Array([0, 1, 0])), 0);
+    assert.equal(computeSelectionMeanChroma(chromaRgba, new Uint8Array([0, 1, 1])), 50);
+
+    const scrubbed = scrubUndoHistoryForRemovedRegions(
+      [{ regionId: 1, prevColorId: null }, { regionId: 2, prevColorId: 1 }, { regionId: 3, prevColorId: null }],
+      new Set([1, 3])
+    );
+    assert.deepEqual(scrubbed.map((e) => e.regionId), [2]);
+
+    const settingsAutoOn = { autoAdvance: true, paletteSort: 'ORIGINAL', prioritizeOnScreen: false };
+    assert.equal(
+      resolvePostSubdivisionActiveColor(puzzle, new Set([1]), 1, [pal[2]], { ...settingsAutoOn, autoAdvance: false }, new Set(), false),
+      1,
+      'autoAdvance OFF must keep current activeColorId'
+    );
+    assert.equal(
+      resolvePostSubdivisionActiveColor(puzzle, new Set([1]), 1, [pal[2]], settingsAutoOn, new Set(), true),
+      1,
+      'Free Colour Mode must keep current activeColorId'
+    );
+    assert.equal(
+      resolvePostSubdivisionActiveColor(puzzle, new Set([1]), 1, [pal[1]], settingsAutoOn, new Set(), false),
+      2,
+      'autoAdvance ON with depleted current color must prefer newly added swatch with remaining regions'
+    );
+
+    const parentSnap = makeBaselineSnapshot('p1', { zoomTree: { depth: 0, direction: 'in-place', childSnapshotIds: ['p1', 'c1', 'c2'] } });
+    const c1 = makeBaselineSnapshot('c1', { parentSnapshotId: 'p1', lastOpened: 100 });
+    const c2 = makeBaselineSnapshot('c2', { parentSnapshotId: 'p1', lastOpened: 50 });
+    assert.equal(resolveLatestChildSave([parentSnap, c1, c2], parentSnap, 'p1')?.id, 'c2', 'childSnapshotIds must resolve LIFO while ignoring self-link');
+    const parentNoList = makeBaselineSnapshot('p2');
+    const cOld = makeBaselineSnapshot('cOld', { parentSnapshotId: 'p2', lastOpened: 100 });
+    const cNew = makeBaselineSnapshot('cNew', { parentSnapshotId: 'p2', lastOpened: 500 });
+    assert.equal(resolveLatestChildSave([parentNoList, cOld, cNew], parentNoList, 'p2')?.id, 'cNew', 'parentSnapshotId fallback must pick latest lastOpened');
+
+    // buildInPlaceUpdatedSourceCanvas bit-exact exterior preservation
+    const baseSrc = createFakeCanvas(10, 10);
+    baseSrc.getContext('2d').fillStyle = '#112233';
+    baseSrc.getContext('2d').fillRect(0, 0, 10, 10);
+    const infSrc = createFakeCanvas(4, 4);
+    infSrc.getContext('2d').fillStyle = '#ff8800';
+    infSrc.getContext('2d').fillRect(0, 0, 4, 4);
+    const subMask = new Uint8Array(16);
+    subMask[5] = 1; // (1,1) inside bbox (3,3) -> (4,4) global
+    const updatedCanvas = buildInPlaceUpdatedSourceCanvas(
+      baseSrc,
+      infSrc,
+      { minX: 3, minY: 3, maxX: 6, maxY: 6, width: 4, height: 4 },
+      subMask,
+      10,
+      10
+    );
+    const upPx = updatedCanvas._getBackingData();
+    assert.deepEqual(Array.from(upPx.subarray((4 * 10 + 4) * 4, (4 * 10 + 4) * 4 + 4)), [255, 136, 0, 255]);
+    assert.deepEqual(Array.from(upPx.subarray((3 * 10 + 3) * 4, (3 * 10 + 3) * 4 + 4)), [0x11, 0x22, 0x33, 255]);
+    assert.deepEqual(Array.from(upPx.subarray(0, 4)), [0x11, 0x22, 0x33, 255]);
+  });
+}
+
 // ===========================================================================
 // Main Exported Unit Suite
 // ===========================================================================
@@ -2743,41 +4031,58 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
   assert.ok(vite && typeof vite.ssrLoadModule === 'function', 'Expected Vite SSR server instance');
 
   logUnitStart?.(
-    'Testing Infinite Zoom Slice 1 (LocalLlmService, RegionSelectionEngine, InfiniteZoomSynthesizer, MaskedRegionSubdivider, CapyCodec & Storage)...'
+    'Testing Infinite Zoom Slice 1 (LocalLlmService, RegionSelectionEngine, InfiniteZoomSynthesizer, MaskedRegionSubdivider, Worker IPC, Exporter, Canvas/Controller Helpers, CapyCodec & Storage)...'
   );
 
   const [
     llmMod,
     selectionMod,
     synthMod,
+    quantizerMod,
     subdividerMod,
     generatorMod,
+    workerSvcMod,
+    workerMod,
     codecMod,
     storageMod,
     idbMod,
     keysMod,
     providerMod,
     typesMod,
+    exporterMod,
+    bridgeMod,
+    canvasHelpersMod,
+    controllerMod,
   ] = await Promise.all([
     vite.ssrLoadModule('/src/services/ai/LocalLlmService.ts'),
     vite.ssrLoadModule('/src/services/ai/RegionSelectionEngine.ts'),
     vite.ssrLoadModule('/src/services/ai/InfiniteZoomSynthesizer.ts'),
+    vite.ssrLoadModule('/src/engine/ColorQuantizer.ts'),
     vite.ssrLoadModule('/src/engine/MaskedRegionSubdivider.ts'),
     vite.ssrLoadModule('/src/engine/PuzzleGenerator.ts'),
+    vite.ssrLoadModule('/src/services/PuzzleWorkerService.ts'),
+    vite.ssrLoadModule('/src/engine/puzzle.worker.ts'),
     vite.ssrLoadModule('/src/services/CapyCodec.ts'),
     vite.ssrLoadModule('/src/services/StorageService.ts'),
     vite.ssrLoadModule('/src/services/storage/IndexedDbStore.ts'),
     vite.ssrLoadModule('/src/services/storage/StorageKeys.ts'),
     vite.ssrLoadModule('/src/services/providers/ProviderRegistry.ts'),
     vite.ssrLoadModule('/src/types/index.ts'),
+    vite.ssrLoadModule('/src/services/artworkExporter.ts'),
+    vite.ssrLoadModule('/src/services/NativeBridge.ts'),
+    vite.ssrLoadModule('/src/components/puzzleCanvasHelpers.ts'),
+    vite.ssrLoadModule('/src/hooks/useInfiniteZoomController.ts'),
   ]);
 
   await testLocalLlmService(llmMod);
   testRegionSelectionEngine(selectionMod, codecMod);
-  await testInfiniteZoomSynthesizer(synthMod, llmMod);
+  await testInfiniteZoomSynthesizer(synthMod, llmMod, quantizerMod);
   testMaskedSubdividerAndGenerator(subdividerMod, generatorMod, selectionMod, codecMod, typesMod);
   await testCapyCodecZoomTree(codecMod);
   await testStorageAndProviders(storageMod, idbMod, keysMod, providerMod, codecMod);
+  await testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod, subdividerMod);
+  await testArtworkExporterCutouts(exporterMod, bridgeMod, codecMod);
+  await testM3CanvasAndControllerHelpers(canvasHelpersMod, controllerMod, codecMod);
 
   logUnitPass?.('Infinite Zoom Slice 1 unit tests passed');
 }

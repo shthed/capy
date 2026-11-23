@@ -310,7 +310,8 @@ function generateAlphaCutoutPuzzle(
   ) => void
 ): PuzzleData {
   const stats = analyzeCutoutOpaqueStats(rawRgba, opaqueMask, opaqueCount);
-  const isBw = stats.coloredRatio < 0.08 || Boolean(config.isFreeColor);
+  const isBw = stats.coloredRatio < 0.08 && config.isFreeColor !== false;
+  const isFreeColorOutput = isBw || Boolean(config.isFreeColor);
   const resolvedColors = resolveCutoutColorCount(config, stats.uniqueBuckets);
   const minArea = config.minRegionArea ? Math.max(12, config.minRegionArea) : isBw ? 12 : 36;
   const maxRegs = config.maxRegions || (isBw ? 800 : 200);
@@ -384,7 +385,7 @@ function generateAlphaCutoutPuzzle(
   emitProgress(0.88, 'Placing cutout region labels...');
   const regions = computeLocalRegionGeometry(segments, localRegionMap, opaqueMask, width, height);
   if (isBw) {
-    assignFreeColorIds(regions, localRegionMap, width, height, palette);
+    assignFreeColorIds(regions, localRegionMap, width, height, palette, true);
   } else {
     recalibrateCutoutRegionColors(regions, rawRgba, palette);
   }
@@ -416,7 +417,7 @@ function generateAlphaCutoutPuzzle(
     regions,
     regionMap: localRegionMap,
     borderMap,
-    ...(isBw ? { isFreeColor: true } : {}),
+    ...(isFreeColorOutput ? { isFreeColor: true } : {}),
   };
 }
 

@@ -565,6 +565,19 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     setSelectionNotice(null);
   }, []);
 
+  useEffect(() => {
+    if (!(Boolean(coopRoomCode) || isReplaying) || !isRegionSelectionMode) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        exitRegionSelectionMode();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [coopRoomCode, isReplaying, isRegionSelectionMode, exitRegionSelectionMode]);
+
   const cancelActiveInfiniteZoom = useCallback(() => {
     infiniteZoomOpSeqRef.current += 1;
     if (abortControllerRef.current) {
@@ -1139,6 +1152,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) return false;
 
         const { img: childImg, objectUrl } = await decodeBlobToImage(pngBlob);
+        let handedOffToActiveState = false;
         try {
           if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) {
             return false;
@@ -1172,6 +1186,12 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           triggerFeatureOffer('infinite_zoom');
           abortControllerRef.current = null;
           cancelHandoffRef.current = { restoreSnapshotId: parentId, createdSnapshotId: null };
+          const priorActiveBlobUrl = activeBlobUrlRef.current;
+          activeBlobUrlRef.current = objectUrl;
+          if (priorActiveBlobUrl && priorActiveBlobUrl !== objectUrl) {
+            revokeObjectUrlSafely(priorActiveBlobUrl);
+          }
+          handedOffToActiveState = true;
           await loadArtworkFromImage(
             childImg,
             buildChildTileTitle(activeTitle, scenePlan.sanitizedPrompt),
@@ -1206,7 +1226,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           );
           return true;
         } finally {
-          revokeObjectUrlSafely(objectUrl);
+          if (!handedOffToActiveState) {
+            revokeObjectUrlSafely(objectUrl);
+          }
         }
       } finally {
         releaseCanvas(infillCanvas);
@@ -1215,6 +1237,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       }
     },
     [
+      activeBlobUrlRef,
       activeSave?.zoomTree?.depth,
       activeSnapshotId,
       activeTitle,
@@ -1359,6 +1382,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         if (isAborted()) return false;
 
         const { img: outerImg, objectUrl } = await decodeBlobToImage(blob);
+        let handedOffToActiveState = false;
         try {
           if (isAborted()) {
             return false;
@@ -1381,6 +1405,12 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           triggerFeatureOffer('infinite_zoom');
           abortControllerRef.current = null;
           cancelHandoffRef.current = { restoreSnapshotId: innerId, createdSnapshotId: null };
+          const priorActiveBlobUrl = activeBlobUrlRef.current;
+          activeBlobUrlRef.current = objectUrl;
+          if (priorActiveBlobUrl && priorActiveBlobUrl !== objectUrl) {
+            revokeObjectUrlSafely(priorActiveBlobUrl);
+          }
+          handedOffToActiveState = true;
           await loadArtworkFromImage(
             outerImg,
             buildExtendedTitle(activeTitle, scenePlan.sanitizedPrompt),
@@ -1415,7 +1445,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           );
           return true;
         } finally {
-          revokeObjectUrlSafely(objectUrl);
+          if (!handedOffToActiveState) {
+            revokeObjectUrlSafely(objectUrl);
+          }
         }
       } finally {
         releaseCanvas(extCanvas);
@@ -1423,6 +1455,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       }
     },
     [
+      activeBlobUrlRef,
       activeSave,
       activeSnapshotId,
       activeTitle,

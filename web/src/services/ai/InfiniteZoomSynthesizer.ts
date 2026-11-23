@@ -1045,6 +1045,104 @@ export function synthesizeInfillRgba(
 
 // --- Directional Border Extrapolation Helpers ---
 
+function computeInnerOpaqueFallbackRgb(
+  rgba: Uint8ClampedArray,
+  strideW: number,
+  offsetX: number,
+  offsetY: number,
+  innerW: number,
+  innerH: number,
+  accents: Array<[number, number, number]>
+): [number, number, number] {
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let count = 0;
+  for (let y = 0; y < innerH; y++) {
+    const row = (offsetY + y) * strideW;
+    for (let x = 0; x < innerW; x++) {
+      const p = (row + offsetX + x) * 4;
+      if (rgba[p + 3] >= 128) {
+        sr += rgba[p];
+        sg += rgba[p + 1];
+        sb += rgba[p + 2];
+        count += 1;
+      }
+    }
+  }
+  if (count > 0) {
+    return [sr / count, sg / count, sb / count];
+  }
+  if (accents.length > 0) {
+    return accents[0];
+  }
+  return [226, 232, 240];
+}
+
+function fillMissingProfileSlices(
+  slices: number,
+  hasSample: Uint8Array,
+  edgeR: Float32Array,
+  edgeG: Float32Array,
+  edgeB: Float32Array,
+  trendR: Float32Array,
+  trendG: Float32Array,
+  trendB: Float32Array,
+  edgeLum: Float32Array,
+  innerLum: Float32Array,
+  fallbackRgb: [number, number, number]
+): void {
+  const fallbackLum =
+    0.299 * fallbackRgb[0] + 0.587 * fallbackRgb[1] + 0.114 * fallbackRgb[2];
+  for (let s = 0; s < slices; s++) {
+    if (hasSample[s] === 1) continue;
+    let left = s - 1;
+    while (left >= 0 && hasSample[left] === 0) left--;
+    let right = s + 1;
+    while (right < slices && hasSample[right] === 0) right++;
+
+    if (left >= 0 && right < slices) {
+      const t = (s - left) / (right - left);
+      const inv = 1 - t;
+      edgeR[s] = edgeR[left] * inv + edgeR[right] * t;
+      edgeG[s] = edgeG[left] * inv + edgeG[right] * t;
+      edgeB[s] = edgeB[left] * inv + edgeB[right] * t;
+      trendR[s] = trendR[left] * inv + trendR[right] * t;
+      trendG[s] = trendG[left] * inv + trendG[right] * t;
+      trendB[s] = trendB[left] * inv + trendB[right] * t;
+      edgeLum[s] = edgeLum[left] * inv + edgeLum[right] * t;
+      innerLum[s] = innerLum[left] * inv + innerLum[right] * t;
+    } else if (left >= 0) {
+      edgeR[s] = edgeR[left];
+      edgeG[s] = edgeG[left];
+      edgeB[s] = edgeB[left];
+      trendR[s] = trendR[left];
+      trendG[s] = trendG[left];
+      trendB[s] = trendB[left];
+      edgeLum[s] = edgeLum[left];
+      innerLum[s] = innerLum[left];
+    } else if (right < slices) {
+      edgeR[s] = edgeR[right];
+      edgeG[s] = edgeG[right];
+      edgeB[s] = edgeB[right];
+      trendR[s] = trendR[right];
+      trendG[s] = trendG[right];
+      trendB[s] = trendB[right];
+      edgeLum[s] = edgeLum[right];
+      innerLum[s] = innerLum[right];
+    } else {
+      edgeR[s] = fallbackRgb[0];
+      edgeG[s] = fallbackRgb[1];
+      edgeB[s] = fallbackRgb[2];
+      trendR[s] = 0;
+      trendG[s] = 0;
+      trendB[s] = 0;
+      edgeLum[s] = fallbackLum;
+      innerLum[s] = fallbackLum;
+    }
+  }
+}
+
 function sampleHorizontalEdgeProfile(
   rgba: Uint8ClampedArray,
   strideW: number,
@@ -1052,7 +1150,8 @@ function sampleHorizontalEdgeProfile(
   offsetY: number,
   innerW: number,
   innerH: number,
-  isTop: boolean
+  isTop: boolean,
+  fallbackRgb: [number, number, number]
 ): EdgeProfile {
   const slices = Math.max(16, Math.min(32, Math.round(innerW / 32)));
   const edgeR = new Float32Array(slices);
@@ -1063,6 +1162,7 @@ function sampleHorizontalEdgeProfile(
   const trendB = new Float32Array(slices);
   const edgeLum = new Float32Array(slices);
   const innerLum = new Float32Array(slices);
+  const hasSample = new Uint8Array(slices);
   const edgeDepth = Math.min(3, innerH);
   const innerStart = Math.min(3, Math.max(0, innerH - 1));
   const innerEnd = Math.min(8, innerH);
@@ -1078,23 +1178,50 @@ function sampleHorizontalEdgeProfile(
     let ig = 0;
     let ib = 0;
     let ic = 0;
+    let foundDepth = 0;
 
     for (let d = 0; d < edgeDepth; d++) {
       const y = isTop ? offsetY + d : offsetY + innerH - 1 - d;
       const row = y * strideW;
       for (let x = x0; x < x1; x++) {
         const p = (row + x) * 4;
+        if (rgba[p + 3] < 128) continue;
         er += rgba[p];
         eg += rgba[p + 1];
         eb += rgba[p + 2];
         ec += 1;
       }
     }
-    for (let d = innerStart; d < innerEnd; d++) {
+
+    if (ec === 0) {
+      let firstOpaqueDepth = -1;
+      for (let d = edgeDepth; d < innerH; d++) {
+        const y = isTop ? offsetY + d : offsetY + innerH - 1 - d;
+        const row = y * strideW;
+        for (let x = x0; x < x1; x++) {
+          const p = (row + x) * 4;
+          if (rgba[p + 3] < 128) continue;
+          if (firstOpaqueDepth < 0) firstOpaqueDepth = d;
+          er += rgba[p];
+          eg += rgba[p + 1];
+          eb += rgba[p + 2];
+          ec += 1;
+        }
+        if (firstOpaqueDepth >= 0 && d >= firstOpaqueDepth + 2) break;
+      }
+      if (firstOpaqueDepth >= 0) {
+        foundDepth = firstOpaqueDepth;
+      }
+    }
+
+    const effInnerStart = Math.min(innerH, Math.max(innerStart, foundDepth + 3));
+    const effInnerEnd = Math.min(innerH, Math.max(innerEnd, effInnerStart + 5));
+    for (let d = effInnerStart; d < effInnerEnd; d++) {
       const y = isTop ? offsetY + d : offsetY + innerH - 1 - d;
       const row = y * strideW;
       for (let x = x0; x < x1; x++) {
         const p = (row + x) * 4;
+        if (rgba[p + 3] < 128) continue;
         ir += rgba[p];
         ig += rgba[p + 1];
         ib += rgba[p + 2];
@@ -1102,20 +1229,36 @@ function sampleHorizontalEdgeProfile(
       }
     }
 
-    const invE = ec > 0 ? 1 / ec : 1;
-    const invI = ic > 0 ? 1 / ic : invE;
-    edgeR[s] = er * invE;
-    edgeG[s] = eg * invE;
-    edgeB[s] = eb * invE;
-    const inR = ic > 0 ? ir * invI : edgeR[s];
-    const inG = ic > 0 ? ig * invI : edgeG[s];
-    const inB = ic > 0 ? ib * invI : edgeB[s];
-    trendR[s] = clampRange(edgeR[s] - inR, -18, 18);
-    trendG[s] = clampRange(edgeG[s] - inG, -18, 18);
-    trendB[s] = clampRange(edgeB[s] - inB, -18, 18);
-    edgeLum[s] = 0.299 * edgeR[s] + 0.587 * edgeG[s] + 0.114 * edgeB[s];
-    innerLum[s] = 0.299 * inR + 0.587 * inG + 0.114 * inB;
+    if (ec > 0) {
+      hasSample[s] = 1;
+      const invE = 1 / ec;
+      edgeR[s] = er * invE;
+      edgeG[s] = eg * invE;
+      edgeB[s] = eb * invE;
+      const inR = ic > 0 ? ir / ic : edgeR[s];
+      const inG = ic > 0 ? ig / ic : edgeG[s];
+      const inB = ic > 0 ? ib / ic : edgeB[s];
+      trendR[s] = clampRange(edgeR[s] - inR, -18, 18);
+      trendG[s] = clampRange(edgeG[s] - inG, -18, 18);
+      trendB[s] = clampRange(edgeB[s] - inB, -18, 18);
+      edgeLum[s] = 0.299 * edgeR[s] + 0.587 * edgeG[s] + 0.114 * edgeB[s];
+      innerLum[s] = 0.299 * inR + 0.587 * inG + 0.114 * inB;
+    }
   }
+
+  fillMissingProfileSlices(
+    slices,
+    hasSample,
+    edgeR,
+    edgeG,
+    edgeB,
+    trendR,
+    trendG,
+    trendB,
+    edgeLum,
+    innerLum,
+    fallbackRgb
+  );
 
   return {
     slices,
@@ -1136,7 +1279,8 @@ function sampleVerticalEdgeProfile(
   offsetY: number,
   innerW: number,
   innerH: number,
-  isLeft: boolean
+  isLeft: boolean,
+  fallbackRgb: [number, number, number]
 ): EdgeProfile {
   const slices = Math.max(16, Math.min(32, Math.round(innerH / 32)));
   const edgeR = new Float32Array(slices);
@@ -1147,6 +1291,7 @@ function sampleVerticalEdgeProfile(
   const trendB = new Float32Array(slices);
   const edgeLum = new Float32Array(slices);
   const innerLum = new Float32Array(slices);
+  const hasSample = new Uint8Array(slices);
   const edgeDepth = Math.min(3, innerW);
   const innerStart = Math.min(3, Math.max(0, innerW - 1));
   const innerEnd = Math.min(8, innerW);
@@ -1162,20 +1307,47 @@ function sampleVerticalEdgeProfile(
     let ig = 0;
     let ib = 0;
     let ic = 0;
+    let foundDepth = 0;
 
-    for (let y = y0; y < y1; y++) {
-      const row = y * strideW;
-      for (let d = 0; d < edgeDepth; d++) {
-        const x = isLeft ? offsetX + d : offsetX + innerW - 1 - d;
-        const p = (row + x) * 4;
+    for (let d = 0; d < edgeDepth; d++) {
+      const x = isLeft ? offsetX + d : offsetX + innerW - 1 - d;
+      for (let y = y0; y < y1; y++) {
+        const p = (y * strideW + x) * 4;
+        if (rgba[p + 3] < 128) continue;
         er += rgba[p];
         eg += rgba[p + 1];
         eb += rgba[p + 2];
         ec += 1;
       }
-      for (let d = innerStart; d < innerEnd; d++) {
+    }
+
+    if (ec === 0) {
+      let firstOpaqueDepth = -1;
+      for (let d = edgeDepth; d < innerW; d++) {
         const x = isLeft ? offsetX + d : offsetX + innerW - 1 - d;
-        const p = (row + x) * 4;
+        for (let y = y0; y < y1; y++) {
+          const p = (y * strideW + x) * 4;
+          if (rgba[p + 3] < 128) continue;
+          if (firstOpaqueDepth < 0) firstOpaqueDepth = d;
+          er += rgba[p];
+          eg += rgba[p + 1];
+          eb += rgba[p + 2];
+          ec += 1;
+        }
+        if (firstOpaqueDepth >= 0 && d >= firstOpaqueDepth + 2) break;
+      }
+      if (firstOpaqueDepth >= 0) {
+        foundDepth = firstOpaqueDepth;
+      }
+    }
+
+    const effInnerStart = Math.min(innerW, Math.max(innerStart, foundDepth + 3));
+    const effInnerEnd = Math.min(innerW, Math.max(innerEnd, effInnerStart + 5));
+    for (let d = effInnerStart; d < effInnerEnd; d++) {
+      const x = isLeft ? offsetX + d : offsetX + innerW - 1 - d;
+      for (let y = y0; y < y1; y++) {
+        const p = (y * strideW + x) * 4;
+        if (rgba[p + 3] < 128) continue;
         ir += rgba[p];
         ig += rgba[p + 1];
         ib += rgba[p + 2];
@@ -1183,20 +1355,36 @@ function sampleVerticalEdgeProfile(
       }
     }
 
-    const invE = ec > 0 ? 1 / ec : 1;
-    const invI = ic > 0 ? 1 / ic : invE;
-    edgeR[s] = er * invE;
-    edgeG[s] = eg * invE;
-    edgeB[s] = eb * invE;
-    const inR = ic > 0 ? ir * invI : edgeR[s];
-    const inG = ic > 0 ? ig * invI : edgeG[s];
-    const inB = ic > 0 ? ib * invI : edgeB[s];
-    trendR[s] = clampRange(edgeR[s] - inR, -18, 18);
-    trendG[s] = clampRange(edgeG[s] - inG, -18, 18);
-    trendB[s] = clampRange(edgeB[s] - inB, -18, 18);
-    edgeLum[s] = 0.299 * edgeR[s] + 0.587 * edgeG[s] + 0.114 * edgeB[s];
-    innerLum[s] = 0.299 * inR + 0.587 * inG + 0.114 * inB;
+    if (ec > 0) {
+      hasSample[s] = 1;
+      const invE = 1 / ec;
+      edgeR[s] = er * invE;
+      edgeG[s] = eg * invE;
+      edgeB[s] = eb * invE;
+      const inR = ic > 0 ? ir / ic : edgeR[s];
+      const inG = ic > 0 ? ig / ic : edgeG[s];
+      const inB = ic > 0 ? ib / ic : edgeB[s];
+      trendR[s] = clampRange(edgeR[s] - inR, -18, 18);
+      trendG[s] = clampRange(edgeG[s] - inG, -18, 18);
+      trendB[s] = clampRange(edgeB[s] - inB, -18, 18);
+      edgeLum[s] = 0.299 * edgeR[s] + 0.587 * edgeG[s] + 0.114 * edgeB[s];
+      innerLum[s] = 0.299 * inR + 0.587 * inG + 0.114 * inB;
+    }
   }
+
+  fillMissingProfileSlices(
+    slices,
+    hasSample,
+    edgeR,
+    edgeG,
+    edgeB,
+    trendR,
+    trendG,
+    trendB,
+    edgeLum,
+    innerLum,
+    fallbackRgb
+  );
 
   return {
     slices,
@@ -1303,6 +1491,15 @@ function fillExtrapolatedBorder(
 ): void {
   const { nextWidth, nextHeight, offsetX, offsetY, innerWidth, innerHeight } =
     check;
+  const fallbackRgb = computeInnerOpaqueFallbackRgb(
+    outRgba,
+    nextWidth,
+    offsetX,
+    offsetY,
+    innerWidth,
+    innerHeight,
+    accents
+  );
   const topProfile = sampleHorizontalEdgeProfile(
     outRgba,
     nextWidth,
@@ -1310,7 +1507,8 @@ function fillExtrapolatedBorder(
     offsetY,
     innerWidth,
     innerHeight,
-    true
+    true,
+    fallbackRgb
   );
   const bottomProfile = sampleHorizontalEdgeProfile(
     outRgba,
@@ -1319,7 +1517,8 @@ function fillExtrapolatedBorder(
     offsetY,
     innerWidth,
     innerHeight,
-    false
+    false,
+    fallbackRgb
   );
   const leftProfile = sampleVerticalEdgeProfile(
     outRgba,
@@ -1328,7 +1527,8 @@ function fillExtrapolatedBorder(
     offsetY,
     innerWidth,
     innerHeight,
-    true
+    true,
+    fallbackRgb
   );
   const rightProfile = sampleVerticalEdgeProfile(
     outRgba,
@@ -1337,7 +1537,8 @@ function fillExtrapolatedBorder(
     offsetY,
     innerWidth,
     innerHeight,
-    false
+    false,
+    fallbackRgb
   );
 
   const maxInnerX = offsetX + innerWidth - 1;
@@ -1358,7 +1559,22 @@ function fillExtrapolatedBorder(
       const uNorm = (cx - offsetX) / Math.max(1, innerWidth - 1);
       const o4 = idx * 4;
 
-      if (dx === 0) {
+      if (dx === 0 && dy === 0) {
+        const [tr, tg, tb] = evaluateProfileAt(topProfile, uNorm, 0, 1, innerWidth, accents);
+        const [br, bg, bb] = evaluateProfileAt(bottomProfile, uNorm, 0, 1, innerWidth, accents);
+        const [lr, lg, lb] = evaluateProfileAt(leftProfile, vNorm, 0, 1, innerHeight, accents);
+        const [rr, rg, rb] = evaluateProfileAt(rightProfile, vNorm, 0, 1, innerHeight, accents);
+        const hr = tr * (1 - vNorm) + br * vNorm;
+        const hg = tg * (1 - vNorm) + bg * vNorm;
+        const hb = tb * (1 - vNorm) + bb * vNorm;
+        const vr = lr * (1 - uNorm) + rr * uNorm;
+        const vg = lg * (1 - uNorm) + rg * uNorm;
+        const vb = lb * (1 - uNorm) + rb * uNorm;
+        outRgba[o4] = clampByte((hr + vr) * 0.5);
+        outRgba[o4 + 1] = clampByte((hg + vg) * 0.5);
+        outRgba[o4 + 2] = clampByte((hb + vb) * 0.5);
+        outRgba[o4 + 3] = 255;
+      } else if (dx === 0) {
         const prof = dy < 0 ? topProfile : bottomProfile;
         const band = dy < 0 ? check.padTop : check.padBottom;
         const [r, g, b] = evaluateProfileAt(
@@ -1492,16 +1708,22 @@ function applyOuterSeamFeather(
 
       const cx = clampRange(x, offsetX, maxInnerX);
       const dx = x - cx;
+      const distPx = Math.hypot(dx, dy);
+      if (distPx <= 0) continue;
+
+      const seamIdx = cy * nextWidth + cx;
+      if (outerMask[seamIdx] !== 0) continue;
+
       const padX = dx < 0 ? check.padLeft : dx > 0 ? check.padRight : 0;
       const localBandPx = Math.max(padX, padY);
       const featherPx = Math.max(2, Math.round(localBandPx * 0.08));
-      const distPx = Math.hypot(dx, dy);
       if (distPx > featherPx) continue;
 
       const t = clamp01(distPx / featherPx);
       const w = t * t * (3 - 2 * t);
       const inv = 1 - w;
-      const seam4 = (cy * nextWidth + cx) * 4;
+      const seam4 = seamIdx * 4;
+      if (outRgba[seam4 + 3] < 128) continue;
       const o4 = idx * 4;
 
       outRgba[o4] = clampByte(outRgba[seam4] * inv + outRgba[o4] * w);
@@ -1566,8 +1788,17 @@ export function synthesizeExtendedBorderRgba(
   const outerMask = new Uint8Array(nextWidth * nextHeight);
   outerMask.fill(1);
   for (let y = 0; y < innerHeight; y++) {
-    const start = (offsetY + y) * nextWidth + offsetX;
-    outerMask.fill(0, start, start + innerWidth);
+    const rowStart = (offsetY + y) * nextWidth + offsetX;
+    for (let x = 0; x < innerWidth; x++) {
+      const idx = rowStart + x;
+      const alpha = outRgba[idx * 4 + 3];
+      if (alpha >= 128) {
+        outerMask[idx] = 0;
+        if (alpha < 255) {
+          outRgba[idx * 4 + 3] = 255;
+        }
+      }
+    }
   }
 
   const accents: Array<[number, number, number]> = [];

@@ -1133,10 +1133,12 @@ export function assignFreeColorIds(
   localRegionMap: Int32Array,
   width: number,
   height: number,
-  existingPalette: PaletteColor[]
+  existingPalette: PaletteColor[],
+  reserveLastInkSwatch: boolean = false
 ): { palette: PaletteColor[]; addedSwatches: PaletteColor[] } {
   const palette = existingPalette.map((c) => ({ ...c }));
-  const usable = palette.length > 1 ? palette.slice(0, palette.length - 1) : palette;
+  const usable =
+    reserveLastInkSwatch && palette.length > 1 ? palette.slice(0, palette.length - 1) : palette;
   if (usable.length === 0) {
     for (let i = 0; i < regions.length; i++) {
       regions[i].colorId = 1;
@@ -1286,6 +1288,68 @@ function sanitizeFiniteNumber(value: number | undefined, fallback: number): numb
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function isSwatchDuplicateOrClose(
+  candidate: PaletteColor,
+  finalPalette: PaletteColor[],
+  reuseThresholdSq: number
+): boolean {
+  if (finalPalette.length === 0) return false;
+  const closest = findClosestPaletteSwatch(
+    candidate.r,
+    candidate.g,
+    candidate.b,
+    finalPalette
+  );
+  if (closest.distSq <= reuseThresholdSq) return true;
+  for (let j = 0; j < finalPalette.length; j++) {
+    const p = finalPalette[j];
+    if (p.r === candidate.r && p.g === candidate.g && p.b === candidate.b) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pruneUnusedAddedSwatches(
+  regions: Region[],
+  existingPalette: PaletteColor[],
+  finalPalette: PaletteColor[],
+  addedSwatches: PaletteColor[]
+): { palette: PaletteColor[]; addedSwatches: PaletteColor[] } {
+  if (addedSwatches.length === 0) {
+    return { palette: finalPalette, addedSwatches };
+  }
+  const usedIds = new Set<number>();
+  for (let i = 0; i < regions.length; i++) {
+    usedIds.add(regions[i].colorId);
+  }
+  const keptAdded = addedSwatches.filter((s) => usedIds.has(s.id));
+  if (keptAdded.length === addedSwatches.length) {
+    return { palette: finalPalette, addedSwatches };
+  }
+  const baseLen = existingPalette.length;
+  const baseMaxId = existingPalette.reduce((m, c) => Math.max(m, c.id), 0);
+  const idRemap = new Map<number, number>();
+  const remappedAdded: PaletteColor[] = [];
+  let remappedNextId = baseMaxId;
+  for (let i = 0; i < keptAdded.length; i++) {
+    const oldSwatch = keptAdded[i];
+    const newId = ++remappedNextId;
+    idRemap.set(oldSwatch.id, newId);
+    remappedAdded.push({ ...oldSwatch, id: newId });
+  }
+  for (let i = 0; i < regions.length; i++) {
+    const mapped = idRemap.get(regions[i].colorId);
+    if (mapped !== undefined) {
+      regions[i].colorId = mapped;
+    }
+  }
+  return {
+    palette: [...finalPalette.slice(0, baseLen), ...remappedAdded],
+    addedSwatches: remappedAdded,
+  };
+}
+
 function assignHarmoniousPaletteColors(
   regions: Region[],
   rgbaData: Uint8ClampedArray,
@@ -1338,9 +1402,16 @@ function assignHarmoniousPaletteColors(
   if (unmatched.length > 0 && allowedNew > 0) {
     const accents = clusterUnmatchedColors(unmatched, allowedNew, safeReuseDeltaE);
     for (let i = 0; i < accents.length; i++) {
-      const swatch = createPaletteColor(++nextPaletteId, accents[i].r, accents[i].g, accents[i].b);
-      addedSwatches.push(swatch);
-      finalPalette.push(swatch);
+      const candidate = createPaletteColor(
+        nextPaletteId + 1,
+        accents[i].r,
+        accents[i].g,
+        accents[i].b
+      );
+      if (isSwatchDuplicateOrClose(candidate, finalPalette, reuseThresholdSq)) continue;
+      nextPaletteId += 1;
+      addedSwatches.push(candidate);
+      finalPalette.push(candidate);
     }
   }
 
@@ -1351,7 +1422,7 @@ function assignHarmoniousPaletteColors(
     }
   }
 
-  return { palette: finalPalette, addedSwatches };
+  return pruneUnusedAddedSwatches(regions, existingPalette, finalPalette, addedSwatches);
 }
 
 export function subdivideMaskedRegion(
@@ -1428,7 +1499,7 @@ export function subdivideMaskedRegion(
   onProgress?.(0.92, 'Placing sub-region labels and harmonizing palette...');
   const regions = computeLocalRegionGeometry(segments, localRegionMap, cropMask, cropWidth, cropHeight);
   const { palette, addedSwatches } = isFreeColor
-    ? assignFreeColorIds(regions, localRegionMap, cropWidth, cropHeight, existingPalette)
+    ? assignFreeColorIds(regions, localRegionMap, cropWidth, cropHeight, existingPalette, false)
     : assignHarmoniousPaletteColors(regions, rgbaData, existingPalette, maxNewSwatches, reuseDeltaE);
 
   onProgress?.(1.0, `Subdivided into ${regions.length} detail regions.`);

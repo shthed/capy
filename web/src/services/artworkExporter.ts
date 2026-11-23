@@ -118,7 +118,7 @@ function renderFreeColorCanvas(
   writeFreeColorRegionPixels(imgData.data, puzzleData, filledSet, customColors);
   ctx.putImageData(imgData, 0, 0);
   ctx.globalCompositeOperation = 'multiply';
-  ctx.drawImage(sourceImg, 0, 0);
+  ctx.drawImage(sourceImg, 0, 0, puzzleData.width, puzzleData.height);
   ctx.globalCompositeOperation = 'source-over';
 }
 

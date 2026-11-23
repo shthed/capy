@@ -628,13 +628,30 @@ async function runStage1InPlaceSubdivision({ browser, BASE_URL, attachErrorListe
       }, initialSnapId);
       assert.ok(promotedBlobSize > 0, 'Promoted sample must persist updated source image Blob in IndexedDB');
 
+      // Gap #6: Assert persisted sanitized zoomTree.promptHint, inPlaceSubdivisionCount, and aiTierUsed on promoted snapshot
+      assert.ok(
+        typeof promotedSnap.zoomTree?.promptHint === 'string' &&
+          promotedSnap.zoomTree.promptHint.toLowerCase().includes('mossy pebbles'),
+        `Promoted snapshot must persist sanitized zoomTree.promptHint (got ${JSON.stringify(promotedSnap.zoomTree?.promptHint)})`
+      );
+      assert.equal(
+        promotedSnap.zoomTree?.inPlaceSubdivisionCount,
+        1,
+        `First in-place split must record inPlaceSubdivisionCount === 1 (got ${promotedSnap.zoomTree?.inPlaceSubdivisionCount})`
+      );
+      assert.equal(
+        promotedSnap.zoomTree?.aiTierUsed,
+        'offline-procedural',
+        `Offline in-place split must record aiTierUsed === "offline-procedural" (got ${promotedSnap.zoomTree?.aiTierUsed})`
+      );
+
       // Replacing painted region `a` must bump resetEpoch cleanly
       assert.ok(
         (promotedSnap.resetEpoch ?? 0) >= 1 || (postSession.resetEpoch ?? 0) >= 1,
         'Replacing a painted region during in-place split must increment resetEpoch'
       );
 
-      // Click 1-tap Undo Subdivision toast and verify exact pre-subdivide restoration
+      // Click 1-tap Undo Subdivision toast and verify exact pre-subdivide restoration (including zoomTree & sampleAssetPath metadata)
       await page.getByTestId('undo-subdivision-btn').click();
       await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 10000 });
       await waitForAnimationFrames(page, 2);
@@ -657,6 +674,16 @@ async function runStage1InPlaceSubdivision({ browser, BASE_URL, attachErrorListe
         revertedOk,
         true,
         '1-tap Undo Subdivision must restore pre-subdivide region count and previously filled regions'
+      );
+      const revertedSnap = (await readSnapshots(page)).find((s) => s.id === initialSnapId);
+      assert.equal(
+        revertedSnap?.zoomTree,
+        undefined,
+        `1-tap Undo Subdivision must restore pre-split zoomTree metadata (got ${JSON.stringify(revertedSnap?.zoomTree)})`
+      );
+      assert.ok(
+        typeof revertedSnap?.sampleAssetPath === 'string' && revertedSnap.sampleAssetPath.length > 0,
+        `1-tap Undo Subdivision must restore pre-split sampleAssetPath (got ${JSON.stringify(revertedSnap?.sampleAssetPath)})`
       );
       await waitForAnimationFrames(page, 2);
 
@@ -685,8 +712,9 @@ async function runStage1InPlaceSubdivision({ browser, BASE_URL, attachErrorListe
       assert.equal(postSplit2Filled.includes(a.id), false, `Replaced region ${a.id} must be absent after second split`);
       assert.equal(postSplit2Filled.includes(b.id), false, `Replaced region ${b.id} must be absent after second split`);
 
-      // Clicking undo-btn ONCE must immediately unfill surviving nonAdjacent (proving replaced b & a were scrubbed from undoStack)
+      // Clicking undo-btn ONCE must immediately unfill surviving nonAdjacent AND invalidate/hide undo-subdivision-toast (Gap #9)
       await page.getByTestId('undo-btn').click();
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 3000 });
       await page.getByTestId('redo-btn').waitFor({ state: 'visible', timeout: 3000 });
       const undidSurviving = await waitForCondition(async () => {
         const s = await readActiveSession(page);
@@ -723,12 +751,93 @@ async function runStage1InPlaceSubdivision({ browser, BASE_URL, attachErrorListe
         `redo-btn click after undo must re-fill surviving region ${nonAdjacent.id} without resurrecting replaced regions ${a.id}/${b.id}`
       );
 
-      // Verify Cancel exits Region Selection Bar cleanly
+      // Gap #9: Consecutive in-place Split #1 -> Split #2 on already-promoted blob puzzle (inPlaceSubdivisionCount: 1 -> 2, non-colliding IDs, Undo Split reverts Split #2 back to Split #1)
+      const beforeConsecMeta = await page.evaluate(async (id) => {
+        const p = await window.capyStorage.loadPuzzleData(id);
+        return p ? { count: p.regions.length, maxId: Math.max(...p.regions.map((r) => r.id)) } : null;
+      }, initialSnapId);
+      assert.ok(beforeConsecMeta, 'Expected puzzle metadata before consecutive split');
+      const consecTargets = await findRegionClickTargets(page, initialSnapId);
+      assert.ok(consecTargets && consecTargets.largePair, 'Expected large pair for consecutive in-place split');
+      const { a: consecA, b: consecB } = consecTargets.largePair;
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await selBar.waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(consecA.clientX, consecA.clientY);
+      await waitForAnimationFrames(page, 2);
+      await page.mouse.click(consecB.clientX, consecB.clientY);
+      await waitForAnimationFrames(page, 2);
+      await page.getByTestId('region-selection-confirm-btn').click();
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
+      await selBar.waitFor({ state: 'hidden', timeout: 5000 });
+      await waitForPuzzleLoaded(page);
+
+      const consecSnap = (await readSnapshots(page)).find((s) => s.id === initialSnapId);
+      assert.equal(
+        consecSnap?.zoomTree?.inPlaceSubdivisionCount,
+        2,
+        `Consecutive in-place split must increment inPlaceSubdivisionCount from 1 to 2 (got ${consecSnap?.zoomTree?.inPlaceSubdivisionCount})`
+      );
+      const afterConsecMeta = await page.evaluate(async (id) => {
+        const p = await window.capyStorage.loadPuzzleData(id);
+        return p ? { count: p.regions.length, ids: p.regions.map((r) => r.id) } : null;
+      }, initialSnapId);
+      assert.ok(
+        afterConsecMeta &&
+          afterConsecMeta.ids.some((id) => id > beforeConsecMeta.maxId) &&
+          new Set(afterConsecMeta.ids).size === afterConsecMeta.ids.length,
+        'Consecutive split must insert non-colliding sparse IDs strictly greater than prior maxId'
+      );
+
+      // Clicking Undo Split reverts consecutive Split #2 back to Split #1 (inPlaceSubdivisionCount === 1)
+      await page.getByTestId('undo-subdivision-btn').click();
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 10000 });
+      const revertedConsecOk = await waitForCondition(async () => {
+        const snap = (await readSnapshots(page)).find((s) => s.id === initialSnapId);
+        return snap?.zoomTree?.inPlaceSubdivisionCount === 1;
+      }, 6000);
+      assert.equal(
+        revertedConsecOk,
+        true,
+        'Undo Split after consecutive Split #2 must revert metadata back to Split #1 (inPlaceSubdivisionCount === 1)'
+      );
+
+      // Verify Cancel button exits Region Selection Bar cleanly
       await page.getByTestId('infinite-zoom-menu-btn').click();
       await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
       await selBar.waitFor({ state: 'visible', timeout: 3000 });
       await page.getByTestId('region-selection-cancel-btn').click();
       await selBar.waitFor({ state: 'hidden', timeout: 3000 });
+
+      // Gap #9: Verify undo-subdivision-toast hides immediately on painting a region
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await selBar.waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(consecA.clientX, consecA.clientY);
+      await waitForAnimationFrames(page, 2);
+      await page.mouse.click(consecB.clientX, consecB.clientY);
+      await waitForAnimationFrames(page, 2);
+      await page.getByTestId('region-selection-confirm-btn').click();
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
+      await selBar.waitFor({ state: 'hidden', timeout: 5000 });
+      await waitForPuzzleLoaded(page);
+      await tapCanvasGrid(page, 0.35, 8, 50);
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 5000 });
+
+      // Gap #9 & Bug #8 regression: enter Region Selection Mode with a selection, then switch to another prebaked sample -> RegionSelectionBar MUST close cleanly
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await selBar.waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(consecA.clientX, consecA.clientY);
+      await waitForAnimationFrames(page, 2);
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-create').waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('settings-tab-create').click();
+      const galleryCards = page.locator('[data-testid^="gallery-card-"]');
+      await galleryCards.nth(1).waitFor({ state: 'visible', timeout: 5000 });
+      await galleryCards.nth(1).getByRole('button', { name: 'Play' }).click();
+      await selBar.waitFor({ state: 'hidden', timeout: 10000 });
+      await waitForPuzzleLoaded(page);
 
       logE2ePass('Stage 1 passed');
     } finally {
@@ -997,6 +1106,17 @@ async function runStage3BorderExtensionPart({ browser, BASE_URL, attachErrorList
         { top: true, bottom: false, left: false, right: true },
         'Outer puzzle zoomTree.extendedSides must record exact selected sides'
       );
+      // Gap #6: Assert persisted sanitized zoomTree.promptHint and aiTierUsed on extended outer snapshot
+      assert.equal(
+        outerMeta?.zoomTree?.promptHint,
+        'starry hills & calm meadow',
+        `Extended outer snapshot must persist sanitized zoomTree.promptHint (got ${JSON.stringify(outerMeta?.zoomTree?.promptHint)})`
+      );
+      assert.equal(
+        outerMeta?.zoomTree?.aiTierUsed,
+        'offline-procedural',
+        `Offline Extend Borders must record aiTierUsed === "offline-procedural" (got ${outerMeta?.zoomTree?.aiTierUsed})`
+      );
 
       const outerDims = await page.evaluate(async (id) => {
         const p = await window.capyStorage.loadPuzzleData(id);
@@ -1197,6 +1317,78 @@ async function runStage3Tier1CancelPart({ browser, BASE_URL, attachErrorListener
         'Cancelling Infinite Zoom must leave active snapshot intact and uncorrupted'
       );
 
+      // Gap #10: Verify non-sticky cancel (subsequent Extend Borders succeeds cleanly after Tier 1 cancel)
+      await tier1Page.evaluate(() => {
+        delete window.LanguageModel;
+      });
+      await tier1Page.getByTestId('infinite-zoom-menu-btn').click();
+      await tier1Page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await setExtendSideState(tier1Page, 'extend-side-top', true);
+      await tier1Page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
+      await tier1Page.waitForFunction(
+        ({ key, prevId }) => {
+          const s = JSON.parse(localStorage.getItem(key) || '{}');
+          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
+        },
+        { key: ACTIVE_SESSION_KEY, prevId: snapBeforeCancel },
+        { timeout: 25000 }
+      );
+      await waitForPuzzleLoaded(tier1Page);
+      const afterRecoverySnapId = (await readActiveSession(tier1Page)).activeSnapshotId;
+      assert.ok(
+        afterRecoverySnapId && afterRecoverySnapId !== snapBeforeCancel,
+        'Subsequent Extend Borders after Tier 1 cancel must complete cleanly (non-sticky cancel)'
+      );
+
+      // Gap #10: Mid-worker handoff cancel (pause GENERATE in worker so loading-cancel-btn fires during loadArtworkFromImage handoff)
+      const snapsCountBeforeMidCancel = (await readSnapshots(tier1Page)).length;
+      await tier1Page.evaluate(() => {
+        const origPost = Worker.prototype.postMessage;
+        window.__capyOrigWorkerPost = origPost;
+        window.__capyMidWorkerGenerateIntercepted = false;
+        Worker.prototype.postMessage = function (msg, transfer) {
+          if (msg && msg.type === 'GENERATE' && !window.__capyMidWorkerGenerateIntercepted) {
+            window.__capyMidWorkerGenerateIntercepted = true;
+            // Hold GENERATE in-flight so user can click loading-cancel-btn during worker handoff
+            return;
+          }
+          return origPost.call(this, msg, transfer);
+        };
+      });
+      try {
+        await tier1Page.getByTestId('infinite-zoom-menu-btn').click();
+        await tier1Page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+        await setExtendSideState(tier1Page, 'extend-side-top', false);
+        await setExtendSideState(tier1Page, 'extend-side-bottom', true);
+        await tier1Page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
+        await tier1Page.waitForFunction(
+          () => Boolean(window.__capyMidWorkerGenerateIntercepted),
+          undefined,
+          { timeout: 10000 }
+        );
+        await cancelBtn.waitFor({ state: 'visible', timeout: 5000 });
+        await cancelBtn.click();
+        await cancelBtn.waitFor({ state: 'hidden', timeout: 10000 });
+      } finally {
+        await tier1Page.evaluate(() => {
+          if (window.__capyOrigWorkerPost) {
+            Worker.prototype.postMessage = window.__capyOrigWorkerPost;
+            delete window.__capyOrigWorkerPost;
+          }
+        });
+      }
+      await waitForPuzzleLoaded(tier1Page);
+      const midCancelRestored = await waitForCondition(async () => {
+        const s = await readActiveSession(tier1Page);
+        const list = await readSnapshots(tier1Page);
+        return s.activeSnapshotId === afterRecoverySnapId && list.length === snapsCountBeforeMidCancel;
+      }, 8000);
+      assert.equal(
+        midCancelRestored,
+        true,
+        'Mid-worker handoff cancel must restore parent snapshot and clean up partial snapshot'
+      );
+
     } finally {
       await tier1Ctx.close();
     }
@@ -1304,8 +1496,96 @@ async function runStage4GuardsAndMobile({ browser, BASE_URL, attachErrorListener
         SETTINGS_KEY,
         { timeout: 3000 }
       );
+
+      // Gap #10: Interactive CreateTab prompt-to-selection launch transfers prompt into RegionSelectionBar
+      const createPromptInput = page.getByLabel('Guide prompt for Infinite Zoom');
+      await createPromptInput.waitFor({ state: 'visible', timeout: 3000 });
+      await createPromptInput.fill('cozy autumn acorns');
+      await page.getByTestId('create-infinite-zoom-in-btn').click();
+      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+      const selBar4 = page.getByTestId('region-selection-bar');
+      await selBar4.waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        await page.getByTestId('infinite-zoom-in-prompt-input').inputValue(),
+        'cozy autumn acorns',
+        'CreateTab create-infinite-zoom-in-btn must transfer prompt into RegionSelectionBar'
+      );
+
+      // Gap #10 & Bug #9 regression: Escape closes SettingsModal FIRST without being stolen by RegionSelectionBar, then second Escape closes RegionSelectionBar
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
       await page.keyboard.press('Escape');
       await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+      assert.equal(
+        await selBar4.isVisible(),
+        true,
+        'First Escape with SettingsModal open over RegionSelectionBar must close SettingsModal and keep RegionSelectionBar open'
+      );
+      await page.keyboard.press('Escape');
+      await selBar4.waitFor({ state: 'hidden', timeout: 3000 });
+
+      // Escape dismisses toolbar popover cleanly
+      await menuBtn.click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').waitFor({ state: 'visible', timeout: 3000 });
+      await page.keyboard.press('Escape');
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').waitFor({ state: 'hidden', timeout: 3000 });
+
+      // Gap #10 & Bug #7 regression: Free Colour Mode round-trip across Extend Borders + Inner breadcrumb return
+      const freeInnerSnapId = (await readActiveSession(page)).activeSnapshotId;
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('settings-tab-settings').click();
+      const freeColorToggle = page.getByTestId('setting-free-color-mode');
+      await freeColorToggle.waitFor({ state: 'visible', timeout: 3000 });
+      await freeColorToggle.click();
+      await page.waitForFunction(
+        (key) => Boolean(JSON.parse(localStorage.getItem(key) || '{}').isFreeColorMode),
+        SETTINGS_KEY,
+        { timeout: 5000 }
+      );
+      await page.keyboard.press('Escape');
+      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+      await menuBtn.click();
+      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await setExtendSideState(page, 'extend-side-top', true);
+      await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
+      await page.waitForFunction(
+        ({ key, prevId }) => {
+          const s = JSON.parse(localStorage.getItem(key) || '{}');
+          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
+        },
+        { key: ACTIVE_SESSION_KEY, prevId: freeInnerSnapId },
+        { timeout: 25000 }
+      );
+      await waitForPuzzleLoaded(page);
+      const freeOuterSession = await readActiveSession(page);
+      assert.equal(
+        Boolean(freeOuterSession.isFreeColorMode),
+        true,
+        'Extended outer puzzle created from Free Colour Mode must preserve Free Colour Mode'
+      );
+      // Navigate back to Inner puzzle via topbar-child-puzzle-btn -> Bug #7 regression: inner snapshot must STILL have isFreeColor === true!
+      await page.getByTestId('topbar-child-puzzle-btn').waitFor({ state: 'visible', timeout: 5000 });
+      await page.getByTestId('topbar-child-puzzle-btn').click();
+      await page.waitForFunction(
+        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
+        { key: ACTIVE_SESSION_KEY, targetId: freeInnerSnapId },
+        { timeout: 15000 }
+      );
+      await waitForPuzzleLoaded(page);
+      const restoredFreeInnerSession = await readActiveSession(page);
+      const restoredFreeInnerSnap = (await readSnapshots(page)).find((s) => s.id === freeInnerSnapId);
+      assert.equal(
+        Boolean(restoredFreeInnerSnap?.isFreeColor),
+        true,
+        'Inner snapshot metadata must preserve isFreeColor === true after Extend Borders transition'
+      );
+      assert.equal(
+        Boolean(restoredFreeInnerSession.isFreeColorMode),
+        true,
+        'Returning to Inner snapshot via breadcrumb must keep Free Colour Mode enabled'
+      );
     } finally {
       await context.close();
     }

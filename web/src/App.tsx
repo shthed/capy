@@ -1177,6 +1177,8 @@ export const App: React.FC = () => {
           notice={selectionNotice}
           prompt={infiniteZoomPrompt}
           isBusy={isInfiniteZoomRunning}
+          isDisabled={isInfiniteZoomDisabled}
+          isOverlayModalOpen={viewProps.isModalOpen}
           onPromptChange={setInfiniteZoomPrompt}
           onConfirm={handleConfirmRegionSubdivision}
           onSwitchSelection={handleSwitchSelectionToPending}

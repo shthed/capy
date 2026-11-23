@@ -130,6 +130,7 @@ export class GenerationCancelledError extends Error {
 export class PuzzleWorkerService {
   private static worker: Worker | null = null;
   private static activeReject: ((reason?: unknown) => void) | null = null;
+  private static activeCancelCleanup: (() => void) | null = null;
 
   private static async generateOnMainThreadFallback(
     sourceCanvas: HTMLCanvasElement,
@@ -166,6 +167,11 @@ export class PuzzleWorkerService {
    * Cancels any active worker generation and cleans up resources.
    */
   static cancelActive(): void {
+    const cleanup = this.activeCancelCleanup;
+    this.activeCancelCleanup = null;
+    if (cleanup) {
+      cleanup();
+    }
     if (this.activeReject) {
       const oldReject = this.activeReject;
       this.activeReject = null;
@@ -197,6 +203,19 @@ export class PuzzleWorkerService {
         return;
       }
 
+      let cancelled = false;
+      let activeWorker: Worker | null = null;
+      let onMsg: ((e: MessageEvent) => void) | null = null;
+      let onErr: ((err: ErrorEvent) => void) | null = null;
+      const cleanupListeners = () => {
+        if (activeWorker && onMsg) activeWorker.removeEventListener('message', onMsg);
+        if (activeWorker && onErr) activeWorker.removeEventListener('error', onErr);
+      };
+      const markCancelled = () => {
+        cancelled = true;
+        cleanupListeners();
+      };
+
       try {
         const width = sourceCanvas.width;
         const height = sourceCanvas.height;
@@ -210,37 +229,55 @@ export class PuzzleWorkerService {
         this.cancelActive();
 
         const worker = this.getWorker();
+        activeWorker = worker;
         const requestId = `gen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
 
         const handleMessage = (e: MessageEvent) => {
+          if (cancelled) return;
           const data = e.data;
           if (!data || data.id !== requestId) return;
 
           if (data.type === 'PROGRESS') {
             onProgress?.(data.progress, data.status, data.payload);
           } else if (data.type === 'SUCCESS') {
-            worker.removeEventListener('message', handleMessage);
-            worker.removeEventListener('error', handleError);
-            this.activeReject = null;
+            cleanupListeners();
+            if (this.activeCancelCleanup === markCancelled) {
+              this.activeCancelCleanup = null;
+            }
+            if (this.activeReject === reject) {
+              this.activeReject = null;
+            }
 
             const puzzleData = unpackPuzzleFromWorker(data.puzzleData as WorkerPuzzlePayload);
             resolve(puzzleData);
           } else if (data.type === 'ERROR') {
-            worker.removeEventListener('message', handleMessage);
-            worker.removeEventListener('error', handleError);
-            this.activeReject = null;
+            cleanupListeners();
+            if (this.activeCancelCleanup === markCancelled) {
+              this.activeCancelCleanup = null;
+            }
+            if (this.activeReject === reject) {
+              this.activeReject = null;
+            }
             reject(new Error(data.error || 'Worker generation failed'));
           }
         };
 
         const handleError = (err: ErrorEvent) => {
-          worker.removeEventListener('message', handleMessage);
-          worker.removeEventListener('error', handleError);
-          this.activeReject = null;
+          if (cancelled) return;
+          cleanupListeners();
+          if (this.activeCancelCleanup === markCancelled) {
+            this.activeCancelCleanup = null;
+          }
+          if (this.activeReject === reject) {
+            this.activeReject = null;
+          }
           // Clean up worker
           worker.terminate();
-          this.worker = null;
+          if (this.worker === worker) {
+            this.worker = null;
+          }
           // Fallback to lazy main-thread execution
           console.warn('Worker error encountered, falling back to local thread:', err);
           this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
@@ -249,6 +286,8 @@ export class PuzzleWorkerService {
           );
         };
 
+        onMsg = handleMessage;
+        onErr = handleError;
         worker.addEventListener('message', handleMessage);
         worker.addEventListener('error', handleError);
 
@@ -266,6 +305,14 @@ export class PuzzleWorkerService {
           [rgbaBuffer]
         );
       } catch (err) {
+        cleanupListeners();
+        if (this.activeCancelCleanup === markCancelled) {
+          this.activeCancelCleanup = null;
+        }
+        if (this.activeReject === reject) {
+          this.activeReject = null;
+        }
+        if (cancelled) return;
         console.warn('Failed to dispatch worker task, falling back to local:', err);
         this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
           resolve,
@@ -292,6 +339,7 @@ export class PuzzleWorkerService {
         return;
       }
 
+      let cancelled = false;
       let activeWorker: Worker | null = null;
       let onMsg: ((e: MessageEvent) => void) | null = null;
       let onErr: ((err: ErrorEvent) => void) | null = null;
@@ -299,14 +347,20 @@ export class PuzzleWorkerService {
         if (activeWorker && onMsg) activeWorker.removeEventListener('message', onMsg);
         if (activeWorker && onErr) activeWorker.removeEventListener('error', onErr);
       };
+      const markCancelled = () => {
+        cancelled = true;
+        cleanupListeners();
+      };
       try {
         this.cancelActive();
         const worker = this.getWorker();
         activeWorker = worker;
         const requestId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
 
         const handleMessage = (e: MessageEvent) => {
+          if (cancelled) return;
           const data = e.data;
           if (!data || data.id !== requestId) return;
 
@@ -314,20 +368,38 @@ export class PuzzleWorkerService {
             effectiveOnProgress?.(data.progress, data.status);
           } else if (data.type === 'SUBDIVIDE_SUCCESS') {
             cleanupListeners();
-            this.activeReject = null;
+            if (this.activeCancelCleanup === markCancelled) {
+              this.activeCancelCleanup = null;
+            }
+            if (this.activeReject === reject) {
+              this.activeReject = null;
+            }
             resolve(unpackSubdivisionFromWorker(data.result as WorkerSubdivisionPayload));
           } else if (data.type === 'ERROR') {
             cleanupListeners();
-            this.activeReject = null;
+            if (this.activeCancelCleanup === markCancelled) {
+              this.activeCancelCleanup = null;
+            }
+            if (this.activeReject === reject) {
+              this.activeReject = null;
+            }
             reject(new Error(data.error || 'Worker masked subdivision failed'));
           }
         };
 
         const handleError = (err: ErrorEvent) => {
+          if (cancelled) return;
           cleanupListeners();
-          this.activeReject = null;
+          if (this.activeCancelCleanup === markCancelled) {
+            this.activeCancelCleanup = null;
+          }
+          if (this.activeReject === reject) {
+            this.activeReject = null;
+          }
           worker.terminate();
-          this.worker = null;
+          if (this.worker === worker) {
+            this.worker = null;
+          }
           console.warn('Worker error during masked subdivision, falling back to local thread:', err);
           this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
         };
@@ -359,9 +431,13 @@ export class PuzzleWorkerService {
         );
       } catch (err) {
         cleanupListeners();
+        if (this.activeCancelCleanup === markCancelled) {
+          this.activeCancelCleanup = null;
+        }
         if (this.activeReject === reject) {
           this.activeReject = null;
         }
+        if (cancelled) return;
         console.warn('Failed to dispatch masked subdivision task, falling back to local:', err);
         this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
       }

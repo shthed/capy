@@ -1447,6 +1447,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     ) => {
       const sampleSeq = ++snapshotTransitionSeqRef.current;
       clearPendingViewportSave();
+      onBeforeSnapshotResetOrSwitch?.();
       snapshotTransitioningRef.current = true;
       liveCoopRef.current = { ...liveCoopRef.current, activeSnapshotId: null, puzzle: null };
 
@@ -1564,6 +1565,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       latestRenderCoopRef,
       liveCoopRef,
       loadArtworkFromImage,
+      onBeforeSnapshotResetOrSwitch,
       setIsLoading,
       snapshotTransitionSeqRef,
       snapshotTransitioningRef,
@@ -1581,6 +1583,8 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       const paintedObj = Object.fromEntries(paintedRegionColors);
       const orderedIds = Array.from(filledRegionIds);
 
+      const effectiveIsFreeColor = Boolean(isFreeColorMode || puzzle?.isFreeColor);
+
       if (existingParent && puzzle) {
         setSnapshots(
           StorageService.updateSnapshotProgress(
@@ -1594,7 +1598,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
             undefined,
             paintedObj,
             puzzle.palette,
-            puzzle.isFreeColor
+            effectiveIsFreeColor
           )
         );
         void StorageService.savePuzzleData(parentId, puzzle).catch((err) => {
@@ -1624,7 +1628,11 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         filledRegionIds: orderedIds,
         ...(paintedRegionColors.size > 0 ? { paintedRegionColors: paintedObj } : {}),
         ...(puzzle?.palette ? { customPalette: puzzle.palette } : {}),
-        ...(puzzle?.isFreeColor !== undefined ? { isFreeColor: puzzle.isFreeColor } : {}),
+        ...(effectiveIsFreeColor
+          ? { isFreeColor: true }
+          : puzzle?.isFreeColor !== undefined
+            ? { isFreeColor: puzzle.isFreeColor }
+            : {}),
         zoomScale: currentView.zoomScale,
         panOffsetX: currentView.panOffsetX,
         panOffsetY: currentView.panOffsetY,
@@ -1638,7 +1646,15 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         });
       }
     },
-    [activeSave, activeTitle, filledRegionIds, paintedRegionColors, puzzle, setSnapshots]
+    [
+      activeSave,
+      activeTitle,
+      filledRegionIds,
+      isFreeColorMode,
+      paintedRegionColors,
+      puzzle,
+      setSnapshots,
+    ]
   );
 
   // Multi-resolution Infinite Zoom: extract 2x high-detail center sub-tile
@@ -1900,6 +1916,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       const startSeq = snapshotTransitionSeqRef.current;
       let ownedSeq = deletingActiveOrLast ? ++snapshotTransitionSeqRef.current : 0;
       if (deletingActiveOrLast) {
+        onBeforeSnapshotResetOrSwitch?.();
         snapshotTransitioningRef.current = true;
         liveCoopRef.current = {
           ...liveCoopRef.current,
@@ -1981,6 +1998,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       latestRenderCoopRef,
       liveCoopRef,
       loadStarterSampleForTransition,
+      onBeforeSnapshotResetOrSwitch,
       setActiveSnapshotId,
       setFilledRegionIds,
       setIsLoading,
@@ -1996,6 +2014,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
   const handleClearAllSnapshots = useCallback(async () => {
     clearPendingViewportSave();
+    onBeforeSnapshotResetOrSwitch?.();
     const clearSeq = ++snapshotTransitionSeqRef.current;
     snapshotTransitioningRef.current = true;
     liveCoopRef.current = {
@@ -2035,6 +2054,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     latestRenderCoopRef,
     liveCoopRef,
     loadStarterSampleForTransition,
+    onBeforeSnapshotResetOrSwitch,
     setIsLoading,
     setSnapshots,
     settings.generatorConfig,
@@ -2052,6 +2072,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     }) => {
       if (!clearedActiveChannel) return;
       clearPendingViewportSave();
+      onBeforeSnapshotResetOrSwitch?.();
       const clearSeq = ++snapshotTransitionSeqRef.current;
       snapshotTransitioningRef.current = true;
       const effectiveSettings = clearedSettings ? StorageService.loadSettings() : settings;
@@ -2097,6 +2118,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       latestRenderCoopRef,
       liveCoopRef,
       loadStarterSampleForTransition,
+      onBeforeSnapshotResetOrSwitch,
       setIsLoading,
       setSettings,
       setSnapshots,
@@ -2108,6 +2130,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
   const handleRestoreStarterSample = useCallback(async () => {
     clearPendingViewportSave();
+    onBeforeSnapshotResetOrSwitch?.();
     const restoreSeq = ++snapshotTransitionSeqRef.current;
     snapshotTransitioningRef.current = true;
     liveCoopRef.current = { ...liveCoopRef.current, activeSnapshotId: null, puzzle: null };
@@ -2128,6 +2151,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     latestRenderCoopRef,
     liveCoopRef,
     loadStarterSampleForTransition,
+    onBeforeSnapshotResetOrSwitch,
     settings.generatorConfig,
     snapshotTransitionSeqRef,
     snapshotTransitioningRef,
