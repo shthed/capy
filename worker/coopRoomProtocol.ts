@@ -8,6 +8,9 @@ export const MAX_REGION_ID_VALUE = 16_777_216;
 export const RATE_LIMIT_MAX_FRAMES = 40;
 export const RATE_LIMIT_WINDOW_MS = 5000;
 export const SEED_CHECKPOINT_DEBOUNCE_MS = 5000;
+export const UNJOINED_HANDSHAKE_TIMEOUT_MS = 10_000;
+export const MAX_UNJOINED_SOCKETS_PER_IP = 4;
+export const MAX_HOST_TOKEN_CHARS = 128;
 export const RESERVED_RELAY_PLAYER_ID = '__capy_room_relay__';
 
 export type RelayMessageType =
@@ -30,6 +33,7 @@ export interface RelayWireMessage {
   roomCode: string;
   sender: RelayParticipant;
   seedToken?: string;
+  hostToken?: string;
   paintEvent?: Record<string, unknown>;
   unfillEvent?: Record<string, unknown>;
   sentAt: number;
@@ -353,6 +357,172 @@ function sanitizeUnfillEvent(
   };
 }
 
+export interface FrameValidationContext {
+  record: Record<string, unknown>;
+  expectedRoomCode: string;
+  senderPlayerId: string;
+}
+
+export interface FramePayloadValidationSuccess {
+  ok: true;
+  seedToken?: string;
+  hostToken?: string;
+  paintEvent?: Record<string, unknown>;
+  unfillEvent?: Record<string, unknown>;
+}
+
+export type FramePayloadValidationResult =
+  | FramePayloadValidationSuccess
+  | { ok: false; reason: string };
+
+export type FrameValidator = (ctx: FrameValidationContext) => FramePayloadValidationResult;
+
+function validateOptionalSeedToken(
+  raw: unknown
+): { ok: true; seedToken?: string } | { ok: false; reason: string } {
+  if (raw === undefined) {
+    return { ok: true };
+  }
+  if (typeof raw !== 'string') {
+    return { ok: false, reason: 'invalid_seed_token' };
+  }
+  if (raw.length > MAX_SEED_TOKEN_CHARS) {
+    return { ok: false, reason: 'seed_token_too_large' };
+  }
+  if (!isValidSeedToken(raw)) {
+    return { ok: false, reason: 'invalid_seed_token' };
+  }
+  return { ok: true, seedToken: raw };
+}
+
+function validateOptionalHostToken(
+  raw: unknown
+): { ok: true; hostToken?: string } | { ok: false; reason: string } {
+  if (raw === undefined) {
+    return { ok: true };
+  }
+  if (typeof raw !== 'string') {
+    return { ok: false, reason: 'invalid_host_token' };
+  }
+  const trimmed = raw.trim();
+  if (
+    trimmed.length === 0 ||
+    raw.length > MAX_HOST_TOKEN_CHARS ||
+    /[\u0000-\u001F\u007F]/.test(trimmed)
+  ) {
+    return { ok: false, reason: 'invalid_host_token' };
+  }
+  return { ok: true, hostToken: trimmed };
+}
+
+function validateSeedCapableFrame(ctx: FrameValidationContext): FramePayloadValidationResult {
+  const { record } = ctx;
+  if (record.paintEvent !== undefined || record.unfillEvent !== undefined) {
+    return { ok: false, reason: 'invalid_event_payload' };
+  }
+  const seedCheck = validateOptionalSeedToken(record.seedToken);
+  if (!seedCheck.ok) {
+    return seedCheck;
+  }
+  const hostTokenCheck = validateOptionalHostToken(record.hostToken);
+  if (!hostTokenCheck.ok) {
+    return hostTokenCheck;
+  }
+  return {
+    ok: true,
+    ...(seedCheck.seedToken ? { seedToken: seedCheck.seedToken } : {}),
+    ...(hostTokenCheck.hostToken ? { hostToken: hostTokenCheck.hostToken } : {}),
+  };
+}
+
+function validateControlOnlyFrame(ctx: FrameValidationContext): FramePayloadValidationResult {
+  const { record } = ctx;
+  if (record.seedToken !== undefined) {
+    return { ok: false, reason: 'invalid_seed_token' };
+  }
+  if (record.hostToken !== undefined) {
+    return { ok: false, reason: 'invalid_host_token' };
+  }
+  if (record.paintEvent !== undefined || record.unfillEvent !== undefined) {
+    return { ok: false, reason: 'invalid_event_payload' };
+  }
+  return { ok: true };
+}
+
+export const COOP_FRAME_VALIDATORS: Readonly<Record<RelayMessageType, FrameValidator>> =
+  Object.freeze(
+    Object.assign(Object.create(null) as Record<RelayMessageType, FrameValidator>, {
+      HELLO: validateSeedCapableFrame,
+      WELCOME_STATE: validateSeedCapableFrame,
+      PAINT_EVENT: ({
+        record,
+        expectedRoomCode,
+        senderPlayerId,
+      }: FrameValidationContext): FramePayloadValidationResult => {
+        if (record.seedToken !== undefined) {
+          return { ok: false, reason: 'invalid_seed_token' };
+        }
+        if (record.hostToken !== undefined) {
+          return { ok: false, reason: 'invalid_host_token' };
+        }
+        if (record.unfillEvent !== undefined) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        const clean = sanitizePaintEvent(record.paintEvent, expectedRoomCode, senderPlayerId);
+        if (!clean) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        return { ok: true, paintEvent: clean };
+      },
+      UNFILL_EVENT: ({
+        record,
+        expectedRoomCode,
+        senderPlayerId,
+      }: FrameValidationContext): FramePayloadValidationResult => {
+        if (record.seedToken !== undefined) {
+          return { ok: false, reason: 'invalid_seed_token' };
+        }
+        if (record.hostToken !== undefined) {
+          return { ok: false, reason: 'invalid_host_token' };
+        }
+        if (record.paintEvent !== undefined) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        const clean = sanitizeUnfillEvent(record.unfillEvent, expectedRoomCode, senderPlayerId);
+        if (!clean) {
+          return { ok: false, reason: 'invalid_event_payload' };
+        }
+        return { ok: true, unfillEvent: clean };
+      },
+      HEARTBEAT: validateControlOnlyFrame,
+      LEAVE: validateControlOnlyFrame,
+    })
+  );
+
+export function generateHostToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    hex += bytes[i].toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+export function timingSafeEqualString(a: string, b: string): boolean {
+  const aBytes = encoder.encode(a);
+  const bBytes = encoder.encode(b);
+  const maxLen = Math.max(aBytes.byteLength, bBytes.byteLength);
+  let diff = aBytes.byteLength ^ bBytes.byteLength;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
+  }
+  return diff === 0;
+}
+
 export function validateCoopFrame(
   rawFrame: string | ArrayBuffer | Uint8Array,
   expectedRoomCode: string
@@ -417,44 +587,14 @@ export function validateCoopFrame(
     return { ok: false, reason: 'reserved_sender_id' };
   }
 
-  if (record.seedToken !== undefined) {
-    if (type !== 'HELLO' && type !== 'WELCOME_STATE') {
-      return { ok: false, reason: 'invalid_seed_token' };
-    }
-    if (typeof record.seedToken !== 'string') {
-      return { ok: false, reason: 'invalid_seed_token' };
-    }
-    if (record.seedToken.length > MAX_SEED_TOKEN_CHARS) {
-      return { ok: false, reason: 'seed_token_too_large' };
-    }
-    if (!isValidSeedToken(record.seedToken)) {
-      return { ok: false, reason: 'invalid_seed_token' };
-    }
-  }
-
-  if (type !== 'PAINT_EVENT' && record.paintEvent !== undefined) {
-    return { ok: false, reason: 'invalid_event_payload' };
-  }
-  if (type !== 'UNFILL_EVENT' && record.unfillEvent !== undefined) {
-    return { ok: false, reason: 'invalid_event_payload' };
-  }
-
-  let sanitizedPaintEvent: Record<string, unknown> | undefined;
-  if (type === 'PAINT_EVENT') {
-    const clean = sanitizePaintEvent(record.paintEvent, expectedRoomCode, trimmedPlayerId);
-    if (!clean) {
-      return { ok: false, reason: 'invalid_event_payload' };
-    }
-    sanitizedPaintEvent = clean;
-  }
-
-  let sanitizedUnfillEvent: Record<string, unknown> | undefined;
-  if (type === 'UNFILL_EVENT') {
-    const clean = sanitizeUnfillEvent(record.unfillEvent, expectedRoomCode, trimmedPlayerId);
-    if (!clean) {
-      return { ok: false, reason: 'invalid_event_payload' };
-    }
-    sanitizedUnfillEvent = clean;
+  const frameValidator = COOP_FRAME_VALIDATORS[type];
+  const payloadValidation = frameValidator({
+    record,
+    expectedRoomCode,
+    senderPlayerId: trimmedPlayerId,
+  });
+  if (!payloadValidation.ok) {
+    return { ok: false, reason: payloadValidation.reason };
   }
 
   const cleanDisplayName =
@@ -475,11 +615,10 @@ export function validateCoopFrame(
     type,
     roomCode: expectedRoomCode,
     sender: sanitizedSender,
-    ...(typeof record.seedToken === 'string' && record.seedToken.length > 0
-      ? { seedToken: record.seedToken }
-      : {}),
-    ...(sanitizedPaintEvent ? { paintEvent: sanitizedPaintEvent } : {}),
-    ...(sanitizedUnfillEvent ? { unfillEvent: sanitizedUnfillEvent } : {}),
+    ...(payloadValidation.seedToken ? { seedToken: payloadValidation.seedToken } : {}),
+    ...(payloadValidation.hostToken ? { hostToken: payloadValidation.hostToken } : {}),
+    ...(payloadValidation.paintEvent ? { paintEvent: payloadValidation.paintEvent } : {}),
+    ...(payloadValidation.unfillEvent ? { unfillEvent: payloadValidation.unfillEvent } : {}),
     sentAt:
       typeof record.sentAt === 'number' && Number.isFinite(record.sentAt)
         ? record.sentAt

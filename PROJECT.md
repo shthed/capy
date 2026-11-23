@@ -31,7 +31,7 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 
 - **Private AI Operational Docs**: AI-assisted workflow, model routing, session hygiene, PR Readiness Checklist specs, and cross-repo guardrails live in [`AGENTS.md`](./AGENTS.md), [`CAPYBOOP.md`](./CAPYBOOP.md), [`docs/ai/workflow-and-models.md`](./docs/ai/workflow-and-models.md), [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md), and [`docs/ai/cross-repo-guardrail.md`](./docs/ai/cross-repo-guardrail.md).
 - **Project Manager (`PM`) Ownership**:
-  - Owns [`PROJECT.md`](./PROJECT.md), [`ROADMAP.md`](./ROADMAP.md), [`TODO.md`](./TODO.md), GitHub Parent Epic Tracking Issues ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), `epic:*` label descriptions, GitHub Sprint Milestones, continuous **PR Description Stewardship** across all open PRs, and `beta -> main` Release Promotion readiness verification.
+  - Owns [`PROJECT.md`](./PROJECT.md), [`ROADMAP.md`](./ROADMAP.md), [`TODO.md`](./TODO.md), focused GitHub Issues and Sprint Milestones, continuous **PR Description Stewardship** across all open PRs, and `beta -> main` Release Promotion readiness verification.
 - **Development Manager (`Dev Manager`) Ownership**:
   - Owns application source (`web/`, `app/`, `worker/`), test & hygiene tooling ([`web/scripts/test.mjs`](./web/scripts/test.mjs), [`web/scripts/sanity.mjs`](./web/scripts/sanity.mjs), [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs)), subsystem technical docs when modified alongside code/CI PRs, `.github/workflows/*`, [`web/package.json`](./web/package.json) SemVer bumps, technical PR conflict rebases, and engineering sprint execution.
 - **Strict Git Worktree Isolation**:
@@ -42,48 +42,46 @@ Canonical project management manual for **Capy** ([`web/`](./web/), [`app/`](./a
 
 ## 2. Lean Agile Lifecycle and Backlog Governance
 
-Capy separates strategic multi-sprint planning from day-to-day execution across the **3-Artefact Agile Triad** ([`ROADMAP.md`](./ROADMAP.md) <-> GitHub Epic Issues & Milestones <-> [`TODO.md`](./TODO.md)).
+Capy separates strategic multi-sprint planning from day-to-day execution across the **3-Artefact Agile Triad** ([`ROADMAP.md`](./ROADMAP.md) <-> Focused GitHub Issues & Milestones <-> [`TODO.md`](./TODO.md)).
 
 ### Plain-English Agile & Release Terminology
 
-- **Epic (`EPIC-1`..`EPIC-5`)**: A multi-week product theme grouping related player capabilities (planned in [`ROADMAP.md`](./ROADMAP.md), tracked `1:1` by one Parent GitHub Tracking Issue, and filtered via `epic:1`..`epic:5` GitHub Labels). Never bundle an entire Epic into one mega-PR.
-- **User Story (`US-X.Y`)**: A cohesive, player-visible outcome inside an Epic written around player value.
+- **Roadmap Theme / Epic (`EPIC-1`..`EPIC-5`)**: A multi-week product theme grouping related player capabilities inside [`ROADMAP.md`](./ROADMAP.md) (no separate GitHub Parent Epic Tracking Issues or `epic:*` labels). Never bundle an entire theme into one mega-PR.
+- **User Story (`US-X.Y`)**: A cohesive, player-visible outcome inside a Roadmap theme written around player value.
 - **Task / Subtask (`TASK-X.Ya`)**: An independently testable `1-PR` coding slice implementing part or all of a User Story. Active-sprint slices live in [`TODO.md`](./TODO.md) and are deleted immediately upon merge.
 - **Bug (`BUG-N`)**: A verified defect, lifecycle guard, or CI reliability fix scheduled at Priority 0 in a Sprint.
 - **Sprint (`Sprint 0`..`Sprint 3`)**: A focused batch of `~8--10` unblocked Tasks and Bugs pulled into [`TODO.md`](./TODO.md), integrated onto `beta`, play-tested on `/beta/`, and promoted to `main`.
-- **GitHub Milestone (`Sprint N: ...`)**: Native Sprint progress bar (`closed PRs / total PRs %`) assigned to every PR and Epic issue in that Sprint.
-- **GitHub Label (`epic:*`, `web`, `android`, `feature`, `fix`, `ui`, `testing`, `ci`, `docs`, `deps`)**: Taxonomy tags allowing PR titles to remain clean and prefix-free.
+- **GitHub Issue**: A focused, actionable bug report, feature request, player issue, ops checklist, or reviewable implementation plan—closed automatically via `Closes #NNN` when its PR merges.
+- **GitHub Milestone (`Sprint N: ...`)**: Optional native Sprint progress bar (`closed PRs / total PRs %`) assigned to PRs and issues in that Sprint.
+- **GitHub Label (`web`, `android`, `feature`, `fix`, `ui`, `testing`, `ci`, `docs`, `deps`)**: Taxonomy tags allowing PR titles to remain clean and prefix-free.
 - **Channels (`Alpha` / `Beta` / `Production`)**: Isolated PR previews at `/alpha/<number>/` (`Alpha`, indexed under `/alpha/`), integration soak branch `beta` at `/beta/` (`Beta`), and live stable `main` at `/` (`Production`).
 - **Git Tag (`vX.Y.Z`) & GitHub Release**: Immutable release tag triggering [`release.yml`](./.github/workflows/release.yml) for APK, Play Store `.aab`, `.tgz`, and release notes.
 
-### Canonical Reference Formatting (Epics vs. PRs)
+### Canonical Reference Formatting (PRs & Issues)
 
 - **PR References Always Use Clickable `#NNN` Links**: Always write PR numbers across docs (`PROJECT.md`, `ROADMAP.md`, `TODO.md`, `CHANGELOG.md`) as relative clickable Markdown links `[#NNN](../../pull/NNN)` (never plain `#NNN` or backticked `` `#NNN` ``, and without hardcoded repository owner URLs).
-- **Epic References Always Use `[EPIC-N](...)` Links**: Whenever referring to an Epic Tracking Issue in prose or docs, ALWAYS use relative links `[EPIC-N](../../issues/<num>)` (or `EPIC-N` when unlinked)—for example [EPIC-1](../../issues/476), [EPIC-2](../../issues/477), [EPIC-3](../../issues/478), [EPIC-4](../../issues/479), [EPIC-5](../../issues/480)—never bare/backticked `#<epic-issue>` or `[#<epic-issue>](../../issues/<num>)` (even in examples or notes), so Epics are strictly distinguished from PR links.
-- **Epic Issue PR-List Formatting Standard**: Inside GitHub Epic Tracking Issue bodies ([EPIC-1](../../issues/476)--[EPIC-5](../../issues/480)), keep items **grouped under Story/Theme subheadings**, put **one entry per line**, place `#NNN` at the **start** of the link text so numbers line up neatly down the left edge (`- [x] [#NNN — Title/Summary](../../pull/NNN)`), and **sort numerically by PR number within each group**.
+- **Focused Issue References**: Link focused GitHub Issues with their title (`[#NNN — Issue Title](../../issues/NNN)`) when referencing active plans, bugs, or ops checklists. Historical archived Epic links in [`ROADMAP.md`](./ROADMAP.md) keep `[EPIC-N](../../issues/<num>)` formatting for backwards clarity.
 
 ### 3-Artefact Agile Triad & Triage Rules
 
-1. **[`ROADMAP.md`](./ROADMAP.md) (*Strategic Epics, Stories, Icebox & Shipped Archive*)**:
-   - Owns all Epics (`EPIC-2`..`EPIC-5`), User Stories (`US-N.M`), readiness status (`Active in Sprint N`, `Ready for Next Sprint`, `Awaiting Review & Approval`, or `Blocked -- External Infra`), Platform Icebox (`ICE-1`..`ICE-3`), and the collapsed `<details>` **Shipped Epics & Stories** archive in Section 6.
+1. **[`ROADMAP.md`](./ROADMAP.md) (*Strategic Themes, Stories, Icebox & Shipped Archive*)**:
+   - Owns multi-sprint Roadmap themes (`EPIC-2`..`EPIC-5`), User Stories (`US-N.M`), readiness status (`Active in Sprint N`, `Ready for Next Sprint`, `Awaiting Review & Approval`, or `Blocked -- External Infra`), Platform Icebox (`ICE-1`..`ICE-3`), and the collapsed `<details>` **Shipped Epics & Stories** archive in Section 6.
    - Blocked items (OAuth/Play Console secrets, hosted WebSocket relays, paid AI endpoints) remain in `ROADMAP.md` with explicit **Unblock Prerequisite** notes until ready.
-2. **GitHub Parent Epic Tracking Issues (`1 Issue = 1 Epic`) & Milestones**:
-   - Strictly one GitHub Issue per Epic: [EPIC-1](../../issues/476) (`CLOSED`), [EPIC-2](../../issues/477) (Sprint 1), [EPIC-3](../../issues/478) (Sprint 2), [EPIC-4](../../issues/479) (Sprint 3), [EPIC-5](../../issues/480) (Blocked).
-   - **Zero Sub-Issue Sprawl**: Never open separate GitHub Issues for `TASK-*` slices, Sprint `BUG-*` fixes, or `ICE-*` items unless explicitly requested. Charter a new `EPIC-N` issue only when promoting an `ICE-*` item or new product theme into active scheduling.
+2. **Focused GitHub Issues & Milestones**:
+   - Use standard focused GitHub Issues for concrete player bugs, feature requests, ops checklists (e.g., Play Store release steps), and reviewable specs rather than umbrella Epic wrapper issues.
 <!-- capy-dev-only:start -->
-   - **Owner-Review Plans & Review/Audit Documents (Explicit Issue Exception)**: Alongside Epics and Ops issues, whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, it MUST log that plan or review as a bot-authored GitHub Issue on the private development repository via `open-issue.yml` (as `github-actions[bot]`, including a clickable Antigravity web session URL `` `[<Role> (<short-id>)](https://antigravity.google.com/remote/<session-id>?project=<project-id>)` `` and a structured summary/checklist) so the Project Owner can review, coordinate, and comment directly on GitHub.
+   - **Owner-Review Plans & Review/Audit Documents (Mandatory Issue Logging)**: Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, it MUST log that plan or review as a bot-authored GitHub Issue on the private development repository via `open-issue.yml` (as `github-actions[bot]`, including a clickable Antigravity web session URL `` `[<Role> (<short-id>)](https://antigravity.google.com/remote/<session-id>?project=<project-id>)` `` and a structured summary/checklist) so the Project Owner can review, coordinate, and comment directly on GitHub.
 <!-- capy-dev-only:end -->
-   - **Epic Triage (`EPIC-2` vs. `EPIC-3..5`)**: Keep [EPIC-2](../../issues/477) (`v3.0.x` Critical Bugfixes & Stabilization) scoped strictly to priority bugfixes and approved stabilization polish. Route post-stabilization feature work and Android Play release (`TASK-2.5`) to [EPIC-3](../../issues/478)--[EPIC-5](../../issues/480); never attach `epic:2` to unapproved features.
 3. **[`TODO.md`](./TODO.md) (*Focused 1-Sprint Ready Queue*)**:
    - Holds **only** active-sprint approved items (`~8--10` max). Separate **dev slices** (`[quick-win]` for `1--3` file slices) clearly from any **Release & Ops Gates** subsection (DNS cutover, Play Store keystore/console uploads).
 4. **Definition of Ready (Anti-Busywork Gate)**:
    - A task enters [`TODO.md`](./TODO.md) only when it delivers concrete player or reliability value (`Why Now`), satisfies all external prerequisites, and verifies exact file/symbol paths against `origin/beta`/`origin/main`.
 5. **Definition of Done**:
    - **Delete from `TODO.md` Immediately**: Never leave `[x]` items in [`TODO.md`](./TODO.md); delete shipped `BUG-*` / `TASK-*` items in the PR that completes them.
-   - **Check Off Parent Epic Issue**: Mark `- [x] [#NNN — Title](../../pull/NNN)` inside the matching Epic Issue (`gh issue edit`).
-   - **Archive in `ROADMAP.md`**: Move completed Stories/Epics into Section 6 `<details>` with clickable `[#NNN](../../pull/NNN)` links; close the Epic Issue and Sprint Milestone only once `100%` of its scope ships to Production `main`.
-6. **Never Auto-Close an Incomplete Epic (`Tracked in` vs. `Closes`)**:
-   - Never use `Closes #...`, `Fixes #...`, or `Resolves #...` on partial Epic PRs. Write `**Agile Scope**: Tracked in [EPIC-N](../../issues/<num>) (US-X.Y: TASK-X.Ya)` so GitHub cross-references the PR while keeping the Epic `OPEN`. Standalone P0 `BUG-*` PRs attach the Sprint Milestone + `fix` + subsystem labels without an unrelated `epic:*` label.
+   - **Close Resolved Focused Issues**: Close resolved focused issues via `Closes #NNN` on the PR (or `gh issue close` after shipping to Production `main`).
+   - **Archive in `ROADMAP.md`**: Move completed Stories into Section 6 `<details>` with clickable `[#NNN](../../pull/NNN)` links; close Sprint Milestones once `100%` of their scope ships to Production `main`.
+6. **Issue Linking (`Closes #NNN` vs. `Refs #NNN`)**:
+   - Use `Closes #NNN` on PRs that completely resolve a focused GitHub Issue, and `Refs #NNN` on partial slices so open multi-PR issues stay open until finished.
 7. **Canonical Mobile-First Card & `<details>` Template**:
    - Keep **Description**, **Value**, **Why Now**, and 1-line **Tasks** visible; wrap verbose metadata inside `<details><summary>...</summary></details>` with blank lines after `</summary>` and before `</details>`:
    ````markdown
@@ -99,7 +97,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
    <details>
    <summary>Engineering Metadata, Files & Acceptance Criteria</summary>
 
-   - **Type & Priority**: `Story` | `EPIC-X` | `priority: high` | `domain: canvas, ui`
+   - **Type & Priority**: `Story` | `priority: high` | `domain: canvas, ui`
    - **Complexity**: `medium`
    - **Target Files**: `./web/src/...`
    - **Acceptance Criteria**:
@@ -107,18 +105,14 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 
    </details>
    ````
-8. **Standard Epic & Milestone `gh` CLI Playbook**:
+8. **Standard Issue & Milestone `gh` CLI Playbook**:
    ```bash
-   # Inspect open Epic Tracking Issues and Sprint Milestones
-   gh issue list --label epic --state open --json number,title,milestone,labels
+   # Inspect open Issues and Sprint Milestones
+   gh issue list --state open --json number,title,milestone,labels
    gh api repos/{owner}/{repo}/milestones?state=open --jq '.[] | {number, title, open_issues, closed_issues}'
 
-   # Check off a shipped slice (- [ ] -> - [x] [#NNN — Title](...)) on its Parent Epic Issue
-   gh issue view <epic-issue> --json body --jq .body > /tmp/epic_<epic-issue>.md
-   gh issue edit <epic-issue> --body-file /tmp/epic_<epic-issue>.md
-
-   # Close a 100%-shipped Epic Issue & Sprint Milestone after beta -> main promotion
-   gh issue close <epic-issue> --comment "Completed in [#NNN](../../pull/NNN) (vX.Y.Z Production release)."
+   # Close a completed Issue & Sprint Milestone after beta -> main promotion
+   gh issue close <issue-num> --comment "Completed in [#NNN](../../pull/NNN) (vX.Y.Z Production release)."
    gh api -X PATCH repos/{owner}/{repo}/milestones/<milestone-num> -f state=closed
    ```
 <!-- capy-dev-only:start -->
@@ -141,14 +135,14 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
   - Always `git fetch --all --prune` and branch linearly from `origin/beta` (`feature/`, `fix/`, `docs/`, `ci/`, `deps/`, `chore/`). Rebase promptly (`git fetch origin beta && git rebase origin/beta`) whenever `origin/beta` advances.
   - Write clean, prefix-free action-oriented PR titles (e.g., `Add floating precision loupe magnifier for micro-regions`). For standard PRs targeting `beta`, avoid `feat():`, `EPIC-*`, `US-*`, version tags, or comma-separated laundry lists in titles; **Release Promotion PRs merging `beta -> main` include the target version number** (e.g., `Promote Capy Paint v3.0.8 to main`) in both the PR title and PR description.
 - **Labels, Milestones & Top-of-PR Ordering**:
-  - Attach `epic:*` (only for scoped Epic slices; omit on standalone P0 `BUG-*`), subsystem labels (`web`, `android`), and work-type labels (`feature`, `fix`, `docs`, `ui`, `testing`, `ci`, `deps`), plus the active Sprint Milestone.
+  - Attach subsystem labels (`web`, `android`), work-type labels (`feature`, `fix`, `docs`, `ui`, `testing`, `ci`, `deps`), and optionally the active Sprint Milestone.
   - **Line 1 Plain-English `## Summary` First**: Start every PR description on **line 1** with a concise, plain-English `## Summary` (`1`--`3` everyday sentences or bullets for non-technical readers—no commit SHAs, file paths, symbol names, or CLI flags).
-  - **Links, Agile Scope & Technical Overview Underneath**: Directly below `## Summary`, place preview links (when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys), clickable **Test Results** links, and `**Agile Scope**: Tracked in [EPIC-N](../../issues/<num>) ... | **Sprint**: Sprint N`, followed by scannable technical overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
+  - **Links, Issue Scope & Technical Overview Underneath**: Directly below `## Summary`, place preview links (when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys), clickable **Test Results** links, and any linked focused GitHub Issue (`Closes #NNN` or `Refs #NNN`), followed by scannable technical overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
 - **PR Sync-on-Push**:
   - Whenever follow-up commits are pushed, a PR is rebased, or scope/version changes, update the PR title, top `## Summary`, overview bullets, target version, verification test list, SHA-pinned line references, labels, and Milestone so reviewers always see accurate state.
 - **Reopening Closed Unmerged PRs**: Recover `refs/pull/<number>/head` onto the original head branch name, push to `origin`, run `gh pr reopen <number>`, rebase onto `origin/beta`, and `git push --force-with-lease`. Merged PRs are immutable—always open a new PR off `origin/beta`.
 <!-- capy-dev-only:start -->
-- **Private Bot PRs, PR Readiness Checklist & Auto-Merge Gate**: Full `open-pr.yml`, `open-issue.yml`, `PR Readiness Score: 100%` / `PR Readiness Checklist`, `pr-review-gate.yml`, `sync-agile-tracker.yml`, and `Needs Your Testing / Approval` protocols live in [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md).
+- **Private Bot PRs, PR Readiness Checklist & Auto-Merge Gate**: Full `open-pr.yml`, `open-issue.yml`, `PR Readiness Score: 100%` / `PR Readiness Checklist`, `pr-review-gate.yml`, and `Needs Your Testing / Approval` protocols live in [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md).
 <!-- capy-dev-only:end -->
 
 ---
@@ -165,7 +159,7 @@ Capy separates strategic multi-sprint planning from day-to-day execution across 
 - **Post-Merge Release Actions & GitHub Releases Cadence** *(after `beta -> main` merges)*:
   1. `git fetch origin main`, tag `v<MAJOR.MINOR.PATCH>` on `origin/main`, and push the tag (`git tag -a v<ver> -m "v<ver>" && git push origin v<ver>`) to trigger [`release.yml`](./.github/workflows/release.yml) on every Production promotion. [`release.yml`](./.github/workflows/release.yml) builds signed `capy-<tag>.apk`, unversioned `capy.apk` (backing `https://capypaint.com/capy.apk`), Play Store `capy-<tag>.aab`, and `capy-web-<tag>.tgz`, attaching notes extracted from [`CHANGELOG.md`](./CHANGELOG.md) via [`.github/scripts/compile-changelog.mjs`](./.github/scripts/compile-changelog.mjs).
   2. Re-align `origin/beta` to `origin/main` (`git push --force-with-lease origin origin/main:refs/heads/beta`) whenever no unpromoted `beta`-only PRs sit ahead, preventing history divergence on subsequent `beta` PRs.
-  3. Close 100%-shipped GitHub Epic Issues and Sprint Milestones.
+  3. Close resolved focused GitHub Issues and completed Sprint Milestones.
 <!-- capy-dev-only:start -->
 - **Clean-Room Public Mirror & Tag-Gated Release Sync (`publish-capyboop.yml`)**: Every push to `shthed/capy` `main` triggers [`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml) -> [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs), stripping `capy-dev-only` blocks, dev-only docs (`AGENTS.md`, `CAPYBOOP.md`, `docs/ai/`), and internal workflows and asserting zero persona/AI-dev leaks before pushing to `capyboop/paint`. `publish-capyboop.yml` only pushes tag `v<version>` to `capyboop/paint` when a matching `v<version>` tag already exists on `shthed/capy`. Always verify `npm run persona:capyboop -- --dry-run` whenever editing docs or scripts.
 <!-- capy-dev-only:end -->

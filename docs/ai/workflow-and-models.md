@@ -11,7 +11,7 @@ Private AI-assisted development guide for the Capy monorepo. Excluded wholesale 
 Capy pairs real-time 60--120fps HTML5 Canvas interaction, off-thread computer vision, binary RLE/CRDT codecs, and a native Kotlin Android wrapper. Human developers and AI agents hold complementary responsibilities across these layers.
 
 ### Human Project Owner Focus
-1. **Product Vision & Sprint Pull Governance**: Curate Epics and Stories in [`ROADMAP.md`](../../ROADMAP.md) ([EPIC-1](../../../../issues/476)--[EPIC-5](../../../../issues/480); governance in [`PROJECT.md`](../../PROJECT.md)) and promote only unblocked, high-impact tasks into [`TODO.md`](../../TODO.md) for the active sprint.
+1. **Product Vision & Sprint Pull Governance**: Curate Roadmap themes and Stories in [`ROADMAP.md`](../../ROADMAP.md) (governance in [`PROJECT.md`](../../PROJECT.md)) and promote only unblocked, high-impact tasks into [`TODO.md`](../../TODO.md) for the active sprint.
 2. **Subjective Aesthetic & Tactile Judgment**: Evaluate qualities automated headless assertions cannot judge alone—inertial pan glide feel, pinch-to-zoom responsiveness, palette contrast, procedural audio warmth, confetti pacing, and physical Android LRA haptic crispness.
 3. **Upfront Ambiguity Resolution (`/grill-me` & `/plan`)**: Answer focused design trade-off questions and approve implementation plans before code generation begins.
 4. **Session & Context Hygiene**: Keep each interactive chat scoped to one PR (or one cohesive Story/Sprint slice under `/goal` or `/teamwork`), prefix new chat prompts with `#NNN` for clean auto-titling, and pin/unpin threads to match open PR state.

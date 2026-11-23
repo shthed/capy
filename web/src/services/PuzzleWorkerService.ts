@@ -1,5 +1,72 @@
 import { GenerationProgressPayload, GeneratorConfig, PuzzleData } from '../types';
 
+export interface WorkerPuzzlePayload {
+  width: number;
+  height: number;
+  palette: PuzzleData['palette'];
+  regionMap: ArrayBuffer;
+  borderMap: ArrayBuffer;
+  packedPixelsBuffer?: ArrayBuffer;
+  regions: Array<{
+    id: number;
+    colorId: number;
+    centroidX: number;
+    centroidY: number;
+    area: number;
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    maxRadius: number;
+    pixelsOffset?: number;
+    pixelsLength?: number;
+    pixelsBuffer?: ArrayBuffer;
+  }>;
+  isFreeColor?: boolean;
+}
+
+/**
+ * Reconstructs PuzzleData from the worker's single contiguous packedPixelsBuffer
+ * using zero-copy Int32Array.subarray views (with legacy per-region pixelsBuffer fallback).
+ */
+export function unpackPuzzleFromWorker(pd: WorkerPuzzlePayload): PuzzleData {
+  const packedPixels = pd.packedPixelsBuffer ? new Int32Array(pd.packedPixelsBuffer) : null;
+  const reconstitutedRegions = pd.regions.map((r) => {
+    let pixels: Int32Array;
+    if (packedPixels && typeof r.pixelsOffset === 'number' && typeof r.pixelsLength === 'number') {
+      pixels = packedPixels.subarray(r.pixelsOffset, r.pixelsOffset + r.pixelsLength);
+    } else if (r.pixelsBuffer) {
+      pixels = new Int32Array(r.pixelsBuffer);
+    } else {
+      pixels = new Int32Array(0);
+    }
+
+    return {
+      id: r.id,
+      colorId: r.colorId,
+      centroidX: r.centroidX,
+      centroidY: r.centroidY,
+      area: r.area,
+      minX: r.minX,
+      maxX: r.maxX,
+      minY: r.minY,
+      maxY: r.maxY,
+      maxRadius: r.maxRadius,
+      pixels,
+    };
+  });
+
+  return {
+    width: pd.width,
+    height: pd.height,
+    palette: pd.palette,
+    regions: reconstitutedRegions,
+    regionMap: new Int32Array(pd.regionMap),
+    borderMap: new Uint8Array(pd.borderMap),
+    isFreeColor: pd.isFreeColor,
+  };
+}
+
 export class GenerationCancelledError extends Error {
   constructor(message = 'Generation cancelled by newer request') {
     super(message);
@@ -93,43 +160,7 @@ export class PuzzleWorkerService {
             worker.removeEventListener('error', handleError);
             this.activeReject = null;
 
-            const pd = data.puzzleData;
-            const reconstitutedRegions = pd.regions.map((r: {
-              id: number;
-              colorId: number;
-              centroidX: number;
-              centroidY: number;
-              area: number;
-              minX: number;
-              maxX: number;
-              minY: number;
-              maxY: number;
-              maxRadius: number;
-              pixelsBuffer: ArrayBuffer;
-            }) => ({
-              id: r.id,
-              colorId: r.colorId,
-              centroidX: r.centroidX,
-              centroidY: r.centroidY,
-              area: r.area,
-              minX: r.minX,
-              maxX: r.maxX,
-              minY: r.minY,
-              maxY: r.maxY,
-              maxRadius: r.maxRadius,
-              pixels: new Int32Array(r.pixelsBuffer),
-            }));
-
-            const puzzleData: PuzzleData = {
-              width: pd.width,
-              height: pd.height,
-              palette: pd.palette,
-              regions: reconstitutedRegions,
-              regionMap: new Int32Array(pd.regionMap),
-              borderMap: new Uint8Array(pd.borderMap),
-              isFreeColor: pd.isFreeColor,
-            };
-
+            const puzzleData = unpackPuzzleFromWorker(data.puzzleData as WorkerPuzzlePayload);
             resolve(puzzleData);
           } else if (data.type === 'ERROR') {
             worker.removeEventListener('message', handleMessage);

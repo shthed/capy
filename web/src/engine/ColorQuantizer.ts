@@ -366,6 +366,27 @@ export class ColorQuantizer {
     const minDistances = new Float64Array(totalPixels);
     minDistances.fill(Number.MAX_VALUE);
 
+    // Initialize minDistances against all pre-seeded centroids (0 .. effectiveK - 2);
+    // centroid[effectiveK - 1] is evaluated on the first iteration of the K-Means++ loop below.
+    if (effectiveK < actualK && effectiveK < totalPixels) {
+      for (let c = 0; c < effectiveK - 1; c++) {
+        const cr = centroidR[c];
+        const cg = centroidG[c];
+        const cb = centroidB[c];
+        for (let i = 0; i < totalPixels; i++) {
+          const pxR = rArr[i];
+          const pxG = gArr[i];
+          const pxB = bArr[i];
+          const dist = usePerceptualDistance
+            ? this.perceptualDistanceSq(pxR, pxG, pxB, cr, cg, cb)
+            : (pxR - cr) ** 2 + (pxG - cg) ** 2 + (pxB - cb) ** 2;
+          if (dist < minDistances[i]) {
+            minDistances[i] = dist;
+          }
+        }
+      }
+    }
+
     // Deterministic FNV-1a + Mulberry32 PRNG seeded from artwork pixels so identical source images
     // always produce identical K-Means++ palettes and region IDs across browsers and devices.
     let rngSeed = (2166136261 ^ totalPixels ^ actualK) >>> 0;

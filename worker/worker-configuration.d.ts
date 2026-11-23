@@ -162,6 +162,11 @@ declare const console: {
   error(...args: unknown[]): void;
 };
 
+declare const crypto: {
+  randomUUID(): string;
+  getRandomValues<T extends ArrayBufferView>(array: T): T;
+};
+
 declare module 'cloudflare:workers' {
   export abstract class DurableObject<E = unknown> {
     protected readonly ctx: DurableObjectState;

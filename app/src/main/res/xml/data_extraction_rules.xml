@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<data-extraction-rules>
+<data-extraction-rules xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="FullBackupContent">
     <cloud-backup>
+        <include domain="file" path="capy_saves" />
         <exclude domain="sharedpref" path="capy_play_games_prefs.xml" />
         <exclude domain="file" path="capy_cloud" />
     </cloud-backup>
     <device-transfer>
+        <include domain="file" path="capy_saves" />
         <exclude domain="sharedpref" path="capy_play_games_prefs.xml" />
         <exclude domain="file" path="capy_cloud" />
     </device-transfer>

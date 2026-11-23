@@ -175,7 +175,7 @@ When opening black-and-white line art or hybrid coloring book pages:
 
 To guarantee **zero UI frame drops and smooth touch responsiveness**:
 * Puzzle generation runs inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts).
-* Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads** (`rgbaBuffer` inbound; `regionMap`, `borderMap`, and `regions[].pixelsBuffer` outbound).
+* Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads** (`rgbaBuffer` inbound; `regionMap`, `borderMap`, and a single contiguous `packedPixelsBuffer` outbound, unpacked into zero-copy `Int32Array.subarray` views via `pixelsOffset`/`pixelsLength`). Pole-of-inaccessibility label placement in [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) reuses a single `Int32Array(total)` `distGrid` and `bfsQueue` across regions to eliminate per-region `Map` heap spikes.
 * Progress updates stream back via `onProgress(pct, status, payload)` with a **strictly monotonic high-water mark** (`0.00` $\rightarrow$ `1.00`). In default **Simple Progress (Fast Mode)** (`detailedProgress = false`), progress IPC is throttled and diagnostic swatch cloning is skipped for maximum generation throughput; toggling **Detailed Progress** sends `{ type: 'SET_DETAILED_PROGRESS', detailed: true }` live to the running worker.
 
 ### 5.1 Canonical 6-Stage Pipeline (`GENERATION_PIPELINE_STEPS`)
