@@ -1270,7 +1270,7 @@ export async function generateScenePlan(
   const effectivePrompt = blocked ? '' : sanitized;
   const seedPalette = collectSeedPalette(request);
 
-  if (request.localAiMode === 'AUTO') {
+  if (request.localAiMode === 'AUTO' || request.localAiMode === 'LOCAL_ONLY') {
     const chromePlan = await tryChromeAiTier(
       request,
       effectivePrompt,

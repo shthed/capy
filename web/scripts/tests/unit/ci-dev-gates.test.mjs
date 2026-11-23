@@ -1251,10 +1251,10 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
 
     // Verify modular parallel E2E suite registry, smoke selection & lossless sharding
     const e2eRunnerMod = await import('../e2e/runner.mjs');
-    assert.equal(e2eRunnerMod.E2E_SUITES.length, 10);
+    assert.equal(e2eRunnerMod.E2E_SUITES.length, 11);
     assert.equal(
       e2eRunnerMod.E2E_SUITES.reduce((sum, s) => sum + s.stages, 0),
-      24
+      28
     );
     const smokeSuites = e2eRunnerMod.selectE2eSuites({ smoke: true });
     assert.deepEqual(

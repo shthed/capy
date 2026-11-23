@@ -1139,73 +1139,75 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) return false;
 
         const { img: childImg, objectUrl } = await decodeBlobToImage(pngBlob);
-        if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) {
-          revokeObjectUrlSafely(objectUrl);
-          return false;
-        }
-
-        persistParentSnapshotBeforeDetailTile(parentId, currentView);
-        const boundsInParent = {
-          x: metrics.bbox.minX / Math.max(1, basePuzzle.width),
-          y: metrics.bbox.minY / Math.max(1, basePuzzle.height),
-          width: metrics.bbox.width / Math.max(1, basePuzzle.width),
-          height: metrics.bbox.height / Math.max(1, basePuzzle.height),
-        };
-        const childZoomTree: InfiniteZoomNodeMeta = {
-          depth: (activeSave?.zoomTree?.depth ?? 0) + 1,
-          direction: 'child-in',
-          boundsInParent,
-          selectedRegionIds: Array.from(selectedSnapshot),
-          promptHint: scenePlan.sanitizedPrompt || undefined,
-          aiTierUsed: scenePlan.tierUsed,
-        };
-        const childConfig: GeneratorConfig = {
-          ...settingsRef.current.generatorConfig,
-          maxRegions: Math.min(
-            900,
-            Math.round((settingsRef.current.generatorConfig.maxRegions || 350) * 1.25)
-          ),
-          isFreeColor: isFree,
-        };
-
-        markTutorialActionTried('create_gallery');
-        triggerFeatureOffer('infinite_zoom');
-        abortControllerRef.current = null;
-        cancelHandoffRef.current = { restoreSnapshotId: parentId, createdSnapshotId: null };
-        await loadArtworkFromImage(
-          childImg,
-          buildChildTileTitle(activeTitle, scenePlan.sanitizedPrompt),
-          childConfig,
-          new Set(),
-          undefined,
-          undefined,
-          null,
-          false,
-          pngBlob,
-          undefined,
-          undefined,
-          undefined,
-          isFree,
-          parentId,
-          {
-            zoomTree: childZoomTree,
-            linkParentId: parentId,
-            preserveLosslessAlpha: true,
-            onRegistered: (snapId) => {
-              if (cancelHandoffRef.current) {
-                cancelHandoffRef.current.createdSnapshotId = snapId;
-              }
-            },
-            onFinished: () => {
-              if (seq === infiniteZoomOpSeqRef.current) {
-                cancelHandoffRef.current = null;
-                setIsInfiniteZoomRunning(false);
-              }
-            },
+        try {
+          if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) {
+            return false;
           }
-        );
-        revokeObjectUrlSafely(objectUrl);
-        return true;
+
+          persistParentSnapshotBeforeDetailTile(parentId, currentView);
+          const boundsInParent = {
+            x: metrics.bbox.minX / Math.max(1, basePuzzle.width),
+            y: metrics.bbox.minY / Math.max(1, basePuzzle.height),
+            width: metrics.bbox.width / Math.max(1, basePuzzle.width),
+            height: metrics.bbox.height / Math.max(1, basePuzzle.height),
+          };
+          const childZoomTree: InfiniteZoomNodeMeta = {
+            depth: (activeSave?.zoomTree?.depth ?? 0) + 1,
+            direction: 'child-in',
+            boundsInParent,
+            selectedRegionIds: Array.from(selectedSnapshot),
+            promptHint: scenePlan.sanitizedPrompt || undefined,
+            aiTierUsed: scenePlan.tierUsed,
+          };
+          const childConfig: GeneratorConfig = {
+            ...settingsRef.current.generatorConfig,
+            maxRegions: Math.min(
+              900,
+              Math.round((settingsRef.current.generatorConfig.maxRegions || 350) * 1.25)
+            ),
+            isFreeColor: isFree,
+          };
+
+          markTutorialActionTried('create_gallery');
+          triggerFeatureOffer('infinite_zoom');
+          abortControllerRef.current = null;
+          cancelHandoffRef.current = { restoreSnapshotId: parentId, createdSnapshotId: null };
+          await loadArtworkFromImage(
+            childImg,
+            buildChildTileTitle(activeTitle, scenePlan.sanitizedPrompt),
+            childConfig,
+            new Set(),
+            undefined,
+            undefined,
+            null,
+            false,
+            pngBlob,
+            undefined,
+            undefined,
+            undefined,
+            isFree,
+            parentId,
+            {
+              zoomTree: childZoomTree,
+              linkParentId: parentId,
+              preserveLosslessAlpha: true,
+              onRegistered: (snapId) => {
+                if (cancelHandoffRef.current) {
+                  cancelHandoffRef.current.createdSnapshotId = snapId;
+                }
+              },
+              onFinished: () => {
+                if (seq === infiniteZoomOpSeqRef.current) {
+                  cancelHandoffRef.current = null;
+                  setIsInfiniteZoomRunning(false);
+                }
+              },
+            }
+          );
+          return true;
+        } finally {
+          revokeObjectUrlSafely(objectUrl);
+        }
       } finally {
         releaseCanvas(infillCanvas);
         releaseCanvas(contextCanvas);
@@ -1357,62 +1359,64 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         if (isAborted()) return false;
 
         const { img: outerImg, objectUrl } = await decodeBlobToImage(blob);
-        if (isAborted()) {
-          revokeObjectUrlSafely(objectUrl);
-          return false;
-        }
-
-        const innerId = activeSnapshotId || crypto.randomUUID();
-        persistParentSnapshotBeforeDetailTile(innerId, { ...viewportRef.current });
-
-        const isFree = Boolean(isFreeColorMode || puzzle?.isFreeColor);
-        const outerZoomTree: InfiniteZoomNodeMeta = {
-          depth: (activeSave?.zoomTree?.depth ?? 0) - 1,
-          direction: 'extend-out',
-          extendedSides: { ...sides },
-          childSnapshotIds: [innerId],
-          promptHint: scenePlan.sanitizedPrompt || undefined,
-          aiTierUsed: scenePlan.tierUsed,
-        };
-
-        markTutorialActionTried('create_gallery');
-        triggerFeatureOffer('infinite_zoom');
-        abortControllerRef.current = null;
-        cancelHandoffRef.current = { restoreSnapshotId: innerId, createdSnapshotId: null };
-        await loadArtworkFromImage(
-          outerImg,
-          buildExtendedTitle(activeTitle, scenePlan.sanitizedPrompt),
-          { ...settingsRef.current.generatorConfig, isFreeColor: isFree },
-          new Set(),
-          undefined,
-          undefined,
-          null,
-          false,
-          blob,
-          undefined,
-          undefined,
-          undefined,
-          isFree,
-          undefined,
-          {
-            zoomTree: outerZoomTree,
-            linkChildId: innerId,
-            peerZoomTreePatch: { boundsInParent: extResult.boundsInParent },
-            onRegistered: (snapId) => {
-              if (cancelHandoffRef.current) {
-                cancelHandoffRef.current.createdSnapshotId = snapId;
-              }
-            },
-            onFinished: () => {
-              if (seq === infiniteZoomOpSeqRef.current) {
-                cancelHandoffRef.current = null;
-                setIsInfiniteZoomRunning(false);
-              }
-            },
+        try {
+          if (isAborted()) {
+            return false;
           }
-        );
-        revokeObjectUrlSafely(objectUrl);
-        return true;
+
+          const innerId = activeSnapshotId || crypto.randomUUID();
+          persistParentSnapshotBeforeDetailTile(innerId, { ...viewportRef.current });
+
+          const isFree = Boolean(isFreeColorMode || puzzle?.isFreeColor);
+          const outerZoomTree: InfiniteZoomNodeMeta = {
+            depth: (activeSave?.zoomTree?.depth ?? 0) - 1,
+            direction: 'extend-out',
+            extendedSides: { ...sides },
+            childSnapshotIds: [innerId],
+            promptHint: scenePlan.sanitizedPrompt || undefined,
+            aiTierUsed: scenePlan.tierUsed,
+          };
+
+          markTutorialActionTried('create_gallery');
+          triggerFeatureOffer('infinite_zoom');
+          abortControllerRef.current = null;
+          cancelHandoffRef.current = { restoreSnapshotId: innerId, createdSnapshotId: null };
+          await loadArtworkFromImage(
+            outerImg,
+            buildExtendedTitle(activeTitle, scenePlan.sanitizedPrompt),
+            { ...settingsRef.current.generatorConfig, isFreeColor: isFree },
+            new Set(),
+            undefined,
+            undefined,
+            null,
+            false,
+            blob,
+            undefined,
+            undefined,
+            undefined,
+            isFree,
+            undefined,
+            {
+              zoomTree: outerZoomTree,
+              linkChildId: innerId,
+              peerZoomTreePatch: { boundsInParent: extResult.boundsInParent },
+              onRegistered: (snapId) => {
+                if (cancelHandoffRef.current) {
+                  cancelHandoffRef.current.createdSnapshotId = snapId;
+                }
+              },
+              onFinished: () => {
+                if (seq === infiniteZoomOpSeqRef.current) {
+                  cancelHandoffRef.current = null;
+                  setIsInfiniteZoomRunning(false);
+                }
+              },
+            }
+          );
+          return true;
+        } finally {
+          revokeObjectUrlSafely(objectUrl);
+        }
       } finally {
         releaseCanvas(extCanvas);
         releaseCanvas(contextCanvas);

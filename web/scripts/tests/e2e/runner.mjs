@@ -1,7 +1,7 @@
 /**
- * Part 2 Browser E2E Suite Orchestrator ([E2E 01/24]..[E2E 24/24]).
+ * Part 2 Browser E2E Suite Orchestrator ([E2E 01/28]..[E2E 28/28]).
  *
- * Runs 10 self-contained E2E suites in parallel across isolated BrowserContexts,
+ * Runs 11 self-contained E2E suites in parallel across isolated BrowserContexts,
  * with support for --smoke, --suite=<csv>, --workers=<n>, and --shard=<i>/<n>.
  */
 import assert from 'node:assert/strict';
@@ -16,6 +16,7 @@ import { runCoopCloudOfflineE2e } from './coop-cloud-offline.e2e.mjs';
 import { runSvgCoopChannelsE2e } from './svg-coop-channels.e2e.mjs';
 import { runMobileLayoutE2e, runResilienceIsolationE2e } from './mobile-resilience-isolation.e2e.mjs';
 import { runAccessibilityByocE2e, runStorageAnalyzerE2e } from './accessibility-byoc-storage.e2e.mjs';
+import { runInfiniteZoomE2e } from './infinite-zoom.e2e.mjs';
 
 export const E2E_SUITES = [
   {
@@ -97,6 +98,14 @@ export const E2E_SUITES = [
     estimatedWeight: 18,
     description: 'Browser Storage Analyzer modal, 360x780 layout, 4 targeted cleanups & oversized photo upload compression',
     run: runStorageAnalyzerE2e,
+  },
+  {
+    name: 'infinite-zoom',
+    stages: 4,
+    smoke: false,
+    estimatedWeight: 60,
+    description: 'Bidirectional local AI Infinite Zoom (in-place split, deep cutout, directional borders, guards, mobile)',
+    run: runInfiniteZoomE2e,
   },
 ];
 

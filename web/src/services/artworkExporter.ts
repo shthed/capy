@@ -302,7 +302,6 @@ export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): v
 
     const titleStr = title || 'capy-artwork';
     const fileName = buildArtworkPngFileName(titleStr);
-    handedToBlob = true;
     canvas.toBlob((blob) => {
       releaseTempCanvas(canvas);
       if (!blob) return;
@@ -316,6 +315,7 @@ export function exportColoredArtworkPng(options: ExportColoredArtworkOptions): v
       });
       NativeBridge.haptic('tick', hapticsEnabled);
     }, 'image/png');
+    handedToBlob = true;
   } finally {
     if (!handedToBlob) {
       releaseTempCanvas(canvas);
