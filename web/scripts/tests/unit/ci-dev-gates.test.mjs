@@ -1,6 +1,6 @@
 /**
  * [Unit 07, 09, 10, 11] (Dev-Only) rebrand-persona.mjs clean-room export, open-pr.yml,
- * deploy-branch.yml / publish-capyboop.yml, ai-review Gemini fallback, dependabot.yml & sync-agile-tracker.yml.
+ * deploy-branch.yml / publish-capyboop.yml, ai-review Gemini fallback & dependabot.yml.
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -280,15 +280,15 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
         assert.equal(cleaned, expectedOut);
         assert.equal(FORBIDDEN_PERSONA_REGEX.test(cleaned), false, `Sanitized output leaked: ${cleaned}`);
       }
-      // Verify multi-line scrub() contract and fail-closed historical replay in publish-capyboop.yml
+      // Verify retired migrate_public_epics step is removed and fail-closed historical replay stays intact in publish-capyboop.yml
       const publishYmlText = fs.readFileSync(
         path.resolve(projectRoot, '../.github/workflows/publish-capyboop.yml'),
         'utf8'
       );
       assert.equal(
-        publishYmlText.includes("transformPersonaContent(String(text || ''))\n              .split(/\\r?\\n/)"),
-        true,
-        'publish-capyboop.yml scrub() must run transformPersonaContent on full multi-line string before splitting'
+        publishYmlText.includes('migrate_public_epics'),
+        false,
+        'publish-capyboop.yml must not include the retired migrate_public_epics input or step'
       );
       assert.equal(
         publishYmlText.includes('timeout-minutes: 30'),
@@ -1581,7 +1581,7 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     }
     logUnitPass('deploy-branch.yml routing & publish-capyboop.yml clean-history guards verified.');
 
-    logUnitStart('Testing ai-review Gemini fallback, dependabot.yml & sync-agile-tracker.yml...');
+    logUnitStart('Testing ai-review Gemini fallback & dependabot.yml...');
     const aiReviewYamlLines = prReviewGateYaml.split(/\r?\n/);
     const aiJobIdx = aiReviewYamlLines.findIndex((line) => /^\s{2}ai-review:\s*$/.test(line));
     assert.notEqual(aiJobIdx, -1, 'Expected ai-review job in pr-review-gate.yml');
@@ -1856,113 +1856,5 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     assert.equal(dependabotYaml.includes('package-ecosystem: "gradle"'), true);
     assert.equal(dependabotYaml.includes('package-ecosystem: "github-actions"'), true);
     assert.equal(dependabotYaml.includes('target-branch: "beta"'), true);
-
-    // Extract and unit-test sync-agile-tracker.yml pure github-script (zero PR checkout)
-    const syncAgileYaml = fs.readFileSync(
-      path.resolve(projectRoot, '../.github/workflows/sync-agile-tracker.yml'),
-      'utf8'
-    );
-    assert.equal(syncAgileYaml.includes('actions/checkout'), false);
-    assert.equal(syncAgileYaml.includes('pull_request_target:'), true);
-    const runSyncAgileScript = new AsyncFunction(
-      'context',
-      'github',
-      'core',
-      extractWorkflowScript('.github/workflows/sync-agile-tracker.yml')
-    );
-
-    const runSyncAgileCase = async ({
-      merged = true,
-      baseRef = 'beta',
-      prNumber = 495,
-      prTitle = 'Harden storage sandbox and changelog compiler',
-      labels = [],
-      body = '',
-      issuesByNumber = {},
-    }) => {
-      const updatedIssues = [];
-      const coreMock = {
-        infos: [],
-        info: (msg) => coreMock.infos.push(msg),
-      };
-      const githubMock = {
-        rest: {
-          issues: {
-            get: async ({ issue_number }) => ({ data: issuesByNumber[issue_number] }),
-            update: async (payload) => {
-              updatedIssues.push(payload);
-              return { data: {} };
-            },
-          },
-        },
-      };
-      const contextMock = {
-        repo: { owner: 'shthed', repo: 'capy' },
-        payload: {
-          pull_request: {
-            number: prNumber,
-            title: prTitle,
-            html_url: `https://github.com/shthed/capy/pull/${prNumber}`,
-            merged,
-            base: { ref: baseRef },
-            labels: labels.map((name) => ({ name })),
-            body,
-          },
-        },
-      };
-      await runSyncAgileScript(contextMock, githubMock, coreMock);
-      return updatedIssues;
-    };
-
-    // Case 1: epic:2 label flips unchecked PR checklist line [ ] -> [x]
-    const syncRes1 = await runSyncAgileCase({
-      labels: ['epic:2'],
-      prNumber: 495,
-      issuesByNumber: {
-        477: {
-          number: 477,
-          state: 'open',
-          body: '#### Staged on `beta`\n- [ ] [#495 — Old PR Title](https://github.com/shthed/capy/pull/495)\n',
-        },
-      },
-    });
-    assert.equal(syncRes1.length, 1);
-    assert.equal(syncRes1[0].issue_number, 477);
-    assert.equal(
-      syncRes1[0].body.includes('- [x] [#495 — Old PR Title](https://github.com/shthed/capy/pull/495)'),
-      true
-    );
-
-    // Case 2: Agile Scope EPIC-3 inserts [x] bullet under Staged on beta when absent
-    const syncRes2 = await runSyncAgileCase({
-      prNumber: 499,
-      prTitle: 'Add loupe magnifier',
-      body: '**Agile Scope**: Tracked in [EPIC-3](https://github.com/shthed/capy/issues/478)',
-      issuesByNumber: {
-        478: {
-          number: 478,
-          state: 'open',
-          body: '#### Staged on `beta`\n- [x] [#472 — Zoom](https://github.com/shthed/capy/pull/472)\n\n#### Open\n- [ ] Future\n',
-        },
-      },
-    });
-    assert.equal(syncRes2.length, 1);
-    assert.equal(syncRes2[0].issue_number, 478);
-    assert.equal(
-      syncRes2[0].body.includes('- [x] [#499 — Add loupe magnifier](https://github.com/shthed/capy/pull/499)'),
-      true
-    );
-
-    // Case 3: closed issue or unmerged PR makes zero mutations
-    const syncRes3 = await runSyncAgileCase({
-      labels: ['epic:1'],
-      prNumber: 500,
-      issuesByNumber: {
-        476: { number: 476, state: 'closed', body: '- [ ] #500' },
-      },
-    });
-    assert.equal(syncRes3.length, 0);
-    const syncRes4 = await runSyncAgileCase({ merged: false, labels: ['epic:2'] });
-    assert.equal(syncRes4.length, 0);
-    logUnitPass('ai-review fallback models, dependabot.yml & sync-agile-tracker.yml verified.');
+    logUnitPass('ai-review fallback models & dependabot.yml verified.');
 }
