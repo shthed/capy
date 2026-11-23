@@ -155,7 +155,9 @@ npm run dev              # Local Vite dev server on http://localhost:3000
 npm run lint             # Strict TypeScript + oxlint guardrails (tsc + oxlint) -- MANDATORY for code PRs
 npm run build            # Production bundle (tsc && vite build -> web/dist/) -- MANDATORY for code PRs
 npm run test:unit        # Fast Vite SSR engine, codec, version/changelog & workflow unit checks
-npm test                 # Unified engine, codec, version/changelog & Playwright E2E suite
+npm run test:e2e:smoke   # Fast (~15-20s) critical-path Playwright smoke E2E (boot + gameplay)
+npm run test:e2e         # Parallel Playwright E2E only (--suite=<csv>, --workers=<n>, --shard=i/n)
+npm test                 # Unified engine, codec, version/changelog & parallel Playwright E2E suite
 npm run changelog:compile # Batch .changelog/*.md fragments into CHANGELOG.md & sync package*.json (--promote for Production)
 npm run gallery:capture  # Refresh docs/gallery/*.png when UI/theme visuals change
 npm run generate:samples # Rebuild web/public/assets/sample_saves.capy when built-in samples change
@@ -187,24 +189,22 @@ Capy runs five core GitHub Actions workflows in [`.github/workflows/`](./.github
 <!-- capy-dev-only:end -->
 
 ### 1. Unified 3-Tier Fast Build Gate, Async E2E/Android & Pages Deployment ([`deploy-branch.yml`](./.github/workflows/deploy-branch.yml))
-- **Fast Blocking Gate + Async Heavy Jobs**: Required branch checks (`Build & Test`) complete in `< 30s` using cached `web/node_modules`, `< 2s` sanity checks, TypeScript + `oxlint` lint, Web build, and headless `--unit` tests (`node scripts/test.mjs --unit`, zero Chromium). **`Android APK`**, **`Playwright E2E`**, and **`Deploy Pages`** run asynchronously without blocking PR checks (nor holding Pages deploys behind Playwright E2E flakes).
+- **Fast Blocking Gate + Async Heavy Jobs**: Required branch checks (`Build & Test`) use cached `web/node_modules`, `< 2s` sanity checks, TypeScript + `oxlint` lint, Web build, and headless `--unit` tests (`node scripts/test.mjs --unit`, zero Chromium). **`Android APK`**, **`Deploy Preview`** (unblocked Alpha/Beta deploys), and smart tiered 4-worker **`Playwright E2E`** run asynchronously without blocking feature PR checks or previews.
 - **Fast Sanity Paths (`isDocsOnlyPr` & `is_main_sync`)**: Pull requests that exclusively touch `**.md`, `docs/**`, `notes/**`, `.gitignore`, or `LICENSE`, or verified `sync/beta-from-main -> beta` ancestry syncs whose `HEAD` tree is byte-identical to `origin/main`, run the `< 2s` `npm run test:sanity` check in `Build & Test` while skipping redundant Web/Android builds, E2E re-runs, and Alpha Pages deployment.
 - **Job 0 -- `prepare` (`Target`, `contents: read`, `pull-requests: read`)**:
-  - Resolves `target_dir` (`/alpha/<number>/`, `/beta/`, or `/`), `checkout_ref`, `is_docs_only`, `is_main_sync`, `is_draft`, and `skip` flags once before downstream fan-out.
+  - Resolves `target_dir` (`/alpha/<number>/`, `/beta/`, or `/`), `checkout_ref`, `is_docs_only`, `is_main_sync`, `is_draft`, `has_web_changes`, and `skip` flags once before downstream fan-out.
 - **Job 1 -- `build` (`Build & Test`, `contents: read`, required)**:
   - Runs concurrently across open PRs (`main` and `beta` bases) with `cancel-in-progress: true` per PR/ref.
   - Injects `vars.VITE_GOOGLE_CLIENT_ID` and `vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS`, restores cached `web/node_modules`, runs `npm run test:sanity && npm run lint && npm run build` plus `node scripts/test.mjs --unit`, and uploads `web-dist` (`web/dist/`).
 - **Job 2 -- `android_build` (`Android APK`, `contents: read`, async)**:
   - Downloads `web-dist`, sets up JDK 17 + Gradle, executes `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleDebug --build-cache` (release-variant `lintVitalRelease` catches release-only lint blockers before tagging), and uploads `build-artifacts` (`staging/web/` + `staging/apk/capy.apk`) for Pages without slowing down `Build & Test`.
-- **Job 3 -- `e2e_release_gate` (`Playwright E2E`, `contents: read`, required for `main`)**:
-  - Runs on ready non-docs/non-main-sync PRs targeting `beta` or `main`, on `push` to `beta`/`main`, and on `workflow_dispatch` targeting `main`, downloading `web-dist` + cached `~/.cache/ms-playwright`, injecting the matching `vars.VITE_*` / `vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` env vars, and running `npm test`.
-- **Job 4 -- `deploy` (`Deploy Pages`, `contents: write`, `pages: write`, `id-token: write`, `pull-requests: write`)**:
-  - Waits on `needs: [prepare, build, android_build, e2e_release_gate]`, requiring `e2e_release_gate` `success` for `main` Production deploys (while allowing `e2e_release_gate == 'skipped'` on Draft PRs or non-`main` `workflow_dispatch` previews), guarded by `github.event.repository.has_pages == true` and serialized under the `deploy-pages` concurrency lock (`cancel-in-progress: false`).
-  - Uploads the Pages artifact with `include-hidden-files: true` (and inspects hidden directories via `ls -lah`) so `.well-known/assetlinks.json` is preserved alongside `/alpha/<number>/`, `/beta/`, and `/` deployments.
-  - Publishes open Alpha PR builds to `/alpha/<number>/` and `/alpha/<number>/capy.apk`, regenerates `/alpha/index.html` + `/alpha/manifest.json` via [`.github/scripts/generate-pr-manifest.mjs`](./.github/scripts/generate-pr-manifest.mjs) (seeding root `404.html` from [`web/public/404.html`](./web/public/404.html) when missing), and posts or updates the zero-emoji PR preview comment.
-  - Publishes `beta` branch pushes to `/beta/` and `/beta/capy.apk` without modifying production `/`, refreshing root `404.html` via `--refresh-404`.
-  - Publishes `main` branch pushes to `/` and `/capy.apk` (excluding `/alpha/` and `/beta/` during `rsync`), refreshing root `404.html` via `--refresh-404`.
-  - Squashes `gh-pages` into a single **orphan commit** on every push so binary `.apk` artifacts never bloat Git history.
+- **Job 3 -- `e2e_release_gate` (`Playwright E2E`, `contents: read`, smart tiered async on `beta`, required for `main`)**:
+  - Runs on ready non-docs/non-main-sync PRs targeting `main` (always) or `beta` (`has_web_changes == 'true'`), on `push` to `main` (`has_web_changes == 'true'`), and on `workflow_dispatch` targeting `main` (or `run_e2e == true`), skipping non-web-only changes and redundant post-merge `beta` pushes. Downloads `web-dist` + cached `~/.cache/ms-playwright`, skips `apt-get` `install-deps` via `ldd` check when shared libs are already satisfied, injects the matching `vars.VITE_*` / `vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` env vars, and runs `npm run test:e2e -- --workers=4` (zero duplicate Part 1 unit tests).
+- **Job 4a -- `deploy_preview` (`Deploy Preview`, unblocked Alpha & Beta deploys)**:
+  - Depends only on `needs: [prepare, build, android_build]` (`target_dir != '.'`), publishing Alpha PR builds (`/alpha/<number>/` + `/alpha/<number>/capy.apk` + PR comment) and `beta` branch pushes (`/beta/` + `/beta/capy.apk` + `--refresh-404`) immediately without waiting for `Playwright E2E`.
+- **Job 4b -- `deploy` (`Deploy Pages`, E2E-gated Production deploys)**:
+  - Depends on `needs: [prepare, build, android_build, e2e_release_gate]` (`target_dir == '.'`), strictly requiring `e2e_release_gate == 'success'` (or `skipped` only when `has_web_changes == 'false'`) before publishing `main` to `/` and `/capy.apk` (excluding `/alpha/` and `/beta/` during `rsync` and refreshing `404.html` via `--refresh-404`).
+  - Both `deploy_preview` and `deploy` share `concurrency: { group: deploy-pages, cancel-in-progress: false }`, upload Pages artifacts with `include-hidden-files: true` (inspecting hidden directories via `ls -lah` so `.well-known/assetlinks.json` survives), and squash `gh-pages` into a single **orphan commit** on every push so binary `.apk` artifacts never bloat Git history.
 
 ### 2. Automated GitHub Release & Play Store Bundle Publisher ([`release.yml`](./.github/workflows/release.yml))
 - Triggered automatically on `push: tags: ['v*.*.*']` (supporting both stable `v3.0.8` tags cut on `main` after each `beta -> main` Production promotion and `--prerelease` `v3.0.8-beta.1` tags on `beta`) or manually via `workflow_dispatch`.

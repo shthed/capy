@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  createBootedContext,
   getSettingsBtn,
   tapCanvasGrid,
   waitForAnimationFrames,
@@ -13,11 +14,24 @@ import {
 } from './helpers.mjs';
 
 export async function runCoopCloudOfflineE2e(ctx) {
-  const { browser, context, page, BASE_URL, projectRoot, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const { browser, BASE_URL, projectRoot, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const ownBoot = !ctx.page;
+  const { context, page } = ownBoot
+    ? await createBootedContext(browser, BASE_URL, {
+        label: 'coop',
+        attachErrorListeners,
+        acceptDownloads: true,
+        permissions: ['clipboard-read', 'clipboard-write'],
+        skipTutorial: true,
+        easyNoReplay: true,
+        extraSettings: { showZoomButtons: true, showResetViewButton: true },
+      })
+    : { context: ctx.context, page: ctx.page };
   const settingsBtn = getSettingsBtn(page);
+  try {
     logE2eStart('Verifying < 2 KB Share Link (#s=), 2-peer BroadcastChannel Co-op, Google Drive CRDT sync, Saves views & .capy v2 export...');
     await page.evaluate(() => localStorage.setItem('capy_dev_cloud_coop_ui', '1'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(page);
     {
       await page.locator('button[title="Settings and Menu"]').click();
@@ -82,7 +96,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     const ctxIsolated = await browser.newContext({ viewport: { width: 1280, height: 860 } });
     const pageRecipient = await ctxIsolated.newPage();
     attachErrorListeners(pageRecipient, 'recipient');
-    await pageRecipient.goto(sharedUrl, { waitUntil: 'networkidle' });
+    await pageRecipient.goto(sharedUrl, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(pageRecipient);
     await pageRecipient.waitForFunction(
       (expectedLen) =>
@@ -107,7 +121,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
 
     const pageB = await context.newPage();
     attachErrorListeners(pageB, 'pageB');
-    await pageB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
+    await pageB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(pageB);
     await pageB.getByTestId('topbar-coop-btn').click();
     await pageB.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
@@ -464,7 +478,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     assert.equal(await page.getByTestId('saves-view-thumbnails-btn').getAttribute('aria-pressed'), 'false');
 
     // Verify DETAIL preference persists across full page reload
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(page);
     await page.getByTestId('topbar-coop-btn').click();
     await page.getByTestId('saves-list-detail').waitFor({ state: 'visible', timeout: 5000 });
@@ -476,7 +490,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
 
     // Verify invalid localStorage value safely falls back to THUMBNAILS
     await page.evaluate(() => localStorage.setItem('capy_saves_view_mode', 'INVALID_VIEW_MODE'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(page);
     await page.getByTestId('topbar-coop-btn').click();
     await page.getByTestId('saves-list-thumbnails').waitFor({ state: 'visible', timeout: 5000 });
@@ -494,7 +508,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
     await page.locator('[data-testid="export-all-saves-btn"]').click();
     const download = await downloadPromise;
-    const exportedPath = path.join(os.tmpdir(), 'capy_unified_test_backup.capy');
+    const exportedPath = path.join(os.tmpdir(), `capy_unified_test_backup_${process.pid}.capy`);
     await download.saveAs(exportedPath);
     const exportedBuf = fs.readFileSync(exportedPath);
     assert.equal(exportedBuf[0], 0x43, 'Magic byte C');
@@ -522,7 +536,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
       const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
       return Array.from(new Uint8Array(await blob.arrayBuffer()));
     });
-    const tmpUploadPath = path.join(os.tmpdir(), 'capy_test_upload.png');
+    const tmpUploadPath = path.join(os.tmpdir(), `capy_test_upload_${process.pid}.png`);
     fs.writeFileSync(tmpUploadPath, Buffer.from(pngBytes));
     const snapIdBeforeUpload = await page.evaluate(
       () => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null
@@ -551,13 +565,25 @@ export async function runCoopCloudOfflineE2e(ctx) {
     assert.equal(uploadCheck.kind, 'blob');
     assert.equal(uploadCheck.fileSizeBytes < 120_000, true);
 
+    // Ensure Service Worker is active and controlling this isolated context before zooming & offline reload
+    await page.evaluate(async () => {
+      if ('serviceWorker' in navigator) {
+        await navigator.serviceWorker.ready;
+      }
+    });
+    const isControlled = await page.evaluate(() => Boolean(navigator.serviceWorker?.controller));
+    if (!isControlled) {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+    }
+
     // Zoom in on the custom puzzle, mark all regions completed, and verify offline reload + post-completion Replay preserves viewport without zooming out
     const zoomInUpload = await page.waitForSelector('[data-testid="zoom-in-btn"]');
     await zoomInUpload.click();
     await zoomInUpload.click();
     await zoomInUpload.click();
     await page.waitForFunction(
-      () => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale || 1) > 1.5,
+      () => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').zoomScale || 1) >= 1.9,
       undefined,
       { timeout: 3000 }
     );
@@ -1084,6 +1110,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
     logE2ePass('Daily Featured Puzzle card/launch, Reduced Motion persistence, Keyboard Gameplay Shortcuts + input-focus guard, and Lifetime Stats verified.');
-
-    // -------------------------------------------------------------------------
+  } finally {
+    if (ownBoot) await context.close();
+  }
 }

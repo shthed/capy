@@ -8,14 +8,15 @@ import path from 'node:path';
 import {
   assertSpotlightAligned,
   captureV3012Screenshot,
+  createBootedContext,
   getStableBoundingBox,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
 } from './helpers.mjs';
 
-export async function runMobileResilienceIsolationE2e(ctx) {
-  const { browser, context, page, BASE_URL, projectRoot, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+export async function runMobileLayoutE2e(ctx) {
+  const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     logE2eStart('Verifying 360x780 mobile GameTopBar lanes (ALPHA #520), OnboardingTutorial, SettingsModal tabs, Saves grid & FeatureOfferBanner...');
     const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     await mobileTopbarContext.addInitScript(() => {
@@ -23,7 +24,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     });
     const mobileTopbarPage = await mobileTopbarContext.newPage();
     attachErrorListeners(mobileTopbarPage, 'mobileTopbarPage');
-    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&pr=520`, { waitUntil: 'networkidle' });
+    await mobileTopbarPage.goto(`${BASE_URL}/?capy_channel=alpha&pr=520`, { waitUntil: 'domcontentloaded' });
     await mobileTopbarPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     await mobileTopbarPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
@@ -486,7 +487,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     assert.ok(seededComplete && seededComplete.expectedCount > 0, 'Expected non-empty puzzle regions for 100% progress test');
     assert.equal(seededComplete.activeCount, seededComplete.expectedCount, 'Expected activeState filledRegionIds to persist before reload');
     assert.equal(seededComplete.snapCount, seededComplete.expectedCount, 'Expected snapshot filledCount to persist before reload');
-    await mobileTopbarPage.reload({ waitUntil: 'networkidle' });
+    await mobileTopbarPage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(mobileTopbarPage);
     if (await mobileTopbarPage.getByTestId('replay-exit-btn').isVisible()) {
       await mobileTopbarPage.getByTestId('replay-exit-btn').click();
@@ -644,7 +645,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     });
     const viewportRacePage = await viewportRaceContext.newPage();
     attachErrorListeners(viewportRacePage, 'viewportRacePage');
-    await viewportRacePage.goto(`${BASE_URL}/?capy_channel=alpha&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await viewportRacePage.goto(`${BASE_URL}/?capy_channel=alpha&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(viewportRacePage);
     const raceCanvasBox = await viewportRacePage.getByTestId('puzzle-canvas').boundingBox();
     assert.ok(raceCanvasBox, 'Expected puzzle-canvas boundingBox for viewport race test');
@@ -704,7 +705,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       return { targetId, totalCount: allIds.length, prevZoom: active?.zoomScale ?? 1 };
     });
     assert.ok(fullRaceState && fullRaceState.totalCount > 0, 'Expected full race state setup');
-    await viewportRacePage.reload({ waitUntil: 'networkidle' });
+    await viewportRacePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(viewportRacePage);
     if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
       await viewportRacePage.getByTestId('replay-exit-btn').click();
@@ -744,7 +745,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       null,
       `persistActiveViewportOnly must NOT resurrect cleared activeState after zoom timer (${JSON.stringify(activeAfterClearAndZoom)})`
     );
-    await viewportRacePage.reload({ waitUntil: 'networkidle' });
+    await viewportRacePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(viewportRacePage);
     if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
       await viewportRacePage.getByTestId('replay-exit-btn').click();
@@ -894,7 +895,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     }, remainingTargetId);
     assert.ok(blobSetup, 'Expected blob race setup to succeed');
 
-    await viewportRacePage.reload({ waitUntil: 'networkidle' });
+    await viewportRacePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(viewportRacePage);
     if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
       await viewportRacePage.getByTestId('replay-exit-btn').click();
@@ -1078,7 +1079,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     const tapStarveContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const tapStarvePage = await tapStarveContext.newPage();
     attachErrorListeners(tapStarvePage, 'tapStarvePage');
-    await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(tapStarvePage);
     await tapStarvePage.evaluate(() => {
       const raw = localStorage.getItem('capy_user_settings_v8');
@@ -1086,7 +1087,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       parsed.fatFingerAssist = false;
       localStorage.setItem('capy_user_settings_v8', JSON.stringify(parsed));
     });
-    await tapStarvePage.reload({ waitUntil: 'networkidle' });
+    await tapStarvePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(tapStarvePage);
     const tapStarveBox = await tapStarvePage.getByTestId('puzzle-canvas').boundingBox();
     assert.ok(tapStarveBox, 'Expected puzzle-canvas boundingBox for tap-starvation regression');
@@ -1142,7 +1143,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     const mobileBetaContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
     const mobileBetaPage = await mobileBetaContext.newPage();
     attachErrorListeners(mobileBetaPage, 'mobileBetaPage');
-    await mobileBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'networkidle' });
+    await mobileBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(mobileBetaPage);
     await mobileBetaPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(
@@ -1189,7 +1190,19 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     await mobileBetaPage.close();
     await mobileBetaContext.close();
     logE2ePass('360x780 BETA channel pill containment in Normal & Large Text modes verified.');
+}
 
+export async function runResilienceIsolationE2e(ctx) {
+  const { browser, BASE_URL, projectRoot, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const ownBoot = !ctx.page;
+  const { context, page } = ownBoot
+    ? await createBootedContext(browser, BASE_URL, {
+        label: 'resilience',
+        attachErrorListeners,
+        skipTutorial: true,
+      })
+    : { context: ctx.context, page: ctx.page };
+  try {
     // -------------------------------------------------------------------------
     // 19. Atomic Malformed Import Notice, Sample Ordering, Zero-Snapshot Recovery & Fractional DPR
     // -------------------------------------------------------------------------
@@ -1206,7 +1219,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       };
     });
     await m3Page.setViewportSize({ width: 540, height: 420 });
-    await m3Page.goto(`${BASE_URL}/`, { waitUntil: 'networkidle' });
+    await m3Page.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(m3Page);
 
     const fractionalDprCheck = await m3Page.evaluate(() => {
@@ -1229,7 +1242,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     const preBadImportSnapCount = await m3Page.evaluate(
       () => JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]').length
     );
-    const badJsonPath = path.join(os.tmpdir(), 'capy_malformed_test.json');
+    const badJsonPath = path.join(os.tmpdir(), `capy_malformed_test_${process.pid}.json`);
     fs.writeFileSync(
       badJsonPath,
       JSON.stringify({
@@ -1323,7 +1336,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     assert.equal(sampleOrderCheck.allSamplesOlder, true, 'Auto-sample timestamps must stay strictly older than custom saves');
 
     // Corrupt #s= deep-link with valid ?room= must join room and strip invalid #s= hash without throwing
-    await m3Page.goto(`${BASE_URL}/?room=ABCD23#s=invalid_corrupt_token`, { waitUntil: 'networkidle' });
+    await m3Page.goto(`${BASE_URL}/?room=ABCD23#s=invalid_corrupt_token`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(m3Page);
     await m3Page.waitForFunction(
       () => !window.location.hash.includes('s='),
@@ -1345,7 +1358,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       const nonDebugEbPage = await nonDebugEbCtx.newPage();
       attachErrorListeners(nonDebugEbPage, 'nonDebugEbPage');
       await nonDebugEbPage.goto(`${BASE_URL}/?skipTutorial=1&capy_test_crash=1`, {
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
       });
       await waitForPuzzleLoaded(nonDebugEbPage);
       assert.equal(
@@ -1359,7 +1372,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     }
 
     const ebPage = await context.newPage();
-    await ebPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'networkidle' });
+    await ebPage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(ebPage);
     await ebPage.evaluate(() => {
       const snaps = window.capyStorage.loadSnapshots();
@@ -1432,7 +1445,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       s.touchReachRadiusPx = 34;
       window.capyStorage.saveSettings(s);
     });
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(page);
     const persistedEnums = await page.evaluate(() => {
       const s = window.capyStorage.loadSettings();
@@ -1455,7 +1468,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     const sandboxBetaPage = await context.newPage();
     attachErrorListeners(sandboxBetaPage, 'sandboxBetaPage');
     await sandboxBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, {
-      waitUntil: 'networkidle',
+      waitUntil: 'domcontentloaded',
     });
     await waitForPuzzleLoaded(sandboxBetaPage);
     await sandboxBetaPage.evaluate(() => {
@@ -1595,7 +1608,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
       });
     });
 
-    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'networkidle' });
+    await syncRacePage.goto(`${BASE_URL}/?skipTutorial=1&coop=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(syncRacePage);
     await syncRacePage.evaluate(() => {
       localStorage.setItem(
@@ -1620,7 +1633,7 @@ export async function runMobileResilienceIsolationE2e(ctx) {
         })
       );
     });
-    await syncRacePage.reload({ waitUntil: 'networkidle' });
+    await syncRacePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(syncRacePage);
 
     await syncRacePage.getByTestId('topbar-coop-btn').click();
@@ -1681,6 +1694,12 @@ export async function runMobileResilienceIsolationE2e(ctx) {
     await syncRacePage.close();
     await syncRaceContext.close();
     logE2ePass('IndexedDB preview offload, storage quota toast & async cloud sync stroke preservation verified.');
+  } finally {
+    if (ownBoot) await context.close();
+  }
+}
 
-    // -------------------------------------------------------------------------
+export async function runMobileResilienceIsolationE2e(ctx) {
+  await runMobileLayoutE2e(ctx);
+  await runResilienceIsolationE2e(ctx);
 }

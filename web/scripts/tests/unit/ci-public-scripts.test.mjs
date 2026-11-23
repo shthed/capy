@@ -625,6 +625,7 @@ export async function runCiPagesWorkflowTests({ projectRoot, logUnitStart, logUn
       parsedWorkflows[wfName] = parseYaml(fs.readFileSync(path.join(workflowsDir, wfName), 'utf8'), wfName);
     }
     for (const [wfFile, jobName] of [
+      ['deploy-branch.yml', 'deploy_preview'],
       ['deploy-branch.yml', 'deploy'],
       ['cleanup-closed-pr.yml', 'cleanup'],
       ['cleanup-branches.yml', 'cleanup'],

@@ -31,6 +31,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_e2e:
+        description: 'Force Playwright E2E run even for non-main branches'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -57,6 +62,7 @@ jobs:
       is_docs_only: ${{ steps.target.outputs.is_docs_only }}
       is_main_sync: ${{ steps.target.outputs.is_main_sync }}
       is_draft: ${{ steps.target.outputs.is_draft }}
+      has_web_changes: ${{ steps.target.outputs.has_web_changes }}
       checkout_ref: ${{ steps.target.outputs.checkout_ref }}
     steps:
       - name: Determine deployment target
@@ -101,6 +107,7 @@ jobs:
             }
 
             let isDocsOnlyPr = false;
+            let hasWebChanges = true;
             if (isPullRequest && prNumber) {
               try {
                 const files = await github.paginate(github.rest.pulls.listFiles, {
@@ -119,8 +126,35 @@ jobs:
                       f.filename === '.gitignore' ||
                       f.filename === 'LICENSE'
                   );
+                hasWebChanges =
+                  files.length === 0 ||
+                  files.some((f) => typeof f?.filename === 'string' && f.filename.startsWith('web/'));
               } catch (error) {
                 core.warning(`Failed to inspect PR changed files for #${prNumber}: ${error.message}`);
+              }
+            } else if (context.eventName === 'push') {
+              const beforeSha = context.payload?.before || '';
+              if (
+                beforeSha &&
+                !/^0+$/.test(beforeSha) &&
+                context.sha &&
+                typeof github.rest.repos?.compareCommitsWithBasehead === 'function'
+              ) {
+                try {
+                  const { data: pushCmp } = await github.rest.repos.compareCommitsWithBasehead({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    basehead: `${beforeSha}...${context.sha}`,
+                  });
+                  const changedFiles = Array.isArray(pushCmp?.files) ? pushCmp.files : null;
+                  if (changedFiles && changedFiles.length > 0 && changedFiles.length < 300) {
+                    hasWebChanges = changedFiles.some(
+                      (f) => typeof f?.filename === 'string' && f.filename.startsWith('web/')
+                    );
+                  }
+                } catch (error) {
+                  core.warning(`Failed to inspect push changed files (${beforeSha}...${context.sha}): ${error.message}`);
+                }
               }
             }
 
@@ -318,6 +352,7 @@ jobs:
               `Checkout ref: ${checkoutRef}`,
               prNumber ? `PR: #${prNumber}` : 'PR: none found',
               `Target directory: ${targetDir}`,
+              `Has web changes: ${hasWebChanges}`,
               `Preview URL (Web): ${previewUrl}`,
               `Android APK URL: ${previewUrl}capy.apk`,
             ];
@@ -339,6 +374,7 @@ jobs:
             core.setOutput('is_docs_only', isDocsOnlyPr ? 'true' : 'false');
             core.setOutput('is_main_sync', isMainSync ? 'true' : 'false');
             core.setOutput('is_draft', isDraftPr ? 'true' : 'false');
+            core.setOutput('has_web_changes', hasWebChanges ? 'true' : 'false');
             core.setOutput('checkout_ref', checkoutRef);
 
             core.summary.addRaw(summaryLines.join('\n')).write();
@@ -475,9 +511,9 @@ jobs:
   e2e_release_gate:
     name: Playwright E2E
     needs: [prepare, build]
-    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')) || (github.event_name == 'workflow_dispatch' && needs.prepare.outputs.target_dir == '.') || (github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'beta') && needs.prepare.outputs.is_draft != 'true'))
+    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && ((github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prepare.outputs.has_web_changes == 'true') || (github.event_name == 'workflow_dispatch' && (needs.prepare.outputs.target_dir == '.' || github.event.inputs.run_e2e == 'true')) || (github.event_name == 'pull_request' && needs.prepare.outputs.is_draft != 'true' && (github.base_ref == 'main' || (github.base_ref == 'beta' && needs.prepare.outputs.has_web_changes == 'true'))))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -522,10 +558,17 @@ jobs:
           if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
             npx playwright install --with-deps chromium
           else
-            npx playwright install-deps chromium
+            CHROME_BIN="$(node -e "import('playwright').then((m) => console.log(m.chromium.executablePath()))" 2>/dev/null || true)"
+            if [ -z "${CHROME_BIN}" ] || [ ! -x "${CHROME_BIN}" ]; then
+              npx playwright install --with-deps chromium
+            elif ldd "${CHROME_BIN}" 2>/dev/null | grep -q "not found"; then
+              npx playwright install-deps chromium
+            else
+              echo "Cached Playwright Chromium shared libraries already satisfied (${CHROME_BIN}); skipping install-deps."
+            fi
           fi
 
-      - name: Run Unified Engine, Codec & Headless Chromium E2E Suite
+      - name: Run Parallel Headless Chromium E2E Suite
         working-directory: web
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
@@ -534,12 +577,266 @@ jobs:
           VITE_APPLE_CLOUDKIT_CONTAINER: ${{ vars.VITE_APPLE_CLOUDKIT_CONTAINER }}
           VITE_APPLE_CLOUDKIT_API_TOKEN: ${{ vars.VITE_APPLE_CLOUDKIT_API_TOKEN }}
           CAPY_ANDROID_SHA256_CERT_FINGERPRINTS: ${{ vars.CAPY_ANDROID_SHA256_CERT_FINGERPRINTS }}
-        run: npm test
+        run: npm run test:e2e -- --workers=4
+
+  deploy_preview:
+    name: Deploy Preview
+    needs: [prepare, build, android_build]
+    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.prepare.outputs.target_dir != '.' && needs.build.result == 'success' && needs.android_build.result == 'success' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ needs.prepare.outputs.preview_url }}
+    concurrency:
+      group: deploy-pages
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR manifest scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+          sparse-checkout: |
+            .github/scripts
+            web/public/404.html
+
+      - name: Resolve build artifact name
+        id: build_artifact
+        uses: actions/github-script@v9
+        env:
+          CURRENT_RUN_ATTEMPT: ${{ github.run_attempt }}
+        with:
+          script: |
+            const preferredName = `build-artifacts-${process.env.CURRENT_RUN_ATTEMPT}`;
+            const maxAttempts = 5;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                per_page: 100,
+              });
+              const candidates = (data.artifacts || []).filter(
+                (a) => !a.expired && typeof a.name === 'string' && a.name.startsWith('build-artifacts-')
+              );
+              const preferred = candidates.find((a) => a.name === preferredName);
+              const latest = candidates.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
+              const chosen = preferred || latest;
+              if (chosen) {
+                core.info(`Resolved build artifact "${chosen.name}" (id=${chosen.id}) on attempt ${attempt}/${maxAttempts}.`);
+                core.setOutput('name', chosen.name);
+                return;
+              }
+              if (attempt < maxAttempts) {
+                core.info(`No build-artifacts-* artifact visible yet (attempt ${attempt}/${maxAttempts}); waiting 3s...`);
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+              }
+            }
+            core.setFailed(`Unable to find any non-expired build-artifacts-* artifact for workflow run ${context.runId}.`);
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.build_artifact.outputs.name }}
+          path: staging
+
+      - name: Retrieve existing gh-pages content
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          rm -rf pages
+
+          if git ls-remote --exit-code --heads "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages; then
+            git clone --depth 1 --branch gh-pages "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
+          else
+            git clone --depth 1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" pages
+            rm -rf pages/*
+          fi
+
+          rm -rf pages/README
+
+      - name: Prepare preview site content
+        env:
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+
+          DEST_DIR="pages/${TARGET_DIR}"
+          rm -rf "${DEST_DIR}"
+          mkdir -p "${DEST_DIR}"
+          rsync -avc --delete \
+            staging/web/ "${DEST_DIR}/"
+
+          cp -f staging/web/index.html "${DEST_DIR}/index.html"
+          cp staging/apk/capy.apk "${DEST_DIR}/capy.apk"
+
+      - name: Generate PR preview manifest & 404 fallback
+        env:
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+          REFRESH_FLAG=""
+          if [ "${TARGET_DIR}" = "beta" ]; then
+            REFRESH_FLAG="--refresh-404"
+          fi
+          node ./.github/scripts/generate-pr-manifest.mjs --pages-dir ./pages ${REFRESH_FLAG}
+
+      - name: Sync gh-pages branch (squashed history) and remove .git before artifact upload
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+          if [ -d pages/.git ]; then
+            cd pages
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            git add -A
+            if ! git diff --cached --quiet || git cat-file -p HEAD | grep -q '^parent '; then
+              git checkout --orphan gh-pages-squashed
+              git add -A
+              git commit -m "Deploy ${TARGET_DIR}"
+              git branch -M gh-pages
+              git push --force origin gh-pages
+            fi
+            cd ..
+            rm -rf pages/.git
+          fi
+
+      - name: Capture deployment directory listing
+        env:
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
+        run: |
+          set -euo pipefail
+
+          LIST_PATH="pages/${TARGET_DIR}"
+          echo "Listing contents for ${LIST_PATH}" > deployment-directory-listing.txt
+          ls -lah "${LIST_PATH}" | tee -a deployment-directory-listing.txt
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: pages
+          name: github-pages-${{ github.run_attempt }}
+          include-hidden-files: true
+
+      - name: Wait for Pages artifact index visibility
+        uses: actions/github-script@v9
+        env:
+          ARTIFACT_NAME: github-pages-${{ github.run_attempt }}
+        with:
+          script: |
+            const targetName = process.env.ARTIFACT_NAME;
+            const maxAttempts = 8;
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: context.runId,
+                  per_page: 100,
+                });
+                const found = (data.artifacts || []).find(
+                  (a) => a.name === targetName && !a.expired
+                );
+                if (found) {
+                  core.info(`Pages artifact "${targetName}" visible (id=${found.id}) on attempt ${attempt}/${maxAttempts}.`);
+                  return;
+                }
+                core.info(`Pages artifact "${targetName}" not yet indexed (attempt ${attempt}/${maxAttempts}); waiting 3s...`);
+              } catch (err) {
+                core.warning(`Failed to list workflow run artifacts on attempt ${attempt}/${maxAttempts}: ${err?.message || err}`);
+              }
+              await new Promise((resolve) => setTimeout(resolve, 3000));
+            }
+            core.warning(`Pages artifact "${targetName}" still not visible after ${maxAttempts} polls; proceeding to deploy-pages.`);
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait before retrying GitHub Pages deploy
+        if: steps.deployment.outcome != 'success'
+        run: sleep 10
+
+      - name: Retry Deploy to GitHub Pages
+        id: deployment_retry
+        if: steps.deployment.outcome != 'success'
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Comment PR with preview & APK links
+        if: needs.prepare.outputs.pr != ''
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const prNumber = Number('${{ needs.prepare.outputs.pr }}');
+            const previewUrl = '${{ needs.prepare.outputs.preview_url }}';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const marker = '<!-- capy-pages-preview -->';
+            const body = [
+              marker,
+              '### Capy Preview & APK Deployed',
+              `- **Workflow Run**: [${context.runId}](${runUrl})`,
+              `- **Web App (\`/\`)**: ${previewUrl}`,
+              `- **Android Debug APK**: [${previewUrl}capy.apk](${previewUrl}capy.apk)`
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
+
+      - name: Output preview link
+        env:
+          TARGET_DIR: ${{ needs.prepare.outputs.target_dir }}
+          PREVIEW_URL: ${{ needs.prepare.outputs.preview_url }}
+        run: |
+          {
+            echo "Preview (Web): ${PREVIEW_URL}"
+            echo "Android APK: ${PREVIEW_URL}capy.apk"
+            echo ""
+            echo "Deployment directory listing (pages/${TARGET_DIR}):"
+            echo '```'
+            cat deployment-directory-listing.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Deploy Pages
     needs: [prepare, build, android_build, e2e_release_gate]
-    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.build.result == 'success' && needs.android_build.result == 'success' && (needs.e2e_release_gate.result == 'success' || (needs.prepare.outputs.target_dir != '.' && needs.e2e_release_gate.result == 'skipped')) && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
+    if: always() && github.event.repository.has_pages == true && needs.prepare.result == 'success' && needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.is_main_sync != 'true' && needs.prepare.outputs.target_dir == '.' && needs.build.result == 'success' && needs.android_build.result == 'success' && (needs.e2e_release_gate.result == 'success' || (needs.prepare.outputs.has_web_changes == 'false' && needs.e2e_release_gate.result == 'skipped')) && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:

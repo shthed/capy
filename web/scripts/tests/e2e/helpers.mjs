@@ -4,6 +4,171 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
+
+const PNG_CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) !== 0 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function pngCrc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    c = PNG_CRC32_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBuf = Buffer.from(type, 'ascii');
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32BE(data.length, 0);
+  const crcInput = Buffer.concat([typeBuf, data]);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(pngCrc32(crcInput), 0);
+  return Buffer.concat([lenBuf, crcInput, crcBuf]);
+}
+
+/**
+ * Generates a valid RGB PNG buffer directly in Node (milliseconds, zero CDP overhead).
+ * With compressionLevel=0 (store mode), a 2200x240 4-quadrant PNG is ~1.58 MB (>400 KB)
+ * and >2048px wide while segmenting in <1s in puzzle.worker.ts.
+ */
+export function createSyntheticPngBuffer(width, height, { compressionLevel = 0 } = {}) {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: RGB
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const stride = 1 + width * 3;
+  const raw = Buffer.alloc(stride * height);
+  const palette = [
+    [239, 68, 68],
+    [59, 130, 246],
+    [34, 197, 94],
+    [245, 158, 11],
+  ];
+  const halfW = width >> 1;
+  const halfH = height >> 1;
+  for (let y = 0; y < height; y++) {
+    const rowOff = y * stride;
+    raw[rowOff] = 0; // filter: None
+    const rowBase = y < halfH ? 0 : 2;
+    const leftRgb = palette[rowBase];
+    const rightRgb = palette[rowBase + 1];
+    for (let x = 0; x < width; x++) {
+      const rgb = x < halfW ? leftRgb : rightRgb;
+      const off = rowOff + 1 + x * 3;
+      raw[off] = rgb[0];
+      raw[off + 1] = rgb[1];
+      raw[off + 2] = rgb[2];
+    }
+  }
+
+  const idat = zlib.deflateSync(raw, { level: compressionLevel });
+  return Buffer.concat([
+    signature,
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', idat),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/**
+ * Creates an isolated BrowserContext + Page booted to BASE_URL for parallel E2E suites.
+ */
+export async function createBootedContext(
+  browser,
+  BASE_URL,
+  {
+    label = 'suite',
+    attachErrorListeners,
+    viewport = { width: 1280, height: 860 },
+    hasTouch = true,
+    acceptDownloads = false,
+    permissions = [],
+    skipTutorial = true,
+    easyNoReplay = false,
+    enableCoopUi = false,
+    extraSettings = null,
+    waitUntil = 'domcontentloaded',
+    bootUrl = null,
+    waitForPuzzle = true,
+  } = {}
+) {
+  const context = await browser.newContext({
+    viewport,
+    hasTouch,
+    acceptDownloads,
+    ...(permissions.length > 0 ? { permissions } : {}),
+  });
+  await context.addInitScript(() => {
+    try {
+      window.localStorage.setItem('capy_dev_debug', '1');
+    } catch {
+      // Ignore on opaque origins
+    }
+  });
+  const page = await context.newPage();
+  if (typeof attachErrorListeners === 'function') {
+    attachErrorListeners(page, label);
+  }
+  if (skipTutorial || easyNoReplay || enableCoopUi || extraSettings) {
+    await page.addInitScript(
+      ({ doSkipTutorial, doEasyNoReplay, doEnableCoopUi, seedExtraSettings }) => {
+        try {
+          if (window.localStorage.getItem('__capy_e2e_boot_seeded') === '1') return;
+          window.localStorage.setItem('__capy_e2e_boot_seeded', '1');
+          if (doSkipTutorial) {
+            window.localStorage.setItem('capy_tutorial_completed_v1', '1');
+          }
+          if (doEnableCoopUi) {
+            window.localStorage.setItem('capy_dev_cloud_coop_ui', '1');
+          }
+          if (doEasyNoReplay || seedExtraSettings) {
+            const s = JSON.parse(window.localStorage.getItem('capy_user_settings_v8') || '{}');
+            if (doEasyNoReplay) {
+              s.autoReplayOnLoad = false;
+              s.difficulty = 'EASY';
+            }
+            if (seedExtraSettings && typeof seedExtraSettings === 'object') {
+              Object.assign(s, seedExtraSettings);
+            }
+            window.localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+          }
+        } catch {
+          // Ignore on opaque origins
+        }
+      },
+      {
+        doSkipTutorial: skipTutorial,
+        doEasyNoReplay: easyNoReplay,
+        doEnableCoopUi: enableCoopUi,
+        seedExtraSettings: extraSettings,
+      }
+    );
+  }
+  if (bootUrl !== false) {
+    const targetUrl = bootUrl || (skipTutorial ? `${BASE_URL}/?skipTutorial=1` : BASE_URL);
+    await page.goto(targetUrl, { waitUntil });
+    if (waitForPuzzle) {
+      await waitForPuzzleLoaded(page);
+    }
+  }
+  return { context, page };
+}
 
 export async function isServerListening(url) {
   try {
@@ -79,11 +244,37 @@ export async function tapCanvasGrid(page, startFrac = 0.32, count = 8, delayMs =
 
 export async function getStableBoundingBox(locator, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
+  const hasRunningCssTransition = async () => {
+    try {
+      return await locator.evaluate((el) => {
+        let node = el;
+        while (node && node !== document.body && node !== document.documentElement) {
+          if (typeof node.getAnimations === 'function') {
+            for (const anim of node.getAnimations()) {
+              if (
+                typeof CSSTransition !== 'undefined' &&
+                anim instanceof CSSTransition &&
+                anim.playState === 'running'
+              ) {
+                return true;
+              }
+            }
+          }
+          node = node.parentElement;
+        }
+        return false;
+      });
+    } catch {
+      return false;
+    }
+  };
   let prev = await locator.boundingBox();
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 60));
     const cur = await locator.boundingBox();
+    const transitioning = await hasRunningCssTransition();
     if (
+      !transitioning &&
       prev &&
       cur &&
       Math.abs(cur.x - prev.x) < 0.5 &&

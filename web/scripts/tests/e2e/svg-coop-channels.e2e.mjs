@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
+  createBootedContext,
   getStableBoundingBox,
   readTotalRemainingRegions,
   tapCanvasGrid,
@@ -12,7 +13,20 @@ import {
 } from './helpers.mjs';
 
 export async function runSvgCoopChannelsE2e(ctx) {
-  const { context, page, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const ownBoot = !ctx.page;
+  const { context, page } = ownBoot
+    ? await createBootedContext(browser, BASE_URL, {
+        label: 'svg-coop',
+        attachErrorListeners,
+        acceptDownloads: true,
+        skipTutorial: true,
+        easyNoReplay: true,
+        enableCoopUi: true,
+        extraSettings: { showZoomButtons: true, showResetViewButton: true },
+      })
+    : { context: ctx.context, page: ctx.page };
+  try {
     logE2eStart('Verifying Printable SVG export, Sub-Tile Parent Breadcrumbs (Infinite Zoom) & 2-peer Co-op UNFILL_EVENT Undo sync...');
 
     // 11a. TASK-4.2a: Clicking export-printable-svg-btn triggers a valid .svg download
@@ -187,7 +201,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
 
     const peerB = await context.newPage();
     attachErrorListeners(peerB, 'peerB-unfill');
-    await peerB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
+    await peerB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(peerB);
     if (await peerB.$('[data-testid="replay-exit-btn"]')) {
       await peerB.locator('[data-testid="replay-exit-btn"]').click();
@@ -307,7 +321,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
 
     const betaPage = await context.newPage();
     attachErrorListeners(betaPage, 'betaPage');
-    await betaPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'networkidle' });
+    await betaPage.goto(`${BASE_URL}/?capy_channel=beta`, { waitUntil: 'domcontentloaded' });
     await betaPage.locator('canvas').first().waitFor({ state: 'visible', timeout: 15000 });
     const betaTopPill = betaPage.getByTestId('topbar-channel-badge');
     await betaTopPill.waitFor({ state: 'visible', timeout: 5000 });
@@ -357,7 +371,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     // Boot Peer B while localStorage has 0 filled regions (100% deterministic, zero debounce race)
     const peerS2 = await context.newPage();
     attachErrorListeners(peerS2, 'peerS2-stage2');
-    await peerS2.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'networkidle' });
+    await peerS2.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(peerS2);
     assert.equal(
       await readTotalRemainingRegions(peerS2),
@@ -449,7 +463,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     );
 
     // Reload Peer B before painting any region and verify welcomed regions survive reload
-    await peerS2.reload({ waitUntil: 'networkidle' });
+    await peerS2.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(peerS2);
     if (await peerS2.$('[data-testid="replay-exit-btn"]')) {
       await peerS2.locator('[data-testid="replay-exit-btn"]').click();
@@ -839,7 +853,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       s.replaySpeed = 20;
       localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
     });
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow2 = await page.locator('canvas').first().boundingBox();
@@ -853,7 +867,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
 
     // Flow 3: Post-load replay in Tap Mode -> 100% -> first tap dismisses ReplayControls
     await page.locator('[data-testid="paint-mode-btn"]').click(); // Turn Paint Mode OFF -> Tap Mode
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow3 = await page.locator('canvas').first().boundingBox();
@@ -863,7 +877,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     assert.equal(await mobileReplayWin.isVisible(), false, 'First tap in Tap Mode after post-load replay must dismiss ReplayControls');
 
     // Flow 4: Minor canvas pan during post-load replay must NOT lock ReplayControls open against Toggle Paint Mode
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     const canvasBoxFlow4 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow4);
@@ -878,6 +892,15 @@ export async function runSvgCoopChannelsE2e(ctx) {
     // Re-open ReplayControls on 360x800 mobile, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
     const mobileUndoLocator = page.getByTestId('undo-btn');
     await mobileUndoLocator.waitFor({ state: 'visible', timeout: 5000 });
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('[data-testid="undo-btn"]');
+        return Boolean(btn && !btn.hasAttribute('disabled'));
+      },
+      undefined,
+      { timeout: 5000 }
+    );
+    await waitForAnimationFrames(page, 2);
     const mobileUndoBox = await getStableBoundingBox(mobileUndoLocator);
     await page.mouse.move(
       mobileUndoBox.x + mobileUndoBox.width / 2,
@@ -937,6 +960,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     });
     await page.waitForFunction(() => window.innerWidth === 1280, undefined, { timeout: 3000 });
     logE2ePass('360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
-
-    // -------------------------------------------------------------------------
+  } finally {
+    if (ownBoot) await context.close();
+  }
 }

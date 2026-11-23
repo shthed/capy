@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  createBootedContext,
   getSettingsBtn,
   getStableBoundingBox,
   tapCanvasGrid,
@@ -13,7 +14,17 @@ import {
 } from './helpers.mjs';
 
 export async function runGameplaySettingsReplayE2e(ctx) {
-  const { page, BASE_URL, projectRoot, logE2eStart, logE2ePass } = ctx;
+  const { browser, BASE_URL, projectRoot, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
+  const ownBoot = !ctx.page;
+  const { context, page } = ownBoot
+    ? await createBootedContext(browser, BASE_URL, {
+        label: 'gameplay',
+        attachErrorListeners,
+        skipTutorial: true,
+        easyNoReplay: true,
+      })
+    : { context: ctx.context, page: ctx.page };
+  try {
     logE2eStart('Verifying palette selection, region tap coloring, double-tap zoom, pan momentum & Paint Mode...');
     const swatches = await page.$$('[aria-label="Palette dock"] button');
     assert.equal(swatches.length > 2, true, 'PaletteDock must render swatches');
@@ -44,7 +55,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
         window.capyStorage.saveSettings(s);
         return JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]')[0]?.filledCount || 0;
       });
-      await page.reload({ waitUntil: 'networkidle' });
+      await page.reload({ waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(page);
       await page.mouse.click(nearMissX, edgeY);
       // INTENTIONAL_TIMING_WINDOW: negative-absence guard verifying near-miss click with fatFingerAssist: false does not fill any region
@@ -66,7 +77,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
         s.touchReachRadiusPx = 34;
         window.capyStorage.saveSettings(s);
       });
-      await page.reload({ waitUntil: 'networkidle' });
+      await page.reload({ waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(page);
       await page.mouse.click(nearMissX, edgeY);
       await waitForAnimationFrames(page, 2);
@@ -593,7 +604,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     await page.getByTestId('saves-list-section').waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab')), '4');
 
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(page);
     await settingsBtn.click();
     await page.getByTestId('saves-share-print-bar').waitFor({ state: 'visible', timeout: 3000 });
@@ -718,7 +729,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     });
     assert.equal(savedZoomBeforeLoad > 1.8, true, `Expected zoomed-in viewport > 1.8, got ${savedZoomBeforeLoad}`);
 
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('canvas', { timeout: 25000 });
     // Immediately check that Fit-to-Screen button is visible (meaning previous zoom extent was restored BEFORE replay)
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
@@ -1050,6 +1061,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
     logE2ePass('Gallery search, category chips, Store-clean Create tab gating, and community idea moderation verified.');
-
-    // -------------------------------------------------------------------------
+  } finally {
+    if (ownBoot) await context.close();
+  }
 }
