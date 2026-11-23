@@ -143,6 +143,12 @@ export class PuzzleWorkerService {
     return generator.generate(sourceCanvas, config, onProgress, detailedProgress);
   }
 
+  private static normalizeTargetSubRegions(targetSubRegions?: number): number | undefined {
+    if (targetSubRegions === undefined) return undefined;
+    const finite = Number.isFinite(targetSubRegions) ? targetSubRegions : 12;
+    return Math.max(1, Math.min(800, Math.floor(finite)));
+  }
+
   private static async subdivideOnMainThreadFallback(
     params: SubdivideMaskedRegionParams,
     onProgress?: (progress: number, status: string) => void
@@ -150,6 +156,7 @@ export class PuzzleWorkerService {
     const { subdivideMaskedRegion } = await import('../engine/MaskedRegionSubdivider');
     return subdivideMaskedRegion({
       ...params,
+      targetSubRegions: this.normalizeTargetSubRegions(params.targetSubRegions),
       onProgress: onProgress ?? params.onProgress,
     });
   }
@@ -422,7 +429,7 @@ export class PuzzleWorkerService {
             cropMaskBuffer: maskCopy.buffer,
             existingPalette: params.existingPalette,
             isFreeColor: params.isFreeColor,
-            targetSubRegions: params.targetSubRegions,
+            targetSubRegions: this.normalizeTargetSubRegions(params.targetSubRegions),
             minRegionArea: params.minRegionArea,
             maxNewSwatches: params.maxNewSwatches,
             reuseDeltaE: params.reuseDeltaE,

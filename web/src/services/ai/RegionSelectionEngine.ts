@@ -1,5 +1,13 @@
-import type { PaletteColor, PuzzleData, Region } from '../../types';
+import type { PaletteColor, Region } from '../../types';
 import type { SubdivisionBbox } from '../../engine/MaskedRegionSubdivider';
+
+export interface RegionGridLike {
+  readonly width: number;
+  readonly height: number;
+  readonly regions: readonly Region[];
+  readonly regionMap: Int32Array;
+  readonly palette?: readonly PaletteColor[];
+}
 
 export const IN_PLACE_MIN_AREA_PX = 8000;
 export const IN_PLACE_MIN_BBOX_DIM_PX = 96;
@@ -42,7 +50,7 @@ export interface SelectionMetrics {
 
 const HEX_6_RE = /^#[0-9A-Fa-f]{6}$/;
 
-export function buildRegionByIdMap(puzzle: PuzzleData): Map<number, Region> {
+export function buildRegionByIdMap(puzzle: RegionGridLike): Map<number, Region> {
   const map = new Map<number, Region>();
   if (!puzzle || !Array.isArray(puzzle.regions)) {
     return map;
@@ -62,7 +70,7 @@ function isValidRegionId(
   return Number.isInteger(id) && id > 0 && regionById.has(id);
 }
 
-function hasValidRegionMap(puzzle: PuzzleData): boolean {
+function hasValidRegionMap(puzzle: RegionGridLike): boolean {
   const width = puzzle?.width ?? 0;
   const height = puzzle?.height ?? 0;
   return (
@@ -135,7 +143,7 @@ function resolveRegionScanBounds(
 }
 
 function collectNeighborTouchCounts(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   regionId: number,
   regionById: ReadonlyMap<number, Region>,
   counts: Map<number, number>
@@ -188,7 +196,7 @@ function collectNeighborTouchCounts(
 }
 
 export function getNeighborRegionIds(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   regionId: number,
   regionById?: ReadonlyMap<number, Region>
 ): Set<number> {
@@ -199,7 +207,7 @@ export function getNeighborRegionIds(
 }
 
 export function isSelectionContiguous(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   selectedIds: ReadonlySet<number>,
   regionById?: ReadonlyMap<number, Region>
 ): boolean {
@@ -233,7 +241,7 @@ export function isSelectionContiguous(
 }
 
 export function toggleContiguousRegion(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   currentSelected: ReadonlySet<number>,
   tappedId: number,
   regionById?: ReadonlyMap<number, Region>
@@ -293,7 +301,7 @@ export function toggleContiguousRegion(
 }
 
 export function addContiguousDragRegions(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   currentSelected: ReadonlySet<number>,
   candidateIds: Iterable<number>,
   regionById?: ReadonlyMap<number, Region>
@@ -408,7 +416,7 @@ function emptySelectionBbox(): SelectionBbox {
 }
 
 function resolveBoundaryHexes(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   regionById: ReadonlyMap<number, Region>,
   externalCounts: ReadonlyMap<number, number>,
   paintedRegionColors?: ReadonlyMap<number, number>
@@ -444,8 +452,12 @@ function resolveBoundaryHexes(
   return hexes;
 }
 
+function isValidGridDimensions(width: number, height: number): boolean {
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+}
+
 export function computeSelectionMetrics(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   selectedIds: ReadonlySet<number>,
   filledRegionIds?: ReadonlySet<number>,
   paintedRegionColors?: ReadonlyMap<number, number>
@@ -458,7 +470,7 @@ export function computeSelectionMetrics(
     }
   }
 
-  if (validSelected.size === 0 || puzzle.width <= 0 || puzzle.height <= 0) {
+  if (validSelected.size === 0 || !isValidGridDimensions(puzzle.width, puzzle.height)) {
     return {
       regionCount: 0,
       area: 0,
@@ -546,7 +558,7 @@ export function computeSelectionMetrics(
 }
 
 function stampRegionMapIntoMask(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   validSelected: ReadonlySet<number>,
   mask: Uint8Array,
   bMinX: number,
@@ -575,7 +587,7 @@ function stampRegionMapIntoMask(
 }
 
 function stampRegionPixelsIntoMask(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   validSelected: ReadonlySet<number>,
   regionById: ReadonlyMap<number, Region>,
   mask: Uint8Array,
@@ -604,9 +616,9 @@ function stampRegionPixelsIntoMask(
 }
 
 export function buildSelectionMask(
-  puzzle: PuzzleData,
+  puzzle: RegionGridLike,
   selectedIds: ReadonlySet<number>,
-  bbox: SelectionBbox
+  bbox: SubdivisionBbox
 ): Uint8Array {
   if (
     !bbox ||
@@ -633,7 +645,7 @@ export function buildSelectionMask(
       validSelected.add(id);
     }
   }
-  if (validSelected.size === 0 || puzzle.width <= 0 || puzzle.height <= 0) {
+  if (validSelected.size === 0 || !isValidGridDimensions(puzzle.width, puzzle.height)) {
     return mask;
   }
 

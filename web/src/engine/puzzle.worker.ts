@@ -4,6 +4,7 @@ import {
   subdivideMaskedRegion,
 } from './MaskedRegionSubdivider';
 import { AutoPuzzleGenerator } from './PuzzleGenerator';
+import { MAX_PUZZLE_PIXELS } from './UnifiedPuzzleLayers';
 
 export interface SerializedWorkerRegion {
   id: number;
@@ -244,6 +245,43 @@ function handleGenerateMessage(data: {
   }
 }
 
+function validateSubdividePayload(data: {
+  cropWidth: number;
+  cropHeight: number;
+  rgbaBuffer: ArrayBuffer;
+  cropMaskBuffer: ArrayBuffer;
+  existingPalette: PaletteColor[];
+}): string | null {
+  if (
+    !Number.isInteger(data.cropWidth) ||
+    !Number.isInteger(data.cropHeight) ||
+    data.cropWidth <= 0 ||
+    data.cropHeight <= 0
+  ) {
+    return `Invalid subdivision dimensions: ${String(data.cropWidth)}x${String(data.cropHeight)}`;
+  }
+  const totalPixels = data.cropWidth * data.cropHeight;
+  if (totalPixels > MAX_PUZZLE_PIXELS) {
+    return `Subdivision dimensions ${data.cropWidth}x${data.cropHeight} exceed MAX_PUZZLE_PIXELS`;
+  }
+  if (!(data.rgbaBuffer instanceof ArrayBuffer)) {
+    return 'Invalid rgbaBuffer: expected ArrayBuffer';
+  }
+  if (data.rgbaBuffer.byteLength < totalPixels * 4) {
+    return `Truncated rgbaBuffer: expected at least ${totalPixels * 4} bytes, got ${data.rgbaBuffer.byteLength}`;
+  }
+  if (!(data.cropMaskBuffer instanceof ArrayBuffer)) {
+    return 'Invalid cropMaskBuffer: expected ArrayBuffer';
+  }
+  if (data.cropMaskBuffer.byteLength < totalPixels) {
+    return `Truncated cropMaskBuffer: expected at least ${totalPixels} bytes, got ${data.cropMaskBuffer.byteLength}`;
+  }
+  if (!Array.isArray(data.existingPalette)) {
+    return 'Invalid existingPalette: expected Array';
+  }
+  return null;
+}
+
 function handleSubdivideMessage(data: {
   id: string;
   cropWidth: number;
@@ -259,6 +297,15 @@ function handleSubdivideMessage(data: {
 }): void {
   const { id } = data;
   try {
+    const validationError = validateSubdividePayload(data);
+    if (validationError) {
+      self.postMessage({
+        type: 'ERROR',
+        id,
+        error: validationError,
+      });
+      return;
+    }
     const rgbaData = new Uint8ClampedArray(data.rgbaBuffer);
     const cropMask = new Uint8Array(data.cropMaskBuffer);
     const result = subdivideMaskedRegion({

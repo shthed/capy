@@ -1,9 +1,33 @@
-import { PaletteColor, PuzzleData, Region } from '../types';
+import {
+  InfiniteZoomProviderMode,
+  NanoBananaModelId,
+  NestedPuzzleLayer,
+  NormalizedRect,
+  PaletteColor,
+  PuzzleData,
+  Region,
+} from '../types';
 import { ColorQuantizer } from './ColorQuantizer';
+import {
+  MAX_DELTA_REGION_ENTRIES,
+  MAX_NESTED_LAYERS,
+  MAX_PUZZLE_PIXELS,
+  MAX_ZOOM_DEPTH,
+  buildOutpaintBorderMask,
+  clampNormalizedRect,
+  getMaxGlobalRegionId,
+  isSafeLayerId,
+  isSafeLayerImageKey,
+  isValidNormalizedRect,
+  rebaseLayerWorldBounds,
+} from './UnifiedPuzzleLayers';
+
+export { buildOutpaintBorderMask };
 
 export const MAX_TOTAL_PALETTE_SWATCHES = 64;
 export const DEFAULT_MAX_NEW_SWATCHES = 6;
 export const DEFAULT_REUSE_DELTA_E = 22;
+export const MAX_SUBDIVIDE_TARGET_REGIONS = 800;
 
 export interface SubdivideMaskedRegionParams {
   rgbaData: Uint8ClampedArray;
@@ -1454,7 +1478,10 @@ export function subdivideMaskedRegion(
 
   const targetSubRegions = Math.max(
     1,
-    Math.min(256, Math.floor(sanitizeFiniteNumber(params.targetSubRegions, 12)))
+    Math.min(
+      MAX_SUBDIVIDE_TARGET_REGIONS,
+      Math.floor(sanitizeFiniteNumber(params.targetSubRegions, 12))
+    )
   );
   const minRegionArea = Math.max(1, Math.floor(sanitizeFiniteNumber(params.minRegionArea, 24)));
   const maxNewSwatches = Math.max(
@@ -1637,23 +1664,124 @@ function buildTranslatedRegion(
   };
 }
 
-function cloneBasePuzzle(basePuzzle: PuzzleData): PuzzleData {
+const VALID_PROVIDER_MODES = new Set<InfiniteZoomProviderMode>([
+  'PUTER',
+  'GUIDED_GEMINI',
+  'GEMINI_BYOK',
+]);
+
+const VALID_MODEL_IDS = new Set<NanoBananaModelId>([
+  'gemini-nano-banana-2.1',
+  'gemini-3.1-flash-lite-image',
+  'gemini-3.1-flash-image',
+]);
+
+const MAX_LAYER_PROMPT_HINT_LEN = 200;
+
+export function mergePreservingBasePalette(
+  basePalette: readonly PaletteColor[],
+  subPalette: readonly PaletteColor[]
+): PaletteColor[] {
+  const merged: PaletteColor[] = [];
+  const seenIds = new Set<number>();
+  for (let i = 0; i < basePalette.length; i++) {
+    const swatch = basePalette[i];
+    if (!swatch) continue;
+    merged.push({ ...swatch });
+    seenIds.add(swatch.id);
+  }
+  for (let i = 0; i < subPalette.length; i++) {
+    const swatch = subPalette[i];
+    if (!swatch || seenIds.has(swatch.id)) continue;
+    if (merged.length >= MAX_TOTAL_PALETTE_SWATCHES) {
+      throw new Error(
+        `Merged palette exceeds MAX_TOTAL_PALETTE_SWATCHES (${MAX_TOTAL_PALETTE_SWATCHES})`
+      );
+    }
+    merged.push({ ...swatch });
+    seenIds.add(swatch.id);
+  }
+  return merged;
+}
+
+function cloneRegion(region: Region): Region {
   return {
+    id: region.id,
+    colorId: region.colorId,
+    centroidX: region.centroidX,
+    centroidY: region.centroidY,
+    area: region.area,
+    minX: region.minX,
+    maxX: region.maxX,
+    minY: region.minY,
+    maxY: region.maxY,
+    maxRadius: region.maxRadius,
+    pixels: new Int32Array(region.pixels),
+  };
+}
+
+function buildNestedLayerWithGrid(
+  layer: NestedPuzzleLayer,
+  regions: Region[],
+  regionMap: Int32Array,
+  borderMap: Uint8Array
+): NestedPuzzleLayer {
+  const next: NestedPuzzleLayer = {
+    layerId: layer.layerId,
+    depth: layer.depth,
+    worldBounds: {
+      x: layer.worldBounds.x,
+      y: layer.worldBounds.y,
+      width: layer.worldBounds.width,
+      height: layer.worldBounds.height,
+    },
+    width: layer.width,
+    height: layer.height,
+    regions,
+    regionMap,
+    borderMap,
+    imageBlobKey: layer.imageBlobKey,
+  };
+  if (layer.promptHint !== undefined) next.promptHint = layer.promptHint;
+  if (layer.providerUsed !== undefined) next.providerUsed = layer.providerUsed;
+  if (layer.modelUsed !== undefined) next.modelUsed = layer.modelUsed;
+  return next;
+}
+
+function cloneNestedLayer(layer: NestedPuzzleLayer): NestedPuzzleLayer {
+  return buildNestedLayerWithGrid(
+    layer,
+    layer.regions.map(cloneRegion),
+    new Int32Array(layer.regionMap),
+    new Uint8Array(layer.borderMap)
+  );
+}
+
+function cloneBasePuzzle(basePuzzle: PuzzleData): PuzzleData {
+  const cloned: PuzzleData = {
     width: basePuzzle.width,
     height: basePuzzle.height,
     palette: basePuzzle.palette.map((c) => ({ ...c })),
-    regions: basePuzzle.regions.slice(),
+    regions: basePuzzle.regions.map(cloneRegion),
     regionMap: new Int32Array(basePuzzle.regionMap),
     borderMap: new Uint8Array(basePuzzle.borderMap),
     isFreeColor: basePuzzle.isFreeColor,
   };
+  if (Array.isArray(basePuzzle.nestedLayers)) {
+    cloned.nestedLayers = basePuzzle.nestedLayers.map(cloneNestedLayer);
+  }
+  if (basePuzzle.maxZoomDepth !== undefined) {
+    cloned.maxZoomDepth = basePuzzle.maxZoomDepth;
+  }
+  return cloned;
 }
 
-function buildGlobalIdMapping(baseRegions: Region[], subRegions: Region[]) {
-  let nextGlobalId = 0;
-  for (let i = 0; i < baseRegions.length; i++) {
-    if (baseRegions[i].id > nextGlobalId) nextGlobalId = baseRegions[i].id;
-  }
+function buildGlobalIdMapping(basePuzzle: PuzzleData, subRegions: Region[]) {
+  const maxAllowedRegionId = Math.min(
+    MAX_PUZZLE_PIXELS,
+    Math.max(basePuzzle.width * basePuzzle.height, MAX_DELTA_REGION_ENTRIES)
+  );
+  let nextGlobalId = getMaxGlobalRegionId(basePuzzle);
   let maxLocalId = 0;
   for (let i = 0; i < subRegions.length; i++) {
     if (subRegions[i].id > maxLocalId) maxLocalId = subRegions[i].id;
@@ -1668,6 +1796,11 @@ function buildGlobalIdMapping(baseRegions: Region[], subRegions: Region[]) {
   for (let s = 0; s < subRegions.length; s++) {
     const subReg = subRegions[s];
     const gId = ++nextGlobalId;
+    if (!Number.isSafeInteger(gId) || gId <= 0 || gId > maxAllowedRegionId) {
+      throw new Error(
+        `Assigned region ID ${gId} exceeds maximum allowed ID (${maxAllowedRegionId}) for ${basePuzzle.width}x${basePuzzle.height} puzzle`
+      );
+    }
     localToGlobalId[subReg.id] = gId;
     localToSlot[subReg.id] = s;
     slotGlobalIds.push(gId);
@@ -1782,7 +1915,7 @@ export function mergeSubdividedRegionIntoPuzzle(
   const nextRegionMap = new Int32Array(basePuzzle.regionMap);
   const nextBorderMap = new Uint8Array(basePuzzle.borderMap);
   const { localToGlobalId, localToSlot, slotGlobalIds, slotPixels, globalIdToSlot } =
-    buildGlobalIdMapping(basePuzzle.regions, subResult.regions);
+    buildGlobalIdMapping(basePuzzle, subResult.regions);
 
   const startX = Math.max(0, normBbox.minX);
   const startY = Math.max(0, normBbox.minY);
@@ -1864,14 +1997,821 @@ export function mergeSubdividedRegionIntoPuzzle(
     dirtyMaxY + 1
   );
 
-  const keptRegions = basePuzzle.regions.filter((r) => !selectedRegionIds.has(r.id));
-  return {
+  const keptRegions = basePuzzle.regions
+    .filter((r) => !selectedRegionIds.has(r.id))
+    .map(cloneRegion);
+  const merged: PuzzleData = {
     width,
     height,
-    palette: subResult.palette.map((c) => ({ ...c })),
+    palette: mergePreservingBasePalette(basePuzzle.palette, subResult.palette),
     regions: [...keptRegions, ...translatedNewRegions],
     regionMap: nextRegionMap,
     borderMap: nextBorderMap,
     isFreeColor: basePuzzle.isFreeColor,
   };
+  if (Array.isArray(basePuzzle.nestedLayers)) {
+    merged.nestedLayers = basePuzzle.nestedLayers.map(cloneNestedLayer);
+  }
+  if (basePuzzle.maxZoomDepth !== undefined) {
+    merged.maxZoomDepth = basePuzzle.maxZoomDepth;
+  }
+  return merged;
 }
+
+export interface EmbedNestedDetailLayerParams {
+  basePuzzle: PuzzleData;
+  /** `null` or omitted targets root `basePuzzle`; string targets matching `NestedPuzzleLayer.layerId` */
+  targetLayerId?: string | null;
+  /** Region IDs inside the target layer being replaced by the new detail layer */
+  selectedRegionIds: ReadonlySet<number>;
+  /** Output of `subdivideMaskedRegion` (may be higher resolution than target crop) */
+  subResult: MaskedSubdivisionResult;
+  /** Explicit root-space [0..1] worldBounds (used as-is, never double-rebased) */
+  worldBounds?: NormalizedRect;
+  /** Optional parent-local [0..1] bounds (rebased through parent layer worldBounds when nested) */
+  localBoundsInParent?: NormalizedRect;
+  /** Optional unique safe layerId; auto-generated if omitted */
+  layerId?: string;
+  /** Safe layer image blob key matching `layer_...` */
+  imageBlobKey: string;
+  promptHint?: string;
+  providerUsed?: InfiniteZoomProviderMode;
+  modelUsed?: NanoBananaModelId;
+}
+
+export interface EmbedNestedDetailLayerResult {
+  puzzle: PuzzleData;
+  layer: NestedPuzzleLayer;
+  removedRegionIds: number[];
+  addedRegionIds: number[];
+  prunedLayerIds: string[];
+}
+
+export interface WrapPuzzleWithOuterBorderParams {
+  basePuzzle: PuzzleData;
+  /** Output of `subdivideMaskedRegion` on extended canvas with `cropMask[i] = 0` inside inner rect */
+  outerSubResult: MaskedSubdivisionResult;
+  /** Exact normalized [0..1] inner rect inside the new outer canvas (`ExtendSidesCheck.boundsInParent`) */
+  innerBoundsInOuter: NormalizedRect;
+  /** Safe layer image blob key (`layer_...`) storing the previous root artwork */
+  previousRootImageBlobKey: string;
+  /** Optional safe layerId for the demoted previous root layer */
+  previousRootLayerId?: string;
+  promptHint?: string;
+  providerUsed?: InfiniteZoomProviderMode;
+  modelUsed?: NanoBananaModelId;
+}
+
+export interface WrapPuzzleWithOuterBorderResult {
+  puzzle: PuzzleData;
+  demotedRootLayer: NestedPuzzleLayer;
+  addedOuterRegionIds: number[];
+}
+
+function assertValidGridDimensions(width: number, height: number, label: string): number {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new Error(`${label} has invalid dimensions (${width}x${height})`);
+  }
+  const total = width * height;
+  if (total > MAX_PUZZLE_PIXELS) {
+    throw new Error(`${label} pixel count ${total} exceeds MAX_PUZZLE_PIXELS`);
+  }
+  return total;
+}
+
+function assertValidBasePuzzle(basePuzzle: PuzzleData): void {
+  if (!basePuzzle || typeof basePuzzle !== 'object') {
+    throw new Error('basePuzzle is required');
+  }
+  const total = assertValidGridDimensions(basePuzzle.width, basePuzzle.height, 'basePuzzle');
+  if (!Array.isArray(basePuzzle.regions)) {
+    throw new Error('basePuzzle.regions must be an array');
+  }
+  if (!Array.isArray(basePuzzle.palette)) {
+    throw new Error('basePuzzle.palette must be an array');
+  }
+  if (!(basePuzzle.regionMap instanceof Int32Array) || basePuzzle.regionMap.length !== total) {
+    throw new Error('basePuzzle.regionMap has invalid length');
+  }
+  if (!(basePuzzle.borderMap instanceof Uint8Array) || basePuzzle.borderMap.length !== total) {
+    throw new Error('basePuzzle.borderMap has invalid length');
+  }
+  if (
+    basePuzzle.maxZoomDepth !== undefined &&
+    (!Number.isInteger(basePuzzle.maxZoomDepth) ||
+      basePuzzle.maxZoomDepth < 0 ||
+      basePuzzle.maxZoomDepth > MAX_ZOOM_DEPTH)
+  ) {
+    throw new Error(
+      `Invalid basePuzzle.maxZoomDepth: ${String(basePuzzle.maxZoomDepth)} (expected integer in 0..${MAX_ZOOM_DEPTH})`
+    );
+  }
+  if (basePuzzle.nestedLayers !== undefined && !Array.isArray(basePuzzle.nestedLayers)) {
+    throw new Error('basePuzzle.nestedLayers must be an array');
+  }
+}
+
+function assertValidSingleExistingNestedLayer(
+  layer: NestedPuzzleLayer,
+  index: number,
+  maxAllowedDepth: number,
+  seenLayerIds: Set<string>
+): void {
+  if (!layer || typeof layer !== 'object' || Array.isArray(layer)) {
+    throw new Error(`Existing nested layer at index ${index} must be an object`);
+  }
+  if (!isSafeLayerId(layer.layerId)) {
+    throw new Error(
+      `Existing nested layer at index ${index} has invalid layerId: ${String(layer.layerId)}`
+    );
+  }
+  if (seenLayerIds.has(layer.layerId)) {
+    throw new Error(`Duplicate existing nested layerId: ${layer.layerId}`);
+  }
+  seenLayerIds.add(layer.layerId);
+  if (!isSafeLayerImageKey(layer.imageBlobKey)) {
+    throw new Error(
+      `Existing nested layer ${layer.layerId} has invalid imageBlobKey: ${String(layer.imageBlobKey)}`
+    );
+  }
+  if (!Number.isInteger(layer.depth) || layer.depth < 1 || layer.depth > maxAllowedDepth) {
+    throw new Error(
+      `Existing nested layer ${layer.layerId} has invalid depth ${String(layer.depth)} (expected integer in 1..${maxAllowedDepth})`
+    );
+  }
+  const layerTotal = assertValidGridDimensions(
+    layer.width,
+    layer.height,
+    `nestedLayer(${layer.layerId})`
+  );
+  if (!isValidNormalizedRect(layer.worldBounds)) {
+    throw new Error(`Existing nested layer ${layer.layerId} has invalid worldBounds`);
+  }
+  if (!Array.isArray(layer.regions)) {
+    throw new Error(`Existing nested layer ${layer.layerId} has invalid regions array`);
+  }
+  if (!(layer.regionMap instanceof Int32Array) || layer.regionMap.length !== layerTotal) {
+    throw new Error(`Existing nested layer ${layer.layerId} has invalid regionMap length`);
+  }
+  if (!(layer.borderMap instanceof Uint8Array) || layer.borderMap.length !== layerTotal) {
+    throw new Error(`Existing nested layer ${layer.layerId} has invalid borderMap length`);
+  }
+  sanitizeOptionalLayerMetadata(layer.promptHint, layer.providerUsed, layer.modelUsed);
+}
+
+function assertValidExistingNestedLayers(
+  layers: readonly NestedPuzzleLayer[],
+  maxAllowedDepth: number
+): void {
+  const seenLayerIds = new Set<string>();
+  for (let i = 0; i < layers.length; i++) {
+    assertValidSingleExistingNestedLayer(layers[i], i, maxAllowedDepth, seenLayerIds);
+  }
+}
+
+function assertValidSubdivisionResult(subResult: MaskedSubdivisionResult, label: string): void {
+  if (!subResult || typeof subResult !== 'object') {
+    throw new Error(`${label} is required`);
+  }
+  const total = assertValidGridDimensions(subResult.width, subResult.height, label);
+  if (!(subResult.localRegionMap instanceof Int32Array) || subResult.localRegionMap.length !== total) {
+    throw new Error(`${label}.localRegionMap must match width * height`);
+  }
+  if (!Array.isArray(subResult.regions) || subResult.regions.length === 0) {
+    throw new Error(`${label}.regions must be non-empty`);
+  }
+  if (!Array.isArray(subResult.palette)) {
+    throw new Error(`${label}.palette must be an array`);
+  }
+}
+
+function sanitizeOptionalLayerMetadata(
+  promptHint?: string,
+  providerUsed?: InfiniteZoomProviderMode,
+  modelUsed?: NanoBananaModelId
+): {
+  promptHint?: string;
+  providerUsed?: InfiniteZoomProviderMode;
+  modelUsed?: NanoBananaModelId;
+} {
+  const meta: {
+    promptHint?: string;
+    providerUsed?: InfiniteZoomProviderMode;
+    modelUsed?: NanoBananaModelId;
+  } = {};
+  if (promptHint !== undefined) {
+    if (typeof promptHint !== 'string') {
+      throw new Error('promptHint must be a string');
+    }
+    const trimmed = promptHint.trim().slice(0, MAX_LAYER_PROMPT_HINT_LEN).trim();
+    if (trimmed.length > 0) {
+      meta.promptHint = trimmed;
+    }
+  }
+  if (providerUsed !== undefined) {
+    if (!VALID_PROVIDER_MODES.has(providerUsed)) {
+      throw new Error(`Invalid providerUsed: ${String(providerUsed)}`);
+    }
+    meta.providerUsed = providerUsed;
+  }
+  if (modelUsed !== undefined) {
+    if (!VALID_MODEL_IDS.has(modelUsed)) {
+      throw new Error(`Invalid modelUsed: ${String(modelUsed)}`);
+    }
+    meta.modelUsed = modelUsed;
+  }
+  return meta;
+}
+
+function resolveUniqueLayerId(
+  requestedId: string | undefined,
+  fallbackBase: string,
+  existingLayerIds: ReadonlySet<string>
+): string {
+  if (requestedId !== undefined) {
+    if (!isSafeLayerId(requestedId)) {
+      throw new Error(`Invalid layerId: ${String(requestedId)}`);
+    }
+    if (existingLayerIds.has(requestedId)) {
+      throw new Error(`Duplicate layerId: ${requestedId}`);
+    }
+    return requestedId;
+  }
+  let candidate = fallbackBase;
+  let suffix = 2;
+  while (existingLayerIds.has(candidate)) {
+    candidate = `${fallbackBase}_${suffix++}`;
+  }
+  if (!isSafeLayerId(candidate)) {
+    throw new Error(`Generated layerId is invalid: ${candidate}`);
+  }
+  return candidate;
+}
+
+function remapSubdivisionToGlobalIds(
+  subResult: MaskedSubdivisionResult,
+  seedMaxGlobalId: number
+): {
+  regions: Region[];
+  regionMap: Int32Array;
+  borderMap: Uint8Array;
+  addedRegionIds: number[];
+} {
+  const total = subResult.width * subResult.height;
+  const maxAllowedRegionId = Math.min(
+    MAX_PUZZLE_PIXELS,
+    Math.max(total, MAX_DELTA_REGION_ENTRIES)
+  );
+  let nextGlobalId = seedMaxGlobalId;
+  const localToSlot = new Map<number, number>();
+  const remappedRegions: Region[] = [];
+  const addedRegionIds: number[] = [];
+
+  for (let i = 0; i < subResult.regions.length; i++) {
+    const subReg = subResult.regions[i];
+    if (!subReg || !subReg.pixels || subReg.pixels.length === 0) continue;
+    if (!Number.isInteger(subReg.id) || subReg.id <= 0) {
+      throw new Error(`Invalid subdivision region ID: ${String(subReg.id)}`);
+    }
+    if (localToSlot.has(subReg.id)) {
+      throw new Error(`Duplicate subdivision region ID: ${subReg.id}`);
+    }
+    const gId = ++nextGlobalId;
+    if (!Number.isSafeInteger(gId) || gId <= 0 || gId > maxAllowedRegionId) {
+      throw new Error(
+        `Assigned region ID ${gId} exceeds maximum allowed ID (${maxAllowedRegionId}) for ${subResult.width}x${subResult.height} layer`
+      );
+    }
+    localToSlot.set(subReg.id, remappedRegions.length);
+    addedRegionIds.push(gId);
+    remappedRegions.push({
+      id: gId,
+      colorId: subReg.colorId,
+      centroidX: subReg.centroidX,
+      centroidY: subReg.centroidY,
+      area: subReg.pixels.length,
+      minX: subReg.minX,
+      maxX: subReg.maxX,
+      minY: subReg.minY,
+      maxY: subReg.maxY,
+      maxRadius: subReg.maxRadius,
+      pixels: new Int32Array(subReg.pixels),
+    });
+  }
+
+  if (remappedRegions.length === 0) {
+    throw new Error('Subdivision result contained zero non-empty regions');
+  }
+
+  const regionMap = new Int32Array(total);
+  const mappedCounts = new Int32Array(remappedRegions.length);
+  let totalMappedPixels = 0;
+  for (let i = 0; i < total; i++) {
+    const localId = subResult.localRegionMap[i];
+    if (localId < 0) {
+      throw new Error(`Invalid negative localRegionMap ID (${localId}) at pixel ${i}`);
+    }
+    if (localId > 0) {
+      const slot = localToSlot.get(localId);
+      if (slot === undefined) {
+        throw new Error(`Unlisted localRegionMap ID (${localId}) at pixel ${i}`);
+      }
+      regionMap[i] = addedRegionIds[slot];
+      mappedCounts[slot]++;
+      totalMappedPixels++;
+    }
+  }
+
+  if (totalMappedPixels === 0) {
+    throw new Error('Subdivision localRegionMap contained zero active pixels');
+  }
+  for (let i = 0; i < remappedRegions.length; i++) {
+    if (mappedCounts[i] === 0) {
+      throw new Error(
+        `Remapped region ${remappedRegions[i].id} has zero mapped pixels in localRegionMap`
+      );
+    }
+  }
+
+  const borderMap = buildBorderMap(regionMap, subResult.width, subResult.height);
+  return { regions: remappedRegions, regionMap, borderMap, addedRegionIds };
+}
+
+function deriveSelectedBoundsInTarget(
+  matchedRegions: readonly Region[],
+  targetWidth: number,
+  targetHeight: number
+): NormalizedRect {
+  let minX = targetWidth;
+  let maxX = -1;
+  let minY = targetHeight;
+  let maxY = -1;
+  const total = targetWidth * targetHeight;
+
+  for (let i = 0; i < matchedRegions.length; i++) {
+    const reg = matchedRegions[i];
+    const hasExplicit =
+      Number.isFinite(reg.minX) &&
+      Number.isFinite(reg.maxX) &&
+      Number.isFinite(reg.minY) &&
+      Number.isFinite(reg.maxY) &&
+      reg.minX <= reg.maxX &&
+      reg.minY <= reg.maxY;
+
+    if (hasExplicit) {
+      const rx0 = Math.max(0, Math.min(targetWidth - 1, Math.floor(reg.minX)));
+      const rx1 = Math.max(0, Math.min(targetWidth - 1, Math.floor(reg.maxX)));
+      const ry0 = Math.max(0, Math.min(targetHeight - 1, Math.floor(reg.minY)));
+      const ry1 = Math.max(0, Math.min(targetHeight - 1, Math.floor(reg.maxY)));
+      if (rx0 < minX) minX = rx0;
+      if (rx1 > maxX) maxX = rx1;
+      if (ry0 < minY) minY = ry0;
+      if (ry1 > maxY) maxY = ry1;
+      continue;
+    }
+
+    for (let p = 0; p < reg.pixels.length; p++) {
+      const idx = reg.pixels[p];
+      if (idx < 0 || idx >= total) continue;
+      const x = idx % targetWidth;
+      const y = (idx - x) / targetWidth;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    throw new Error('Could not derive non-empty bounding box from selectedRegionIds');
+  }
+
+  return clampNormalizedRect({
+    x: minX / targetWidth,
+    y: minY / targetHeight,
+    width: (maxX - minX + 1) / targetWidth,
+    height: (maxY - minY + 1) / targetHeight,
+  });
+}
+
+function clearRegionsFromLayerGrid(
+  width: number,
+  height: number,
+  regions: readonly Region[],
+  regionMap: Int32Array,
+  borderMap: Uint8Array,
+  selectedRegionIds: ReadonlySet<number>
+): {
+  keptRegions: Region[];
+  nextRegionMap: Int32Array;
+  nextBorderMap: Uint8Array;
+} {
+  const nextRegionMap = new Int32Array(regionMap);
+  const nextBorderMap = new Uint8Array(borderMap);
+  const total = width * height;
+  let dirtyMinX = width;
+  let dirtyMinY = height;
+  let dirtyMaxX = -1;
+  let dirtyMaxY = -1;
+
+  const markCleared = (x: number, y: number) => {
+    if (x < dirtyMinX) dirtyMinX = x;
+    if (x > dirtyMaxX) dirtyMaxX = x;
+    if (y < dirtyMinY) dirtyMinY = y;
+    if (y > dirtyMaxY) dirtyMaxY = y;
+  };
+
+  const keptRegions: Region[] = [];
+  for (let i = 0; i < regions.length; i++) {
+    const reg = regions[i];
+    if (!selectedRegionIds.has(reg.id)) {
+      keptRegions.push(cloneRegion(reg));
+      continue;
+    }
+
+    for (let p = 0; p < reg.pixels.length; p++) {
+      const idx = reg.pixels[p];
+      if (idx < 0 || idx >= total) continue;
+      if (selectedRegionIds.has(nextRegionMap[idx])) {
+        nextRegionMap[idx] = 0;
+        const x = idx % width;
+        const y = (idx - x) / width;
+        markCleared(x, y);
+      }
+    }
+
+    if (
+      Number.isFinite(reg.minX) &&
+      Number.isFinite(reg.maxX) &&
+      Number.isFinite(reg.minY) &&
+      Number.isFinite(reg.maxY)
+    ) {
+      const bx0 = Math.max(0, Math.min(width - 1, Math.floor(reg.minX)));
+      const bx1 = Math.max(0, Math.min(width - 1, Math.floor(reg.maxX)));
+      const by0 = Math.max(0, Math.min(height - 1, Math.floor(reg.minY)));
+      const by1 = Math.max(0, Math.min(height - 1, Math.floor(reg.maxY)));
+      for (let y = by0; y <= by1; y++) {
+        const rowOff = y * width;
+        for (let x = bx0; x <= bx1; x++) {
+          if (selectedRegionIds.has(nextRegionMap[rowOff + x])) {
+            nextRegionMap[rowOff + x] = 0;
+            markCleared(x, y);
+          }
+        }
+      }
+    }
+  }
+
+  if (dirtyMaxX >= dirtyMinX && dirtyMaxY >= dirtyMinY) {
+    recomputeBorderMapInBounds(
+      nextRegionMap,
+      nextBorderMap,
+      width,
+      height,
+      dirtyMinX - 1,
+      dirtyMinY - 1,
+      dirtyMaxX + 1,
+      dirtyMaxY + 1
+    );
+  }
+
+  return { keptRegions, nextRegionMap, nextBorderMap };
+}
+
+function resolveEmbedTargetLayer(
+  basePuzzle: PuzzleData,
+  targetLayerId: string | null | undefined
+): NestedPuzzleLayer | null {
+  if (targetLayerId === null || targetLayerId === undefined) {
+    return null;
+  }
+  const existing = basePuzzle.nestedLayers ?? [];
+  const parent = existing.find((l) => l.layerId === targetLayerId);
+  if (!parent) {
+    throw new Error(`Target nested layer not found: ${String(targetLayerId)}`);
+  }
+  const total = assertValidGridDimensions(
+    parent.width,
+    parent.height,
+    `targetLayer(${parent.layerId})`
+  );
+  if (!Number.isInteger(parent.depth) || parent.depth < 1 || parent.depth > MAX_ZOOM_DEPTH) {
+    throw new Error(`Target nested layer ${parent.layerId} has invalid depth: ${String(parent.depth)}`);
+  }
+  if (!isValidNormalizedRect(parent.worldBounds)) {
+    throw new Error(`Target nested layer ${parent.layerId} has invalid worldBounds`);
+  }
+  if (!Array.isArray(parent.regions)) {
+    throw new Error(`Target nested layer ${parent.layerId} has invalid regions array`);
+  }
+  if (!(parent.regionMap instanceof Int32Array) || parent.regionMap.length !== total) {
+    throw new Error(`Target nested layer ${parent.layerId} has invalid regionMap length`);
+  }
+  if (!(parent.borderMap instanceof Uint8Array) || parent.borderMap.length !== total) {
+    throw new Error(`Target nested layer ${parent.layerId} has invalid borderMap length`);
+  }
+  return parent;
+}
+
+function resolveEmbedWorldBounds(
+  params: EmbedNestedDetailLayerParams,
+  parentLayer: NestedPuzzleLayer | null,
+  matchedRegions: readonly Region[],
+  targetWidth: number,
+  targetHeight: number
+): NormalizedRect {
+  if (params.worldBounds !== undefined) {
+    return clampNormalizedRect(params.worldBounds);
+  }
+  const localBounds =
+    params.localBoundsInParent !== undefined
+      ? clampNormalizedRect(params.localBoundsInParent)
+      : deriveSelectedBoundsInTarget(matchedRegions, targetWidth, targetHeight);
+  return parentLayer
+    ? rebaseLayerWorldBounds(localBounds, parentLayer.worldBounds)
+    : localBounds;
+}
+
+function computeValidatedEmbedMaxDepth(
+  baseDepth: number | undefined,
+  layers: readonly NestedPuzzleLayer[]
+): number {
+  let maxZoomDepth = baseDepth ?? 0;
+  for (let i = 0; i < layers.length; i++) {
+    if (layers[i].depth > maxZoomDepth) {
+      maxZoomDepth = layers[i].depth;
+    }
+  }
+  if (!Number.isInteger(maxZoomDepth) || maxZoomDepth < 1 || maxZoomDepth > MAX_ZOOM_DEPTH) {
+    throw new Error(
+      `Invalid maxZoomDepth ${maxZoomDepth} (expected integer in 1..${MAX_ZOOM_DEPTH})`
+    );
+  }
+  return maxZoomDepth;
+}
+
+/**
+ * Embeds a subdivided high-resolution detail layer into the unified puzzle (Zoom In),
+ * clearing the replaced regions from the target layer (root or nested) and assigning
+ * globally unique monotonic region IDs without mutating `basePuzzle`.
+ */
+export function embedNestedDetailLayerIntoPuzzle(
+  params: EmbedNestedDetailLayerParams
+): EmbedNestedDetailLayerResult {
+  assertValidBasePuzzle(params.basePuzzle);
+  const existingLayers = params.basePuzzle.nestedLayers ?? [];
+  assertValidExistingNestedLayers(existingLayers, MAX_ZOOM_DEPTH);
+  if (!params.selectedRegionIds || params.selectedRegionIds.size === 0) {
+    throw new Error('selectedRegionIds must be non-empty');
+  }
+  assertValidSubdivisionResult(params.subResult, 'subResult');
+  if (!isSafeLayerImageKey(params.imageBlobKey)) {
+    throw new Error(`Invalid imageBlobKey: ${String(params.imageBlobKey)}`);
+  }
+
+  const meta = sanitizeOptionalLayerMetadata(
+    params.promptHint,
+    params.providerUsed,
+    params.modelUsed
+  );
+  const parentLayer = resolveEmbedTargetLayer(params.basePuzzle, params.targetLayerId);
+  const targetWidth = parentLayer ? parentLayer.width : params.basePuzzle.width;
+  const targetHeight = parentLayer ? parentLayer.height : params.basePuzzle.height;
+  const targetRegions = parentLayer ? parentLayer.regions : params.basePuzzle.regions;
+
+  const targetRegionById = new Map<number, Region>();
+  for (let i = 0; i < targetRegions.length; i++) {
+    targetRegionById.set(targetRegions[i].id, targetRegions[i]);
+  }
+  const matchedRegions: Region[] = [];
+  const removedRegionIds: number[] = [];
+  for (const id of params.selectedRegionIds) {
+    const reg = targetRegionById.get(id);
+    if (!reg) {
+      throw new Error(`Selected region ${id} does not exist in target layer`);
+    }
+    matchedRegions.push(reg);
+    removedRegionIds.push(id);
+  }
+
+  const nextDepth = (parentLayer ? parentLayer.depth : 0) + 1;
+  if (!Number.isInteger(nextDepth) || nextDepth < 1 || nextDepth > MAX_ZOOM_DEPTH) {
+    throw new Error(`Zoom depth ${nextDepth} exceeds MAX_ZOOM_DEPTH (${MAX_ZOOM_DEPTH})`);
+  }
+
+  const finalWorldBounds = resolveEmbedWorldBounds(
+    params,
+    parentLayer,
+    matchedRegions,
+    targetWidth,
+    targetHeight
+  );
+
+  const remapped = remapSubdivisionToGlobalIds(
+    params.subResult,
+    getMaxGlobalRegionId(params.basePuzzle)
+  );
+  const existingLayerIds = new Set<string>(existingLayers.map((l) => l.layerId));
+  const layerId = resolveUniqueLayerId(
+    params.layerId,
+    `detail_d${nextDepth}_${remapped.addedRegionIds[0]}`,
+    existingLayerIds
+  );
+
+  const newLayer: NestedPuzzleLayer = {
+    layerId,
+    depth: nextDepth,
+    worldBounds: finalWorldBounds,
+    width: params.subResult.width,
+    height: params.subResult.height,
+    regions: remapped.regions,
+    regionMap: remapped.regionMap,
+    borderMap: remapped.borderMap,
+    imageBlobKey: params.imageBlobKey,
+    ...meta,
+  };
+
+  const prunedLayerIds: string[] = [];
+  let rootRegions: Region[];
+  let rootRegionMap: Int32Array;
+  let rootBorderMap: Uint8Array;
+  const nextNestedLayers: NestedPuzzleLayer[] = [];
+
+  if (parentLayer === null) {
+    const cleared = clearRegionsFromLayerGrid(
+      params.basePuzzle.width,
+      params.basePuzzle.height,
+      params.basePuzzle.regions,
+      params.basePuzzle.regionMap,
+      params.basePuzzle.borderMap,
+      params.selectedRegionIds
+    );
+    rootRegions = cleared.keptRegions;
+    rootRegionMap = cleared.nextRegionMap;
+    rootBorderMap = cleared.nextBorderMap;
+    for (let i = 0; i < existingLayers.length; i++) {
+      nextNestedLayers.push(cloneNestedLayer(existingLayers[i]));
+    }
+  } else {
+    rootRegions = params.basePuzzle.regions.map(cloneRegion);
+    rootRegionMap = new Int32Array(params.basePuzzle.regionMap);
+    rootBorderMap = new Uint8Array(params.basePuzzle.borderMap);
+    for (let i = 0; i < existingLayers.length; i++) {
+      const layer = existingLayers[i];
+      if (layer.layerId !== parentLayer.layerId) {
+        nextNestedLayers.push(cloneNestedLayer(layer));
+        continue;
+      }
+      const cleared = clearRegionsFromLayerGrid(
+        layer.width,
+        layer.height,
+        layer.regions,
+        layer.regionMap,
+        layer.borderMap,
+        params.selectedRegionIds
+      );
+      if (cleared.keptRegions.length === 0) {
+        prunedLayerIds.push(layer.layerId);
+      } else {
+        nextNestedLayers.push(
+          buildNestedLayerWithGrid(
+            layer,
+            cleared.keptRegions,
+            cleared.nextRegionMap,
+            cleared.nextBorderMap
+          )
+        );
+      }
+    }
+  }
+
+  nextNestedLayers.push(newLayer);
+  if (nextNestedLayers.length > MAX_NESTED_LAYERS) {
+    throw new Error(`Nested layer count ${nextNestedLayers.length} exceeds MAX_NESTED_LAYERS (${MAX_NESTED_LAYERS})`);
+  }
+
+  const maxZoomDepth = computeValidatedEmbedMaxDepth(
+    params.basePuzzle.maxZoomDepth,
+    nextNestedLayers
+  );
+
+  const puzzle: PuzzleData = {
+    width: params.basePuzzle.width,
+    height: params.basePuzzle.height,
+    palette: mergePreservingBasePalette(params.basePuzzle.palette, params.subResult.palette),
+    regions: rootRegions,
+    regionMap: rootRegionMap,
+    borderMap: rootBorderMap,
+    isFreeColor: params.basePuzzle.isFreeColor,
+    nestedLayers: nextNestedLayers,
+    maxZoomDepth,
+  };
+
+  return {
+    puzzle,
+    layer: newLayer,
+    removedRegionIds,
+    addedRegionIds: remapped.addedRegionIds,
+    prunedLayerIds,
+  };
+}
+
+/**
+ * Wraps an active unified puzzle inside a newly extended outer border ring (Zoom Out),
+ * demoting the previous root to depth 1 and affinely rebasing every existing nested layer
+ * to `depth + 1` with zero changes to any existing region ID, color ID, or painted progress.
+ */
+export function wrapPuzzleWithOuterBorderLayer(
+  params: WrapPuzzleWithOuterBorderParams
+): WrapPuzzleWithOuterBorderResult {
+  assertValidBasePuzzle(params.basePuzzle);
+  assertValidSubdivisionResult(params.outerSubResult, 'outerSubResult');
+  const clampedInnerBounds = clampNormalizedRect(params.innerBoundsInOuter);
+  if (!isSafeLayerImageKey(params.previousRootImageBlobKey)) {
+    throw new Error(`Invalid previousRootImageBlobKey: ${String(params.previousRootImageBlobKey)}`);
+  }
+
+  const meta = sanitizeOptionalLayerMetadata(
+    params.promptHint,
+    params.providerUsed,
+    params.modelUsed
+  );
+
+  const existingLayers = params.basePuzzle.nestedLayers ?? [];
+  assertValidExistingNestedLayers(existingLayers, MAX_ZOOM_DEPTH - 1);
+  if (existingLayers.length + 1 > MAX_NESTED_LAYERS) {
+    throw new Error(
+      `Nested layer count ${existingLayers.length + 1} exceeds MAX_NESTED_LAYERS (${MAX_NESTED_LAYERS})`
+    );
+  }
+
+  let existingMaxDepth = params.basePuzzle.maxZoomDepth ?? 0;
+  for (let i = 0; i < existingLayers.length; i++) {
+    if (existingLayers[i].depth > existingMaxDepth) {
+      existingMaxDepth = existingLayers[i].depth;
+    }
+  }
+  const nextMaxDepth = existingMaxDepth + 1;
+  if (!Number.isInteger(nextMaxDepth) || nextMaxDepth < 1 || nextMaxDepth > MAX_ZOOM_DEPTH) {
+    throw new Error(
+      `Wrapped maxZoomDepth ${nextMaxDepth} is out of range (expected integer in 1..${MAX_ZOOM_DEPTH})`
+    );
+  }
+
+  const existingLayerIds = new Set<string>(existingLayers.map((l) => l.layerId));
+  const previousRootLayerId = resolveUniqueLayerId(
+    params.previousRootLayerId,
+    `inner_root_d1`,
+    existingLayerIds
+  );
+
+  const remappedOuter = remapSubdivisionToGlobalIds(
+    params.outerSubResult,
+    getMaxGlobalRegionId(params.basePuzzle)
+  );
+
+  const demotedRootLayer: NestedPuzzleLayer = {
+    layerId: previousRootLayerId,
+    depth: 1,
+    worldBounds: clampedInnerBounds,
+    width: params.basePuzzle.width,
+    height: params.basePuzzle.height,
+    regions: params.basePuzzle.regions.map(cloneRegion),
+    regionMap: new Int32Array(params.basePuzzle.regionMap),
+    borderMap: new Uint8Array(params.basePuzzle.borderMap),
+    imageBlobKey: params.previousRootImageBlobKey,
+    ...meta,
+  };
+
+  const rebasedExistingLayers: NestedPuzzleLayer[] = existingLayers.map((layer) => {
+    const nextDepth = layer.depth + 1;
+    if (!Number.isInteger(nextDepth) || nextDepth < 2 || nextDepth > MAX_ZOOM_DEPTH) {
+      throw new Error(
+        `Rebased layer ${layer.layerId} depth ${nextDepth} is out of range (expected integer in 2..${MAX_ZOOM_DEPTH})`
+      );
+    }
+    const cloned = cloneNestedLayer(layer);
+    cloned.depth = nextDepth;
+    cloned.worldBounds = rebaseLayerWorldBounds(layer.worldBounds, clampedInnerBounds);
+    return cloned;
+  });
+
+  const puzzle: PuzzleData = {
+    width: params.outerSubResult.width,
+    height: params.outerSubResult.height,
+    palette: mergePreservingBasePalette(params.basePuzzle.palette, params.outerSubResult.palette),
+    regions: remappedOuter.regions,
+    regionMap: remappedOuter.regionMap,
+    borderMap: remappedOuter.borderMap,
+    isFreeColor: params.basePuzzle.isFreeColor,
+    nestedLayers: [demotedRootLayer, ...rebasedExistingLayers],
+    maxZoomDepth: nextMaxDepth,
+  };
+
+  return {
+    puzzle,
+    demotedRootLayer,
+    addedOuterRegionIds: remappedOuter.addedRegionIds,
+  };
+}
+
