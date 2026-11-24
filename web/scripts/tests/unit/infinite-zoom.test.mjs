@@ -5714,7 +5714,8 @@ async function testClusterE_CodecStorageIsolationBridge(
   idbMod,
   keysMod,
   serializerMod,
-  bridgeMod
+  bridgeMod,
+  exporterMod
 ) {
   const pal = [makePaletteColor(1, 200, 50, 50), makePaletteColor(2, 50, 200, 50)];
   const rootMap = new Int32Array(10 * 10).fill(1);
@@ -5866,6 +5867,11 @@ async function testClusterE_CodecStorageIsolationBridge(
 
         const importedRes = await storageMod.StorageService.importSnapshotData(craftedBytes);
         assert.equal(importedRes.importedCount, 1);
+        assert.deepEqual(
+          importedRes.importedIds,
+          ['snap-imported'],
+          'Single binary import must report exact importedIds'
+        );
         // Victim's blob must remain 100% untouched
         const victimAfter = new Uint8Array(await stores.images.get('layer_snap-victim_d1').arrayBuffer());
         assert.deepEqual(Array.from(victimAfter), [11, 22, 33, 44], 'Import must NEVER overwrite sibling layer blob');
@@ -5891,7 +5897,7 @@ async function testClusterE_CodecStorageIsolationBridge(
         const reservedRes = await storageMod.StorageService.importSnapshotData(reservedJson);
         assert.equal(reservedRes.importedCount, 0, 'Reserved root ID must fail closed');
 
-        // Full exportSnapshotBinary -> clear -> re-import round-trip
+        // Full exportSnapshotBinary -> clear -> re-import round-trip + exact importedIds across formats
         const exportedBin = await storageMod.StorageService.exportSnapshotBinary('snap-imported');
         assert.ok(exportedBin instanceof Uint8Array && exportedBin.length > 0);
         stores.puzzles.clear();
@@ -5899,9 +5905,63 @@ async function testClusterE_CodecStorageIsolationBridge(
         ls.clear();
         const reimportRes = await storageMod.StorageService.importSnapshotData(exportedBin);
         assert.equal(reimportRes.importedCount, 1);
+        assert.deepEqual(reimportRes.importedIds, ['snap-imported']);
         assert.equal(stores.images.has('layer_snap-imported_d1'), true);
         const reLoaded = await storageMod.StorageService.loadPuzzleData('snap-imported');
         assert.equal(reLoaded.nestedLayers.length, 1);
+
+        // Unrelated binary archive import must list ONLY its imported ID (never poison existing snap-imported)
+        const archiveImportRes = await storageMod.StorageService.importSnapshotData(archiveBytes);
+        assert.equal(archiveImportRes.importedCount, 1);
+        assert.deepEqual(archiveImportRes.importedIds, ['snap-multi']);
+
+        // JSON single, JSON archive, and JSON array imports report exact importedIds
+        const singleJsonRes = await storageMod.StorageService.importSnapshotData(
+          JSON.stringify({
+            format: 'capy-single-save',
+            snapshot: makeBaselineSnapshot('snap-json-single'),
+            puzzle: serializerMod.serializePuzzle(rootPuz),
+          })
+        );
+        assert.equal(singleJsonRes.importedCount, 1);
+        assert.deepEqual(singleJsonRes.importedIds, ['snap-json-single']);
+
+        const archiveJsonRes = await storageMod.StorageService.importSnapshotData(
+          JSON.stringify({
+            format: 'capy-archive-save',
+            snapshots: [
+              makeBaselineSnapshot('snap-json-arch-1'),
+              makeBaselineSnapshot('snap-json-arch-2'),
+            ],
+            puzzles: {
+              'snap-json-arch-1': serializerMod.serializePuzzle(rootPuz),
+              'snap-json-arch-2': serializerMod.serializePuzzle(rootPuz),
+            },
+          })
+        );
+        assert.equal(archiveJsonRes.importedCount, 2);
+        assert.deepEqual(archiveJsonRes.importedIds, ['snap-json-arch-1', 'snap-json-arch-2']);
+
+        const arrayJsonRes = await storageMod.StorageService.importSnapshotData(
+          JSON.stringify([makeBaselineSnapshot('snap-arr-1')])
+        );
+        assert.equal(arrayJsonRes.importedCount, 1);
+        assert.deepEqual(arrayJsonRes.importedIds, ['snap-arr-1']);
+
+        if (exporterMod) {
+          const exporterImportRes = await exporterMod.importSnapshotsArchive(
+            {
+              arrayBuffer: async () =>
+                exportedBin.buffer.slice(
+                  exportedBin.byteOffset,
+                  exportedBin.byteOffset + exportedBin.byteLength
+                ),
+            },
+            false
+          );
+          assert.equal(exporterImportRes.ok, true);
+          assert.deepEqual(exporterImportRes.importedIds, ['snap-imported']);
+        }
 
         // SnapshotStorage.deleteSnapshot: deletes target's layer_* while protecting sibling's & shared blobs
         const snapA = makeBaselineSnapshot('snap-a', { sourceRef: { kind: 'blob', uri: 'snap-a' } });
@@ -6421,7 +6481,8 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     idbMod,
     keysMod,
     serializerMod,
-    bridgeMod
+    bridgeMod,
+    exporterMod
   );
   await testClusterF_UiSsrAndControllerHelpers(floatingMod, controlsMod, modalMod, controllerMod);
 

@@ -564,7 +564,12 @@
   [data-testid="region-selection-bar"] > :not(:first-child) {
     margin-top: 0.25rem;
   }
-  [data-ui-boosted="true"] [data-testid="region-selection-bar"] button,
+  [data-ui-boosted="true"] [data-testid="region-selection-bar"] button:not(.capy-prompt-chip) {
+    min-height: 2.75rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+  [data-ui-boosted="true"] [data-testid="region-selection-bar"] button.capy-prompt-chip,
   [data-ui-boosted="true"] [data-testid="region-selection-bar"] input[type="text"] {
     min-height: 2rem;
     padding-top: 0.2rem;
@@ -576,7 +581,12 @@
   .capy-iz-popover > :not(:first-child) {
     margin-top: 0.375rem;
   }
-  [data-ui-boosted="true"] .capy-iz-popover button:not(.capy-icon-btn),
+  [data-ui-boosted="true"] .capy-iz-popover button:not(.capy-icon-btn):not(.capy-prompt-chip) {
+    min-height: 2.75rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+  [data-ui-boosted="true"] .capy-iz-popover button.capy-prompt-chip,
   [data-ui-boosted="true"] .capy-iz-popover input[type="text"] {
     min-height: 2rem;
     padding-top: 0.2rem;

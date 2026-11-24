@@ -50,6 +50,7 @@ import {
 
 export interface ImportSnapshotResult {
   importedCount: number;
+  importedIds?: string[];
   firstSnapshot?: SavedSnapshot;
   firstPuzzle?: PuzzleData;
   error?: string;
@@ -541,7 +542,7 @@ async function importBinarySingleSave(
     await savePreviewDataUrl(snap.id, snap.previewDataUrl);
   }
   addSnapshot(snap);
-  return { importedCount: 1, firstSnapshot: snap, firstPuzzle };
+  return { importedCount: 1, importedIds: [snap.id], firstSnapshot: snap, firstPuzzle };
 }
 
 async function importBinaryArchiveSave(
@@ -628,6 +629,7 @@ async function importBinaryArchiveSave(
   saveSnapshotsInternal(mergedList, { metaTsById });
   return {
     importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
+    importedIds: toPersist.map((s) => s.id),
     firstSnapshot: toPersist[0] || stripInternalSnapshotMeta(validSnapshots[0]),
     firstPuzzle,
   };
@@ -697,7 +699,7 @@ async function importSingleJsonBundle(
     await savePreviewDataUrl(snap.id, snap.previewDataUrl);
   }
   addSnapshot(snap);
-  return { importedCount: 1, firstSnapshot: snap, firstPuzzle };
+  return { importedCount: 1, importedIds: [snap.id], firstSnapshot: snap, firstPuzzle };
 }
 
 async function importArchiveJsonBundle(
@@ -774,6 +776,7 @@ async function importArchiveJsonBundle(
 
   return {
     importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
+    importedIds: toPersist.map((s) => s.id),
     firstSnapshot: toPersist[0] || stripInternalSnapshotMeta(validSnapshots[0]),
     firstPuzzle,
   };
@@ -813,6 +816,7 @@ async function importSnapshotArrayBundle(
   saveSnapshotsInternal(mergedList, { metaTsById });
   return {
     importedCount: toPersist.length > 0 ? toPersist.length : validSnapshots.length,
+    importedIds: toPersist.map((s) => s.id),
     firstSnapshot: toPersist[0] || stripInternalSnapshotMeta(validSnapshots[0]),
   };
 }

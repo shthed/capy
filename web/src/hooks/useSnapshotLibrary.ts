@@ -584,6 +584,14 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const generationSeqRef = useRef<number>(0);
+  const dirtyImportedSnapshotIdsRef = useRef<Set<string>>(new Set());
+  const clearDirtyImportedIds = useCallback((...ids: Array<string | null | undefined>) => {
+    for (const id of ids) {
+      if (id) {
+        dirtyImportedSnapshotIdsRef.current.delete(id);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -863,6 +871,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       infiniteZoomOptions?: InfiniteZoomLoadOptions
     ) => {
       onBeforeSnapshotResetOrSwitch?.();
+      clearDirtyImportedIds(liveCoopRef.current.activeSnapshotId, existingSnapshotId);
       const currentSeq = ++generationSeqRef.current;
       const transitionSeq = ++snapshotTransitionSeqRef.current;
       clearPendingViewportSave();
@@ -1036,6 +1045,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     [
       abortFailedTransition,
       applyViewport,
+      clearDirtyImportedIds,
       clearPendingViewportSave,
       finalizeGeneratedPuzzle,
       liveCoopRef,
@@ -1232,21 +1242,44 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
   // Load a saved snapshot (and optionally auto-replay its region completion sequence)
   const handleLoadSnapshot = useCallback(
     async (snapshot: SavedSnapshot, forceReplay: boolean = false) => {
-      handleUpdateSettings((prev) => (prev.replayLoop ? { ...prev, replayLoop: false } : prev));
-      if (snapshot.id === activeSnapshotId && puzzle && !snapshotTransitioningRef.current) {
+      const isActiveDirty = Boolean(
+        activeSnapshotId && dirtyImportedSnapshotIdsRef.current.has(activeSnapshotId)
+      );
+      const needsDiskReload =
+        dirtyImportedSnapshotIdsRef.current.has(snapshot.id) ||
+        (puzzle !== null && snapshot.totalCount !== getTotalRegionCount(puzzle)) ||
+        (snapshot.filledRegionIds?.length ?? snapshot.filledCount ?? 0) !== filledRegionIds.size;
+      if (
+        snapshot.id === activeSnapshotId &&
+        puzzle &&
+        !snapshotTransitioningRef.current &&
+        !needsDiskReload
+      ) {
+        if (!forceReplay) {
+          return;
+        }
+        handleUpdateSettings((prev) => (prev.replayLoop ? { ...prev, replayLoop: false } : prev));
         const currentOrdered =
           filledRegionIds.size > 0
             ? Array.from(filledRegionIds)
             : snapshot.filledRegionIds || [];
-        if ((forceReplay || settings.autoReplayOnLoad !== false) && currentOrdered.length > 0) {
+        if (currentOrdered.length > 0) {
           startReplay(currentOrdered, true);
         }
         return;
       }
+      handleUpdateSettings((prev) => (prev.replayLoop ? { ...prev, replayLoop: false } : prev));
+      clearDirtyImportedIds(snapshot.id, activeSnapshotId);
 
       clearPendingViewportSave();
       onBeforeSnapshotResetOrSwitch?.();
-      if (activeSnapshotId && puzzle && !snapshotTransitioningRef.current) {
+      if (
+        activeSnapshotId &&
+        activeSnapshotId !== snapshot.id &&
+        !isActiveDirty &&
+        puzzle &&
+        !snapshotTransitioningRef.current
+      ) {
         const updated = StorageService.updateSnapshotViewport(
           activeSnapshotId,
           viewportRef.current.zoomScale,
@@ -1418,6 +1451,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       activeBlobUrlRef,
       activeSnapshotId,
       applyCachedSnapshotToState,
+      clearDirtyImportedIds,
       clearPendingViewportSave,
       filledRegionIds,
       handleUpdateSettings,
@@ -2003,6 +2037,12 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
       const regenSeq = ++snapshotTransitionSeqRef.current;
       snapshotTransitioningRef.current = true;
       const prevSnap = activeSave;
+      if (prevSnap?.id) {
+        dirtyImportedSnapshotIdsRef.current.delete(prevSnap.id);
+      }
+      if (liveCoopRef.current.activeSnapshotId) {
+        dirtyImportedSnapshotIdsRef.current.delete(liveCoopRef.current.activeSnapshotId);
+      }
       const prevTitle = activeTitle;
       liveCoopRef.current = { ...liveCoopRef.current, activeSnapshotId: null, puzzle: null };
       let handedOff = false;
@@ -2088,6 +2128,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
   const handleDeleteSnapshot = useCallback(
     async (id: string) => {
       clearPendingViewportSave();
+      dirtyImportedSnapshotIdsRef.current.delete(id);
       const currentActiveId = liveCoopRef.current.activeSnapshotId ?? activeSnapshotId;
       const deletingActiveOrLast = id === currentActiveId || snapshots.length <= 1;
       const startSeq = snapshotTransitionSeqRef.current;
@@ -2191,6 +2232,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
   const handleClearAllSnapshots = useCallback(async () => {
     clearPendingViewportSave();
+    dirtyImportedSnapshotIdsRef.current.clear();
     onBeforeSnapshotResetOrSwitch?.();
     const clearSeq = ++snapshotTransitionSeqRef.current;
     snapshotTransitioningRef.current = true;
@@ -2336,6 +2378,9 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
 
   const handleResetProgress = useCallback(() => {
     clearPendingViewportSave();
+    if (activeSnapshotId) {
+      dirtyImportedSnapshotIdsRef.current.delete(activeSnapshotId);
+    }
     onBeforeSnapshotResetOrSwitch?.();
     const previouslyFilled = Array.from(filledRegionIds);
     if (previouslyFilled.length > 0) {
@@ -2538,6 +2583,9 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
     ): Promise<{ ok: boolean; importedCount: number; message: string }> => {
       const result = await importSnapshotsArchive(file, settings.hapticsEnabled);
       if (result.ok && result.snapshots) {
+        if (activeSnapshotId && result.importedIds?.includes(activeSnapshotId)) {
+          dirtyImportedSnapshotIdsRef.current.add(activeSnapshotId);
+        }
         setSnapshots(result.snapshots);
         markTutorialActionTried('saves_export');
       }
@@ -2547,7 +2595,7 @@ export function useSnapshotLibrary(params: UseSnapshotLibraryParams) {
         message: result.message,
       };
     },
-    [markTutorialActionTried, setSnapshots, settings.hapticsEnabled]
+    [activeSnapshotId, markTutorialActionTried, setSnapshots, settings.hapticsEnabled]
   );
 
   return {

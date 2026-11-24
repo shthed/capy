@@ -39,6 +39,7 @@ export interface ExportSnapshotSvgOptions {
 export interface ImportSnapshotsResult {
   ok: boolean;
   importedCount: number;
+  importedIds?: string[];
   message: string;
   snapshots?: SavedSnapshot[];
 }
@@ -734,6 +735,8 @@ export async function importSnapshotsArchive(
       return {
         ok: true,
         importedCount: result.importedCount,
+        importedIds:
+          result.importedIds ?? (result.firstSnapshot ? [result.firstSnapshot.id] : []),
         message: `Imported ${result.importedCount} ${result.importedCount === 1 ? 'save' : 'saves'} cleanly.`,
         snapshots: refreshed,
       };

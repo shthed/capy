@@ -141,7 +141,7 @@ const SideToggleRow: React.FC<SideToggleRowProps> = ({
           aria-pressed={active}
           disabled={disabled}
           onClick={() => onToggle(key)}
-          className={`px-1.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+          className={`inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-1.5 py-1 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
             active
               ? 'bg-sky-500/25 text-sky-200 border-sky-400/70'
               : 'bg-slate-900/90 text-slate-400 border-slate-700/70 hover:text-slate-200'
@@ -176,7 +176,7 @@ const PromptChipsRow: React.FC<PromptChipsRowProps> = ({
           type="button"
           disabled={disabled}
           onClick={() => onSelect(chip)}
-          className={`flex-shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
+          className={`capy-prompt-chip flex-shrink-0 whitespace-nowrap px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
             isSelected
               ? 'bg-amber-400/20 text-amber-200 border-amber-400/60'
               : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:border-slate-500'
@@ -373,9 +373,9 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
                 type="button"
                 aria-label="Close Infinite Zoom menu"
                 onClick={closePopover}
-                className="capy-icon-btn inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                className="capy-icon-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 flex-shrink-0 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
               >
-                <X size={13} />
+                <X size={16} />
               </button>
             </div>
             <div
@@ -391,7 +391,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
             type="button"
             data-testid="toolbar-infinite-zoom-in-btn"
             onClick={handleStartZoomIn}
-            className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/45 text-sky-200 text-xs font-bold transition-colors text-left cursor-pointer"
+            className="w-full min-h-[44px] flex items-center gap-2 px-2.5 py-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/45 text-sky-200 text-xs font-bold transition-colors text-left cursor-pointer"
           >
             <ZoomIn size={15} className="flex-shrink-0 text-sky-300" />
             <div className="min-w-0 flex-1">
@@ -408,7 +408,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
               data-testid="toolbar-infinite-zoom-out-btn"
               aria-expanded={showExtendConfig}
               onClick={() => setShowExtendConfig((prev) => !prev)}
-              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors text-left cursor-pointer ${
+              className={`w-full min-h-[44px] flex items-center gap-2 px-2.5 py-2 rounded-xl border text-xs font-bold transition-colors text-left cursor-pointer ${
                 showExtendConfig
                   ? 'bg-amber-400/20 border-amber-400/60 text-amber-200'
                   : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'
@@ -473,7 +473,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
                   data-testid="toolbar-infinite-zoom-out-confirm-btn"
                   disabled={!extendCheck.allowed}
                   onClick={handleConfirmExtend}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
                 >
                   <Expand size={13} />
                   <span>Extend</span>
@@ -672,7 +672,7 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
                 type="button"
                 data-testid="region-selection-switch-btn"
                 onClick={onSwitchSelection}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-500/25 hover:bg-sky-500/35 border border-sky-400/50 text-sky-200 text-[11px] font-bold flex-shrink-0 cursor-pointer"
+                className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-md bg-sky-500/25 hover:bg-sky-500/35 border border-sky-400/50 text-sky-200 text-[11px] font-bold flex-shrink-0 cursor-pointer"
               >
                 <ArrowLeftRight size={11} />
                 <span>Switch Selection</span>
@@ -701,13 +701,13 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
           />
         </div>
 
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button
             type="button"
             data-testid="region-selection-cancel-btn"
             disabled={isBusy}
             onClick={onCancel}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
           >
             Cancel
           </button>
@@ -716,7 +716,7 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
             data-testid="region-selection-clear-btn"
             disabled={!hasSelection || isBusy}
             onClick={onClear}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-45 disabled:cursor-not-allowed border border-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1 min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-45 disabled:cursor-not-allowed border border-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
           >
             <Trash2 size={12} />
             <span>Clear</span>
@@ -726,7 +726,7 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
             data-testid="region-selection-confirm-btn"
             disabled={!hasSelection || isBusy || isDisabled}
             onClick={onConfirm}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-lg bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
           >
             <Sparkles size={13} />
             <span>Subdivide</span>

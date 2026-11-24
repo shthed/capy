@@ -168,9 +168,7 @@ const SelectedSaveToolbar: React.FC<SelectedSaveToolbarProps> = ({
           type="button"
           data-testid="save-action-load"
           onClick={() => {
-            if (selectedSave.id !== activeSnapshotId) {
-              onLoadSnapshot(selectedSave);
-            }
+            onLoadSnapshot(selectedSave);
             onClose();
           }}
           title={
@@ -354,9 +352,7 @@ export const SavesTab: React.FC<SavesTabProps> = ({
     const prev = lastTapRef.current;
     if (prev.id === snap.id && now - prev.time < 350) {
       lastTapRef.current = { id: '', time: 0 };
-      if (snap.id !== activeSnapshotId) {
-        onLoadSnapshot(snap);
-      }
+      onLoadSnapshot(snap);
       onClose();
       return;
     }
@@ -365,9 +361,7 @@ export const SavesTab: React.FC<SavesTabProps> = ({
   };
 
   const handleSaveCardDoubleClick = (snap: SavedSnapshot) => {
-    if (snap.id !== activeSnapshotId) {
-      onLoadSnapshot(snap);
-    }
+    onLoadSnapshot(snap);
     onClose();
   };
 
