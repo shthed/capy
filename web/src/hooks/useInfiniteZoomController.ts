@@ -11,48 +11,82 @@ import {
 import {
   BorderExtensionSides,
   GenerationProgressPayload,
-  GeneratorConfig,
   InfiniteZoomNodeMeta,
+  InfiniteZoomProviderMode,
+  NanoBananaModelId,
+  NormalizedRect,
   PaletteColor,
   PuzzleData,
   Region,
   SavedSnapshot,
   UserSettings,
 } from '../types';
-import { StorageService } from '../services/StorageService';
+import { buildCanonicalLayerImageKey, StorageService } from '../services/StorageService';
+import { deleteOrphanedEntries } from '../services/storage/IndexedDbStore';
 import { NativeBridge } from '../services/NativeBridge';
 import { PuzzleWorkerService } from '../services/PuzzleWorkerService';
-import { mergeSubdividedRegionIntoPuzzle } from '../engine/MaskedRegionSubdivider';
+import {
+  embedNestedDetailLayerIntoPuzzle,
+  MAX_SUBDIVIDE_TARGET_REGIONS,
+  wrapPuzzleWithOuterBorderLayer,
+} from '../engine/MaskedRegionSubdivider';
+import {
+  buildOutpaintBorderMask,
+  buildUnifiedRegionIndex,
+  getAllPuzzleRegions,
+  getTotalRegionCount,
+  isSafeLayerId,
+} from '../engine/UnifiedPuzzleLayers';
 import { generatePreviewDataUrl, hasCutoutExteriorMask } from '../services/artworkExporter';
 import { reportSwallowed } from '../services/telemetry';
 import { FeatureOfferId } from '../services/FeatureOffersService';
 import { getDockPalette, getVisiblePalette } from '../components/PaletteDock';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
 import {
-  generateScenePlan,
-  MAX_CONTEXT_BITMAP_DIM,
-} from '../services/ai/LocalLlmService';
+  buildNanoBananaInfillPrompt,
+  buildNanoBananaOutpaintPrompt,
+  DecodedGeminiImage,
+  decodeReceivedGeminiImage,
+  DirectGeminiByokProvider,
+  GuidedGeminiHandoffPackage,
+  NanoBananaError,
+  prepareGuidedGeminiHandoff,
+  PuterNanoBananaProvider,
+  sanitizeUserPrompt,
+} from '../services/ai/NanoBananaService';
 import {
   addContiguousDragRegions,
+  buildRegionByIdMap,
   buildSelectionMask,
   computeSelectionMetrics,
+  RegionGridLike,
   SelectionBbox,
   SelectionMetrics,
   toggleContiguousRegion,
 } from '../services/ai/RegionSelectionEngine';
 import {
+  buildInfillTemplateCanvas,
+  buildOutpaintTemplateCanvas,
   canExtendSides,
-  INFILL_MAX_DELTA_E,
-  synthesizeExtendedBorderCanvas,
-  synthesizeInfillCanvas,
-} from '../services/ai/InfiniteZoomSynthesizer';
+  canvasToPngBlobAndDataUrl,
+  compositeInfillRgba,
+  compositeOutpaintRgba,
+  ExtendSidesCheck,
+  NESTED_LAYER_MAX_DIM_PX,
+  TemplateMaskRect,
+} from '../services/ai/SeamCompositor';
 import type { CoopLiveState, CoopViewport } from './useCoopSession';
 import type { UndoHistoryEntry } from './useUndoRedo';
 import {
   computeNextResetEpoch,
-  InfiniteZoomLoadOptions,
+  hydrateLayerImagesForPuzzle,
 } from './useSnapshotLibrary';
 import { useLatest } from './useLatest';
+
+const UNDO_TOAST_DURATION_MS = 18_000;
+const ERROR_TOAST_DURATION_MS = 9_000;
+const MIN_OUTPAINT_SUBREGIONS = 24;
+const MAX_NESTED_UPSCALE_FACTOR = 4;
 
 function revokeObjectUrlSafely(url: string | null | undefined): void {
   if (!url || !url.startsWith('blob:')) return;
@@ -69,56 +103,486 @@ function releaseCanvas(canvas: HTMLCanvasElement | null | undefined): void {
   canvas.height = 0;
 }
 
-function renderSourceToPuzzleCanvas(
-  sourceImage: HTMLImageElement,
-  puzzleWidth: number,
-  puzzleHeight: number
+function createCanvasFromRgbaData(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
-  canvas.width = puzzleWidth;
-  canvas.height = puzzleHeight;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.drawImage(sourceImage, 0, 0, puzzleWidth, puzzleHeight);
+    const imgData = ctx.createImageData(width, height);
+    imgData.data.set(rgba);
+    ctx.putImageData(imgData, 0, 0);
   }
   return canvas;
 }
 
-function rollbackAbortedInPlacePersist(
-  snapId: string,
-  newBlobUrl: string,
-  previousBlob: Blob | null,
-  basePuzzle?: PuzzleData
-): void {
-  revokeObjectUrlSafely(newBlobUrl);
-  if (previousBlob) {
-    void StorageService.saveImageBlob(snapId, previousBlob).catch((err) => {
-      reportSwallowed('InfiniteZoom.rollbackImageBlob', err, { id: snapId });
+function renderImageToCanvas(
+  sourceImage: HTMLImageElement,
+  targetWidth: number,
+  targetHeight: number
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d');
+  if (ctx) {
+    ctx.drawImage(sourceImage, 0, 0, targetWidth, targetHeight);
+  }
+  return canvas;
+}
+
+function readCanvasCropRgba(
+  canvas: HTMLCanvasElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): Uint8ClampedArray | null {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d');
+  if (!ctx || typeof ctx.getImageData !== 'function') return null;
+  return ctx.getImageData(x, y, width, height).data;
+}
+
+function canvasToBlobAsync(
+  canvas: HTMLCanvasElement,
+  mimeType: 'image/png' | 'image/webp',
+  quality?: number
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob);
+          return;
+        }
+        if (mimeType !== 'image/png') {
+          canvas.toBlob((pngBlob) => {
+            if (pngBlob) resolve(pngBlob);
+            else reject(new Error('Failed to encode artwork canvas'));
+          }, 'image/png');
+          return;
+        }
+        reject(new Error('Failed to encode PNG canvas'));
+      },
+      mimeType,
+      quality
+    );
+  });
+}
+
+function decodeBlobToImage(blob: Blob): Promise<{ img: HTMLImageElement; objectUrl: string }> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => resolve({ img, objectUrl });
+    img.onerror = () => {
+      revokeObjectUrlSafely(objectUrl);
+      reject(new Error('Failed to decode generated artwork image'));
+    };
+    img.src = objectUrl;
+  });
+}
+
+function collectMonotonicResetEpoch(
+  snapshotId: string,
+  activeSave: SavedSnapshot | undefined,
+  liveActiveSave: SavedSnapshot | undefined
+): number {
+  const freshSnap = StorageService.loadSnapshots().find((s) => s.id === snapshotId);
+  const storedActive = StorageService.loadActiveState();
+  const activeStateEpoch =
+    storedActive?.activeSnapshotId === snapshotId ? storedActive.resetEpoch ?? 0 : 0;
+  return computeNextResetEpoch(
+    activeSave?.resetEpoch,
+    liveActiveSave?.resetEpoch,
+    freshSnap?.resetEpoch,
+    activeStateEpoch
+  );
+}
+
+function isAbortLikeError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  if (err instanceof NanoBananaError && err.code === 'ABORTED') return true;
+  const name = (err as { name?: string }).name;
+  return name === 'AbortError' || name === 'GenerationCancelledError';
+}
+
+function makeUniqueLayerId(prefix: string): string {
+  const stamp = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 6);
+  const candidate = `${prefix}_${stamp}_${rand}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  return isSafeLayerId(candidate) ? candidate : `layer_${stamp}_${rand}`;
+}
+
+function isSamplePromotionMeta(
+  meta:
+    | {
+        sampleAssetPath?: string | null;
+        sourceRef?: SavedSnapshot['sourceRef'];
+      }
+    | undefined
+): boolean {
+  return !meta || Boolean(meta.sampleAssetPath) || meta.sourceRef?.kind !== 'blob';
+}
+
+function countRemovedFilledRegions(
+  filled: ReadonlySet<number>,
+  removedIds: ReadonlySet<number>
+): number {
+  let removedFilledCount = 0;
+  for (const id of removedIds) {
+    if (filled.has(id)) removedFilledCount++;
+  }
+  return removedFilledCount;
+}
+
+async function rollbackAbortedLayerPersist(opts: {
+  snapId: string;
+  addedLayerBlobKeys: string[];
+  newRootBlobUrl?: string | null;
+  newLayerObjectUrls?: string[];
+  previousRootBlob?: Blob | null;
+  promotedFromSample?: boolean;
+  basePuzzle?: PuzzleData;
+}): Promise<void> {
+  if (opts.newRootBlobUrl) {
+    revokeObjectUrlSafely(opts.newRootBlobUrl);
+  }
+  if (opts.newLayerObjectUrls) {
+    for (const url of opts.newLayerObjectUrls) {
+      revokeObjectUrlSafely(url);
+    }
+  }
+  const keysToDelete =
+    !opts.previousRootBlob && opts.promotedFromSample
+      ? [...opts.addedLayerBlobKeys, opts.snapId]
+      : opts.addedLayerBlobKeys;
+  if (keysToDelete.length > 0) {
+    await deleteOrphanedEntries([], keysToDelete).catch((err) => {
+      reportSwallowed('InfiniteZoom.rollbackDeleteLayerBlobs', err, { id: opts.snapId });
     });
   }
-  if (basePuzzle) {
-    void StorageService.savePuzzleData(snapId, basePuzzle).catch((err) => {
-      reportSwallowed('InfiniteZoom.rollbackPuzzleData', err, { id: snapId });
+  if (opts.previousRootBlob) {
+    await StorageService.saveImageBlob(opts.snapId, opts.previousRootBlob).catch((err) => {
+      reportSwallowed('InfiniteZoom.rollbackImageBlob', err, { id: opts.snapId });
+    });
+  }
+  if (opts.basePuzzle) {
+    await StorageService.savePuzzleData(opts.snapId, opts.basePuzzle).catch((err) => {
+      reportSwallowed('InfiniteZoom.rollbackPuzzleData', err, { id: opts.snapId });
     });
   }
 }
 
-const ACHROMATIC_CHROMA_THRESHOLD = 28;
-const ACHROMATIC_CHILD_MAX_DELTA_E = 78;
-const UNDO_TOAST_DURATION_MS = 18_000;
+function resolveNextZoomDepth(basePuzzle: PuzzleData, targetLayerId: string | null): number {
+  if (targetLayerId === null) return 1;
+  const targetLayer = basePuzzle.nestedLayers?.find((l) => l.layerId === targetLayerId) ?? null;
+  return (targetLayer ? targetLayer.depth : 0) + 1;
+}
 
-export interface UndoSubdivisionSnapshot {
+function buildZoomInZoomTreeMeta(
+  existingSnap: SavedSnapshot | undefined,
+  selectedCopy: ReadonlySet<number>,
+  sanitizedPrompt: string,
+  providerUsed: InfiniteZoomProviderMode,
+  modelUsed: NanoBananaModelId
+): InfiniteZoomNodeMeta {
+  const prevTree = existingSnap?.zoomTree;
+  return {
+    ...(prevTree || { depth: 0, direction: 'in-place' }),
+    direction: prevTree?.direction ?? 'in-place',
+    selectedRegionIds: Array.from(selectedCopy),
+    promptHint: sanitizedPrompt || undefined,
+    providerUsed,
+    modelUsed,
+    inPlaceSubdivisionCount: (prevTree?.inPlaceSubdivisionCount ?? 0) + 1,
+  };
+}
+
+function buildPreviousSnapshotMeta(existingSnap: SavedSnapshot | undefined) {
+  return {
+    sampleAssetPath: existingSnap?.sampleAssetPath,
+    isAutoSample: existingSnap?.isAutoSample,
+    sourceRef: existingSnap?.sourceRef,
+    zoomTree: existingSnap?.zoomTree,
+    previewDataUrl: existingSnap?.previewDataUrl,
+  };
+}
+
+async function encodeRgbaToBlob(
+  rgba: Uint8ClampedArray,
+  width: number,
+  height: number,
+  mimeType: 'image/png' | 'image/webp',
+  quality?: number
+): Promise<Blob> {
+  const canvas = createCanvasFromRgbaData(rgba, width, height);
+  try {
+    return await canvasToBlobAsync(canvas, mimeType, quality);
+  } finally {
+    releaseCanvas(canvas);
+  }
+}
+
+async function encodeImageToPuzzleBlob(
+  baseImage: HTMLImageElement,
+  basePuzzle: PuzzleData
+): Promise<Blob> {
+  const canvas = renderImageToCanvas(baseImage, basePuzzle.width, basePuzzle.height);
+  try {
+    const needsPng = hasCutoutExteriorMask(basePuzzle);
+    return await canvasToBlobAsync(
+      canvas,
+      needsPng ? 'image/png' : 'image/webp',
+      needsPng ? undefined : 0.94
+    );
+  } finally {
+    releaseCanvas(canvas);
+  }
+}
+
+async function renderHydratedPreview(
+  puzzle: PuzzleData,
+  rootImage: HTMLImageElement,
+  filled: Set<number>,
+  painted: Map<number, number>,
+  scope: string
+): Promise<string> {
+  const hydrated = await hydrateLayerImagesForPuzzle(puzzle, scope);
+  try {
+    return generatePreviewDataUrl(puzzle, rootImage, filled, painted, hydrated.layerImages);
+  } finally {
+    hydrated.dispose();
+  }
+}
+
+async function buildInfillTemplatePayload(
+  layerCanvas: HTMLCanvasElement,
+  targetGrid: RegionGridLike,
+  selectedCopy: ReadonlySet<number>,
+  bbox: SelectionBbox
+): Promise<{
+  cropMask: Uint8Array;
+  originalCropRgba: Uint8ClampedArray;
+  width: number;
+  height: number;
+  maskInTemplateRect: TemplateMaskRect;
+  templatePngBlob: Blob;
+  templateDataUrl: string;
+}> {
+  const cropMask = buildSelectionMask(targetGrid, selectedCopy, bbox);
+  const originalCropRgba = readCanvasCropRgba(
+    layerCanvas,
+    bbox.minX,
+    bbox.minY,
+    bbox.width,
+    bbox.height
+  );
+  let tpl: ReturnType<typeof buildInfillTemplateCanvas> | null = null;
+  try {
+    if (!originalCropRgba) {
+      throw new Error('Could not read pixel data for selected region.');
+    }
+    tpl = buildInfillTemplateCanvas(layerCanvas, bbox, cropMask);
+    const encoded = await canvasToPngBlobAndDataUrl(tpl.canvas);
+    return {
+      cropMask,
+      originalCropRgba,
+      width: tpl.width,
+      height: tpl.height,
+      maskInTemplateRect: tpl.maskInTemplateRect,
+      templatePngBlob: encoded.blob,
+      templateDataUrl: encoded.dataUrl,
+    };
+  } finally {
+    releaseCanvas(tpl?.canvas);
+    releaseCanvas(layerCanvas);
+  }
+}
+
+async function loadPreviousRootBlobIfOwned(
+  existingSnap: SavedSnapshot | undefined,
+  snapId: string
+): Promise<Blob | null> {
+  if (!existingSnap || existingSnap.sampleAssetPath || existingSnap.sourceRef?.kind !== 'blob') {
+    return null;
+  }
+  return await StorageService.loadImageBlob(snapId).catch(() => null);
+}
+
+async function persistZoomInBlobsAndPuzzle(opts: {
+  snapId: string;
+  existingSnap: SavedSnapshot | undefined;
+  basePuzzle: PuzzleData;
+  baseImage: HTMLImageElement;
+  nextPuzzle: PuzzleData;
+  imageBlobKey: string;
+  layerPngBlob: Blob;
+  layerObjectUrl: string;
+  promotedFromSample: boolean;
+  isAborted: () => boolean;
+}): Promise<boolean> {
+  const {
+    snapId,
+    existingSnap,
+    basePuzzle,
+    baseImage,
+    nextPuzzle,
+    imageBlobKey,
+    layerPngBlob,
+    layerObjectUrl,
+    promotedFromSample,
+    isAborted,
+  } = opts;
+  const needsSamplePromotion = isSamplePromotionMeta(existingSnap);
+  if (needsSamplePromotion) {
+    const rootBlob = await encodeImageToPuzzleBlob(baseImage, basePuzzle);
+    if (isAborted()) {
+      revokeObjectUrlSafely(layerObjectUrl);
+      return false;
+    }
+    await StorageService.saveImageBlob(snapId, rootBlob).catch((err) => {
+      reportSwallowed('InfiniteZoom.promoteSampleRootBlob', err, { id: snapId });
+    });
+    if (isAborted()) {
+      await rollbackAbortedLayerPersist({
+        snapId,
+        addedLayerBlobKeys: [],
+        newLayerObjectUrls: [layerObjectUrl],
+        promotedFromSample,
+      });
+      return false;
+    }
+  }
+
+  await StorageService.saveImageBlob(imageBlobKey, layerPngBlob).catch((err) => {
+    reportSwallowed('InfiniteZoom.saveLayerImageBlob', err, { id: snapId, key: imageBlobKey });
+  });
+  if (isAborted()) {
+    await rollbackAbortedLayerPersist({
+      snapId,
+      addedLayerBlobKeys: [imageBlobKey],
+      newLayerObjectUrls: [layerObjectUrl],
+      promotedFromSample,
+    });
+    return false;
+  }
+
+  await StorageService.savePuzzleData(snapId, nextPuzzle).catch((err) => {
+    reportSwallowed('InfiniteZoom.savePuzzleData', err, { id: snapId });
+  });
+  if (isAborted()) {
+    await rollbackAbortedLayerPersist({
+      snapId,
+      addedLayerBlobKeys: [imageBlobKey],
+      newLayerObjectUrls: [layerObjectUrl],
+      promotedFromSample,
+      basePuzzle,
+    });
+    return false;
+  }
+  return true;
+}
+
+async function persistZoomOutBlobsAndPuzzle(opts: {
+  snapId: string;
+  basePuzzle: PuzzleData;
+  nextPuzzle: PuzzleData;
+  previousRootImageBlobKey: string;
+  previousRootLayerBlob: Blob;
+  outerBlob: Blob;
+  previousRootBlob: Blob | null;
+  promotedFromSample: boolean;
+  outerObjUrl: string;
+  prevRootObjUrl: string;
+  isAborted: () => boolean;
+}): Promise<boolean> {
+  const {
+    snapId,
+    basePuzzle,
+    nextPuzzle,
+    previousRootImageBlobKey,
+    previousRootLayerBlob,
+    outerBlob,
+    previousRootBlob,
+    promotedFromSample,
+    outerObjUrl,
+    prevRootObjUrl,
+    isAborted,
+  } = opts;
+
+  await StorageService.saveImageBlob(previousRootImageBlobKey, previousRootLayerBlob).catch(
+    (err) => {
+      reportSwallowed('InfiniteZoom.saveDemotedRootLayerBlob', err, {
+        id: snapId,
+        key: previousRootImageBlobKey,
+      });
+    }
+  );
+  if (isAborted()) {
+    await rollbackAbortedLayerPersist({
+      snapId,
+      addedLayerBlobKeys: [previousRootImageBlobKey],
+      newRootBlobUrl: outerObjUrl,
+      newLayerObjectUrls: [prevRootObjUrl],
+    });
+    return false;
+  }
+
+  await StorageService.saveImageBlob(snapId, outerBlob).catch((err) => {
+    reportSwallowed('InfiniteZoom.saveOuterRootBlob', err, { id: snapId });
+  });
+  if (isAborted()) {
+    await rollbackAbortedLayerPersist({
+      snapId,
+      addedLayerBlobKeys: [previousRootImageBlobKey],
+      newRootBlobUrl: outerObjUrl,
+      newLayerObjectUrls: [prevRootObjUrl],
+      previousRootBlob,
+      promotedFromSample,
+    });
+    return false;
+  }
+
+  await StorageService.savePuzzleData(snapId, nextPuzzle).catch((err) => {
+    reportSwallowed('InfiniteZoom.saveWrappedPuzzleData', err, { id: snapId });
+  });
+  if (isAborted()) {
+    await rollbackAbortedLayerPersist({
+      snapId,
+      addedLayerBlobKeys: [previousRootImageBlobKey],
+      newRootBlobUrl: outerObjUrl,
+      newLayerObjectUrls: [prevRootObjUrl],
+      previousRootBlob,
+      promotedFromSample,
+      basePuzzle,
+    });
+    return false;
+  }
+  return true;
+}
+
+export interface UndoInfiniteZoomSnapshot {
+  operationKind: 'zoom-in' | 'zoom-out';
   snapshotId: string;
   puzzle: PuzzleData;
   sourceImage: HTMLImageElement;
   previousBlob: Blob | null;
+  promotedFromSample?: boolean;
   previousBlobUrl: string | null;
   newBlobUrl: string | null;
+  addedLayerBlobKeys: string[];
+  previousLayerImages: Map<string, HTMLImageElement>;
   filledRegionIds: Set<number>;
   paintedRegionColors: Map<number, number>;
   undoStack: UndoHistoryEntry[];
   redoStack: UndoHistoryEntry[];
   activeColorId: number;
+  previousViewport: CoopViewport;
   previousMeta: {
     sampleAssetPath: string | null | undefined;
     isAutoSample: boolean | undefined;
@@ -127,6 +591,20 @@ export interface UndoSubdivisionSnapshot {
     previewDataUrl: string | undefined;
   };
   addedRegionCount: number;
+}
+
+export type UndoSubdivisionSnapshot = UndoInfiniteZoomSnapshot;
+
+export interface GuidedHandoffSessionState {
+  handoff: GuidedGeminiHandoffPackage;
+  fallbackReason: string | null;
+  isProcessing: boolean;
+  errorMessage: string | null;
+}
+
+export interface InfiniteZoomErrorState {
+  message: string;
+  code?: string;
 }
 
 export interface UseInfiniteZoomControllerParams {
@@ -142,6 +620,9 @@ export interface UseInfiniteZoomControllerParams {
   isFreeColorMode: boolean;
   isLoading: boolean;
   isReplaying: boolean;
+  isReplayPlaying: boolean;
+  exitReplay: () => void;
+  applyViewport?: (view: CoopViewport) => void;
   coopRoomCode: string | null;
   settings: UserSettings;
   visibleColorIdsRef: MutableRefObject<Set<number>>;
@@ -154,24 +635,6 @@ export interface UseInfiniteZoomControllerParams {
   handleLoadSnapshotRef: MutableRefObject<
     (snapshot: SavedSnapshot, forceReplay?: boolean) => Promise<void>
   >;
-  persistParentSnapshotBeforeDetailTile: (parentId: string, currentView: CoopViewport) => void;
-  loadArtworkFromImage: (
-    img: HTMLImageElement,
-    title: string,
-    config?: GeneratorConfig,
-    initialFilledRegionIds?: Set<number>,
-    initialActiveColorId?: number,
-    existingSnapshotId?: string,
-    sampleAssetPath?: string | null,
-    shouldAutoReplay?: boolean,
-    sourceBlob?: Blob | null,
-    initialPaintedColors?: Record<number, number>,
-    initialViewportOverride?: CoopViewport,
-    initialCustomPalette?: PaletteColor[],
-    initialIsFreeColor?: boolean,
-    parentSnapshotId?: string,
-    infiniteZoomOptions?: InfiniteZoomLoadOptions
-  ) => Promise<void>;
   syncUndoStack: (
     updater: UndoHistoryEntry[] | ((prev: UndoHistoryEntry[]) => UndoHistoryEntry[])
   ) => void;
@@ -191,6 +654,54 @@ export interface UseInfiniteZoomControllerParams {
   setLoadingPayload: Dispatch<SetStateAction<GenerationProgressPayload | null>>;
   markTutorialActionTried: (action: keyof TutorialTriedActions) => void;
   triggerFeatureOffer: (id: FeatureOfferId) => void;
+  onGuidedHandoffOpenChange?: (isOpen: boolean) => void;
+}
+
+/**
+ * Pure helper resolving the active RegionGridLike for root (layerId === null) or a NestedPuzzleLayer.
+ */
+export function resolveActiveSelectionGrid(
+  puzzle: PuzzleData | null | undefined,
+  layerId: string | null
+): RegionGridLike | null {
+  if (!puzzle) return null;
+  if (layerId === null) return puzzle;
+  const nested = puzzle.nestedLayers?.find((l) => l.layerId === layerId);
+  if (!nested) return null;
+  return {
+    width: nested.width,
+    height: nested.height,
+    regions: nested.regions,
+    regionMap: nested.regionMap,
+    palette: puzzle.palette,
+  };
+}
+
+/**
+ * Pure helper computing crisp high-resolution target dimensions for a nested detail layer:
+ * upscales smaller selections up to maxDimPx (preserving aspect ratio) and never shrinks below crop bbox.
+ */
+export function computeNestedLayerTargetDimensions(
+  bboxWidth: number,
+  bboxHeight: number,
+  maxDimPx: number = NESTED_LAYER_MAX_DIM_PX
+): { width: number; height: number } {
+  const safeW =
+    Number.isFinite(bboxWidth) && bboxWidth > 0 ? Math.max(1, Math.round(bboxWidth)) : 1;
+  const safeH =
+    Number.isFinite(bboxHeight) && bboxHeight > 0 ? Math.max(1, Math.round(bboxHeight)) : 1;
+  const safeMaxDim =
+    Number.isFinite(maxDimPx) && maxDimPx > 0
+      ? Math.max(1, Math.round(maxDimPx))
+      : NESTED_LAYER_MAX_DIM_PX;
+  const maxSide = Math.max(safeW, safeH);
+  if (maxSide >= safeMaxDim) {
+    return { width: safeW, height: safeH };
+  }
+  const scale = Math.min(safeMaxDim / maxSide, MAX_NESTED_UPSCALE_FACTOR);
+  const width = Math.max(safeW, Math.min(safeMaxDim, Math.round(safeW * scale)));
+  const height = Math.max(safeH, Math.min(safeMaxDim, Math.round(safeH * scale)));
+  return { width, height };
 }
 
 /**
@@ -245,7 +756,8 @@ function filterProgressForRemovedRegions(
 }
 
 /**
- * Pure helper resolving activeColorId after an in-place subdivision, honoring autoAdvance.
+ * Pure helper resolving activeColorId after unified Zoom In across root + all nested layers,
+ * honoring autoAdvance and Free Color mode.
  */
 export function resolvePostSubdivisionActiveColor(
   nextPuzzle: PuzzleData,
@@ -256,22 +768,23 @@ export function resolvePostSubdivisionActiveColor(
   visibleColorIds: Set<number>,
   isFreeColorMode: boolean
 ): number {
-  if (isFreeColorMode || !settings.autoAdvance || nextPuzzle.regions.length === 0) {
+  const allRegions = getAllPuzzleRegions(nextPuzzle);
+  if (isFreeColorMode || !settings.autoAdvance || allRegions.length === 0) {
     return currentActiveColorId;
   }
-  const currentHasRemaining = nextPuzzle.regions.some(
+  const currentHasRemaining = allRegions.some(
     (r) => r.colorId === currentActiveColorId && !nextFilled.has(r.id)
   );
   if (currentHasRemaining) return currentActiveColorId;
 
   for (const swatch of addedSwatches) {
-    if (nextPuzzle.regions.some((r) => r.colorId === swatch.id && !nextFilled.has(r.id))) {
+    if (allRegions.some((r) => r.colorId === swatch.id && !nextFilled.has(r.id))) {
       return swatch.id;
     }
   }
   const basePalette = getVisiblePalette(
     nextPuzzle.palette,
-    nextPuzzle.regions,
+    allRegions,
     nextFilled,
     settings.paletteSort
   );
@@ -280,7 +793,7 @@ export function resolvePostSubdivisionActiveColor(
 }
 
 /**
- * Pure helper resolving the most recent live child snapshot for bidirectional TopBar navigation.
+ * Pure helper resolving the most recent live child snapshot for legacy TopBar zoom-tree navigation.
  */
 export function resolveLatestChildSave(
   snapshots: readonly SavedSnapshot[],
@@ -356,118 +869,11 @@ export function buildInPlaceUpdatedSourceCanvas(
   return fullCanvas;
 }
 
-function buildContextCanvas(
-  source: HTMLImageElement | HTMLCanvasElement,
-  bbox?: SelectionBbox
-): HTMLCanvasElement | null {
-  if (typeof document === 'undefined') return null;
-  const srcW = 'naturalWidth' in source ? source.naturalWidth || source.width : source.width;
-  const srcH = 'naturalHeight' in source ? source.naturalHeight || source.height : source.height;
-  if (srcW <= 0 || srcH <= 0) return null;
-
-  const cropX = bbox ? Math.max(0, Math.min(srcW - 1, bbox.minX)) : 0;
-  const cropY = bbox ? Math.max(0, Math.min(srcH - 1, bbox.minY)) : 0;
-  const cropW = bbox ? Math.max(1, Math.min(srcW - cropX, bbox.width)) : srcW;
-  const cropH = bbox ? Math.max(1, Math.min(srcH - cropY, bbox.height)) : srcH;
-  const scale = Math.min(1, MAX_CONTEXT_BITMAP_DIM / Math.max(cropW, cropH));
-  const outW = Math.max(1, Math.round(cropW * scale));
-  const outH = Math.max(1, Math.round(cropH * scale));
-
-  const canvas = document.createElement('canvas');
-  canvas.width = outW;
-  canvas.height = outH;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    releaseCanvas(canvas);
-    return null;
-  }
-  ctx.drawImage(source, cropX, cropY, cropW, cropH, 0, 0, outW, outH);
-  return canvas;
-}
-
-function readSelectionCropRgba(
-  puzzleCanvas: HTMLCanvasElement,
-  bbox: SelectionBbox
-): Uint8ClampedArray | null {
-  const ctx =
-    puzzleCanvas.getContext('2d', { willReadFrequently: true }) || puzzleCanvas.getContext('2d');
-  if (!ctx || typeof ctx.getImageData !== 'function') return null;
-  return ctx.getImageData(bbox.minX, bbox.minY, bbox.width, bbox.height).data;
-}
-
-function canvasToBlobAsync(
-  canvas: HTMLCanvasElement,
-  mimeType: 'image/png' | 'image/webp',
-  quality?: number
-): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          resolve(blob);
-          return;
-        }
-        if (mimeType !== 'image/png') {
-          canvas.toBlob((pngBlob) => {
-            if (pngBlob) resolve(pngBlob);
-            else reject(new Error('Failed to encode artwork canvas'));
-          }, 'image/png');
-          return;
-        }
-        reject(new Error('Failed to encode PNG canvas'));
-      },
-      mimeType,
-      quality
-    );
-  });
-}
-
-function decodeBlobToImage(blob: Blob): Promise<{ img: HTMLImageElement; objectUrl: string }> {
-  return new Promise((resolve, reject) => {
-    const objectUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => resolve({ img, objectUrl });
-    img.onerror = () => {
-      revokeObjectUrlSafely(objectUrl);
-      reject(new Error('Failed to decode generated artwork image'));
-    };
-    img.src = objectUrl;
-  });
-}
-
-function collectMonotonicResetEpoch(
-  snapshotId: string,
-  activeSave: SavedSnapshot | undefined,
-  liveActiveSave: SavedSnapshot | undefined
-): number {
-  const freshSnap = StorageService.loadSnapshots().find((s) => s.id === snapshotId);
-  const storedActive = StorageService.loadActiveState();
-  const activeStateEpoch =
-    storedActive?.activeSnapshotId === snapshotId ? storedActive.resetEpoch ?? 0 : 0;
-  return computeNextResetEpoch(
-    activeSave?.resetEpoch,
-    liveActiveSave?.resetEpoch,
-    freshSnap?.resetEpoch,
-    activeStateEpoch
-  );
-}
-
-function buildChildTileTitle(baseTitle: string, promptHint: string): string {
-  const cleanBase = (baseTitle || 'Artwork').replace(/\s*\([^)]*Detail[^)]*\)\s*$/i, '').trim();
-  const shortPrompt = promptHint.trim().slice(0, 24);
-  return shortPrompt ? `${cleanBase} (Detail: ${shortPrompt})` : `${cleanBase} (Detail Tile)`;
-}
-
-function buildExtendedTitle(baseTitle: string, promptHint: string): string {
-  const cleanBase = (baseTitle || 'Artwork').replace(/\s*\(Extended[^)]*\)\s*$/i, '').trim();
-  const shortPrompt = promptHint.trim().slice(0, 24);
-  return shortPrompt ? `${cleanBase} (Extended: ${shortPrompt})` : `${cleanBase} (Extended)`;
-}
-
-function isAbortLikeError(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
-  const name = (err as { name?: string }).name;
-  return name === 'AbortError' || name === 'GenerationCancelledError';
+interface PendingGuidedContinuation {
+  seq: number;
+  isDecoding?: boolean;
+  complete: (decoded: DecodedGeminiImage, signal: AbortSignal) => Promise<void>;
+  cleanup?: () => void;
 }
 
 export function useInfiniteZoomController(params: UseInfiniteZoomControllerParams) {
@@ -477,25 +883,23 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     snapshots,
     activeSnapshotId,
     activeSave,
-    activeTitle,
-    activeColorId,
     filledRegionIds,
     paintedRegionColors,
     isFreeColorMode,
     isLoading,
     isReplaying,
+    isReplayPlaying,
+    exitReplay,
+    applyViewport,
     coopRoomCode,
     settings,
     visibleColorIdsRef,
-    regionByIdRef,
     liveCoopRef,
     viewportRef,
     activeBlobUrlRef,
     undoStackRef,
     redoStackRef,
     handleLoadSnapshotRef,
-    persistParentSnapshotBeforeDetailTile,
-    loadArtworkFromImage,
     syncUndoStack,
     syncRedoStack,
     setSnapshots,
@@ -511,36 +915,74 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     setLoadingPayload,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onGuidedHandoffOpenChange,
   } = params;
 
   const [isRegionSelectionMode, setIsRegionSelectionMode] = useState(false);
   const [selectedRegionIds, setSelectedRegionIds] = useState<Set<number>>(() => new Set());
+  const [selectionLayerId, setSelectionLayerId] = useState<string | null>(null);
   const [pendingSwitchRegionId, setPendingSwitchRegionId] = useState<number | null>(null);
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null);
   const [infiniteZoomPrompt, setInfiniteZoomPrompt] = useState('');
   const [isInfiniteZoomRunning, setIsInfiniteZoomRunning] = useState(false);
   const [undoSubdivisionState, setUndoSubdivisionState] =
-    useState<UndoSubdivisionSnapshot | null>(null);
+    useState<UndoInfiniteZoomSnapshot | null>(null);
+  const [liveLayerImages, setLiveLayerImages] = useState<Map<string, HTMLImageElement>>(
+    () => new Map()
+  );
+  const [guidedHandoffSession, setGuidedHandoffSession] =
+    useState<GuidedHandoffSessionState | null>(null);
+  const [infiniteZoomError, setInfiniteZoomError] = useState<InfiniteZoomErrorState | null>(null);
 
   const infiniteZoomOpSeqRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelHandoffRef = useRef<{ restoreSnapshotId: string; createdSnapshotId: string | null } | null>(
-    null
-  );
+  const errorToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSwitchLayerIdRef = useRef<string | null>(null);
+  const pendingGuidedRef = useRef<PendingGuidedContinuation | null>(null);
+  const ownedLayerBlobUrlsRef = useRef<Map<string, string>>(new Map());
+
   const undoSubdivisionRef = useLatest(undoSubdivisionState);
   const settingsRef = useLatest(settings);
+  const selectionLayerIdRef = useLatest(selectionLayerId);
+  const selectedRegionIdsRef = useLatest(selectedRegionIds);
+  const liveLayerImagesRef = useLatest(liveLayerImages);
+  const isReplayingRef = useLatest(isReplaying);
+  const onGuidedHandoffOpenChangeRef = useLatest(onGuidedHandoffOpenChange);
+
+  const isActiveReplayPlayback = isReplaying && isReplayPlaying;
 
   useEffect(() => {
-    if (!isLoading) {
-      cancelHandoffRef.current = null;
-      if (abortControllerRef.current === null) {
-        setIsInfiniteZoomRunning(false);
-      }
+    if (!isLoading && abortControllerRef.current === null && pendingGuidedRef.current === null) {
+      setIsInfiniteZoomRunning(false);
     }
   }, [isLoading]);
 
   const effectiveInfiniteZoomRunning = isInfiniteZoomRunning && isLoading;
+
+  const clearErrorToastTimer = useCallback(() => {
+    if (errorToastTimerRef.current !== null) {
+      clearTimeout(errorToastTimerRef.current);
+      errorToastTimerRef.current = null;
+    }
+  }, []);
+
+  const clearInfiniteZoomError = useCallback(() => {
+    clearErrorToastTimer();
+    setInfiniteZoomError(null);
+  }, [clearErrorToastTimer]);
+
+  const showInfiniteZoomError = useCallback(
+    (message: string, code?: string) => {
+      clearErrorToastTimer();
+      setInfiniteZoomError({ message, code });
+      errorToastTimerRef.current = setTimeout(() => {
+        errorToastTimerRef.current = null;
+        setInfiniteZoomError(null);
+      }, ERROR_TOAST_DURATION_MS);
+    },
+    [clearErrorToastTimer]
+  );
 
   const clearUndoToastTimer = useCallback(() => {
     if (undoToastTimerRef.current !== null) {
@@ -549,24 +991,64 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     }
   }, []);
 
+  const revokeOwnedLayerUrlsNotIn = useCallback((keepKeys: ReadonlySet<string>) => {
+    const owned = ownedLayerBlobUrlsRef.current;
+    for (const [key, url] of Array.from(owned.entries())) {
+      if (!keepKeys.has(key)) {
+        revokeObjectUrlSafely(url);
+        owned.delete(key);
+      }
+    }
+  }, []);
+
   const clearUndoSubdivision = useCallback(() => {
     clearUndoToastTimer();
     const prev = undoSubdivisionRef.current;
+    undoSubdivisionRef.current = null;
     if (prev && prev.previousBlobUrl && prev.previousBlobUrl !== activeBlobUrlRef.current) {
       revokeObjectUrlSafely(prev.previousBlobUrl);
     }
     setUndoSubdivisionState(null);
-  }, [activeBlobUrlRef, clearUndoToastTimer, undoSubdivisionRef]);
+    // Reclaim any owned layer URLs that are no longer in active liveLayerImages
+    const keepKeys = new Set<string>(liveLayerImagesRef.current.keys());
+    revokeOwnedLayerUrlsNotIn(keepKeys);
+  }, [
+    activeBlobUrlRef,
+    clearUndoToastTimer,
+    liveLayerImagesRef,
+    revokeOwnedLayerUrlsNotIn,
+    undoSubdivisionRef,
+  ]);
+
+  const clearGuidedSession = useCallback(() => {
+    const pending = pendingGuidedRef.current;
+    pendingGuidedRef.current = null;
+    if (pending?.cleanup) {
+      try {
+        pending.cleanup();
+      } catch (err) {
+        reportSwallowed('InfiniteZoom.guidedCleanup', err);
+      }
+    }
+    setGuidedHandoffSession(null);
+    onGuidedHandoffOpenChangeRef.current?.(false);
+  }, [onGuidedHandoffOpenChangeRef]);
 
   const exitRegionSelectionMode = useCallback(() => {
+    const empty = new Set<number>();
+    selectedRegionIdsRef.current = empty;
+    selectionLayerIdRef.current = null;
     setIsRegionSelectionMode(false);
-    setSelectedRegionIds(new Set());
+    setSelectedRegionIds(empty);
+    setSelectionLayerId(null);
     setPendingSwitchRegionId(null);
+    pendingSwitchLayerIdRef.current = null;
     setSelectionNotice(null);
-  }, []);
+  }, [selectedRegionIdsRef, selectionLayerIdRef]);
 
+  // Auto-exit selection mode ONLY on Co-op join or active animated Replay playback (NOT paused replay)
   useEffect(() => {
-    if (!(Boolean(coopRoomCode) || isReplaying) || !isRegionSelectionMode) return;
+    if (!(Boolean(coopRoomCode) || isActiveReplayPlayback) || !isRegionSelectionMode) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) {
@@ -576,7 +1058,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     return () => {
       cancelled = true;
     };
-  }, [coopRoomCode, isReplaying, isRegionSelectionMode, exitRegionSelectionMode]);
+  }, [coopRoomCode, isActiveReplayPlayback, isRegionSelectionMode, exitRegionSelectionMode]);
 
   const cancelActiveInfiniteZoom = useCallback(() => {
     infiniteZoomOpSeqRef.current += 1;
@@ -584,40 +1066,33 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    const handoff = cancelHandoffRef.current;
-    cancelHandoffRef.current = null;
+    clearGuidedSession();
     PuzzleWorkerService.cancelActive();
     setIsInfiniteZoomRunning(false);
-    if (handoff) {
-      if (handoff.createdSnapshotId && handoff.createdSnapshotId !== handoff.restoreSnapshotId) {
-        void StorageService.deleteSnapshot(handoff.createdSnapshotId)
-          .then((updated) => setSnapshots(updated))
-          .catch((err) => reportSwallowed('InfiniteZoom.cancelDeleteSnapshot', err));
-      }
-      const restoreSnap = StorageService.loadSnapshots().find(
-        (s) => s.id === handoff.restoreSnapshotId
-      );
-      if (restoreSnap) {
-        void handleLoadSnapshotRef.current(restoreSnap, false);
-        return;
-      }
-    }
     setIsLoading(false);
     setLoadingPayload(null);
-  }, [handleLoadSnapshotRef, setIsLoading, setLoadingPayload, setSnapshots]);
+  }, [clearGuidedSession, setIsLoading, setLoadingPayload]);
 
   const handleBeforeSnapshotResetOrSwitch = useCallback(() => {
     exitRegionSelectionMode();
     clearUndoSubdivision();
-    if (!cancelHandoffRef.current) {
-      infiniteZoomOpSeqRef.current += 1;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      setIsInfiniteZoomRunning(false);
+    clearGuidedSession();
+    clearInfiniteZoomError();
+    infiniteZoomOpSeqRef.current += 1;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
-  }, [clearUndoSubdivision, exitRegionSelectionMode]);
+    setIsInfiniteZoomRunning(false);
+    revokeOwnedLayerUrlsNotIn(new Set());
+    setLiveLayerImages(new Map());
+  }, [
+    clearGuidedSession,
+    clearInfiniteZoomError,
+    clearUndoSubdivision,
+    exitRegionSelectionMode,
+    revokeOwnedLayerUrlsNotIn,
+  ]);
 
   const revokePendingUndoBlob = useCallback(() => {
     const prev = undoSubdivisionRef.current;
@@ -629,16 +1104,30 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   useEffect(() => {
     return () => {
       clearUndoToastTimer();
+      clearErrorToastTimer();
       revokePendingUndoBlob();
+      clearGuidedSession();
+      revokeOwnedLayerUrlsNotIn(new Set());
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
     };
-  }, [clearUndoToastTimer, revokePendingUndoBlob]);
+  }, [
+    clearErrorToastTimer,
+    clearGuidedSession,
+    clearUndoToastTimer,
+    revokeOwnedLayerUrlsNotIn,
+    revokePendingUndoBlob,
+  ]);
+
+  const activeSelectionGrid = useMemo(
+    () => resolveActiveSelectionGrid(puzzle, selectionLayerId),
+    [puzzle, selectionLayerId]
+  );
 
   const selectionMetrics: SelectionMetrics = useMemo(() => {
-    if (!puzzle || selectedRegionIds.size === 0) {
+    if (!activeSelectionGrid || selectedRegionIds.size === 0) {
       return {
         regionCount: 0,
         area: 0,
@@ -649,19 +1138,25 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         mode: 'in-place',
       };
     }
-    return computeSelectionMetrics(puzzle, selectedRegionIds, filledRegionIds, paintedRegionColors);
-  }, [puzzle, selectedRegionIds, filledRegionIds, paintedRegionColors]);
+    return computeSelectionMetrics(
+      activeSelectionGrid,
+      selectedRegionIds,
+      filledRegionIds,
+      paintedRegionColors
+    );
+  }, [activeSelectionGrid, selectedRegionIds, filledRegionIds, paintedRegionColors]);
 
   const childSave = useMemo(
     () => resolveLatestChildSave(snapshots, activeSave, activeSnapshotId),
     [snapshots, activeSave, activeSnapshotId]
   );
 
-  const isInfiniteZoomDisabled = Boolean(coopRoomCode) || isLoading || isReplaying || !sourceImage;
+  const isInfiniteZoomDisabled =
+    Boolean(coopRoomCode) || isLoading || isActiveReplayPlayback || !sourceImage;
   const infiniteZoomDisabledReason = coopRoomCode
     ? 'Leave Co-op room to use Infinite Zoom'
-    : isReplaying
-      ? 'Exit Replay to use Infinite Zoom'
+    : isActiveReplayPlayback
+      ? 'Pause or exit Replay to use Infinite Zoom'
       : undefined;
 
   const handleJumpToChildPuzzle = useCallback(() => {
@@ -673,71 +1168,347 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   const handleEnterRegionSelectionMode = useCallback(
     (initialPrompt?: string) => {
       if (isInfiniteZoomDisabled || !puzzle) return;
+      if (isReplayingRef.current) {
+        exitReplay();
+      }
+      clearInfiniteZoomError();
       if (typeof initialPrompt === 'string' && initialPrompt.trim().length > 0) {
         setInfiniteZoomPrompt(initialPrompt);
       }
-      setSelectedRegionIds(new Set());
+      const empty = new Set<number>();
+      selectedRegionIdsRef.current = empty;
+      selectionLayerIdRef.current = null;
+      setSelectedRegionIds(empty);
+      setSelectionLayerId(null);
       setPendingSwitchRegionId(null);
+      pendingSwitchLayerIdRef.current = null;
       setSelectionNotice(null);
       setIsRegionSelectionMode(true);
     },
-    [isInfiniteZoomDisabled, puzzle]
+    [
+      clearInfiniteZoomError,
+      exitReplay,
+      isInfiniteZoomDisabled,
+      isReplayingRef,
+      puzzle,
+      selectedRegionIdsRef,
+      selectionLayerIdRef,
+    ]
   );
 
   const handleRegionSelectTap = useCallback(
-    (regionId: number) => {
+    (regionId: number, layerId?: string | null) => {
       if (!puzzle || !isRegionSelectionMode) return;
-      const result = toggleContiguousRegion(
-        puzzle,
-        selectedRegionIds,
-        regionId,
-        regionByIdRef.current
-      );
+      const targetLayerId =
+        layerId !== undefined
+          ? layerId
+          : (buildUnifiedRegionIndex(puzzle).worldById.get(regionId)?.layerId ?? null);
+      const targetGrid = resolveActiveSelectionGrid(puzzle, targetLayerId);
+      if (!targetGrid) return;
+      const layerRegionMap = buildRegionByIdMap(targetGrid);
+      if (!layerRegionMap.has(regionId)) return;
+
+      const curSelected = selectedRegionIdsRef.current;
+      const curLayerId = selectionLayerIdRef.current;
+
+      if (curSelected.size > 0 && targetLayerId !== curLayerId) {
+        pendingSwitchLayerIdRef.current = targetLayerId;
+        setPendingSwitchRegionId(regionId);
+        setSelectionNotice(null);
+        return;
+      }
+
+      const result = toggleContiguousRegion(targetGrid, curSelected, regionId, layerRegionMap);
       if (result.status === 'added' || result.status === 'removed') {
+        const nextLayerId = result.nextSelected.size > 0 ? targetLayerId : null;
+        selectedRegionIdsRef.current = result.nextSelected;
+        selectionLayerIdRef.current = nextLayerId;
         setSelectedRegionIds(result.nextSelected);
+        setSelectionLayerId(nextLayerId);
         setPendingSwitchRegionId(null);
+        pendingSwitchLayerIdRef.current = null;
         setSelectionNotice(null);
         NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
       } else if (result.status === 'non-adjacent') {
+        pendingSwitchLayerIdRef.current = targetLayerId;
         setPendingSwitchRegionId(regionId);
         setSelectionNotice(null);
       } else if (result.status === 'bridge-blocked') {
         setPendingSwitchRegionId(null);
-        setSelectionNotice('Cannot unselect a connecting bridge region — clear or unselect ends first.');
+        pendingSwitchLayerIdRef.current = null;
+        setSelectionNotice(
+          'Cannot unselect a connecting bridge region — clear or unselect ends first.'
+        );
       }
     },
-    [isRegionSelectionMode, puzzle, regionByIdRef, selectedRegionIds, settingsRef]
+    [isRegionSelectionMode, puzzle, selectedRegionIdsRef, selectionLayerIdRef, settingsRef]
   );
 
   const handleRegionSelectDragAdd = useCallback(
     (candidateIds: ReadonlySet<number>) => {
       if (!puzzle || !isRegionSelectionMode || candidateIds.size === 0) return;
-      const snapshot = Array.from(candidateIds);
-      setSelectedRegionIds((prev) => {
-        const next = addContiguousDragRegions(puzzle, prev, snapshot, regionByIdRef.current);
-        return next.size === prev.size ? prev : next;
-      });
+      const curSelected = selectedRegionIdsRef.current;
+      let targetLayerId = selectionLayerIdRef.current;
+
+      if (curSelected.size === 0) {
+        const index = buildUnifiedRegionIndex(puzzle);
+        for (const id of candidateIds) {
+          const ref = index.worldById.get(id);
+          if (ref) {
+            targetLayerId = ref.layerId;
+            break;
+          }
+        }
+      }
+
+      const targetGrid = resolveActiveSelectionGrid(puzzle, targetLayerId);
+      if (!targetGrid) return;
+      const layerRegionMap = buildRegionByIdMap(targetGrid);
+      const filtered: number[] = [];
+      for (const id of candidateIds) {
+        if (layerRegionMap.has(id)) {
+          filtered.push(id);
+        }
+      }
+      if (filtered.length === 0) return;
+
+      const next = addContiguousDragRegions(targetGrid, curSelected, filtered, layerRegionMap);
+      if (next.size !== curSelected.size) {
+        selectedRegionIdsRef.current = next;
+        setSelectedRegionIds(next);
+        if (curSelected.size === 0 && next.size > 0) {
+          selectionLayerIdRef.current = targetLayerId;
+          setSelectionLayerId(targetLayerId);
+        }
+      }
       setPendingSwitchRegionId(null);
+      pendingSwitchLayerIdRef.current = null;
       setSelectionNotice(null);
     },
-    [isRegionSelectionMode, puzzle, regionByIdRef]
+    [isRegionSelectionMode, puzzle, selectedRegionIdsRef, selectionLayerIdRef]
   );
 
   const handleSwitchSelectionToPending = useCallback(() => {
     if (pendingSwitchRegionId === null || !puzzle) return;
-    setSelectedRegionIds(new Set([pendingSwitchRegionId]));
+    const nextLayerId = pendingSwitchLayerIdRef.current;
+    const targetGrid = resolveActiveSelectionGrid(puzzle, nextLayerId);
+    if (!targetGrid) return;
+    const nextSet = new Set([pendingSwitchRegionId]);
+    selectionLayerIdRef.current = nextLayerId;
+    selectedRegionIdsRef.current = nextSet;
+    setSelectionLayerId(nextLayerId);
+    setSelectedRegionIds(nextSet);
     setPendingSwitchRegionId(null);
+    pendingSwitchLayerIdRef.current = null;
     setSelectionNotice(null);
     NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
-  }, [pendingSwitchRegionId, puzzle, settingsRef]);
+  }, [pendingSwitchRegionId, puzzle, selectedRegionIdsRef, selectionLayerIdRef, settingsRef]);
 
   const handleClearSelection = useCallback(() => {
-    setSelectedRegionIds(new Set());
+    const empty = new Set<number>();
+    selectedRegionIdsRef.current = empty;
+    selectionLayerIdRef.current = null;
+    setSelectedRegionIds(empty);
+    setSelectionLayerId(null);
     setPendingSwitchRegionId(null);
+    pendingSwitchLayerIdRef.current = null;
     setSelectionNotice(null);
-  }, []);
+  }, [selectedRegionIdsRef, selectionLayerIdRef]);
 
-  const commitInPlaceSubdivision = useCallback(
+  /**
+   * Resolves an HTMLCanvasElement for the target layer (root or nested) at exact grid dimensions.
+   */
+  const renderLayerSourceToCanvas = useCallback(
+    async (
+      basePuzzle: PuzzleData,
+      baseImage: HTMLImageElement,
+      targetLayerId: string | null,
+      targetGrid: RegionGridLike
+    ): Promise<HTMLCanvasElement> => {
+      if (targetLayerId === null) {
+        return renderImageToCanvas(baseImage, targetGrid.width, targetGrid.height);
+      }
+      const nestedLayer = basePuzzle.nestedLayers?.find((l) => l.layerId === targetLayerId);
+      if (!nestedLayer) {
+        return renderImageToCanvas(baseImage, targetGrid.width, targetGrid.height);
+      }
+      const liveImg = liveLayerImagesRef.current.get(nestedLayer.imageBlobKey);
+      if (liveImg && liveImg.complete && (liveImg.naturalWidth > 0 || liveImg.width > 0)) {
+        return renderImageToCanvas(liveImg, targetGrid.width, targetGrid.height);
+      }
+      const blob = await StorageService.loadImageBlob(nestedLayer.imageBlobKey);
+      if (!blob) {
+        throw new Error('Could not load artwork for the selected detail layer.');
+      }
+      const { img, objectUrl } = await decodeBlobToImage(blob);
+      try {
+        return renderImageToCanvas(img, targetGrid.width, targetGrid.height);
+      } finally {
+        revokeObjectUrlSafely(objectUrl);
+      }
+    },
+    [liveLayerImagesRef]
+  );
+
+  /**
+   * Executes the selected Nano Banana provider or opens Guided Gemini Handoff Modal.
+   * Returns decoded image + provider/model metadata when resolved immediately, or `null` when
+   * paused waiting on the Guided Gemini Handoff modal.
+   */
+  const runProviderOrOpenGuidedHandoff = useCallback(
+    async (opts: {
+      seq: number;
+      signal: AbortSignal;
+      direction: 'in-place' | 'child-in' | 'extend-out';
+      prompt: string;
+      templatePngBlob: Blob;
+      templateDataUrl: string;
+      width: number;
+      height: number;
+      onComplete: (
+        decoded: DecodedGeminiImage,
+        providerUsed: InfiniteZoomProviderMode,
+        modelUsed: NanoBananaModelId,
+        activeSignal: AbortSignal
+      ) => Promise<void>;
+      onCleanup?: () => void;
+    }): Promise<'completed' | 'awaiting-guided' | 'aborted'> => {
+      const {
+        seq,
+        signal,
+        direction,
+        prompt,
+        templatePngBlob,
+        templateDataUrl,
+        width,
+        height,
+        onComplete,
+        onCleanup,
+      } = opts;
+      const isAborted = () => signal.aborted || seq !== infiniteZoomOpSeqRef.current;
+
+      const curSettings = settingsRef.current;
+      const isAndroid = NativeBridge.isAndroidNative();
+      const effectiveProvider: InfiniteZoomProviderMode =
+        isAndroid && curSettings.infiniteZoomProvider === 'PUTER'
+          ? 'GUIDED_GEMINI'
+          : curSettings.infiniteZoomProvider;
+      const model = curSettings.nanoBananaModel;
+      const resolution = curSettings.nanoBananaResolution;
+
+      const openGuided = (fallbackReason: string | null): 'awaiting-guided' => {
+        const handoff = prepareGuidedGeminiHandoff({
+          templatePngBlob,
+          templateDataUrl,
+          prompt,
+          direction,
+        });
+        pendingGuidedRef.current = {
+          seq,
+          complete: async (decoded, activeSignal) => {
+            await onComplete(decoded, 'GUIDED_GEMINI', model, activeSignal);
+          },
+          cleanup: onCleanup,
+        };
+        setIsLoading(false);
+        setLoadingPayload(null);
+        setGuidedHandoffSession({
+          handoff,
+          fallbackReason,
+          isProcessing: false,
+          errorMessage: null,
+        });
+        onGuidedHandoffOpenChangeRef.current?.(true);
+        return 'awaiting-guided';
+      };
+
+      if (effectiveProvider === 'GUIDED_GEMINI') {
+        return openGuided(null);
+      }
+
+      try {
+        setLoadingProgress(0.18);
+        setLoadingStatus(
+          effectiveProvider === 'PUTER'
+            ? 'Generating seamless artwork via Puter (Nano Banana)...'
+            : 'Generating seamless artwork via Gemini API...'
+        );
+
+        const generationResult =
+          effectiveProvider === 'PUTER'
+            ? await new PuterNanoBananaProvider().generate({
+                prompt,
+                templatePngBlob,
+                templateDataUrl,
+                width,
+                height,
+                model,
+                resolution,
+                signal,
+              })
+            : await new DirectGeminiByokProvider().generate({
+                prompt,
+                templatePngBlob,
+                templateDataUrl,
+                width,
+                height,
+                model,
+                resolution,
+                signal,
+              });
+
+        if (isAborted()) {
+          onCleanup?.();
+          return 'aborted';
+        }
+
+        setLoadingProgress(0.42);
+        setLoadingStatus('Validating generated image...');
+        const decoded = await decodeReceivedGeminiImage(generationResult.blob);
+        if (isAborted()) {
+          onCleanup?.();
+          return 'aborted';
+        }
+
+        await onComplete(decoded, generationResult.providerUsed, generationResult.modelUsed, signal);
+        onCleanup?.();
+        return 'completed';
+      } catch (err) {
+        if (isAborted() || isAbortLikeError(err)) {
+          onCleanup?.();
+          return 'aborted';
+        }
+        if (err instanceof NanoBananaError) {
+          if (err.code === 'SAFETY_BLOCKED') {
+            onCleanup?.();
+            showInfiniteZoomError(err.message, err.code);
+            return 'aborted';
+          }
+          if (err.canFallbackToGuided) {
+            return openGuided(
+              `${err.message} Switched to Free Gemini App Handoff so you can finish at $0 cost.`
+            );
+          }
+          onCleanup?.();
+          showInfiniteZoomError(err.message, err.code);
+          return 'aborted';
+        }
+        onCleanup?.();
+        throw err;
+      }
+    },
+    [
+      onGuidedHandoffOpenChangeRef,
+      setIsLoading,
+      setLoadingPayload,
+      setLoadingProgress,
+      setLoadingStatus,
+      settingsRef,
+      showInfiniteZoomError,
+    ]
+  );
+
+  const commitZoomInResult = useCallback(
     async (opts: {
       seq: number;
       signal: AbortSignal;
@@ -745,17 +1516,17 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       existingSnap: SavedSnapshot | undefined;
       basePuzzle: PuzzleData;
       baseImage: HTMLImageElement;
-      mergedPuzzle: PuzzleData;
-      updatedImg: HTMLImageElement;
-      updatedBlob: Blob;
-      newBlobUrl: string;
-      previousBlob: Blob | null;
-      selectedSnapshot: Set<number>;
-      addedRegionCount: number;
-      addedSwatches: PaletteColor[];
-      paintedCount: number;
+      targetLayerId: string | null;
+      targetGrid: RegionGridLike;
+      selectedCopy: Set<number>;
+      metrics: SelectionMetrics;
+      cropMask: Uint8Array;
+      originalCropRgba: Uint8ClampedArray;
+      templateMeta: TemplateMaskRect;
       sanitizedPrompt: string;
-      tierUsed: InfiniteZoomNodeMeta['aiTierUsed'];
+      decoded: DecodedGeminiImage;
+      providerUsed: InfiniteZoomProviderMode;
+      modelUsed: NanoBananaModelId;
       isFree: boolean;
     }) => {
       const {
@@ -765,500 +1536,341 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         existingSnap,
         basePuzzle,
         baseImage,
-        mergedPuzzle,
-        updatedImg,
-        updatedBlob,
-        newBlobUrl,
-        previousBlob,
-        selectedSnapshot,
-        addedRegionCount,
-        addedSwatches,
-        paintedCount,
+        targetLayerId,
+        targetGrid,
+        selectedCopy,
+        metrics,
+        cropMask,
+        originalCropRgba,
+        templateMeta,
         sanitizedPrompt,
-        tierUsed,
+        decoded,
+        providerUsed,
+        modelUsed,
         isFree,
       } = opts;
 
       const isAborted = () => signal.aborted || seq !== infiniteZoomOpSeqRef.current;
-      if (isAborted()) {
-        revokeObjectUrlSafely(newBlobUrl);
-        return;
-      }
+      if (isAborted()) return;
 
-      const previousBlobUrl = activeBlobUrlRef.current;
-      const preSplitUndo: UndoSubdivisionSnapshot = {
-        snapshotId: snapId,
-        puzzle: basePuzzle,
-        sourceImage: baseImage,
-        previousBlob,
-        previousBlobUrl,
-        newBlobUrl,
-        filledRegionIds: new Set(filledRegionIds),
-        paintedRegionColors: new Map(paintedRegionColors),
-        undoStack: undoStackRef.current.slice(),
-        redoStack: redoStackRef.current.slice(),
-        activeColorId,
-        previousMeta: {
-          sampleAssetPath: existingSnap?.sampleAssetPath,
-          isAutoSample: existingSnap?.isAutoSample,
-          sourceRef: existingSnap?.sourceRef,
-          zoomTree: existingSnap?.zoomTree,
-          previewDataUrl: existingSnap?.previewDataUrl,
+      const nextDepth = resolveNextZoomDepth(basePuzzle, targetLayerId);
+
+      setLoadingProgress(0.48);
+      setLoadingStatus('Compositing pixel-locked seamless detail...');
+      const targetDims = computeNestedLayerTargetDimensions(
+        metrics.bbox.width,
+        metrics.bbox.height,
+        NESTED_LAYER_MAX_DIM_PX
+      );
+      const composited = compositeInfillRgba({
+        originalCropRgba,
+        cropWidth: metrics.bbox.width,
+        cropHeight: metrics.bbox.height,
+        cropMask,
+        generatedRgba: decoded.rgba,
+        generatedWidth: decoded.width,
+        generatedHeight: decoded.height,
+        templateMeta,
+        targetWidth: targetDims.width,
+        targetHeight: targetDims.height,
+        transparentOutsideMask: true,
+      });
+      if (isAborted()) return;
+
+      const subResult = await PuzzleWorkerService.subdivideMaskedRegion(
+        {
+          rgbaData: composited.rgba,
+          cropWidth: composited.width,
+          cropHeight: composited.height,
+          cropMask: composited.mask,
+          existingPalette: basePuzzle.palette,
+          isFreeColor: isFree,
         },
-        addedRegionCount,
+        (prog, status) => {
+          if (seq === infiniteZoomOpSeqRef.current) {
+            setLoadingProgress(0.5 + Math.min(1, Math.max(0, prog)) * 0.35);
+            setLoadingStatus(status);
+          }
+        }
+      );
+      if (isAborted()) return;
+
+      setLoadingProgress(0.88);
+      setLoadingStatus('Embedding seamless detail layer...');
+
+      const layerId = makeUniqueLayerId(`detail_d${nextDepth}`);
+      const imageBlobKey = buildCanonicalLayerImageKey(snapId, layerId);
+      const localBoundsInParent: NormalizedRect = {
+        x: metrics.bbox.minX / Math.max(1, targetGrid.width),
+        y: metrics.bbox.minY / Math.max(1, targetGrid.height),
+        width: metrics.bbox.width / Math.max(1, targetGrid.width),
+        height: metrics.bbox.height / Math.max(1, targetGrid.height),
       };
 
-      const { nextFilled, nextPainted } = filterProgressForRemovedRegions(
-        filledRegionIds,
-        paintedRegionColors,
-        selectedSnapshot
+      const layerPngBlob = await encodeRgbaToBlob(
+        composited.rgba,
+        composited.width,
+        composited.height,
+        'image/png'
       );
-      const nextUndo = scrubUndoHistoryForRemovedRegions(undoStackRef.current, selectedSnapshot);
-      const nextRedo = scrubUndoHistoryForRemovedRegions(redoStackRef.current, selectedSnapshot);
-      const nextActiveColorId = resolvePostSubdivisionActiveColor(
-        mergedPuzzle,
-        nextFilled,
-        activeColorId,
-        addedSwatches,
-        settingsRef.current,
-        visibleColorIdsRef.current,
-        isFree
-      );
+      if (isAborted()) return;
 
-      await StorageService.saveImageBlob(snapId, updatedBlob).catch((err) => {
-        reportSwallowed('InfiniteZoom.saveImageBlob', err, { id: snapId });
-      });
-      if (isAborted()) {
-        rollbackAbortedInPlacePersist(snapId, newBlobUrl, previousBlob);
-        return;
+      const { img: layerImg, objectUrl: layerObjectUrl } = await decodeBlobToImage(layerPngBlob);
+      let persistedToIdb = false;
+      let committed = false;
+      let previousRootBlob: Blob | null = null;
+      let promotedFromSample = false;
+
+      try {
+        if (isAborted()) {
+          revokeObjectUrlSafely(layerObjectUrl);
+          return;
+        }
+
+        const embedResult = embedNestedDetailLayerIntoPuzzle({
+          basePuzzle,
+          targetLayerId,
+          selectedRegionIds: selectedCopy,
+          subResult,
+          localBoundsInParent,
+          layerId,
+          imageBlobKey,
+          promptHint: sanitizedPrompt || undefined,
+          providerUsed,
+          modelUsed,
+        });
+
+        const previousLayerImages = new Map(liveLayerImagesRef.current);
+        const previousViewport = { ...viewportRef.current };
+        previousRootBlob = await loadPreviousRootBlobIfOwned(existingSnap, snapId);
+        promotedFromSample = !previousRootBlob && isSamplePromotionMeta(existingSnap);
+        if (isAborted()) {
+          revokeObjectUrlSafely(layerObjectUrl);
+          return;
+        }
+
+        persistedToIdb = true;
+        const persisted = await persistZoomInBlobsAndPuzzle({
+          snapId,
+          existingSnap,
+          basePuzzle,
+          baseImage,
+          nextPuzzle: embedResult.puzzle,
+          imageBlobKey,
+          layerPngBlob,
+          layerObjectUrl,
+          promotedFromSample,
+          isAborted,
+        });
+        if (!persisted) {
+          persistedToIdb = false;
+          return;
+        }
+
+        const liveState = liveCoopRef.current;
+        const liveFilled = liveState.filledRegionIds;
+        const livePainted = liveState.paintedRegionColors;
+        const liveActiveColorId = liveState.activeColorId;
+        const liveActiveSave = liveState.activeSave;
+
+        const removedIdSet = new Set(embedResult.removedRegionIds);
+        const removedFilledCount = countRemovedFilledRegions(liveFilled, removedIdSet);
+        const { nextFilled, nextPainted } = filterProgressForRemovedRegions(
+          liveFilled,
+          livePainted,
+          removedIdSet
+        );
+        const nextUndo = scrubUndoHistoryForRemovedRegions(undoStackRef.current, removedIdSet);
+        const nextRedo = scrubUndoHistoryForRemovedRegions(redoStackRef.current, removedIdSet);
+        const nextActiveColorId = resolvePostSubdivisionActiveColor(
+          embedResult.puzzle,
+          nextFilled,
+          liveActiveColorId,
+          subResult.addedSwatches,
+          settingsRef.current,
+          visibleColorIdsRef.current,
+          isFree
+        );
+
+        const previewUrl = await renderHydratedPreview(
+          embedResult.puzzle,
+          baseImage,
+          nextFilled,
+          nextPainted,
+          'InfiniteZoom.zoomInPreview'
+        );
+        if (isAborted()) {
+          await rollbackAbortedLayerPersist({
+            snapId,
+            addedLayerBlobKeys: [imageBlobKey],
+            newLayerObjectUrls: [layerObjectUrl],
+            previousRootBlob,
+            promotedFromSample,
+            basePuzzle,
+          });
+          persistedToIdb = false;
+          return;
+        }
+
+        const preOpUndo: UndoInfiniteZoomSnapshot = {
+          operationKind: 'zoom-in',
+          snapshotId: snapId,
+          puzzle: basePuzzle,
+          sourceImage: baseImage,
+          previousBlob: previousRootBlob,
+          promotedFromSample,
+          previousBlobUrl: activeBlobUrlRef.current,
+          newBlobUrl: activeBlobUrlRef.current,
+          addedLayerBlobKeys: [imageBlobKey],
+          previousLayerImages,
+          filledRegionIds: new Set(liveFilled),
+          paintedRegionColors: new Map(livePainted),
+          undoStack: undoStackRef.current.slice(),
+          redoStack: redoStackRef.current.slice(),
+          activeColorId: liveActiveColorId,
+          previousViewport,
+          previousMeta: buildPreviousSnapshotMeta(existingSnap),
+          addedRegionCount: embedResult.addedRegionIds.length,
+        };
+
+        const nextZoomTree = buildZoomInZoomTreeMeta(
+          existingSnap,
+          selectedCopy,
+          sanitizedPrompt,
+          providerUsed,
+          modelUsed
+        );
+        const nextResetEpoch =
+          removedFilledCount > 0
+            ? collectMonotonicResetEpoch(snapId, liveActiveSave, liveCoopRef.current.activeSave)
+            : undefined;
+        const totalRegions = getTotalRegionCount(embedResult.puzzle);
+        const estSaveBytes = StorageService.estimatePuzzleSaveBytes(embedResult.puzzle, previewUrl);
+        const orderedFilled = Array.from(nextFilled);
+        const paintedObj = Object.fromEntries(nextPainted);
+        const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
+
+        StorageService.updateSnapshotMetadata(snapId, {
+          sampleAssetPath: null,
+          isAutoSample: false,
+          sourceRef: { kind: 'blob', uri: snapId },
+          zoomTree: nextZoomTree,
+        });
+        const updatedSnapshots = StorageService.updateSnapshotProgress(
+          snapId,
+          nextFilled.size,
+          totalRegions,
+          orderedFilled,
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+          previewUrl,
+          paintedObj,
+          embedResult.puzzle.palette,
+          isFree,
+          estSaveBytes,
+          nextResetEpoch
+        );
+        const syncedSave = updatedSnapshots.find((s) => s.id === snapId);
+        StorageService.saveActiveState({
+          activeSnapshotId: snapId,
+          activeColorId: nextActiveColorId,
+          filledRegionIds: orderedFilled,
+          paintedRegionColors: paintedObj,
+          isFreeColorMode: isFree,
+          ...(nextResetEpoch !== undefined ? { resetEpoch: nextResetEpoch } : {}),
+          zoomScale,
+          panOffsetX,
+          panOffsetY,
+        });
+
+        ownedLayerBlobUrlsRef.current.set(imageBlobKey, layerObjectUrl);
+        const nextLiveLayerImages = new Map(previousLayerImages);
+        nextLiveLayerImages.set(imageBlobKey, layerImg);
+
+        liveCoopRef.current = {
+          ...liveCoopRef.current,
+          puzzle: embedResult.puzzle,
+          activeSave: syncedSave ?? liveCoopRef.current.activeSave,
+          filledRegionIds: nextFilled,
+          paintedRegionColors: nextPainted,
+          activeColorId: nextActiveColorId,
+        };
+        setLiveLayerImages(nextLiveLayerImages);
+        setPuzzle(embedResult.puzzle);
+        setFilledRegionIds(nextFilled);
+        setPaintedRegionColors(nextPainted);
+        setActiveColorId(nextActiveColorId);
+        setHintRegionId(null);
+        syncUndoStack(nextUndo);
+        syncRedoStack(nextRedo);
+        setSnapshots(updatedSnapshots);
+        committed = true;
+
+        clearUndoToastTimer();
+        undoSubdivisionRef.current = preOpUndo;
+        setUndoSubdivisionState(preOpUndo);
+        undoToastTimerRef.current = setTimeout(() => {
+          clearUndoSubdivision();
+        }, UNDO_TOAST_DURATION_MS);
+
+        markTutorialActionTried('create_gallery');
+        triggerFeatureOffer('infinite_zoom');
+        NativeBridge.haptic('success', settingsRef.current.hapticsEnabled);
+      } catch (err) {
+        if (!committed) {
+          if (persistedToIdb) {
+            await rollbackAbortedLayerPersist({
+              snapId,
+              addedLayerBlobKeys: [imageBlobKey],
+              newLayerObjectUrls: [layerObjectUrl],
+              previousRootBlob,
+              promotedFromSample,
+              basePuzzle,
+            });
+          } else {
+            revokeObjectUrlSafely(layerObjectUrl);
+          }
+        }
+        throw err;
       }
-
-      await StorageService.savePuzzleData(snapId, mergedPuzzle).catch((err) => {
-        reportSwallowed('InfiniteZoom.savePuzzleData', err, { id: snapId });
-      });
-      if (isAborted()) {
-        rollbackAbortedInPlacePersist(snapId, newBlobUrl, previousBlob, basePuzzle);
-        return;
-      }
-
-      const nextZoomTree: InfiniteZoomNodeMeta = {
-        ...(existingSnap?.zoomTree || { depth: 0, direction: 'in-place' }),
-        direction: existingSnap?.zoomTree?.direction ?? 'in-place',
-        selectedRegionIds: Array.from(selectedSnapshot),
-        promptHint: sanitizedPrompt || undefined,
-        aiTierUsed: tierUsed,
-        inPlaceSubdivisionCount: (existingSnap?.zoomTree?.inPlaceSubdivisionCount ?? 0) + 1,
-      };
-      const nextResetEpoch =
-        paintedCount > 0
-          ? collectMonotonicResetEpoch(snapId, activeSave, liveCoopRef.current.activeSave)
-          : undefined;
-      const previewUrl = generatePreviewDataUrl(mergedPuzzle, updatedImg, nextFilled, nextPainted);
-      const estSaveBytes = StorageService.estimatePuzzleSaveBytes(mergedPuzzle, previewUrl);
-      const orderedFilled = Array.from(nextFilled);
-      const paintedObj = Object.fromEntries(nextPainted);
-      const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-
-      activeBlobUrlRef.current = newBlobUrl;
-      StorageService.updateSnapshotMetadata(snapId, {
-        sampleAssetPath: null,
-        isAutoSample: false,
-        sourceRef: { kind: 'blob', uri: snapId },
-        zoomTree: nextZoomTree,
-      });
-      const updatedSnapshots = StorageService.updateSnapshotProgress(
-        snapId,
-        nextFilled.size,
-        mergedPuzzle.regions.length,
-        orderedFilled,
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-        previewUrl,
-        paintedObj,
-        mergedPuzzle.palette,
-        isFree,
-        estSaveBytes,
-        nextResetEpoch
-      );
-      const syncedSave = updatedSnapshots.find((s) => s.id === snapId);
-      StorageService.saveActiveState({
-        activeSnapshotId: snapId,
-        activeColorId: nextActiveColorId,
-        filledRegionIds: orderedFilled,
-        paintedRegionColors: paintedObj,
-        isFreeColorMode: isFree,
-        ...(nextResetEpoch !== undefined ? { resetEpoch: nextResetEpoch } : {}),
-        zoomScale,
-        panOffsetX,
-        panOffsetY,
-      });
-
-      liveCoopRef.current = {
-        ...liveCoopRef.current,
-        puzzle: mergedPuzzle,
-        activeSave: syncedSave ?? liveCoopRef.current.activeSave,
-        filledRegionIds: nextFilled,
-        paintedRegionColors: nextPainted,
-        activeColorId: nextActiveColorId,
-      };
-      setSourceImage(updatedImg);
-      setPuzzle(mergedPuzzle);
-      setFilledRegionIds(nextFilled);
-      setPaintedRegionColors(nextPainted);
-      setActiveColorId(nextActiveColorId);
-      setHintRegionId(null);
-      syncUndoStack(nextUndo);
-      syncRedoStack(nextRedo);
-      setSnapshots(updatedSnapshots);
-
-      clearUndoToastTimer();
-      setUndoSubdivisionState(preSplitUndo);
-      undoToastTimerRef.current = setTimeout(() => {
-        clearUndoSubdivision();
-      }, UNDO_TOAST_DURATION_MS);
-
-      markTutorialActionTried('create_gallery');
-      triggerFeatureOffer('infinite_zoom');
-      NativeBridge.haptic('success', settingsRef.current.hapticsEnabled);
     },
     [
       activeBlobUrlRef,
-      activeColorId,
-      activeSave,
       clearUndoSubdivision,
       clearUndoToastTimer,
-      filledRegionIds,
       liveCoopRef,
+      liveLayerImagesRef,
       markTutorialActionTried,
-      paintedRegionColors,
       redoStackRef,
       setActiveColorId,
       setFilledRegionIds,
       setHintRegionId,
+      setLoadingProgress,
+      setLoadingStatus,
       setPaintedRegionColors,
       setPuzzle,
       setSnapshots,
-      setSourceImage,
       settingsRef,
       syncRedoStack,
       syncUndoStack,
       triggerFeatureOffer,
       undoStackRef,
+      undoSubdivisionRef,
       viewportRef,
       visibleColorIdsRef,
     ]
   );
 
-  const executeInPlaceSubdivision = useCallback(
-    async (
-      seq: number,
-      signal: AbortSignal,
-      basePuzzle: PuzzleData,
-      baseImage: HTMLImageElement,
-      selectedSnapshot: Set<number>,
-      metrics: SelectionMetrics,
-      promptText: string
-    ) => {
-      const isAborted = () => signal.aborted || seq !== infiniteZoomOpSeqRef.current;
-      const snapId = activeSnapshotId || crypto.randomUUID();
-      const isFree = Boolean(isFreeColorMode || basePuzzle.isFreeColor);
-      const existingSnap = snapshots.find((s) => s.id === snapId);
-      const previousBlob =
-        existingSnap && !existingSnap.sampleAssetPath
-          ? await StorageService.loadImageBlob(snapId).catch(() => null)
-          : null;
-      if (isAborted()) return;
-
-      const puzzleCanvas = renderSourceToPuzzleCanvas(baseImage, basePuzzle.width, basePuzzle.height);
-      let contextCanvas: HTMLCanvasElement | null = null;
-      let infillCanvas: HTMLCanvasElement | null = null;
-      let updatedCanvas: HTMLCanvasElement | null = null;
-      try {
-        contextCanvas = buildContextCanvas(puzzleCanvas, metrics.bbox);
-        const scenePlan = await generateScenePlan(
-          {
-            direction: 'in-place',
-            localAiMode: settingsRef.current.localAiMode,
-            userPrompt: promptText,
-            neighborPaletteHex: metrics.neighborBoundaryHexes,
-            existingPaletteHex: basePuzzle.palette.map((c) => c.hex),
-            depth: activeSave?.zoomTree?.depth ?? 0,
-            aspectRatio: metrics.bbox.width / Math.max(1, metrics.bbox.height),
-            contextCanvas,
-          },
-          signal,
-          (pct, status) => {
-            if (seq === infiniteZoomOpSeqRef.current) {
-              setLoadingProgress(0.05 + (Math.min(100, Math.max(0, pct)) / 100) * 0.3);
-              setLoadingStatus(status);
-            }
-          }
-        );
-        if (isAborted()) return;
-
-        setLoadingProgress(0.38);
-        setLoadingStatus('Synthesizing seamless region infill...');
-        const cropMask = buildSelectionMask(basePuzzle, selectedSnapshot, metrics.bbox);
-        const infill = synthesizeInfillCanvas(puzzleCanvas, metrics.bbox, cropMask, scenePlan, {
-          mode: 'in-place',
-        });
-        infillCanvas = infill.canvas;
-        if (isAborted()) return;
-
-        const subResult = await PuzzleWorkerService.subdivideMaskedRegion(
-          {
-            rgbaData: infill.rgba,
-            cropWidth: infill.width,
-            cropHeight: infill.height,
-            cropMask: infill.mask,
-            existingPalette: basePuzzle.palette,
-            isFreeColor: isFree,
-          },
-          (prog, status) => {
-            if (seq === infiniteZoomOpSeqRef.current) {
-              setLoadingProgress(0.4 + Math.min(1, Math.max(0, prog)) * 0.45);
-              setLoadingStatus(status);
-            }
-          }
-        );
-        if (isAborted()) return;
-
-        setLoadingProgress(0.88);
-        setLoadingStatus('Splicing new detail regions...');
-        const mergedPuzzle = mergeSubdividedRegionIntoPuzzle(
-          basePuzzle,
-          selectedSnapshot,
-          subResult,
-          metrics.bbox
-        );
-        updatedCanvas = buildInPlaceUpdatedSourceCanvas(
-          puzzleCanvas,
-          infill.canvas,
-          metrics.bbox,
-          cropMask,
-          basePuzzle.width,
-          basePuzzle.height
-        );
-        const needsPng = hasCutoutExteriorMask(basePuzzle);
-        const updatedBlob = await canvasToBlobAsync(
-          updatedCanvas,
-          needsPng ? 'image/png' : 'image/webp',
-          needsPng ? undefined : 0.94
-        );
-        if (isAborted()) return;
-
-        const { img: updatedImg, objectUrl: newBlobUrl } = await decodeBlobToImage(updatedBlob);
-        if (isAborted()) {
-          revokeObjectUrlSafely(newBlobUrl);
-          return;
-        }
-
-        await commitInPlaceSubdivision({
-          seq,
-          signal,
-          snapId,
-          existingSnap,
-          basePuzzle,
-          baseImage,
-          mergedPuzzle,
-          updatedImg,
-          updatedBlob,
-          newBlobUrl,
-          previousBlob,
-          selectedSnapshot,
-          addedRegionCount: subResult.regions.length,
-          addedSwatches: subResult.addedSwatches,
-          paintedCount: metrics.paintedCount,
-          sanitizedPrompt: scenePlan.sanitizedPrompt,
-          tierUsed: scenePlan.tierUsed,
-          isFree,
-        });
-      } finally {
-        releaseCanvas(updatedCanvas);
-        releaseCanvas(infillCanvas);
-        releaseCanvas(contextCanvas);
-        releaseCanvas(puzzleCanvas);
-      }
-    },
-    [
-      activeSave,
-      activeSnapshotId,
-      commitInPlaceSubdivision,
-      isFreeColorMode,
-      setLoadingProgress,
-      setLoadingStatus,
-      settingsRef,
-      snapshots,
-    ]
-  );
-
-  const executeChildTilePromotion = useCallback(
-    async (
-      seq: number,
-      signal: AbortSignal,
-      basePuzzle: PuzzleData,
-      baseImage: HTMLImageElement,
-      selectedSnapshot: Set<number>,
-      metrics: SelectionMetrics,
-      promptText: string
-    ): Promise<boolean> => {
-      const parentId = activeSnapshotId || crypto.randomUUID();
-      const currentView = { ...viewportRef.current };
-      const isFree = Boolean(isFreeColorMode || basePuzzle.isFreeColor);
-
-      const puzzleCanvas = renderSourceToPuzzleCanvas(baseImage, basePuzzle.width, basePuzzle.height);
-      let contextCanvas: HTMLCanvasElement | null = null;
-      let infillCanvas: HTMLCanvasElement | null = null;
-      try {
-        contextCanvas = buildContextCanvas(puzzleCanvas, metrics.bbox);
-        const scenePlan = await generateScenePlan(
-          {
-            direction: 'child-in',
-            localAiMode: settingsRef.current.localAiMode,
-            userPrompt: promptText,
-            neighborPaletteHex: metrics.neighborBoundaryHexes,
-            existingPaletteHex: basePuzzle.palette.map((c) => c.hex),
-            depth: (activeSave?.zoomTree?.depth ?? 0) + 1,
-            aspectRatio: metrics.bbox.width / Math.max(1, metrics.bbox.height),
-            contextCanvas,
-          },
-          signal,
-          (pct, status) => {
-            if (seq === infiniteZoomOpSeqRef.current) {
-              setLoadingProgress(0.05 + (Math.min(100, Math.max(0, pct)) / 100) * 0.35);
-              setLoadingStatus(status);
-            }
-          }
-        );
-        if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) return false;
-
-        setLoadingProgress(0.45);
-        setLoadingStatus('Synthesizing high-detail cutout tile...');
-        const cropMask = buildSelectionMask(basePuzzle, selectedSnapshot, metrics.bbox);
-        const cropRgba = readSelectionCropRgba(puzzleCanvas, metrics.bbox);
-        const meanChroma = cropRgba ? computeSelectionMeanChroma(cropRgba, cropMask) : 40;
-        const maxDeltaE =
-          meanChroma < ACHROMATIC_CHROMA_THRESHOLD
-            ? ACHROMATIC_CHILD_MAX_DELTA_E
-            : INFILL_MAX_DELTA_E;
-
-        const infill = synthesizeInfillCanvas(puzzleCanvas, metrics.bbox, cropMask, scenePlan, {
-          mode: 'child-tile',
-          maxDeltaE,
-        });
-        infillCanvas = infill.canvas;
-        const pngBlob = await canvasToBlobAsync(infill.canvas, 'image/png');
-        if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) return false;
-
-        const { img: childImg, objectUrl } = await decodeBlobToImage(pngBlob);
-        let handedOffToActiveState = false;
-        try {
-          if (signal.aborted || seq !== infiniteZoomOpSeqRef.current) {
-            return false;
-          }
-
-          persistParentSnapshotBeforeDetailTile(parentId, currentView);
-          const boundsInParent = {
-            x: metrics.bbox.minX / Math.max(1, basePuzzle.width),
-            y: metrics.bbox.minY / Math.max(1, basePuzzle.height),
-            width: metrics.bbox.width / Math.max(1, basePuzzle.width),
-            height: metrics.bbox.height / Math.max(1, basePuzzle.height),
-          };
-          const childZoomTree: InfiniteZoomNodeMeta = {
-            depth: (activeSave?.zoomTree?.depth ?? 0) + 1,
-            direction: 'child-in',
-            boundsInParent,
-            selectedRegionIds: Array.from(selectedSnapshot),
-            promptHint: scenePlan.sanitizedPrompt || undefined,
-            aiTierUsed: scenePlan.tierUsed,
-          };
-          const childConfig: GeneratorConfig = {
-            ...settingsRef.current.generatorConfig,
-            maxRegions: Math.min(
-              900,
-              Math.round((settingsRef.current.generatorConfig.maxRegions || 350) * 1.25)
-            ),
-            isFreeColor: isFree,
-          };
-
-          markTutorialActionTried('create_gallery');
-          triggerFeatureOffer('infinite_zoom');
-          abortControllerRef.current = null;
-          cancelHandoffRef.current = { restoreSnapshotId: parentId, createdSnapshotId: null };
-          const priorActiveBlobUrl = activeBlobUrlRef.current;
-          activeBlobUrlRef.current = objectUrl;
-          if (priorActiveBlobUrl && priorActiveBlobUrl !== objectUrl) {
-            revokeObjectUrlSafely(priorActiveBlobUrl);
-          }
-          handedOffToActiveState = true;
-          await loadArtworkFromImage(
-            childImg,
-            buildChildTileTitle(activeTitle, scenePlan.sanitizedPrompt),
-            childConfig,
-            new Set(),
-            undefined,
-            undefined,
-            null,
-            false,
-            pngBlob,
-            undefined,
-            undefined,
-            undefined,
-            isFree,
-            parentId,
-            {
-              zoomTree: childZoomTree,
-              linkParentId: parentId,
-              preserveLosslessAlpha: true,
-              onRegistered: (snapId) => {
-                if (cancelHandoffRef.current) {
-                  cancelHandoffRef.current.createdSnapshotId = snapId;
-                }
-              },
-              onFinished: () => {
-                if (seq === infiniteZoomOpSeqRef.current) {
-                  cancelHandoffRef.current = null;
-                  setIsInfiniteZoomRunning(false);
-                }
-              },
-            }
-          );
-          return true;
-        } finally {
-          if (!handedOffToActiveState) {
-            revokeObjectUrlSafely(objectUrl);
-          }
-        }
-      } finally {
-        releaseCanvas(infillCanvas);
-        releaseCanvas(contextCanvas);
-        releaseCanvas(puzzleCanvas);
-      }
-    },
-    [
-      activeBlobUrlRef,
-      activeSave?.zoomTree?.depth,
-      activeSnapshotId,
-      activeTitle,
-      isFreeColorMode,
-      loadArtworkFromImage,
-      markTutorialActionTried,
-      persistParentSnapshotBeforeDetailTile,
-      setLoadingProgress,
-      setLoadingStatus,
-      settingsRef,
-      triggerFeatureOffer,
-      viewportRef,
-    ]
-  );
-
   const handleConfirmRegionSubdivision = useCallback(async () => {
     if (!puzzle || !sourceImage || selectedRegionIds.size === 0 || isInfiniteZoomDisabled) return;
+    const targetLayerId = selectionLayerId;
+    const targetGrid = resolveActiveSelectionGrid(puzzle, targetLayerId);
+    if (!targetGrid) return;
 
     const selectedCopy = new Set(selectedRegionIds);
     const metrics = computeSelectionMetrics(
-      puzzle,
+      targetGrid,
       selectedCopy,
       filledRegionIds,
       paintedRegionColors
@@ -1266,254 +1878,585 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     if (metrics.regionCount === 0) return;
 
     const promptText = infiniteZoomPrompt;
+    const basePuzzle = puzzle;
+    const baseImage = sourceImage;
+    const snapId = activeSnapshotId || crypto.randomUUID();
+    const existingSnap = snapshots.find((s) => s.id === snapId);
+    const isFree = Boolean(isFreeColorMode || basePuzzle.isFreeColor);
+
     exitRegionSelectionMode();
     clearUndoSubdivision();
+    clearGuidedSession();
+    clearInfiniteZoomError();
 
     const seq = ++infiniteZoomOpSeqRef.current;
     const controller = new AbortController();
     abortControllerRef.current = controller;
     setIsInfiniteZoomRunning(true);
     setIsLoading(true);
-    setLoadingProgress(0.03);
-    setLoadingStatus(
-      metrics.mode === 'in-place'
-        ? 'Planning local in-place detail...'
-        : 'Planning deep cutout child tile...'
-    );
+    setLoadingProgress(0.05);
+    setLoadingStatus('Preparing context-padded detail template...');
     setLoadingPayload(null);
 
-    let handedOffToLoader = false;
+    let awaitingGuided = false;
     try {
-      if (metrics.mode === 'in-place') {
-        await executeInPlaceSubdivision(
-          seq,
-          controller.signal,
-          puzzle,
-          sourceImage,
-          selectedCopy,
-          metrics,
-          promptText
-        );
-      } else {
-        handedOffToLoader = await executeChildTilePromotion(
-          seq,
-          controller.signal,
-          puzzle,
-          sourceImage,
-          selectedCopy,
-          metrics,
-          promptText
-        );
+      const layerCanvas = await renderLayerSourceToCanvas(
+        basePuzzle,
+        baseImage,
+        targetLayerId,
+        targetGrid
+      );
+      if (controller.signal.aborted || seq !== infiniteZoomOpSeqRef.current) {
+        releaseCanvas(layerCanvas);
+        return;
       }
+
+      const tpl = await buildInfillTemplatePayload(
+        layerCanvas,
+        targetGrid,
+        selectedCopy,
+        metrics.bbox
+      );
+      if (controller.signal.aborted || seq !== infiniteZoomOpSeqRef.current) return;
+
+      const nextDepth = resolveNextZoomDepth(basePuzzle, targetLayerId);
+      const sanitizedPrompt = sanitizeUserPrompt(promptText).sanitized;
+      const engineeredPrompt = buildNanoBananaInfillPrompt({
+        userPrompt: promptText,
+        neighborPaletteHex: metrics.neighborBoundaryHexes,
+        depth: nextDepth,
+        width: tpl.width,
+        height: tpl.height,
+      });
+
+      const outcome = await runProviderOrOpenGuidedHandoff({
+        seq,
+        signal: controller.signal,
+        direction: metrics.mode === 'in-place' ? 'in-place' : 'child-in',
+        prompt: engineeredPrompt,
+        templatePngBlob: tpl.templatePngBlob,
+        templateDataUrl: tpl.templateDataUrl,
+        width: tpl.width,
+        height: tpl.height,
+        onComplete: async (decoded, providerUsed, modelUsed, activeSignal) => {
+          await commitZoomInResult({
+            seq,
+            signal: activeSignal,
+            snapId,
+            existingSnap,
+            basePuzzle,
+            baseImage,
+            targetLayerId,
+            targetGrid,
+            selectedCopy,
+            metrics,
+            cropMask: tpl.cropMask,
+            originalCropRgba: tpl.originalCropRgba,
+            templateMeta: tpl.maskInTemplateRect,
+            sanitizedPrompt,
+            decoded,
+            providerUsed,
+            modelUsed,
+            isFree,
+          });
+        },
+      });
+      awaitingGuided = outcome === 'awaiting-guided';
     } catch (err) {
       if (!isAbortLikeError(err)) {
         reportSwallowed('InfiniteZoom.confirmSubdivision', err);
-        console.error('Infinite Zoom subdivision failed:', err);
+        const msg =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Infinite Zoom detail generation failed.';
+        showInfiniteZoomError(msg, err instanceof NanoBananaError ? err.code : undefined);
       }
-      handedOffToLoader = false;
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
       }
-      if (seq === infiniteZoomOpSeqRef.current && !handedOffToLoader) {
+      if (seq === infiniteZoomOpSeqRef.current && !awaitingGuided) {
         setIsInfiniteZoomRunning(false);
         setIsLoading(false);
         setLoadingPayload(null);
       }
     }
   }, [
+    activeSnapshotId,
+    clearGuidedSession,
+    clearInfiniteZoomError,
     clearUndoSubdivision,
-    executeChildTilePromotion,
-    executeInPlaceSubdivision,
+    commitZoomInResult,
     exitRegionSelectionMode,
     filledRegionIds,
     infiniteZoomPrompt,
+    isFreeColorMode,
     isInfiniteZoomDisabled,
     paintedRegionColors,
     puzzle,
+    renderLayerSourceToCanvas,
+    runProviderOrOpenGuidedHandoff,
     selectedRegionIds,
+    selectionLayerId,
     setIsLoading,
     setLoadingPayload,
     setLoadingProgress,
     setLoadingStatus,
+    showInfiniteZoomError,
+    snapshots,
     sourceImage,
   ]);
 
-  const runExtendBordersPipeline = useCallback(
-    async (
-      seq: number,
-      signal: AbortSignal,
-      baseImage: HTMLImageElement,
-      sides: BorderExtensionSides,
-      aspectRatio: number,
-      promptText: string
-    ): Promise<boolean> => {
+  const commitZoomOutResult = useCallback(
+    async (opts: {
+      seq: number;
+      signal: AbortSignal;
+      snapId: string;
+      existingSnap: SavedSnapshot | undefined;
+      basePuzzle: PuzzleData;
+      baseImage: HTMLImageElement;
+      sides: BorderExtensionSides;
+      check: ExtendSidesCheck;
+      originalInnerRgba: Uint8ClampedArray;
+      sanitizedPrompt: string;
+      decoded: DecodedGeminiImage;
+      providerUsed: InfiniteZoomProviderMode;
+      modelUsed: NanoBananaModelId;
+      isFree: boolean;
+    }) => {
+      const {
+        seq,
+        signal,
+        snapId,
+        existingSnap,
+        basePuzzle,
+        baseImage,
+        sides,
+        check,
+        originalInnerRgba,
+        sanitizedPrompt,
+        decoded,
+        providerUsed,
+        modelUsed,
+        isFree,
+      } = opts;
+
       const isAborted = () => signal.aborted || seq !== infiniteZoomOpSeqRef.current;
-      let contextCanvas: HTMLCanvasElement | null = null;
-      let extCanvas: HTMLCanvasElement | null = null;
-      try {
-        contextCanvas = buildContextCanvas(baseImage);
-        const scenePlan = await generateScenePlan(
-          {
-            direction: 'extend-out',
-            localAiMode: settingsRef.current.localAiMode,
-            userPrompt: promptText,
-            extendedSides: sides,
-            existingPaletteHex: puzzle ? puzzle.palette.map((c) => c.hex) : [],
-            depth: (activeSave?.zoomTree?.depth ?? 0) - 1,
-            aspectRatio,
-            contextCanvas,
-          },
-          signal,
-          (pct, status) => {
-            if (seq === infiniteZoomOpSeqRef.current) {
-              setLoadingProgress(0.05 + (Math.min(100, Math.max(0, pct)) / 100) * 0.35);
-              setLoadingStatus(status);
-            }
-          }
-        );
-        if (isAborted()) return false;
+      if (isAborted()) return;
 
-        setLoadingProgress(0.45);
-        setLoadingStatus('Synthesizing extended canvas borders...');
-        const extResult = synthesizeExtendedBorderCanvas(baseImage, sides, scenePlan);
-        extCanvas = extResult.canvas;
-        const blob = await canvasToBlobAsync(extResult.canvas, 'image/webp', 0.94);
-        if (isAborted()) return false;
+      setLoadingProgress(0.48);
+      setLoadingStatus('Compositing pixel-locked outer borders...');
+      const composited = compositeOutpaintRgba({
+        originalInnerRgba,
+        innerWidth: basePuzzle.width,
+        innerHeight: basePuzzle.height,
+        check,
+        generatedRgba: decoded.rgba,
+        generatedWidth: decoded.width,
+        generatedHeight: decoded.height,
+      });
+      if (isAborted()) return;
 
-        const { img: outerImg, objectUrl } = await decodeBlobToImage(blob);
-        let handedOffToActiveState = false;
-        try {
-          if (isAborted()) {
-            return false;
-          }
+      const borderMask = buildOutpaintBorderMask(
+        composited.width,
+        composited.height,
+        check.offsetX,
+        check.offsetY,
+        check.innerWidth,
+        check.innerHeight
+      );
+      const innerArea = Math.max(1, check.innerWidth * check.innerHeight);
+      const outerArea = Math.max(1, composited.width * composited.height - innerArea);
+      const proportionalTarget = Math.round(
+        Math.max(1, basePuzzle.regions.length) * (outerArea / innerArea)
+      );
+      const targetSubRegions = Math.max(
+        MIN_OUTPAINT_SUBREGIONS,
+        Math.min(MAX_SUBDIVIDE_TARGET_REGIONS, proportionalTarget)
+      );
 
-          const innerId = activeSnapshotId || crypto.randomUUID();
-          persistParentSnapshotBeforeDetailTile(innerId, { ...viewportRef.current });
-
-          const isFree = Boolean(isFreeColorMode || puzzle?.isFreeColor);
-          const outerZoomTree: InfiniteZoomNodeMeta = {
-            depth: (activeSave?.zoomTree?.depth ?? 0) - 1,
-            direction: 'extend-out',
-            extendedSides: { ...sides },
-            childSnapshotIds: [innerId],
-            promptHint: scenePlan.sanitizedPrompt || undefined,
-            aiTierUsed: scenePlan.tierUsed,
-          };
-
-          markTutorialActionTried('create_gallery');
-          triggerFeatureOffer('infinite_zoom');
-          abortControllerRef.current = null;
-          cancelHandoffRef.current = { restoreSnapshotId: innerId, createdSnapshotId: null };
-          const priorActiveBlobUrl = activeBlobUrlRef.current;
-          activeBlobUrlRef.current = objectUrl;
-          if (priorActiveBlobUrl && priorActiveBlobUrl !== objectUrl) {
-            revokeObjectUrlSafely(priorActiveBlobUrl);
-          }
-          handedOffToActiveState = true;
-          await loadArtworkFromImage(
-            outerImg,
-            buildExtendedTitle(activeTitle, scenePlan.sanitizedPrompt),
-            { ...settingsRef.current.generatorConfig, isFreeColor: isFree },
-            new Set(),
-            undefined,
-            undefined,
-            null,
-            false,
-            blob,
-            undefined,
-            undefined,
-            undefined,
-            isFree,
-            undefined,
-            {
-              zoomTree: outerZoomTree,
-              linkChildId: innerId,
-              peerZoomTreePatch: { boundsInParent: extResult.boundsInParent },
-              onRegistered: (snapId) => {
-                if (cancelHandoffRef.current) {
-                  cancelHandoffRef.current.createdSnapshotId = snapId;
-                }
-              },
-              onFinished: () => {
-                if (seq === infiniteZoomOpSeqRef.current) {
-                  cancelHandoffRef.current = null;
-                  setIsInfiniteZoomRunning(false);
-                }
-              },
-            }
-          );
-          return true;
-        } finally {
-          if (!handedOffToActiveState) {
-            revokeObjectUrlSafely(objectUrl);
+      const outerSubResult = await PuzzleWorkerService.subdivideMaskedRegion(
+        {
+          rgbaData: composited.rgba,
+          cropWidth: composited.width,
+          cropHeight: composited.height,
+          cropMask: borderMask,
+          existingPalette: basePuzzle.palette,
+          isFreeColor: isFree,
+          targetSubRegions,
+        },
+        (prog, status) => {
+          if (seq === infiniteZoomOpSeqRef.current) {
+            setLoadingProgress(0.5 + Math.min(1, Math.max(0, prog)) * 0.35);
+            setLoadingStatus(status);
           }
         }
-      } finally {
-        releaseCanvas(extCanvas);
-        releaseCanvas(contextCanvas);
+      );
+      if (isAborted()) return;
+
+      setLoadingProgress(0.88);
+      setLoadingStatus('Wrapping unified puzzle canvas...');
+
+      const previousRootLayerId = makeUniqueLayerId('root_wrap');
+      const previousRootImageBlobKey = buildCanonicalLayerImageKey(snapId, previousRootLayerId);
+
+      const previousRootLayerBlob = await encodeImageToPuzzleBlob(baseImage, basePuzzle);
+      if (isAborted()) return;
+
+      const outerBlob = await encodeRgbaToBlob(
+        composited.rgba,
+        composited.width,
+        composited.height,
+        'image/webp',
+        0.94
+      );
+      if (isAborted()) return;
+
+      const { img: prevRootImg, objectUrl: prevRootObjUrl } =
+        await decodeBlobToImage(previousRootLayerBlob);
+      let outerObjUrl: string | null = null;
+      let persistedToIdb = false;
+      let committed = false;
+      let previousRootBlob: Blob | null = null;
+      let promotedFromSample = false;
+
+      try {
+        if (isAborted()) {
+          revokeObjectUrlSafely(prevRootObjUrl);
+          return;
+        }
+
+        const decodedOuter = await decodeBlobToImage(outerBlob);
+        const outerImg = decodedOuter.img;
+        outerObjUrl = decodedOuter.objectUrl;
+        if (isAborted()) {
+          revokeObjectUrlSafely(prevRootObjUrl);
+          revokeObjectUrlSafely(outerObjUrl);
+          return;
+        }
+
+        previousRootBlob = await loadPreviousRootBlobIfOwned(existingSnap, snapId);
+        promotedFromSample = !previousRootBlob && isSamplePromotionMeta(existingSnap);
+        if (isAborted()) {
+          revokeObjectUrlSafely(prevRootObjUrl);
+          revokeObjectUrlSafely(outerObjUrl);
+          return;
+        }
+
+        const wrapResult = wrapPuzzleWithOuterBorderLayer({
+          basePuzzle,
+          outerSubResult,
+          innerBoundsInOuter: check.boundsInParent,
+          previousRootImageBlobKey,
+          previousRootLayerId,
+          promptHint: sanitizedPrompt || undefined,
+          providerUsed,
+          modelUsed,
+        });
+
+        persistedToIdb = true;
+        const persisted = await persistZoomOutBlobsAndPuzzle({
+          snapId,
+          basePuzzle,
+          nextPuzzle: wrapResult.puzzle,
+          previousRootImageBlobKey,
+          previousRootLayerBlob,
+          outerBlob,
+          previousRootBlob,
+          promotedFromSample,
+          outerObjUrl,
+          prevRootObjUrl,
+          isAborted,
+        });
+        if (!persisted) {
+          persistedToIdb = false;
+          return;
+        }
+
+        // 100% of painted progress, Undo stack, and Redo stack remain untouched (read live state)!
+        const liveState = liveCoopRef.current;
+        const preservedFilled = new Set(liveState.filledRegionIds);
+        const preservedPainted = new Map(liveState.paintedRegionColors);
+        const liveActiveColorId = liveState.activeColorId;
+        const previousLayerImages = new Map(liveLayerImagesRef.current);
+        const previousViewport = { ...viewportRef.current };
+        const previousBlobUrl = activeBlobUrlRef.current;
+
+        const previewUrl = await renderHydratedPreview(
+          wrapResult.puzzle,
+          outerImg,
+          preservedFilled,
+          preservedPainted,
+          'InfiniteZoom.zoomOutPreview'
+        );
+        if (isAborted()) {
+          await rollbackAbortedLayerPersist({
+            snapId,
+            addedLayerBlobKeys: [previousRootImageBlobKey],
+            newRootBlobUrl: outerObjUrl,
+            newLayerObjectUrls: [prevRootObjUrl],
+            previousRootBlob,
+            promotedFromSample,
+            basePuzzle,
+          });
+          persistedToIdb = false;
+          return;
+        }
+
+        const preOpUndo: UndoInfiniteZoomSnapshot = {
+          operationKind: 'zoom-out',
+          snapshotId: snapId,
+          puzzle: basePuzzle,
+          sourceImage: baseImage,
+          previousBlob: previousRootBlob,
+          promotedFromSample,
+          previousBlobUrl,
+          newBlobUrl: outerObjUrl,
+          addedLayerBlobKeys: [previousRootImageBlobKey],
+          previousLayerImages,
+          filledRegionIds: new Set(preservedFilled),
+          paintedRegionColors: new Map(preservedPainted),
+          undoStack: undoStackRef.current.slice(),
+          redoStack: redoStackRef.current.slice(),
+          activeColorId: liveActiveColorId,
+          previousViewport,
+          previousMeta: buildPreviousSnapshotMeta(existingSnap),
+          addedRegionCount: wrapResult.addedOuterRegionIds.length,
+        };
+
+        const nextZoomTree: InfiniteZoomNodeMeta = {
+          ...(existingSnap?.zoomTree || { depth: 0, direction: 'extend-out' }),
+          direction: 'extend-out',
+          extendedSides: { ...sides },
+          promptHint: sanitizedPrompt || undefined,
+          providerUsed,
+          modelUsed,
+        };
+        const fittedViewport: CoopViewport = { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 };
+        const totalRegions = getTotalRegionCount(wrapResult.puzzle);
+        const estSaveBytes = StorageService.estimatePuzzleSaveBytes(wrapResult.puzzle, previewUrl);
+        const orderedFilled = Array.from(preservedFilled);
+        const paintedObj = Object.fromEntries(preservedPainted);
+
+        StorageService.updateSnapshotMetadata(snapId, {
+          sampleAssetPath: null,
+          isAutoSample: false,
+          sourceRef: { kind: 'blob', uri: snapId },
+          zoomTree: nextZoomTree,
+        });
+        const updatedSnapshots = StorageService.updateSnapshotProgress(
+          snapId,
+          preservedFilled.size,
+          totalRegions,
+          orderedFilled,
+          fittedViewport.zoomScale,
+          fittedViewport.panOffsetX,
+          fittedViewport.panOffsetY,
+          previewUrl,
+          paintedObj,
+          wrapResult.puzzle.palette,
+          isFree,
+          estSaveBytes
+        );
+        const syncedSave = updatedSnapshots.find((s) => s.id === snapId);
+        StorageService.saveActiveState({
+          activeSnapshotId: snapId,
+          activeColorId: liveActiveColorId,
+          filledRegionIds: orderedFilled,
+          paintedRegionColors: paintedObj,
+          isFreeColorMode: isFree,
+          zoomScale: fittedViewport.zoomScale,
+          panOffsetX: fittedViewport.panOffsetX,
+          panOffsetY: fittedViewport.panOffsetY,
+        });
+
+        ownedLayerBlobUrlsRef.current.set(previousRootImageBlobKey, prevRootObjUrl);
+        const nextLiveLayerImages = new Map(previousLayerImages);
+        nextLiveLayerImages.set(previousRootImageBlobKey, prevRootImg);
+
+        liveCoopRef.current = {
+          ...liveCoopRef.current,
+          puzzle: wrapResult.puzzle,
+          activeSave: syncedSave ?? liveCoopRef.current.activeSave,
+          filledRegionIds: preservedFilled,
+          paintedRegionColors: preservedPainted,
+          activeColorId: liveActiveColorId,
+        };
+        setLiveLayerImages(nextLiveLayerImages);
+        activeBlobUrlRef.current = outerObjUrl;
+        setSourceImage(outerImg);
+        setPuzzle(wrapResult.puzzle);
+        setHintRegionId(null);
+        setSnapshots(updatedSnapshots);
+        applyViewport?.(fittedViewport);
+        committed = true;
+
+        clearUndoToastTimer();
+        undoSubdivisionRef.current = preOpUndo;
+        setUndoSubdivisionState(preOpUndo);
+        undoToastTimerRef.current = setTimeout(() => {
+          clearUndoSubdivision();
+        }, UNDO_TOAST_DURATION_MS);
+
+        markTutorialActionTried('create_gallery');
+        triggerFeatureOffer('infinite_zoom');
+        NativeBridge.haptic('success', settingsRef.current.hapticsEnabled);
+      } catch (err) {
+        if (!committed) {
+          if (persistedToIdb) {
+            await rollbackAbortedLayerPersist({
+              snapId,
+              addedLayerBlobKeys: [previousRootImageBlobKey],
+              newRootBlobUrl: outerObjUrl,
+              newLayerObjectUrls: [prevRootObjUrl],
+              previousRootBlob,
+              promotedFromSample,
+              basePuzzle,
+            });
+          } else {
+            revokeObjectUrlSafely(prevRootObjUrl);
+            if (outerObjUrl) {
+              revokeObjectUrlSafely(outerObjUrl);
+            }
+          }
+        }
+        throw err;
       }
     },
     [
       activeBlobUrlRef,
-      activeSave,
-      activeSnapshotId,
-      activeTitle,
-      isFreeColorMode,
-      loadArtworkFromImage,
+      applyViewport,
+      clearUndoSubdivision,
+      clearUndoToastTimer,
+      liveCoopRef,
+      liveLayerImagesRef,
       markTutorialActionTried,
-      persistParentSnapshotBeforeDetailTile,
-      puzzle,
+      redoStackRef,
+      setHintRegionId,
       setLoadingProgress,
       setLoadingStatus,
+      setPuzzle,
+      setSnapshots,
+      setSourceImage,
       settingsRef,
       triggerFeatureOffer,
+      undoStackRef,
+      undoSubdivisionRef,
       viewportRef,
     ]
   );
 
   const handleConfirmExtendBorders = useCallback(
     async (sides: BorderExtensionSides, promptOverride?: string) => {
-      if (!sourceImage || isInfiniteZoomDisabled) return;
-      const srcW = sourceImage.naturalWidth || sourceImage.width;
-      const srcH = sourceImage.naturalHeight || sourceImage.height;
-      const check = canExtendSides(srcW, srcH, sides);
+      if (!puzzle || !sourceImage || isInfiniteZoomDisabled) return;
+      const check = canExtendSides(puzzle.width, puzzle.height, sides);
       if (!check.allowed) return;
 
+      if (isReplayingRef.current) {
+        exitReplay();
+      }
+
       const promptText = typeof promptOverride === 'string' ? promptOverride : infiniteZoomPrompt;
+      const basePuzzle = puzzle;
+      const baseImage = sourceImage;
+      const snapId = activeSnapshotId || crypto.randomUUID();
+      const existingSnap = snapshots.find((s) => s.id === snapId);
+      const isFree = Boolean(isFreeColorMode || basePuzzle.isFreeColor);
+
       exitRegionSelectionMode();
       clearUndoSubdivision();
+      clearGuidedSession();
+      clearInfiniteZoomError();
 
       const seq = ++infiniteZoomOpSeqRef.current;
       const controller = new AbortController();
       abortControllerRef.current = controller;
       setIsInfiniteZoomRunning(true);
       setIsLoading(true);
-      setLoadingProgress(0.04);
-      setLoadingStatus('Planning outward border extension...');
+      setLoadingProgress(0.05);
+      setLoadingStatus('Preparing outward border template...');
       setLoadingPayload(null);
 
-      let handedOffToLoader = false;
+      let awaitingGuided = false;
       try {
-        handedOffToLoader = await runExtendBordersPipeline(
-          seq,
-          controller.signal,
-          sourceImage,
-          sides,
-          check.aspectRatio,
-          promptText
+        const rootCanvas = renderImageToCanvas(baseImage, basePuzzle.width, basePuzzle.height);
+        const originalInnerRgba = readCanvasCropRgba(
+          rootCanvas,
+          0,
+          0,
+          basePuzzle.width,
+          basePuzzle.height
         );
+        let tpl: ReturnType<typeof buildOutpaintTemplateCanvas> | null = null;
+        let templatePngBlob: Blob;
+        let templateDataUrl: string;
+        try {
+          if (!originalInnerRgba) {
+            throw new Error('Could not read pixel data from active puzzle artwork.');
+          }
+          tpl = buildOutpaintTemplateCanvas(rootCanvas, sides);
+          const encoded = await canvasToPngBlobAndDataUrl(tpl.canvas);
+          templatePngBlob = encoded.blob;
+          templateDataUrl = encoded.dataUrl;
+        } finally {
+          releaseCanvas(tpl?.canvas);
+          releaseCanvas(rootCanvas);
+        }
+
+        if (controller.signal.aborted || seq !== infiniteZoomOpSeqRef.current) return;
+
+        const sanitizedPrompt = sanitizeUserPrompt(promptText).sanitized;
+        const engineeredPrompt = buildNanoBananaOutpaintPrompt({
+          userPrompt: promptText,
+          sides,
+          existingPaletteHex: basePuzzle.palette.map((c) => c.hex),
+          width: tpl.width,
+          height: tpl.height,
+        });
+
+        const outcome = await runProviderOrOpenGuidedHandoff({
+          seq,
+          signal: controller.signal,
+          direction: 'extend-out',
+          prompt: engineeredPrompt,
+          templatePngBlob,
+          templateDataUrl,
+          width: tpl.width,
+          height: tpl.height,
+          onComplete: async (decoded, providerUsed, modelUsed, activeSignal) => {
+            await commitZoomOutResult({
+              seq,
+              signal: activeSignal,
+              snapId,
+              existingSnap,
+              basePuzzle,
+              baseImage,
+              sides,
+              check: tpl.check,
+              originalInnerRgba,
+              sanitizedPrompt,
+              decoded,
+              providerUsed,
+              modelUsed,
+              isFree,
+            });
+          },
+        });
+        awaitingGuided = outcome === 'awaiting-guided';
       } catch (err) {
         if (!isAbortLikeError(err)) {
           reportSwallowed('InfiniteZoom.extendBorders', err);
-          console.error('Infinite Zoom border extension failed:', err);
+          const msg =
+            err instanceof Error && err.message
+              ? err.message
+              : 'Infinite Zoom border extension failed.';
+          showInfiniteZoomError(msg, err instanceof NanoBananaError ? err.code : undefined);
         }
-        handedOffToLoader = false;
       } finally {
         if (abortControllerRef.current === controller) {
           abortControllerRef.current = null;
         }
-        if (seq === infiniteZoomOpSeqRef.current && !handedOffToLoader) {
+        if (seq === infiniteZoomOpSeqRef.current && !awaitingGuided) {
           setIsInfiniteZoomRunning(false);
           setIsLoading(false);
           setLoadingPayload(null);
@@ -1521,27 +2464,144 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       }
     },
     [
+      activeSnapshotId,
+      clearGuidedSession,
+      clearInfiniteZoomError,
       clearUndoSubdivision,
+      commitZoomOutResult,
       exitRegionSelectionMode,
+      exitReplay,
       infiniteZoomPrompt,
+      isFreeColorMode,
       isInfiniteZoomDisabled,
-      runExtendBordersPipeline,
+      isReplayingRef,
+      puzzle,
+      runProviderOrOpenGuidedHandoff,
       setIsLoading,
       setLoadingPayload,
       setLoadingProgress,
       setLoadingStatus,
+      showInfiniteZoomError,
+      snapshots,
       sourceImage,
     ]
   );
 
+  const handleCompleteGuidedGeminiHandoff = useCallback(
+    async (input: Blob | File | string) => {
+      const pending = pendingGuidedRef.current;
+      if (!pending || pending.seq !== infiniteZoomOpSeqRef.current) {
+        clearGuidedSession();
+        return;
+      }
+      if (pending.isDecoding) {
+        return;
+      }
+      pending.isDecoding = true;
+
+      setGuidedHandoffSession((prev) =>
+        prev ? { ...prev, isProcessing: true, errorMessage: null } : prev
+      );
+
+      let decoded: DecodedGeminiImage;
+      try {
+        decoded = await decodeReceivedGeminiImage(input);
+      } catch (err) {
+        if (pendingGuidedRef.current !== pending) {
+          return;
+        }
+        pending.isDecoding = false;
+        if (pending.seq !== infiniteZoomOpSeqRef.current) {
+          clearGuidedSession();
+          return;
+        }
+        const msg =
+          err instanceof Error && err.message
+            ? err.message
+            : 'Could not read that image. Please paste or pick a valid PNG, JPEG, or WebP.';
+        setGuidedHandoffSession((prev) =>
+          prev ? { ...prev, isProcessing: false, errorMessage: msg } : prev
+        );
+        return;
+      }
+
+      if (pendingGuidedRef.current !== pending) {
+        return;
+      }
+      if (pending.seq !== infiniteZoomOpSeqRef.current) {
+        clearGuidedSession();
+        return;
+      }
+
+      const seq = pending.seq;
+      const completeFn = pending.complete;
+      const cleanupFn = pending.cleanup;
+      pendingGuidedRef.current = null;
+      setGuidedHandoffSession(null);
+      onGuidedHandoffOpenChangeRef.current?.(false);
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      setIsInfiniteZoomRunning(true);
+      setIsLoading(true);
+      setLoadingProgress(0.45);
+      setLoadingStatus('Compositing generated artwork...');
+      setLoadingPayload(null);
+
+      try {
+        await completeFn(decoded, controller.signal);
+      } catch (err) {
+        if (!isAbortLikeError(err)) {
+          reportSwallowed('InfiniteZoom.guidedComplete', err);
+          const msg =
+            err instanceof Error && err.message
+              ? err.message
+              : 'Failed to apply generated image.';
+          showInfiniteZoomError(msg);
+        }
+      } finally {
+        cleanupFn?.();
+        if (abortControllerRef.current === controller) {
+          abortControllerRef.current = null;
+        }
+        if (seq === infiniteZoomOpSeqRef.current) {
+          setIsInfiniteZoomRunning(false);
+          setIsLoading(false);
+          setLoadingPayload(null);
+        }
+      }
+    },
+    [
+      clearGuidedSession,
+      onGuidedHandoffOpenChangeRef,
+      setIsLoading,
+      setLoadingPayload,
+      setLoadingProgress,
+      setLoadingStatus,
+      showInfiniteZoomError,
+    ]
+  );
+
+  const handleCancelGuidedGeminiHandoff = useCallback(() => {
+    infiniteZoomOpSeqRef.current += 1;
+    clearGuidedSession();
+    setIsInfiniteZoomRunning(false);
+    setIsLoading(false);
+    setLoadingPayload(null);
+  }, [clearGuidedSession, setIsLoading, setLoadingPayload]);
+
   const handleUndoSubdivision = useCallback(async () => {
     const snap = undoSubdivisionRef.current;
-    if (!snap || snap.snapshotId !== activeSnapshotId) {
+    if (!snap) {
+      return;
+    }
+    if (snap.snapshotId !== activeSnapshotId) {
       clearUndoSubdivision();
       return;
     }
 
     clearUndoToastTimer();
+    undoSubdivisionRef.current = null;
     setUndoSubdivisionState(null);
 
     const seq = ++infiniteZoomOpSeqRef.current;
@@ -1554,6 +2614,25 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         revokeObjectUrlSafely(snap.previousBlobUrl);
       }
     };
+
+    const isPromotedSample =
+      !snap.previousBlob &&
+      Boolean(
+        snap.promotedFromSample ??
+          (snap.previousMeta.sampleAssetPath || snap.previousMeta.sourceRef?.kind !== 'blob')
+      );
+    const keysToDelete = isPromotedSample
+      ? [...snap.addedLayerBlobKeys, expectedSnapshotId]
+      : snap.addedLayerBlobKeys;
+    if (keysToDelete.length > 0) {
+      await deleteOrphanedEntries([], keysToDelete).catch((err) => {
+        reportSwallowed('InfiniteZoom.undoDeleteLayerBlobs', err, { id: expectedSnapshotId });
+      });
+      if (isStale()) {
+        revokePreviousIfUnused();
+        return;
+      }
+    }
 
     if (snap.previousBlob) {
       await StorageService.saveImageBlob(expectedSnapshotId, snap.previousBlob).catch((err) => {
@@ -1581,21 +2660,39 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     );
     const orderedFilled = Array.from(snap.filledRegionIds);
     const paintedObj = Object.fromEntries(snap.paintedRegionColors);
-    const { zoomScale, panOffsetX, panOffsetY } = viewportRef.current;
-    const previewUrl =
-      snap.previousMeta.previewDataUrl ||
-      generatePreviewDataUrl(
-        snap.puzzle,
-        snap.sourceImage,
-        snap.filledRegionIds,
-        snap.paintedRegionColors
-      );
+    const restoredViewport =
+      snap.operationKind === 'zoom-out' ? snap.previousViewport : viewportRef.current;
+    const totalRegions = getTotalRegionCount(snap.puzzle);
+
+    let previewUrl = snap.previousMeta.previewDataUrl;
+    if (!previewUrl) {
+      const hydrated = await hydrateLayerImagesForPuzzle(snap.puzzle, 'InfiniteZoom.undoPreview');
+      try {
+        previewUrl = generatePreviewDataUrl(
+          snap.puzzle,
+          snap.sourceImage,
+          snap.filledRegionIds,
+          snap.paintedRegionColors,
+          hydrated.layerImages
+        );
+      } finally {
+        hydrated.dispose();
+      }
+      if (isStale()) {
+        revokePreviousIfUnused();
+        return;
+      }
+    }
     const estSaveBytes = StorageService.estimatePuzzleSaveBytes(snap.puzzle, previewUrl);
 
     if (snap.newBlobUrl && snap.newBlobUrl !== snap.previousBlobUrl) {
       revokeObjectUrlSafely(snap.newBlobUrl);
     }
     activeBlobUrlRef.current = snap.previousBlobUrl;
+
+    const restoredLayerImages = new Map(snap.previousLayerImages);
+    const keepLayerKeys = new Set<string>(restoredLayerImages.keys());
+    revokeOwnedLayerUrlsNotIn(keepLayerKeys);
 
     StorageService.updateSnapshotMetadata(expectedSnapshotId, {
       sampleAssetPath: snap.previousMeta.sampleAssetPath,
@@ -1607,11 +2704,11 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     const updatedSnapshots = StorageService.updateSnapshotProgress(
       expectedSnapshotId,
       snap.filledRegionIds.size,
-      snap.puzzle.regions.length,
+      totalRegions,
       orderedFilled,
-      zoomScale,
-      panOffsetX,
-      panOffsetY,
+      restoredViewport.zoomScale,
+      restoredViewport.panOffsetX,
+      restoredViewport.panOffsetY,
       previewUrl,
       paintedObj,
       snap.puzzle.palette,
@@ -1628,9 +2725,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       paintedRegionColors: paintedObj,
       isFreeColorMode: isFree,
       resetEpoch: nextResetEpoch,
-      zoomScale,
-      panOffsetX,
-      panOffsetY,
+      zoomScale: restoredViewport.zoomScale,
+      panOffsetX: restoredViewport.panOffsetX,
+      panOffsetY: restoredViewport.panOffsetY,
     });
 
     liveCoopRef.current = {
@@ -1641,6 +2738,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       paintedRegionColors: snap.paintedRegionColors,
       activeColorId: snap.activeColorId,
     };
+    setLiveLayerImages(restoredLayerImages);
     setSourceImage(snap.sourceImage);
     setPuzzle(snap.puzzle);
     setFilledRegionIds(snap.filledRegionIds);
@@ -1650,15 +2748,20 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     syncUndoStack(snap.undoStack);
     syncRedoStack(snap.redoStack);
     setSnapshots(updatedSnapshots);
+    if (snap.operationKind === 'zoom-out') {
+      applyViewport?.(restoredViewport);
+    }
     NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
   }, [
     activeBlobUrlRef,
     activeSave,
     activeSnapshotId,
+    applyViewport,
     clearUndoSubdivision,
     clearUndoToastTimer,
     isFreeColorMode,
     liveCoopRef,
+    revokeOwnedLayerUrlsNotIn,
     setActiveColorId,
     setFilledRegionIds,
     setHintRegionId,
@@ -1676,6 +2779,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   return {
     isRegionSelectionMode,
     selectedRegionIds,
+    selectionLayerId,
     selectionMetrics,
     pendingSwitchRegionId,
     selectionNotice,
@@ -1685,6 +2789,10 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     isInfiniteZoomDisabled,
     infiniteZoomDisabledReason,
     undoSubdivisionState,
+    liveLayerImages,
+    guidedHandoffSession,
+    infiniteZoomError,
+    clearInfiniteZoomError,
     childSave,
     handleJumpToChildPuzzle,
     handleEnterRegionSelectionMode,
@@ -1695,6 +2803,8 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     handleClearSelection,
     handleConfirmRegionSubdivision,
     handleConfirmExtendBorders,
+    handleCompleteGuidedGeminiHandoff,
+    handleCancelGuidedGeminiHandoff,
     handleUndoSubdivision,
     clearUndoSubdivision,
     cancelActiveInfiniteZoom,

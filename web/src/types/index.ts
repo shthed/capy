@@ -76,7 +76,6 @@ export type RegionColorMode = 'DETAIL' | 'SOLID';
 export type RegionHighlightStyle = 'CENTROID_GLOW' | 'NUMBER_ONLY' | 'FULL_REGION' | 'BOUNDARY_ONLY';
 export type HintFillStyle = 'SOLID' | 'CHECKER' | 'STRIPES';
 export type SaveSortOrder = 'LAST_ACTIVE' | 'DATE' | 'PERCENT_COMPLETE';
-export type LocalAiMode = 'AUTO' | 'LOCAL_ONLY' | 'OFFLINE_FAST';
 
 export interface GeneratorConfig {
   algorithm?: GeneratorAlgorithm;
@@ -179,7 +178,6 @@ export interface UserSettings {
   textScale: number;
   uiScale: number;
   detailedLoadingProgress: boolean;
-  localAiMode: LocalAiMode;
   infiniteZoomProvider: InfiniteZoomProviderMode;
   nanoBananaModel: NanoBananaModelId;
   nanoBananaResolution: NanoBananaResolution;
@@ -293,43 +291,9 @@ export interface InfiniteZoomNodeMeta {
   selectedRegionIds?: number[];
   promptHint?: string;
   aiTierUsed?: 'chrome-ai' | 'local-wasm' | 'offline-procedural';
+  providerUsed?: InfiniteZoomProviderMode;
+  modelUsed?: NanoBananaModelId;
   inPlaceSubdivisionCount?: number;
-}
-
-export type InfiniteZoomMotifKind =
-  | 'petals'
-  | 'leaves'
-  | 'pebbles'
-  | 'ripples'
-  | 'stars'
-  | 'clouds'
-  | 'hills'
-  | 'trees'
-  | 'mushrooms'
-  | 'waves'
-  | 'sparkles'
-  | 'vines'
-  | 'geometric'
-  | 'organic-blobs';
-
-export interface InfiniteZoomSceneElement {
-  kind: InfiniteZoomMotifKind;
-  /** Normalized [0..1] coordinates within target canvas/bbox */
-  x: number;
-  y: number;
-  scale: number;
-  rotationDeg: number;
-  fillHex: string;
-  strokeHex?: string;
-  count?: number;
-}
-
-export interface InfiniteZoomScenePlan {
-  theme: string;
-  paletteAccentsHex: string[];
-  elements: InfiniteZoomSceneElement[];
-  tierUsed: 'chrome-ai' | 'local-wasm' | 'offline-procedural';
-  sanitizedPrompt: string;
 }
 
 export interface SavedSnapshot {

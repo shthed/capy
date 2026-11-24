@@ -68,7 +68,6 @@ export const DEFAULT_SETTINGS: UserSettings = {
   textScale: 1.0,
   uiScale: 1.0,
   detailedLoadingProgress: false,
-  localAiMode: 'AUTO',
   infiniteZoomProvider: 'PUTER',
   nanoBananaModel: 'gemini-nano-banana-2.1',
   nanoBananaResolution: '1K',
@@ -130,7 +129,6 @@ const SETTINGS_ENUM_VALUES: Record<string, readonly string[]> = {
   highlightStyle: ['CENTROID_GLOW', 'NUMBER_ONLY', 'FULL_REGION', 'BOUNDARY_ONLY'],
   hintFillStyle: ['CHECKER', 'STRIPES', 'SOLID'],
   paletteSort: ['NUMBER', 'REMAINING', 'HUE', 'LIGHTNESS'],
-  localAiMode: ['AUTO', 'LOCAL_ONLY', 'OFFLINE_FAST'],
   infiniteZoomProvider: ['PUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK'],
   nanoBananaModel: [
     'gemini-nano-banana-2.1',
@@ -386,7 +384,6 @@ function resolveUserSettings(
       'detailedLoadingProgress',
       DEFAULT_SETTINGS.detailedLoadingProgress
     ),
-    localAiMode: pickSettingsEnum(parsed, 'localAiMode'),
     infiniteZoomProvider: resolvePlatformInfiniteZoomProvider(parsed.infiniteZoomProvider),
     nanoBananaModel: pickSettingsEnum(parsed, 'nanoBananaModel'),
     nanoBananaResolution: pickSettingsEnum(parsed, 'nanoBananaResolution'),

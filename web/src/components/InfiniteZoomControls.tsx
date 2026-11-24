@@ -3,25 +3,40 @@ import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
   ArrowLeftRight,
+  Check,
   Cpu,
   Expand,
+  ExternalLink,
   Info,
+  KeyRound,
   Layers,
   Sparkles,
   Trash2,
   X,
   ZoomIn,
 } from 'lucide-react';
-import { BorderExtensionSides, LocalAiMode } from '../types';
+import {
+  BorderExtensionSides,
+  InfiniteZoomProviderMode,
+  NanoBananaModelId,
+  NanoBananaResolution,
+} from '../types';
 import { NativeBridge } from '../services/NativeBridge';
 import { useIsomorphicLayoutEffect } from '../hooks/useLatest';
 import {
-  detectLocalAiCapabilities,
-  LocalAiCapabilities,
+  DEFAULT_NANO_BANANA_MODEL,
+  GOOGLE_AI_STUDIO_KEY_URL,
   MAX_USER_PROMPT_LENGTH,
-} from '../services/ai/LocalLlmService';
+  NANO_BANANA_MODEL_MAP,
+  NANO_BANANA_MODELS,
+} from '../services/ai/NanoBananaService';
+import {
+  clearGeminiByokApiKey,
+  hasGeminiByokApiKey,
+  saveGeminiByokApiKey,
+} from '../services/storage/SettingsStorage';
 import { SelectionMetrics } from '../services/ai/RegionSelectionEngine';
-import { canExtendSides, ExtendSidesCheck } from '../services/ai/InfiniteZoomSynthesizer';
+import { canExtendSides, ExtendSidesCheck } from '../services/ai/SeamCompositor';
 
 export const DEFAULT_EXTEND_SIDES: BorderExtensionSides = {
   top: true,
@@ -51,28 +66,55 @@ const SIDE_OPTIONS: ReadonlyArray<{ key: keyof BorderExtensionSides; label: stri
   { key: 'right', label: 'Right' },
 ];
 
-const LOCAL_AI_MODE_OPTIONS: ReadonlyArray<{ value: LocalAiMode; label: string }> = [
-  { value: 'AUTO', label: 'Auto (Built-in AI -> Offline Fast)' },
-  { value: 'LOCAL_ONLY', label: 'Chrome Built-in AI Preferred' },
-  { value: 'OFFLINE_FAST', label: 'Instant Offline Procedural' },
-];
+const PROVIDER_SHORT_LABELS: Record<InfiniteZoomProviderMode, string> = {
+  PUTER: 'Puter',
+  GUIDED_GEMINI: 'Guided Gemini',
+  GEMINI_BYOK: 'Gemini BYOK',
+};
 
-function formatAiCapabilitySummary(caps: LocalAiCapabilities | null, mode: LocalAiMode): string {
-  if (mode === 'OFFLINE_FAST') {
-    return 'Instant Offline Procedural (< 20ms) • On-Device • Offline-Ready';
+const MODEL_SELECT_LABELS: Record<NanoBananaModelId, string> = {
+  'gemini-nano-banana-2.1': 'Nano Banana 2.1 (Recommended)',
+  'gemini-3.1-flash-lite-image': 'Nano Banana 2 Lite (Fastest)',
+  'gemini-3.1-flash-image': 'Nano Banana 2 (Pro)',
+};
+
+export interface ProviderOptionItem {
+  value: InfiniteZoomProviderMode;
+  label: string;
+}
+
+export function getAvailableProviderOptions(isAndroid: boolean): readonly ProviderOptionItem[] {
+  if (isAndroid) {
+    return [
+      { value: 'GUIDED_GEMINI', label: 'Free Gemini App (Guided)' },
+      { value: 'GEMINI_BYOK', label: 'Gemini API Key (BYOK)' },
+    ];
   }
-  if (!caps) {
-    return 'On-Device Local AI • Free • Offline-Ready';
+  return [
+    { value: 'PUTER', label: 'Puter (Free 1-Click)' },
+    { value: 'GUIDED_GEMINI', label: 'Free Gemini App (Guided)' },
+    { value: 'GEMINI_BYOK', label: 'Gemini API Key (BYOK)' },
+  ];
+}
+
+export function resolveVisibleProvider(
+  provider: InfiniteZoomProviderMode,
+  isAndroid: boolean
+): InfiniteZoomProviderMode {
+  if (isAndroid && provider === 'PUTER') {
+    return 'GUIDED_GEMINI';
   }
-  if (caps.chromeAi === 'available') {
-    return caps.chromeAiMultimodal
-      ? 'Chrome Built-in AI (Multimodal) Ready • On-Device'
-      : 'Chrome Built-in AI (Text) Ready • On-Device';
-  }
-  if (caps.chromeAi === 'downloadable' || caps.chromeAi === 'downloading') {
-    return 'Chrome Built-in AI Downloading • Offline Procedural Ready';
-  }
-  return 'Instant Offline Procedural Ready • Zero Cloud Required';
+  return provider;
+}
+
+export function formatActiveProviderModelPill(
+  provider: InfiniteZoomProviderMode,
+  model: NanoBananaModelId,
+  isAndroid: boolean = NativeBridge.isAndroidNative()
+): string {
+  const effectiveProvider = resolveVisibleProvider(provider, isAndroid);
+  const modelMeta = NANO_BANANA_MODEL_MAP[model] ?? NANO_BANANA_MODEL_MAP[DEFAULT_NANO_BANANA_MODEL];
+  return `Nano Banana ${modelMeta.shortLabel} • ${PROVIDER_SHORT_LABELS[effectiveProvider]}`;
 }
 
 interface SideToggleRowProps {
@@ -153,6 +195,8 @@ export interface InfiniteZoomToolbarButtonProps {
   sourceWidth: number;
   sourceHeight: number;
   prompt: string;
+  provider?: InfiniteZoomProviderMode;
+  model?: NanoBananaModelId;
   onPromptChange: (next: string) => void;
   onEnterSelectionMode: () => void;
   onConfirmExtendBorders: (sides: BorderExtensionSides, prompt: string) => void;
@@ -165,10 +209,18 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     sourceWidth,
     sourceHeight,
     prompt,
+    provider,
+    model = DEFAULT_NANO_BANANA_MODEL,
     onPromptChange,
     onEnterSelectionMode,
     onConfirmExtendBorders,
   }) => {
+    const isAndroid = NativeBridge.isAndroidNative();
+    const effectiveProvider: InfiniteZoomProviderMode = resolveVisibleProvider(
+      provider ?? (isAndroid ? 'GUIDED_GEMINI' : 'PUTER'),
+      isAndroid
+    );
+    const activeProviderPill = formatActiveProviderModelPill(effectiveProvider, model, isAndroid);
     const [isOpen, setIsOpen] = useState(false);
     const [showExtendConfig, setShowExtendConfig] = useState(false);
     const [prevDisabled, setPrevDisabled] = useState(disabled);
@@ -309,21 +361,30 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
                 }
           }
         >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Sparkles size={14} className="text-sky-400 flex-shrink-0" />
-              <span className="text-xs font-extrabold tracking-wide text-slate-100 truncate">
-                Infinite Zoom
-              </span>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Sparkles size={14} className="text-sky-400 flex-shrink-0" />
+                <span className="text-xs font-extrabold tracking-wide text-slate-100 truncate">
+                  Infinite Zoom
+                </span>
+              </div>
+              <button
+                type="button"
+                aria-label="Close Infinite Zoom menu"
+                onClick={closePopover}
+                className="capy-icon-btn inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X size={13} />
+              </button>
             </div>
-            <button
-              type="button"
-              aria-label="Close Infinite Zoom menu"
-              onClick={closePopover}
-              className="capy-icon-btn inline-flex items-center justify-center w-6 h-6 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+            <div
+              data-testid="iz-active-provider-pill"
+              className="inline-flex items-center gap-1 max-w-full rounded-full bg-slate-950/85 border border-slate-700/80 px-2 py-0.5 text-[10px] font-semibold text-sky-300"
             >
-              <X size={13} />
-            </button>
+              <Cpu size={10} className="flex-shrink-0" />
+              <span className="truncate">{activeProviderPill}</span>
+            </div>
           </div>
 
           <button
@@ -336,7 +397,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
             <div className="min-w-0 flex-1">
               <div className="truncate">Infill Detail (Select Regions)</div>
               <div className="text-[10px] font-normal text-sky-200/75 truncate">
-                Subdivide in-place or zoom deeper
+                Add seamless detail layer on this canvas
               </div>
             </div>
           </button>
@@ -583,7 +644,7 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
                   : 'bg-sky-500/20 text-sky-200 border-sky-400/50'
               }`}
             >
-              {isInPlace ? 'In-Place Split' : 'Deep Child Tile'}
+              {isInPlace ? 'In-Place Detail' : 'Nested Detail Layer'}
             </span>
           )}
         </div>
@@ -678,10 +739,14 @@ export const RegionSelectionBar: React.FC<RegionSelectionBarProps> = React.memo(
 
 export interface InfiniteZoomCreateCardProps {
   sourceImage?: HTMLImageElement | null;
-  localAiMode: LocalAiMode;
+  infiniteZoomProvider: InfiniteZoomProviderMode;
+  nanoBananaModel: NanoBananaModelId;
+  nanoBananaResolution: NanoBananaResolution;
   isInfiniteZoomDisabled?: boolean;
   disabledReason?: string;
-  onChangeLocalAiMode: (mode: LocalAiMode) => void;
+  onChangeProvider: (provider: InfiniteZoomProviderMode) => void;
+  onChangeModel: (model: NanoBananaModelId, nextResolution?: NanoBananaResolution) => void;
+  onChangeResolution: (resolution: NanoBananaResolution) => void;
   onStartInfiniteZoomIn?: (prompt?: string) => void;
   onStartInfiniteZoomOut?: (sides: BorderExtensionSides, prompt?: string) => void;
   onZoomIntoDetailTile?: () => void;
@@ -690,12 +755,241 @@ export interface InfiniteZoomCreateCardProps {
   renderHintCallout?: (id: string, text: string) => React.ReactNode;
 }
 
+const ByokApiKeySection: React.FC = () => {
+  const [byokDraft, setByokDraft] = useState<string>('');
+  const [hasStoredByokKey, setHasStoredByokKey] = useState<boolean>(() => hasGeminiByokApiKey());
+  const [byokFeedback, setByokFeedback] = useState<string | null>(null);
+  const byokFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (byokFeedbackTimerRef.current !== null) {
+        clearTimeout(byokFeedbackTimerRef.current);
+        byokFeedbackTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const flashByokFeedback = (msg: string) => {
+    setByokFeedback(msg);
+    if (byokFeedbackTimerRef.current !== null) {
+      clearTimeout(byokFeedbackTimerRef.current);
+    }
+    byokFeedbackTimerRef.current = setTimeout(() => {
+      byokFeedbackTimerRef.current = null;
+      setByokFeedback(null);
+    }, 2500);
+  };
+
+  const handleSaveByokKey = () => {
+    const trimmed = byokDraft.trim();
+    if (!trimmed) return;
+    saveGeminiByokApiKey(trimmed);
+    setHasStoredByokKey(hasGeminiByokApiKey());
+    setByokDraft('');
+    flashByokFeedback('Saved on this device only');
+  };
+
+  const handleClearByokKey = () => {
+    clearGeminiByokApiKey();
+    setHasStoredByokKey(hasGeminiByokApiKey());
+    setByokDraft('');
+    flashByokFeedback('Key removed from this device');
+  };
+
+  return (
+    <div className="rounded-lg bg-slate-900/90 border border-slate-700/80 p-2.5 space-y-2 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <KeyRound size={12} className="text-amber-300 flex-shrink-0" />
+          <span className="text-[11px] font-bold text-slate-200 truncate">
+            Gemini API Key (Device-Local)
+          </span>
+        </div>
+        <span
+          data-testid="iz-byok-status-badge"
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+            hasStoredByokKey
+              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-400/45'
+              : 'bg-amber-500/15 text-amber-200 border-amber-400/45'
+          }`}
+        >
+          {hasStoredByokKey ? <Check size={10} /> : null}
+          <span>{hasStoredByokKey ? 'Saved on this device only' : 'Not set'}</span>
+        </span>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-1.5 min-w-0">
+        <input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          data-testid="iz-byok-key-input"
+          aria-label="Gemini API Key"
+          value={byokDraft}
+          onChange={(e) => setByokDraft(e.target.value)}
+          placeholder={hasStoredByokKey ? 'Enter new key to replace...' : 'Paste your Gemini API key...'}
+          className="flex-1 min-w-0 px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+        />
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            data-testid="iz-byok-save-btn"
+            disabled={byokDraft.trim().length === 0}
+            onClick={handleSaveByokKey}
+            className="inline-flex items-center justify-center px-3 py-1.5 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+          >
+            Save Key
+          </button>
+          <button
+            type="button"
+            data-testid="iz-byok-clear-btn"
+            disabled={!hasStoredByokKey}
+            onClick={handleClearByokKey}
+            className="inline-flex items-center justify-center px-3 py-1.5 min-h-[44px] rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-45 disabled:cursor-not-allowed border border-slate-700 text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-slate-400 min-w-0">
+        <span className="break-words">
+          Stored only on this device — never included in `.capy` saves or cloud sync.
+        </span>
+        <a
+          href={GOOGLE_AI_STUDIO_KEY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 font-semibold underline underline-offset-2 shrink-0"
+        >
+          <span>Get key at Google AI Studio</span>
+          <ExternalLink size={10} />
+        </a>
+      </div>
+
+      {byokFeedback && (
+        <p role="status" className="text-[11px] font-semibold text-emerald-300">
+          {byokFeedback}
+        </p>
+      )}
+    </div>
+  );
+};
+
+interface ProviderConfigPanelProps {
+  effectiveProvider: InfiniteZoomProviderMode;
+  providerOptions: readonly ProviderOptionItem[];
+  nanoBananaModel: NanoBananaModelId;
+  nanoBananaResolution: NanoBananaResolution;
+  onChangeProvider: (provider: InfiniteZoomProviderMode) => void;
+  onChangeModel: (model: NanoBananaModelId, nextResolution?: NanoBananaResolution) => void;
+  onChangeResolution: (resolution: NanoBananaResolution) => void;
+}
+
+const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
+  effectiveProvider,
+  providerOptions,
+  nanoBananaModel,
+  nanoBananaResolution,
+  onChangeProvider,
+  onChangeModel,
+  onChangeResolution,
+}) => {
+  const selectedModelMeta =
+    NANO_BANANA_MODEL_MAP[nanoBananaModel] ?? NANO_BANANA_MODEL_MAP[DEFAULT_NANO_BANANA_MODEL];
+  const resolvedResolution = selectedModelMeta.supportedResolutions.includes(nanoBananaResolution)
+    ? nanoBananaResolution
+    : selectedModelMeta.defaultResolution;
+
+  const handleModelChange = (nextModel: NanoBananaModelId) => {
+    const nextMeta = NANO_BANANA_MODEL_MAP[nextModel];
+    const nextResolution =
+      nextMeta && !nextMeta.supportedResolutions.includes(nanoBananaResolution)
+        ? nextMeta.defaultResolution
+        : undefined;
+    onChangeModel(nextModel, nextResolution);
+  };
+
+  return (
+    <div className="rounded-xl bg-slate-950/65 border border-slate-800 p-2.5 space-y-2 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 min-w-0">
+        <label
+          htmlFor="iz-provider-select"
+          className="text-[11px] font-bold text-slate-300 flex-shrink-0"
+        >
+          Generation Provider
+        </label>
+        <select
+          id="iz-provider-select"
+          data-testid="iz-provider-select"
+          value={effectiveProvider}
+          onChange={(e) => onChangeProvider(e.target.value as InfiniteZoomProviderMode)}
+          className="w-full sm:w-auto min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+        >
+          {providerOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
+        <div className="flex flex-col gap-1 min-w-0">
+          <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
+            Nano Banana Model
+          </label>
+          <select
+            id="iz-model-select"
+            data-testid="iz-model-select"
+            value={nanoBananaModel}
+            onChange={(e) => handleModelChange(e.target.value as NanoBananaModelId)}
+            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            {NANO_BANANA_MODELS.map((modelItem) => (
+              <option key={modelItem.id} value={modelItem.id}>
+                {MODEL_SELECT_LABELS[modelItem.id] ?? modelItem.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 min-w-0">
+          <label htmlFor="iz-resolution-select" className="text-[11px] font-bold text-slate-300">
+            Output Resolution
+          </label>
+          <select
+            id="iz-resolution-select"
+            data-testid="iz-resolution-select"
+            value={resolvedResolution}
+            onChange={(e) => onChangeResolution(e.target.value as NanoBananaResolution)}
+            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            {selectedModelMeta.supportedResolutions.map((resOpt) => (
+              <option key={resOpt} value={resOpt}>
+                {resOpt}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {effectiveProvider === 'GEMINI_BYOK' && <ByokApiKeySection />}
+    </div>
+  );
+};
+
 export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
   sourceImage,
-  localAiMode,
+  infiniteZoomProvider,
+  nanoBananaModel,
+  nanoBananaResolution,
   isInfiniteZoomDisabled = false,
   disabledReason,
-  onChangeLocalAiMode,
+  onChangeProvider,
+  onChangeModel,
+  onChangeResolution,
   onStartInfiniteZoomIn,
   onStartInfiniteZoomOut,
   onZoomIntoDetailTile,
@@ -703,55 +997,44 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
   renderHintButton,
   renderHintCallout,
 }) => {
-  const [capabilities, setCapabilities] = useState<LocalAiCapabilities | null>(null);
+  const isAndroid = NativeBridge.isAndroidNative();
+  const providerOptions = useMemo(() => getAvailableProviderOptions(isAndroid), [isAndroid]);
+  const effectiveProvider = resolveVisibleProvider(infiniteZoomProvider, isAndroid);
+
   const [sides, setSides] = useState<BorderExtensionSides>(DEFAULT_EXTEND_SIDES);
   const [prompt, setPrompt] = useState<string>('');
-
-  useEffect(() => {
-    let cancelled = false;
-    void detectLocalAiCapabilities()
-      .then((caps) => {
-        if (!cancelled) setCapabilities(caps);
-      })
-      .catch(() => {
-        // Capability check is best-effort; offline procedural fallback is always ready
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const srcW = sourceImage ? sourceImage.naturalWidth || sourceImage.width : 0;
   const srcH = sourceImage ? sourceImage.naturalHeight || sourceImage.height : 0;
   const extendCheck = useMemo(() => canExtendSides(srcW, srcH, sides), [srcW, srcH, sides]);
   const hasSource = srcW > 0 && srcH > 0;
   const actionsDisabled = isInfiniteZoomDisabled || !hasSource;
-  const capSummary = formatAiCapabilitySummary(capabilities, localAiMode);
+  const activeSummary = formatActiveProviderModelPill(effectiveProvider, nanoBananaModel, isAndroid);
 
-  const handleToggleSide = useCallback((key: keyof BorderExtensionSides) => {
+  const handleToggleSide = (key: keyof BorderExtensionSides) => {
     setSides((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+  };
 
   return (
-    <div className="rounded-xl border border-sky-400/35 bg-gradient-to-br from-slate-900 via-slate-950 to-sky-950/25 p-3 space-y-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="capy-iz-provider-card rounded-xl border border-sky-400/35 bg-gradient-to-br from-slate-900 via-slate-950 to-sky-950/25 p-3 space-y-2.5 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <Sparkles size={14} className="text-sky-400 flex-shrink-0" />
           <span className="text-xs sm:text-sm font-extrabold text-slate-100 truncate">
-            Local Infinite Zoom
+            Infinite Zoom
           </span>
-          {renderHintButton?.('infinite-zoom', 'Infinite Zoom 2x Detail Tile')}
+          {renderHintButton?.('infinite-zoom', 'Infinite Zoom Detail & Border Extension')}
         </div>
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-900/90 border border-slate-700/80 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
+        <span className="inline-flex items-center gap-1 max-w-full rounded-full bg-slate-900/90 border border-slate-700/80 px-2 py-0.5 text-[10px] font-semibold text-sky-300">
           <Cpu size={10} className="flex-shrink-0" />
-          <span className="truncate max-w-[14rem] sm:max-w-none">{capSummary}</span>
+          <span className="truncate">{activeSummary}</span>
         </span>
       </div>
 
       {isInfiniteZoomDisabled && disabledReason && (
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-[11px] text-amber-200">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-400/40 text-[11px] text-amber-200 min-w-0">
           <Info size={12} className="flex-shrink-0 text-amber-300" />
-          <span>{disabledReason}</span>
+          <span className="min-w-0 break-words">{disabledReason}</span>
         </div>
       )}
 
@@ -765,7 +1048,7 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
               onStartInfiniteZoomIn(prompt);
               onClose();
             }}
-            className="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-sky-400/50 bg-sky-500/15 hover:bg-sky-500/25 disabled:opacity-45 disabled:cursor-not-allowed text-sky-200 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-2 p-2.5 min-h-[44px] rounded-xl border border-sky-400/50 bg-sky-500/15 hover:bg-sky-500/25 disabled:opacity-45 disabled:cursor-not-allowed text-sky-200 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
           >
             <ZoomIn size={15} className="flex-shrink-0" />
             <span className="truncate">Infill Detail (Select Regions)</span>
@@ -782,7 +1065,7 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
               onClose();
             }}
             title="Generate a higher-detail 2x zoomed sub-puzzle from the center of your current view"
-            className="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-sky-400/40 bg-sky-500/10 hover:bg-sky-500/20 disabled:opacity-45 disabled:cursor-not-allowed text-sky-300 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-2 p-2.5 min-h-[44px] rounded-xl border border-sky-400/40 bg-sky-500/10 hover:bg-sky-500/20 disabled:opacity-45 disabled:cursor-not-allowed text-sky-300 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
           >
             <ZoomIn size={15} className="flex-shrink-0" />
             <span className="truncate">Quick 2x Detail Tile</span>
@@ -791,7 +1074,7 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
       </div>
 
       {onStartInfiniteZoomOut && (
-        <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-2.5 space-y-2">
+        <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-2.5 space-y-2 min-w-0">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] font-bold text-slate-200">
               Extend Borders Outward (0.35x per side)
@@ -804,7 +1087,7 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
                 onStartInfiniteZoomOut(sides, prompt);
                 onClose();
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
             >
               <Expand size={13} />
               <span>Extend Borders</span>
@@ -842,39 +1125,27 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
               className="flex items-start gap-1.5 px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-400/40 text-[10px] text-amber-200"
             >
               <AlertTriangle size={12} className="flex-shrink-0 mt-0.5 text-amber-300" />
-              <span>{extendCheck.reason}</span>
+              <span className="min-w-0 break-words">{extendCheck.reason}</span>
             </div>
           )}
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-0.5">
-        <label
-          htmlFor="local-ai-mode-select"
-          className="text-[11px] font-bold text-slate-300 flex-shrink-0"
-        >
-          Local AI Mode
-        </label>
-        <select
-          id="local-ai-mode-select"
-          data-testid="local-ai-mode-select"
-          value={localAiMode}
-          onChange={(e) => onChangeLocalAiMode(e.target.value as LocalAiMode)}
-          className="w-full sm:w-auto px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
-        >
-          {LOCAL_AI_MODE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ProviderConfigPanel
+        effectiveProvider={effectiveProvider}
+        providerOptions={providerOptions}
+        nanoBananaModel={nanoBananaModel}
+        nanoBananaResolution={nanoBananaResolution}
+        onChangeProvider={onChangeProvider}
+        onChangeModel={onChangeModel}
+        onChangeResolution={onChangeResolution}
+      />
 
       {onZoomIntoDetailTile &&
         sourceImage &&
         renderHintCallout?.(
           'infinite-zoom',
-          'Subdivide selected connected regions for higher detail, extend canvas borders outward, or crop a quick 2x center detail tile — all locally on your device.'
+          'Add seamless detail layers inside selected regions or extend canvas borders outward on the same unified puzzle using Nano Banana 2.1 / 2.'
         )}
     </div>
   );

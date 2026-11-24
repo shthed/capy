@@ -1,0 +1,646 @@
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  Check,
+  ClipboardPaste,
+  Copy,
+  ExternalLink,
+  ImagePlus,
+  Loader2,
+  Share2,
+  Sparkles,
+  Upload,
+  X,
+} from 'lucide-react';
+import { NativeBridge } from '../services/NativeBridge';
+import {
+  copyPromptToClipboard,
+  GuidedGeminiHandoffPackage,
+  launchGeminiHandoff,
+} from '../services/ai/NanoBananaService';
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target || typeof target !== 'object') return false;
+  const el = target as { tagName?: unknown; isContentEditable?: unknown };
+  if (el.isContentEditable === true) return true;
+  if (typeof el.tagName === 'string') {
+    const tag = el.tagName.toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+  return false;
+}
+
+function isBackgroundCanvasShortcutKey(key: string): boolean {
+  if (key.length === 1) {
+    if (key >= '0' && key <= '9') return true;
+    const lower = key.toLowerCase();
+    return (
+      lower === 'w' ||
+      lower === 'a' ||
+      lower === 's' ||
+      lower === 'd' ||
+      key === '+' ||
+      key === '=' ||
+      key === '-' ||
+      key === '_'
+    );
+  }
+  return (
+    key === 'ArrowUp' ||
+    key === 'ArrowDown' ||
+    key === 'ArrowLeft' ||
+    key === 'ArrowRight'
+  );
+}
+
+export interface GuidedGeminiHandoffModalProps {
+  isOpen: boolean;
+  handoff: GuidedGeminiHandoffPackage | null;
+  fallbackReason?: string | null;
+  isProcessing?: boolean;
+  errorMessage?: string | null;
+  onImageReceived: (input: Blob | File | string) => Promise<void> | void;
+  onCancel: () => void;
+}
+
+export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> = React.memo(
+  ({
+    isOpen,
+    handoff,
+    fallbackReason = null,
+    isProcessing = false,
+    errorMessage = null,
+    onImageReceived,
+    onCancel,
+  }) => {
+    const titleId = useId();
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string>('');
+    const [launchStatus, setLaunchStatus] = useState<string | null>(null);
+    const [copiedOnly, setCopiedOnly] = useState<boolean>(false);
+    const [localError, setLocalError] = useState<string | null>(null);
+    const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
+    const [isLaunching, setIsLaunching] = useState<boolean>(false);
+
+    const isAndroid = NativeBridge.isAndroidNative();
+
+    // Synchronous refs eliminate stale-closure double-submission races across paste/drop/Android share/clipboard.read.
+    const isOpenRef = useRef<boolean>(isOpen);
+    isOpenRef.current = isOpen;
+    const isProcessingRef = useRef<boolean>(isProcessing);
+    isProcessingRef.current = isProcessing;
+    const handoffRef = useRef<GuidedGeminiHandoffPackage | null>(handoff);
+    handoffRef.current = handoff;
+    const isSubmittingRef = useRef<boolean>(false);
+    const submitSeqRef = useRef<number>(0);
+    const isReadingClipboardRef = useRef<boolean>(false);
+
+    useEffect(() => {
+      if (!isOpen || !handoff) {
+        submitSeqRef.current += 1;
+        isSubmittingRef.current = false;
+      } else if (!isProcessing) {
+        isSubmittingRef.current = false;
+      }
+    }, [isProcessing, isOpen, handoff, errorMessage]);
+
+    // Manage object URL for template PNG preview and strictly revoke on change/unmount.
+    useEffect(() => {
+      if (!isOpen || !handoff) {
+        setTemplatePreviewUrl('');
+        setLaunchStatus(null);
+        setCopiedOnly(false);
+        setLocalError(null);
+        setIsDraggingFile(false);
+        return;
+      }
+
+      let createdUrl: string | null = null;
+      if (
+        handoff.templatePngBlob &&
+        typeof URL !== 'undefined' &&
+        typeof URL.createObjectURL === 'function'
+      ) {
+        try {
+          createdUrl = URL.createObjectURL(handoff.templatePngBlob);
+          setTemplatePreviewUrl(createdUrl);
+        } catch {
+          setTemplatePreviewUrl(handoff.templateDataUrl || '');
+        }
+      } else {
+        setTemplatePreviewUrl(handoff.templateDataUrl || '');
+      }
+
+      return () => {
+        submitSeqRef.current += 1;
+        isSubmittingRef.current = false;
+        if (copiedTimerRef.current !== null) {
+          clearTimeout(copiedTimerRef.current);
+          copiedTimerRef.current = null;
+        }
+        if (createdUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+          try {
+            URL.revokeObjectURL(createdUrl);
+          } catch {
+            // Ignore cleanup errors in synthetic environments
+          }
+        }
+      };
+    }, [isOpen, handoff]);
+
+    const handleReceiveInput = useCallback(
+      (input: Blob | File | string) => {
+        if (!isOpenRef.current || isProcessingRef.current || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
+        const seq = ++submitSeqRef.current;
+        setLocalError(null);
+        try {
+          const result = onImageReceived(input);
+          if (result && typeof (result as PromiseLike<void>).then === 'function') {
+            void Promise.resolve(result)
+              .catch(() => {
+                // Parent controller owns error display; always release synchronous submit lock.
+              })
+              .finally(() => {
+                if (submitSeqRef.current === seq) {
+                  isSubmittingRef.current = false;
+                }
+              });
+          }
+        } catch {
+          if (submitSeqRef.current === seq) {
+            isSubmittingRef.current = false;
+          }
+        }
+      },
+      [onImageReceived]
+    );
+
+    // LIFO Android Back handler + capture-phase Escape & background shortcut guard + LIFO Android Shared Image interceptor + global paste listener
+    useEffect(() => {
+      if (!isOpen || !handoff) return;
+
+      const popBack = NativeBridge.pushBackHandler(() => {
+        if (!isProcessingRef.current) {
+          onCancel();
+        }
+      });
+
+      const popSharedImage = NativeBridge.pushSharedImageInterceptor((_title, dataUrl) => {
+        handleReceiveInput(dataUrl);
+      });
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          if (!isProcessingRef.current) {
+            onCancel();
+          }
+          return;
+        }
+
+        const editable =
+          isEditableTarget(e.target) ||
+          (typeof document !== 'undefined' && isEditableTarget(document.activeElement));
+        if (editable) return;
+
+        // Defense-in-depth: block background canvas Undo/Redo & navigation shortcuts while preserving Ctrl/Cmd+C/V, Tab, Enter, Space, and text selection.
+        if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+          const lower = e.key.toLowerCase();
+          if (lower === 'z' || lower === 'y') {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          }
+          return;
+        }
+
+        if (!e.ctrlKey && !e.metaKey && !e.altKey && isBackgroundCanvasShortcutKey(e.key)) {
+          e.stopImmediatePropagation();
+        }
+      };
+
+      const handleWindowPaste = (e: ClipboardEvent) => {
+        if (!isOpenRef.current || isProcessingRef.current || isSubmittingRef.current) return;
+        const clipboardData = e.clipboardData;
+        if (!clipboardData) return;
+
+        if (clipboardData.items && clipboardData.items.length > 0) {
+          for (let i = 0; i < clipboardData.items.length; i++) {
+            const item = clipboardData.items[i];
+            if (item && typeof item.type === 'string' && item.type.startsWith('image/')) {
+              const file = item.getAsFile();
+              if (file) {
+                e.preventDefault();
+                handleReceiveInput(file);
+                return;
+              }
+            }
+          }
+        }
+
+        if (clipboardData.files && clipboardData.files.length > 0) {
+          for (let i = 0; i < clipboardData.files.length; i++) {
+            const file = clipboardData.files[i];
+            if (file && typeof file.type === 'string' && file.type.startsWith('image/')) {
+              e.preventDefault();
+              handleReceiveInput(file);
+              return;
+            }
+          }
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown, true);
+      window.addEventListener('paste', handleWindowPaste);
+
+      return () => {
+        popSharedImage();
+        popBack();
+        window.removeEventListener('keydown', handleKeyDown, true);
+        window.removeEventListener('paste', handleWindowPaste);
+      };
+    }, [isOpen, handoff, onCancel, handleReceiveInput]);
+
+    const handleLaunchGemini = useCallback(async () => {
+      if (!handoff || isLaunching || isProcessing) return;
+      setLocalError(null);
+      setIsLaunching(true);
+      try {
+        const res = await launchGeminiHandoff(handoff);
+        if (isAndroid) {
+          setLaunchStatus(
+            res.copiedPrompt
+              ? 'Prompt copied! Choose Gemini in the share sheet, paste the prompt, then share the result back to Capy.'
+              : 'Template shared! Copy the prompt below, paste it in Gemini, then share the result back to Capy.'
+          );
+        } else {
+          setLaunchStatus(
+            res.copiedPrompt
+              ? 'Prompt copied & template saved! Attach the template PNG in Gemini, paste the prompt, then paste or upload the result below.'
+              : 'Template saved & Gemini opened! Copy the prompt below, attach the template PNG, then return the result below.'
+          );
+        }
+      } catch {
+        setLocalError('Could not open Gemini automatically. Copy the prompt below and upload the template image in Gemini.');
+      } finally {
+        setIsLaunching(false);
+      }
+    }, [handoff, isAndroid, isLaunching, isProcessing]);
+
+    const handleCopyPromptOnly = useCallback(async () => {
+      if (!handoff) return;
+      setLocalError(null);
+      const ok = await copyPromptToClipboard(handoff.prompt);
+      if (ok) {
+        setCopiedOnly(true);
+        if (copiedTimerRef.current !== null) {
+          clearTimeout(copiedTimerRef.current);
+        }
+        copiedTimerRef.current = setTimeout(() => {
+          copiedTimerRef.current = null;
+          setCopiedOnly(false);
+        }, 2500);
+      } else {
+        setLocalError('Clipboard access was blocked. Select and copy the prompt text manually.');
+      }
+    }, [handoff]);
+
+    const handlePasteClipboard = useCallback(async () => {
+      const activeHandoff = handoffRef.current;
+      if (
+        !isOpenRef.current ||
+        !activeHandoff ||
+        isProcessingRef.current ||
+        isSubmittingRef.current ||
+        isReadingClipboardRef.current
+      ) {
+        return;
+      }
+      setLocalError(null);
+      if (
+        typeof navigator === 'undefined' ||
+        !navigator.clipboard ||
+        typeof navigator.clipboard.read !== 'function'
+      ) {
+        setLocalError(
+          'Direct clipboard read is unavailable here. Press Ctrl+V / Cmd+V anywhere in this window, or pick an image file below.'
+        );
+        return;
+      }
+      isReadingClipboardRef.current = true;
+      const isReadStale = () =>
+        !isOpenRef.current ||
+        handoffRef.current !== activeHandoff ||
+        isProcessingRef.current ||
+        isSubmittingRef.current;
+      try {
+        const items = await navigator.clipboard.read();
+        if (isReadStale()) return;
+        for (const item of items) {
+          const imageMime = item.types.find((type) => type.startsWith('image/'));
+          if (imageMime) {
+            const blob = await item.getType(imageMime);
+            if (isReadStale()) return;
+            handleReceiveInput(blob);
+            return;
+          }
+        }
+        if (isReadStale()) return;
+        setLocalError(
+          'No image was found in your clipboard yet. Copy the generated image from Gemini first, or pick a saved image file below.'
+        );
+      } catch {
+        if (isReadStale()) return;
+        setLocalError(
+          'Clipboard permission was denied. Press Ctrl+V / Cmd+V to paste, or pick an image file below.'
+        );
+      } finally {
+        isReadingClipboardRef.current = false;
+      }
+    }, [handleReceiveInput]);
+
+    const handleFileChange = useCallback(
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        handleReceiveInput(file);
+      },
+      [handleReceiveInput]
+    );
+
+    const handleDrop = useCallback(
+      (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setIsDraggingFile(false);
+        if (!isOpenRef.current || isProcessingRef.current || isSubmittingRef.current) return;
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+        if (file.type && !file.type.startsWith('image/')) {
+          setLocalError('Please drop a PNG, JPEG, or WebP image file.');
+          return;
+        }
+        handleReceiveInput(file);
+      },
+      [handleReceiveInput]
+    );
+
+    if (!isOpen || !handoff) return null;
+
+    const displayedError = errorMessage || localError;
+    const modeLabel =
+      handoff.direction === 'extend-out'
+        ? 'Extend Canvas Borders'
+        : 'Infill Selected Detail';
+
+    return (
+      <div
+        className="fixed inset-0 z-[58] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm sm:p-4"
+        onClick={(e) => {
+          if (e.target === e.currentTarget && !isProcessing) {
+            onCancel();
+          }
+        }}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          data-testid="guided-gemini-modal"
+          className="capy-guided-gemini-modal w-full h-full sm:h-auto sm:max-h-[90dvh] sm:max-w-lg bg-slate-900 sm:border sm:border-slate-700/80 sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden text-slate-100"
+        >
+          {/* Sticky Header */}
+          <div
+            className="capy-guided-gemini-header flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 bg-slate-950/80 shrink-0"
+            style={{
+              paddingTop: 'max(0.75rem, var(--sat, 0px))',
+              paddingLeft: 'max(1rem, var(--sal, 0px))',
+              paddingRight: 'max(1rem, var(--sar, 0px))',
+            }}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles size={16} className="text-sky-400 shrink-0" />
+              <div className="min-w-0">
+                <h2
+                  id={titleId}
+                  className="text-sm font-extrabold text-slate-100 truncate"
+                >
+                  Free Gemini App Handoff
+                </h2>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {modeLabel} • 100% Free with Gemini
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={isProcessing}
+              aria-label="Close Guided Gemini Handoff"
+              onClick={onCancel}
+              className="capy-icon-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Scrollable Body */}
+          <div
+            className="capy-guided-gemini-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-4 space-y-3"
+            style={{
+              paddingLeft: 'max(0.875rem, var(--sal, 0px))',
+              paddingRight: 'max(0.875rem, var(--sar, 0px))',
+            }}
+          >
+            {fallbackReason && (
+              <div
+                role="status"
+                data-testid="guided-gemini-fallback-notice"
+                className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/45 text-xs text-amber-200 min-w-0"
+              >
+                <AlertTriangle size={14} className="text-amber-300 shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words leading-snug">{fallbackReason}</span>
+              </div>
+            )}
+
+            {/* Step 1: Template & Prompt */}
+            <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+                <span className="text-xs font-extrabold text-sky-300">
+                  Step 1 — Send Template &amp; Prompt to Gemini
+                </span>
+                <button
+                  type="button"
+                  data-testid="guided-gemini-copy-prompt-btn"
+                  disabled={isProcessing}
+                  onClick={() => void handleCopyPromptOnly()}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {copiedOnly ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                  <span>{copiedOnly ? 'Copied' : 'Copy Prompt'}</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2.5 items-start min-w-0">
+                {templatePreviewUrl && (
+                  <div className="w-full sm:w-28 shrink-0 rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center p-1">
+                    <img
+                      src={templatePreviewUrl}
+                      alt="Prepared puzzle template preview"
+                      className="capy-guided-gemini-preview max-h-32 sm:max-h-24 w-auto object-contain rounded"
+                    />
+                  </div>
+                )}
+
+                <div className="w-full min-w-0 flex-1 rounded-lg bg-slate-900/90 border border-slate-800 p-2 max-h-28 overflow-y-auto">
+                  <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap break-words select-text">
+                    {handoff.prompt}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                data-testid="guided-gemini-launch-btn"
+                disabled={isProcessing || isLaunching}
+                onClick={() => void handleLaunchGemini()}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer"
+              >
+                {isLaunching ? (
+                  <Loader2 size={15} className="animate-spin shrink-0" />
+                ) : isAndroid ? (
+                  <Share2 size={15} className="shrink-0" />
+                ) : (
+                  <ExternalLink size={15} className="shrink-0" />
+                )}
+                <span className="break-words text-center">
+                  {isAndroid
+                    ? 'Copy Prompt & Share to Gemini App'
+                    : 'Copy Prompt & Open Gemini'}
+                </span>
+              </button>
+
+              {launchStatus && (
+                <p
+                  role="status"
+                  className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 leading-snug break-words"
+                >
+                  {launchStatus}
+                </p>
+              )}
+            </div>
+
+            {/* Step 2: Return Generated Image */}
+            <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">
+              <div className="text-xs font-extrabold text-amber-300">
+                Step 2 — Return Generated Image
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  data-testid="guided-gemini-paste-btn"
+                  disabled={isProcessing}
+                  onClick={() => void handlePasteClipboard()}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl bg-amber-400 hover:bg-amber-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+                >
+                  <ClipboardPaste size={15} className="shrink-0" />
+                  <span className="truncate">Paste Result</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 disabled:opacity-50 text-slate-100 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  <Upload size={15} className="shrink-0 text-sky-300" />
+                  <span className="truncate">Pick Image File</span>
+                </button>
+              </div>
+
+              <div
+                data-testid="guided-gemini-dropzone"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (!isProcessing) setIsDraggingFile(true);
+                }}
+                onDragLeave={() => setIsDraggingFile(false)}
+                onDrop={handleDrop}
+                onClick={() => {
+                  if (!isProcessing) fileInputRef.current?.click();
+                }}
+                className={`rounded-xl border-2 border-dashed p-3 text-center transition-colors cursor-pointer min-w-0 ${
+                  isDraggingFile
+                    ? 'border-sky-400 bg-sky-500/15 text-sky-100'
+                    : 'border-slate-700 hover:border-slate-500 bg-slate-900/60 text-slate-400'
+                }`}
+              >
+                <div className="flex flex-col items-center justify-center gap-1">
+                  {isProcessing ? (
+                    <Loader2 size={18} className="animate-spin text-sky-400" />
+                  ) : (
+                    <ImagePlus size={18} className="text-slate-400" />
+                  )}
+                  <span className="text-[11px] font-semibold text-slate-300 break-words">
+                    {isProcessing
+                      ? 'Compositing & segmenting your artwork...'
+                      : 'Drop generated PNG/WebP/JPEG here, press Ctrl+V, or tap to choose a file'}
+                  </span>
+                  {isAndroid && !isProcessing && (
+                    <span className="text-[10px] text-slate-400 break-words">
+                      On Android, you can also tap Share in Gemini and select Capy.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                data-testid="guided-gemini-file-input"
+                disabled={isProcessing}
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
+
+            {displayedError && (
+              <div
+                role="alert"
+                data-testid="guided-gemini-error"
+                className="flex items-start gap-2 px-3 py-2 rounded-xl bg-red-950/70 border border-red-500/50 text-xs text-red-200 min-w-0"
+              >
+                <AlertTriangle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words leading-snug">{displayedError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Sticky Footer */}
+          <div
+            className="capy-guided-gemini-footer flex items-center justify-end gap-2 px-4 py-2.5 border-t border-slate-800 bg-slate-950/80 shrink-0"
+            style={{
+              paddingBottom: 'max(0.75rem, calc(var(--sab, 0px) + 0.5rem))',
+              paddingLeft: 'max(1rem, var(--sal, 0px))',
+              paddingRight: 'max(1rem, var(--sar, 0px))',
+            }}
+          >
+            <button
+              type="button"
+              data-testid="guided-gemini-cancel-btn"
+              disabled={isProcessing}
+              onClick={onCancel}
+              className="inline-flex items-center justify-center px-4 py-2 min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+);

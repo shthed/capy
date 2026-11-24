@@ -30,16 +30,21 @@ import { PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
+import { buildUnifiedRegionIndex } from './engine/UnifiedPuzzleLayers';
 import {
   InfiniteZoomToolbarButton,
   RegionSelectionBar,
 } from './components/InfiniteZoomControls';
+import { GuidedGeminiHandoffModal } from './components/GuidedGeminiHandoffModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
 import { OnboardingTutorial, TUTORIAL_STEPS } from './components/OnboardingTutorial';
 import { FeatureOfferBanner } from './components/FeatureOfferBanner';
 import { TargetSpotlightOverlay } from './components/TargetSpotlightOverlay';
 import { resolveReleaseChannel } from './version';
+
+const EMPTY_REGIONS: Region[] = [];
+const EMPTY_REGION_MAP: Map<number, Region> = new Map();
 
 const SettingsModal = React.lazy(() =>
   import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -70,6 +75,7 @@ interface AppViewPropsInput {
   showTutorial: boolean;
   showSettings: boolean;
   showPaletteOptions: boolean;
+  isGuidedGeminiOpen: boolean;
   loadingStepIndex: number | undefined;
 }
 
@@ -127,6 +133,7 @@ function deriveHudViewProps(input: AppViewPropsInput) {
     showTutorial,
     showSettings,
     showPaletteOptions,
+    isGuidedGeminiOpen,
   } = input;
   return {
     showActiveHud: Boolean(puzzle && !isLoading),
@@ -137,9 +144,9 @@ function deriveHudViewProps(input: AppViewPropsInput) {
       isFreeColorMode || puzzle?.isFreeColor || settings.enableCustomColorForAllPuzzles
     ),
     activePaletteColor: puzzle?.palette.find((c) => c.id === activeColorId) || null,
-    hasDockedTutorial: showTutorial && showSettings && !showPaletteOptions,
-    isModalOpen: showSettings || showPaletteOptions,
-    isSettingsOnlyOpen: showSettings && !showPaletteOptions,
+    hasDockedTutorial: showTutorial && showSettings && !showPaletteOptions && !isGuidedGeminiOpen,
+    isModalOpen: showSettings || showPaletteOptions || isGuidedGeminiOpen,
+    isSettingsOnlyOpen: showSettings && !showPaletteOptions && !isGuidedGeminiOpen,
   };
 }
 
@@ -222,6 +229,7 @@ export const App: React.FC = () => {
   const [activeSettingsTab, setActiveSettingsTab] = useState<number>(1);
   const activeSettingsTabRef = useLatest(activeSettingsTab);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
+  const [isGuidedGeminiOpen, setIsGuidedGeminiOpen] = useState<boolean>(false);
 
   const settingsRef = useLatest(settings);
   const sourceImageRef = useLatest(sourceImage);
@@ -257,17 +265,13 @@ export const App: React.FC = () => {
     }
   });
 
-  // O(1) region lookup map whenever puzzle changes
-  const regionByIdMap = useMemo(() => {
-    const map = new Map<number, Region>();
-    if (puzzle) {
-      for (let i = 0; i < puzzle.regions.length; i++) {
-        const r = puzzle.regions[i];
-        map.set(r.id, r);
-      }
-    }
-    return map;
-  }, [puzzle]);
+  // Unified O(1) region index across root + all nested layers whenever puzzle changes
+  const unifiedRegionIndex = useMemo(
+    () => (puzzle ? buildUnifiedRegionIndex(puzzle) : null),
+    [puzzle]
+  );
+  const allPuzzleRegions = unifiedRegionIndex?.allRegions ?? EMPTY_REGIONS;
+  const regionByIdMap = unifiedRegionIndex?.byId ?? EMPTY_REGION_MAP;
   const regionByIdRef = useLatest(regionByIdMap);
 
   const handleUpdateSettings = useCallback(
@@ -520,7 +524,7 @@ export const App: React.FC = () => {
     isLoadingRef,
     isReplaying,
     showSettings,
-    showPaletteOptions,
+    showPaletteOptions: showPaletteOptions || isGuidedGeminiOpen,
     isUndoEnabled,
     viewportRef,
     canvasContainerSizeRef,
@@ -551,7 +555,7 @@ export const App: React.FC = () => {
     isLoading,
     isReplaying,
     showSettings,
-    showPaletteOptions,
+    showPaletteOptions: showPaletteOptions || isGuidedGeminiOpen,
     filledRegionCount: filledRegionIds.size,
     initialSnapshots: snapshots,
     liveCoopRef,
@@ -586,7 +590,6 @@ export const App: React.FC = () => {
     loadArtworkFromImage,
     handleLoadSnapshot,
     handleLoadSnapshotRef,
-    persistParentSnapshotBeforeDetailTile,
     handleZoomIntoDetailTile,
     handleFileUpload,
     handlePickImage,
@@ -651,10 +654,11 @@ export const App: React.FC = () => {
     onBeforeSnapshotResetOrSwitch: handleBeforeSnapshotResetOrSwitchBridge,
   });
 
-  // 7b. Bidirectional Local AI Infinite Zoom Controller
+  // 7b. Unified Single-Canvas Infinite Zoom Controller (Nano Banana 2.1 / 2)
   const {
     isRegionSelectionMode,
     selectedRegionIds,
+    selectionLayerId,
     selectionMetrics,
     pendingSwitchRegionId,
     selectionNotice,
@@ -664,6 +668,10 @@ export const App: React.FC = () => {
     isInfiniteZoomDisabled,
     infiniteZoomDisabledReason,
     undoSubdivisionState,
+    liveLayerImages,
+    guidedHandoffSession,
+    infiniteZoomError,
+    clearInfiniteZoomError,
     childSave,
     handleJumpToChildPuzzle,
     handleEnterRegionSelectionMode,
@@ -674,6 +682,8 @@ export const App: React.FC = () => {
     handleClearSelection,
     handleConfirmRegionSubdivision,
     handleConfirmExtendBorders,
+    handleCompleteGuidedGeminiHandoff,
+    handleCancelGuidedGeminiHandoff,
     handleUndoSubdivision,
     clearUndoSubdivision,
     cancelActiveInfiniteZoom,
@@ -691,6 +701,9 @@ export const App: React.FC = () => {
     isFreeColorMode,
     isLoading,
     isReplaying,
+    isReplayPlaying,
+    exitReplay,
+    applyViewport,
     coopRoomCode,
     settings,
     visibleColorIdsRef,
@@ -701,8 +714,6 @@ export const App: React.FC = () => {
     undoStackRef,
     redoStackRef,
     handleLoadSnapshotRef,
-    persistParentSnapshotBeforeDetailTile,
-    loadArtworkFromImage,
     syncUndoStack,
     syncRedoStack,
     setSnapshots,
@@ -718,6 +729,7 @@ export const App: React.FC = () => {
     setLoadingPayload,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onGuidedHandoffOpenChange: setIsGuidedGeminiOpen,
   });
 
   useIsomorphicLayoutEffect(() => {
@@ -785,13 +797,13 @@ export const App: React.FC = () => {
     syncRedoStack,
   });
 
-  // Derived Display Numbers & Progress
+  // Derived Display Numbers & Progress (unified across root + all nested layers)
   const displayNumberMap = useMemo(() => {
     if (!puzzle) return new Map<number, string>();
-    return getDisplayNumberMap(puzzle.palette, puzzle.regions, settings.paletteSort);
-  }, [puzzle, settings.paletteSort]);
+    return getDisplayNumberMap(puzzle.palette, allPuzzleRegions, settings.paletteSort);
+  }, [puzzle, allPuzzleRegions, settings.paletteSort]);
 
-  const totalCount = puzzle?.regions.length || 0;
+  const totalCount = unifiedRegionIndex?.totalCount ?? 0;
   const filledCount = filledRegionIds.size;
   const progressPercentage = computeProgressPercentage(filledCount, totalCount);
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
@@ -815,6 +827,7 @@ export const App: React.FC = () => {
     showTutorial,
     showSettings,
     showPaletteOptions,
+    isGuidedGeminiOpen: isGuidedGeminiOpen || Boolean(guidedHandoffSession),
     loadingStepIndex: loadingPayload?.stepIndex,
   });
 
@@ -1124,6 +1137,8 @@ export const App: React.FC = () => {
         activeSnapshotId={activeSnapshotId}
         isRegionSelectionMode={isRegionSelectionMode}
         selectedRegionIds={selectedRegionIds}
+        selectionLayerId={selectionLayerId}
+        layerImages={liveLayerImages}
         onRegionSelectTap={handleRegionSelectTap}
         onRegionSelectDragAdd={handleRegionSelectDragAdd}
       />
@@ -1141,6 +1156,7 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
+          isReplayPlaying={isReplayPlaying}
           onUndo={handleFloatingUndo}
           onRedo={handleFloatingRedo}
           onLongPressUndo={handleLongPressUndo}
@@ -1154,9 +1170,16 @@ export const App: React.FC = () => {
               <InfiniteZoomToolbarButton
                 disabled={isInfiniteZoomDisabled}
                 disabledReason={infiniteZoomDisabledReason}
-                sourceWidth={sourceImage ? sourceImage.naturalWidth || sourceImage.width : 0}
-                sourceHeight={sourceImage ? sourceImage.naturalHeight || sourceImage.height : 0}
+                sourceWidth={
+                  puzzle?.width ?? (sourceImage ? sourceImage.naturalWidth || sourceImage.width : 0)
+                }
+                sourceHeight={
+                  puzzle?.height ??
+                  (sourceImage ? sourceImage.naturalHeight || sourceImage.height : 0)
+                }
                 prompt={infiniteZoomPrompt}
+                provider={settings.infiniteZoomProvider}
+                model={settings.nanoBananaModel}
                 onPromptChange={setInfiniteZoomPrompt}
                 onEnterSelectionMode={() => handleEnterRegionSelectionMode()}
                 onConfirmExtendBorders={handleConfirmExtendBorders}
@@ -1215,7 +1238,7 @@ export const App: React.FC = () => {
       {viewProps.showPaletteDock && puzzle && (
         <PaletteDock
           palette={puzzle.palette}
-          regions={puzzle.regions}
+          regions={allPuzzleRegions}
           activeColorId={activeColorId}
           filledRegionIds={filledRegionIds}
           paintedRegionColors={paintedRegionColors}
@@ -1387,7 +1410,9 @@ export const App: React.FC = () => {
           }}
         >
           <span className="font-semibold text-sky-200 truncate">
-            Added {undoSubdivisionState.addedRegionCount} detail regions
+            {undoSubdivisionState.operationKind === 'zoom-out'
+              ? `Extended borders (+${undoSubdivisionState.addedRegionCount} regions)`
+              : `Added ${undoSubdivisionState.addedRegionCount} detail regions`}
           </span>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
@@ -1396,11 +1421,11 @@ export const App: React.FC = () => {
               onClick={() => void handleUndoSubdivision()}
               className="px-2.5 py-1 rounded-lg bg-sky-400 hover:bg-sky-300 text-slate-950 text-xs font-extrabold cursor-pointer"
             >
-              Undo Split
+              {undoSubdivisionState.operationKind === 'zoom-out' ? 'Undo Extend' : 'Undo Split'}
             </button>
             <button
               type="button"
-              aria-label="Dismiss subdivision notice"
+              aria-label="Dismiss Infinite Zoom notice"
               onClick={clearUndoSubdivision}
               className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
             >
@@ -1409,6 +1434,41 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {infiniteZoomError && !guidedHandoffSession && (
+        <div
+          role="alert"
+          data-testid="infinite-zoom-error-toast"
+          className="fixed left-1/2 -translate-x-1/2 z-[56] max-w-md w-[calc(100%-1.5rem)] bg-red-950/95 border border-red-500/60 text-red-100 px-3.5 py-2.5 rounded-xl shadow-2xl flex items-start justify-between gap-3 text-xs backdrop-blur-md"
+          style={{
+            bottom: `calc(${
+              settings.raisePaletteDock
+                ? 'var(--capy-replay-bottom-raised, 6.25rem)'
+                : 'var(--capy-replay-bottom, 4.625rem)'
+            } + var(--sab, 0px))`,
+          }}
+        >
+          <span className="leading-snug break-words">{infiniteZoomError.message}</span>
+          <button
+            type="button"
+            data-testid="infinite-zoom-error-dismiss"
+            onClick={clearInfiniteZoomError}
+            className="shrink-0 px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-100 text-xs font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <GuidedGeminiHandoffModal
+        isOpen={Boolean(guidedHandoffSession)}
+        handoff={guidedHandoffSession?.handoff ?? null}
+        fallbackReason={guidedHandoffSession?.fallbackReason ?? null}
+        isProcessing={Boolean(guidedHandoffSession?.isProcessing)}
+        errorMessage={guidedHandoffSession?.errorMessage ?? null}
+        onImageReceived={handleCompleteGuidedGeminiHandoff}
+        onCancel={handleCancelGuidedGeminiHandoff}
+      />
 
       {storageQuotaWarning && (
         <div

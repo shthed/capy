@@ -855,6 +855,10 @@ export const CreateTab: React.FC<CreateTabProps> = ({
     onUpdateSettings({ ...settings, [key]: value });
   };
 
+  const updateSettingsPatch = (patch: Partial<UserSettings>) => {
+    onUpdateSettings({ ...settings, ...patch });
+  };
+
   const renderHintButton = (id: string, title: string) => {
     const isExpanded = openHintId === id;
     return (
@@ -1043,10 +1047,20 @@ export const CreateTab: React.FC<CreateTabProps> = ({
 
         <InfiniteZoomCreateCard
           sourceImage={sourceImage}
-          localAiMode={settings.localAiMode}
+          infiniteZoomProvider={settings.infiniteZoomProvider}
+          nanoBananaModel={settings.nanoBananaModel}
+          nanoBananaResolution={settings.nanoBananaResolution}
           isInfiniteZoomDisabled={isInfiniteZoomDisabled}
           disabledReason={infiniteZoomDisabledReason}
-          onChangeLocalAiMode={(mode) => updateSetting('localAiMode', mode)}
+          onChangeProvider={(provider) => updateSetting('infiniteZoomProvider', provider)}
+          onChangeModel={(model, nextResolution) =>
+            updateSettingsPatch(
+              nextResolution
+                ? { nanoBananaModel: model, nanoBananaResolution: nextResolution }
+                : { nanoBananaModel: model }
+            )
+          }
+          onChangeResolution={(resolution) => updateSetting('nanoBananaResolution', resolution)}
           onStartInfiniteZoomIn={onStartInfiniteZoomIn}
           onStartInfiniteZoomOut={onStartInfiniteZoomOut}
           onZoomIntoDetailTile={onZoomIntoDetailTile}

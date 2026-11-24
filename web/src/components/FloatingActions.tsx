@@ -12,6 +12,7 @@ interface FloatingActionsProps {
   showUndo?: boolean;
   isCompleted?: boolean;
   isReplaying?: boolean;
+  isReplayPlaying?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   onLongPressUndo?: () => void;
@@ -34,6 +35,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
   showUndo = true,
   isCompleted = false,
   isReplaying = false,
+  isReplayPlaying = false,
   onUndo,
   onRedo,
   onLongPressUndo,
@@ -153,8 +155,8 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
         </button>
       )}
 
-      {/* Manual Infinite Zoom Trigger (hidden during Replay to preserve mobile/landscape geometry) */}
-      {!isReplaying && infiniteZoomSlot}
+      {/* Manual Infinite Zoom Trigger (hidden only while Replay is actively playing) */}
+      {!(isReplaying && isReplayPlaying) && infiniteZoomSlot}
 
       {/* Undo & Redo History Action Buttons (Redo stacked above Undo, hidden when disabled or hidden via setting) */}
       {showUndo && (
