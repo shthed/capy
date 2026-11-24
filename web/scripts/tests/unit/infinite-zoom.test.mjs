@@ -5399,6 +5399,22 @@ function testClusterD_UnifiedCanvasHelpers(canvasHelpersMod, unifiedMod, codecMo
     }),
     96
   );
+  assert.equal(
+    canvasHelpersMod.resolvePuzzleMaxZoomScale({
+      maxZoomDepth: 1,
+      nestedLayers: [{ depth: 1, worldBounds: { x: 0.4, y: 0.3, width: 0.12, height: 0.18 } }],
+    }),
+    67,
+    'Small depth-1 nested layer must unlock enough zoom headroom to inspect at full 12x local detail'
+  );
+  assert.equal(
+    canvasHelpersMod.resolvePuzzleMaxZoomScale({
+      maxZoomDepth: 1,
+      nestedLayers: [{ depth: 1, worldBounds: { x: 0.45, y: 0.45, width: 0.03, height: 0.03 } }],
+    }),
+    256,
+    'Very small nested layer worldBounds must clamp cleanly at MAX_INFINITE_ZOOM_SCALE (256)'
+  );
 
   assert.equal(canvasHelpersMod.applyZoomSnapDetent(24.3, true, 48), 24);
   assert.equal(canvasHelpersMod.applyZoomSnapDetent(24.3, true, 12), 24.3, 'Detents > maxScale must not snap');

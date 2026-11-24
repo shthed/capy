@@ -1648,7 +1648,7 @@ async function runStage2(ctx) {
     assert.equal(puzzleUnified.nestedLayers.length, 1);
     assert.equal(puzzleUnified.maxZoomDepth, 1);
 
-    // Verify dynamic max zoom scales cleanly ABOVE 12x (up to 24x at depth 1)
+    // Verify dynamic max zoom scales cleanly ABOVE 12x (worldBounds-aware up to 256x)
     const zoomInBtn = page.getByTestId('zoom-in-btn');
     await zoomInBtn.waitFor({ state: 'visible', timeout: 3000 });
     for (let i = 0; i < 16; i++) {
@@ -1665,8 +1665,8 @@ async function runStage2(ctx) {
       `Expected dynamic max zoom > 12x at depth 1, got zoomScale=${zoomedSess.zoomScale}`
     );
     assert.ok(
-      zoomedSess.zoomScale <= 24.05,
-      `Expected depth-1 zoomScale <= 24x, got ${zoomedSess.zoomScale}`
+      zoomedSess.zoomScale <= 256.05,
+      `Expected depth-1 zoomScale <= 256x, got ${zoomedSess.zoomScale}`
     );
 
     // Reset view back to 1x so both outer root and nested detail layers are cleanly clickable

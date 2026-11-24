@@ -27,6 +27,7 @@ export { buildOutpaintBorderMask };
 export const MAX_TOTAL_PALETTE_SWATCHES = 64;
 export const DEFAULT_MAX_NEW_SWATCHES = 6;
 export const DEFAULT_REUSE_DELTA_E = 22;
+export const DEFAULT_ZOOM_IN_TARGET_REGIONS = 200;
 export const MAX_SUBDIVIDE_TARGET_REGIONS = 800;
 
 export interface SubdivideMaskedRegionParams {
@@ -1480,7 +1481,7 @@ export function subdivideMaskedRegion(
     1,
     Math.min(
       MAX_SUBDIVIDE_TARGET_REGIONS,
-      Math.floor(sanitizeFiniteNumber(params.targetSubRegions, 12))
+      Math.floor(sanitizeFiniteNumber(params.targetSubRegions, DEFAULT_ZOOM_IN_TARGET_REGIONS))
     )
   );
   const minRegionArea = Math.max(1, Math.floor(sanitizeFiniteNumber(params.minRegionArea, 24)));

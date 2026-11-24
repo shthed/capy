@@ -184,7 +184,8 @@ export function computeMaxZoomScale(maxZoomDepth?: number): number {
 
 /**
  * Resolves the effective maximum zoom scale for a puzzle by taking the maximum
- * of puzzle.maxZoomDepth and all nestedLayers[i].depth.
+ * of puzzle.maxZoomDepth, all nestedLayers[i].depth, and the zoom headroom needed
+ * to inspect each nested layer's worldBounds at full BASE_MAX_ZOOM_SCALE detail.
  */
 export function resolvePuzzleMaxZoomScale(puzzle: PuzzleData | null | undefined): number {
   if (!puzzle) return BASE_MAX_ZOOM_SCALE;
@@ -194,16 +195,34 @@ export function resolvePuzzleMaxZoomScale(puzzle: PuzzleData | null | undefined)
     puzzle.maxZoomDepth > 0
       ? Math.floor(puzzle.maxZoomDepth)
       : 0;
+  let boundsNeededMax = BASE_MAX_ZOOM_SCALE;
   const layers = puzzle.nestedLayers;
   if (Array.isArray(layers)) {
     for (let i = 0; i < layers.length; i++) {
-      const d = layers[i]?.depth;
+      const layer = layers[i];
+      const d = layer?.depth;
       if (typeof d === 'number' && Number.isFinite(d) && d > maxDepth) {
         maxDepth = Math.floor(d);
       }
+      const wb = layer?.worldBounds;
+      if (
+        wb &&
+        Number.isFinite(wb.width) &&
+        Number.isFinite(wb.height) &&
+        wb.width > 0 &&
+        wb.height > 0
+      ) {
+        const dominantSpan = Math.max(wb.width, wb.height);
+        if (dominantSpan < 1) {
+          const needed = Math.ceil(BASE_MAX_ZOOM_SCALE / Math.max(1e-4, dominantSpan));
+          if (needed > boundsNeededMax) {
+            boundsNeededMax = needed;
+          }
+        }
+      }
     }
   }
-  return computeMaxZoomScale(maxDepth);
+  return Math.min(MAX_INFINITE_ZOOM_SCALE, Math.max(computeMaxZoomScale(maxDepth), boundsNeededMax));
 }
 
 /**

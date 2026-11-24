@@ -11,6 +11,7 @@ import {
 import {
   BorderExtensionSides,
   GenerationProgressPayload,
+  GeneratorConfig,
   InfiniteZoomNodeMeta,
   InfiniteZoomProviderMode,
   NanoBananaModelId,
@@ -677,14 +678,19 @@ export function resolveActiveSelectionGrid(
   };
 }
 
+export const ZOOM_IN_MAX_NEW_SWATCHES = 10;
+
 /**
  * Pure helper computing crisp high-resolution target dimensions for a nested detail layer:
  * upscales smaller selections up to maxDimPx (preserving aspect ratio) and never shrinks below crop bbox.
+ * When a high-resolution generated image dimension (`generatedMaxDim`) is supplied, preserves its
+ * resolution up to `maxDimPx` without the legacy 4x cap so zoomed-in areas hold a full puzzle's detail.
  */
 export function computeNestedLayerTargetDimensions(
   bboxWidth: number,
   bboxHeight: number,
-  maxDimPx: number = NESTED_LAYER_MAX_DIM_PX
+  maxDimPx: number = NESTED_LAYER_MAX_DIM_PX,
+  generatedMaxDim?: number
 ): { width: number; height: number } {
   const safeW =
     Number.isFinite(bboxWidth) && bboxWidth > 0 ? Math.max(1, Math.round(bboxWidth)) : 1;
@@ -698,10 +704,61 @@ export function computeNestedLayerTargetDimensions(
   if (maxSide >= safeMaxDim) {
     return { width: safeW, height: safeH };
   }
-  const scale = Math.min(safeMaxDim / maxSide, MAX_NESTED_UPSCALE_FACTOR);
+  const hasGeneratedMax =
+    typeof generatedMaxDim === 'number' && Number.isFinite(generatedMaxDim) && generatedMaxDim > 0;
+  const desiredMaxSide = hasGeneratedMax
+    ? Math.min(safeMaxDim, Math.max(maxSide, Math.round(generatedMaxDim)))
+    : Math.min(safeMaxDim, Math.round(maxSide * MAX_NESTED_UPSCALE_FACTOR));
+  const scale = desiredMaxSide / maxSide;
   const width = Math.max(safeW, Math.min(safeMaxDim, Math.round(safeW * scale)));
   const height = Math.max(safeH, Math.min(safeMaxDim, Math.round(safeH * scale)));
   return { width, height };
+}
+
+/**
+ * Pure helper computing whole-puzzle-density subdivision parameters for a Zoom In detail patch,
+ * matching the user's generatorConfig and parent puzzle complexity while adapting minRegionArea
+ * cleanly for irregular or narrow selection masks.
+ */
+export function computeZoomInSubdivisionParams(opts: {
+  maskedPixelCount: number;
+  basePuzzleRegionCount: number;
+  generatorConfig?: GeneratorConfig | null;
+}): { targetSubRegions: number; minRegionArea: number; maxNewSwatches: number } {
+  const cfg = opts.generatorConfig;
+  const fallbackMax =
+    cfg?.paletteDetail === 'HIGH' ? 500 : cfg?.paletteDetail === 'LOW' ? 100 : 200;
+  const configuredMax =
+    typeof cfg?.maxRegions === 'number' && Number.isFinite(cfg.maxRegions) && cfg.maxRegions > 0
+      ? Math.floor(cfg.maxRegions)
+      : fallbackMax;
+  const safeBaseRegions =
+    Number.isFinite(opts.basePuzzleRegionCount) && opts.basePuzzleRegionCount > 0
+      ? Math.floor(opts.basePuzzleRegionCount)
+      : 0;
+  const desiredTarget = Math.max(configuredMax, Math.min(400, safeBaseRegions));
+  const targetSubRegions = Math.max(64, Math.min(MAX_SUBDIVIDE_TARGET_REGIONS, desiredTarget));
+
+  const configuredMinArea =
+    typeof cfg?.minRegionArea === 'number' &&
+    Number.isFinite(cfg.minRegionArea) &&
+    cfg.minRegionArea > 0
+      ? Math.floor(cfg.minRegionArea)
+      : 48;
+  const baseMinArea = Math.max(16, Math.min(40, Math.round(configuredMinArea * 0.75)));
+  const safeMasked =
+    Number.isFinite(opts.maskedPixelCount) && opts.maskedPixelCount > 0
+      ? Math.floor(opts.maskedPixelCount)
+      : 0;
+  const adaptiveCap =
+    safeMasked > 0 ? Math.max(12, Math.floor(safeMasked / (targetSubRegions * 8))) : baseMinArea;
+  const minRegionArea = Math.max(12, Math.min(baseMinArea, adaptiveCap));
+
+  return {
+    targetSubRegions,
+    minRegionArea,
+    maxNewSwatches: ZOOM_IN_MAX_NEW_SWATCHES,
+  };
 }
 
 /**
@@ -1557,10 +1614,12 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
       setLoadingProgress(0.48);
       setLoadingStatus('Compositing pixel-locked seamless detail...');
+      const generatedMaxDim = Math.max(decoded.width, decoded.height);
       const targetDims = computeNestedLayerTargetDimensions(
         metrics.bbox.width,
         metrics.bbox.height,
-        NESTED_LAYER_MAX_DIM_PX
+        NESTED_LAYER_MAX_DIM_PX,
+        generatedMaxDim
       );
       const composited = compositeInfillRgba({
         originalCropRgba,
@@ -1577,6 +1636,16 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       });
       if (isAborted()) return;
 
+      let maskedPixelCount = 0;
+      for (let i = 0; i < composited.mask.length; i++) {
+        if (composited.mask[i] === 1) maskedPixelCount++;
+      }
+      const subBudget = computeZoomInSubdivisionParams({
+        maskedPixelCount,
+        basePuzzleRegionCount: basePuzzle.regions.length,
+        generatorConfig: settingsRef.current.generatorConfig,
+      });
+
       const subResult = await PuzzleWorkerService.subdivideMaskedRegion(
         {
           rgbaData: composited.rgba,
@@ -1585,6 +1654,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           cropMask: composited.mask,
           existingPalette: basePuzzle.palette,
           isFreeColor: isFree,
+          targetSubRegions: subBudget.targetSubRegions,
+          minRegionArea: subBudget.minRegionArea,
+          maxNewSwatches: subBudget.maxNewSwatches,
         },
         (prog, status) => {
           if (seq === infiniteZoomOpSeqRef.current) {
