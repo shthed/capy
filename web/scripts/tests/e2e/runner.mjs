@@ -104,7 +104,7 @@ export const E2E_SUITES = [
     stages: 4,
     smoke: false,
     estimatedWeight: 60,
-    description: 'Bidirectional local AI Infinite Zoom (in-place split, deep cutout, directional borders, guards, mobile)',
+    description: 'Unified Single-Canvas Infinite Zoom (Nano Banana 2.1/2 providers, >12x nested layers, Zoom Out, .capy v2, mobile)',
     run: runInfiniteZoomE2e,
   },
 ];

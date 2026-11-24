@@ -20,6 +20,7 @@
  *   7-9. Worker IPC, ArtworkExporter cutouts, Canvas & Controller pure helpers
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -6259,7 +6260,10 @@ async function testClusterF_UiSsrAndControllerHelpers(
   floatingMod,
   controlsMod,
   modalMod,
-  controllerMod
+  controllerMod,
+  subdividerMod,
+  unifiedMod,
+  codecMod
 ) {
   const React = (await import('react')).default;
   const { renderToStaticMarkup } = await import('react-dom/server');
@@ -6383,6 +6387,197 @@ async function testClusterF_UiSsrAndControllerHelpers(
     assert.ok(Number.isFinite(res.width) && Number.isFinite(res.height), `bbox=${badSide} must return finite dims`);
     assert.deepEqual(res, { width: 4, height: 4 }, `bbox=${badSide} must fall back safely to 1x1 upscaled 4x -> 4x4`);
   }
+
+  // F5. Post-Zoom-Out activeColorId advancement on a 100% completed puzzle (Tier 5 regression)
+  const completedPal = [
+    makePaletteColor(1, 220, 70, 60),
+    makePaletteColor(2, 60, 140, 220),
+  ];
+  const baseRm = new Int32Array(12 * 12);
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      baseRm[y * 12 + x] = x < 6 ? 1 : 2;
+    }
+  }
+  const completedBasePuzzle = buildPuzzleFromRegionMap(
+    12,
+    12,
+    baseRm,
+    completedPal,
+    new Map([
+      [1, 1],
+      [2, 2],
+    ]),
+    codecMod.buildBorderMapFromRegionMap
+  );
+  // 100% completed inner puzzle where color 2 was finished last (liveActiveColorId = 2)
+  const completedFilled = new Set([1, 2]);
+  const outerBorderMask = unifiedMod.buildOutpaintBorderMask(20, 20, 4, 4, 12, 12);
+  const outerRmExistingOnly = new Int32Array(20 * 20);
+  for (let i = 0; i < outerRmExistingOnly.length; i++) {
+    outerRmExistingOnly[i] = outerBorderMask[i] === 1 ? 1 : 0;
+  }
+  const outerExistingPuzzle = buildPuzzleFromRegionMap(
+    20,
+    20,
+    outerRmExistingOnly,
+    completedPal,
+    new Map([[1, 1]]),
+    codecMod.buildBorderMapFromRegionMap
+  );
+  const wrapExistingOnly = subdividerMod.wrapPuzzleWithOuterBorderLayer({
+    basePuzzle: completedBasePuzzle,
+    outerSubResult: {
+      width: 20,
+      height: 20,
+      localRegionMap: outerExistingPuzzle.regionMap,
+      regions: outerExistingPuzzle.regions,
+      palette: completedPal,
+      addedSwatches: [],
+    },
+    innerBoundsInOuter: { x: 0.2, y: 0.2, width: 0.6, height: 0.6 },
+    previousRootImageBlobKey: 'layer_zoomout_prev_root_1',
+    previousRootLayerId: 'zoomout_prev_root_1',
+  });
+  const settingsAutoAdvanceOn = {
+    autoAdvance: true,
+    paletteSort: 'ORIGINAL',
+    prioritizeOnScreen: false,
+  };
+  assert.equal(
+    controllerMod.resolvePostSubdivisionActiveColor(
+      wrapExistingOnly.puzzle,
+      completedFilled,
+      2,
+      [],
+      settingsAutoAdvanceOn,
+      new Set(),
+      false
+    ),
+    1,
+    'After Zoom Out on 100% completed puzzle where previous activeColorId=2 has 0 outer regions, activeColorId must advance to unfilled outer swatch 1'
+  );
+  assert.equal(
+    controllerMod.resolvePostSubdivisionActiveColor(
+      wrapExistingOnly.puzzle,
+      completedFilled,
+      1,
+      [],
+      settingsAutoAdvanceOn,
+      new Set(),
+      false
+    ),
+    1,
+    'After Zoom Out when previous activeColorId=1 still has unfilled outer regions, activeColorId must remain on 1'
+  );
+  assert.equal(
+    controllerMod.resolvePostSubdivisionActiveColor(
+      wrapExistingOnly.puzzle,
+      completedFilled,
+      2,
+      [],
+      { ...settingsAutoAdvanceOn, autoAdvance: false },
+      new Set(),
+      false
+    ),
+    2,
+    'After Zoom Out with autoAdvance OFF, activeColorId must remain unchanged'
+  );
+  assert.equal(
+    controllerMod.resolvePostSubdivisionActiveColor(
+      wrapExistingOnly.puzzle,
+      completedFilled,
+      2,
+      [],
+      settingsAutoAdvanceOn,
+      new Set(),
+      true
+    ),
+    2,
+    'After Zoom Out in Free Colour Mode, activeColorId must remain unchanged'
+  );
+
+  // Also verify Zoom Out introducing a newly added accent swatch prefers the new unfilled outer swatch
+  const newAccentSwatch = makePaletteColor(3, 50, 190, 90);
+  const extendedPal = [...completedPal, newAccentSwatch];
+  const outerRmWithNewSwatch = new Int32Array(20 * 20);
+  for (let y = 0; y < 20; y++) {
+    for (let x = 0; x < 20; x++) {
+      const idx = y * 20 + x;
+      if (outerBorderMask[idx] !== 1) continue;
+      outerRmWithNewSwatch[idx] = y < 10 ? 1 : 2;
+    }
+  }
+  const outerNewSwatchPuzzle = buildPuzzleFromRegionMap(
+    20,
+    20,
+    outerRmWithNewSwatch,
+    extendedPal,
+    new Map([
+      [1, 1],
+      [2, 3],
+    ]),
+    codecMod.buildBorderMapFromRegionMap
+  );
+  const wrapWithNewSwatch = subdividerMod.wrapPuzzleWithOuterBorderLayer({
+    basePuzzle: completedBasePuzzle,
+    outerSubResult: {
+      width: 20,
+      height: 20,
+      localRegionMap: outerNewSwatchPuzzle.regionMap,
+      regions: outerNewSwatchPuzzle.regions,
+      palette: extendedPal,
+      addedSwatches: [newAccentSwatch],
+    },
+    innerBoundsInOuter: { x: 0.2, y: 0.2, width: 0.6, height: 0.6 },
+    previousRootImageBlobKey: 'layer_zoomout_prev_root_2',
+    previousRootLayerId: 'zoomout_prev_root_2',
+  });
+  assert.equal(
+    controllerMod.resolvePostSubdivisionActiveColor(
+      wrapWithNewSwatch.puzzle,
+      completedFilled,
+      2,
+      [newAccentSwatch],
+      settingsAutoAdvanceOn,
+      new Set(),
+      false
+    ),
+    3,
+    'After Zoom Out adding a new outer-border swatch when previous activeColorId=2 has 0 outer regions, activeColorId must advance to new swatch 3'
+  );
+
+  // Verify commitZoomOutResult actually invokes resolvePostSubdivisionActiveColor + setActiveColorId
+  const controllerSrc = fs.readFileSync(
+    path.resolve(WEB_ROOT, 'src/hooks/useInfiniteZoomController.ts'),
+    'utf8'
+  );
+  const zoomOutStart = controllerSrc.indexOf('const commitZoomOutResult = useCallback(');
+  const zoomOutEnd = controllerSrc.indexOf('const handleConfirmExtendBorders = useCallback(');
+  assert.ok(zoomOutStart >= 0 && zoomOutEnd > zoomOutStart, 'commitZoomOutResult block must exist');
+  const commitZoomOutBlock = controllerSrc.slice(zoomOutStart, zoomOutEnd);
+  assert.equal(
+    commitZoomOutBlock.includes('resolvePostSubdivisionActiveColor('),
+    true,
+    'commitZoomOutResult must call resolvePostSubdivisionActiveColor'
+  );
+  assert.equal(
+    commitZoomOutBlock.includes('setActiveColorId(nextActiveColorId)'),
+    true,
+    'commitZoomOutResult must call setActiveColorId(nextActiveColorId)'
+  );
+  assert.equal(
+    commitZoomOutBlock.includes('activeColorId: nextActiveColorId'),
+    true,
+    'commitZoomOutResult must persist nextActiveColorId to storage and liveCoopRef'
+  );
+  const depArrayStart = commitZoomOutBlock.lastIndexOf('[');
+  const depArrayBlock = commitZoomOutBlock.slice(depArrayStart);
+  assert.equal(
+    depArrayBlock.includes('setActiveColorId') && depArrayBlock.includes('visibleColorIdsRef'),
+    true,
+    'commitZoomOutResult dependency array must include setActiveColorId and visibleColorIdsRef'
+  );
 }
 
 // ===========================================================================
@@ -6484,7 +6679,15 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     bridgeMod,
     exporterMod
   );
-  await testClusterF_UiSsrAndControllerHelpers(floatingMod, controlsMod, modalMod, controllerMod);
+  await testClusterF_UiSsrAndControllerHelpers(
+    floatingMod,
+    controlsMod,
+    modalMod,
+    controllerMod,
+    subdividerMod,
+    unifiedMod,
+    codecMod
+  );
 
   logUnitPass?.('Infinite Zoom unit tests passed');
 }

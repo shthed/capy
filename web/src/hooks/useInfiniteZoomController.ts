@@ -756,7 +756,7 @@ function filterProgressForRemovedRegions(
 }
 
 /**
- * Pure helper resolving activeColorId after unified Zoom In across root + all nested layers,
+ * Pure helper resolving activeColorId after unified Zoom In or Zoom Out across root + all nested layers,
  * honoring autoAdvance and Free Color mode.
  */
 export function resolvePostSubdivisionActiveColor(
@@ -2178,6 +2178,15 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         const preservedFilled = new Set(liveState.filledRegionIds);
         const preservedPainted = new Map(liveState.paintedRegionColors);
         const liveActiveColorId = liveState.activeColorId;
+        const nextActiveColorId = resolvePostSubdivisionActiveColor(
+          wrapResult.puzzle,
+          preservedFilled,
+          liveActiveColorId,
+          outerSubResult.addedSwatches,
+          settingsRef.current,
+          visibleColorIdsRef.current,
+          isFree
+        );
         const previousLayerImages = new Map(liveLayerImagesRef.current);
         const previousViewport = { ...viewportRef.current };
         const previousBlobUrl = activeBlobUrlRef.current;
@@ -2261,7 +2270,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         const syncedSave = updatedSnapshots.find((s) => s.id === snapId);
         StorageService.saveActiveState({
           activeSnapshotId: snapId,
-          activeColorId: liveActiveColorId,
+          activeColorId: nextActiveColorId,
           filledRegionIds: orderedFilled,
           paintedRegionColors: paintedObj,
           isFreeColorMode: isFree,
@@ -2280,12 +2289,13 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           activeSave: syncedSave ?? liveCoopRef.current.activeSave,
           filledRegionIds: preservedFilled,
           paintedRegionColors: preservedPainted,
-          activeColorId: liveActiveColorId,
+          activeColorId: nextActiveColorId,
         };
         setLiveLayerImages(nextLiveLayerImages);
         activeBlobUrlRef.current = outerObjUrl;
         setSourceImage(outerImg);
         setPuzzle(wrapResult.puzzle);
+        setActiveColorId(nextActiveColorId);
         setHintRegionId(null);
         setSnapshots(updatedSnapshots);
         applyViewport?.(fittedViewport);
@@ -2332,6 +2342,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       liveLayerImagesRef,
       markTutorialActionTried,
       redoStackRef,
+      setActiveColorId,
       setHintRegionId,
       setLoadingProgress,
       setLoadingStatus,
@@ -2343,6 +2354,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       undoStackRef,
       undoSubdivisionRef,
       viewportRef,
+      visibleColorIdsRef,
     ]
   );
 
