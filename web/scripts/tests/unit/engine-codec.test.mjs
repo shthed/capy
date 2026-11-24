@@ -557,6 +557,68 @@ export async function runEngineCodecTests({ vite, logUnitStart, logUnitPass, sha
           assert.equal(wsSeg.regionMap[i], 0, `Masked watershed inactive pixel ${i} must stay 0`);
         }
       }
+
+      // F8-1 regression: regions lying solely on x===0 or y===0 must have maxX===0 / maxY===0 (never Number.MIN_VALUE)
+      const onePxSeg = segmenterMod.RegionSegmenter.segment(
+        1,
+        1,
+        testPalette,
+        new Int32Array([0]),
+        1,
+        10,
+        2.0,
+        undefined,
+        'ABSORB_LINES',
+        undefined,
+        8,
+        undefined,
+        undefined,
+        new Uint8Array([1])
+      );
+      assert.equal(onePxSeg.regions.length, 1);
+      assert.equal(onePxSeg.regions[0].minX, 0);
+      assert.equal(onePxSeg.regions[0].maxX, 0, '1x1 masked region maxX must be 0, not 5e-324');
+      assert.equal(onePxSeg.regions[0].minY, 0);
+      assert.equal(onePxSeg.regions[0].maxY, 0, '1x1 masked region maxY must be 0, not 5e-324');
+
+      const stripX0 = segmenterMod.RegionSegmenter.segment(1, 20, testPalette, new Int32Array(20), 1, 10);
+      assert.equal(stripX0.regions[0].maxX, 0, '1x20 x=0 strip maxX must be 0');
+      assert.equal(stripX0.regions[0].maxY, 19);
+      const stripY0 = segmenterMod.RegionSegmenter.segment(20, 1, testPalette, new Int32Array(20), 1, 10);
+      assert.equal(stripY0.regions[0].maxY, 0, '20x1 y=0 strip maxY must be 0');
+      assert.equal(stripY0.regions[0].maxX, 19);
+
+      const cbMask = new Uint8Array(16 * 16);
+      const cbClusters = new Int32Array(16 * 16);
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          if ((x + y) % 2 === 0) cbMask[y * 16 + x] = 1;
+          cbClusters[y * 16 + x] = (x + y) % 2;
+        }
+      }
+      const cbSeg = segmenterMod.RegionSegmenter.segment(
+        16,
+        16,
+        testPalette,
+        cbClusters,
+        1,
+        5,
+        2.0,
+        undefined,
+        'ABSORB_LINES',
+        undefined,
+        8,
+        undefined,
+        undefined,
+        cbMask
+      );
+      assert.equal(cbSeg.regions.length, 128);
+      for (const r of cbSeg.regions) {
+        assert.ok(
+          Number.isInteger(r.maxX) && Number.isInteger(r.maxY) && r.maxX >= r.minX && r.maxY >= r.minY,
+          `Checkerboard region ${r.id} has invalid bbox: ${JSON.stringify(r)}`
+        );
+      }
     }
 
     // 6. F9 — LineArtExtractor colored-ink bilateral dark-ridge detection, thick-blob zero-halo suppression & activeMask
@@ -655,6 +717,69 @@ export async function runEngineCodecTests({ vite, logUnitStart, logUnitPass, sha
         assert.equal(res.linePixelCount, 0, `Thick ${label} must emit 0 halo pixels (got ${res.linePixelCount})`);
         assert.equal(res.isLineArt, false, `Thick ${label} must not be classified as line art`);
       }
+
+      // F9-1 regression: solid black 45-degree diagonal bars at r=5, 7, 8 on mid-tone must emit 0 corner-halo pixels
+      const dw = 160;
+      const dh = 160;
+      for (const rad of [5, 7, 8]) {
+        const diagBuf = new Uint8ClampedArray(dw * dh * 4);
+        for (let y = 0; y < dh; y++) {
+          for (let x = 0; x < dw; x++) {
+            const o = (y * dw + x) * 4;
+            const dx = x - 80;
+            const dy = y - 80;
+            const u = (dx + dy) * Math.SQRT1_2;
+            const v = (dx - dy) * Math.SQRT1_2;
+            const inside = Math.abs(u) <= 40 && Math.abs(v) <= rad;
+            const lum = inside ? 8 : 150;
+            diagBuf[o] = lum;
+            diagBuf[o + 1] = lum;
+            diagBuf[o + 2] = lum;
+            diagBuf[o + 3] = 255;
+          }
+        }
+        const diagRes = LineArtExtractor.extract(diagBuf, dw, dh);
+        assert.equal(
+          diagRes.linePixelCount,
+          0,
+          `Thick black 45-deg diagonal bar r=${rad} must emit 0 halo pixels (got ${diagRes.linePixelCount})`
+        );
+        assert.equal(diagRes.isLineArt, false);
+      }
+
+      // F9-2 regression: uniform L=120 +-60 high-frequency noise & 4x4 checkerboard (L55/L165) must stay isLineArt=false
+      for (const noiseSeed of [999, 120601]) {
+        const noiseBuf = new Uint8ClampedArray(dw * dh * 4);
+        let ns = noiseSeed >>> 0;
+        for (let i = 0; i < dw * dh; i++) {
+          ns = (Math.imul(ns, 1664525) + 1013904223) >>> 0;
+          const v = Math.max(0, Math.min(255, Math.round(120 + ((ns / 4294967296) * 2 - 1) * 60)));
+          noiseBuf[i * 4] = v;
+          noiseBuf[i * 4 + 1] = v;
+          noiseBuf[i * 4 + 2] = v;
+          noiseBuf[i * 4 + 3] = 255;
+        }
+        const noiseRes = LineArtExtractor.extract(noiseBuf, dw, dh);
+        assert.equal(
+          noiseRes.isLineArt,
+          false,
+          `Uniform L=120+-60 noise (seed ${noiseSeed}) must not trigger isLineArt (ratio=${noiseRes.lineRatio})`
+        );
+      }
+      const checker4Buf = new Uint8ClampedArray(dw * dh * 4);
+      for (let y = 0; y < dh; y++) {
+        for (let x = 0; x < dw; x++) {
+          const v = (Math.floor(x / 4) + Math.floor(y / 4)) % 2 === 0 ? 55 : 165;
+          const o = (y * dw + x) * 4;
+          checker4Buf[o] = v;
+          checker4Buf[o + 1] = v;
+          checker4Buf[o + 2] = v;
+          checker4Buf[o + 3] = 255;
+        }
+      }
+      const checker4Res = LineArtExtractor.extract(checker4Buf, dw, dh);
+      assert.equal(checker4Res.linePixelCount, 0, '4x4 checkerboard must emit 0 colored-ink ridge pixels');
+      assert.equal(checker4Res.isLineArt, false, '4x4 checkerboard must not trigger isLineArt');
 
       // Smooth gradient & noisy photo preservation (isLineArt === false)
       const photoBuf = new Uint8ClampedArray(lw * lh * 4);
@@ -842,6 +967,30 @@ export async function runEngineCodecTests({ vite, logUnitStart, logUnitPass, sha
       assert.equal(aRes.edgeRatio, 0, 'Smooth interior masked patch must have 0 edgeRatio (no mask-boundary Sobel spike)');
       const aEmpty = ImageAnalyzer.analyze({ width: aw, height: ah, data: aRgba }, new Uint8Array(aw * ah));
       assert.equal(Number.isFinite(aEmpty.edgeRatio) && Number.isFinite(aEmpty.globalVariance), true);
+
+      const genMod = await vite.ssrLoadModule('/src/engine/PuzzleGenerator.ts');
+      const nanEmptyPuzzle = new genMod.AutoPuzzleGenerator().generateFromRgba(
+        new Uint8ClampedArray(64),
+        Number.NaN,
+        8,
+        {
+          algorithm: 'AUTO',
+          lineHandling: 'ABSORB_LINES',
+          imageType: 'AUTO',
+          paletteDetail: 'MEDIUM',
+          colorCount: 8,
+          minRegionArea: 16,
+          maxRegions: 50,
+          resolution: 64,
+          smoothingPasses: 1,
+        },
+        undefined,
+        false,
+        new Uint8Array(0)
+      );
+      assert.equal(nanEmptyPuzzle.width, 0, 'createEmptyPuzzleData must sanitize NaN width to 0');
+      assert.equal(nanEmptyPuzzle.height, 0, 'createEmptyPuzzleData must sanitize height to 0 when width is invalid');
+      assert.equal(nanEmptyPuzzle.regionMap.length, 0);
     }
 
     // 8. F12 — 96-swatch .capy v2 single & archive round-trip + MAX_GENERATOR_CONFIG.colorCount=64 parity

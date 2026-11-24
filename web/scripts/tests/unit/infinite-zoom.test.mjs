@@ -2202,6 +2202,42 @@ function testSubdividerEdgeCasesAndEngineParity(subdividerMod, selectionMod, cod
       existingPalette: basePuzzle.palette,
     });
     assert.equal(zeroDimRes.regions.length, 0);
+    assert.equal(zeroDimRes.localRegionMap.length, zeroDimRes.width * zeroDimRes.height);
+
+    // F11-2c-2 regression: adversarial negative, NaN, Infinity, fractional, and oversized crop dimensions
+    const adversarialDims = [
+      [-5, -5],
+      [Number.NaN, 10],
+      [Number.POSITIVE_INFINITY, 10],
+      [10.7, 10.3],
+      [10000, 10000],
+    ];
+    for (const [badW, badH] of adversarialDims) {
+      const badRes = subdivideMaskedRegion({
+        rgbaData: twoColorRgba,
+        cropWidth: badW,
+        cropHeight: badH,
+        cropMask: fullMask32,
+        existingPalette: basePuzzle.palette,
+      });
+      assert.ok(
+        Number.isSafeInteger(badRes.width) && badRes.width === 0,
+        `Adversarial dim (${badW}, ${badH}) must sanitize width to 0`
+      );
+      assert.ok(
+        Number.isSafeInteger(badRes.height) && badRes.height === 0,
+        `Adversarial dim (${badW}, ${badH}) must sanitize height to 0`
+      );
+      assert.equal(
+        badRes.localRegionMap.length,
+        badRes.width * badRes.height,
+        `Adversarial dim (${badW}, ${badH}) must preserve localRegionMap.length === width * height`
+      );
+      assert.equal(badRes.regions.length, 0);
+    }
+    assert.equal(zeroMaskRes.width, 32);
+    assert.equal(zeroMaskRes.height, 32);
+    assert.equal(zeroMaskRes.localRegionMap.length, 32 * 32);
 
     // Embedded nested layer preserves Free Colour flag, cutout rId===0 exterior, and bounded borderMap recomputation
     const cMap = new Int32Array(32 * 32);

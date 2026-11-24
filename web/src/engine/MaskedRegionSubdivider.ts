@@ -420,21 +420,46 @@ function prepareMaskedSubdivisionBuffers(
   cropWidth: number,
   cropHeight: number,
   cropMask: Uint8Array
-): { maskedCount: number; activeMask: Uint8Array; effectiveRgba: Uint8ClampedArray } {
-  if (cropWidth <= 0 || cropHeight <= 0) {
-    return { maskedCount: 0, activeMask: new Uint8Array(0), effectiveRgba: rgbaData };
+): {
+  safeWidth: number;
+  safeHeight: number;
+  maskedCount: number;
+  activeMask: Uint8Array;
+  effectiveRgba: Uint8ClampedArray;
+} {
+  const safeWidth = Number.isSafeInteger(cropWidth) && cropWidth > 0 ? cropWidth : 0;
+  const safeHeight = Number.isSafeInteger(cropHeight) && cropHeight > 0 ? cropHeight : 0;
+  const total = safeWidth * safeHeight;
+  if (
+    safeWidth === 0 ||
+    safeHeight === 0 ||
+    !Number.isSafeInteger(total) ||
+    total > MAX_PUZZLE_PIXELS
+  ) {
+    return {
+      safeWidth: 0,
+      safeHeight: 0,
+      maskedCount: 0,
+      activeMask: new Uint8Array(0),
+      effectiveRgba: rgbaData,
+    };
   }
-  const total = cropWidth * cropHeight;
   const limit = Math.min(total, cropMask.length, Math.floor(rgbaData.length / 4));
   let maskedCount = 0;
   for (let i = 0; i < limit; i++) {
     if (cropMask[i] === 1) maskedCount++;
   }
   if (maskedCount === 0) {
-    return { maskedCount: 0, activeMask: new Uint8Array(total), effectiveRgba: rgbaData };
+    return {
+      safeWidth,
+      safeHeight,
+      maskedCount: 0,
+      activeMask: new Uint8Array(total),
+      effectiveRgba: rgbaData,
+    };
   }
   if (cropMask.length === total && rgbaData.length >= total * 4) {
-    return { maskedCount, activeMask: cropMask, effectiveRgba: rgbaData };
+    return { safeWidth, safeHeight, maskedCount, activeMask: cropMask, effectiveRgba: rgbaData };
   }
 
   const activeMask = new Uint8Array(total);
@@ -443,7 +468,7 @@ function prepareMaskedSubdivisionBuffers(
   }
   const effectiveRgba = new Uint8ClampedArray(total * 4);
   effectiveRgba.set(rgbaData.subarray(0, Math.min(rgbaData.length, total * 4)));
-  return { maskedCount, activeMask, effectiveRgba };
+  return { safeWidth, safeHeight, maskedCount, activeMask, effectiveRgba };
 }
 
 function buildSubdivisionGeneratorConfig(
@@ -512,18 +537,14 @@ export function subdivideMaskedRegion(
     onProgress,
   } = params;
 
-  const { maskedCount, activeMask, effectiveRgba } = prepareMaskedSubdivisionBuffers(
-    rgbaData,
-    cropWidth,
-    cropHeight,
-    cropMask
-  );
+  const { safeWidth, safeHeight, maskedCount, activeMask, effectiveRgba } =
+    prepareMaskedSubdivisionBuffers(rgbaData, cropWidth, cropHeight, cropMask);
   if (maskedCount === 0) {
     onProgress?.(1.0, 'No masked pixels to subdivide.');
     return {
-      width: Math.max(0, cropWidth),
-      height: Math.max(0, cropHeight),
-      localRegionMap: new Int32Array(Math.max(0, cropWidth * cropHeight)),
+      width: safeWidth,
+      height: safeHeight,
+      localRegionMap: new Int32Array(safeWidth * safeHeight),
       regions: [],
       palette: existingPalette.map((c) => ({ ...c })),
       addedSwatches: [],
@@ -547,8 +568,8 @@ export function subdivideMaskedRegion(
   const reuseDeltaE = Math.max(0, sanitizeFiniteNumber(params.reuseDeltaE, DEFAULT_REUSE_DELTA_E));
 
   const effectiveConfig = buildSubdivisionGeneratorConfig(
-    cropWidth,
-    cropHeight,
+    safeWidth,
+    safeHeight,
     maskedCount,
     targetSubRegions,
     minRegionArea,
@@ -564,8 +585,8 @@ export function subdivideMaskedRegion(
 
   const generated = new AutoPuzzleGenerator().generateFromRgba(
     effectiveRgba,
-    cropWidth,
-    cropHeight,
+    safeWidth,
+    safeHeight,
     effectiveConfig,
     mappedProgress,
     false,
@@ -577,8 +598,8 @@ export function subdivideMaskedRegion(
     ? assignFreeColorIds(
         generated.regions,
         generated.regionMap,
-        cropWidth,
-        cropHeight,
+        safeWidth,
+        safeHeight,
         existingPalette,
         false
       )
@@ -592,8 +613,8 @@ export function subdivideMaskedRegion(
 
   onProgress?.(1.0, `Subdivided into ${generated.regions.length} detail regions.`);
   return {
-    width: cropWidth,
-    height: cropHeight,
+    width: safeWidth,
+    height: safeHeight,
     localRegionMap: generated.regionMap,
     regions: generated.regions,
     palette,

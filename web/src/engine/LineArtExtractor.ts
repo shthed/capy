@@ -15,6 +15,8 @@ const RIDGE_MAX_LUMINANCE = 115;
 const RIDGE_CONTRAST = 32;
 const MIN_RIDGE_NEIGHBORS = 2;
 const MIN_LINE_COMPONENT_PIXELS = 6;
+const LARGE_NON_PAPER_MIN_COMPONENT_PIXELS = 12;
+const LARGE_NON_PAPER_ACTIVE_THRESHOLD = 2048;
 
 // [probeDx, probeDy, tangentTx, tangentTy]
 const RIDGE_AXES: ReadonlyArray<readonly [number, number, number, number]> = [
@@ -325,6 +327,25 @@ function countActiveRidgeNeighbors(
   return count;
 }
 
+function isAnisotropicColoredInkRidge(
+  lum: Uint8Array,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  l0: number,
+  activeMask?: Uint8Array
+): boolean {
+  const hMatch = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[0], activeMask);
+  const vMatch = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[1], activeMask);
+  if (hMatch && vMatch) return false;
+  if (hMatch || vMatch) return true;
+
+  const d1Match = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[2], activeMask);
+  const d2Match = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[3], activeMask);
+  return d1Match !== d2Match;
+}
+
 function detectColoredInkRidges(
   lum: Uint8Array,
   isDark: Uint8Array,
@@ -345,11 +366,8 @@ function detectColoredInkRidges(
       const l0 = lum[idx];
       if (l0 > RIDGE_MAX_LUMINANCE) continue;
 
-      for (let a = 0; a < RIDGE_AXES.length; a++) {
-        if (matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[a], activeMask)) {
-          rawRidge[idx] = 1;
-          break;
-        }
+      if (isAnisotropicColoredInkRidge(lum, width, height, x, y, l0, activeMask)) {
+        rawRidge[idx] = 1;
       }
     }
   }
@@ -506,13 +524,14 @@ function extractThinNonPaperLines(
   isDark: Uint8Array,
   width: number,
   height: number,
-  effectiveMaxRadius: number
+  effectiveMaxRadius: number,
+  activeCount: number
 ): { cleanLineMask: Uint8Array; linePixelCount: number } {
   const total = width * height;
   const cleanLineMask = new Uint8Array(total);
   const queue = new Int32Array(total);
   const strokeDist = computeBackgroundDistance8(isDark, width, height, effectiveMaxRadius, queue);
-  const dilateRadius = effectiveMaxRadius + 1;
+  const dilateRadius = effectiveMaxRadius + 2;
   const thickDist = computeThickCoreDilation8(
     isDark,
     strokeDist,
@@ -534,8 +553,12 @@ function extractThinNonPaperLines(
     }
   }
 
+  const baseMinPixels =
+    activeCount >= LARGE_NON_PAPER_ACTIVE_THRESHOLD
+      ? LARGE_NON_PAPER_MIN_COMPONENT_PIXELS
+      : MIN_LINE_COMPONENT_PIXELS;
   const minComponentPixels = Math.min(
-    MIN_LINE_COMPONENT_PIXELS,
+    baseMinPixels,
     Math.max(2, Math.floor(Math.min(width, height) / 4))
   );
   const linePixelCount = pruneSmallComponents8(
@@ -659,7 +682,13 @@ export class LineArtExtractor {
         }
       }
     } else {
-      const extracted = extractThinNonPaperLines(isDark, width, height, effectiveMaxRadius);
+      const extracted = extractThinNonPaperLines(
+        isDark,
+        width,
+        height,
+        effectiveMaxRadius,
+        activeCount
+      );
       cleanLineMask = extracted.cleanLineMask;
       linePixelCount = extracted.linePixelCount;
     }

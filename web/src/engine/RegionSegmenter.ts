@@ -535,12 +535,15 @@ function computeRegionBounds(
   pixelData: number[],
   width: number
 ): { sumX: number; sumY: number; minX: number; maxX: number; minY: number; maxY: number } {
+  if (pixelData.length === 0) {
+    return { sumX: 0, sumY: 0, minX: 0, maxX: 0, minY: 0, maxY: 0 };
+  }
   let sumX = 0;
   let sumY = 0;
   let minX = Number.MAX_VALUE;
-  let maxX = Number.MIN_VALUE;
+  let maxX = -1;
   let minY = Number.MAX_VALUE;
-  let maxY = Number.MIN_VALUE;
+  let maxY = -1;
 
   for (let i = 0; i < pixelData.length; i++) {
     const idx = pixelData[i];

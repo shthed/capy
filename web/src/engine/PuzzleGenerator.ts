@@ -10,7 +10,7 @@ import {
   PuzzleData,
   Region,
 } from '../types';
-import { encodeRegionMapRle } from '../services/CapyCodec';
+import { MAX_PUZZLE_PIXELS, encodeRegionMapRle } from '../services/CapyCodec';
 import { ColorQuantizer } from './ColorQuantizer';
 import { ImageAnalysisResult, ImageAnalyzer } from './ImageAnalyzer';
 import { LineArtAnalysis, LineArtExtractor } from './LineArtExtractor';
@@ -93,16 +93,18 @@ function hasAnyActivePixel(activeMask: Uint8Array, total: number): boolean {
 }
 
 function createEmptyPuzzleData(width: number, height: number, isFreeColor?: boolean): PuzzleData {
-  const safeW = Math.max(0, width);
-  const safeH = Math.max(0, height);
+  const safeW = Number.isFinite(width) && width > 0 ? Math.floor(width) : 0;
+  const safeH = Number.isFinite(height) && height > 0 ? Math.floor(height) : 0;
   const total = safeW * safeH;
+  const validTotal =
+    safeW > 0 && safeH > 0 && Number.isSafeInteger(total) && total <= MAX_PUZZLE_PIXELS ? total : 0;
   return {
-    width: safeW,
-    height: safeH,
+    width: validTotal > 0 ? safeW : 0,
+    height: validTotal > 0 ? safeH : 0,
     palette: [],
     regions: [],
-    regionMap: new Int32Array(total),
-    borderMap: new Uint8Array(total),
+    regionMap: new Int32Array(validTotal),
+    borderMap: new Uint8Array(validTotal),
     ...(isFreeColor ? { isFreeColor: true } : {}),
   };
 }
