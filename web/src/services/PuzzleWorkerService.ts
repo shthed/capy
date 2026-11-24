@@ -1,7 +1,9 @@
 import { GenerationProgressPayload, GeneratorConfig, PaletteColor, PuzzleData } from '../types';
-import type {
-  MaskedSubdivisionResult,
-  SubdivideMaskedRegionParams,
+import {
+  DEFAULT_ZOOM_IN_TARGET_REGIONS,
+  MAX_SUBDIVIDE_TARGET_REGIONS,
+  type MaskedSubdivisionResult,
+  type SubdivideMaskedRegionParams,
 } from '../engine/MaskedRegionSubdivider';
 
 export interface WorkerPuzzlePayload {
@@ -145,8 +147,10 @@ export class PuzzleWorkerService {
 
   private static normalizeTargetSubRegions(targetSubRegions?: number): number | undefined {
     if (targetSubRegions === undefined) return undefined;
-    const finite = Number.isFinite(targetSubRegions) ? targetSubRegions : 12;
-    return Math.max(1, Math.min(800, Math.floor(finite)));
+    const finite = Number.isFinite(targetSubRegions)
+      ? targetSubRegions
+      : DEFAULT_ZOOM_IN_TARGET_REGIONS;
+    return Math.max(1, Math.min(MAX_SUBDIVIDE_TARGET_REGIONS, Math.floor(finite)));
   }
 
   private static async subdivideOnMainThreadFallback(
@@ -433,6 +437,7 @@ export class PuzzleWorkerService {
             minRegionArea: params.minRegionArea,
             maxNewSwatches: params.maxNewSwatches,
             reuseDeltaE: params.reuseDeltaE,
+            generatorConfig: params.generatorConfig,
           },
           [rgbaCopy.buffer, maskCopy.buffer]
         );

@@ -11,8 +11,8 @@
  *      pixel-locked infill & outpaint template builders and seam compositors)
  *   4. UnifiedPuzzleLayers, MaskedRegionSubdivider & Alpha-Mask PuzzleGenerator (nested detail embedding,
  *      outer border wrapping + affine worldBounds rebase, Harmonious Palette Growth deltaE<=22 reuse &
- *      64-swatch cap, Free Colour Mode preservation, sparse monotonic IDs, bounded borderMap equivalence,
- *      double-subdivision non-collision, alpha=0 exterior in generateFromRgba)
+ *      96-swatch cap, Free Colour Mode preservation, sparse monotonic IDs, bounded borderMap equivalence,
+ *      shared AutoPuzzleGenerator activeMask & GeneratorConfig parity, alpha=0 exterior in generateFromRgba)
  *   5. CapyCodec (sanitizeZoomTreeMeta clamping, legacy .capy v2 backward compat, nestedLayers + layerImages round-trip)
  *   6. StorageService & ProviderRegistry (provider/model/resolution persistence & Android PUTER coercion,
  *      device-local BYOK SafeLocalStore isolation, bidirectional linkZoomTreeSnapshots dedup,
@@ -1880,7 +1880,17 @@ function testMaskedSubdividerAndGenerator(
       }
     }
 
-    // 4b. Harmonious Palette Growth: contrasting accents (2-6 added) & hard 64-swatch cap
+    // 4b. Harmonious Palette Growth: contrasting accents (2-6 added), 64->70 Max Detail headroom & hard 96-swatch cap
+    assert.equal(
+      subdividerMod.MAX_TOTAL_PALETTE_SWATCHES,
+      96,
+      'MAX_TOTAL_PALETTE_SWATCHES must be raised to 96'
+    );
+    assert.equal(
+      subdividerMod.DEFAULT_ZOOM_IN_TARGET_REGIONS,
+      200,
+      'DEFAULT_ZOOM_IN_TARGET_REGIONS must preserve 1ee7b06 default of 200'
+    );
     const vividRgba = new Uint8ClampedArray(bbox1.width * bbox1.height * 4);
     const vividSwatches = [
       [235, 30, 40],
@@ -1927,8 +1937,32 @@ function testMaskedSubdividerAndGenerator(
       `Contrasting accents must report addedSwatches.length in 2..6, got ${vividSub.addedSwatches.length}`
     );
 
-    // Start near cap (62 muted swatches) -> must never exceed 64
-    const muted62 = Array.from({ length: 62 }, (_, idx) =>
+    // 64-swatch Max Detail palette MUST grow beyond 64 (+32 Infinite Zoom headroom)
+    const muted64 = Array.from({ length: 64 }, (_, idx) =>
+      makePaletteColor(idx + 1, 80 + (idx % 40), 90 + (idx % 35), 110 + (idx % 30))
+    );
+    const grownFrom64 = subdivideMaskedRegion({
+      rgbaData: vividRgba,
+      cropWidth: bbox1.width,
+      cropHeight: bbox1.height,
+      cropMask: mask1,
+      existingPalette: muted64,
+      isFreeColor: false,
+      minRegionArea: 24,
+      targetSubRegions: 6,
+    });
+    assert.ok(
+      grownFrom64.palette.length > 64 && grownFrom64.palette.length <= 70,
+      `64-swatch Max Detail base palette must grow into 65..70 (got ${grownFrom64.palette.length})`
+    );
+    assert.equal(
+      grownFrom64.addedSwatches.length,
+      grownFrom64.palette.length - 64,
+      '64-swatch growth must report exact addedSwatches delta'
+    );
+
+    // Start near cap (94 muted swatches) -> must never exceed 96
+    const muted94 = Array.from({ length: 94 }, (_, idx) =>
       makePaletteColor(idx + 1, 80 + (idx % 40), 90 + (idx % 35), 110 + (idx % 30))
     );
     const cappedSub = subdivideMaskedRegion({
@@ -1936,7 +1970,7 @@ function testMaskedSubdividerAndGenerator(
       cropWidth: bbox1.width,
       cropHeight: bbox1.height,
       cropMask: mask1,
-      existingPalette: muted62,
+      existingPalette: muted94,
       isFreeColor: false,
       minRegionArea: 24,
       targetSubRegions: 6,
@@ -1945,17 +1979,17 @@ function testMaskedSubdividerAndGenerator(
     assert.ok(cappedLocalMap instanceof Int32Array, 'cappedSub.localRegionMap must be an Int32Array');
     assert.ok(Array.isArray(cappedSub.addedSwatches), 'cappedSub must return addedSwatches array');
     assert.ok(
-      cappedSub.palette.length <= 64,
-      `Harmonious palette growth MUST cap total swatches at <= 64 (got ${cappedSub.palette.length})`
+      cappedSub.palette.length <= 96,
+      `Harmonious palette growth MUST cap total swatches at <= 96 (got ${cappedSub.palette.length})`
     );
     assert.ok(
-      cappedSub.palette.length > 62,
-      `Palette starting at 62 with contrasting accents should grow up to cap 64 (got ${cappedSub.palette.length})`
+      cappedSub.palette.length > 94,
+      `Palette starting at 94 with contrasting accents should grow up to cap 96 (got ${cappedSub.palette.length})`
     );
     assert.equal(
       cappedSub.addedSwatches.length,
-      cappedSub.palette.length - muted62.length,
-      `cappedSub.addedSwatches.length (${cappedSub.addedSwatches.length}) must match palette delta (${cappedSub.palette.length - muted62.length})`
+      cappedSub.palette.length - muted94.length,
+      `cappedSub.addedSwatches.length (${cappedSub.addedSwatches.length}) must match palette delta (${cappedSub.palette.length - muted94.length})`
     );
 
     // 4c. Free Colour Mode preserves existing palette without inflating swatches
@@ -1988,112 +2022,37 @@ function testMaskedSubdividerAndGenerator(
       'Free Colour Mode must preserve existing palette swatches verbatim'
     );
 
-    testMergeAndDoubleSubdivide(subdividerMod, selectionMod, codecMod, basePuzzle, vividSub, bbox1);
+    testSubdividerEdgeCasesAndEngineParity(subdividerMod, selectionMod, codecMod, basePuzzle);
     testAlphaMaskPuzzleGenerator(generatorMod, typesMod);
     testUnifiedLayersEmbedAndWrap(subdividerMod, unifiedMod, codecMod);
 }
 
-function testMergeAndDoubleSubdivide(subdividerMod, selectionMod, codecMod, basePuzzle, vividSub, bbox1) {
-    const { subdivideMaskedRegion, mergeSubdividedRegionIntoPuzzle } = subdividerMod;
+function testSubdividerEdgeCasesAndEngineParity(subdividerMod, selectionMod, codecMod, basePuzzle) {
+    const {
+      subdivideMaskedRegion,
+      assignFreeColorIds,
+      embedNestedDetailLayerIntoPuzzle,
+      mergePreservingBasePalette,
+    } = subdividerMod;
     const { buildBorderMapFromRegionMap } = codecMod;
 
-    // 4d. mergeSubdividedRegionIntoPuzzle: sparse monotonic IDs, untouched integrity, exact borderMap, double-subdivide
-    const merged1 = mergeSubdividedRegionIntoPuzzle(basePuzzle, new Set([1]), vividSub, bbox1);
-    assert.equal(
-      merged1.regions.some((r) => r.id === 1),
-      false,
-      'Replaced region ID 1 must be removed from merged.regions'
-    );
-    for (let i = 0; i < merged1.regionMap.length; i++) {
-      assert.notEqual(merged1.regionMap[i], 1, 'Replaced region ID 1 must not remain in merged.regionMap');
+    // 4d-i. Verify removed legacy duplicate & dead v1 splice exports are strictly absent
+    for (const removedName of [
+      'mergeSubdividedRegionIntoPuzzle',
+      'collectMaskedPixels',
+      'quantizeMaskedPixels',
+      'segmentMaskedComponents',
+      'computeLocalRegionGeometry',
+      'buildBorderMap',
+    ]) {
+      assert.equal(
+        subdividerMod[removedName],
+        undefined,
+        `Legacy symbol ${removedName} must be deleted from MaskedRegionSubdivider.ts`
+      );
     }
-    const origReg2 = basePuzzle.regions.find((r) => r.id === 2);
-    const origReg10 = basePuzzle.regions.find((r) => r.id === 10);
-    const mergedReg2 = merged1.regions.find((r) => r.id === 2);
-    const mergedReg10 = merged1.regions.find((r) => r.id === 10);
-    assert.ok(mergedReg2 && mergedReg10, 'Untouched regions 2 and 10 must persist after merge');
-    assert.equal(mergedReg2.colorId, origReg2.colorId);
-    assert.equal(mergedReg2.area, origReg2.area);
-    assert.equal(mergedReg10.colorId, origReg10.colorId);
-    assert.equal(mergedReg10.area, origReg10.area);
 
-    const newGen1Regions = merged1.regions.filter((r) => r.id !== 2 && r.id !== 10);
-    assert.ok(newGen1Regions.length >= 2, 'Merge must insert newly created sub-regions');
-    const seenIds1 = new Set();
-    for (const r of newGen1Regions) {
-      assert.ok(r.id >= 11, `New sparse monotonic ID must be >= maxExistingId+1 (11), got ${r.id}`);
-      assert.equal(seenIds1.has(r.id), false, `Duplicate region ID ${r.id}`);
-      seenIds1.add(r.id);
-    }
-    const expectedBorder1 = buildBorderMapFromRegionMap(merged1.regionMap, merged1.width, merged1.height);
-    assert.deepEqual(
-      merged1.borderMap,
-      expectedBorder1,
-      'Bounded borderMap recomputation must match full buildBorderMapFromRegionMap pixel-for-pixel'
-    );
-
-    // Double-subdivision non-collision on largest gen-1 sub-region
-    const firstGenMaxId = Math.max(...merged1.regions.map((r) => r.id));
-    const targetGen1 = [...newGen1Regions].sort((a, b) => b.area - a.area)[0];
-    const bbox2 = {
-      minX: targetGen1.minX,
-      minY: targetGen1.minY,
-      width: targetGen1.maxX - targetGen1.minX + 1,
-      height: targetGen1.maxY - targetGen1.minY + 1,
-    };
-    const mask2 = selectionMod.buildSelectionMask(merged1, new Set([targetGen1.id]), bbox2);
-    const gen2Rgba = new Uint8ClampedArray(bbox2.width * bbox2.height * 4);
-    for (let y = 0; y < bbox2.height; y++) {
-      for (let x = 0; x < bbox2.width; x++) {
-        const o = (y * bbox2.width + x) * 4;
-        const leftHalf = x < bbox2.width / 2;
-        gen2Rgba[o] = leftHalf ? 30 : 240;
-        gen2Rgba[o + 1] = leftHalf ? 180 : 120;
-        gen2Rgba[o + 2] = leftHalf ? 230 : 40;
-        gen2Rgba[o + 3] = 255;
-      }
-    }
-    const sub2 = subdivideMaskedRegion({
-      rgbaData: gen2Rgba,
-      cropWidth: bbox2.width,
-      cropHeight: bbox2.height,
-      cropMask: mask2,
-      existingPalette: merged1.palette,
-      isFreeColor: false,
-      minRegionArea: 12,
-      targetSubRegions: 3,
-    });
-    const sub2LocalMap = sub2.localRegionMap ?? sub2.regionMap;
-    assert.ok(sub2LocalMap instanceof Int32Array, 'sub2.localRegionMap must be an Int32Array');
-    assert.ok(Array.isArray(sub2.addedSwatches), 'sub2 must return addedSwatches array');
-    const merged2 = mergeSubdividedRegionIntoPuzzle(merged1, new Set([targetGen1.id]), sub2, bbox2);
-    assert.equal(
-      merged2.regions.some((r) => r.id === targetGen1.id),
-      false,
-      'Target gen-1 region must be replaced in second subdivision'
-    );
-    const allIds2 = new Set();
-    let gen2NewCount = 0;
-    for (const r of merged2.regions) {
-      assert.equal(allIds2.has(r.id), false, `Double subdivision produced duplicate region ID ${r.id}`);
-      allIds2.add(r.id);
-      if (r.id > firstGenMaxId) {
-        gen2NewCount += 1;
-      }
-    }
-    assert.ok(
-      gen2NewCount >= 1,
-      `Second-generation sub-regions must have IDs strictly > firstGenMaxId (${firstGenMaxId})`
-    );
-    const expectedBorder2 = buildBorderMapFromRegionMap(merged2.regionMap, merged2.width, merged2.height);
-    assert.deepEqual(
-      merged2.borderMap,
-      expectedBorder2,
-      'Double-subdivision borderMap must match full buildBorderMapFromRegionMap pixel-for-pixel'
-    );
-
-    // 4d-ii. Bug #4, Bug #5, and Gap #10: deduplication, Free Colour 2-swatch custom palette, exact deltaE=22 vs 24, 64-cap, empty palette, and merge corner cases
-    const { assignFreeColorIds } = subdividerMod;
+    // 4d-ii. Bug #4, Bug #5, and Gap #10: deduplication, Free Colour 2-swatch custom palette, exact deltaE=22 vs 24, 96-cap, empty palette
     const makeSplitRgba = (w, h, leftRgb, rightRgb) => {
       const buf = new Uint8ClampedArray(w * h * 4);
       for (let y = 0; y < h; y++) {
@@ -2189,22 +2148,29 @@ function testMergeAndDoubleSubdivide(subdividerMod, selectionMod, codecMod, base
     });
     assert.equal(res24.addedSwatches.length, 1, 'deltaE === 24 (> 22) must add 1 harmonious accent swatch');
 
-    // Starting already at 64 swatches & empty existingPalette: []
-    const full64Pal = Array.from({ length: 64 }, (_, i) =>
+    // Starting already at 96 swatches & mergePreservingBasePalette 96/97 guard
+    const full96Pal = Array.from({ length: 96 }, (_, i) =>
       makePaletteColor(i + 1, (i * 3) % 180, (i * 5) % 180, (i * 7) % 180)
     );
-    const at64Res = subdivideMaskedRegion({
+    const at96Res = subdivideMaskedRegion({
       rgbaData: makeSplitRgba(24, 24, [255, 255, 255], [255, 250, 240]),
       cropWidth: 24,
       cropHeight: 24,
       cropMask: fullMask24,
-      existingPalette: full64Pal,
+      existingPalette: full96Pal,
       targetSubRegions: 2,
       minRegionArea: 16,
       maxNewSwatches: 4,
     });
-    assert.equal(at64Res.palette.length, 64, 'Palette at 64-cap must never exceed 64');
-    assert.equal(at64Res.addedSwatches.length, 0, 'Palette at 64-cap must add 0 swatches');
+    assert.equal(at96Res.palette.length, 96, 'Palette at 96-cap must never exceed 96');
+    assert.equal(at96Res.addedSwatches.length, 0, 'Palette at 96-cap must add 0 swatches');
+    const merged96Ok = mergePreservingBasePalette(full96Pal.slice(0, 95), [full96Pal[95]]);
+    assert.equal(merged96Ok.length, 96, 'mergePreservingBasePalette must accept 96th swatch');
+    assert.throws(
+      () => mergePreservingBasePalette(full96Pal, [makePaletteColor(97, 255, 255, 255)]),
+      /MAX_TOTAL_PALETTE_SWATCHES \(96\)/,
+      'mergePreservingBasePalette must throw when adding 97th swatch'
+    );
 
     const emptyPalRes = subdivideMaskedRegion({
       rgbaData: twoColorRgba,
@@ -2218,11 +2184,30 @@ function testMergeAndDoubleSubdivide(subdividerMod, selectionMod, codecMod, base
     assert.ok(emptyPalRes.palette.length >= 1, 'Empty existingPalette must synthesize >= 1 swatch');
     assert.ok(emptyPalRes.regions.every((r) => r.colorId >= 1));
 
-    // Merge corner cases: corner-touching (0,0)/(w-1,h-1), multi-region contiguous merge, cutout rId===0 exterior preservation, Free Colour merge, empty selection/mask
+    // Empty mask & zero dimensions return safe empty result
+    const zeroMaskRes = subdivideMaskedRegion({
+      rgbaData: twoColorRgba,
+      cropWidth: 32,
+      cropHeight: 32,
+      cropMask: new Uint8Array(32 * 32),
+      existingPalette: basePuzzle.palette,
+    });
+    assert.equal(zeroMaskRes.regions.length, 0);
+    assert.equal(zeroMaskRes.addedSwatches.length, 0);
+    const zeroDimRes = subdivideMaskedRegion({
+      rgbaData: new Uint8ClampedArray(0),
+      cropWidth: 0,
+      cropHeight: 0,
+      cropMask: new Uint8Array(0),
+      existingPalette: basePuzzle.palette,
+    });
+    assert.equal(zeroDimRes.regions.length, 0);
+
+    // Embedded nested layer preserves Free Colour flag, cutout rId===0 exterior, and bounded borderMap recomputation
     const cMap = new Int32Array(32 * 32);
     for (let y = 0; y < 32; y++) {
       for (let x = 0; x < 32; x++) {
-        if (x < 4 && y < 4) cMap[y * 32 + x] = 0; // cutout exterior corner
+        if (x < 4 && y < 4) cMap[y * 32 + x] = 0;
         else if (x < 16 && y < 16) cMap[y * 32 + x] = 1;
         else if (x >= 16 && y < 16) cMap[y * 32 + x] = 2;
         else cMap[y * 32 + x] = 3;
@@ -2249,32 +2234,144 @@ function testMergeAndDoubleSubdivide(subdividerMod, selectionMod, codecMod, base
       targetSubRegions: 4,
       minRegionArea: 12,
     });
-    const mergedMulti = mergeSubdividedRegionIntoPuzzle(
-      cornerCutoutPuzzle,
-      new Set([1, 2]),
-      multiSub,
-      multiBbox
-    );
-    assert.equal(mergedMulti.isFreeColor, true, 'Free Colour flag must survive in-place merge');
+    const embeddedCutout = embedNestedDetailLayerIntoPuzzle({
+      basePuzzle: cornerCutoutPuzzle,
+      selectedRegionIds: new Set([1, 2]),
+      subResult: multiSub,
+      imageBlobKey: 'layer_cutout_border_test',
+    });
+    assert.equal(embeddedCutout.puzzle.isFreeColor, true, 'Free Colour flag must survive nested layer embedding');
     for (let y = 0; y < 4; y++) {
       for (let x = 0; x < 4; x++) {
-        assert.equal(mergedMulti.regionMap[y * 32 + x], 0, 'Cutout rId===0 exterior must remain 0 after merge');
+        assert.equal(embeddedCutout.puzzle.regionMap[y * 32 + x], 0, 'Cutout rId===0 exterior must remain 0');
       }
     }
     assert.deepEqual(
-      mergedMulti.borderMap,
-      buildBorderMapFromRegionMap(mergedMulti.regionMap, 32, 32),
-      'Corner-touching multi-region cutout merge borderMap must match full recompute'
+      embeddedCutout.puzzle.borderMap,
+      buildBorderMapFromRegionMap(embeddedCutout.puzzle.regionMap, 32, 32),
+      'Root borderMap after clearing replaced regions must match full recompute pixel-for-pixel'
     );
-    // Empty selection & empty mask safety
-    const emptyMerge = mergeSubdividedRegionIntoPuzzle(
-      cornerCutoutPuzzle,
-      new Set(),
-      { ...multiSub, regions: [], localRegionMap: new Int32Array(32 * 16) },
-      multiBbox
+
+    // 4d-iii. F11 generatorConfig parity across all 4 strategies + UNIFIED_BLACK_REGION + colored-ink + 1ee7b06 high-density
+    const stratW = 64;
+    const stratH = 64;
+    const stratMask = new Uint8Array(stratW * stratH);
+    const stratRgba = new Uint8ClampedArray(stratW * stratH * 4);
+    for (let y = 0; y < stratH; y++) {
+      for (let x = 0; x < stratW; x++) {
+        const idx = y * stratW + x;
+        const dx = x - 32;
+        const dy = y - 32;
+        if (dx * dx + dy * dy <= 26 * 26) {
+          stratMask[idx] = 1;
+          const onInk = Math.abs(x - 32) <= 1 || Math.abs(y - 32) <= 1;
+          if (onInk) {
+            // Warm brown colored ink #4A2C1D
+            stratRgba[idx * 4] = 74;
+            stratRgba[idx * 4 + 1] = 44;
+            stratRgba[idx * 4 + 2] = 29;
+          } else {
+            const q = (y < 32 ? 0 : 2) + (x < 32 ? 0 : 1);
+            const cols = [
+              [230, 80, 70],
+              [70, 185, 95],
+              [65, 130, 225],
+              [235, 200, 60],
+            ];
+            stratRgba[idx * 4] = cols[q][0];
+            stratRgba[idx * 4 + 1] = cols[q][1];
+            stratRgba[idx * 4 + 2] = cols[q][2];
+          }
+          stratRgba[idx * 4 + 3] = 255;
+        }
+      }
+    }
+    const strategyConfigs = [
+      { algorithm: 'LINE_ART', lineHandling: 'ABSORB_LINES' },
+      { algorithm: 'LINE_ART', lineHandling: 'UNIFIED_BLACK_REGION' },
+      { algorithm: 'PAINTERLY' },
+      { algorithm: 'POSTERIZED' },
+      { algorithm: 'MOSAIC_CEL' },
+      { paletteDetail: 'CUSTOM', colorCount: 64 },
+    ];
+    for (const gCfg of strategyConfigs) {
+      const res = subdivideMaskedRegion({
+        rgbaData: stratRgba,
+        cropWidth: stratW,
+        cropHeight: stratH,
+        cropMask: stratMask,
+        existingPalette: basePuzzle.palette,
+        targetSubRegions: 12,
+        minRegionArea: 12,
+        generatorConfig: gCfg,
+      });
+      assert.ok(
+        res.regions.length >= 2 && res.regions.length <= 12,
+        `generatorConfig ${JSON.stringify(gCfg)} must produce 2..12 regions (got ${res.regions.length})`
+      );
+      for (let i = 0; i < stratW * stratH; i++) {
+        if (stratMask[i] === 1) assert.ok(res.localRegionMap[i] >= 1);
+        else assert.equal(res.localRegionMap[i], 0);
+      }
+    }
+
+    // 1ee7b06 high-density Zoom In (targetSubRegions=250 on rich multi-cell masked artwork -> > 20 regions)
+    const denseW = 128;
+    const denseH = 128;
+    const denseMask = new Uint8Array(denseW * denseH);
+    const denseRgba = new Uint8ClampedArray(denseW * denseH * 4);
+    for (let y = 0; y < denseH; y++) {
+      for (let x = 0; x < denseW; x++) {
+        const idx = y * denseW + x;
+        const dx = x - 64;
+        const dy = y - 64;
+        if (dx * dx + dy * dy <= 58 * 58) {
+          denseMask[idx] = 1;
+          const cx = Math.floor(x / 12);
+          const cy = Math.floor(y / 12);
+          const palettePick = (cx * 3 + cy * 5) % 6;
+          const swatches = [
+            [230, 50, 50],
+            [50, 190, 80],
+            [50, 110, 230],
+            [240, 210, 40],
+            [200, 60, 210],
+            [40, 200, 210],
+          ];
+          denseRgba[idx * 4] = swatches[palettePick][0];
+          denseRgba[idx * 4 + 1] = swatches[palettePick][1];
+          denseRgba[idx * 4 + 2] = swatches[palettePick][2];
+          denseRgba[idx * 4 + 3] = 255;
+        }
+      }
+    }
+    const denseRes = subdivideMaskedRegion({
+      rgbaData: denseRgba,
+      cropWidth: denseW,
+      cropHeight: denseH,
+      cropMask: denseMask,
+      existingPalette: basePuzzle.palette,
+      targetSubRegions: 250,
+      minRegionArea: 16,
+    });
+    assert.ok(
+      denseRes.regions.length > 20 && denseRes.regions.length <= 250,
+      `1ee7b06 high-density Zoom In must preserve > 20..250 detail regions (got ${denseRes.regions.length})`
     );
-    assert.notEqual(emptyMerge, cornerCutoutPuzzle, 'Empty merge must return safe non-mutating clone');
-    assert.equal(emptyMerge.regions.length, cornerCutoutPuzzle.regions.length);
+
+    // Tiny 4x4 mask & targetSubRegions=1 edge case
+    const tinyMask4 = new Uint8Array(16).fill(1);
+    const tinyRgba4 = makeSplitRgba(4, 4, [200, 50, 50], [50, 100, 200]);
+    const tinyRes1 = subdivideMaskedRegion({
+      rgbaData: tinyRgba4,
+      cropWidth: 4,
+      cropHeight: 4,
+      cropMask: tinyMask4,
+      existingPalette: basePuzzle.palette,
+      targetSubRegions: 1,
+      minRegionArea: 2,
+    });
+    assert.equal(tinyRes1.regions.length, 1, 'targetSubRegions=1 on 4x4 mask must yield exactly 1 region');
 }
 
 function testAlphaMaskPuzzleGenerator(generatorMod, typesMod) {
@@ -2362,6 +2459,43 @@ function testAlphaMaskPuzzleGenerator(generatorMod, typesMod) {
       true,
       '2-tone gray cutout with explicit isFreeColor: false must not silently flip to isFreeColor: true'
     );
+
+    // Explicit activeMask passed directly to AutoPuzzleGenerator across all 4 explicit strategies (skips scaleRgba!)
+    const explicitMask = new Uint8Array(gw * gh);
+    for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        const dx = x - 64;
+        const dy = y - 64;
+        if (dx * dx + dy * dy <= 46 * 46) explicitMask[y * gw + x] = 1;
+      }
+    }
+    for (const alg of ['LINE_ART', 'PAINTERLY', 'POSTERIZED', 'MOSAIC_CEL']) {
+      const maskedRes = new AutoPuzzleGenerator().generateFromRgba(
+        alphaRgba,
+        gw,
+        gh,
+        {
+          ...DEFAULT_GENERATOR_CONFIG,
+          algorithm: alg,
+          resolution: 64, // Intentionally smaller than 128 to prove activeMask skips scaleRgba!
+          paletteDetail: 'CUSTOM',
+          colorCount: 4,
+          minRegionArea: 16,
+          maxRegions: 20,
+          isFreeColor: false,
+        },
+        undefined,
+        false,
+        explicitMask
+      );
+      assert.equal(maskedRes.width, gw, `${alg} with activeMask must skip scaleRgba and preserve exact width`);
+      assert.equal(maskedRes.height, gh, `${alg} with activeMask must skip scaleRgba and preserve exact height`);
+      assert.ok(maskedRes.regions.length >= 2 && maskedRes.regions.length <= 20, `${alg} must generate 2..20 regions`);
+      for (let i = 0; i < gw * gh; i++) {
+        if (explicitMask[i] === 1) assert.ok(maskedRes.regionMap[i] >= 1);
+        else assert.equal(maskedRes.regionMap[i], 0);
+      }
+    }
 }
 
 function testUnifiedLayersEmbedAndWrap(subdividerMod, unifiedMod, codecMod) {
@@ -3084,7 +3218,7 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
     assert.deepEqual(Array.from(unpacked.regions[i].pixels), Array.from(direct.regions[i].pixels));
   }
 
-  // 7b. typeof Worker === 'undefined' main-thread fallback
+  // 7b. typeof Worker === 'undefined' main-thread fallback (including generatorConfig parity)
   await withGlobalOverrides({ Worker: undefined }, async () => {
     const progressCalls = [];
     const fallbackRes = await PuzzleWorkerService.subdivideMaskedRegion(
@@ -3096,6 +3230,7 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
         existingPalette,
         targetSubRegions: 4,
         minRegionArea: 12,
+        generatorConfig: { algorithm: 'POSTERIZED', paletteDetail: 'CUSTOM', colorCount: 4 },
       },
       (p, s) => progressCalls.push([p, s])
     );
@@ -3103,7 +3238,7 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
     assert.ok(progressCalls.length >= 2);
   });
 
-  // 7c. Mock Worker: PROGRESS -> SUBDIVIDE_SUCCESS, ERROR, worker error fallback preserving caller buffers, cancelActive, and Bug #1 late error race
+  // 7c. Mock Worker: PROGRESS -> SUBDIVIDE_SUCCESS, generatorConfig + 200 fallback forwarding, ERROR, worker error fallback preserving caller buffers, cancelActive, and Bug #1 late error race
   const createdWorkers = [];
   class MockWorker {
     constructor() {
@@ -3142,8 +3277,9 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
     PuzzleWorkerService.cancelActive();
     createdWorkers.length = 0;
 
-    // PROGRESS + SUBDIVIDE_SUCCESS
+    // PROGRESS + SUBDIVIDE_SUCCESS + generatorConfig forwarding + transfer.length === 2
     const progressSeen = [];
+    const sampleGenCfg = { algorithm: 'LINE_ART', lineHandling: 'UNIFIED_BLACK_REGION', colorCount: 16 };
     const pSuccess = PuzzleWorkerService.subdivideMaskedRegion(
       {
         rgbaData: rgba,
@@ -3153,10 +3289,17 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
         existingPalette,
         targetSubRegions: 4,
         minRegionArea: 12,
+        generatorConfig: sampleGenCfg,
       },
       (prog, status) => progressSeen.push([prog, status])
     );
     const wSuccess = createdWorkers[createdWorkers.length - 1];
+    assert.deepEqual(
+      wSuccess.posted[0].msg.generatorConfig,
+      sampleGenCfg,
+      'PuzzleWorkerService must forward generatorConfig to worker postMessage'
+    );
+    assert.equal(wSuccess.posted[0].transfer.length, 2, 'Worker postMessage must transfer exactly 2 buffers');
     const reqId1 = wSuccess.posted[0].msg.id;
     wSuccess.emitMessage({ type: 'PROGRESS', id: reqId1, progress: 0.5, status: 'Halfway' });
     const packed = packSubdivisionForTransfer(
@@ -3175,17 +3318,24 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
     assert.equal(progressSeen.length, 1);
     assert.ok(okRes.regions.length >= 2);
 
-    // Worker ERROR message rejects cleanly
-    const pErrMsg = PuzzleWorkerService.subdivideMaskedRegion({
+    // Non-finite targetSubRegions must fall back to DEFAULT_ZOOM_IN_TARGET_REGIONS (200), NOT legacy 12
+    const pNaN = PuzzleWorkerService.subdivideMaskedRegion({
       rgbaData: rgba,
       cropWidth: w,
       cropHeight: h,
       cropMask: mask,
       existingPalette,
+      targetSubRegions: Number.NaN,
     });
-    const wErrMsg = createdWorkers[createdWorkers.length - 1];
-    wErrMsg.emitMessage({ type: 'ERROR', id: wErrMsg.posted[wErrMsg.posted.length - 1].msg.id, error: 'Simulated worker failure' });
-    await assert.rejects(() => pErrMsg, /Simulated worker failure/);
+    const wNaN = createdWorkers[createdWorkers.length - 1];
+    const lastNaNMsg = wNaN.posted[wNaN.posted.length - 1].msg;
+    assert.equal(
+      lastNaNMsg.targetSubRegions,
+      subdividerMod.DEFAULT_ZOOM_IN_TARGET_REGIONS,
+      `Non-finite targetSubRegions must normalize to DEFAULT_ZOOM_IN_TARGET_REGIONS (200), got ${lastNaNMsg.targetSubRegions}`
+    );
+    wNaN.emitMessage({ type: 'ERROR', id: lastNaNMsg.id, error: 'Simulated worker failure' });
+    await assert.rejects(() => pNaN, /Simulated worker failure/);
 
     // Worker error event falls back to main thread AND keeps caller TypedArrays non-detached
     const callerRgba = rgba.slice();
@@ -3240,6 +3390,24 @@ async function testPuzzleWorkerServiceAndSubdivisionIpc(workerSvcMod, workerMod,
     );
     assert.equal(worker2.terminated, true, 'worker2 must be terminated by cancelActive() (zero worker leak)');
   });
+
+  // 7d. puzzle.worker.ts validateSubdividePayload rejects malformed generatorConfig cleanly
+  const baseWorkerPayload = {
+    cropWidth: w,
+    cropHeight: h,
+    rgbaBuffer: rgba.slice().buffer,
+    cropMaskBuffer: mask.slice().buffer,
+    existingPalette,
+  };
+  assert.equal(workerMod.validateSubdividePayload(baseWorkerPayload), null);
+  assert.equal(
+    workerMod.validateSubdividePayload({ ...baseWorkerPayload, generatorConfig: { algorithm: 'POSTERIZED' } }),
+    null
+  );
+  for (const badCfg of ['bad', null, [], 42]) {
+    const errMsg = workerMod.validateSubdividePayload({ ...baseWorkerPayload, generatorConfig: badCfg });
+    assert.match(String(errMsg), /Invalid generatorConfig/, `Malformed generatorConfig ${JSON.stringify(badCfg)} must be rejected`);
+  }
 }
 
 // -------------------------------------------------------------------------

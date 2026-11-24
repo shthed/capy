@@ -245,12 +245,13 @@ function handleGenerateMessage(data: {
   }
 }
 
-function validateSubdividePayload(data: {
+export function validateSubdividePayload(data: {
   cropWidth: number;
   cropHeight: number;
   rgbaBuffer: ArrayBuffer;
   cropMaskBuffer: ArrayBuffer;
   existingPalette: PaletteColor[];
+  generatorConfig?: Partial<GeneratorConfig>;
 }): string | null {
   if (
     !Number.isInteger(data.cropWidth) ||
@@ -279,6 +280,14 @@ function validateSubdividePayload(data: {
   if (!Array.isArray(data.existingPalette)) {
     return 'Invalid existingPalette: expected Array';
   }
+  if (
+    data.generatorConfig !== undefined &&
+    (typeof data.generatorConfig !== 'object' ||
+      data.generatorConfig === null ||
+      Array.isArray(data.generatorConfig))
+  ) {
+    return 'Invalid generatorConfig: expected plain object';
+  }
   return null;
 }
 
@@ -294,6 +303,7 @@ function handleSubdivideMessage(data: {
   minRegionArea?: number;
   maxNewSwatches?: number;
   reuseDeltaE?: number;
+  generatorConfig?: Partial<GeneratorConfig>;
 }): void {
   const { id } = data;
   try {
@@ -319,6 +329,7 @@ function handleSubdivideMessage(data: {
       minRegionArea: data.minRegionArea,
       maxNewSwatches: data.maxNewSwatches,
       reuseDeltaE: data.reuseDeltaE,
+      generatorConfig: data.generatorConfig,
       onProgress: (progress, status) => {
         self.postMessage({
           type: 'PROGRESS',
