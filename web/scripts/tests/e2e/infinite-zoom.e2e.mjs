@@ -1,28 +1,35 @@
 /**
  * Opaque-Box Playwright E2E Suite for Capy Paint Issue #606:
- * Bidirectional In-Browser Local AI Infinite Zoom (PR Slice 1).
+ * Google Nano Banana 2.1 / 2 Suite & Unified Single-Canvas Nested-Layer Infinite Zoom.
  *
- * Exact 4 Stages (deterministic, zero external network dependencies):
- *   Stage 1: Manual toolbar popover, inline Guide Prompt + chips, 4-connected selection
- *            (painted warning + 1-tap Switch Selection), seamless in-place subdivision,
- *            camera viewport preservation, untouched vs replaced progress & Undo/Redo scrub,
- *            built-in sample-to-blob promotion, and 1-tap Undo Subdivision revert.
- *   Stage 2: Small-region Deep Child Tile promotion, transparent rId <= 0 organic cutout
- *            (IDB PuzzleData + IDB image Blob alpha + live canvas charcoal corners),
- *            bidirectional Outer/Inner breadcrumbs, and snapshot deletion orphan pruning.
- *   Stage 3: Directional Border Extension (Top + Right) with inline prompt + chips into fresh
- *            0% outer puzzle keeping inner progress intact, 2.5:1 aspect guard on repeated
- *            horizontal stretching, and Tier 1 mock LanguageModel + loading-cancel-btn AbortController.
- *   Stage 4: Offline BroadcastChannel Co-op guard, active Replay guard, CreateTab parity
- *            (legacy infinite-zoom-subtile-btn + new controls + local-ai-mode-select persistence),
- *            and 360x780 + Large Text mobile/a11y layout & TopBar lane containment.
+ * Exact 4 Stages (deterministic, zero external network dependencies, zero console/page errors):
+ *   Stage 1: Sparkles visibility on 100% completed puzzles (hidden only during active Replay
+ *            playback, visible when paused/idle, entering Zoom dismisses ReplayControls cleanly),
+ *            Menu > Create provider/model/resolution/BYOK controls & device-local key isolation,
+ *            Android WebView Puter exclusion & zero js.puter.com loads, and 360x780 + Large Text
+ *            (1.25x) plus 640x360 short-landscape responsive/touch-target checks.
+ *   Stage 2: Unified Zoom In via mocked window.puter.ai.txt2img, non-adjacent switch prompt,
+ *            single-canvas invariants (no child snapshot, no parent breadcrumb), 1-tap Undo Split,
+ *            dynamic max zoom > 12x, and multi-layer painting (outer root + nested detail layer)
+ *            with shared PaletteDock and unified Undo/Redo.
+ *   Stage 3: Unified Zoom Out (Directional Border Extension) via mocked Direct Gemini BYOK route,
+ *            0-side & 2.5:1 aspect guards, 100% painted progress + affine-rebased nested layer
+ *            preservation, 1-tap Undo Extend, outer border painting, single-file .capy v2 binary
+ *            export (zero BYOK key leak), and fresh isolated context import round-trip.
+ *   Stage 4: Free Guided Gemini App Handoff end-to-end: Web template download + gemini.google.com
+ *            launch stub, invalid SVG & corrupt PNG rejection + recovery via file input, Puter 402
+ *            automatic Guided fallback + synthetic window clipboard paste completion, and Android
+ *            WebView shareImage + LIFO __capyReceiveSharedImage interception without stray saves.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import zlib from 'node:zlib';
 import {
   createBootedContext,
   getStableBoundingBox,
   readTotalRemainingRegions,
-  tapCanvasGrid,
   waitForAnimationFrames,
   waitForCondition,
   waitForPuzzleLoaded,
@@ -31,44 +38,381 @@ import {
 const ACTIVE_SESSION_KEY = 'capy_active_session_v8';
 const SNAPSHOTS_KEY = 'capy_snapshots_v8';
 const SETTINGS_KEY = 'capy_user_settings_v8';
+const BYOK_KEY_STORAGE_KEY = 'capy_gemini_byok_key_v1';
+
+const VALID_GEMINI_ASPECT_RATIOS = new Set([
+  '1:1',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '16:9',
+  '9:16',
+  '4:5',
+  '5:4',
+  '21:9',
+]);
+
+// ============================================================================
+// Pure-Node Deterministic Multi-Color PNG Generator
+// ============================================================================
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) !== 0 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    c = CRC32_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function makePngChunk(type, data) {
+  const typeBuf = Buffer.from(type, 'ascii');
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32BE(data.length, 0);
+  const crcInput = Buffer.concat([typeBuf, data]);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(crc32(crcInput), 0);
+  return Buffer.concat([lenBuf, crcInput, crcBuf]);
+}
 
 /**
- * Reads active session metadata from localStorage.
+ * Builds a deterministic 6-color geometric RGB PNG buffer in pure Node so
+ * MaskedRegionSubdivider always segments crisp multi-region detail for both
+ * Zoom In masks and Zoom Out border rings.
  */
+function createMultiColorPatternPngBuffer(width = 128, height = 128) {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // RGB
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const palette = [
+    [230, 57, 70], // #E63946 crimson
+    [42, 157, 143], // #2A9D8F teal
+    [233, 196, 106], // #E9C46A saffron
+    [69, 123, 157], // #457B9D steel blue
+    [155, 93, 229], // #9B5DE5 violet
+    [244, 162, 97], // #F4A261 coral
+  ];
+
+  const stride = 1 + width * 3;
+  const raw = Buffer.alloc(stride * height);
+  const cx = width / 2;
+  const cy = height / 2;
+  const innerR2 = Math.pow(Math.min(width, height) * 0.18, 2);
+  const ringR2 = Math.pow(Math.min(width, height) * 0.34, 2);
+
+  for (let y = 0; y < height; y++) {
+    const rowOff = y * stride;
+    raw[rowOff] = 0; // filter: None
+    const gy = Math.min(2, Math.floor((y * 3) / height));
+    for (let x = 0; x < width; x++) {
+      const gx = Math.min(3, Math.floor((x * 4) / width));
+      const dx = x - cx;
+      const dy = y - cy;
+      const d2 = dx * dx + dy * dy;
+      let colorIdx;
+      if (d2 < innerR2) {
+        colorIdx = (gx + gy + 2) % palette.length;
+      } else if (d2 < ringR2 && (x + y) % 32 < 16) {
+        colorIdx = (gx + gy + 4) % palette.length;
+      } else {
+        colorIdx = (gy * 2 + gx) % palette.length;
+      }
+      const rgb = palette[colorIdx];
+      const off = rowOff + 1 + x * 3;
+      raw[off] = rgb[0];
+      raw[off + 1] = rgb[1];
+      raw[off + 2] = rgb[2];
+    }
+  }
+
+  const idat = zlib.deflateSync(raw, { level: 6 });
+  return Buffer.concat([
+    signature,
+    makePngChunk('IHDR', ihdr),
+    makePngChunk('IDAT', idat),
+    makePngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+const MULTI_COLOR_PNG_BUFFER = createMultiColorPatternPngBuffer(128, 128);
+const MULTI_COLOR_PNG_BASE64 = MULTI_COLOR_PNG_BUFFER.toString('base64').replace(/\s+/g, '');
+const MULTI_COLOR_PNG_DATA_URL = `data:image/png;base64,${MULTI_COLOR_PNG_BASE64}`;
+
+// ============================================================================
+// Error, Network, Mock & Storage Helpers
+// ============================================================================
+
+/**
+ * Attaches both runner pageerror listeners AND strict console.error listeners so
+ * every stage enforces zero console errors and zero uncaught page errors.
+ */
+function attachStrictErrorListeners(page, label, ctx) {
+  const stageErrors = [];
+  if (typeof ctx.attachErrorListeners === 'function') {
+    ctx.attachErrorListeners(page, label);
+  }
+  page.on('pageerror', (err) => {
+    stageErrors.push(`[${label}:pageerror] ${err.message}`);
+  });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      const entry = `[${label}:console.error] ${msg.text()}`;
+      stageErrors.push(entry);
+      if (Array.isArray(ctx.consoleErrors)) {
+        ctx.consoleErrors.push(entry);
+      }
+    }
+  });
+  return {
+    getErrors: () => [...stageErrors],
+    assertZeroErrors: () => {
+      assert.equal(
+        stageErrors.length,
+        0,
+        `Expected zero console/page errors in ${label}, got:\n${stageErrors.join('\n')}`
+      );
+    },
+  };
+}
+
+/**
+ * Intercepts and blocks any request to js.puter.com or *.puter.com so offline E2E
+ * tests never touch external servers and can assert zero Puter network loads.
+ */
+async function attachPuterNetworkSpy(page) {
+  const requests = [];
+  await page.route('**://*.puter.com/**', async (route) => {
+    requests.push(route.request().url());
+    await route.abort('blockedbyclient');
+  });
+  return {
+    getRequests: () => [...requests],
+  };
+}
+
+/**
+ * Injects an in-page window.puter.ai.txt2img stub BEFORE module load so Puter
+ * provider tests run 100% offline with zero external script tags.
+ */
+async function injectPuterMock(page, { pngDataUrl, mode = 'ok' }) {
+  await page.addInitScript(
+    ({ dataUrl, initialMode }) => {
+      window.__puterCalls = [];
+      window.__puterMode = initialMode;
+      window.puter = {
+        ai: {
+          async txt2img(prompt, options) {
+            window.__puterCalls.push({
+              prompt,
+              options: options ? { ...options } : null,
+            });
+            const activeMode = window.__puterMode;
+            if (activeMode === '402') {
+              const err = new Error('Insufficient balance (402)');
+              err.status = 402;
+              throw err;
+            }
+            if (activeMode === 'cancelled') {
+              throw new Error('Puter auth popup cancelled by user');
+            }
+            if (activeMode === 'safety') {
+              throw new Error('Blocked by safety policy');
+            }
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            return img;
+          },
+        },
+      };
+    },
+    { dataUrl: pngDataUrl, initialMode: mode }
+  );
+}
+
+/**
+ * Injects the complete Android WebView CapyAndroid bridge mock BEFORE page load
+ * so NativeBridge detects Android mode with zero console warnings or backup retries.
+ */
+async function injectAndroidWebViewMock(page) {
+  await page.addInitScript(() => {
+    window.__androidBridgeCalls = {
+      shareImage: [],
+      shareFile: [],
+      haptics: [],
+      modals: [],
+    };
+    window.CapyAndroid = {
+      getSafeAreaInsets: () => '{"top":0,"bottom":0,"left":0,"right":0}',
+      consumePendingSharedImage: () => null,
+      consumePendingDeepLink: () => null,
+      isPlayGamesConfigured: () => false,
+      signInPlayGames: () => null,
+      loadBackup: () => null,
+      saveBackup: () => true,
+      haptic: (type) => window.__androidBridgeCalls.haptics.push(String(type)),
+      setModalOpen: (isOpen) => window.__androidBridgeCalls.modals.push(Boolean(isOpen)),
+      shareImage: (title, dataUrl) =>
+        window.__androidBridgeCalls.shareImage.push({
+          title: String(title),
+          dataUrl: String(dataUrl),
+        }),
+      shareFile: (title, fileName, mimeType, base64Data) =>
+        window.__androidBridgeCalls.shareFile.push({
+          title: String(title),
+          fileName: String(fileName),
+          mimeType: String(mimeType),
+          base64Length: String(base64Data).length,
+        }),
+      shareTextLink: () => {},
+      saveCloudSnapshot: () => false,
+      loadCloudSnapshot: () => null,
+      saveCloudBinaryChunk: () => false,
+      loadCloudBinaryChunk: () => null,
+      requestCloudSnapshotPull: () => false,
+      openExternalOAuth: () => false,
+      getAppVersion: () => '2.6.0-e2e',
+    };
+  });
+}
+
+/**
+ * Stubs window.open before page load so Guided Gemini web launches record opened
+ * URLs without spawning external popup tabs.
+ */
+async function injectWindowOpenStub(page) {
+  await page.addInitScript(() => {
+    window.__openedUrls = [];
+    window.open = (url) => {
+      window.__openedUrls.push(String(url));
+      return {};
+    };
+  });
+}
+
 async function readActiveSession(page) {
   return page.evaluate((key) => {
     const raw = localStorage.getItem(key);
     if (raw === null || raw.trim() === '') return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error(`Malformed active session JSON in ${key}: expected object`);
+      throw new Error(`Malformed active session JSON in ${key}`);
     }
     return parsed;
   }, ACTIVE_SESSION_KEY);
 }
 
-/**
- * Reads saved snapshot list from localStorage.
- */
 async function readSnapshots(page) {
   return page.evaluate((key) => {
     const raw = localStorage.getItem(key);
     if (raw === null || raw.trim() === '') return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      throw new Error(`Malformed snapshots JSON in ${key}: expected array`);
+      throw new Error(`Malformed snapshots JSON in ${key}`);
     }
     return parsed;
   }, SNAPSHOTS_KEY);
 }
 
+async function readUserSettings(page) {
+  return page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw.trim() === '') return {};
+    return JSON.parse(raw);
+  }, SETTINGS_KEY);
+}
+
+async function readByokKey(page) {
+  return page.evaluate((key) => localStorage.getItem(key), BYOK_KEY_STORAGE_KEY);
+}
+
+async function readPuzzleSummary(page, snapId) {
+  return page.evaluate(async (id) => {
+    if (!window.capyStorage) return null;
+    const puzzle = await window.capyStorage.loadPuzzleData(id);
+    if (!puzzle) return null;
+    const nestedLayers = Array.isArray(puzzle.nestedLayers) ? puzzle.nestedLayers : [];
+    const allRegionIds = [];
+    for (const r of puzzle.regions || []) {
+      allRegionIds.push(r.id);
+    }
+    for (const layer of nestedLayers) {
+      for (const r of layer.regions || []) {
+        allRegionIds.push(r.id);
+      }
+    }
+    return {
+      width: puzzle.width,
+      height: puzzle.height,
+      rootRegionCount: (puzzle.regions || []).length,
+      nestedLayers: nestedLayers.map((l) => ({
+        layerId: l.layerId,
+        depth: l.depth,
+        width: l.width,
+        height: l.height,
+        regionCount: (l.regions || []).length,
+        worldBounds: { ...l.worldBounds },
+        imageBlobKey: l.imageBlobKey,
+        providerUsed: l.providerUsed,
+        modelUsed: l.modelUsed,
+      })),
+      maxZoomDepth: typeof puzzle.maxZoomDepth === 'number' ? puzzle.maxZoomDepth : 0,
+      totalRegionCount: allRegionIds.length,
+      allRegionIds,
+    };
+  }, snapId);
+}
+
+async function dismissFeatureOfferIfVisible(page) {
+  const offerDismissBtn = page.getByTestId('feature-offer-dismiss-btn');
+  if ((await offerDismissBtn.count()) > 0 && (await offerDismissBtn.first().isVisible())) {
+    await offerDismissBtn.first().click();
+    await page.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
+    await waitForAnimationFrames(page, 1);
+  }
+}
+
+async function setExtendSideState(page, testId, desiredOn) {
+  const locator = page.getByTestId(testId);
+  await locator.waitFor({ state: 'visible', timeout: 3000 });
+  const readActive = async () =>
+    locator.evaluate((el) => {
+      const pressed = el.getAttribute('aria-pressed');
+      if (pressed !== null) return pressed === 'true';
+      if (el instanceof HTMLInputElement && el.type === 'checkbox') return el.checked;
+      return false;
+    });
+  if ((await readActive()) !== desiredOn) {
+    await locator.click();
+    await waitForAnimationFrames(page, 1);
+  }
+  assert.equal(await readActive(), desiredOn, `Toggle ${testId} must be ${desiredOn}`);
+}
+
 /**
- * Deterministically maps puzzle regions from IDB PuzzleData into exact live screen
- * coordinates using the public 0.92 fit formula and persisted camera transform.
- * Filters target click points strictly into the unobstructed canvas center area
- * so clicks never collide with GameTopBar, FloatingActions, or PaletteDock.
+ * Deterministically maps both root-layer AND nested-layer regions from IDB PuzzleData
+ * into live unobstructed screen coordinates (respecting worldBounds and deepest-first
+ * occlusion so clicks reliably hit the intended layer and region).
  */
-async function findRegionClickTargets(page, snapId) {
+async function findUnifiedRegionTargets(page, snapId) {
   return page.evaluate(
     async ({ targetSnapId, sessionKey }) => {
       const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
@@ -78,9 +422,11 @@ async function findRegionClickTargets(page, snapId) {
 
       const rect = canvas.getBoundingClientRect();
       const session = JSON.parse(localStorage.getItem(sessionKey) || '{}');
-      const zoomScale = typeof session.zoomScale === 'number' && session.zoomScale > 0 ? session.zoomScale : 1;
+      const zoomScale =
+        typeof session.zoomScale === 'number' && session.zoomScale > 0 ? session.zoomScale : 1;
       const panOffsetX = typeof session.panOffsetX === 'number' ? session.panOffsetX : 0;
       const panOffsetY = typeof session.panOffsetY === 'number' ? session.panOffsetY : 0;
+      const filledSet = new Set(Array.isArray(session.filledRegionIds) ? session.filledRegionIds : []);
 
       const pw = puzzle.width;
       const ph = puzzle.height;
@@ -91,21 +437,57 @@ async function findRegionClickTargets(page, snapId) {
       const baseOffsetY = (h - ph * baseScale) / 2;
       const effScale = zoomScale * baseScale;
 
-      const safeMinX = rect.left + 28;
-      const safeMaxX = rect.right - 108;
-      const safeMinY = rect.top + 96;
-      const safeMaxY = rect.bottom - 240;
+      const headerEl = document.querySelector('header');
+      const headerBottom = headerEl ? headerEl.getBoundingClientRect().bottom : rect.top + 64;
+      const safeMinX = rect.left + Math.min(28, w * 0.04);
+      const safeMaxX = rect.right - Math.min(108, w * 0.2);
+      const safeMinY =
+        h <= 500
+          ? Math.max(rect.top + 48, headerBottom + 6)
+          : Math.max(rect.top + 72, headerBottom + 16);
+      const safeMaxY = h <= 500 ? rect.bottom - 72 : rect.bottom - Math.min(240, h * 0.34);
 
-      const toScreen = (px, py) => ({
-        clientX: rect.left + panOffsetX + baseOffsetX + (px + 0.5) * effScale,
-        clientY: rect.top + panOffsetY + baseOffsetY + (py + 0.5) * effScale,
+      const worldToScreen = (wx, wy) => ({
+        clientX: rect.left + panOffsetX + baseOffsetX + wx * effScale,
+        clientY: rect.top + panOffsetY + baseOffsetY + wy * effScale,
       });
 
-      const isSafe = (pt) =>
-        pt.clientX >= safeMinX &&
-        pt.clientX <= safeMaxX &&
-        pt.clientY >= safeMinY &&
-        pt.clientY <= safeMaxY;
+      const isSafe = (pt) => {
+        if (
+          pt.clientX < safeMinX ||
+          pt.clientX > safeMaxX ||
+          pt.clientY < safeMinY ||
+          pt.clientY > safeMaxY
+        ) {
+          return false;
+        }
+        return document.elementFromPoint(pt.clientX, pt.clientY) === canvas;
+      };
+
+      const nestedLayers = Array.isArray(puzzle.nestedLayers) ? puzzle.nestedLayers : [];
+      const sortedLayersDeepestFirst = [...nestedLayers].sort((a, b) => b.depth - a.depth);
+
+      const sampleLayerAtWorld = (layer, wx, wy) => {
+        const wb = layer.worldBounds;
+        if (!wb || wb.width <= 0 || wb.height <= 0) return 0;
+        const nx = wx / pw;
+        const ny = wy / ph;
+        if (nx < wb.x || nx >= wb.x + wb.width || ny < wb.y || ny >= wb.y + wb.height) {
+          return 0;
+        }
+        const lx = Math.floor(((nx - wb.x) / wb.width) * layer.width);
+        const ly = Math.floor(((ny - wb.y) / wb.height) * layer.height);
+        if (lx < 0 || lx >= layer.width || ly < 0 || ly >= layer.height) return 0;
+        return layer.regionMap[ly * layer.width + lx] || 0;
+      };
+
+      const isOccludedByDeeperLayer = (minDepthExclusive, wx, wy) => {
+        for (const layer of sortedLayersDeepestFirst) {
+          if (layer.depth <= minDepthExclusive) break;
+          if (sampleLayerAtWorld(layer, wx, wy) > 0) return true;
+        }
+        return false;
+      };
 
       const buildAdjacency = (rm, width, height) => {
         const map = new Map();
@@ -128,119 +510,161 @@ async function findRegionClickTargets(page, snapId) {
         return map;
       };
 
-      const findSafeHit = (r, rm) => {
+      const findSafeRootHit = (r, rm) => {
+        const tryPx = (px, py) => {
+          if (px < 0 || px >= pw || py < 0 || py >= ph) return null;
+          if (rm[py * pw + px] !== r.id) return null;
+          const wx = px + 0.5;
+          const wy = py + 0.5;
+          if (isOccludedByDeeperLayer(0, wx, wy)) return null;
+          const s = worldToScreen(wx, wy);
+          if (!isSafe(s)) return null;
+          return { px, py, ...s };
+        };
         const cx = Math.max(0, Math.min(pw - 1, Math.round(r.centroidX)));
         const cy = Math.max(0, Math.min(ph - 1, Math.round(r.centroidY)));
-        if (rm[cy * pw + cx] === r.id) {
-          const s = toScreen(cx, cy);
-          if (isSafe(s)) return { px: cx, py: cy, ...s };
-        }
+        const direct = tryPx(cx, cy);
+        if (direct) return direct;
         if (!r.pixels || r.pixels.length === 0) return null;
-        const step = Math.max(1, Math.floor(r.pixels.length / 40));
-        const scan = (startIdx) => {
-          for (let i = startIdx; i < r.pixels.length; i += step) {
-            const idx = r.pixels[i];
-            const px = idx % pw;
-            const py = Math.floor(idx / pw);
-            const s = toScreen(px, py);
-            if (isSafe(s)) return { px, py, ...s };
-          }
-          return null;
-        };
-        return scan(Math.floor(r.pixels.length / 2)) || scan(0);
+        const step = Math.max(1, Math.floor(r.pixels.length / 60));
+        for (let i = Math.floor(r.pixels.length / 2); i < r.pixels.length; i += step) {
+          const idx = r.pixels[i];
+          const hit = tryPx(idx % pw, Math.floor(idx / pw));
+          if (hit) return hit;
+        }
+        for (let i = 0; i < r.pixels.length; i += step) {
+          const idx = r.pixels[i];
+          const hit = tryPx(idx % pw, Math.floor(idx / pw));
+          if (hit) return hit;
+        }
+        return null;
       };
 
-      const screenDist = (p1, p2) => Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
-      const MIN_TAP_SEP_PX = 48;
-
-      const pickLargePair = (byAreaDesc, clickableById, adj) => {
-        for (const a of byAreaDesc) {
-          const neighbors = adj.get(a.id);
-          if (!neighbors || neighbors.size === 0) continue;
-          for (const nbId of neighbors) {
-            const b = clickableById.get(nbId);
-            if (!b) continue;
-            if (screenDist(a, b) < MIN_TAP_SEP_PX) continue;
-            const unionArea = a.area + b.area;
-            const unionW = Math.max(a.maxX, b.maxX) - Math.min(a.minX, b.minX) + 1;
-            const unionH = Math.max(a.maxY, b.maxY) - Math.min(a.minY, b.minY) + 1;
-            if (unionArea < 8000 || Math.min(unionW, unionH) < 96) continue;
-            const nonAdj = byAreaDesc.find((cand) => {
-              if (cand.id === a.id || cand.id === b.id) return false;
-              if (screenDist(cand, a) < MIN_TAP_SEP_PX || screenDist(cand, b) < MIN_TAP_SEP_PX) return false;
-              const nbA = adj.get(a.id);
-              const nbB = adj.get(b.id);
-              return !(nbA && nbA.has(cand.id)) && !(nbB && nbB.has(cand.id));
-            });
-            if (!nonAdj) continue;
-            const untouched = byAreaDesc.find(
-              (cand) =>
-                cand.id !== a.id &&
-                cand.id !== b.id &&
-                cand.id !== nonAdj.id &&
-                screenDist(cand, a) >= MIN_TAP_SEP_PX &&
-                screenDist(cand, b) >= MIN_TAP_SEP_PX &&
-                screenDist(cand, nonAdj) >= MIN_TAP_SEP_PX
-            );
-            if (untouched) return { a, b, nonAdjacent: nonAdj, untouched };
-          }
+      const findSafeNestedHit = (layer, r) => {
+        const wb = layer.worldBounds;
+        const lw = layer.width;
+        const lh = layer.height;
+        const rm = layer.regionMap;
+        const tryLocal = (lx, ly) => {
+          if (lx < 0 || lx >= lw || ly < 0 || ly >= lh) return null;
+          if (rm[ly * lw + lx] !== r.id) return null;
+          const wx = (wb.x + ((lx + 0.5) / lw) * wb.width) * pw;
+          const wy = (wb.y + ((ly + 0.5) / lh) * wb.height) * ph;
+          if (isOccludedByDeeperLayer(layer.depth, wx, wy)) return null;
+          const s = worldToScreen(wx, wy);
+          if (!isSafe(s)) return null;
+          return { lx, ly, ...s };
+        };
+        const cx = Math.max(0, Math.min(lw - 1, Math.round(r.centroidX)));
+        const cy = Math.max(0, Math.min(lh - 1, Math.round(r.centroidY)));
+        const direct = tryLocal(cx, cy);
+        if (direct) return direct;
+        if (!r.pixels || r.pixels.length === 0) return null;
+        const step = Math.max(1, Math.floor(r.pixels.length / 60));
+        for (let i = Math.floor(r.pixels.length / 2); i < r.pixels.length; i += step) {
+          const idx = r.pixels[i];
+          const hit = tryLocal(idx % lw, Math.floor(idx / lw));
+          if (hit) return hit;
+        }
+        for (let i = 0; i < r.pixels.length; i += step) {
+          const idx = r.pixels[i];
+          const hit = tryLocal(idx % lw, Math.floor(idx / lw));
+          if (hit) return hit;
         }
         return null;
       };
 
       const rm = puzzle.regionMap;
       const adj = buildAdjacency(rm, pw, ph);
-      const clickable = [];
-      const clickableById = new Map();
+      const rootClickable = [];
+      const rootClickableById = new Map();
       for (const r of puzzle.regions) {
-        const hit = findSafeHit(r, rm);
+        const hit = findSafeRootHit(r, rm);
         if (!hit) continue;
         const info = {
           id: r.id,
+          layerId: null,
+          depth: 0,
           colorId: r.colorId,
           area: r.area,
           minX: r.minX,
           maxX: r.maxX,
           minY: r.minY,
           maxY: r.maxY,
-          bboxW: r.maxX - r.minX + 1,
-          bboxH: r.maxY - r.minY + 1,
+          filled: filledSet.has(r.id),
           clientX: hit.clientX,
           clientY: hit.clientY,
         };
-        clickable.push(info);
-        clickableById.set(r.id, info);
+        rootClickable.push(info);
+        rootClickableById.set(r.id, info);
       }
 
-      const byAreaDesc = [...clickable].sort((x, y) => y.area - x.area);
-      const largePair = pickLargePair(byAreaDesc, clickableById, adj);
-      const hasExteriorBboxCorner = (r) => {
-        const cornerIndices = [
-          r.minY * pw + r.minX,
-          r.minY * pw + r.maxX,
-          r.maxY * pw + r.minX,
-          r.maxY * pw + r.maxX,
-        ];
-        return cornerIndices.some((idx) => rm[idx] !== r.id);
-      };
-      const smallCandidates = clickable
-        .filter(
-          (r) =>
-            r.area >= 40 &&
-            r.bboxW >= 8 &&
-            r.bboxH >= 8 &&
-            (r.area < 8000 || Math.min(r.bboxW, r.bboxH) < 96) &&
-            r.area / (r.bboxW * r.bboxH) < 0.85 &&
-            hasExteriorBboxCorner(r)
-        )
-        .sort((x, y) => y.area - x.area);
+      const screenDist = (p1, p2) => Math.hypot(p1.clientX - p2.clientX, p1.clientY - p2.clientY);
+      const MIN_TAP_SEP_PX = 48;
+      const byAreaDesc = [...rootClickable].sort((x, y) => y.area - x.area);
+
+      let largePair = null;
+      outer: for (const a of byAreaDesc) {
+        const neighbors = adj.get(a.id);
+        if (!neighbors || neighbors.size === 0) continue;
+        for (const nbId of neighbors) {
+          const b = rootClickableById.get(nbId);
+          if (!b || screenDist(a, b) < MIN_TAP_SEP_PX) continue;
+          const nonAdj = byAreaDesc.find((cand) => {
+            if (cand.id === a.id || cand.id === b.id) return false;
+            if (screenDist(cand, a) < MIN_TAP_SEP_PX || screenDist(cand, b) < MIN_TAP_SEP_PX) {
+              return false;
+            }
+            const nbA = adj.get(a.id);
+            const nbB = adj.get(b.id);
+            return !(nbA && nbA.has(cand.id)) && !(nbB && nbB.has(cand.id));
+          });
+          if (!nonAdj) continue;
+          const untouched = byAreaDesc.find(
+            (cand) =>
+              cand.id !== a.id &&
+              cand.id !== b.id &&
+              cand.id !== nonAdj.id &&
+              screenDist(cand, a) >= MIN_TAP_SEP_PX &&
+              screenDist(cand, b) >= MIN_TAP_SEP_PX &&
+              screenDist(cand, nonAdj) >= MIN_TAP_SEP_PX
+          );
+          if (untouched) {
+            largePair = { a, b, nonAdjacent: nonAdj, untouched };
+            break outer;
+          }
+        }
+      }
+
+      const unfilledNestedTargets = [];
+      for (const layer of sortedLayersDeepestFirst) {
+        const layerRegionsDesc = [...(layer.regions || [])].sort((x, y) => y.area - x.area);
+        for (const r of layerRegionsDesc) {
+          if (filledSet.has(r.id)) continue;
+          const hit = findSafeNestedHit(layer, r);
+          if (!hit) continue;
+          unfilledNestedTargets.push({
+            id: r.id,
+            layerId: layer.layerId,
+            depth: layer.depth,
+            colorId: r.colorId,
+            area: r.area,
+            worldBounds: { ...layer.worldBounds },
+            clientX: hit.clientX,
+            clientY: hit.clientY,
+          });
+          if (unfilledNestedTargets.length >= 10) break;
+        }
+      }
+
+      const unfilledRootTargets = byAreaDesc.filter((r) => !r.filled);
 
       return {
         width: pw,
         height: ph,
-        totalRegions: puzzle.regions.length,
         largePair,
-        smallRegion: smallCandidates[0] || null,
+        unfilledRootTargets,
+        unfilledNestedTargets,
       };
     },
     { targetSnapId: snapId, sessionKey: ACTIVE_SESSION_KEY }
@@ -248,1503 +672,1900 @@ async function findRegionClickTargets(page, snapId) {
 }
 
 /**
- * Dismisses any visible FeatureOfferBanner (e.g. `undo_replay` or `infinite_zoom` Quick Tip)
- * so the top-center banner never intercepts subsequent canvas clicks.
+ * Clicks a specific unfilled region's screen coordinate (in EASY mode) and verifies
+ * active session filledRegionIds includes its ID.
  */
-async function dismissFeatureOfferIfVisible(page) {
-  const offerDismissBtn = page.getByTestId('feature-offer-dismiss-btn');
-  if ((await offerDismissBtn.count()) > 0 && (await offerDismissBtn.first().isVisible())) {
-    await offerDismissBtn.first().click();
-    await page.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
-    await waitForAnimationFrames(page, 1);
-  }
-}
-
-/**
- * Clicks a specific unfilled region's exact screen coordinate (in EASY mode, which paints
- * any tapped region directly with zero palette-swatch hint camera pan), waiting until
- * filledRegionIds includes the target region ID.
- */
-async function paintTargetRegion(page, regionTarget) {
+async function paintTargetRegion(page, target) {
   await dismissFeatureOfferIfVisible(page);
-  await page.mouse.click(regionTarget.clientX, regionTarget.clientY);
+  await page.mouse.click(target.clientX, target.clientY);
   await waitForAnimationFrames(page, 2);
-  const filled = await waitForCondition(async () => {
+  const painted = await waitForCondition(async () => {
     const sess = await readActiveSession(page);
-    return Array.isArray(sess.filledRegionIds) && sess.filledRegionIds.includes(regionTarget.id);
-  }, 4000);
+    return Array.isArray(sess.filledRegionIds) && sess.filledRegionIds.includes(target.id);
+  }, 4500);
   assert.equal(
-    filled,
+    painted,
     true,
-    `Expected region ${regionTarget.id} to be painted at (${Math.round(regionTarget.clientX)}, ${Math.round(regionTarget.clientY)})`
+    `Expected region ${target.id} (layer=${target.layerId || 'root'}) to paint at (${Math.round(target.clientX)}, ${Math.round(target.clientY)})`
   );
 }
 
 /**
- * Ensures a directional border edge toggle (`extend-side-*`) matches desired boolean state.
+ * Picks up to `count` regions mutually separated by >= minSepPx on screen so rapid
+ * sequential clicks never collapse into a double-tap zoom gesture.
  */
-async function setExtendSideState(page, testId, desiredOn) {
-  const locator = page.getByTestId(testId);
-  await locator.waitFor({ state: 'visible', timeout: 3000 });
-  const readActive = async () =>
-    locator.evaluate((el) => {
-      if (el instanceof HTMLInputElement && el.type === 'checkbox') return el.checked;
-      const pressed = el.getAttribute('aria-pressed');
-      if (pressed !== null) return pressed === 'true';
-      const checked = el.getAttribute('aria-checked');
-      if (checked !== null) return checked === 'true';
-      const selected = el.getAttribute('aria-selected');
-      if (selected !== null) return selected === 'true';
-      const dataActive = el.getAttribute('data-active');
-      if (dataActive !== null) return dataActive === 'true';
-      const dataSelected = el.getAttribute('data-selected');
-      if (dataSelected !== null) return dataSelected === 'true';
-      const dataState = el.getAttribute('data-state');
-      if (dataState !== null) {
-        return (
-          dataState === 'on' ||
-          dataState === 'checked' ||
-          dataState === 'active' ||
-          dataState === 'selected'
-        );
-      }
-      const nestedCheckbox = el.querySelector('input[type="checkbox"]');
-      if (nestedCheckbox instanceof HTMLInputElement) return nestedCheckbox.checked;
-      return false;
-    });
-  const current = await readActive();
-  if (current !== desiredOn) {
-    await locator.click();
-    await waitForAnimationFrames(page, 1);
+function pickWellSeparatedTargets(candidates, count, excludeIds = new Set(), minSepPx = 48) {
+  const chosen = [];
+  for (const cand of candidates) {
+    if (excludeIds.has(cand.id)) continue;
+    const tooClose = chosen.some(
+      (prev) => Math.hypot(prev.clientX - cand.clientX, prev.clientY - cand.clientY) < minSepPx
+    );
+    if (tooClose) continue;
+    chosen.push(cand);
+    if (chosen.length >= count) break;
   }
-  const finalState = await readActive();
-  assert.equal(finalState, desiredOn, `Edge toggle ${testId} must be ${desiredOn ? 'ON' : 'OFF'}`);
+  return chosen;
 }
 
 /**
- * Inspects decoded IDB source image Blob alpha channels (exterior alpha === 0 vs opaque interior).
+ * Seeds 100% completion for the active puzzle into localStorage and reloads so the
+ * puzzle enters its authentic 100% completed state deterministically.
  */
-async function inspectImageBlobAlpha(page, snapId) {
-  return page.evaluate(async (id) => {
-    const blob = await window.capyStorage.loadImageBlob(id);
-    if (!blob) return null;
-    const bmp = await createImageBitmap(blob);
-    try {
-      const c = document.createElement('canvas');
-      c.width = bmp.width;
-      c.height = bmp.height;
-      const ctx = c.getContext('2d');
-      ctx.drawImage(bmp, 0, 0);
-      const data = ctx.getImageData(0, 0, c.width, c.height).data;
-      let zeroAlphaCount = 0;
-      let opaqueCount = 0;
-      for (let i = 3; i < data.length; i += 4) {
-        if (data[i] === 0) zeroAlphaCount += 1;
-        else if (data[i] >= 250) opaqueCount += 1;
+async function completeActivePuzzleTo100(page, snapId) {
+  const totalCount = await page.evaluate(
+    async ({ id, activeKey, snapsKey }) => {
+      const puzzle = await window.capyStorage.loadPuzzleData(id);
+      if (!puzzle) throw new Error(`Missing puzzle ${id} in IDB`);
+      const allIds = [];
+      for (const r of puzzle.regions || []) allIds.push(r.id);
+      for (const layer of puzzle.nestedLayers || []) {
+        for (const r of layer.regions || []) allIds.push(r.id);
       }
-      return {
-        blobSize: blob.size,
-        width: bmp.width,
-        height: bmp.height,
-        zeroAlphaCount,
-        opaqueCount,
-      };
-    } finally {
-      bmp.close();
-    }
-  }, snapId);
+      const sess = JSON.parse(localStorage.getItem(activeKey) || '{}');
+      sess.activeSnapshotId = id;
+      sess.filledRegionIds = allIds;
+      sess.fillOrder = allIds;
+      localStorage.setItem(activeKey, JSON.stringify(sess));
+
+      const snaps = JSON.parse(localStorage.getItem(snapsKey) || '[]');
+      const updated = snaps.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              filledRegionIds: allIds,
+              fillOrder: allIds,
+              filledCount: allIds.length,
+              totalCount: allIds.length,
+            }
+          : s
+      );
+      localStorage.setItem(snapsKey, JSON.stringify(updated));
+      return allIds.length;
+    },
+    { id: snapId, activeKey: ACTIVE_SESSION_KEY, snapsKey: SNAPSHOTS_KEY }
+  );
+  assert.ok(totalCount > 10, `Expected sample puzzle to have > 10 regions, got ${totalCount}`);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForPuzzleLoaded(page);
+  return totalCount;
 }
 
 /**
- * Samples live `<canvas data-testid="puzzle-canvas">` pixels to inspect artwork bounding corners
- * against the default charcoal stage `rgb(24, 24, 27)` (verifying organic cutout exterior has
- * no opaque white rectangular corner paper block).
+ * Parses and validates an exported single-save .capy v2 binary file, asserting
+ * header format, gzip decompression, nestedLayers/layerImages presence, and zero
+ * BYOK API key leakage across both raw and decompressed bytes.
  */
-async function sampleLiveCanvasCutoutCorners(page) {
-  return page.evaluate(() => {
-    const canvas = document.querySelector('[data-testid="puzzle-canvas"]');
-    if (!canvas) return null;
-    const ctx = canvas.getContext('2d');
-    const { width, height } = canvas;
-    const data = ctx.getImageData(0, 0, width, height).data;
-    let minX = width;
-    let minY = height;
-    let maxX = -1;
-    let maxY = -1;
-    const step = 4;
-    const isCharcoalStage = (r, g, b) =>
-      Math.abs(r - 24) <= 18 && Math.abs(g - 24) <= 18 && Math.abs(b - 27) <= 18;
-    for (let y = 0; y < height; y += step) {
-      for (let x = 0; x < width; x += step) {
-        const i = (y * width + x) * 4;
-        if (!isCharcoalStage(data[i], data[i + 1], data[i + 2])) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    const sampleAt = (x, y) => {
-      const cx = Math.max(0, Math.min(width - 1, Math.round(x)));
-      const cy = Math.max(0, Math.min(height - 1, Math.round(y)));
-      const i = (cy * width + cx) * 4;
-      return {
-        r: data[i],
-        g: data[i + 1],
-        b: data[i + 2],
-        a: data[i + 3],
-        isStage: isCharcoalStage(data[i], data[i + 1], data[i + 2]),
-        isWhitePaper: data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240,
-      };
-    };
-    const corners =
-      maxX > minX + 8 && maxY > minY + 8
-        ? [
-            sampleAt(minX + 2, minY + 2),
-            sampleAt(maxX - 2, minY + 2),
-            sampleAt(minX + 2, maxY - 2),
-            sampleAt(maxX - 2, maxY - 2),
-          ]
-        : [];
-    return { width, height, minX, minY, maxX, maxY, corners };
-  });
-}
-
-// =========================================================================
-// STAGE 1: Manual Popover, Guide Prompt + Chips, 4-Connected Selection,
-//          Painted Warning, Switch Selection, Seamless In-Place Subdivision,
-//          Viewport Preservation, Sample-to-Blob Promotion & 1-Tap Undo
-// =========================================================================
-async function runStage1InPlaceSubdivision({ browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass }) {
-    logE2eStart(
-      'Stage 1: Manual Infinite Zoom popover, 4-connected selection, inline prompt, seamless in-place split, camera preservation, sample-to-blob promotion, Undo/Redo scrub & 1-tap Undo Subdivision'
-    );
-    const { context, page } = await createBootedContext(browser, BASE_URL, {
-      label: 'infinite-zoom-stage1',
-      attachErrorListeners,
-      viewport: { width: 1280, height: 860 },
-      skipTutorial: true,
-      easyNoReplay: true,
-      extraSettings: { showZoomButtons: true, showResetViewButton: true },
-    });
-    try {
-      const initialSession = await readActiveSession(page);
-      const initialSnapId = initialSession.activeSnapshotId;
-      assert.ok(initialSnapId, 'Initial puzzle must have an activeSnapshotId');
-
-      const initialRemaining = await readTotalRemainingRegions(page);
-      assert.ok(initialRemaining > 0, 'Initial puzzle must have remaining unpainted regions');
-
-      // Zoom in once so camera is non-default and reset-view-btn is visible
-      await page.getByTestId('zoom-in-btn').click();
-      await page.getByTestId('reset-view-btn').waitFor({ state: 'visible', timeout: 4000 });
-      await page.waitForFunction(
-        (key) => {
-          const s = JSON.parse(localStorage.getItem(key) || '{}');
-          return typeof s.zoomScale === 'number' && s.zoomScale > 1.05;
-        },
-        ACTIVE_SESSION_KEY,
-        { timeout: 4000 }
-      );
-
-      const targets = await findRegionClickTargets(page, initialSnapId);
-      assert.ok(targets && targets.largePair, 'Expected deterministic 4-connected large region pair in zoomed viewport');
-      const { a, b, nonAdjacent, untouched } = targets.largePair;
-      const preRegionCount = targets.totalRegions;
-      const preRegionIds = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        return p ? p.regions.map((r) => r.id) : [];
-      }, initialSnapId);
-      const preMaxRegionId = Math.max(...preRegionIds);
-
-      // Paint untouched, a, and b, then undo b once so redoStack holds [b] (while undoStack holds [untouched, a])
-      await paintTargetRegion(page, untouched);
-      await paintTargetRegion(page, a);
-      await paintTargetRegion(page, b);
-
-      await page.getByTestId('undo-btn').click();
-      await page.getByTestId('redo-btn').waitFor({ state: 'visible', timeout: 3000 });
-      const bUndone = await waitForCondition(async () => {
-        const s = await readActiveSession(page);
-        const ids = Array.isArray(s.filledRegionIds) ? s.filledRegionIds : [];
-        return ids.includes(untouched.id) && ids.includes(a.id) && !ids.includes(b.id);
-      }, 4000);
-      assert.equal(bUndone, true, `Expected pre-subdivide undo to unfill region ${b.id} while keeping ${untouched.id} & ${a.id}`);
-      await waitForAnimationFrames(page, 2);
-
-      // Dismiss undo_replay FeatureOfferBanner if triggered on first undo so it never intercepts canvas clicks
-      await dismissFeatureOfferIfVisible(page);
-      assert.equal(
-        await page.getByTestId('redo-btn').count(),
-        1,
-        'Precondition: redo-btn must be visible before in-place subdivision so redoStack scrubbing can be verified'
-      );
-
-      const preSession = await readActiveSession(page);
-      const cameraBefore = {
-        zoomScale: preSession.zoomScale,
-        panOffsetX: preSession.panOffsetX,
-        panOffsetY: preSession.panOffsetY,
-      };
-
-      // Open manual toolbar popover and enter Infill Detail selection mode
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('toolbar-infinite-zoom-out-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-
-      const selBar = page.getByTestId('region-selection-bar');
-      await selBar.waitFor({ state: 'visible', timeout: 3000 });
-
-      // Select painted region `a` + 4-connected touching neighbor `b`
-      await page.mouse.click(a.clientX, a.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.mouse.click(b.clientX, b.clientY);
-      await waitForAnimationFrames(page, 2);
-
-      // Verify painted-region reopen warning & In-Place mode badge
-      const selBarText = await selBar.innerText();
-      assert.match(
-        selBarText,
-        /paint|color|reopen|filled/i,
-        `Selection bar must warn when painted regions are included, got: "${selBarText}"`
-      );
-      const modeBadgeText = await page.getByTestId('region-selection-mode-badge').innerText();
-      assert.match(
-        modeBadgeText,
-        /in-place|in place|split/i,
-        `Large contiguous selection must show In-Place mode badge, got: "${modeBadgeText}"`
-      );
-
-      // Tap non-adjacent region -> must reveal 1-tap Switch Selection button (zero double-tap collision)
-      await page.mouse.click(nonAdjacent.clientX, nonAdjacent.clientY);
-      const switchBtn = page.getByTestId('region-selection-switch-btn');
-      await switchBtn.waitFor({ state: 'visible', timeout: 3000 });
-      await switchBtn.click();
-      await switchBtn.waitFor({ state: 'hidden', timeout: 3000 });
-
-      // Clear selection and re-select contiguous pair (a + b)
-      await page.getByTestId('region-selection-clear-btn').click();
-      await waitForAnimationFrames(page, 2);
-      await page.mouse.click(a.clientX, a.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.mouse.click(b.clientX, b.clientY);
-      await waitForAnimationFrames(page, 2);
-
-      // Inline Guide Prompt + 1-tap suggestion chip
-      const promptInput = page.getByTestId('infinite-zoom-in-prompt-input');
-      await promptInput.waitFor({ state: 'visible', timeout: 3000 });
-      const chipButtons = selBar
-        .locator('button:not([data-testid^="region-selection-"])')
-        .filter({ hasText: /[A-Za-z]{3,}/ })
-        .filter({
-          hasNotText:
-            /^(clear(\s+prompt|\s+selection)?|close|cancel|subdivide|switch(\s+selection)?|dismiss|undo|back)$/i,
-        });
-      assert.ok((await chipButtons.count()) >= 1, 'Expected at least one 1-tap prompt suggestion chip in selection bar');
-      await chipButtons.first().click();
-      const chipPromptVal = await promptInput.inputValue();
-      assert.ok(chipPromptVal.trim().length > 0, 'Clicking 1-tap suggestion chip must populate prompt input');
-      await promptInput.fill(`${chipPromptVal.trim()}, mossy pebbles`);
-
-      // Confirm seamless In-Place Subdivision
-      await page.getByTestId('region-selection-confirm-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
-      await page.getByTestId('undo-subdivision-btn').waitFor({ state: 'visible', timeout: 5000 });
-      await selBar.waitFor({ state: 'hidden', timeout: 5000 });
-      await waitForPuzzleLoaded(page);
-
-      // Verify zero viewport camera jolt
-      await page.getByTestId('reset-view-btn').waitFor({ state: 'visible', timeout: 3000 });
-      const postSession = await readActiveSession(page);
-      assert.equal(postSession.activeSnapshotId, initialSnapId, 'In-place subdivision must keep activeSnapshotId');
-      assert.ok(
-        Math.abs(postSession.zoomScale - cameraBefore.zoomScale) < 0.05 &&
-          Math.abs(postSession.panOffsetX - cameraBefore.panOffsetX) < 5 &&
-          Math.abs(postSession.panOffsetY - cameraBefore.panOffsetY) < 5,
-        `In-place subdivision must preserve viewport camera (before=${JSON.stringify(cameraBefore)}, after=${JSON.stringify({
-          zoomScale: postSession.zoomScale,
-          panOffsetX: postSession.panOffsetX,
-          panOffsetY: postSession.panOffsetY,
-        })})`
-      );
-
-      // Verify untouched painted region preserved & replaced painted region `a` reopened
-      const postFilled = Array.isArray(postSession.filledRegionIds) ? postSession.filledRegionIds : [];
-      assert.equal(
-        postFilled.includes(untouched.id),
-        true,
-        `Untouched painted region ${untouched.id} must remain filled after in-place split`
-      );
-      assert.equal(
-        postFilled.includes(a.id),
-        false,
-        `Replaced painted region ${a.id} must be reopened/scrubbed after in-place split`
-      );
-      assert.equal(
-        postFilled.includes(b.id),
-        false,
-        `Replaced region ${b.id} must remain unfilled after in-place split`
-      );
-      // Verify redoStack scrubbing immediately (without touching undo-btn before 1-tap undo-subdivision-btn)
-      assert.equal(
-        await page.getByTestId('redo-btn').count(),
-        0,
-        `In-place subdivision of {${a.id}, ${b.id}} must scrub replaced region ${b.id} from redoStack so redo-btn hides`
-      );
-
-      // Verify puzzle data updated in IDB with replaced IDs gone and new regions added
-      const postPuzzleMeta = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        return p ? { count: p.regions.length, ids: p.regions.map((r) => r.id) } : null;
-      }, initialSnapId);
-      assert.ok(postPuzzleMeta, 'Updated PuzzleData must be persisted in IndexedDB');
-      assert.equal(postPuzzleMeta.ids.includes(a.id), false, 'Replaced region a.id must be removed from PuzzleData');
-      assert.equal(postPuzzleMeta.ids.includes(b.id), false, 'Replaced region b.id must be removed from PuzzleData');
-      const newlyAddedIds = postPuzzleMeta.ids.filter((id) => id > preMaxRegionId);
-      assert.ok(
-        newlyAddedIds.length >= 2 && postPuzzleMeta.count >= preRegionCount,
-        `In-place subdivision must insert >= 2 sparse monotonic sub-region IDs > ${preMaxRegionId} (added=${newlyAddedIds.length}, before=${preRegionCount}, after=${postPuzzleMeta.count})`
-      );
-
-      // Verify built-in sample promoted to sourceRef.kind === 'blob', sampleAssetPath cleared, IDB Blob persisted
-      const postSnaps = await readSnapshots(page);
-      const promotedSnap = postSnaps.find((s) => s.id === initialSnapId);
-      assert.ok(promotedSnap, 'Promoted snapshot metadata must exist');
-      assert.equal(
-        promotedSnap.sourceRef?.kind,
-        'blob',
-        `Built-in sample must promote to sourceRef.kind === "blob" after in-place split, got ${JSON.stringify(promotedSnap.sourceRef)}`
-      );
-      assert.equal(
-        promotedSnap.sampleAssetPath ?? null,
-        null,
-        `Promoted sample must clear sampleAssetPath, got ${promotedSnap.sampleAssetPath}`
-      );
-      const promotedBlobSize = await page.evaluate(async (id) => {
-        const blob = await window.capyStorage.loadImageBlob(id);
-        return blob ? blob.size : 0;
-      }, initialSnapId);
-      assert.ok(promotedBlobSize > 0, 'Promoted sample must persist updated source image Blob in IndexedDB');
-
-      // Gap #6: Assert persisted sanitized zoomTree.promptHint, inPlaceSubdivisionCount, and aiTierUsed on promoted snapshot
-      assert.ok(
-        typeof promotedSnap.zoomTree?.promptHint === 'string' &&
-          promotedSnap.zoomTree.promptHint.toLowerCase().includes('mossy pebbles'),
-        `Promoted snapshot must persist sanitized zoomTree.promptHint (got ${JSON.stringify(promotedSnap.zoomTree?.promptHint)})`
-      );
-      assert.equal(
-        promotedSnap.zoomTree?.inPlaceSubdivisionCount,
-        1,
-        `First in-place split must record inPlaceSubdivisionCount === 1 (got ${promotedSnap.zoomTree?.inPlaceSubdivisionCount})`
-      );
-      assert.equal(
-        promotedSnap.zoomTree?.aiTierUsed,
-        'offline-procedural',
-        `Offline in-place split must record aiTierUsed === "offline-procedural" (got ${promotedSnap.zoomTree?.aiTierUsed})`
-      );
-
-      // Replacing painted region `a` must bump resetEpoch cleanly
-      assert.ok(
-        (promotedSnap.resetEpoch ?? 0) >= 1 || (postSession.resetEpoch ?? 0) >= 1,
-        'Replacing a painted region during in-place split must increment resetEpoch'
-      );
-
-      // Click 1-tap Undo Subdivision toast and verify exact pre-subdivide restoration (including zoomTree & sampleAssetPath metadata)
-      await page.getByTestId('undo-subdivision-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 10000 });
-      await waitForAnimationFrames(page, 2);
-
-      const revertedOk = await waitForCondition(async () => {
-        const s = await readActiveSession(page);
-        const pCount = await page.evaluate(async (id) => {
-          const p = await window.capyStorage.loadPuzzleData(id);
-          return p ? p.regions.length : -1;
-        }, initialSnapId);
-        return (
-          pCount === preRegionCount &&
-          Array.isArray(s.filledRegionIds) &&
-          s.filledRegionIds.includes(a.id) &&
-          s.filledRegionIds.includes(untouched.id) &&
-          !s.filledRegionIds.includes(b.id)
-        );
-      }, 6000);
-      assert.equal(
-        revertedOk,
-        true,
-        '1-tap Undo Subdivision must restore pre-subdivide region count and previously filled regions'
-      );
-      const revertedSnap = (await readSnapshots(page)).find((s) => s.id === initialSnapId);
-      assert.equal(
-        revertedSnap?.zoomTree,
-        undefined,
-        `1-tap Undo Subdivision must restore pre-split zoomTree metadata (got ${JSON.stringify(revertedSnap?.zoomTree)})`
-      );
-      assert.ok(
-        typeof revertedSnap?.sampleAssetPath === 'string' && revertedSnap.sampleAssetPath.length > 0,
-        `1-tap Undo Subdivision must restore pre-split sampleAssetPath (got ${JSON.stringify(revertedSnap?.sampleAssetPath)})`
-      );
-      await waitForAnimationFrames(page, 2);
-
-      // Verify undoStack selective scrubbing: paint nonAdjacent then b -> undoStack ends with [..., nonAdjacent, b]
-      await paintTargetRegion(page, nonAdjacent);
-      await paintTargetRegion(page, b);
-
-      // Clean second in-place subdivision on {a, b} (keeps nonAdjacent & untouched; scrubs replaced a & b from undoStack)
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await selBar.waitFor({ state: 'visible', timeout: 3000 });
-      await page.mouse.click(a.clientX, a.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.mouse.click(b.clientX, b.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.getByTestId('region-selection-confirm-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
-      await selBar.waitFor({ state: 'hidden', timeout: 5000 });
-      await waitForPuzzleLoaded(page);
-
-      const postSplit2Session = await readActiveSession(page);
-      const postSplit2Filled = Array.isArray(postSplit2Session.filledRegionIds) ? postSplit2Session.filledRegionIds : [];
-      assert.equal(postSplit2Filled.includes(nonAdjacent.id), true, `Surviving region ${nonAdjacent.id} must stay filled after second split`);
-      assert.equal(postSplit2Filled.includes(untouched.id), true, `Surviving region ${untouched.id} must stay filled after second split`);
-      assert.equal(postSplit2Filled.includes(a.id), false, `Replaced region ${a.id} must be absent after second split`);
-      assert.equal(postSplit2Filled.includes(b.id), false, `Replaced region ${b.id} must be absent after second split`);
-
-      // Clicking undo-btn ONCE must immediately unfill surviving nonAdjacent AND invalidate/hide undo-subdivision-toast (Gap #9)
-      await page.getByTestId('undo-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 3000 });
-      await page.getByTestId('redo-btn').waitFor({ state: 'visible', timeout: 3000 });
-      const undidSurviving = await waitForCondition(async () => {
-        const s = await readActiveSession(page);
-        const ids = Array.isArray(s.filledRegionIds) ? s.filledRegionIds : [];
-        return (
-          !ids.includes(nonAdjacent.id) &&
-          ids.includes(untouched.id) &&
-          !ids.includes(a.id) &&
-          !ids.includes(b.id)
-        );
-      }, 4000);
-      assert.equal(
-        undidSurviving,
-        true,
-        `First undo-btn click after in-place split must immediately unfill surviving region ${nonAdjacent.id} (proving replaced regions ${a.id}/${b.id} were scrubbed from undoStack without wiping surviving history)`
-      );
-
-      // Clicking redo-btn ONCE must re-fill surviving nonAdjacent cleanly without resurrecting replaced a or b
-      await page.getByTestId('redo-btn').click();
-      await page.getByTestId('redo-btn').waitFor({ state: 'hidden', timeout: 3000 });
-      const redidSurviving = await waitForCondition(async () => {
-        const s = await readActiveSession(page);
-        const ids = Array.isArray(s.filledRegionIds) ? s.filledRegionIds : [];
-        return (
-          ids.includes(nonAdjacent.id) &&
-          ids.includes(untouched.id) &&
-          !ids.includes(a.id) &&
-          !ids.includes(b.id)
-        );
-      }, 4000);
-      assert.equal(
-        redidSurviving,
-        true,
-        `redo-btn click after undo must re-fill surviving region ${nonAdjacent.id} without resurrecting replaced regions ${a.id}/${b.id}`
-      );
-
-      // Gap #9: Consecutive in-place Split #1 -> Split #2 on already-promoted blob puzzle (inPlaceSubdivisionCount: 1 -> 2, non-colliding IDs, Undo Split reverts Split #2 back to Split #1)
-      const beforeConsecMeta = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        return p ? { count: p.regions.length, maxId: Math.max(...p.regions.map((r) => r.id)) } : null;
-      }, initialSnapId);
-      assert.ok(beforeConsecMeta, 'Expected puzzle metadata before consecutive split');
-      const consecTargets = await findRegionClickTargets(page, initialSnapId);
-      assert.ok(consecTargets && consecTargets.largePair, 'Expected large pair for consecutive in-place split');
-      const { a: consecA, b: consecB } = consecTargets.largePair;
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await selBar.waitFor({ state: 'visible', timeout: 3000 });
-      await page.mouse.click(consecA.clientX, consecA.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.mouse.click(consecB.clientX, consecB.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.getByTestId('region-selection-confirm-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
-      await selBar.waitFor({ state: 'hidden', timeout: 5000 });
-      await waitForPuzzleLoaded(page);
-
-      const consecSnap = (await readSnapshots(page)).find((s) => s.id === initialSnapId);
-      assert.equal(
-        consecSnap?.zoomTree?.inPlaceSubdivisionCount,
-        2,
-        `Consecutive in-place split must increment inPlaceSubdivisionCount from 1 to 2 (got ${consecSnap?.zoomTree?.inPlaceSubdivisionCount})`
-      );
-      const afterConsecMeta = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        return p ? { count: p.regions.length, ids: p.regions.map((r) => r.id) } : null;
-      }, initialSnapId);
-      assert.ok(
-        afterConsecMeta &&
-          afterConsecMeta.ids.some((id) => id > beforeConsecMeta.maxId) &&
-          new Set(afterConsecMeta.ids).size === afterConsecMeta.ids.length,
-        'Consecutive split must insert non-colliding sparse IDs strictly greater than prior maxId'
-      );
-
-      // Clicking Undo Split reverts consecutive Split #2 back to Split #1 (inPlaceSubdivisionCount === 1)
-      await page.getByTestId('undo-subdivision-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 10000 });
-      const revertedConsecOk = await waitForCondition(async () => {
-        const snap = (await readSnapshots(page)).find((s) => s.id === initialSnapId);
-        return snap?.zoomTree?.inPlaceSubdivisionCount === 1;
-      }, 6000);
-      assert.equal(
-        revertedConsecOk,
-        true,
-        'Undo Split after consecutive Split #2 must revert metadata back to Split #1 (inPlaceSubdivisionCount === 1)'
-      );
-
-      // Verify Cancel button exits Region Selection Bar cleanly
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await selBar.waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('region-selection-cancel-btn').click();
-      await selBar.waitFor({ state: 'hidden', timeout: 3000 });
-
-      // Gap #9: Verify undo-subdivision-toast hides immediately on painting a region
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await selBar.waitFor({ state: 'visible', timeout: 3000 });
-      await page.mouse.click(consecA.clientX, consecA.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.mouse.click(consecB.clientX, consecB.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.getByTestId('region-selection-confirm-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
-      await selBar.waitFor({ state: 'hidden', timeout: 5000 });
-      await waitForPuzzleLoaded(page);
-      await tapCanvasGrid(page, 0.35, 8, 50);
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'hidden', timeout: 5000 });
-
-      // Gap #9 & Bug #8 regression: enter Region Selection Mode with a selection, then switch to another prebaked sample -> RegionSelectionBar MUST close cleanly
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await selBar.waitFor({ state: 'visible', timeout: 3000 });
-      await page.mouse.click(consecA.clientX, consecA.clientY);
-      await waitForAnimationFrames(page, 2);
-      await page.getByTestId('topbar-settings-btn').click();
-      await page.getByTestId('settings-tab-create').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('settings-tab-create').click();
-      const galleryCards = page.locator('[data-testid^="gallery-card-"]');
-      await galleryCards.nth(1).waitFor({ state: 'visible', timeout: 5000 });
-      await galleryCards.nth(1).getByRole('button', { name: 'Play' }).click();
-      await selBar.waitFor({ state: 'hidden', timeout: 10000 });
-      await waitForPuzzleLoaded(page);
-
-      logE2ePass('Stage 1 passed');
-    } finally {
-      await context.close();
-    }
-}
-
-// =========================================================================
-// STAGE 2: Small-Region Deep Child Promotion, Transparent rId <= 0 Cutout
-//          (IDB PuzzleData + IDB Blob Alpha + Live Canvas Charcoal Corners),
-//          Bidirectional Outer/Inner Breadcrumbs & Orphan Pruning
-// =========================================================================
-async function runStage2DeepChildCutout({ browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass }) {
-    logE2eStart(
-      'Stage 2: Deep Child Tile promotion, transparent rId <= 0 organic cutout verification, Outer/Inner breadcrumbs & orphan pruning'
-    );
-    const { context, page } = await createBootedContext(browser, BASE_URL, {
-      label: 'infinite-zoom-stage2',
-      attachErrorListeners,
-      viewport: { width: 1280, height: 860 },
-      skipTutorial: true,
-      easyNoReplay: true,
-    });
-    try {
-      const parentSnapId = (await readActiveSession(page)).activeSnapshotId;
-      assert.ok(parentSnapId, 'Expected active parentSnapshotId');
-
-      const targets = await findRegionClickTargets(page, parentSnapId);
-      assert.ok(targets && targets.smallRegion, 'Expected a small region (< 8000 px or minDim < 96) for Deep Child Tile');
-      const smallReg = targets.smallRegion;
-
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
-
-      await page.mouse.click(smallReg.clientX, smallReg.clientY);
-      await waitForAnimationFrames(page, 2);
-
-      const badgeText = await page.getByTestId('region-selection-mode-badge').innerText();
-      assert.match(
-        badgeText,
-        /child|deep|tile/i,
-        `Small region selection must switch badge to Deep Child Tile, got: "${badgeText}"`
-      );
-
-      await page.getByTestId('region-selection-confirm-btn').click();
-      await page.waitForFunction(
-        ({ key, prevId }) => {
-          const s = JSON.parse(localStorage.getItem(key) || '{}');
-          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
-        },
-        { key: ACTIVE_SESSION_KEY, prevId: parentSnapId },
-        { timeout: 25000 }
-      );
-      await waitForPuzzleLoaded(page);
-
-      const childSnapId = (await readActiveSession(page)).activeSnapshotId;
-      assert.ok(childSnapId && childSnapId !== parentSnapId, 'Deep Child Tile must create a distinct child snapshot');
-
-      const snaps = await readSnapshots(page);
-      const childMeta = snaps.find((s) => s.id === childSnapId);
-      const parentMeta = snaps.find((s) => s.id === parentSnapId);
-      assert.ok(childMeta, `Child snapshot ${childSnapId} must be persisted in snapshots`);
-      assert.ok(parentMeta, `Parent snapshot ${parentSnapId} must be persisted in snapshots`);
-      assert.equal(childMeta.parentSnapshotId, parentSnapId, 'Child snapshot must link parentSnapshotId');
-      assert.equal(childMeta.zoomTree?.direction, 'child-in', 'Child zoomTree.direction must be "child-in"');
-      assert.equal(
-        Boolean(parentMeta.zoomTree?.childSnapshotIds?.includes(childSnapId)),
-        true,
-        'Parent zoomTree.childSnapshotIds must reference linked childSnapId'
-      );
-
-      // (a) Verify IDB PuzzleData has exterior transparent rId <= 0 pixels
-      const idbCutoutStats = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        if (!p || !p.regionMap) return null;
-        let transparentPixels = 0;
-        let interiorPixels = 0;
-        for (let i = 0; i < p.regionMap.length; i++) {
-          if (p.regionMap[i] <= 0) transparentPixels += 1;
-          else interiorPixels += 1;
-        }
-        return { transparentPixels, interiorPixels, regionCount: p.regions.length };
-      }, childSnapId);
-      assert.ok(idbCutoutStats, 'Child PuzzleData must exist in IndexedDB');
-      assert.ok(
-        idbCutoutStats.transparentPixels > 0 && idbCutoutStats.interiorPixels > 0,
-        `Child PuzzleData must contain transparent rId<=0 exterior and positive interior regions (${JSON.stringify(idbCutoutStats)})`
-      );
-
-      // (b) Verify IDB source image Blob decoded offscreen has alpha === 0 exterior pixels
-      const blobAlpha = await inspectImageBlobAlpha(page, childSnapId);
-      assert.ok(blobAlpha && blobAlpha.blobSize > 0, 'Child cutout source image Blob must exist in IDB');
-      assert.ok(
-        blobAlpha.zeroAlphaCount > 0 && blobAlpha.opaqueCount > 0,
-        `Child cutout image Blob must contain alpha===0 exterior and opaque interior pixels (${JSON.stringify(blobAlpha)})`
-      );
-
-      // (c) Verify live canvas bounding corners show charcoal stage rgb(24,24,27) instead of opaque white paper
-      const canvasCutout = await sampleLiveCanvasCutoutCorners(page);
-      assert.ok(canvasCutout && canvasCutout.corners.length === 4, 'Live canvas must render child cutout');
-      const hasCharcoalCorner = canvasCutout.corners.some((c) => c.isStage && !c.isWhitePaper);
-      assert.equal(
-        hasCharcoalCorner,
-        true,
-        `Organic child cutout corners on live canvas must show stage charcoal rgb(24,24,27), not white paper (${JSON.stringify(canvasCutout.corners)})`
-      );
-
-      // Bidirectional Outer (parent) / Inner (child) breadcrumb navigation
-      const parentBtn = page.getByTestId('topbar-parent-puzzle-btn');
-      const childBtn = page.getByTestId('topbar-child-puzzle-btn');
-      await parentBtn.waitFor({ state: 'visible', timeout: 5000 });
-
-      await parentBtn.click();
-      await page.waitForFunction(
-        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
-        { key: ACTIVE_SESSION_KEY, targetId: parentSnapId },
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(page);
-      assert.equal(await parentBtn.count(), 0, 'Parent root puzzle must hide topbar-parent-puzzle-btn');
-      await childBtn.waitFor({ state: 'visible', timeout: 5000 });
-
-      await childBtn.click();
-      await page.waitForFunction(
-        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
-        { key: ACTIVE_SESSION_KEY, targetId: childSnapId },
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(page);
-      await parentBtn.waitFor({ state: 'visible', timeout: 5000 });
-
-      // Delete parent snapshot via Saves tab and verify dead breadcrumb immediately prunes
-      await page.getByTestId('topbar-saves-btn').click();
-      await page.getByTestId(`save-card-${parentSnapId}`).waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId(`save-card-${parentSnapId}`).click();
-      await page.getByTestId('save-action-delete').click();
-      await page.getByTestId('save-action-confirm-delete').click();
-      await page.getByTestId(`save-card-${parentSnapId}`).waitFor({ state: 'hidden', timeout: 3000 });
-      await page.keyboard.press('Escape');
-      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-
-      assert.equal(
-        await parentBtn.count(),
-        0,
-        'Deleting parent snapshot must immediately hide topbar-parent-puzzle-btn'
-      );
-      const prunedSnaps = await readSnapshots(page);
-      assert.equal(
-        prunedSnaps.some((s) => s.id === parentSnapId),
-        false,
-        `Deleted parent snapshot ${parentSnapId} must be removed from persisted snapshots`
-      );
-      const prunedChild = prunedSnaps.find((s) => s.id === childSnapId);
-      assert.ok(
-        prunedChild,
-        `Child snapshot ${childSnapId} must remain persisted after deleting parent snapshot ${parentSnapId}`
-      );
-      assert.equal(
-        prunedChild.parentSnapshotId,
-        undefined,
-        'Deleting parent snapshot must prune child.parentSnapshotId to undefined'
-      );
-
-      logE2ePass('Stage 2 passed');
-    } finally {
-      await context.close();
-    }
-}
-
-// =========================================================================
-// STAGE 3: Directional Border Extension (Top + Right), Fresh 0% Outer Puzzle
-//          Keeping Inner Progress Intact, 2.5:1 Aspect Guard, and
-//          Tier 1 Mock LanguageModel + loading-cancel-btn AbortController
-// =========================================================================
-async function runStage3BorderExtensionPart({ browser, BASE_URL, attachErrorListeners }) {
-    // Part A: Directional Border Extension + 2.5:1 aspect guard
-    const { context, page } = await createBootedContext(browser, BASE_URL, {
-      label: 'infinite-zoom-stage3-extend',
-      attachErrorListeners,
-      viewport: { width: 1280, height: 860 },
-      skipTutorial: true,
-      easyNoReplay: true,
-    });
-    try {
-      const innerSnapId = (await readActiveSession(page)).activeSnapshotId;
-      assert.ok(innerSnapId);
-
-      // Paint regions on the inner puzzle so we verify inner progress stays intact
-      await tapCanvasGrid(page, 0.35, 8, 50);
-      await page.waitForFunction(
-        () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
-        undefined,
-        { timeout: 5000 }
-      );
-      const innerFilledBefore = Number(
-        await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
-      );
-      assert.ok(innerFilledBefore >= 1, 'Inner puzzle must have painted progress before border extension');
-
-      const innerDims = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        return p ? { width: p.width, height: p.height } : null;
-      }, innerSnapId);
-      assert.ok(innerDims, 'Inner puzzle dimensions must be readable from IDB');
-
-      // Open Extend Borders popover, select Top + Right ONLY (Bottom & Left OFF)
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-out-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
-
-      await setExtendSideState(page, 'extend-side-top', true);
-      await setExtendSideState(page, 'extend-side-right', true);
-      await setExtendSideState(page, 'extend-side-bottom', false);
-      await setExtendSideState(page, 'extend-side-left', false);
-
-      // Inline Guide Prompt + 1-tap chip scoped strictly to Extend Borders popover
-      const outPromptInput = page.getByTestId('infinite-zoom-out-prompt-input');
-      await outPromptInput.waitFor({ state: 'visible', timeout: 3000 });
-      const extendPopover = outPromptInput.locator(
-        'xpath=ancestor::*[.//*[@data-testid="extend-side-top"] and .//*[@data-testid="toolbar-infinite-zoom-out-confirm-btn"]][1]'
-      );
-      const outChips = extendPopover
-        .locator(
-          'button:not([data-testid^="extend-side-"]):not([data-testid^="toolbar-infinite-zoom-"]):not([data-testid="infinite-zoom-menu-btn"])'
-        )
-        .filter({
-          hasText: /[A-Za-z]{3,}/,
-          hasNotText:
-            /^\s*(?:[←<×✕]\s*)?(back|close|cancel|clear(?:\s+prompt)?|reset|extend(?:\s+borders)?|confirm|apply|done|all|none|top|bottom|left|right|infill\s+detail)\s*$/i,
-        });
-      const outChipCount = await outChips.count();
-      assert.ok(
-        outChipCount >= 1,
-        'Expected at least one 1-tap prompt suggestion chip inside Extend Borders popover'
-      );
-      const outChip = outChips.first();
-      await outChip.waitFor({ state: 'visible', timeout: 3000 });
-      await outChip.click();
-      assert.ok(
-        (await outPromptInput.inputValue()).trim().length > 0,
-        'Clicking Extend Borders 1-tap prompt chip must populate prompt input'
-      );
-      await outPromptInput.fill('starry hills & calm meadow');
-
-      await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
-      await page.waitForFunction(
-        ({ key, prevId }) => {
-          const s = JSON.parse(localStorage.getItem(key) || '{}');
-          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
-        },
-        { key: ACTIVE_SESSION_KEY, prevId: innerSnapId },
-        { timeout: 25000 }
-      );
-      await waitForPuzzleLoaded(page);
-
-      const outerSnapId = (await readActiveSession(page)).activeSnapshotId;
-      assert.ok(outerSnapId && outerSnapId !== innerSnapId, 'Extend Borders must create a new linked outer puzzle');
-
-      const snaps = await readSnapshots(page);
-      const outerMeta = snaps.find((s) => s.id === outerSnapId);
-      assert.equal(outerMeta?.filledCount, 0, 'Extended outer puzzle must start fresh at 0% (filledCount === 0)');
-      assert.equal(outerMeta?.zoomTree?.direction, 'extend-out', 'Outer puzzle zoomTree.direction must be "extend-out"');
-      assert.deepEqual(
-        outerMeta?.zoomTree?.extendedSides,
-        { top: true, bottom: false, left: false, right: true },
-        'Outer puzzle zoomTree.extendedSides must record exact selected sides'
-      );
-      // Gap #6: Assert persisted sanitized zoomTree.promptHint and aiTierUsed on extended outer snapshot
-      assert.equal(
-        outerMeta?.zoomTree?.promptHint,
-        'starry hills & calm meadow',
-        `Extended outer snapshot must persist sanitized zoomTree.promptHint (got ${JSON.stringify(outerMeta?.zoomTree?.promptHint)})`
-      );
-      assert.equal(
-        outerMeta?.zoomTree?.aiTierUsed,
-        'offline-procedural',
-        `Offline Extend Borders must record aiTierUsed === "offline-procedural" (got ${outerMeta?.zoomTree?.aiTierUsed})`
-      );
-
-      const outerDims = await page.evaluate(async (id) => {
-        const p = await window.capyStorage.loadPuzzleData(id);
-        return p ? { width: p.width, height: p.height } : null;
-      }, outerSnapId);
-      assert.ok(outerDims, 'Extended outer PuzzleData must exist in IndexedDB');
-      const expectedOuterW = Math.round(innerDims.width * 1.35);
-      const expectedOuterH = Math.round(innerDims.height * 1.35);
-      const expectedAspect = expectedOuterW / expectedOuterH;
-      const actualOuterAspect = outerDims.width / outerDims.height;
-      assert.ok(
-        outerDims.width > 0 &&
-          outerDims.height > 0 &&
-          Math.abs(actualOuterAspect - expectedAspect) < 0.04,
-        `Extended outer puzzle must preserve expanded aspect ratio (inner=${JSON.stringify(innerDims)}, outer=${JSON.stringify(outerDims)}, expectedAspect=${expectedAspect.toFixed(3)})`
-      );
-      let outerBlobDims = null;
-      const outerBlobSaved = await waitForCondition(async () => {
-        outerBlobDims = await page.evaluate(async (id) => {
-          const blob = await window.capyStorage.loadImageBlob(id);
-          if (!blob) return null;
-          const bmp = await createImageBitmap(blob);
-          const dims = { width: bmp.width, height: bmp.height };
-          bmp.close();
-          return dims;
-        }, outerSnapId);
-        return Boolean(outerBlobDims);
-      }, 6000);
-      assert.equal(outerBlobSaved, true, 'Extended outer source image Blob must be persisted in IndexedDB');
-      assert.ok(
-        outerBlobDims.width > innerDims.width &&
-          outerBlobDims.height > innerDims.height &&
-          Math.abs(outerBlobDims.width - expectedOuterW) <= 4 &&
-          Math.abs(outerBlobDims.height - expectedOuterH) <= 4,
-        `Extended outer source Blob must expand Top+Right by 0.35x (inner=${JSON.stringify(innerDims)}, expected=${expectedOuterW}x${expectedOuterH}, actualBlob=${JSON.stringify(outerBlobDims)})`
-      );
-      const innerAfterExt = snaps.find((s) => s.id === innerSnapId);
-      const extBounds = innerAfterExt?.zoomTree?.boundsInParent ?? outerMeta?.zoomTree?.boundsInParent;
-      assert.ok(
-        extBounds &&
-          extBounds.x >= 0 &&
-          extBounds.x <= 0.01 &&
-          extBounds.y > 0.05 &&
-          extBounds.y < 1 &&
-          extBounds.width > 0 &&
-          extBounds.width < 0.95 &&
-          extBounds.height > 0 &&
-          extBounds.height < 0.95,
-        `Top+Right border extension must persist exact normalized boundsInParent with x<=0.01, y>0.05, width<0.95, height<0.95 (got ${JSON.stringify(extBounds)})`
-      );
-
-      // Verify navigating Inner restores exact prior painted progress, and Outer returns to outer puzzle
-      const innerBreadcrumb = page.getByTestId('topbar-child-puzzle-btn');
-      await innerBreadcrumb.waitFor({ state: 'visible', timeout: 5000 });
-      await innerBreadcrumb.click();
-      await page.waitForFunction(
-        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
-        { key: ACTIVE_SESSION_KEY, targetId: innerSnapId },
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(page);
-      const restoredInnerFilled = Number(
-        await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
-      );
-      assert.equal(
-        restoredInnerFilled,
-        innerFilledBefore,
-        'Inner puzzle must preserve exact prior painted progress after border extension'
-      );
-
-      const outerBreadcrumb = page.getByTestId('topbar-parent-puzzle-btn');
-      await outerBreadcrumb.waitFor({ state: 'visible', timeout: 5000 });
-      await outerBreadcrumb.click();
-      await page.waitForFunction(
-        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
-        { key: ACTIVE_SESSION_KEY, targetId: outerSnapId },
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(page);
-
-      // Repeated single-axis stretching (Left + Right only) must hit 2.5:1 aspect guard
-      await verifyHorizontalAspectGuard(page);
-    } finally {
-      await context.close();
-    }
-}
-
-async function verifyHorizontalAspectGuard(page) {
-  let aspectGuardTriggered = false;
-  for (let attempt = 0; attempt < 4; attempt++) {
-    await page.getByTestId('infinite-zoom-menu-btn').click();
-    await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
-    await setExtendSideState(page, 'extend-side-top', false);
-    await setExtendSideState(page, 'extend-side-bottom', false);
-    await setExtendSideState(page, 'extend-side-left', true);
-    await setExtendSideState(page, 'extend-side-right', true);
-
-    const confirmBtn = page.getByTestId('toolbar-infinite-zoom-out-confirm-btn');
-    if (await confirmBtn.isDisabled()) {
-      aspectGuardTriggered = true;
-      break;
-    }
-    const prevId = (await readActiveSession(page)).activeSnapshotId;
-    await confirmBtn.click();
-    await page.waitForFunction(
-      ({ key, beforeId }) => {
-        const s = JSON.parse(localStorage.getItem(key) || '{}');
-        return Boolean(s.activeSnapshotId && s.activeSnapshotId !== beforeId);
-      },
-      { key: ACTIVE_SESSION_KEY, beforeId: prevId },
-      { timeout: 25000 }
-    );
-    await waitForPuzzleLoaded(page);
-  }
+function inspectCapyV2Buffer(rawBuf, secretByokKey) {
+  assert.ok(rawBuf.length > 16, `Exported .capy file too small (${rawBuf.length} bytes)`);
+  assert.equal(rawBuf.subarray(0, 4).toString('ascii'), 'CAPY', 'Expected CAPY magic header');
+  assert.equal(rawBuf[4], 0x02, `Expected .capy v2 byte (0x02), got 0x${rawBuf[4].toString(16)}`);
+  const flags = rawBuf[5];
+  assert.equal(flags & 0x02, 0, 'Expected single-save .capy (archive flag bit 1 must be 0)');
+
+  const body = rawBuf.subarray(6);
+  const framed = (flags & 0x01) !== 0 ? zlib.gunzipSync(body) : body;
+
+  // Verify zero BYOK API key leakage in raw and decompressed bytes
+  const secretBuf = Buffer.from(secretByokKey, 'utf8');
+  const keyNameBuf = Buffer.from(BYOK_KEY_STORAGE_KEY, 'utf8');
+  assert.equal(rawBuf.includes(secretBuf), false, 'BYOK secret key leaked into raw .capy bytes!');
   assert.equal(
-    aspectGuardTriggered,
-    true,
-    'Repeated horizontal-only border extensions MUST trigger the 2.5:1 aspect guard and disable confirm'
+    framed.includes(secretBuf),
+    false,
+    'BYOK secret key leaked into decompressed .capy payload!'
+  );
+  assert.equal(
+    framed.includes(keyNameBuf),
+    false,
+    'BYOK storage key name leaked into decompressed .capy payload!'
+  );
+
+  const jsonLen = framed.readUInt32LE(0);
+  assert.ok(jsonLen > 20 && 4 + jsonLen <= framed.length, `Invalid framed JSON length ${jsonLen}`);
+  const jsonText = framed.subarray(4, 4 + jsonLen).toString('utf8');
+  assert.equal(jsonText.includes(secretByokKey), false, 'BYOK key found in .capy JSON header!');
+  const parsed = JSON.parse(jsonText);
+  assert.equal(parsed.format, 'capy-single-save-v2', 'Expected capy-single-save-v2 format');
+  assert.equal(parsed.version, 2, 'Expected version === 2');
+  return parsed;
+}
+
+// ============================================================================
+// Responsive Layout & Touch-Target Verification Helpers
+// ============================================================================
+
+async function assertNoHorizontalOverflow(page, containerLocator, label) {
+  const docOverflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  assert.ok(
+    docOverflow.scrollWidth <= docOverflow.clientWidth + 1,
+    `${label}: document horizontal overflow (${docOverflow.scrollWidth} > ${docOverflow.clientWidth})`
+  );
+  if (containerLocator) {
+    const metrics = await containerLocator.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+    }));
+    assert.ok(
+      metrics.scrollWidth <= metrics.clientWidth + 1,
+      `${label}: container horizontal overflow (${metrics.scrollWidth} > ${metrics.clientWidth})`
+    );
+  }
+}
+
+async function assertInsideViewport(page, locator, label) {
+  const box = await getStableBoundingBox(locator);
+  assert.ok(box, `${label}: expected stable bounding box`);
+  const vp = page.viewportSize();
+  assert.ok(
+    box.x >= -1 &&
+      box.y >= -1 &&
+      box.x + box.width <= vp.width + 1 &&
+      box.y + box.height <= vp.height + 1,
+    `${label}: box (${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)}x${Math.round(box.height)}) overflows viewport ${vp.width}x${vp.height}`
+  );
+  return box;
+}
+
+async function assertMinTouchTarget(locator, label, minPx = 44) {
+  const box = await getStableBoundingBox(locator);
+  assert.ok(box, `${label}: expected bounding box for touch target check`);
+  assert.ok(
+    box.height >= minPx - 0.5 && box.width >= minPx - 0.5,
+    `${label}: touch target ${box.width.toFixed(1)}x${box.height.toFixed(1)}px is below ${minPx}px minimum`
+  );
+  return box;
+}
+
+async function assertTopBarLanesNonOverlapping(page, label) {
+  const vp = page.viewportSize();
+  const leftBox = await getStableBoundingBox(page.getByTestId('topbar-left-lane'));
+  const rightBox = await getStableBoundingBox(page.getByTestId('topbar-right-lane'));
+  assert.ok(leftBox && rightBox, `${label}: expected TopBar lane bounding boxes`);
+  assert.ok(
+    leftBox.x + leftBox.width <= rightBox.x + 1,
+    `${label}: TopBar lanes overlap (leftRight=${leftBox.x + leftBox.width} > rightLeft=${rightBox.x})`
+  );
+  assert.ok(
+    rightBox.x + rightBox.width <= vp.width + 1,
+    `${label}: TopBar right lane overflows viewport width ${vp.width}`
   );
 }
 
-async function runStage3Tier1CancelPart({ browser, BASE_URL, attachErrorListeners }) {
-    // Part B: Dedicated Tier 1 Mock window.LanguageModel + loading-cancel-btn AbortController cancellation
-    const { context: tier1Ctx, page: tier1Page } = await createBootedContext(browser, BASE_URL, {
-      label: 'infinite-zoom-stage3-tier1-cancel',
-      attachErrorListeners,
-      viewport: { width: 1280, height: 860 },
-      skipTutorial: true,
+// ============================================================================
+// Stage 1: Sparkles 100% Visibility, Provider/BYOK Controls, Android & Mobile
+// ============================================================================
+
+async function runStage1(ctx) {
+  const label =
+    'Infinite Zoom Stage 1: Sparkles 100% visibility, provider/BYOK controls, Android exclusion & mobile/Large Text';
+  ctx.logE2eStart(label);
+
+  // --- Part 1A: Web Desktop Sparkles 100% visibility + CreateTab controls & BYOK isolation ---
+  {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s1-web',
       easyNoReplay: true,
       bootUrl: false,
       waitForPuzzle: false,
     });
     try {
-      await tier1Page.addInitScript(() => {
-        window.__capyTier1Mock = { createCalls: 0, promptStarted: false, aborted: false, destroyCalls: 0 };
-        window.LanguageModel = {
-          async availability() {
-            return 'available';
-          },
-          async create() {
-            window.__capyTier1Mock.createCalls += 1;
-            return {
-              prompt(_input, opts) {
-                window.__capyTier1Mock.promptStarted = true;
-                return new Promise((_resolve, reject) => {
-                  const onAbort = () => {
-                    window.__capyTier1Mock.aborted = true;
-                    const err = new DOMException('Aborted by user', 'AbortError');
-                    reject(err);
-                  };
-                  if (opts?.signal?.aborted) {
-                    onAbort();
-                    return;
-                  }
-                  opts?.signal?.addEventListener?.('abort', onAbort, { once: true });
-                });
-              },
-              destroy() {
-                window.__capyTier1Mock.destroyCalls += 1;
-              },
-            };
-          },
-        };
-      });
-      await tier1Page.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
-      await waitForPuzzleLoaded(tier1Page);
+      const errors = attachStrictErrorListeners(page, 'iz-s1-web', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
 
-      const snapBeforeCancel = (await readActiveSession(tier1Page)).activeSnapshotId;
-      await tier1Page.getByTestId('infinite-zoom-menu-btn').click();
-      await tier1Page.getByTestId('toolbar-infinite-zoom-out-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await tier1Page.getByTestId('toolbar-infinite-zoom-out-btn').click();
-      await setExtendSideState(tier1Page, 'extend-side-top', true);
-      await tier1Page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await tier1Page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
 
-      // Wait for Tier 1 prompt invocation AND loading-cancel-btn visibility
-      const cancelBtn = tier1Page.getByTestId('loading-cancel-btn');
-      await cancelBtn.waitFor({ state: 'visible', timeout: 8000 });
-      await tier1Page.waitForFunction(() => Boolean(window.__capyTier1Mock?.promptStarted), undefined, {
-        timeout: 5000,
-      });
+      const initialSession = await readActiveSession(page);
+      const snapId = initialSession.activeSnapshotId;
+      assert.ok(snapId, 'Stage 1A: expected activeSnapshotId after boot');
 
-      await cancelBtn.click();
-      await cancelBtn.waitFor({ state: 'hidden', timeout: 5000 });
-      await waitForAnimationFrames(tier1Page, 3);
+      // Complete puzzle to 100% and verify Sparkles visibility across idle/playing/paused Replay
+      await completeActivePuzzleTo100(page, snapId);
+      const savesBtnText = await page.getByTestId('topbar-saves-btn').innerText();
+      assert.ok(savesBtnText.includes('100%'), `Expected 100% completion, got "${savesBtnText}"`);
 
-      const tier1State = await tier1Page.evaluate(() => window.__capyTier1Mock);
-      assert.ok(tier1State.createCalls >= 1, 'Tier 1 LanguageModel.create() must have been invoked');
+      const replayBtn = page.getByTestId('replay-btn');
+      const sparklesBtn = page.getByTestId('infinite-zoom-menu-btn');
+      await replayBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await sparklesBtn.waitFor({ state: 'visible', timeout: 5000 });
       assert.equal(
-        tier1State.aborted,
+        await sparklesBtn.isEnabled(),
         true,
-        'Aborting via loading-cancel-btn must trigger AbortSignal listener on Tier 1 LanguageModel.prompt()'
-      );
-      assert.ok(tier1State.destroyCalls >= 1, 'Aborting via loading-cancel-btn must call session.destroy()');
-      assert.equal(
-        (await readActiveSession(tier1Page)).activeSnapshotId,
-        snapBeforeCancel,
-        'Cancelling Infinite Zoom must leave active snapshot intact and uncorrupted'
+        'Sparkles button must stay enabled on 100% completed idle puzzle'
       );
 
-      // Gap #10: Verify non-sticky cancel (subsequent Extend Borders succeeds cleanly after Tier 1 cancel)
-      await tier1Page.evaluate(() => {
-        delete window.LanguageModel;
-      });
-      await tier1Page.getByTestId('infinite-zoom-menu-btn').click();
-      await tier1Page.getByTestId('toolbar-infinite-zoom-out-btn').click();
-      await setExtendSideState(tier1Page, 'extend-side-top', true);
-      await tier1Page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
-      await tier1Page.waitForFunction(
-        ({ key, prevId }) => {
-          const s = JSON.parse(localStorage.getItem(key) || '{}');
-          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
-        },
-        { key: ACTIVE_SESSION_KEY, prevId: snapBeforeCancel },
-        { timeout: 25000 }
-      );
-      await waitForPuzzleLoaded(tier1Page);
-      const afterRecoverySnapId = (await readActiveSession(tier1Page)).activeSnapshotId;
-      assert.ok(
-        afterRecoverySnapId && afterRecoverySnapId !== snapBeforeCancel,
-        'Subsequent Extend Borders after Tier 1 cancel must complete cleanly (non-sticky cancel)'
-      );
-
-      // Gap #10: Mid-worker handoff cancel (pause GENERATE in worker so loading-cancel-btn fires during loadArtworkFromImage handoff)
-      const snapsCountBeforeMidCancel = (await readSnapshots(tier1Page)).length;
-      await tier1Page.evaluate(() => {
-        const origPost = Worker.prototype.postMessage;
-        window.__capyOrigWorkerPost = origPost;
-        window.__capyMidWorkerGenerateIntercepted = false;
-        Worker.prototype.postMessage = function (msg, transfer) {
-          if (msg && msg.type === 'GENERATE' && !window.__capyMidWorkerGenerateIntercepted) {
-            window.__capyMidWorkerGenerateIntercepted = true;
-            // Hold GENERATE in-flight so user can click loading-cancel-btn during worker handoff
-            return;
-          }
-          return origPost.call(this, msg, transfer);
-        };
-      });
-      try {
-        await tier1Page.getByTestId('infinite-zoom-menu-btn').click();
-        await tier1Page.getByTestId('toolbar-infinite-zoom-out-btn').click();
-        await setExtendSideState(tier1Page, 'extend-side-top', false);
-        await setExtendSideState(tier1Page, 'extend-side-bottom', true);
-        await tier1Page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
-        await tier1Page.waitForFunction(
-          () => Boolean(window.__capyMidWorkerGenerateIntercepted),
-          undefined,
-          { timeout: 10000 }
-        );
-        await cancelBtn.waitFor({ state: 'visible', timeout: 5000 });
-        await cancelBtn.click();
-        await cancelBtn.waitFor({ state: 'hidden', timeout: 10000 });
-      } finally {
-        await tier1Page.evaluate(() => {
-          if (window.__capyOrigWorkerPost) {
-            Worker.prototype.postMessage = window.__capyOrigWorkerPost;
-            delete window.__capyOrigWorkerPost;
-          }
-        });
-      }
-      await waitForPuzzleLoaded(tier1Page);
-      const midCancelRestored = await waitForCondition(async () => {
-        const s = await readActiveSession(tier1Page);
-        const list = await readSnapshots(tier1Page);
-        return s.activeSnapshotId === afterRecoverySnapId && list.length === snapsCountBeforeMidCancel;
-      }, 8000);
-      assert.equal(
-        midCancelRestored,
-        true,
-        'Mid-worker handoff cancel must restore parent snapshot and clean up partial snapshot'
-      );
-
-    } finally {
-      await tier1Ctx.close();
-    }
-}
-
-async function runStage3DirectionalBorderAndCancel(stageCtx) {
-  stageCtx.logE2eStart(
-    'Stage 3: Directional Border Extension (Top+Right), fresh 0% outer puzzle, 2.5:1 aspect guard & Tier 1 mock LanguageModel AbortController cancel'
-  );
-  await runStage3BorderExtensionPart(stageCtx);
-  await runStage3Tier1CancelPart(stageCtx);
-  stageCtx.logE2ePass('Stage 3 passed');
-}
-
-// =========================================================================
-// STAGE 4: Co-op Guard, Replay Guard, CreateTab Legacy Parity &
-//          local-ai-mode-select, and 360x780 + Large Text Mobile Layout
-// =========================================================================
-async function runStage4GuardsAndMobile({ browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass }) {
-    logE2eStart(
-      'Stage 4: Offline Co-op guard, active Replay guard, CreateTab parity & local-ai-mode-select, and 360x780 + Large Text mobile layout'
-    );
-
-    // Part A: Co-op guard, Replay guard & CreateTab parity
-    const { context, page } = await createBootedContext(browser, BASE_URL, {
-      label: 'infinite-zoom-stage4-guards',
-      attachErrorListeners,
-      viewport: { width: 1280, height: 860 },
-      skipTutorial: true,
-      easyNoReplay: true,
-      enableCoopUi: true,
-    });
-    try {
-      // Paint at least 1 region so Replay via long-press undo-btn is enabled
-      await tapCanvasGrid(page, 0.35, 8, 50);
+      // Start animated Replay -> Sparkles MUST be hidden while isReplaying && isReplayPlaying
+      await replayBtn.click();
+      const replayWindow = page.getByTestId('replay-controls-window');
+      const replayToggleBtn = page.getByTestId('replay-play-pause-btn');
+      await replayWindow.waitFor({ state: 'visible', timeout: 5000 });
       await page.waitForFunction(
-        () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
-        undefined,
+        () =>
+          document
+            .querySelector('[data-testid="replay-play-pause-btn"]')
+            ?.getAttribute('aria-label') === 'Pause Replay',
         { timeout: 5000 }
       );
-
-      const menuBtn = page.getByTestId('infinite-zoom-menu-btn');
-      await menuBtn.waitFor({ state: 'visible', timeout: 3000 });
-      assert.equal(await menuBtn.isEnabled(), true, 'infinite-zoom-menu-btn must be enabled outside Co-op');
-
-      // 4a. Host offline BroadcastChannel Co-op room -> Infinite Zoom must be disabled
-      await page.getByTestId('topbar-coop-btn').click();
-      await page.getByTestId('host-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('host-coop-room-btn').click();
-      await page.getByTestId('active-coop-room-code').waitFor({ state: 'visible', timeout: 5000 });
-      await page.keyboard.press('Escape');
-      await page.getByTestId('topbar-active-coop-pill').waitFor({ state: 'visible', timeout: 3000 });
-
-      const disabledInCoop = await menuBtn.evaluate(
-        (el) => Boolean(el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true')
+      assert.equal(
+        await sparklesBtn.count(),
+        0,
+        'Sparkles button must be hidden ONLY while Replay is actively playing'
       );
-      assert.equal(disabledInCoop, true, 'infinite-zoom-menu-btn MUST be disabled while in an active Co-op room');
 
-      // Leave Co-op room -> Infinite Zoom must re-enable
-      await page.getByTestId('topbar-coop-btn').click();
-      await page.getByTestId('leave-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('leave-coop-room-btn').click();
-      await page.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
-      await page.keyboard.press('Escape');
-      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-      assert.equal(await menuBtn.isEnabled(), true, 'infinite-zoom-menu-btn must re-enable after leaving Co-op');
+      // Pause Replay -> Sparkles MUST reappear and stay enabled
+      await replayToggleBtn.click();
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="replay-play-pause-btn"]')
+            ?.getAttribute('aria-label') === 'Resume Replay',
+        { timeout: 5000 }
+      );
+      await sparklesBtn.waitFor({ state: 'visible', timeout: 5000 });
+      assert.equal(
+        await sparklesBtn.isEnabled(),
+        true,
+        'Sparkles button must be visible and enabled when Replay is paused on 100% puzzle'
+      );
 
-      // 4b. Active Replay mode (long-press undo-btn) -> Infinite Zoom button must hide
-      const undoBtn = page.getByTestId('undo-btn');
-      await undoBtn.waitFor({ state: 'visible', timeout: 3000 });
-      const undoBox = await getStableBoundingBox(undoBtn);
-      assert.ok(undoBox, 'Expected stable boundingBox for undo-btn');
-      await page.mouse.move(undoBox.x + undoBox.width / 2, undoBox.y + undoBox.height / 2);
-      await page.mouse.down();
-      await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
-      await page.mouse.up();
+      // Open Infinite Zoom while Replay is paused -> ReplayControls cleanly dismissed (zero overlap)
+      await sparklesBtn.click();
+      const popover = page.locator('[role="dialog"][aria-label="Infinite Zoom Controls"]');
+      await popover.waitFor({ state: 'visible', timeout: 3000 });
+      const pillText = await page.getByTestId('iz-active-provider-pill').innerText();
+      assert.ok(
+        pillText.includes('Nano Banana 2.1') && pillText.includes('Puter'),
+        `Expected default Web pill "Nano Banana 2.1 • Puter", got "${pillText}"`
+      );
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        await replayWindow.count(),
+        0,
+        'Entering Infinite Zoom from paused Replay must cleanly dismiss replay-controls-window'
+      );
 
-      const hiddenInReplay = (await menuBtn.count()) === 0 || !(await menuBtn.isVisible());
-      assert.equal(hiddenInReplay, true, 'infinite-zoom-menu-btn MUST be hidden during active Replay');
+      // Cancel selection -> both Replay and Sparkles remain visible on completed idle puzzle
+      await page.getByTestId('region-selection-cancel-btn').click();
+      await page.getByTestId('region-selection-bar').waitFor({ state: 'hidden', timeout: 3000 });
+      await replayBtn.waitFor({ state: 'visible', timeout: 3000 });
+      await sparklesBtn.waitFor({ state: 'visible', timeout: 3000 });
 
-      await page.getByTestId('replay-exit-btn').click();
-      await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
-      await menuBtn.waitFor({ state: 'visible', timeout: 3000 });
-
-      // 4c. CreateTab legacy parity & local-ai-mode-select persistence
+      // Menu > Create: verify provider/model/resolution controls & device-local BYOK isolation
       await page.getByTestId('topbar-settings-btn').click();
-      await page.getByTestId('settings-tab-create').waitFor({ state: 'visible', timeout: 3000 });
       await page.getByTestId('settings-tab-create').click();
 
-      await page.getByTestId('infinite-zoom-subtile-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('create-infinite-zoom-in-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.getByTestId('create-infinite-zoom-out-btn').waitFor({ state: 'visible', timeout: 3000 });
-      const modeSelect = page.getByTestId('local-ai-mode-select');
-      await modeSelect.waitFor({ state: 'visible', timeout: 3000 });
+      const providerSelect = page.getByTestId('iz-provider-select');
+      const modelSelect = page.getByTestId('iz-model-select');
+      const resSelect = page.getByTestId('iz-resolution-select');
+      await providerSelect.waitFor({ state: 'visible', timeout: 3000 });
 
-      await modeSelect.selectOption('OFFLINE_FAST');
+      const providerOptions = await providerSelect
+        .locator('option')
+        .evaluateAll((opts) => opts.map((o) => o.value));
+      assert.deepEqual(
+        providerOptions,
+        ['PUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK'],
+        'Web CreateTab must expose Puter, Guided Gemini, and Gemini BYOK providers'
+      );
+      assert.equal(await providerSelect.inputValue(), 'PUTER', 'Default Web provider must be PUTER');
+
+      const modelOptions = await modelSelect
+        .locator('option')
+        .evaluateAll((opts) => opts.map((o) => o.value));
+      assert.deepEqual(
+        modelOptions,
+        ['gemini-nano-banana-2.1', 'gemini-3.1-flash-lite-image', 'gemini-3.1-flash-image'],
+        'CreateTab must expose Nano Banana 2.1, 2 Lite, and 2 Pro models'
+      );
+      assert.equal(
+        await modelSelect.inputValue(),
+        'gemini-nano-banana-2.1',
+        'Default model must be gemini-nano-banana-2.1'
+      );
+
+      const resOptions = await resSelect
+        .locator('option')
+        .evaluateAll((opts) => opts.map((o) => o.value));
+      assert.deepEqual(resOptions, ['512', '1K', '2K'], 'CreateTab must expose 512, 1K, 2K');
+      assert.equal(await resSelect.inputValue(), '1K', 'Default resolution must be 1K');
+
+      // Switch model & resolution and verify UserSettings persistence
+      await modelSelect.selectOption('gemini-3.1-flash-image');
+      await resSelect.selectOption('2K');
+      const settingsAfterPick = await readUserSettings(page);
+      assert.equal(settingsAfterPick.nanoBananaModel, 'gemini-3.1-flash-image');
+      assert.equal(settingsAfterPick.nanoBananaResolution, '2K');
+
+      // Switch to GEMINI_BYOK and verify device-local storage isolation
+      await providerSelect.selectOption('GEMINI_BYOK');
+      const byokBadge = page.getByTestId('iz-byok-status-badge');
+      await byokBadge.waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal((await byokBadge.innerText()).trim(), 'Not set');
+      assert.equal(await page.getByTestId('iz-byok-clear-btn').isDisabled(), true);
+
+      const sampleByokSecret = 'AIzaSyStage1DeviceLocalOnlyKey999';
+      await page.getByTestId('iz-byok-key-input').fill(sampleByokSecret);
+      await page.getByTestId('iz-byok-save-btn').click();
       await page.waitForFunction(
-        (key) => JSON.parse(localStorage.getItem(key) || '{}').localAiMode === 'OFFLINE_FAST',
-        SETTINGS_KEY,
+        (key) => localStorage.getItem(key) !== null,
+        BYOK_KEY_STORAGE_KEY,
         { timeout: 3000 }
       );
-      await modeSelect.selectOption('AUTO');
+      assert.equal(await readByokKey(page), sampleByokSecret);
+      assert.equal((await byokBadge.innerText()).trim(), 'Saved on this device only');
+
+      // Verify BYOK key is strictly absent from capy_user_settings_v8
+      const rawSettingsJson = await page.evaluate((k) => localStorage.getItem(k) || '', SETTINGS_KEY);
+      assert.equal(
+        rawSettingsJson.includes(sampleByokSecret),
+        false,
+        'BYOK key must NEVER be stored inside capy_user_settings_v8'
+      );
+
+      // Clear BYOK key and confirm removal
+      await page.getByTestId('iz-byok-clear-btn').click();
       await page.waitForFunction(
-        (key) => JSON.parse(localStorage.getItem(key) || '{}').localAiMode === 'AUTO',
-        SETTINGS_KEY,
+        (key) => localStorage.getItem(key) === null,
+        BYOK_KEY_STORAGE_KEY,
         { timeout: 3000 }
       );
+      assert.equal((await byokBadge.innerText()).trim(), 'Not set');
 
-      // Gap #10: Interactive CreateTab prompt-to-selection launch transfers prompt into RegionSelectionBar
-      const createPromptInput = page.getByLabel('Guide prompt for Infinite Zoom');
-      await createPromptInput.waitFor({ state: 'visible', timeout: 3000 });
-      await createPromptInput.fill('cozy autumn acorns');
-      await page.getByTestId('create-infinite-zoom-in-btn').click();
-      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-      const selBar4 = page.getByTestId('region-selection-bar');
-      await selBar4.waitFor({ state: 'visible', timeout: 3000 });
+      const puterScripts = await page.locator('script[src*="js.puter.com"]').count();
+      assert.equal(puterScripts, 0, 'Web idle boot/settings must not inject js.puter.com');
+      assert.equal(puterSpy.getRequests().length, 0, 'Zero js.puter.com requests expected');
+
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
+
+  // --- Part 1B: Android WebView simulation (Puter hidden & unreachable, Guided Gemini default) ---
+  {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s1-android',
+      easyNoReplay: true,
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, 'iz-s1-android', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      await injectAndroidWebViewMock(page);
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      // Verify toolbar pill defaults to Guided Gemini on Android
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      const pillText = await page.getByTestId('iz-active-provider-pill').innerText();
+      assert.ok(
+        pillText.includes('Guided Gemini') && !pillText.includes('Puter'),
+        `Android toolbar pill must show Guided Gemini (never Puter), got "${pillText}"`
+      );
+      await page.keyboard.press('Escape');
+
+      // Verify CreateTab provider select omits PUTER completely
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-create').click();
+      const providerSelect = page.getByTestId('iz-provider-select');
+      await providerSelect.waitFor({ state: 'visible', timeout: 3000 });
+      const androidOptions = await providerSelect
+        .locator('option')
+        .evaluateAll((opts) => opts.map((o) => o.value));
+      assert.deepEqual(
+        androidOptions,
+        ['GUIDED_GEMINI', 'GEMINI_BYOK'],
+        'Android WebView must completely omit PUTER from provider select'
+      );
       assert.equal(
-        await page.getByTestId('infinite-zoom-in-prompt-input').inputValue(),
-        'cozy autumn acorns',
-        'CreateTab create-infinite-zoom-in-btn must transfer prompt into RegionSelectionBar'
+        await providerSelect.inputValue(),
+        'GUIDED_GEMINI',
+        'Android default provider must be GUIDED_GEMINI'
       );
 
-      // Gap #10 & Bug #9 regression: Escape closes SettingsModal FIRST without being stolen by RegionSelectionBar, then second Escape closes RegionSelectionBar
-      await page.getByTestId('topbar-settings-btn').click();
-      await page.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
-      await page.keyboard.press('Escape');
-      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
       assert.equal(
-        await selBar4.isVisible(),
-        true,
-        'First Escape with SettingsModal open over RegionSelectionBar must close SettingsModal and keep RegionSelectionBar open'
+        await page.locator('script[src*="js.puter.com"]').count(),
+        0,
+        'Android WebView must never contain js.puter.com script tags'
       );
-      await page.keyboard.press('Escape');
-      await selBar4.waitFor({ state: 'hidden', timeout: 3000 });
+      assert.equal(
+        puterSpy.getRequests().length,
+        0,
+        'Android WebView must never issue js.puter.com network requests'
+      );
 
-      // Escape dismisses toolbar popover cleanly
-      await menuBtn.click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await page.keyboard.press('Escape');
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').waitFor({ state: 'hidden', timeout: 3000 });
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
 
-      // Gap #10 & Bug #7 regression: Free Colour Mode round-trip across Extend Borders + Inner breadcrumb return
-      const freeInnerSnapId = (await readActiveSession(page)).activeSnapshotId;
+  // --- Part 1C: 360x780 Mobile + Large Text (1.25x via setting-large-text) ---
+  {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s1-mobile-large-text',
+      viewport: { width: 360, height: 780 },
+      hasTouch: true,
+      easyNoReplay: true,
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, 'iz-s1-mobile-360', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      await injectWindowOpenStub(page);
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      // Toggle Large Text (1.25x) via real Settings UI switch
       await page.getByTestId('topbar-settings-btn').click();
-      await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
       await page.getByTestId('settings-tab-settings').click();
-      const freeColorToggle = page.getByTestId('setting-free-color-mode');
-      await freeColorToggle.waitFor({ state: 'visible', timeout: 3000 });
-      await freeColorToggle.click();
+      const largeTextSwitch = page.getByTestId('setting-large-text');
+      await largeTextSwitch.waitFor({ state: 'visible', timeout: 3000 });
+      if ((await largeTextSwitch.getAttribute('aria-checked')) !== 'true') {
+        await largeTextSwitch.click();
+      }
       await page.waitForFunction(
-        (key) => Boolean(JSON.parse(localStorage.getItem(key) || '{}').isFreeColorMode),
-        SETTINGS_KEY,
-        { timeout: 5000 }
+        () => document.documentElement.dataset.largeText === 'true',
+        { timeout: 3000 }
       );
-      await page.keyboard.press('Escape');
-      await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
-      await menuBtn.click();
+      // Check CreateTab card on 360x780 + Large Text
+      await page.getByTestId('settings-tab-create').click();
+      await page.getByTestId('iz-provider-select').selectOption('GUIDED_GEMINI');
+      const createCard = page.locator('.capy-iz-provider-card');
+      await createCard.waitFor({ state: 'visible', timeout: 3000 });
+      await assertNoHorizontalOverflow(page, createCard, '360x780 LargeText CreateCard');
+      await assertMinTouchTarget(page.getByTestId('iz-provider-select'), '360x780 iz-provider-select');
+      await assertMinTouchTarget(page.getByTestId('iz-model-select'), '360x780 iz-model-select');
+      await assertMinTouchTarget(
+        page.getByTestId('iz-resolution-select'),
+        '360x780 iz-resolution-select'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('create-infinite-zoom-in-btn'),
+        '360x780 create-infinite-zoom-in-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('create-infinite-zoom-out-btn'),
+        '360x780 create-infinite-zoom-out-btn'
+      );
+
+      await page.getByTestId('settings-modal-close').click();
+      await waitForAnimationFrames(page, 2);
+
+      // Check TopBar lanes on 360x780 + Large Text
+      await assertTopBarLanesNonOverlapping(page, '360x780 LargeText TopBar');
+
+      // Check Infinite Zoom toolbar popover & touch targets
+      const sparklesBtn = page.getByTestId('infinite-zoom-menu-btn');
+      await assertMinTouchTarget(sparklesBtn, '360x780 infinite-zoom-menu-btn');
+      await sparklesBtn.click();
+      const popover = page.locator('[role="dialog"][aria-label="Infinite Zoom Controls"]');
+      await popover.waitFor({ state: 'visible', timeout: 3000 });
+      await assertInsideViewport(page, popover, '360x780 LargeText Popover');
+      await assertNoHorizontalOverflow(page, popover, '360x780 LargeText Popover');
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-in-btn'),
+        '360x780 toolbar-infinite-zoom-in-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-out-btn'),
+        '360x780 toolbar-infinite-zoom-out-btn'
+      );
       await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await assertInsideViewport(page, popover, '360x780 LargeText Expanded Popover');
+      await assertNoHorizontalOverflow(page, popover, '360x780 LargeText Expanded Popover');
+      await assertMinTouchTarget(
+        popover.locator('button[aria-label="Close Infinite Zoom menu"]'),
+        '360x780 popover close button'
+      );
+      for (const side of ['top', 'bottom', 'left', 'right']) {
+        await assertMinTouchTarget(
+          page.getByTestId(`extend-side-${side}`),
+          `360x780 extend-side-${side}`
+        );
+      }
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-out-confirm-btn'),
+        '360x780 toolbar-infinite-zoom-out-confirm-btn'
+      );
+
+      // Enter RegionSelectionBar and verify containment + >= 44px touch targets
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      const selBar = page.getByTestId('region-selection-bar');
+      await selBar.waitFor({ state: 'visible', timeout: 3000 });
+      const selBarBox = await assertInsideViewport(page, selBar, '360x780 LargeText RegionSelectionBar');
+      await assertNoHorizontalOverflow(page, selBar, '360x780 LargeText RegionSelectionBar');
+      const headerBox = await getStableBoundingBox(page.locator('header'));
+      assert.ok(
+        selBarBox.y >= headerBox.y + headerBox.height - 1,
+        '360x780 RegionSelectionBar must not collide with GameTopBar header'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-cancel-btn'),
+        '360x780 region-selection-cancel-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-clear-btn'),
+        '360x780 region-selection-clear-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-confirm-btn'),
+        '360x780 region-selection-confirm-btn'
+      );
+
+      // Select a region and open GuidedGeminiHandoffModal to verify mobile modal layout
+      const sess = await readActiveSession(page);
+      const targets = await findUnifiedRegionTargets(page, sess.activeSnapshotId);
+      assert.ok(targets && targets.unfilledRootTargets.length > 0, '360x780: expected clickable region');
+      await page.mouse.click(
+        targets.unfilledRootTargets[0].clientX,
+        targets.unfilledRootTargets[0].clientY
+      );
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="region-selection-confirm-btn"]')?.disabled,
+        { timeout: 3000 }
+      );
+      await page.getByTestId('region-selection-confirm-btn').click();
+
+      const guidedModal = page.getByTestId('guided-gemini-modal');
+      await guidedModal.waitFor({ state: 'visible', timeout: 10000 });
+      await assertInsideViewport(page, guidedModal, '360x780 LargeText GuidedGeminiModal');
+      await assertNoHorizontalOverflow(page, guidedModal, '360x780 LargeText GuidedGeminiModal');
+      await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-launch-btn'),
+        '360x780 guided-gemini-launch-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-paste-btn'),
+        '360x780 guided-gemini-paste-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-cancel-btn'),
+        '360x780 guided-gemini-cancel-btn'
+      );
+      await page.getByTestId('guided-gemini-cancel-btn').click();
+      await guidedModal.waitFor({ state: 'hidden', timeout: 3000 });
+
+      assert.equal(puterSpy.getRequests().length, 0);
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
+
+  // --- Part 1D: 640x360 Short Landscape Layout & Touch Target Verification (1.0x + Boosted 1.25x Large Text) ---
+  {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s1-landscape-640x360',
+      viewport: { width: 640, height: 360 },
+      hasTouch: true,
+      easyNoReplay: true,
+      extraSettings: { infiniteZoomProvider: 'GUIDED_GEMINI' },
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, 'iz-s1-landscape', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      await injectWindowOpenStub(page);
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      await assertTopBarLanesNonOverlapping(page, '640x360 Landscape TopBar');
+
+      // Verify CreateTab card on 640x360 (1.0x)
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-create').click();
+      const createCard = page.locator('.capy-iz-provider-card');
+      await createCard.waitFor({ state: 'visible', timeout: 3000 });
+      await assertNoHorizontalOverflow(page, createCard, '640x360 Landscape CreateCard');
+      await assertMinTouchTarget(
+        page.getByTestId('create-infinite-zoom-in-btn'),
+        '640x360 create-infinite-zoom-in-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('create-infinite-zoom-out-btn'),
+        '640x360 create-infinite-zoom-out-btn'
+      );
+      await page.getByTestId('settings-modal-close').click();
+      await waitForAnimationFrames(page, 2);
+
+      // Verify Infinite Zoom popover on 640x360 (1.0x)
+      const sparklesBtn = page.getByTestId('infinite-zoom-menu-btn');
+      await assertMinTouchTarget(sparklesBtn, '640x360 infinite-zoom-menu-btn');
+      await sparklesBtn.click();
+      const popover = page.locator('[role="dialog"][aria-label="Infinite Zoom Controls"]');
+      await popover.waitFor({ state: 'visible', timeout: 3000 });
+      await assertInsideViewport(page, popover, '640x360 Landscape Popover');
+      await assertNoHorizontalOverflow(page, popover, '640x360 Landscape Popover');
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-in-btn'),
+        '640x360 toolbar-infinite-zoom-in-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-out-btn'),
+        '640x360 toolbar-infinite-zoom-out-btn'
+      );
+
+      // Verify RegionSelectionBar on 640x360 (1.0x)
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      const selBar = page.getByTestId('region-selection-bar');
+      await selBar.waitFor({ state: 'visible', timeout: 3000 });
+      await assertInsideViewport(page, selBar, '640x360 Landscape RegionSelectionBar');
+      await assertNoHorizontalOverflow(page, selBar, '640x360 Landscape RegionSelectionBar');
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-cancel-btn'),
+        '640x360 region-selection-cancel-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-clear-btn'),
+        '640x360 region-selection-clear-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-confirm-btn'),
+        '640x360 region-selection-confirm-btn'
+      );
+
+      // Open GuidedGeminiHandoffModal on 640x360 and verify sticky header/footer containment
+      const sess = await readActiveSession(page);
+      const targets = await findUnifiedRegionTargets(page, sess.activeSnapshotId);
+      assert.ok(targets && targets.unfilledRootTargets.length > 0, '640x360: expected clickable region');
+      await page.mouse.click(
+        targets.unfilledRootTargets[0].clientX,
+        targets.unfilledRootTargets[0].clientY
+      );
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="region-selection-confirm-btn"]')?.disabled,
+        { timeout: 3000 }
+      );
+      await page.getByTestId('region-selection-confirm-btn').click();
+
+      const guidedModal = page.getByTestId('guided-gemini-modal');
+      await guidedModal.waitFor({ state: 'visible', timeout: 10000 });
+      await assertInsideViewport(page, guidedModal, '640x360 Landscape GuidedGeminiModal');
+      await assertNoHorizontalOverflow(page, guidedModal, '640x360 Landscape GuidedGeminiModal');
+      await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-cancel-btn'),
+        '640x360 guided-gemini-cancel-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-launch-btn'),
+        '640x360 guided-gemini-launch-btn'
+      );
+      await page.getByTestId('guided-gemini-cancel-btn').click();
+      await guidedModal.waitFor({ state: 'hidden', timeout: 3000 });
+
+      // Now enable Large Text (1.25x -> data-ui-boosted="true") on 640x360 to exercise
+      // @media (max-height: 440px) + [data-ui-boosted="true"] CSS rules in index.css
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-settings').click();
+      const largeTextSwitch = page.getByTestId('setting-large-text');
+      await largeTextSwitch.waitFor({ state: 'visible', timeout: 3000 });
+      if ((await largeTextSwitch.getAttribute('aria-checked')) !== 'true') {
+        await largeTextSwitch.click();
+      }
+      await page.waitForFunction(
+        () =>
+          document.documentElement.dataset.largeText === 'true' &&
+          document.documentElement.dataset.uiBoosted === 'true' &&
+          window.matchMedia('(max-height: 440px)').matches,
+        { timeout: 3000 }
+      );
+      await page.getByTestId('settings-modal-close').click();
+      await waitForAnimationFrames(page, 2);
+
+      // Verify expanded .capy-iz-popover on 640x360 + Large Text (data-ui-boosted="true")
+      await sparklesBtn.click();
+      await popover.waitFor({ state: 'visible', timeout: 3000 });
+      await assertInsideViewport(page, popover, '640x360 Boosted Popover');
+      await assertNoHorizontalOverflow(page, popover, '640x360 Boosted Popover');
+      await assertMinTouchTarget(
+        popover.locator('button[aria-label="Close Infinite Zoom menu"]'),
+        '640x360 Boosted popover close button'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-in-btn'),
+        '640x360 Boosted toolbar-infinite-zoom-in-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-out-btn'),
+        '640x360 Boosted toolbar-infinite-zoom-out-btn'
+      );
+
+      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await assertInsideViewport(page, popover, '640x360 Boosted Expanded Popover');
+      await assertNoHorizontalOverflow(page, popover, '640x360 Boosted Expanded Popover');
+      for (const side of ['top', 'bottom', 'left', 'right']) {
+        await assertMinTouchTarget(
+          page.getByTestId(`extend-side-${side}`),
+          `640x360 Boosted extend-side-${side}`
+        );
+      }
+      await assertMinTouchTarget(
+        page.getByTestId('toolbar-infinite-zoom-out-confirm-btn'),
+        '640x360 Boosted toolbar-infinite-zoom-out-confirm-btn'
+      );
+
+      // Verify RegionSelectionBar on 640x360 + Large Text (data-ui-boosted="true")
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await selBar.waitFor({ state: 'visible', timeout: 3000 });
+      await assertInsideViewport(page, selBar, '640x360 Boosted RegionSelectionBar');
+      await assertNoHorizontalOverflow(page, selBar, '640x360 Boosted RegionSelectionBar');
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-cancel-btn'),
+        '640x360 Boosted region-selection-cancel-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-clear-btn'),
+        '640x360 Boosted region-selection-clear-btn'
+      );
+      await assertMinTouchTarget(
+        page.getByTestId('region-selection-confirm-btn'),
+        '640x360 Boosted region-selection-confirm-btn'
+      );
+      await page.getByTestId('region-selection-cancel-btn').click();
+      await selBar.waitFor({ state: 'hidden', timeout: 3000 });
+
+      assert.equal(puterSpy.getRequests().length, 0);
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
+
+  ctx.logE2ePass(label);
+}
+
+// ============================================================================
+// Stage 2: Unified Zoom In (Puter Mock), 1-Tap Undo, >12x Zoom & Multi-Layer Paint
+// ============================================================================
+
+async function runStage2(ctx) {
+  const label =
+    'Infinite Zoom Stage 2: Unified Zoom In (Puter mock), 1-tap Undo, >12x dynamic zoom & multi-layer painting';
+  ctx.logE2eStart(label);
+
+  const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+    label: 'infinite-zoom-s2',
+    easyNoReplay: true,
+    extraSettings: { showZoomButtons: true, showResetViewButton: true },
+    bootUrl: false,
+    waitForPuzzle: false,
+  });
+
+  try {
+    const errors = attachStrictErrorListeners(page, 'iz-s2', ctx);
+    const puterSpy = await attachPuterNetworkSpy(page);
+    await injectPuterMock(page, { pngDataUrl: MULTI_COLOR_PNG_DATA_URL, mode: 'ok' });
+
+    await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+    await waitForPuzzleLoaded(page);
+
+    const sessionBefore = await readActiveSession(page);
+    const snapId = sessionBefore.activeSnapshotId;
+    const snapshotsBefore = await readSnapshots(page);
+    const puzzleBefore = await readPuzzleSummary(page, snapId);
+    assert.ok(snapId && puzzleBefore, 'Stage 2: expected loaded puzzle in IDB');
+    assert.equal(puzzleBefore.nestedLayers.length, 0, 'Stage 2: initial puzzle must have 0 nested layers');
+    assert.equal(puzzleBefore.maxZoomDepth, 0, 'Stage 2: initial maxZoomDepth must be 0');
+
+    const targets = await findUnifiedRegionTargets(page, snapId);
+    assert.ok(targets?.largePair, 'Stage 2: expected touching pair + non-adjacent root regions');
+    const { a, b, nonAdjacent } = targets.largePair;
+
+    // Enter Region Selection mode
+    await page.getByTestId('infinite-zoom-menu-btn').click();
+    await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+    const selBar = page.getByTestId('region-selection-bar');
+    await selBar.waitFor({ state: 'visible', timeout: 3000 });
+
+    // Select region A, then tap non-adjacent region -> assert switch prompt & switch cleanly
+    await page.mouse.click(a.clientX, a.clientY);
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="region-selection-bar"]')
+          ?.innerText.includes('1 region selected'),
+      { timeout: 3000 }
+    );
+    await page.getByTestId('region-selection-mode-badge').waitFor({ state: 'visible', timeout: 3000 });
+
+    await page.mouse.click(nonAdjacent.clientX, nonAdjacent.clientY);
+    const switchBtn = page.getByTestId('region-selection-switch-btn');
+    await switchBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const barTextNonAdj = await selBar.innerText();
+    assert.ok(
+      barTextNonAdj.includes('That region is not touching your selection.'),
+      `Expected non-adjacent warning, got "${barTextNonAdj}"`
+    );
+    await switchBtn.click();
+    await switchBtn.waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Clear and select touching pair A + B
+    await page.getByTestId('region-selection-clear-btn').click();
+    await page.mouse.click(a.clientX, a.clientY);
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="region-selection-bar"]')
+          ?.innerText.includes('1 region selected'),
+      { timeout: 3000 }
+    );
+    await page.mouse.click(b.clientX, b.clientY);
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="region-selection-bar"]')
+          ?.innerText.includes('2 regions selected'),
+      { timeout: 3000 }
+    );
+
+    // Enter raw prompt with extra whitespace/control chars to verify sanitization
+    await page
+      .getByTestId('infinite-zoom-in-prompt-input')
+      .fill('  Tiny wildflowers   and moss  ');
+    await page.getByTestId('region-selection-confirm-btn').click();
+
+    const undoToast = page.getByTestId('undo-subdivision-toast');
+    await undoToast.waitFor({ state: 'visible', timeout: 25000 });
+
+    // Assert Puter call payload contract & zero external script loads
+    const puterCalls = await page.evaluate(() => window.__puterCalls || []);
+    assert.equal(puterCalls.length, 1, `Expected 1 Puter call, got ${puterCalls.length}`);
+    const call = puterCalls[0];
+    assert.equal(call.options?.model, 'gemini-nano-banana-2.1', 'Expected default Nano Banana 2.1 model');
+    assert.equal(call.options?.input_image_mime_type, 'image/png', 'Expected image/png MIME type');
+    assert.ok(
+      typeof call.options?.input_image === 'string' &&
+        call.options.input_image.length > 100 &&
+        !call.options.input_image.startsWith('data:'),
+      'Expected non-empty raw base64 input_image without data URL prefix'
+    );
+    assert.ok(
+      VALID_GEMINI_ASPECT_RATIOS.has(call.options?.ratio),
+      `Expected valid Gemini aspect ratio, got "${call.options?.ratio}"`
+    );
+    assert.ok(
+      typeof call.prompt === 'string' && call.prompt.includes('Tiny wildflowers and moss'),
+      `Expected sanitized user prompt inside Puter prompt, got "${call.prompt}"`
+    );
+    assert.equal(await page.locator('script[src*="js.puter.com"]').count(), 0);
+    assert.equal(puterSpy.getRequests().length, 0);
+
+    // Verify unified single-canvas invariants: NO separate child save
+    assert.equal(
+      await page.getByTestId('topbar-parent-puzzle-btn').count(),
+      0,
+      'Unified Zoom In must NOT show topbar-parent-puzzle-btn'
+    );
+    const snapshotsAfterFirstZoom = await readSnapshots(page);
+    const sessionAfterFirstZoom = await readActiveSession(page);
+    assert.equal(
+      snapshotsAfterFirstZoom.length,
+      snapshotsBefore.length,
+      'Unified Zoom In must NOT create a separate child snapshot'
+    );
+    assert.equal(
+      sessionAfterFirstZoom.activeSnapshotId,
+      snapId,
+      'activeSnapshotId must remain identical after Zoom In'
+    );
+
+    const puzzleAfterFirstZoom = await readPuzzleSummary(page, snapId);
+    assert.equal(puzzleAfterFirstZoom.nestedLayers.length, 1, 'Expected 1 embedded nested layer');
+    assert.equal(puzzleAfterFirstZoom.maxZoomDepth, 1, 'Expected maxZoomDepth === 1');
+    assert.ok(
+      puzzleAfterFirstZoom.totalRegionCount > puzzleBefore.totalRegionCount,
+      `Expected total regions to grow (${puzzleAfterFirstZoom.totalRegionCount} > ${puzzleBefore.totalRegionCount})`
+    );
+
+    // 1-Tap Undo Infinite Zoom (BEFORE painting, since painting clears the undo toast)
+    await page.getByTestId('undo-subdivision-btn').click();
+    await undoToast.waitFor({ state: 'hidden', timeout: 10000 });
+    const undoSplitRestored = await waitForCondition(
+      async () => {
+        const snaps = await readSnapshots(page);
+        const cur = snaps.find((s) => s.id === snapId);
+        return Boolean(cur && cur.totalCount === puzzleBefore.totalRegionCount);
+      },
+      10000,
+      50
+    );
+    assert.equal(
+      undoSplitRestored,
+      true,
+      'Expected 1-tap Undo Split to restore pre-zoom snapshot totalCount'
+    );
+    const puzzleAfterUndo = await readPuzzleSummary(page, snapId);
+    assert.equal(
+      puzzleAfterUndo.nestedLayers.length,
+      0,
+      '1-tap Undo Split must remove the embedded nested layer'
+    );
+    assert.equal(
+      puzzleAfterUndo.totalRegionCount,
+      puzzleBefore.totalRegionCount,
+      '1-tap Undo Split must restore exact pre-zoom region count'
+    );
+    assert.equal((await readSnapshots(page)).length, snapshotsBefore.length);
+
+    // Re-apply Zoom In on A + B
+    await dismissFeatureOfferIfVisible(page);
+    await page.getByTestId('infinite-zoom-menu-btn').click();
+    await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+    await selBar.waitFor({ state: 'visible', timeout: 3000 });
+    await page.mouse.click(a.clientX, a.clientY);
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="region-selection-bar"]')
+          ?.innerText.includes('1 region selected'),
+      { timeout: 3000 }
+    );
+    await page.mouse.click(b.clientX, b.clientY);
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="region-selection-bar"]')
+          ?.innerText.includes('2 regions selected'),
+      { timeout: 3000 }
+    );
+    await page.getByTestId('region-selection-confirm-btn').click();
+    await undoToast.waitFor({ state: 'visible', timeout: 25000 });
+
+    const puzzleUnified = await readPuzzleSummary(page, snapId);
+    assert.equal(puzzleUnified.nestedLayers.length, 1);
+    assert.equal(puzzleUnified.maxZoomDepth, 1);
+
+    // Verify dynamic max zoom scales cleanly ABOVE 12x (up to 24x at depth 1)
+    const zoomInBtn = page.getByTestId('zoom-in-btn');
+    await zoomInBtn.waitFor({ state: 'visible', timeout: 3000 });
+    for (let i = 0; i < 16; i++) {
+      await zoomInBtn.click();
+    }
+    const scaledAbove12 = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return typeof sess.zoomScale === 'number' && sess.zoomScale > 12;
+    }, 5000);
+    const zoomedSess = await readActiveSession(page);
+    assert.equal(
+      scaledAbove12,
+      true,
+      `Expected dynamic max zoom > 12x at depth 1, got zoomScale=${zoomedSess.zoomScale}`
+    );
+    assert.ok(
+      zoomedSess.zoomScale <= 24.05,
+      `Expected depth-1 zoomScale <= 24x, got ${zoomedSess.zoomScale}`
+    );
+
+    // Reset view back to 1x so both outer root and nested detail layers are cleanly clickable
+    await page.getByTestId('reset-view-btn').click();
+    const resetDone = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return typeof sess.zoomScale === 'number' && sess.zoomScale <= 1.05;
+    }, 4000);
+    assert.equal(resetDone, true, 'Expected reset-view-btn to return zoomScale to ~1x');
+    await waitForAnimationFrames(page, 2);
+    await dismissFeatureOfferIfVisible(page);
+
+    // Paint BOTH an outer root region AND a nested detail layer region in the same session
+    const unifiedTargets = await findUnifiedRegionTargets(page, snapId);
+    assert.ok(
+      unifiedTargets &&
+        unifiedTargets.unfilledRootTargets.length > 0 &&
+        unifiedTargets.unfilledNestedTargets.length > 0,
+      `Expected clickable outer (${unifiedTargets?.unfilledRootTargets?.length}) and nested (${unifiedTargets?.unfilledNestedTargets?.length}) targets`
+    );
+    const outerTarget = unifiedTargets.unfilledRootTargets[0];
+    const nestedTarget = unifiedTargets.unfilledNestedTargets.find(
+      (cand) => Math.hypot(cand.clientX - outerTarget.clientX, cand.clientY - outerTarget.clientY) >= 48
+    ) || unifiedTargets.unfilledNestedTargets[0];
+
+    const filledBefore = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    const remainingBefore = await readTotalRemainingRegions(page);
+
+    await paintTargetRegion(page, outerTarget);
+    // Painting commits history and clears the undo-subdivision toast
+    await undoToast.waitFor({ state: 'hidden', timeout: 3000 });
+    const filledAfterOuter = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(filledAfterOuter, filledBefore + 1, 'Outer root paint must increment filledCount');
+
+    // INTENTIONAL_TIMING_WINDOW: ensure second paint tap exceeds 350ms double-tap window if close
+    await page.waitForTimeout(380);
+    await paintTargetRegion(page, nestedTarget);
+    const filledAfterNested = Number(
+      await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')
+    );
+    assert.equal(filledAfterNested, filledBefore + 2, 'Nested detail paint must increment filledCount');
+
+    const remainingAfterBoth = await readTotalRemainingRegions(page);
+    assert.equal(
+      remainingAfterBoth,
+      remainingBefore - 2,
+      'Shared PaletteDock remaining count must decrement for both outer and nested layer paints'
+    );
+
+    // Verify unified Undo & Redo across both layers
+    await dismissFeatureOfferIfVisible(page);
+    await page.getByTestId('undo-btn').click();
+    const undidNested = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return (
+        Array.isArray(sess.filledRegionIds) &&
+        !sess.filledRegionIds.includes(nestedTarget.id) &&
+        sess.filledRegionIds.includes(outerTarget.id)
+      );
+    }, 4000);
+    assert.equal(undidNested, true, 'First Undo must revert nested layer paint');
+
+    await dismissFeatureOfferIfVisible(page);
+    await page.getByTestId('undo-btn').click();
+    const undidOuter = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return Array.isArray(sess.filledRegionIds) && !sess.filledRegionIds.includes(outerTarget.id);
+    }, 4000);
+    assert.equal(undidOuter, true, 'Second Undo must revert outer root paint');
+
+    await page.getByTestId('redo-btn').click();
+    await waitForAnimationFrames(page, 2);
+    await page.getByTestId('redo-btn').click();
+    const redidBoth = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return (
+        Array.isArray(sess.filledRegionIds) &&
+        sess.filledRegionIds.includes(outerTarget.id) &&
+        sess.filledRegionIds.includes(nestedTarget.id)
+      );
+    }, 4000);
+    assert.equal(redidBoth, true, 'Redo twice must restore both outer and nested layer paints');
+
+    assert.equal(puterSpy.getRequests().length, 0);
+    errors.assertZeroErrors();
+  } finally {
+    await context.close();
+  }
+
+  ctx.logE2ePass(label);
+}
+
+// ============================================================================
+// Stage 3: Unified Zoom Out (BYOK Mock), 100% Progress & Nested Preservation,
+//          2.5:1 Guard & Single-File .capy v2 Round-Trip
+// ============================================================================
+
+async function runStage3(ctx) {
+  const label =
+    'Infinite Zoom Stage 3: Unified Zoom Out (BYOK mock), progress/layer preservation, 2.5:1 guard & .capy v2 round-trip';
+  ctx.logE2eStart(label);
+
+  const TEST_BYOK_KEY = 'AIzaSyCapyE2EByokSecretKey987654321';
+  const exportedCapyPath = path.join(
+    os.tmpdir(),
+    `capy_iz_v2_roundtrip_${process.pid}_${Date.now()}.capy`
+  );
+
+  let expectedTotalRegions = 0;
+  let expectedNestedLayerCount = 0;
+  let expectedMaxZoomDepth = 0;
+  let expectedFilledIds = [];
+
+  try {
+    // --- Context 1: Paint + Zoom In + BYOK Zoom Out + 2.5:1 Guard + Export .capy v2 ---
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s3-export',
+      acceptDownloads: true,
+      easyNoReplay: true,
+      extraSettings: { showZoomButtons: true, showResetViewButton: true },
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, 'iz-s3-export', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      await injectPuterMock(page, { pngDataUrl: MULTI_COLOR_PNG_DATA_URL, mode: 'ok' });
+
+      const geminiRequests = [];
+      await page.route(
+        'https://generativelanguage.googleapis.com/v1beta/models/*:generateContent',
+        async (route) => {
+          const req = route.request();
+          const headers = req.headers();
+          const url = req.url();
+          let body = null;
+          try {
+            body = req.postDataJSON();
+          } catch {
+            body = null;
+          }
+          geminiRequests.push({
+            url,
+            apiKeyHeader: headers['x-goog-api-key'] || null,
+            body,
+          });
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              candidates: [
+                {
+                  finishReason: 'STOP',
+                  content: {
+                    parts: [
+                      {
+                        inlineData: {
+                          mimeType: 'image/png',
+                          data: MULTI_COLOR_PNG_BASE64,
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+          });
+        }
+      );
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      const initialSession = await readActiveSession(page);
+      const snapId = initialSession.activeSnapshotId;
+      const snapshotsBefore = await readSnapshots(page);
+
+      // Step 1: Paint 2 distinct root regions outside our Zoom In pair
+      const initialTargets = await findUnifiedRegionTargets(page, snapId);
+      assert.ok(initialTargets?.largePair, 'Stage 3: expected touching pair');
+      const { a, b } = initialTargets.largePair;
+      const prePaintRootTargets = pickWellSeparatedTargets(
+        initialTargets.unfilledRootTargets,
+        2,
+        new Set([a.id, b.id]),
+        48
+      );
+      assert.equal(prePaintRootTargets.length, 2, 'Stage 3: expected 2 root regions to pre-paint');
+      for (const target of prePaintRootTargets) {
+        await paintTargetRegion(page, target);
+      }
+
+      // Step 2: Create a nested Zoom In detail layer on A + B and paint 1 nested region too
+      await dismissFeatureOfferIfVisible(page);
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(a.clientX, a.clientY);
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="region-selection-bar"]')
+            ?.innerText.includes('1 region selected'),
+        { timeout: 3000 }
+      );
+      await page.mouse.click(b.clientX, b.clientY);
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="region-selection-bar"]')
+            ?.innerText.includes('2 regions selected'),
+        { timeout: 3000 }
+      );
+      await page.getByTestId('region-selection-confirm-btn').click();
+      const undoToast = page.getByTestId('undo-subdivision-toast');
+      await undoToast.waitFor({ state: 'visible', timeout: 25000 });
+
+      const afterZoomInTargets = await findUnifiedRegionTargets(page, snapId);
+      assert.ok(
+        afterZoomInTargets?.unfilledNestedTargets?.length > 0,
+        'Stage 3: expected paintable region in nested detail layer'
+      );
+      await paintTargetRegion(page, afterZoomInTargets.unfilledNestedTargets[0]);
+      await undoToast.waitFor({ state: 'hidden', timeout: 3000 });
+
+      const puzzleBeforeExtend = await readPuzzleSummary(page, snapId);
+      assert.equal(puzzleBeforeExtend.nestedLayers.length, 1, 'Expected 1 nested layer before Zoom Out');
+      const preExistingDetailLayer = puzzleBeforeExtend.nestedLayers[0];
+      const sessionBeforeExtend = await readActiveSession(page);
+      const filledBeforeExtend = [...(sessionBeforeExtend.filledRegionIds || [])];
+      assert.ok(
+        filledBeforeExtend.length >= 3,
+        `Expected >= 3 painted regions (root + nested) before Zoom Out, got ${filledBeforeExtend.length}`
+      );
+
+      // Step 3: Switch provider to GEMINI_BYOK and save test API key
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-create').click();
+      await page.getByTestId('iz-provider-select').selectOption('GEMINI_BYOK');
+      await page.getByTestId('iz-byok-key-input').fill(TEST_BYOK_KEY);
+      await page.getByTestId('iz-byok-save-btn').click();
+      await page.waitForFunction(
+        (k) => localStorage.getItem(k) !== null,
+        BYOK_KEY_STORAGE_KEY,
+        { timeout: 3000 }
+      );
+      await page.getByTestId('settings-modal-close').click();
+      await waitForAnimationFrames(page, 2);
+
+      // Step 4: Verify 0-side alert guard, then extend Top + Left via Direct Gemini BYOK
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      const popover = page.locator('[role="dialog"][aria-label="Infinite Zoom Controls"]');
+      await popover.waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+
+      await setExtendSideState(page, 'extend-side-top', false);
+      await setExtendSideState(page, 'extend-side-bottom', false);
+      await setExtendSideState(page, 'extend-side-left', false);
+      await setExtendSideState(page, 'extend-side-right', false);
+
+      const zeroSideAlert = popover.locator('[role="alert"]');
+      await zeroSideAlert.waitFor({ state: 'visible', timeout: 3000 });
+      assert.ok(
+        (await zeroSideAlert.innerText()).includes('Select at least one border side'),
+        'Expected 0-side guard alert message'
+      );
+      assert.equal(
+        await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').isDisabled(),
+        true,
+        'Confirm button must be disabled when 0 sides are selected'
+      );
+
+      // Enable Top + Left and confirm Zoom Out
       await setExtendSideState(page, 'extend-side-top', true);
+      await setExtendSideState(page, 'extend-side-left', true);
+      await page.getByTestId('infinite-zoom-out-prompt-input').fill('Starry hills');
       await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
-      await page.waitForFunction(
-        ({ key, prevId }) => {
-          const s = JSON.parse(localStorage.getItem(key) || '{}');
-          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
+
+      await undoToast.waitFor({ state: 'visible', timeout: 25000 });
+      assert.ok(
+        (await page.getByTestId('undo-subdivision-btn').innerText()).includes('Undo Extend'),
+        'Expected Undo Extend label on Zoom Out toast'
+      );
+
+      // Assert Direct Gemini BYOK HTTP contract
+      assert.equal(geminiRequests.length, 1, 'Expected 1 Direct Gemini BYOK HTTP request');
+      assert.equal(
+        geminiRequests[0].apiKeyHeader,
+        TEST_BYOK_KEY,
+        'x-goog-api-key header must match saved BYOK key'
+      );
+      assert.equal(
+        geminiRequests[0].url.includes(TEST_BYOK_KEY),
+        false,
+        'BYOK API key must NEVER appear in request URL'
+      );
+      assert.equal(
+        geminiRequests[0].body?.generationConfig?.imageConfig?.imageSize,
+        '1K',
+        'Expected 1K resolution in Gemini imageConfig'
+      );
+
+      // Verify unified Zoom Out invariants: NO separate 0% save, 100% painted progress & nested layer preserved
+      assert.equal(await page.getByTestId('topbar-parent-puzzle-btn').count(), 0);
+      assert.equal(
+        (await readSnapshots(page)).length,
+        snapshotsBefore.length,
+        'Unified Zoom Out must NOT create a separate 0% outer snapshot'
+      );
+      const sessionAfterExtend = await readActiveSession(page);
+      assert.equal(sessionAfterExtend.activeSnapshotId, snapId);
+      const filledSetAfterExtend = new Set(sessionAfterExtend.filledRegionIds || []);
+      for (const prevId of filledBeforeExtend) {
+        assert.equal(
+          filledSetAfterExtend.has(prevId),
+          true,
+          `Previously painted region ${prevId} MUST remain painted after Zoom Out`
+        );
+      }
+
+      const puzzleAfterExtend = await readPuzzleSummary(page, snapId);
+      assert.equal(
+        puzzleAfterExtend.nestedLayers.length,
+        puzzleBeforeExtend.nestedLayers.length + 1,
+        'Zoom Out must demote prior root and preserve existing nested detail layer'
+      );
+      assert.equal(puzzleAfterExtend.maxZoomDepth, 2, 'Expected maxZoomDepth === 2 after Zoom In + Zoom Out');
+      assert.ok(
+        puzzleAfterExtend.totalRegionCount > puzzleBeforeExtend.totalRegionCount,
+        'Expected outer border regions added to unified totalCount'
+      );
+
+      const rebasedDetailLayer = puzzleAfterExtend.nestedLayers.find(
+        (l) => l.layerId === preExistingDetailLayer.layerId
+      );
+      assert.ok(rebasedDetailLayer, 'Pre-existing nested detail layer must survive Zoom Out');
+      assert.equal(
+        rebasedDetailLayer.depth,
+        preExistingDetailLayer.depth + 1,
+        'Pre-existing nested detail layer depth must increment on Zoom Out'
+      );
+      assert.ok(
+        rebasedDetailLayer.worldBounds.x > preExistingDetailLayer.worldBounds.x &&
+          rebasedDetailLayer.worldBounds.y > preExistingDetailLayer.worldBounds.y &&
+          rebasedDetailLayer.worldBounds.width < preExistingDetailLayer.worldBounds.width &&
+          rebasedDetailLayer.worldBounds.height < preExistingDetailLayer.worldBounds.height,
+        `Pre-existing nested detail layer worldBounds must be affinely rebased inside Top+Left expanded world (before=${JSON.stringify(preExistingDetailLayer.worldBounds)}, after=${JSON.stringify(rebasedDetailLayer.worldBounds)})`
+      );
+
+      // Step 5: Verify 1-tap Undo Extend restores exact pre-extend state
+      await page.getByTestId('undo-subdivision-btn').click();
+      await undoToast.waitFor({ state: 'hidden', timeout: 10000 });
+      const undoExtendRestored = await waitForCondition(
+        async () => {
+          const snaps = await readSnapshots(page);
+          const cur = snaps.find((s) => s.id === snapId);
+          return Boolean(cur && cur.totalCount === puzzleBeforeExtend.totalRegionCount);
         },
-        { key: ACTIVE_SESSION_KEY, prevId: freeInnerSnapId },
-        { timeout: 25000 }
-      );
-      await waitForPuzzleLoaded(page);
-      const freeOuterSession = await readActiveSession(page);
-      assert.equal(
-        Boolean(freeOuterSession.isFreeColorMode),
-        true,
-        'Extended outer puzzle created from Free Colour Mode must preserve Free Colour Mode'
-      );
-      // Navigate back to Inner puzzle via topbar-child-puzzle-btn -> Bug #7 regression: inner snapshot must STILL have isFreeColor === true!
-      await page.getByTestId('topbar-child-puzzle-btn').waitFor({ state: 'visible', timeout: 5000 });
-      await page.getByTestId('topbar-child-puzzle-btn').click();
-      await page.waitForFunction(
-        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
-        { key: ACTIVE_SESSION_KEY, targetId: freeInnerSnapId },
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(page);
-      const restoredFreeInnerSession = await readActiveSession(page);
-      const restoredFreeInnerSnap = (await readSnapshots(page)).find((s) => s.id === freeInnerSnapId);
-      assert.equal(
-        Boolean(restoredFreeInnerSnap?.isFreeColor),
-        true,
-        'Inner snapshot metadata must preserve isFreeColor === true after Extend Borders transition'
+        10000,
+        50
       );
       assert.equal(
-        Boolean(restoredFreeInnerSession.isFreeColorMode),
+        undoExtendRestored,
         true,
-        'Returning to Inner snapshot via breadcrumb must keep Free Colour Mode enabled'
+        'Expected 1-tap Undo Extend to restore pre-extend snapshot totalCount'
       );
+      const puzzleAfterUndoExtend = await readPuzzleSummary(page, snapId);
+      assert.equal(puzzleAfterUndoExtend.nestedLayers.length, puzzleBeforeExtend.nestedLayers.length);
+      assert.equal(puzzleAfterUndoExtend.maxZoomDepth, puzzleBeforeExtend.maxZoomDepth);
+      assert.equal(puzzleAfterUndoExtend.totalRegionCount, puzzleBeforeExtend.totalRegionCount);
+
+      // Step 6: Verify 2.5:1 aspect ratio guard via Left + Right extension and leave an active extended border for Steps 7-8
+      await dismissFeatureOfferIfVisible(page);
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await popover.waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await setExtendSideState(page, 'extend-side-top', false);
+      await setExtendSideState(page, 'extend-side-bottom', false);
+      await setExtendSideState(page, 'extend-side-left', true);
+      await setExtendSideState(page, 'extend-side-right', true);
+
+      const confirmExtendBtn = page.getByTestId('toolbar-infinite-zoom-out-confirm-btn');
+      const aspectAlert = popover.locator('[role="alert"]');
+      const leftRightAlreadyBlocked = await confirmExtendBtn.isDisabled();
+      if (leftRightAlreadyBlocked) {
+        // Wide sample (e.g. 1408x768 = 1.83:1 -> Left+Right = 3.12:1 > 2.5:1) trips 2.5:1 guard immediately
+        await aspectAlert.waitFor({ state: 'visible', timeout: 3000 });
+        assert.ok(
+          (await aspectAlert.innerText()).includes('2.5:1'),
+          `Expected 2.5:1 aspect guard alert, got "${await aspectAlert.innerText()}"`
+        );
+        assert.equal(
+          await confirmExtendBtn.isDisabled(),
+          true,
+          'Confirm button must be disabled when extension exceeds 2.5:1 aspect ratio'
+        );
+        // Now switch to balanced Top + Left extension so Steps 7 & 8 test outer border painting & .capy v2 round-trip
+        await setExtendSideState(page, 'extend-side-top', true);
+        await setExtendSideState(page, 'extend-side-right', false);
+        assert.equal(
+          await confirmExtendBtn.isDisabled(),
+          false,
+          'Confirm button must re-enable for balanced Top + Left extension'
+        );
+        await confirmExtendBtn.click();
+        await undoToast.waitFor({ state: 'visible', timeout: 25000 });
+      } else {
+        // Square sample (1:1 -> 1.7:1 on first Left+Right, then 2.89:1 > 2.5:1 on second Left+Right)
+        await confirmExtendBtn.click();
+        await undoToast.waitFor({ state: 'visible', timeout: 25000 });
+
+        await page.getByTestId('infinite-zoom-menu-btn').click();
+        await popover.waitFor({ state: 'visible', timeout: 3000 });
+        await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+        await setExtendSideState(page, 'extend-side-top', false);
+        await setExtendSideState(page, 'extend-side-bottom', false);
+        await setExtendSideState(page, 'extend-side-left', true);
+        await setExtendSideState(page, 'extend-side-right', true);
+
+        await aspectAlert.waitFor({ state: 'visible', timeout: 3000 });
+        assert.ok(
+          (await aspectAlert.innerText()).includes('2.5:1'),
+          `Expected 2.5:1 aspect guard alert, got "${await aspectAlert.innerText()}"`
+        );
+        assert.equal(
+          await confirmExtendBtn.isDisabled(),
+          true,
+          'Confirm button must be disabled when extension exceeds 2.5:1 aspect ratio'
+        );
+        await page.keyboard.press('Escape');
+        await popover.waitFor({ state: 'hidden', timeout: 3000 });
+      }
+
+      // Step 7: Paint a newly added outer border region in the SAME unified canvas
+      await dismissFeatureOfferIfVisible(page);
+      const postExtendTargets = await findUnifiedRegionTargets(page, snapId);
+      assert.ok(
+        postExtendTargets?.unfilledRootTargets?.length > 0,
+        'Stage 3: expected clickable newly added outer border region'
+      );
+      const outerBorderTarget = postExtendTargets.unfilledRootTargets[0];
+      await paintTargetRegion(page, outerBorderTarget);
+
+      const finalExportPuzzle = await readPuzzleSummary(page, snapId);
+      const finalExportSession = await readActiveSession(page);
+      expectedTotalRegions = finalExportPuzzle.totalRegionCount;
+      expectedNestedLayerCount = finalExportPuzzle.nestedLayers.length;
+      expectedMaxZoomDepth = finalExportPuzzle.maxZoomDepth;
+      expectedFilledIds = [...(finalExportSession.filledRegionIds || [])];
+      assert.ok(expectedFilledIds.includes(outerBorderTarget.id));
+      for (const prevId of filledBeforeExtend) {
+        assert.ok(
+          expectedFilledIds.includes(prevId),
+          `Prior painted region ${prevId} must remain in final exported set`
+        );
+      }
+
+      // Step 8: Export single-file .capy v2 & verify binary structure + zero BYOK leak
+      await page.getByTestId('topbar-saves-btn').click();
+      await page.getByTestId(`save-card-${snapId}`).click();
+      const [download] = await Promise.all([
+        page.waitForEvent('download', { timeout: 10000 }),
+        page.getByTestId('save-action-export').click(),
+      ]);
+      await download.saveAs(exportedCapyPath);
+
+      const exportedBuf = fs.readFileSync(exportedCapyPath);
+      const parsedCapy = inspectCapyV2Buffer(exportedBuf, TEST_BYOK_KEY);
+      assert.equal(
+        parsedCapy.compactPuzzle?.nestedLayers?.length,
+        expectedNestedLayerCount,
+        'Exported .capy v2 must include all nestedLayers'
+      );
+      assert.equal(
+        parsedCapy.compactPuzzle?.maxZoomDepth,
+        expectedMaxZoomDepth,
+        'Exported .capy v2 must include maxZoomDepth'
+      );
+      const layerImageKeys = Object.keys(parsedCapy.layerImages || {});
+      assert.ok(
+        layerImageKeys.length >= expectedNestedLayerCount,
+        `Exported .capy v2 must include layerImages (got ${layerImageKeys.length}, expected >= ${expectedNestedLayerCount})`
+      );
+
+      assert.equal(puterSpy.getRequests().length, 0);
+      errors.assertZeroErrors();
     } finally {
       await context.close();
     }
 
-    // Part B: 360x780 Mobile Portrait + largeText: true layout & TopBar lane overlap checks
-    const { context: mobCtx, page: mobPage } = await createBootedContext(browser, BASE_URL, {
-      label: 'infinite-zoom-stage4-mobile-360',
-      attachErrorListeners,
-      viewport: { width: 360, height: 780 },
-      hasTouch: true,
-      skipTutorial: true,
-      easyNoReplay: true,
-      extraSettings: { largeText: true },
-    });
+    // --- Context 2: Fresh Isolated Context .capy v2 Import Round-Trip Verification ---
+    const { context: freshContext, page: freshPage } = await createBootedContext(
+      ctx.browser,
+      ctx.BASE_URL,
+      {
+        label: 'infinite-zoom-s3-import',
+        easyNoReplay: true,
+        extraSettings: { showZoomButtons: true },
+        bootUrl: false,
+        waitForPuzzle: false,
+      }
+    );
     try {
-      const largeTextAttr = await mobPage.evaluate(() => document.documentElement.dataset.largeText);
-      assert.equal(largeTextAttr, 'true', 'largeText: true must set documentElement.dataset.largeText = "true"');
+      const errors = attachStrictErrorListeners(freshPage, 'iz-s3-import', ctx);
+      const puterSpy = await attachPuterNetworkSpy(freshPage);
 
-      // Create an extended outer puzzle so Outer/Inner breadcrumbs are visible on 360x780
-      const baseSnapId = (await readActiveSession(mobPage)).activeSnapshotId;
-      await mobPage.getByTestId('infinite-zoom-menu-btn').click();
-      await mobPage.getByTestId('toolbar-infinite-zoom-out-btn').waitFor({ state: 'visible', timeout: 3000 });
+      await freshPage.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(freshPage);
 
-      // Check popover items fit strictly inside [0, 360] x [0, 780]
-      const zoomInPopBox = await getStableBoundingBox(mobPage.getByTestId('toolbar-infinite-zoom-in-btn'));
-      const zoomOutPopBox = await getStableBoundingBox(mobPage.getByTestId('toolbar-infinite-zoom-out-btn'));
-      assert.ok(zoomInPopBox && zoomOutPopBox, 'Popover action buttons must have valid bounding boxes');
-      for (const [name, box] of [
-        ['toolbar-infinite-zoom-in-btn', zoomInPopBox],
-        ['toolbar-infinite-zoom-out-btn', zoomOutPopBox],
-      ]) {
-        assert.ok(
-          box.x >= -0.5 && box.x + box.width <= 360.5 && box.y >= 0 && box.y + box.height <= 780.5,
-          `Mobile 360x780 + largeText: ${name} clipped outside viewport (${JSON.stringify(box)})`
-        );
-      }
-
-      await mobPage.getByTestId('toolbar-infinite-zoom-out-btn').click();
-      await mobPage.getByTestId('toolbar-infinite-zoom-out-confirm-btn').waitFor({ state: 'visible', timeout: 3000 });
-      await mobPage.getByTestId('infinite-zoom-out-prompt-input').waitFor({ state: 'visible', timeout: 3000 });
-      await setExtendSideState(mobPage, 'extend-side-top', true);
-
-      // Verify Extend Borders sub-popover controls fit strictly inside 360x780 + largeText with zero horizontal overflow
-      const extendSubPopoverControls = [
-        'extend-side-top',
-        'extend-side-bottom',
-        'extend-side-left',
-        'extend-side-right',
-        'infinite-zoom-out-prompt-input',
-        'toolbar-infinite-zoom-out-confirm-btn',
-      ];
-      for (const testId of extendSubPopoverControls) {
-        const ctrl = mobPage.getByTestId(testId);
-        await ctrl.waitFor({ state: 'visible', timeout: 3000 });
-        const box = await getStableBoundingBox(ctrl);
-        assert.ok(box, `Mobile 360x780 + largeText: ${testId} must have a valid bounding box`);
-        assert.ok(
-          box.x >= 0 && box.x + box.width <= 360.5 && box.y >= 0 && box.y + box.height <= 780.5,
-          `Mobile 360x780 + largeText: Extend Borders control ${testId} clipped outside viewport (${JSON.stringify(box)})`
-        );
-      }
-      const extendPopoverOverflow = await mobPage.evaluate(
-        () => document.documentElement.scrollWidth - window.innerWidth
+      assert.equal(
+        await readByokKey(freshPage),
+        null,
+        'Fresh isolated context must have no BYOK key'
       );
+
+      const snapsBeforeImport = await readSnapshots(freshPage);
+      const idsBeforeImport = new Set(snapsBeforeImport.map((s) => s.id));
+
+      await freshPage.getByTestId('topbar-saves-btn').click();
+      await freshPage.getByTestId('import-save-btn').waitFor({ state: 'visible', timeout: 5000 });
+      await freshPage.locator('input[type="file"][accept*=".capy"]').setInputFiles(exportedCapyPath);
+
+      const importNotice = freshPage.getByTestId('saves-import-notice');
+      await importNotice.waitFor({ state: 'visible', timeout: 10000 });
       assert.ok(
-        extendPopoverOverflow <= 0,
-        `Must have zero horizontal document overflow while Extend Borders sub-popover is open on 360x780 + largeText (got ${extendPopoverOverflow}px)`
+        (await importNotice.innerText()).toLowerCase().includes('imported'),
+        `Expected successful import notice, got "${await importNotice.innerText()}"`
       );
 
-      await mobPage.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
-      await mobPage.waitForFunction(
-        ({ key, prevId }) => {
-          const s = JSON.parse(localStorage.getItem(key) || '{}');
-          return Boolean(s.activeSnapshotId && s.activeSnapshotId !== prevId);
+      // Locate imported snapshot card (either newly inserted ID or updated matching totalCount)
+      const snapsAfterImport = await readSnapshots(freshPage);
+      const importedSnap =
+        snapsAfterImport.find((s) => !idsBeforeImport.has(s.id)) ||
+        snapsAfterImport.find((s) => s.totalCount === expectedTotalRegions);
+      assert.ok(importedSnap, 'Expected imported snapshot in capy_snapshots_v8');
+
+      await freshPage.getByTestId(`save-card-${importedSnap.id}`).click();
+      await freshPage.getByTestId('save-action-load').click();
+      await freshPage.waitForFunction(
+        ({ key, targetId }) => {
+          const sess = JSON.parse(localStorage.getItem(key) || '{}');
+          return (
+            sess.activeSnapshotId === targetId &&
+            Array.isArray(sess.filledRegionIds) &&
+            sess.filledRegionIds.length > 0
+          );
         },
-        { key: ACTIVE_SESSION_KEY, prevId: baseSnapId },
-        { timeout: 25000 }
+        { key: ACTIVE_SESSION_KEY, targetId: importedSnap.id },
+        { timeout: 10000 }
       );
-      await waitForPuzzleLoaded(mobPage);
-      await mobPage.getByTestId('topbar-child-puzzle-btn').waitFor({ state: 'visible', timeout: 5000 });
+      await waitForPuzzleLoaded(freshPage);
 
-      // Verify zero horizontal document overflow and zero topbar-left-lane / topbar-right-lane overlap
-      const mobileOverflow = await mobPage.evaluate(
-        () => document.documentElement.scrollWidth - window.innerWidth
+      const restoredPuzzle = await readPuzzleSummary(freshPage, importedSnap.id);
+      const restoredSession = await readActiveSession(freshPage);
+      assert.equal(
+        restoredPuzzle.totalRegionCount,
+        expectedTotalRegions,
+        'Imported .capy v2 must restore exact unified totalRegionCount'
       );
-      assert.ok(
-        mobileOverflow <= 0,
-        `Must have zero horizontal document overflow on 360x780 + largeText (got ${mobileOverflow}px)`
+      assert.equal(
+        restoredPuzzle.nestedLayers.length,
+        expectedNestedLayerCount,
+        'Imported .capy v2 must restore exact nestedLayers count'
       );
-
-      const leftLaneBox = await mobPage.getByTestId('topbar-left-lane').boundingBox();
-      const rightLaneBox = await mobPage.getByTestId('topbar-right-lane').boundingBox();
-      assert.ok(leftLaneBox && rightLaneBox, 'TopBar left and right lanes must have bounding boxes');
-      assert.ok(
-        leftLaneBox.x + leftLaneBox.width <= rightLaneBox.x + 1 &&
-          rightLaneBox.x + rightLaneBox.width <= 360.5,
-        `TopBar lanes must not overlap or overflow 360px with Inner breadcrumb visible (${JSON.stringify({
-          leftLaneBox,
-          rightLaneBox,
-        })})`
+      assert.equal(
+        restoredPuzzle.maxZoomDepth,
+        expectedMaxZoomDepth,
+        'Imported .capy v2 must restore exact maxZoomDepth'
       );
 
-      // Navigate Inner to also verify Outer breadcrumb (topbar-parent-puzzle-btn) on 360x780 + largeText
-      await mobPage.getByTestId('topbar-child-puzzle-btn').click();
-      await mobPage.waitForFunction(
-        ({ key, targetId }) => JSON.parse(localStorage.getItem(key) || '{}').activeSnapshotId === targetId,
-        { key: ACTIVE_SESSION_KEY, targetId: baseSnapId },
-        { timeout: 15000 }
+      const restoredFilledSet = new Set(restoredSession.filledRegionIds || []);
+      assert.equal(
+        restoredFilledSet.size,
+        expectedFilledIds.length,
+        'Imported .capy v2 must restore exact painted region count'
       );
-      await waitForPuzzleLoaded(mobPage);
-      await mobPage.getByTestId('topbar-parent-puzzle-btn').waitFor({ state: 'visible', timeout: 5000 });
-      const leftLaneOuterBox = await mobPage.getByTestId('topbar-left-lane').boundingBox();
-      const rightLaneOuterBox = await mobPage.getByTestId('topbar-right-lane').boundingBox();
-      assert.ok(
-        leftLaneOuterBox &&
-          rightLaneOuterBox &&
-          leftLaneOuterBox.x + leftLaneOuterBox.width <= rightLaneOuterBox.x + 1 &&
-          rightLaneOuterBox.x + rightLaneOuterBox.width <= 360.5,
-        `TopBar lanes must not overlap with Outer breadcrumb visible on 360x780 (${JSON.stringify({
-          leftLaneOuterBox,
-          rightLaneOuterBox,
-        })})`
-      );
+      for (const expectedId of expectedFilledIds) {
+        assert.equal(
+          restoredFilledSet.has(expectedId),
+          true,
+          `Imported .capy v2 missing painted region ID ${expectedId}`
+        );
+      }
 
-      // Open Region Selection Bar on 360x780 + largeText and verify zero horizontal clipping
-      await mobPage.getByTestId('infinite-zoom-menu-btn').click();
-      await mobPage.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      const mobSelBar = mobPage.getByTestId('region-selection-bar');
-      await mobSelBar.waitFor({ state: 'visible', timeout: 3000 });
-      const mobBarBox = await getStableBoundingBox(mobSelBar);
-      assert.ok(mobBarBox, 'Expected stable boundingBox for mobile region-selection-bar');
-      assert.ok(
-        mobBarBox.x >= -0.5 &&
-          mobBarBox.x + mobBarBox.width <= 360.5 &&
-          mobBarBox.y >= 0 &&
-          mobBarBox.y + mobBarBox.height <= 780.5,
-        `region-selection-bar clipped on 360x780 + largeText (${JSON.stringify(mobBarBox)})`
-      );
-      const overflowWithBar = await mobPage.evaluate(
-        () => document.documentElement.scrollWidth - window.innerWidth
-      );
-      assert.ok(
-        overflowWithBar <= 0,
-        `Must have zero horizontal overflow with region-selection-bar open on 360x780 (got ${overflowWithBar}px)`
-      );
-      await mobPage.getByTestId('region-selection-cancel-btn').click();
-      await mobSelBar.waitFor({ state: 'hidden', timeout: 3000 });
-
-      logE2ePass('Stage 4 passed');
+      // Verify zero BYOK key leaked into fresh context localStorage
+      assert.equal(await readByokKey(freshPage), null);
+      assert.equal(puterSpy.getRequests().length, 0);
+      errors.assertZeroErrors();
     } finally {
-      await mobCtx.close();
+      await freshContext.close();
     }
+  } finally {
+    fs.rmSync(exportedCapyPath, { force: true });
+  }
+
+  ctx.logE2ePass(label);
 }
 
+// ============================================================================
+// Stage 4: Free Guided Gemini Handoff (Web File/Error/Retry, Puter 402 Fallback
+//          + Clipboard Paste, Android LIFO Share Receive)
+// ============================================================================
+
+async function runStage4(ctx) {
+  const label =
+    'Infinite Zoom Stage 4: Free Guided Gemini Handoff (Web file/error/retry, Puter 402 fallback + paste, Android LIFO share)';
+  ctx.logE2eStart(label);
+
+  // --- Part 4A: Web Guided Gemini Handoff + Invalid File Rejection + Puter 402 Fallback + Paste ---
+  {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s4-web-guided',
+      acceptDownloads: true,
+      easyNoReplay: true,
+      extraSettings: { infiniteZoomProvider: 'GUIDED_GEMINI' },
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, 'iz-s4-web', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      await injectWindowOpenStub(page);
+      await injectPuterMock(page, { pngDataUrl: MULTI_COLOR_PNG_DATA_URL, mode: '402' });
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      const sessionBefore = await readActiveSession(page);
+      const snapId = sessionBefore.activeSnapshotId;
+      const snapshotsBefore = await readSnapshots(page);
+      const puzzleBefore = await readPuzzleSummary(page, snapId);
+      const targets = await findUnifiedRegionTargets(page, snapId);
+      assert.ok(targets?.largePair, 'Stage 4A: expected clickable region targets');
+
+      // Trigger Zoom In under GUIDED_GEMINI
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(targets.largePair.a.clientX, targets.largePair.a.clientY);
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="region-selection-confirm-btn"]')?.disabled,
+        { timeout: 3000 }
+      );
+      await page.getByTestId('region-selection-confirm-btn').click();
+
+      const modal = page.getByTestId('guided-gemini-modal');
+      await modal.waitFor({ state: 'visible', timeout: 10000 });
+      assert.equal(
+        await page.getByTestId('guided-gemini-fallback-notice').count(),
+        0,
+        'Direct GUIDED_GEMINI launch should not show fallback notice'
+      );
+
+      // Assert template preview image loaded & prompt text populated
+      const previewImg = modal.locator('img[alt="Prepared puzzle template preview"]');
+      await previewImg.waitFor({ state: 'visible', timeout: 5000 });
+      const previewLoaded = await previewImg.evaluate(
+        (img) => img.complete && img.naturalWidth > 0 && Boolean(img.src)
+      );
+      assert.equal(previewLoaded, true, 'Guided Gemini template preview image must load');
+
+      const modalText = await modal.innerText();
+      assert.ok(
+        modalText.toLowerCase().includes('magenta') || modalText.toLowerCase().includes('infill'),
+        'Guided Gemini modal must display the engineered infill prompt'
+      );
+
+      // Click launch button -> verify template PNG download AND window.open('https://gemini.google.com/')
+      const [templateDownload] = await Promise.all([
+        page.waitForEvent('download', { timeout: 10000 }),
+        page.getByTestId('guided-gemini-launch-btn').click(),
+      ]);
+      assert.ok(
+        templateDownload.suggestedFilename().toLowerCase().endsWith('.png'),
+        `Expected PNG template download, got "${templateDownload.suggestedFilename()}"`
+      );
+      await page.waitForFunction(
+        () => (window.__openedUrls || []).some((u) => u.includes('gemini.google.com')),
+        { timeout: 5000 }
+      );
+      const openedUrls = await page.evaluate(() => window.__openedUrls || []);
+      assert.ok(
+        openedUrls.some((u) => u.includes('gemini.google.com')),
+        `Expected window.open to launch gemini.google.com, got ${JSON.stringify(openedUrls)}`
+      );
+
+      const fileInput = page.getByTestId('guided-gemini-file-input');
+      const errorBanner = page.getByTestId('guided-gemini-error');
+
+      // Negative robustness test 1: invalid SVG upload
+      await fileInput.setInputFiles({
+        name: 'invalid-vector.svg',
+        mimeType: 'image/svg+xml',
+        buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64"/></svg>'),
+      });
+      await errorBanner.waitFor({ state: 'visible', timeout: 5000 });
+      assert.ok((await errorBanner.innerText()).trim().length > 0, 'Expected inline SVG error message');
+      assert.equal(await modal.isVisible(), true, 'Modal must stay open & recoverable after SVG error');
+
+      // Negative robustness test 2: corrupt PNG bytes (valid magic bytes + garbage payload)
+      await fileInput.setInputFiles({
+        name: 'corrupt-image.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2, 3, 4, 5, 6, 7, 255, 254]),
+      });
+      await page.waitForFunction(
+        () => {
+          const el = document.querySelector('[data-testid="guided-gemini-error"]');
+          return Boolean(el && el.textContent && el.textContent.toLowerCase().includes('decode'));
+        },
+        { timeout: 5000 }
+      );
+      assert.equal(await modal.isVisible(), true, 'Modal must stay open after corrupt PNG error');
+
+      // Recover cleanly with valid multi-color PNG via file input
+      await fileInput.setInputFiles({
+        name: 'gemini-detail-result.png',
+        mimeType: 'image/png',
+        buffer: MULTI_COLOR_PNG_BUFFER,
+      });
+      await modal.waitFor({ state: 'hidden', timeout: 25000 });
+      const undoToast = page.getByTestId('undo-subdivision-toast');
+      await undoToast.waitFor({ state: 'visible', timeout: 10000 });
+
+      const puzzleAfterGuidedZoomIn = await readPuzzleSummary(page, snapId);
+      assert.equal(puzzleAfterGuidedZoomIn.nestedLayers.length, 1);
+      assert.ok(puzzleAfterGuidedZoomIn.totalRegionCount > puzzleBefore.totalRegionCount);
+      assert.equal((await readSnapshots(page)).length, snapshotsBefore.length);
+
+      // --- Puter 402 Error -> Automatic Guided Gemini Fallback + Synthetic Window Paste ---
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-create').click();
+      await page.getByTestId('iz-provider-select').selectOption('PUTER');
+      await page.getByTestId('settings-modal-close').click();
+      await waitForAnimationFrames(page, 2);
+
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await setExtendSideState(page, 'extend-side-top', true);
+      await setExtendSideState(page, 'extend-side-bottom', false);
+      await setExtendSideState(page, 'extend-side-left', false);
+      await setExtendSideState(page, 'extend-side-right', false);
+      await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').click();
+
+      // Puter 402 must automatically open GuidedGeminiHandoffModal with fallback notice
+      await modal.waitFor({ state: 'visible', timeout: 15000 });
+      const fallbackNotice = page.getByTestId('guided-gemini-fallback-notice');
+      await fallbackNotice.waitFor({ state: 'visible', timeout: 5000 });
+      const fallbackText = await fallbackNotice.innerText();
+      assert.ok(
+        fallbackText.includes('Free Gemini App Handoff') || fallbackText.includes('$0'),
+        `Expected Guided fallback notice text, got "${fallbackText}"`
+      );
+      const puterCalls = await page.evaluate(() => window.__puterCalls || []);
+      assert.equal(puterCalls.length, 1, 'Expected Puter provider to be attempted before 402 fallback');
+
+      // Complete via synthetic window ClipboardEvent('paste') with valid multi-color PNG File
+      await page.evaluate((base64Png) => {
+        const bin = atob(base64Png);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const file = new File([bytes], 'pasted-gemini-result.png', { type: 'image/png' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const ev = new ClipboardEvent('paste', {
+          clipboardData: dt,
+          bubbles: true,
+          cancelable: true,
+        });
+        window.dispatchEvent(ev);
+      }, MULTI_COLOR_PNG_BASE64);
+
+      await modal.waitFor({ state: 'hidden', timeout: 25000 });
+      await undoToast.waitFor({ state: 'visible', timeout: 10000 });
+
+      const puzzleAfterFallbackPaste = await readPuzzleSummary(page, snapId);
+      assert.equal(
+        puzzleAfterFallbackPaste.nestedLayers.length,
+        2,
+        'Puter 402 fallback + paste must complete unified Zoom Out cleanly'
+      );
+      assert.equal(puzzleAfterFallbackPaste.maxZoomDepth, 2);
+      assert.equal((await readSnapshots(page)).length, snapshotsBefore.length);
+
+      assert.equal(puterSpy.getRequests().length, 0);
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
+
+  // --- Part 4B: Android WebView Mock + shareImage + LIFO __capyReceiveSharedImage ---
+  {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: 'infinite-zoom-s4-android-share',
+      easyNoReplay: true,
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, 'iz-s4-android', ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      await injectAndroidWebViewMock(page);
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      const sessionBefore = await readActiveSession(page);
+      const snapId = sessionBefore.activeSnapshotId;
+      const snapshotsBefore = await readSnapshots(page);
+      const puzzleBefore = await readPuzzleSummary(page, snapId);
+      const targets = await findUnifiedRegionTargets(page, snapId);
+      assert.ok(targets?.largePair, 'Stage 4B: expected clickable root regions');
+
+      // Trigger Zoom In under default Android GUIDED_GEMINI provider
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(targets.largePair.a.clientX, targets.largePair.a.clientY);
+      await page.waitForFunction(
+        () => !document.querySelector('[data-testid="region-selection-confirm-btn"]')?.disabled,
+        { timeout: 3000 }
+      );
+      await page.getByTestId('region-selection-confirm-btn').click();
+
+      const modal = page.getByTestId('guided-gemini-modal');
+      await modal.waitFor({ state: 'visible', timeout: 10000 });
+
+      const launchBtn = page.getByTestId('guided-gemini-launch-btn');
+      assert.ok(
+        (await launchBtn.innerText()).includes('Share to Gemini App'),
+        `Expected Android launch label, got "${await launchBtn.innerText()}"`
+      );
+      await launchBtn.click();
+      await page.waitForFunction(
+        () => (window.__androidBridgeCalls?.shareImage?.length || 0) >= 1,
+        { timeout: 5000 }
+      );
+
+      const shareCalls = await page.evaluate(() => window.__androidBridgeCalls?.shareImage || []);
+      assert.equal(shareCalls.length, 1, 'Android launch must invoke window.CapyAndroid.shareImage');
+      assert.ok(
+        shareCalls[0].dataUrl.startsWith('data:image/png;base64,'),
+        'Android shareImage must pass prepared PNG template data URL'
+      );
+
+      // Simulate Android OS Share-Back via window.__capyReceiveSharedImage -> LIFO interceptor
+      await page.evaluate((dataUrl) => {
+        if (typeof window.__capyReceiveSharedImage !== 'function') {
+          throw new Error('window.__capyReceiveSharedImage is not registered');
+        }
+        window.__capyReceiveSharedImage('Gemini Result', dataUrl);
+      }, MULTI_COLOR_PNG_DATA_URL);
+
+      await modal.waitFor({ state: 'hidden', timeout: 25000 });
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 10000 });
+
+      const puzzleAfterShare = await readPuzzleSummary(page, snapId);
+      const snapshotsAfterShare = await readSnapshots(page);
+      const sessionAfterShare = await readActiveSession(page);
+
+      assert.equal(
+        puzzleAfterShare.nestedLayers.length,
+        1,
+        'Android LIFO share-back must embed the detail layer into active puzzle'
+      );
+      assert.ok(
+        puzzleAfterShare.totalRegionCount > puzzleBefore.totalRegionCount,
+        'Android LIFO share-back must grow unified totalRegionCount'
+      );
+      assert.equal(
+        snapshotsAfterShare.length,
+        snapshotsBefore.length,
+        'Android LIFO share-back must NOT create a stray new snapshot in useSnapshotLibrary'
+      );
+      assert.equal(sessionAfterShare.activeSnapshotId, snapId);
+      assert.equal(await page.locator('script[src*="js.puter.com"]').count(), 0);
+      assert.equal(puterSpy.getRequests().length, 0);
+
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
+
+  ctx.logE2ePass(label);
+}
+
+// ============================================================================
+// Suite Entrypoint (Exact 4-stage runner.mjs Contract)
+// ============================================================================
+
 export async function runInfiniteZoomE2e(ctx) {
-  const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
-  const stageCtx = { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass };
-  await runStage1InPlaceSubdivision(stageCtx);
-  await runStage2DeepChildCutout(stageCtx);
-  await runStage3DirectionalBorderAndCancel(stageCtx);
-  await runStage4GuardsAndMobile(stageCtx);
+  await runStage1(ctx);
+  await runStage2(ctx);
+  await runStage3(ctx);
+  await runStage4(ctx);
 }
