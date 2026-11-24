@@ -1,10 +1,14 @@
 import type { BorderExtensionSides, NormalizedRect } from '../../types';
+import { base64ToUint8, uint8ToBase64 } from '../../utils/base64';
+import { reportSwallowed } from '../telemetry';
 
 export const BORDER_EXTEND_RATIO = 0.35;
 export const MAX_EXTENDED_ASPECT_RATIO = 2.5;
 export const MAX_EXTENDED_DIMENSION_PX = 2048;
 export const NESTED_LAYER_MAX_DIM_PX = 1024;
 export const INFILL_CONTEXT_PAD_RATIO = 0.25;
+export const MAX_AI_TEMPLATE_BYTES = 900 * 1024;
+export const MAX_AI_TEMPLATE_DIMENSION_PX = 1536;
 
 export interface ExtendSidesCheck {
   allowed: boolean;
@@ -1165,4 +1169,288 @@ export async function canvasToPngBlobAndDataUrl(
       .then(resolve, reject);
   });
   return { blob, dataUrl };
+}
+
+export interface CompactTemplateEncodeOptions {
+  maxBytes?: number;
+  maxDim?: number;
+}
+
+export interface CompactTemplateEncodeResult {
+  blob: Blob;
+  dataUrl: string;
+  mimeType: string;
+  width: number;
+  height: number;
+}
+
+const COMPACT_TEMPLATE_JPEG_QUALITIES = [0.86, 0.78, 0.7, 0.6, 0.5] as const;
+const COMPACT_TEMPLATE_SCALE_STEPS = [1, 0.85, 0.7, 0.55, 0.4] as const;
+const MIN_COMPACT_TEMPLATE_LONGEST_EDGE = 256;
+
+interface EncodedCanvasCandidate {
+  blob: Blob;
+  mimeType: string;
+  dataUrl?: string;
+}
+
+function normalizeCompactMime(rawMime: string | undefined, fallbackMime: string): string {
+  const cleaned = (rawMime || '').split(';')[0].trim().toLowerCase();
+  if (cleaned === 'image/jpg' || cleaned === 'image/jpeg') return 'image/jpeg';
+  if (cleaned === 'image/png' || cleaned === 'image/webp') return cleaned;
+  return fallbackMime === 'image/jpg' ? 'image/jpeg' : fallbackMime;
+}
+
+function computeCompactTemplateDimensions(
+  width: number,
+  height: number,
+  maxDim: number
+): { width: number; height: number } {
+  const safeW = Math.max(1, Math.round(width));
+  const safeH = Math.max(1, Math.round(height));
+  const longest = Math.max(safeW, safeH);
+  if (longest <= maxDim) {
+    return { width: safeW, height: safeH };
+  }
+  const scale = maxDim / longest;
+  return {
+    width: Math.max(1, Math.round(safeW * scale)),
+    height: Math.max(1, Math.round(safeH * scale)),
+  };
+}
+
+function releaseScratchCanvas(canvas: HTMLCanvasElement | null): void {
+  if (!canvas) return;
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+function createResizedTemplateCanvas(
+  source: HTMLCanvasElement,
+  width: number,
+  height: number
+): HTMLCanvasElement | null {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+    return null;
+  }
+  const scratch = document.createElement('canvas');
+  scratch.width = width;
+  scratch.height = height;
+  const ctx = scratch.getContext('2d');
+  if (!ctx) {
+    releaseScratchCanvas(scratch);
+    return null;
+  }
+  try {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.imageSmoothingEnabled = true;
+    if ('imageSmoothingQuality' in ctx) {
+      ctx.imageSmoothingQuality = 'high';
+    }
+    ctx.drawImage(source, 0, 0, width, height);
+    return scratch;
+  } catch (err) {
+    releaseScratchCanvas(scratch);
+    throw err;
+  }
+}
+
+function decodeDataUrlToCandidate(
+  rawDataUrl: string,
+  fallbackMime: string
+): EncodedCanvasCandidate | null {
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i.exec(rawDataUrl.trim());
+  if (!match) return null;
+  const mimeType = normalizeCompactMime(match[1], fallbackMime);
+  const compactBase64 = match[2].replace(/\s+/g, '');
+  const bytes = base64ToUint8(compactBase64);
+  if (bytes.byteLength === 0) return null;
+  return {
+    blob: new Blob([new Uint8Array(bytes)], { type: mimeType }),
+    mimeType,
+    dataUrl: `data:${mimeType};base64,${compactBase64}`,
+  };
+}
+
+async function encodeCanvasCandidate(
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality?: number
+): Promise<EncodedCanvasCandidate | null> {
+  if (typeof canvas.toBlob === 'function') {
+    try {
+      const rawBlob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((result) => resolve(result), mimeType, quality);
+      });
+      if (rawBlob && rawBlob.size > 0) {
+        const resolvedMime = normalizeCompactMime(rawBlob.type, mimeType);
+        const blob =
+          rawBlob.type === resolvedMime ? rawBlob : new Blob([rawBlob], { type: resolvedMime });
+        return { blob, mimeType: resolvedMime };
+      }
+    } catch (err) {
+      reportSwallowed('SeamCompositor.compactTemplateToBlob', err, { mimeType, quality });
+    }
+  }
+  if (typeof canvas.toDataURL === 'function') {
+    try {
+      const rawDataUrl = canvas.toDataURL(mimeType, quality);
+      return decodeDataUrlToCandidate(rawDataUrl, mimeType);
+    } catch (err) {
+      reportSwallowed('SeamCompositor.compactTemplateToDataUrl', err, { mimeType, quality });
+    }
+  }
+  return null;
+}
+
+async function tryEncodeCanvasAtQualities(
+  canvas: HTMLCanvasElement,
+  maxBytes: number
+): Promise<{ winner: EncodedCanvasCandidate | null; best: EncodedCanvasCandidate | null }> {
+  let best: EncodedCanvasCandidate | null = null;
+  for (const quality of COMPACT_TEMPLATE_JPEG_QUALITIES) {
+    const candidate = await encodeCanvasCandidate(canvas, 'image/jpeg', quality);
+    if (!candidate) continue;
+    if (!best || candidate.blob.size < best.blob.size) {
+      best = candidate;
+    }
+    if (candidate.blob.size <= maxBytes) {
+      return { winner: candidate, best: candidate };
+    }
+    // If browser/mock ignored image/jpeg and emitted PNG, lower JPEG quality won't shrink it.
+    if (candidate.mimeType !== 'image/jpeg') {
+      break;
+    }
+  }
+  if (!best) {
+    const pngFallback = await encodeCanvasCandidate(canvas, 'image/png');
+    if (pngFallback) {
+      best = pngFallback;
+      if (pngFallback.blob.size <= maxBytes) {
+        return { winner: pngFallback, best: pngFallback };
+      }
+    }
+  }
+  return { winner: null, best };
+}
+
+async function finalizeCompactTemplateResult(
+  candidate: EncodedCanvasCandidate,
+  width: number,
+  height: number
+): Promise<CompactTemplateEncodeResult> {
+  if (candidate.dataUrl) {
+    return {
+      blob: candidate.blob,
+      dataUrl: candidate.dataUrl,
+      mimeType: candidate.mimeType,
+      width,
+      height,
+    };
+  }
+  const bytes = new Uint8Array(await candidate.blob.arrayBuffer());
+  const dataUrl = `data:${candidate.mimeType};base64,${uint8ToBase64(bytes)}`;
+  return {
+    blob: candidate.blob,
+    dataUrl,
+    mimeType: candidate.mimeType,
+    width,
+    height,
+  };
+}
+
+function resolvePositiveIntOption(
+  value: number | undefined,
+  fallback: number,
+  minValue: number
+): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value >= minValue) {
+    return Math.floor(value);
+  }
+  return fallback;
+}
+
+async function encodeCompactTemplateStep(
+  sourceCanvas: HTMLCanvasElement,
+  srcW: number,
+  srcH: number,
+  targetDims: { width: number; height: number },
+  maxBytes: number,
+  hasBest: boolean
+): Promise<{
+  skippedResizeFailure: boolean;
+  winner: EncodedCanvasCandidate | null;
+  best: EncodedCanvasCandidate | null;
+  width: number;
+  height: number;
+}> {
+  const needsResize = targetDims.width !== srcW || targetDims.height !== srcH;
+  const scratch = needsResize
+    ? createResizedTemplateCanvas(sourceCanvas, targetDims.width, targetDims.height)
+    : null;
+  if (needsResize && !scratch && hasBest) {
+    return {
+      skippedResizeFailure: true,
+      winner: null,
+      best: null,
+      width: srcW,
+      height: srcH,
+    };
+  }
+  const workCanvas = scratch ?? sourceCanvas;
+  const width = scratch ? targetDims.width : srcW;
+  const height = scratch ? targetDims.height : srcH;
+  try {
+    const { winner, best } = await tryEncodeCanvasAtQualities(workCanvas, maxBytes);
+    return { skippedResizeFailure: false, winner, best, width, height };
+  } finally {
+    releaseScratchCanvas(scratch);
+  }
+}
+
+export async function canvasToCompactTemplateBlobAndDataUrl(
+  canvas: HTMLCanvasElement,
+  options?: CompactTemplateEncodeOptions
+): Promise<CompactTemplateEncodeResult> {
+  const srcW = Math.floor(canvas?.width ?? 0);
+  const srcH = Math.floor(canvas?.height ?? 0);
+  if (!Number.isFinite(srcW) || !Number.isFinite(srcH) || srcW <= 0 || srcH <= 0) {
+    throw new Error('Cannot encode empty canvas to compact template');
+  }
+  const maxBytes = resolvePositiveIntOption(options?.maxBytes, MAX_AI_TEMPLATE_BYTES, 1);
+  const maxDim = resolvePositiveIntOption(options?.maxDim, MAX_AI_TEMPLATE_DIMENSION_PX, 1);
+
+  const baseDims = computeCompactTemplateDimensions(srcW, srcH, maxDim);
+  const baseLongest = Math.max(baseDims.width, baseDims.height);
+  const minLongest = Math.min(MIN_COMPACT_TEMPLATE_LONGEST_EDGE, baseLongest);
+
+  let prevW = 0;
+  let prevH = 0;
+  let best: { candidate: EncodedCanvasCandidate; width: number; height: number } | null = null;
+
+  for (const scale of COMPACT_TEMPLATE_SCALE_STEPS) {
+    const stepMaxDim =
+      scale === 1 ? baseLongest : Math.max(minLongest, Math.round(baseLongest * scale));
+    const dims = computeCompactTemplateDimensions(srcW, srcH, stepMaxDim);
+    if (dims.width === prevW && dims.height === prevH) continue;
+    prevW = dims.width;
+    prevH = dims.height;
+
+    const step = await encodeCompactTemplateStep(canvas, srcW, srcH, dims, maxBytes, best !== null);
+    if (step.skippedResizeFailure) {
+      break;
+    }
+    if (step.best && (!best || step.best.blob.size < best.candidate.blob.size)) {
+      best = { candidate: step.best, width: step.width, height: step.height };
+    }
+    if (step.winner) {
+      return await finalizeCompactTemplateResult(step.winner, step.width, step.height);
+    }
+  }
+
+  if (!best) {
+    throw new Error('Failed to encode canvas to compact template blob');
+  }
+  return await finalizeCompactTemplateResult(best.candidate, best.width, best.height);
 }

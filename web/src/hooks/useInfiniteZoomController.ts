@@ -69,7 +69,7 @@ import {
   buildInfillTemplateCanvas,
   buildOutpaintTemplateCanvas,
   canExtendSides,
-  canvasToPngBlobAndDataUrl,
+  canvasToCompactTemplateBlobAndDataUrl,
   compositeInfillRgba,
   compositeOutpaintRgba,
   ExtendSidesCheck,
@@ -389,7 +389,7 @@ async function buildInfillTemplatePayload(
       throw new Error('Could not read pixel data for selected region.');
     }
     tpl = buildInfillTemplateCanvas(layerCanvas, bbox, cropMask);
-    const encoded = await canvasToPngBlobAndDataUrl(tpl.canvas);
+    const encoded = await canvasToCompactTemplateBlobAndDataUrl(tpl.canvas);
     return {
       cropMask,
       originalCropRgba,
@@ -2479,7 +2479,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
             throw new Error('Could not read pixel data from active puzzle artwork.');
           }
           tpl = buildOutpaintTemplateCanvas(rootCanvas, sides);
-          const encoded = await canvasToPngBlobAndDataUrl(tpl.canvas);
+          const encoded = await canvasToCompactTemplateBlobAndDataUrl(tpl.canvas);
           templatePngBlob = encoded.blob;
           templateDataUrl = encoded.dataUrl;
         } finally {

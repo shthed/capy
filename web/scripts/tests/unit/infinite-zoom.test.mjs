@@ -929,23 +929,56 @@ function makeBaselineSnapshot(id, overrides = {}) {
 // -------------------------------------------------------------------------
 // 1. NanoBananaService (Providers, Prompt Safety, Model Defaults, Decode)
 // -------------------------------------------------------------------------
-async function testNanoBananaService(nanoMod) {
+async function testNanoBananaService(nanoMod, promptsMod) {
   const {
     MAX_USER_PROMPT_LENGTH,
     DEFAULT_NANO_BANANA_MODEL,
     DEFAULT_NANO_BANANA_RESOLUTION,
     GEMINI_APP_URL,
     NANO_BANANA_MODELS,
+    NANO_BANANA_MODEL_MAP,
     NanoBananaError,
     sanitizeUserPrompt,
+    resolveSupportedModelResolution,
     resolveNearestGeminiAspectRatio,
+    resolveNearestPuterRatio,
     buildNanoBananaInfillPrompt,
     buildNanoBananaOutpaintPrompt,
     PuterNanoBananaProvider,
     DirectGeminiByokProvider,
     GuidedGeminiHandoffProvider,
+    copyTemplateImageToClipboard,
     resetPuterSdkLoaderForTests,
   } = nanoMod;
+
+  // F7: nanoBananaPrompts.ts split re-export referential parity
+  const reExportKeys = [
+    'MAX_USER_PROMPT_LENGTH',
+    'DEFAULT_NANO_BANANA_MODEL',
+    'DEFAULT_NANO_BANANA_RESOLUTION',
+    'NANO_BANANA_MODELS',
+    'NANO_BANANA_MODEL_MAP',
+    'getNanoBananaModelMeta',
+    'NanoBananaError',
+    'resolveSupportedModelResolution',
+    'resolveNearestGeminiAspectRatio',
+    'resolveNearestPuterRatio',
+    'sanitizeUserPrompt',
+    'buildNanoBananaInfillPrompt',
+    'buildNanoBananaOutpaintPrompt',
+  ];
+  for (const key of reExportKeys) {
+    assert.strictEqual(
+      nanoMod[key],
+      promptsMod[key],
+      `NanoBananaService.${key} must re-export exact symbol from nanoBananaPrompts.ts`
+    );
+  }
+  assert.strictEqual(
+    GuidedGeminiHandoffProvider.copyTemplateImageToClipboard,
+    copyTemplateImageToClipboard,
+    'GuidedGeminiHandoffProvider must expose copyTemplateImageToClipboard'
+  );
 
   assert.equal(MAX_USER_PROMPT_LENGTH, 200);
   assert.equal(DEFAULT_NANO_BANANA_MODEL, 'gemini-nano-banana-2.1');
@@ -955,6 +988,56 @@ async function testNanoBananaService(nanoMod) {
     NANO_BANANA_MODELS.map((m) => m.id),
     ['gemini-nano-banana-2.1', 'gemini-3.1-flash-lite-image', 'gemini-3.1-flash-image']
   );
+
+  // F2: Model-validated resolution tiers & resolveSupportedModelResolution clamping
+  assert.deepEqual([...NANO_BANANA_MODEL_MAP['gemini-nano-banana-2.1'].supportedResolutions], ['1K', '2K']);
+  assert.equal(NANO_BANANA_MODEL_MAP['gemini-nano-banana-2.1'].defaultResolution, '1K');
+  assert.deepEqual([...NANO_BANANA_MODEL_MAP['gemini-3.1-flash-lite-image'].supportedResolutions], ['1K']);
+  assert.equal(NANO_BANANA_MODEL_MAP['gemini-3.1-flash-lite-image'].defaultResolution, '1K');
+  assert.deepEqual([...NANO_BANANA_MODEL_MAP['gemini-3.1-flash-image'].supportedResolutions], ['512', '1K', '2K']);
+  assert.equal(NANO_BANANA_MODEL_MAP['gemini-3.1-flash-image'].defaultResolution, '1K');
+
+  assert.equal(resolveSupportedModelResolution('gemini-nano-banana-2.1', '512'), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-nano-banana-2.1', '1K'), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-nano-banana-2.1', '2K'), '2K');
+  assert.equal(resolveSupportedModelResolution('gemini-nano-banana-2.1', undefined), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-3.1-flash-lite-image', '512'), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-3.1-flash-lite-image', '1K'), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-3.1-flash-lite-image', '2K'), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-3.1-flash-image', '512'), '512');
+  assert.equal(resolveSupportedModelResolution('gemini-3.1-flash-image', '1K'), '1K');
+  assert.equal(resolveSupportedModelResolution('gemini-3.1-flash-image', '2K'), '2K');
+  assert.equal(resolveSupportedModelResolution('unknown-model-id', '2K'), '2K');
+  assert.equal(resolveSupportedModelResolution('unknown-model-id', '512'), '1K');
+
+  // F2 regression: Object.prototype property names must fall back cleanly without TypeError or undefined
+  for (const protoKey of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+    assert.equal(
+      nanoMod.getNanoBananaModelMeta(protoKey).id,
+      DEFAULT_NANO_BANANA_MODEL,
+      `getNanoBananaModelMeta(${protoKey}) must fall back to default model`
+    );
+    assert.equal(
+      resolveSupportedModelResolution(protoKey, undefined),
+      '1K',
+      `resolveSupportedModelResolution(${protoKey}, undefined) must return 1K`
+    );
+    assert.equal(
+      resolveSupportedModelResolution(protoKey, '1K'),
+      '1K',
+      `resolveSupportedModelResolution(${protoKey}, '1K') must return 1K`
+    );
+    assert.equal(
+      resolveSupportedModelResolution(protoKey, '2K'),
+      '2K',
+      `resolveSupportedModelResolution(${protoKey}, '2K') must return 2K`
+    );
+    assert.equal(
+      resolveSupportedModelResolution(protoKey, '512'),
+      '1K',
+      `resolveSupportedModelResolution(${protoKey}, '512') must clamp to 1K`
+    );
+  }
 
   // 1a. sanitizeUserPrompt: normal, trimming, 200-char clamp, injection strip, unsafe blocklist
   const cleanRes = sanitizeUserPrompt('   tiny   wildflowers & mossy pebbles   ');
@@ -977,10 +1060,52 @@ async function testNanoBananaService(nanoMod) {
   const blocked = sanitizeUserPrompt('explicit gore violence');
   assert.equal(blocked.blocked, true, 'Unsafe prompt must be flagged blocked');
 
-  // 1b. Aspect ratio & engineered infill/outpaint prompts
+  // 1b. Aspect ratio (Gemini string + F1 Puter {w,h} object) & engineered infill/outpaint prompts
   assert.equal(resolveNearestGeminiAspectRatio(1024, 1024), '1:1');
   assert.equal(resolveNearestGeminiAspectRatio(1600, 900), '16:9');
   assert.equal(resolveNearestGeminiAspectRatio(600, 800), '3:4');
+
+  const puterRatioCases = [
+    [1024, 1024, { w: 1, h: 1 }],
+    [1600, 900, { w: 16, h: 9 }],
+    [900, 1600, { w: 9, h: 16 }],
+    [600, 800, { w: 3, h: 4 }],
+    [1200, 900, { w: 4, h: 3 }],
+    [1500, 1000, { w: 3, h: 2 }],
+    [1000, 1500, { w: 2, h: 3 }],
+    [800, 1000, { w: 4, h: 5 }],
+    [1000, 800, { w: 5, h: 4 }],
+    [2100, 900, { w: 21, h: 9 }],
+    [2500, 500, { w: 21, h: 9 }],
+    [500, 2500, { w: 9, h: 16 }],
+    [1e308, 1e-308, { w: 21, h: 9 }],
+    [1e-308, 1e308, { w: 9, h: 16 }],
+  ];
+  for (const [w, h, expected] of puterRatioCases) {
+    const r = resolveNearestPuterRatio(w, h);
+    assert.deepEqual(r, expected, `resolveNearestPuterRatio(${w}, ${h})`);
+    assert.ok(r.w > 0 && r.w <= 32 && r.h > 0 && r.h <= 32, 'Puter ratio components must stay in 1..32');
+  }
+  assert.equal(resolveNearestGeminiAspectRatio(1e308, 1e-308), '21:9');
+  assert.equal(resolveNearestGeminiAspectRatio(1e-308, 1e308), '9:16');
+  for (const [badW, badH] of [
+    [0, 100],
+    [100, 0],
+    [-50, 100],
+    [100, -50],
+    [NaN, 100],
+    [100, Infinity],
+    [Infinity, Infinity],
+  ]) {
+    assert.deepEqual(
+      resolveNearestPuterRatio(badW, badH),
+      { w: 1, h: 1 },
+      `Invalid (${badW}, ${badH}) must fall back to { w: 1, h: 1 }`
+    );
+  }
+  const rFreshA = resolveNearestPuterRatio(1024, 1024);
+  rFreshA.w = 99;
+  assert.deepEqual(resolveNearestPuterRatio(1024, 1024), { w: 1, h: 1 }, 'Must return a fresh object');
 
   const infillPrompt = buildNanoBananaInfillPrompt({
     userPrompt: 'tiny wildflowers and dewdrops',
@@ -1064,6 +1189,8 @@ async function testNanoBananaService(nanoMod) {
   assert.equal(puterRes.mimeType, 'image/png');
   assert.equal(capturedPuterOpts?.model, 'gemini-nano-banana-2.1');
   assert.equal(capturedPuterOpts?.input_image_mime_type, 'image/png');
+  assert.deepEqual(capturedPuterOpts?.ratio, { w: 1, h: 1 });
+  assert.equal(capturedPuterOpts?.quality, '1K');
 
   // 1d. DirectGeminiByokProvider: missing key rejection + x-goog-api-key header + inlineData decode
   const missingKeyProvider = new DirectGeminiByokProvider({ getApiKey: () => '' });
@@ -3859,6 +3986,7 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
   // A3. PuterNanoBananaProvider: all 3 models, input_image, Blob & HTTPS outputs, safety-over-cancel precedence, 402/cancel/abort/timeout
   await withGlobalOverrides({ window: {}, puter: undefined }, async () => {
     const seenModels = [];
+    const seenQualities = [];
     let seenInputImage = null;
     let seenRatio = null;
     for (const modelId of ['gemini-nano-banana-2.1', 'gemini-3.1-flash-lite-image', 'gemini-3.1-flash-image']) {
@@ -3867,6 +3995,7 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
           ai: {
             txt2img: async (_prompt, opts) => {
               seenModels.push(opts.model);
+              seenQualities.push(opts.quality);
               seenInputImage = opts.input_image;
               seenRatio = opts.ratio;
               return tinyPngBlob;
@@ -3889,9 +4018,45 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
       assert.equal(res.mimeType, 'image/png');
     }
     assert.deepEqual(seenModels, ['gemini-nano-banana-2.1', 'gemini-3.1-flash-lite-image', 'gemini-3.1-flash-image']);
+    assert.deepEqual(seenQualities, ['1K', '1K', '1K']);
     assert.equal(typeof seenInputImage, 'string');
     assert.ok(seenInputImage.length > 0, 'input_image base64 payload must be passed to puter.ai.txt2img');
-    assert.equal(seenRatio, '1:1');
+    assert.deepEqual(seenRatio, { w: 1, h: 1 });
+
+    // F2: Model-validated quality clamping on Puter
+    for (const [modelId, requestedRes, expectedQuality] of [
+      ['gemini-nano-banana-2.1', '512', '1K'],
+      ['gemini-nano-banana-2.1', '2K', '2K'],
+      ['gemini-3.1-flash-lite-image', '2K', '1K'],
+      ['gemini-3.1-flash-lite-image', '512', '1K'],
+      ['gemini-3.1-flash-image', '512', '512'],
+    ]) {
+      let seenQuality = null;
+      const clampProv = new nanoMod.PuterNanoBananaProvider({
+        loadSdk: async () => ({
+          ai: {
+            txt2img: async (_prompt, opts) => {
+              seenQuality = opts.quality;
+              return tinyPngBlob;
+            },
+          },
+        }),
+      });
+      await clampProv.generate({
+        templatePngBlob: tinyPngBlob,
+        templateDataUrl: tinyPngDataUrl,
+        prompt: 'clamped petals',
+        width: 1024,
+        height: 1024,
+        model: modelId,
+        resolution: requestedRes,
+      });
+      assert.equal(
+        seenQuality,
+        expectedQuality,
+        `Puter quality for ${modelId} requested=${requestedRes} must clamp to ${expectedQuality}`
+      );
+    }
 
     // HTTPS URL output: valid PNG, oversized content-length > 16 MiB reject, non-raster reject
     let httpsSeenRatio = null;
@@ -3919,7 +4084,7 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
       model: 'gemini-nano-banana-2.1',
       resolution: '1K',
     });
-    assert.equal(httpsSeenRatio, '16:9');
+    assert.deepEqual(httpsSeenRatio, { w: 16, h: 9 });
     assert.ok(httpsRes.blob instanceof Blob && httpsRes.blob.size === tinyPngBytes.length);
     assert.equal(httpsRes.mimeType, 'image/png');
 
@@ -4087,6 +4252,226 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
         }),
       (err) => err instanceof nanoMod.NanoBananaError && err.code === 'TIMEOUT'
     );
+
+    // F3: Structured Puter { code, errorCode, status } and nested error classification
+    const structuredCases = [
+      {
+        label: 'top-level moderation_flagged with bad_request',
+        payload: { code: 'bad_request', errorCode: 'moderation_flagged', status: 400, message: 'Refused by filter' },
+        expectedCode: 'SAFETY_BLOCKED',
+        expectedFallback: false,
+      },
+      {
+        label: 'nested error moderation_flagged with denied message',
+        payload: { error: { code: 'bad_request', errorCode: 'moderation_flagged', message: 'Denied' } },
+        expectedCode: 'SAFETY_BLOCKED',
+        expectedFallback: false,
+      },
+      {
+        label: 'structured safety-over-cancel precedence',
+        payload: { code: 'cancelled', errorCode: 'moderation_flagged', message: 'Popup cancelled by user' },
+        expectedCode: 'SAFETY_BLOCKED',
+        expectedFallback: false,
+      },
+      {
+        label: 'top-level insufficient_funds without status 402 or balance text',
+        payload: { code: 'insufficient_funds', message: 'Please add credits' },
+        expectedCode: 'PUTER_BALANCE_EXHAUSTED',
+        expectedFallback: true,
+      },
+      {
+        label: 'nested insufficient_funds with status 402 and denied text',
+        payload: { error: { code: 'insufficient_funds', status: 402, message: 'Payment denied' } },
+        expectedCode: 'PUTER_BALANCE_EXHAUSTED',
+        expectedFallback: true,
+      },
+      {
+        label: 'non-moderation bad_request',
+        payload: { code: 'bad_request', message: 'Unsupported quality tier' },
+        expectedCode: 'INVALID_RESPONSE',
+        expectedFallback: true,
+      },
+      {
+        label: 'prompt_required',
+        payload: { error: { code: 'prompt_required', message: 'Prompt is required' } },
+        expectedCode: 'INVALID_RESPONSE',
+        expectedFallback: true,
+      },
+      {
+        label: 'upstream_failed',
+        payload: { code: 'upstream_failed', message: 'Upstream denied request' },
+        expectedCode: 'NETWORK_ERROR',
+        expectedFallback: true,
+      },
+      {
+        label: 'access_denied with denied message must not misclassify as PUTER_CANCELLED',
+        payload: { code: 'access_denied', message: 'Access denied to file path' },
+        expectedCode: 'NETWORK_ERROR',
+        expectedFallback: true,
+      },
+      {
+        label: 'outer bad_request must NOT shadow nested moderation_flagged',
+        payload: { code: 'bad_request', error: { code: 'moderation_flagged' }, message: 'Refused' },
+        expectedCode: 'SAFETY_BLOCKED',
+        expectedFallback: false,
+      },
+      {
+        label: 'outer generic_error must NOT shadow nested error_code moderation_flagged',
+        payload: { errorCode: 'generic_error', error: { error_code: 'moderation_flagged' }, message: 'Refused' },
+        expectedCode: 'SAFETY_BLOCKED',
+        expectedFallback: false,
+      },
+      {
+        label: 'outer bad_request must NOT shadow nested insufficient_funds',
+        payload: { code: 'bad_request', error: { code: 'insufficient_funds' }, message: 'Add credits' },
+        expectedCode: 'PUTER_BALANCE_EXHAUSTED',
+        expectedFallback: true,
+      },
+      {
+        label: 'outer api_error must NOT shadow nested access_denied with denied message',
+        payload: { code: 'api_error', error: { code: 'access_denied' }, message: 'Access denied' },
+        expectedCode: 'NETWORK_ERROR',
+        expectedFallback: true,
+      },
+      {
+        label: 'outer bad_request must NOT shadow nested upstream_timeout',
+        payload: { code: 'bad_request', error: { code: 'upstream_timeout' }, message: 'Upstream denied' },
+        expectedCode: 'NETWORK_ERROR',
+        expectedFallback: true,
+      },
+      {
+        label: 'numeric string HTTP status 402 maps to PUTER_BALANCE_EXHAUSTED',
+        payload: { status: '402', message: 'nope' },
+        expectedCode: 'PUTER_BALANCE_EXHAUSTED',
+        expectedFallback: true,
+      },
+      {
+        label: 'nested trimmed numeric string HTTP status 402 maps to PUTER_BALANCE_EXHAUSTED',
+        payload: { error: { status: ' 402 ' }, message: 'nope' },
+        expectedCode: 'PUTER_BALANCE_EXHAUSTED',
+        expectedFallback: true,
+      },
+    ];
+    for (const tc of structuredCases) {
+      const structProv = new nanoMod.PuterNanoBananaProvider({
+        loadSdk: async () => ({
+          ai: {
+            txt2img: async () => {
+              throw tc.payload;
+            },
+          },
+        }),
+      });
+      await assert.rejects(
+        () =>
+          structProv.generate({
+            templatePngBlob: tinyPngBlob,
+            templateDataUrl: tinyPngDataUrl,
+            prompt: 'flowers',
+            width: 1024,
+            height: 1024,
+            model: 'gemini-nano-banana-2.1',
+            resolution: '1K',
+          }),
+        (err) =>
+          err instanceof nanoMod.NanoBananaError &&
+          err.code === tc.expectedCode &&
+          err.canFallbackToGuided === tc.expectedFallback,
+        `Structured Puter error (${tc.label}) must map to ${tc.expectedCode} (fallback=${tc.expectedFallback})`
+      );
+    }
+
+    // F4: Dynamic template MIME parity on Puter (JPEG, WebP, raw JPEG base64, reject SVG)
+    const tinyJpegBytes = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9,
+    ]);
+    const tinyJpegB64 = Buffer.from(tinyJpegBytes).toString('base64');
+    const tinyJpegDataUrl = `data:image/jpeg;base64,${tinyJpegB64}`;
+    const tinyJpegBlob = new Blob([tinyJpegBytes], { type: 'image/jpeg' });
+    const tinyWebpBytes = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+    ]);
+    const tinyWebpB64 = Buffer.from(tinyWebpBytes).toString('base64');
+    const tinyWebpDataUrl = `data:image/webp;base64,${tinyWebpB64}`;
+    const tinyWebpBlob = new Blob([tinyWebpBytes], { type: 'image/webp' });
+
+    const seenPuterMimes = [];
+    const mimePuterProv = new nanoMod.PuterNanoBananaProvider({
+      loadSdk: async () => ({
+        ai: {
+          txt2img: async (_prompt, opts) => {
+            seenPuterMimes.push(opts.input_image_mime_type);
+            return tinyPngBlob;
+          },
+        },
+      }),
+    });
+    await mimePuterProv.generate({
+      templatePngBlob: tinyJpegBlob,
+      templateDataUrl: tinyJpegDataUrl,
+      prompt: 'jpeg tpl',
+      width: 512,
+      height: 512,
+    });
+    await mimePuterProv.generate({
+      templatePngBlob: tinyWebpBlob,
+      templateDataUrl: tinyWebpDataUrl,
+      prompt: 'webp tpl',
+      width: 512,
+      height: 512,
+    });
+    await mimePuterProv.generate({
+      templateBase64: tinyJpegB64,
+      prompt: 'raw jpeg base64 tpl',
+      width: 512,
+      height: 512,
+    });
+    // F4 regression: detected raster magic bytes take precedence over mismatched templateMimeType / data-URL header
+    await mimePuterProv.generate({
+      templateDataUrl: tinyJpegDataUrl,
+      templateMimeType: 'image/png',
+      prompt: 'mismatched explicit mime',
+      width: 512,
+      height: 512,
+    });
+    await mimePuterProv.generate({
+      templateDataUrl: `data:image/png;base64,${tinyJpegB64}`,
+      prompt: 'mismatched data url header',
+      width: 512,
+      height: 512,
+    });
+    assert.deepEqual(seenPuterMimes, ['image/jpeg', 'image/webp', 'image/jpeg', 'image/jpeg', 'image/jpeg']);
+
+    const svgBytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    const svgB64 = Buffer.from(svgBytes).toString('base64');
+    const bomXmlSvgBytes = new Uint8Array([
+      0xef,
+      0xbb,
+      0xbf,
+      ...new TextEncoder().encode('  \n <?xml version="1.0"?><svg/>'),
+    ]);
+    const bomXmlSvgB64 = Buffer.from(bomXmlSvgBytes).toString('base64');
+    const invalidSvgCases = [
+      { label: 'explicit svg dataUrl', templateDataUrl: `data:image/svg+xml;base64,${svgB64}` },
+      { label: 'disguised svg in png dataUrl', templateDataUrl: `data:image/png;base64,${svgB64}` },
+      { label: 'disguised BOM+xml svg in png dataUrl', templateDataUrl: `data:image/png;base64,${bomXmlSvgB64}` },
+      { label: 'raw svg base64', templateBase64: svgB64 },
+      { label: 'untyped svg blob', templatePngBlob: new Blob([svgBytes]) },
+      { label: 'disguised png-typed svg blob', templatePngBlob: new Blob([svgBytes], { type: 'image/png' }) },
+    ];
+    for (const sc of invalidSvgCases) {
+      await assert.rejects(
+        () =>
+          mimePuterProv.generate({
+            ...sc,
+            prompt: 'bad svg tpl',
+            width: 512,
+            height: 512,
+          }),
+        (err) => err instanceof nanoMod.NanoBananaError && err.code === 'INVALID_IMAGE',
+        `Puter must reject ${sc.label} with INVALID_IMAGE`
+      );
+    }
   });
 
   // A4. DirectGeminiByokProvider: header-only key, 16:9 aspectRatio wiring, HTTP 401/403/429/400/502, safety, snake_case inline_data, abort & timeout across response.json()
@@ -4135,6 +4520,76 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
       'DirectGeminiByokProvider must map 1600x900 width/height to 16:9 imageConfig.aspectRatio'
     );
     assert.equal(capturedBody?.generationConfig?.imageConfig?.imageSize, '1K');
+
+    // F2 + F4: BYOK resolution clamping and dynamic JPEG/WebP inlineData.mimeType
+    const byokJpegBytes = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9,
+    ]);
+    const byokJpegB64 = Buffer.from(byokJpegBytes).toString('base64');
+    const byokWebpBytes = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+    ]);
+    const byokWebpB64 = Buffer.from(byokWebpBytes).toString('base64');
+    for (const [modelId, reqRes, expectedSize, tplUrl, expectedMime, extraParams] of [
+      ['gemini-nano-banana-2.1', '512', '1K', `data:image/jpeg;base64,${byokJpegB64}`, 'image/jpeg', {}],
+      ['gemini-3.1-flash-lite-image', '2K', '1K', `data:image/webp;base64,${byokWebpB64}`, 'image/webp', {}],
+      [
+        'gemini-nano-banana-2.1',
+        '1K',
+        '1K',
+        `data:image/jpeg;base64,${byokJpegB64}`,
+        'image/jpeg',
+        { templateMimeType: 'image/png' },
+      ],
+      ['gemini-nano-banana-2.1', '1K', '1K', `data:image/png;base64,${byokJpegB64}`, 'image/jpeg', {}],
+    ]) {
+      let byokBody = null;
+      const byokCheckProv = new nanoMod.DirectGeminiByokProvider({
+        getApiKey: () => testKey,
+        fetchImpl: async (_url, init) => {
+          byokBody = JSON.parse(String(init?.body || '{}'));
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: tinyPngB64 } }] } }],
+            }),
+          };
+        },
+      });
+      await byokCheckProv.generate({
+        templateDataUrl: tplUrl,
+        ...extraParams,
+        prompt: 'byok clamp + mime',
+        width: 1024,
+        height: 1024,
+        model: modelId,
+        resolution: reqRes,
+      });
+      assert.equal(byokBody?.generationConfig?.imageConfig?.imageSize, expectedSize);
+      assert.equal(byokBody?.contents?.[0]?.parts?.[1]?.inlineData?.mimeType, expectedMime);
+    }
+
+    // F4 regression: BYOK rejects disguised SVG/XML payloads
+    const byokSvgB64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>').toString('base64');
+    const byokXmlB64 = Buffer.from('<?xml version="1.0"?><svg/>').toString('base64');
+    for (const badInput of [
+      { templateDataUrl: `data:image/png;base64,${byokSvgB64}` },
+      { templateBase64: byokXmlB64 },
+      { templatePngBlob: new Blob(['<svg/>'], { type: 'image/png' }) },
+    ]) {
+      await assert.rejects(
+        () =>
+          snakeOkProv.generate({
+            ...badInput,
+            prompt: 'bad svg byok',
+            width: 512,
+            height: 512,
+          }),
+        (err) => err instanceof nanoMod.NanoBananaError && err.code === 'INVALID_IMAGE',
+        'BYOK must reject disguised SVG/XML template payloads'
+      );
+    }
 
     const statusCases = [
       [401, 'INVALID_API_KEY'],
@@ -4297,14 +4752,16 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
       }
     );
 
-    // Web launchGeminiHandoff: stub exportOrShareFile to avoid 1500ms revokeObjectURL timer
+    // Web launchGeminiHandoff: stub exportOrShareFile to avoid 1500ms revokeObjectURL timer & verify F4 dynamic MIME/ext
     const origExportOrShare = bridgeMod.NativeBridge.exportOrShareFile;
     let webExportCalls = 0;
+    const webExportOpts = [];
     let webOpenedUrl = '';
     let webOpenedFeatures = '';
     try {
-      bridgeMod.NativeBridge.exportOrShareFile = async () => {
+      bridgeMod.NativeBridge.exportOrShareFile = async (opts) => {
         webExportCalls++;
+        webExportOpts.push(opts);
         return true;
       };
       await withGlobalOverrides(
@@ -4325,10 +4782,244 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
           assert.equal(webExportCalls, 1);
           assert.equal(webOpenedUrl, nanoMod.GEMINI_APP_URL);
           assert.equal(webOpenedFeatures, 'noopener,noreferrer');
+          assert.equal(webExportOpts[0]?.mimeType, 'image/png');
+          assert.equal(webExportOpts[0]?.fileName?.endsWith('.png'), true);
+
+          // F4: JPEG and WebP handoffs emit matching extension & MIME
+          const jpegBytes = new Uint8Array([
+            0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9,
+          ]);
+          const jpegHandoff = nanoMod.prepareGuidedGeminiHandoff({
+            templatePngBlob: new Blob([jpegBytes], { type: 'image/jpeg' }),
+            templateDataUrl: `data:image/jpeg;base64,${Buffer.from(jpegBytes).toString('base64')}`,
+            prompt: 'jpeg handoff',
+            direction: 'in-place',
+          });
+          assert.equal(jpegHandoff.templateMimeType, 'image/jpeg');
+          await nanoMod.launchGeminiHandoff(jpegHandoff);
+          assert.equal(webExportOpts[1]?.mimeType, 'image/jpeg');
+          assert.equal(webExportOpts[1]?.fileName?.endsWith('.jpg'), true);
+
+          const webpBytes = new Uint8Array([
+            0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+          ]);
+          const webpHandoff = nanoMod.prepareGuidedGeminiHandoff({
+            templatePngBlob: new Blob([webpBytes], { type: 'image/webp' }),
+            templateDataUrl: `data:image/webp;base64,${Buffer.from(webpBytes).toString('base64')}`,
+            prompt: 'webp handoff',
+            direction: 'extend-out',
+          });
+          assert.equal(webpHandoff.templateMimeType, 'image/webp');
+          await nanoMod.launchGeminiHandoff(webpHandoff);
+          assert.equal(webExportOpts[2]?.mimeType, 'image/webp');
+          assert.equal(webExportOpts[2]?.fileName?.endsWith('.webp'), true);
+
+          // F4 regression: mismatched templateMimeType:'image/png' with JPEG magic bytes resolves to image/jpeg + .jpg
+          const mismatchedJpegHandoff = nanoMod.prepareGuidedGeminiHandoff({
+            templatePngBlob: new Blob([jpegBytes], { type: 'image/png' }),
+            templateDataUrl: `data:image/png;base64,${Buffer.from(jpegBytes).toString('base64')}`,
+            templateMimeType: 'image/png',
+            prompt: 'mismatched jpeg handoff',
+            direction: 'in-place',
+          });
+          assert.equal(mismatchedJpegHandoff.templateMimeType, 'image/jpeg');
+          await nanoMod.launchGeminiHandoff(mismatchedJpegHandoff);
+          assert.equal(webExportOpts[3]?.mimeType, 'image/jpeg');
+          assert.equal(webExportOpts[3]?.fileName?.endsWith('.jpg'), true);
+
+          // F4 regression: prepareGuidedGeminiHandoff rejects SVG dataUrl, disguised SVG bytes, and non-raster types
+          const handoffSvgB64 = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>').toString('base64');
+          for (const badHandoffInput of [
+            {
+              templatePngBlob: new Blob(['<svg/>'], { type: 'image/svg+xml' }),
+              templateDataUrl: `data:image/svg+xml;base64,${handoffSvgB64}`,
+            },
+            {
+              templatePngBlob: new Blob([jpegBytes], { type: 'image/png' }),
+              templateDataUrl: `data:image/png;base64,${handoffSvgB64}`,
+            },
+            {
+              templatePngBlob: new Blob([jpegBytes], { type: 'image/png' }),
+              templateDataUrl: `data:image/jpeg;base64,${Buffer.from(jpegBytes).toString('base64')}`,
+              templateMimeType: 'image/svg+xml',
+            },
+            {
+              templatePngBlob: new Blob([jpegBytes], { type: 'image/svg+xml' }),
+              templateDataUrl: `data:image/jpeg;base64,${Buffer.from(jpegBytes).toString('base64')}`,
+            },
+          ]) {
+            assert.throws(
+              () =>
+                nanoMod.prepareGuidedGeminiHandoff({
+                  ...badHandoffInput,
+                  prompt: 'bad handoff',
+                  direction: 'in-place',
+                }),
+              (err) => err instanceof nanoMod.NanoBananaError && err.code === 'INVALID_IMAGE',
+              'prepareGuidedGeminiHandoff must reject SVG / non-raster template inputs'
+            );
+          }
         }
       );
     } finally {
       bridgeMod.NativeBridge.exportOrShareFile = origExportOrShare;
+    }
+
+    // F6: copyTemplateImageToClipboard (PNG fast path, JPEG->PNG transcode, concrete-Blob fallback, NotAllowedError, unsupported)
+    {
+      const jpegBytes = new Uint8Array([
+        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9,
+      ]);
+      const jpegBlob = new Blob([jpegBytes], { type: 'image/jpeg' });
+      const jpegDataUrl = `data:image/jpeg;base64,${Buffer.from(jpegBytes).toString('base64')}`;
+
+      // 1. PNG fast path
+      const writtenItems = [];
+      class MockClipboardItem {
+        constructor(items) {
+          this.items = items;
+        }
+      }
+      await withGlobalOverrides(
+        {
+          ClipboardItem: MockClipboardItem,
+          navigator: {
+            clipboard: {
+              write: async (items) => {
+                writtenItems.push(...items);
+              },
+            },
+          },
+        },
+        async () => {
+          const ok = await nanoMod.copyTemplateImageToClipboard(tinyPngBlob, tinyPngDataUrl);
+          assert.equal(ok, true);
+          assert.equal(writtenItems.length, 1);
+          assert.equal(writtenItems[0].items['image/png'], tinyPngBlob);
+        }
+      );
+
+      // 2. JPEG -> PNG transcoding via Promise-backed ClipboardItem (preserves transient user activation)
+      let bitmapClosed = false;
+      let createdScratchCanvas = null;
+      const promiseItems = [];
+      await withGlobalOverrides(
+        {
+          ClipboardItem: MockClipboardItem,
+          createImageBitmap: async () => ({
+            width: 8,
+            height: 6,
+            close() {
+              bitmapClosed = true;
+            },
+          }),
+          document: {
+            createElement(tag) {
+              assert.equal(tag, 'canvas');
+              const c = createFakeCanvas(8, 6);
+              c.toBlob = (cb, mime) => cb(new Blob([tinyPngBytes], { type: mime || 'image/png' }));
+              createdScratchCanvas = c;
+              return c;
+            },
+          },
+          navigator: {
+            clipboard: {
+              write: async (items) => {
+                promiseItems.push(...items);
+                const resolved = await items[0].items['image/png'];
+                assert.ok(resolved instanceof Blob);
+                assert.equal(resolved.type, 'image/png');
+                assert.ok(resolved.size > 0);
+              },
+            },
+          },
+        },
+        async () => {
+          const ok = await nanoMod.copyTemplateImageToClipboard(jpegBlob, jpegDataUrl);
+          assert.equal(ok, true);
+          assert.equal(promiseItems.length, 1);
+          assert.equal(typeof promiseItems[0].items['image/png']?.then, 'function');
+          assert.equal(bitmapClosed, true, 'ImageBitmap must be closed in finally');
+          assert.equal(createdScratchCanvas?.width, 0, 'Scratch canvas must be released in finally');
+          assert.equal(createdScratchCanvas?.height, 0, 'Scratch canvas must be released in finally');
+        }
+      );
+
+      // 3. Legacy concrete-Blob fallback when ClipboardItem rejects Promise values
+      let fallbackWrites = 0;
+      let fallbackReceivedBlob = null;
+      class ConcreteOnlyClipboardItem {
+        constructor(items) {
+          if (typeof items['image/png']?.then === 'function') {
+            throw new TypeError('Promise ClipboardItem values not supported');
+          }
+          this.items = items;
+        }
+      }
+      await withGlobalOverrides(
+        {
+          ClipboardItem: ConcreteOnlyClipboardItem,
+          createImageBitmap: async () => ({ width: 4, height: 4, close() {} }),
+          document: {
+            createElement() {
+              const c = createFakeCanvas(4, 4);
+              c.toBlob = (cb, mime) => cb(new Blob([tinyPngBytes], { type: mime || 'image/png' }));
+              return c;
+            },
+          },
+          navigator: {
+            clipboard: {
+              write: async (items) => {
+                fallbackWrites++;
+                fallbackReceivedBlob = items[0].items['image/png'];
+              },
+            },
+          },
+        },
+        async () => {
+          const ok = await nanoMod.copyTemplateImageToClipboard(jpegBlob, jpegDataUrl);
+          assert.equal(ok, true);
+          assert.equal(fallbackWrites, 1);
+          assert.ok(fallbackReceivedBlob instanceof Blob && fallbackReceivedBlob.type === 'image/png');
+        }
+      );
+
+      // 4. NotAllowedError must return false without retrying clipboard.write
+      let deniedWriteAttempts = 0;
+      await withGlobalOverrides(
+        {
+          ClipboardItem: MockClipboardItem,
+          createImageBitmap: async () => ({ width: 4, height: 4, close() {} }),
+          document: {
+            createElement() {
+              const c = createFakeCanvas(4, 4);
+              c.toBlob = (cb, mime) => cb(new Blob([tinyPngBytes], { type: mime || 'image/png' }));
+              return c;
+            },
+          },
+          navigator: {
+            clipboard: {
+              write: async () => {
+                deniedWriteAttempts++;
+                const e = new Error('Permission denied');
+                e.name = 'NotAllowedError';
+                throw e;
+              },
+            },
+          },
+        },
+        async () => {
+          const ok = await nanoMod.copyTemplateImageToClipboard(jpegBlob, jpegDataUrl);
+          assert.equal(ok, false);
+          assert.equal(deniedWriteAttempts, 1, 'NotAllowedError must not trigger a second permission prompt');
+        }
+      );
+
+      // 5. Unsupported environment (missing ClipboardItem or clipboard.write) returns false cleanly
+      await withGlobalOverrides({ ClipboardItem: undefined, navigator: {} }, async () => {
+        const ok = await nanoMod.copyTemplateImageToClipboard(tinyPngBlob, tinyPngDataUrl);
+        assert.equal(ok, false);
+      });
     }
 
     // Magic bytes across PNG, JPEG, WebP, GIF87a/89a, and 14-byte BMP floor
@@ -4757,6 +5448,217 @@ async function testClusterB_SeamCompositorHardening(seamMod) {
       assert.equal(dataUrl.startsWith('data:image/png'), true);
     }
   );
+
+  // F5: Compact < 900 KB AI template encoder (constants, dimension cap, quality ladder, scale ladder, fallbacks)
+  assert.equal(seamMod.MAX_AI_TEMPLATE_BYTES, 900 * 1024);
+  assert.equal(seamMod.MAX_AI_TEMPLATE_DIMENSION_PX, 1536);
+
+  // Empty 0x0 canvas rejects cleanly
+  await assert.rejects(
+    () => seamMod.canvasToCompactTemplateBlobAndDataUrl({ width: 0, height: 0 }),
+    /empty canvas/i
+  );
+
+  // Oversized 2048x1024 canvas downscales to 1536x768, emits JPEG, and disposes scratch canvas
+  {
+    const createdScratch = [];
+    await withGlobalOverrides(
+      {
+        document: {
+          createElement(tag) {
+            assert.equal(tag, 'canvas');
+            const c = createFakeCanvas(1, 1);
+            c.toBlob = (cb, mime = 'image/jpeg') =>
+              cb(new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: mime }));
+            createdScratch.push(c);
+            return c;
+          },
+        },
+      },
+      async () => {
+        const bigCanvas = createFakeCanvas(2048, 1024);
+        const compact = await seamMod.canvasToCompactTemplateBlobAndDataUrl(bigCanvas);
+        assert.equal(compact.width, 1536);
+        assert.equal(compact.height, 768);
+        assert.equal(compact.mimeType, 'image/jpeg');
+        assert.equal(compact.blob.type, 'image/jpeg');
+        assert.equal(compact.dataUrl.startsWith('data:image/jpeg;base64,'), true);
+        assert.ok(compact.blob.size > 0 && compact.blob.size <= seamMod.MAX_AI_TEMPLATE_BYTES);
+        assert.equal(createdScratch.length, 1);
+        assert.equal(createdScratch[0].width, 0, 'Scratch canvas must be released in finally');
+        assert.equal(createdScratch[0].height, 0, 'Scratch canvas must be released in finally');
+      }
+    );
+  }
+
+  // Quality ladder step-down when q=0.86 exceeds maxBytes
+  {
+    const triedQualities = [];
+    const qualityCanvas = createFakeCanvas(1024, 1024);
+    qualityCanvas.toBlob = (cb, mime, quality = 0.86) => {
+      triedQualities.push(quality);
+      // Exceed 900 KB at q=0.86 (~980 KB) and q=0.78 (~930 KB), pass at q=0.70 (~820 KB)
+      const byteCount = quality >= 0.85 ? 980_000 : quality >= 0.75 ? 930_000 : 820_000;
+      cb(new Blob([new Uint8Array(byteCount)], { type: mime }));
+    };
+    const res = await seamMod.canvasToCompactTemplateBlobAndDataUrl(qualityCanvas);
+    assert.deepEqual(triedQualities, [0.86, 0.78, 0.7]);
+    assert.ok(res.blob.size <= seamMod.MAX_AI_TEMPLATE_BYTES);
+    assert.equal(res.mimeType, 'image/jpeg');
+    assert.equal(res.width, 1024);
+    assert.equal(res.height, 1024);
+  }
+
+  // Scale ladder step-down when even lowest JPEG quality at full dimension exceeds custom maxBytes
+  {
+    const triedDims = [];
+    await withGlobalOverrides(
+      {
+        document: {
+          createElement() {
+            const c = createFakeCanvas(1, 1);
+            c.toBlob = (cb, mime, quality = 0.86) => {
+              triedDims.push(`${c.width}x${c.height}@${quality}`);
+              const byteCount = Math.max(64, Math.round(c.width * c.height * quality * 0.2));
+              cb(new Blob([new Uint8Array(byteCount)], { type: mime }));
+            };
+            return c;
+          },
+        },
+      },
+      async () => {
+        const denseCanvas = createFakeCanvas(1000, 1000);
+        denseCanvas.toBlob = (cb, mime, quality = 0.86) => {
+          triedDims.push(`${denseCanvas.width}x${denseCanvas.height}@${quality}`);
+          const byteCount = Math.max(64, Math.round(denseCanvas.width * denseCanvas.height * quality * 0.2));
+          cb(new Blob([new Uint8Array(byteCount)], { type: mime }));
+        };
+        const res = await seamMod.canvasToCompactTemplateBlobAndDataUrl(denseCanvas, {
+          maxBytes: 60_000,
+          maxDim: 1000,
+        });
+        assert.ok(res.blob.size <= 60_000, `Expected <= 60000 bytes, got ${res.blob.size}`);
+        assert.ok(res.width < 1000 && res.width >= 256, `Expected downscaled width, got ${res.width}`);
+        assert.equal(res.width, res.height);
+        assert.ok(triedDims.length > 5, 'Should advance past initial dimension into scale ladder');
+      }
+    );
+  }
+
+  // Browser/mock ignoring image/jpeg (always returning oversized PNG): breaks quality loop early & terminates boundedly
+  {
+    let pngCalls = 0;
+    await withGlobalOverrides(
+      {
+        document: {
+          createElement() {
+            const c = createFakeCanvas(1, 1);
+            c.toBlob = (cb) => {
+              pngCalls++;
+              cb(new Blob([new Uint8Array(2000)], { type: 'image/png' }));
+            };
+            return c;
+          },
+        },
+      },
+      async () => {
+        const pngOnlyCanvas = createFakeCanvas(800, 800);
+        pngOnlyCanvas.toBlob = (cb) => {
+          pngCalls++;
+          cb(new Blob([new Uint8Array(2000)], { type: 'image/png' }));
+        };
+        const res = await seamMod.canvasToCompactTemplateBlobAndDataUrl(pngOnlyCanvas, {
+          maxBytes: 500,
+        });
+        assert.equal(res.mimeType, 'image/png');
+        assert.equal(res.dataUrl.startsWith('data:image/png;base64,'), true);
+        assert.ok(pngCalls <= 5, `Must exit quality loop immediately on non-JPEG (calls=${pngCalls})`);
+      }
+    );
+  }
+
+  // toDataURL-only canvas fallback (no toBlob, must NOT call fetch)
+  {
+    let fetchCalled = false;
+    await withGlobalOverrides(
+      {
+        fetch: async () => {
+          fetchCalled = true;
+          throw new Error('fetch must not be called');
+        },
+      },
+      async () => {
+        const dataUrlOnlyCanvas = {
+          width: 320,
+          height: 240,
+          toDataURL: (mime) => `data:${mime || 'image/jpeg'};base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA==`,
+        };
+        const res = await seamMod.canvasToCompactTemplateBlobAndDataUrl(dataUrlOnlyCanvas);
+        assert.equal(fetchCalled, false);
+        assert.equal(res.mimeType, 'image/jpeg');
+        assert.equal(res.blob.type, 'image/jpeg');
+        assert.ok(res.blob.size > 0);
+        assert.equal(res.width, 320);
+        assert.equal(res.height, 240);
+      }
+    );
+  }
+
+  // F5 regression: non-finite (NaN / Infinity) canvas dimensions rejected cleanly
+  for (const [badW, badH] of [
+    [NaN, 512],
+    [512, NaN],
+    [Infinity, 512],
+    [512, Infinity],
+    [-Infinity, 512],
+  ]) {
+    await assert.rejects(
+      () => seamMod.canvasToCompactTemplateBlobAndDataUrl({ width: badW, height: badH }),
+      /Cannot encode empty canvas to compact template/,
+      `Non-finite canvas dimensions (${badW}, ${badH}) must reject`
+    );
+  }
+
+  // F5 regression: scratch canvas is disposed (0x0) if ctx.drawImage throws during resize
+  {
+    const createdScratch = [];
+    await withGlobalOverrides(
+      {
+        document: {
+          createElement(tag) {
+            assert.equal(tag, 'canvas');
+            const c = {
+              width: 0,
+              height: 0,
+              getContext() {
+                return {
+                  fillStyle: '',
+                  imageSmoothingEnabled: false,
+                  imageSmoothingQuality: 'low',
+                  fillRect() {},
+                  drawImage() {
+                    throw new Error('simulated drawImage failure');
+                  },
+                };
+              },
+            };
+            createdScratch.push(c);
+            return c;
+          },
+        },
+      },
+      async () => {
+        const srcCanvas = { width: 2048, height: 2048 };
+        await assert.rejects(
+          () => seamMod.canvasToCompactTemplateBlobAndDataUrl(srcCanvas),
+          /simulated drawImage failure/
+        );
+        assert.equal(createdScratch.length, 1);
+        assert.equal(createdScratch[0].width, 0, 'Scratch canvas width must be released to 0 on drawImage error');
+        assert.equal(createdScratch[0].height, 0, 'Scratch canvas height must be released to 0 on drawImage error');
+      }
+    );
+  }
 }
 
 // ===========================================================================
@@ -6266,6 +7168,122 @@ async function testClusterE_CodecStorageIsolationBridge(
         if (unsubBase) unsubBase();
       }
     });
+
+    // F4: NativeBridge.shareImage Web fallback dynamic MIME & extension (navigator.share + desktop download + SSRF + Android)
+    const origExportOrShare = bridgeMod.NativeBridge.exportOrShareFile;
+    try {
+      const shareCases = [
+        ['data:image/jpeg;base64,/9j/2w==', 'image/jpeg', 'jpg'],
+        ['data:image/webp;base64,UklGRg==', 'image/webp', 'webp'],
+        ['data:image/png;base64,iVBORw0KGgo=', 'image/png', 'png'],
+      ];
+      for (const [url, expectedMime, expectedExt] of shareCases) {
+        let sharedPayload = null;
+        await withGlobalOverrides(
+          {
+            window: {},
+            fetch: async () => new Response(new Uint8Array([1, 2, 3, 4]), { headers: { 'content-type': expectedMime } }),
+            navigator: {
+              share: async (payload) => {
+                sharedPayload = payload;
+              },
+            },
+          },
+          async () => {
+            await bridgeMod.NativeBridge.shareImage('Capy Zoom Template', url);
+            assert.equal(sharedPayload?.files?.[0]?.name, `capy_zoom_template.${expectedExt}`);
+            assert.equal(sharedPayload?.files?.[0]?.type, expectedMime);
+          }
+        );
+      }
+
+      // Desktop fallback (no navigator.share) -> exportOrShareFile receives dynamic fileName & mimeType (including blob: URLs)
+      const desktopExports = [];
+      bridgeMod.NativeBridge.exportOrShareFile = async (opts) => {
+        desktopExports.push(opts);
+      };
+      await withGlobalOverrides(
+        {
+          window: {},
+          navigator: {},
+          fetch: async (target) =>
+            new Response(new Uint8Array([1, 2, 3, 4]), {
+              headers: { 'content-type': String(target).startsWith('blob:') ? 'image/jpeg' : 'image/webp' },
+            }),
+        },
+        async () => {
+          await bridgeMod.NativeBridge.shareImage('Capy Template', 'data:image/webp;base64,UklGRg==');
+          await bridgeMod.NativeBridge.shareImage('Blob Template', 'blob:https://capypaint.com/abc-123');
+          assert.equal(desktopExports[0]?.fileName, 'capy_template.webp');
+          assert.equal(desktopExports[0]?.mimeType, 'image/webp');
+          assert.equal(desktopExports[1]?.fileName, 'blob_template.jpg');
+          assert.equal(desktopExports[1]?.mimeType, 'image/jpeg');
+        }
+      );
+
+      // SSRF guard + Android native passthrough stay intact
+      let blockedFetchCalls = 0;
+      let androidForwardedUrl = '';
+      await withGlobalOverrides(
+        {
+          window: {
+            CapyAndroid: {
+              shareImage(_t, u) {
+                androidForwardedUrl = u;
+              },
+            },
+          },
+          fetch: async () => {
+            blockedFetchCalls++;
+            return new Response(new Uint8Array([1]));
+          },
+        },
+        async () => {
+          await bridgeMod.NativeBridge.shareImage('Evil', 'https://evil.example/x.jpg');
+          assert.equal(blockedFetchCalls, 0, 'Untrusted https URL must be blocked before fetch');
+          await bridgeMod.NativeBridge.shareImage('Android Pic', 'data:image/jpeg;base64,/9j/2w==');
+          assert.equal(androidForwardedUrl, 'data:image/jpeg;base64,/9j/2w==');
+          assert.equal(blockedFetchCalls, 0, 'Android shareImage must forward without calling fetch');
+        }
+      );
+
+      // F4 regression: NativeBridge.shareImage rejects blob: URLs returning image/svg+xml, text/html, or disguised <svg> bytes
+      for (const [label, responseBody, contentType] of [
+        ['image/svg+xml blob', '<svg xmlns="http://www.w3.org/2000/svg"></svg>', 'image/svg+xml'],
+        ['text/html blob', '<html><body>x</body></html>', 'text/html'],
+        ['disguised png-typed svg blob', '<svg xmlns="http://www.w3.org/2000/svg"></svg>', 'image/png'],
+        ['untyped xml svg blob', '<?xml version="1.0"?><svg/>', ''],
+      ]) {
+        let badShareCalls = 0;
+        let badExportCalls = 0;
+        bridgeMod.NativeBridge.exportOrShareFile = async () => {
+          badExportCalls++;
+        };
+        await withGlobalOverrides(
+          {
+            window: {},
+            navigator: {
+              share: async () => {
+                badShareCalls++;
+              },
+            },
+            fetch: async () =>
+              new Response(responseBody, contentType ? { headers: { 'content-type': contentType } } : undefined),
+          },
+          async () => {
+            const ok = await bridgeMod.NativeBridge.shareImage(
+              'Blob SVG',
+              'blob:https://capypaint.com/fake-svg-uuid'
+            );
+            assert.equal(ok, false, `NativeBridge.shareImage must return false for ${label}`);
+            assert.equal(badShareCalls, 0, `navigator.share must not be called for ${label}`);
+            assert.equal(badExportCalls, 0, `exportOrShareFile must not be called for ${label}`);
+          }
+        );
+      }
+    } finally {
+      bridgeMod.NativeBridge.exportOrShareFile = origExportOrShare;
+    }
   }
 }
 
@@ -6343,7 +7361,58 @@ async function testClusterF_UiSsrAndControllerHelpers(
     'Nano Banana 2.1 • Puter'
   );
 
-  // F3. GuidedGeminiHandoffModal SSR markup checks (closed, Web open, Android open, fallbackReason, errorMessage)
+  // F2: InfiniteZoomCreateCard SSR resolution options & stale persisted value clamping
+  await withGlobalOverrides({ window: {} }, async () => {
+    const extractResolutionSelect = (model, res) => {
+      const html = renderToStaticMarkup(
+        React.createElement(controlsMod.InfiniteZoomCreateCard, {
+          sourceImage: null,
+          infiniteZoomProvider: 'PUTER',
+          nanoBananaModel: model,
+          nanoBananaResolution: res,
+          onChangeProvider: () => {},
+          onChangeModel: () => {},
+          onChangeResolution: () => {},
+          onStartInfiniteZoomIn: () => {},
+          onStartInfiniteZoomOut: () => {},
+          onZoomIntoDetailTile: () => {},
+          onClose: () => {},
+        })
+      );
+      const match = /<select[^>]*id="iz-resolution-select"[^>]*>([\s\S]*?)<\/select>/.exec(html);
+      assert.ok(match, `Expected iz-resolution-select in InfiniteZoomCreateCard markup for ${model}`);
+      return match[1];
+    };
+
+    const opts21 = extractResolutionSelect('gemini-nano-banana-2.1', '512');
+    assert.equal(opts21.includes('<option value="1K" selected="">1K</option>'), true);
+    assert.equal(opts21.includes('<option value="2K">2K</option>'), true);
+    assert.equal(opts21.includes('value="512"'), false, 'Nano Banana 2.1 must not offer 512');
+
+    const optsLite = extractResolutionSelect('gemini-3.1-flash-lite-image', '2K');
+    assert.equal(optsLite.includes('<option value="1K" selected="">1K</option>'), true);
+    assert.equal(optsLite.includes('value="512"'), false, 'Nano Banana 2 Lite must only offer 1K');
+    assert.equal(optsLite.includes('value="2K"'), false, 'Nano Banana 2 Lite must only offer 1K');
+
+    const opts2 = extractResolutionSelect('gemini-3.1-flash-image', '512');
+    assert.equal(opts2.includes('<option value="512" selected="">512</option>'), true);
+    assert.equal(opts2.includes('<option value="1K">1K</option>'), true);
+    assert.equal(opts2.includes('<option value="2K">2K</option>'), true);
+
+    // F2 regression: prototype keys in formatActiveProviderModelPill & InfiniteZoomCreateCard SSR fall back cleanly
+    for (const protoKey of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+      assert.equal(
+        controlsMod.formatActiveProviderModelPill('PUTER', protoKey, false),
+        'Nano Banana 2.1 • Puter',
+        `formatActiveProviderModelPill(${protoKey}) must fall back cleanly to 2.1`
+      );
+      const optsProto = extractResolutionSelect(protoKey, '512');
+      assert.equal(optsProto.includes('<option value="1K" selected="">1K</option>'), true);
+      assert.equal(optsProto.includes('<option value="2K">2K</option>'), true);
+    }
+  });
+
+  // F3. GuidedGeminiHandoffModal SSR markup checks (closed, Web open + F6 Copy Image, Android open without Copy Image, fallbackReason, errorMessage)
   const sampleHandoff = {
     prompt: 'Add tiny wildflowers',
     templatePngBlob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
@@ -6376,6 +7445,16 @@ async function testClusterF_UiSsrAndControllerHelpers(
     assert.equal(webModalHtml.includes('Copy Prompt &amp; Open Gemini'), true);
     assert.equal(webModalHtml.includes('Puter quota reached'), true);
     assert.equal(webModalHtml.includes('Please paste a PNG image'), true);
+    // F6: Web renders 1-tap Copy Image button with >=44px touch target
+    assert.equal(webModalHtml.includes('data-testid="guided-gemini-copy-image-btn"'), true);
+    assert.equal(webModalHtml.includes('Copy Image'), true);
+    const copyImgBtnMatch = /<button[^>]*data-testid="guided-gemini-copy-image-btn"[^>]*>/.exec(webModalHtml);
+    assert.ok(copyImgBtnMatch, 'Web modal must render guided-gemini-copy-image-btn');
+    assert.equal(
+      copyImgBtnMatch[0].includes('min-h-[44px]'),
+      true,
+      'Copy Image button must preserve 44px minimum touch target'
+    );
   });
 
   await withGlobalOverrides({ window: { CapyAndroid: {} } }, async () => {
@@ -6388,6 +7467,12 @@ async function testClusterF_UiSsrAndControllerHelpers(
       })
     );
     assert.equal(androidModalHtml.includes('Copy Prompt &amp; Share to Gemini App'), true);
+    assert.equal(
+      androidModalHtml.includes('data-testid="guided-gemini-copy-image-btn"'),
+      false,
+      'Web-only Copy Image button must NOT render on Android native'
+    );
+    assert.equal(androidModalHtml.includes('data-testid="guided-gemini-copy-prompt-btn"'), true);
   });
 
   // F4. useInfiniteZoomController computeNestedLayerTargetDimensions edge cases & 4x upscale cap
@@ -6613,6 +7698,12 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     'Testing Infinite Zoom (NanoBananaService, RegionSelectionEngine, SeamCompositor, UnifiedPuzzleLayers, MaskedRegionSubdivider, Worker IPC, Exporters, Canvas/UI/Controller Helpers, CapyCodec, Storage & NativeBridge)...'
   );
 
+  // F7: Load nanoBananaPrompts.ts with zero DOM globals to verify pure zero-DOM module boundary
+  const promptsMod = await withGlobalOverrides(
+    { window: undefined, document: undefined },
+    () => vite.ssrLoadModule('/src/services/ai/nanoBananaPrompts.ts')
+  );
+
   const [
     nanoMod,
     selectionMod,
@@ -6663,7 +7754,7 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     vite.ssrLoadModule('/src/components/GuidedGeminiHandoffModal.tsx'),
   ]);
 
-  await testNanoBananaService(nanoMod);
+  await testNanoBananaService(nanoMod, promptsMod);
   testRegionSelectionEngine(selectionMod, codecMod);
   await testSeamCompositor(seamMod);
   testMaskedSubdividerAndGenerator(subdividerMod, generatorMod, selectionMod, codecMod, typesMod, unifiedMod);

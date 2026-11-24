@@ -25,10 +25,11 @@ import { NativeBridge } from '../services/NativeBridge';
 import { useIsomorphicLayoutEffect } from '../hooks/useLatest';
 import {
   DEFAULT_NANO_BANANA_MODEL,
+  getNanoBananaModelMeta,
   GOOGLE_AI_STUDIO_KEY_URL,
   MAX_USER_PROMPT_LENGTH,
-  NANO_BANANA_MODEL_MAP,
   NANO_BANANA_MODELS,
+  resolveSupportedModelResolution,
 } from '../services/ai/NanoBananaService';
 import {
   clearGeminiByokApiKey,
@@ -113,7 +114,7 @@ export function formatActiveProviderModelPill(
   isAndroid: boolean = NativeBridge.isAndroidNative()
 ): string {
   const effectiveProvider = resolveVisibleProvider(provider, isAndroid);
-  const modelMeta = NANO_BANANA_MODEL_MAP[model] ?? NANO_BANANA_MODEL_MAP[DEFAULT_NANO_BANANA_MODEL];
+  const modelMeta = getNanoBananaModelMeta(model);
   return `Nano Banana ${modelMeta.shortLabel} • ${PROVIDER_SHORT_LABELS[effectiveProvider]}`;
 }
 
@@ -896,18 +897,15 @@ const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
   onChangeModel,
   onChangeResolution,
 }) => {
-  const selectedModelMeta =
-    NANO_BANANA_MODEL_MAP[nanoBananaModel] ?? NANO_BANANA_MODEL_MAP[DEFAULT_NANO_BANANA_MODEL];
-  const resolvedResolution = selectedModelMeta.supportedResolutions.includes(nanoBananaResolution)
-    ? nanoBananaResolution
-    : selectedModelMeta.defaultResolution;
+  const selectedModelMeta = getNanoBananaModelMeta(nanoBananaModel);
+  const resolvedResolution = resolveSupportedModelResolution(
+    nanoBananaModel,
+    nanoBananaResolution
+  );
 
   const handleModelChange = (nextModel: NanoBananaModelId) => {
-    const nextMeta = NANO_BANANA_MODEL_MAP[nextModel];
-    const nextResolution =
-      nextMeta && !nextMeta.supportedResolutions.includes(nanoBananaResolution)
-        ? nextMeta.defaultResolution
-        : undefined;
+    const nextResolved = resolveSupportedModelResolution(nextModel, resolvedResolution);
+    const nextResolution = nextResolved !== nanoBananaResolution ? nextResolved : undefined;
     onChangeModel(nextModel, nextResolution);
   };
 

@@ -109,6 +109,87 @@ export function isAllowedSharedImageDataUrl(rawUrl: string): boolean {
   );
 }
 
+const ALLOWED_SHARED_IMAGE_MIMES = new Set<string>([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+]);
+
+function isAllowedSharedImageMime(rawMime: string | undefined | null): boolean {
+  if (typeof rawMime !== 'string') return false;
+  const normalized = rawMime.split(';')[0].trim().toLowerCase();
+  return ALLOWED_SHARED_IMAGE_MIMES.has(normalized);
+}
+
+async function isSvgOrXmlSharedBlob(blob: Blob): Promise<boolean> {
+  if (typeof blob.slice !== 'function') return false;
+  try {
+    const bytes = new Uint8Array(await blob.slice(0, 64).arrayBuffer());
+    let offset = 0;
+    if (bytes.byteLength >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+      offset = 3;
+    }
+    while (
+      offset < bytes.byteLength &&
+      (bytes[offset] === 0x20 ||
+        bytes[offset] === 0x09 ||
+        bytes[offset] === 0x0a ||
+        bytes[offset] === 0x0d ||
+        bytes[offset] === 0x0c)
+    ) {
+      offset += 1;
+    }
+    if (offset >= bytes.byteLength || bytes[offset] !== 0x3c) return false;
+    const headLen = Math.min(bytes.byteLength - offset, 16);
+    let head = '';
+    for (let i = 0; i < headLen; i++) {
+      head += String.fromCharCode(bytes[offset + i]);
+    }
+    const lower = head.toLowerCase();
+    return (
+      lower.startsWith('<svg') ||
+      lower.startsWith('<?xml') ||
+      lower.startsWith('<!doctype') ||
+      lower.startsWith('<!--')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function resolveSharedImageMimeAndExt(
+  dataUrl: string,
+  blobType?: string
+): { mimeType: string; ext: string } {
+  const dataMatch = /^data:(image\/[a-z0-9.+-]+);base64,/i.exec(dataUrl.trim());
+  const rawMime = (dataMatch?.[1] || blobType || '').split(';')[0].trim().toLowerCase();
+  switch (rawMime) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return { mimeType: 'image/jpeg', ext: 'jpg' };
+    case 'image/webp':
+      return { mimeType: 'image/webp', ext: 'webp' };
+    case 'image/gif':
+      return { mimeType: 'image/gif', ext: 'gif' };
+    case 'image/bmp':
+      return { mimeType: 'image/bmp', ext: 'bmp' };
+    case 'image/avif':
+      return { mimeType: 'image/avif', ext: 'avif' };
+    case 'image/heic':
+      return { mimeType: 'image/heic', ext: 'heic' };
+    case 'image/heif':
+      return { mimeType: 'image/heif', ext: 'heif' };
+    default:
+      return { mimeType: 'image/png', ext: 'png' };
+  }
+}
+
 export interface BridgeListenOptions {
   once?: boolean;
 }
@@ -543,40 +624,55 @@ export class NativeBridgeService {
     };
   }
 
-  async shareImage(title: string, dataUrl: string): Promise<void> {
-    if (typeof dataUrl !== 'string') return;
+  async shareImage(title: string, dataUrl: string): Promise<boolean> {
+    if (typeof dataUrl !== 'string') return false;
     const trimmedUrl = dataUrl.trim();
-    if (!isAllowedSharedImageDataUrl(trimmedUrl) && !/^blob:/i.test(trimmedUrl)) {
-      return;
+    const isBlobUrl = /^blob:/i.test(trimmedUrl);
+    if (!isAllowedSharedImageDataUrl(trimmedUrl) && !isBlobUrl) {
+      return false;
     }
     try {
       if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage) {
         window.CapyAndroid.shareImage(title, trimmedUrl);
-        return;
+        return true;
       }
+      const res = await fetch(trimmedUrl);
+      const blob = await res.blob();
+      if (
+        isBlobUrl &&
+        typeof blob.type === 'string' &&
+        blob.type.trim().length > 0 &&
+        !isAllowedSharedImageMime(blob.type)
+      ) {
+        return false;
+      }
+      if (await isSvgOrXmlSharedBlob(blob)) {
+        return false;
+      }
+      const { mimeType, ext } = resolveSharedImageMimeAndExt(trimmedUrl, blob.type);
+      const safeBase = title.trim().replace(/\s+/g, '_').toLowerCase() || 'capy_image';
+      const fileName = `${safeBase}.${ext}`;
       if (typeof navigator !== 'undefined' && navigator.share) {
-        const res = await fetch(trimmedUrl);
-        const blob = await res.blob();
-        const file = new File([blob], `${title.replace(/\s+/g, '_').toLowerCase()}.png`, {
-          type: 'image/png',
+        const file = new File([blob], fileName, {
+          type: mimeType,
         });
         await navigator.share({
           title,
           files: [file],
         });
-        return;
+        return true;
       }
       // Fallback on desktop web without Web Share API: trigger download
-      const res = await fetch(trimmedUrl);
-      const blob = await res.blob();
       await this.exportOrShareFile({
         title,
-        fileName: `${title.replace(/\s+/g, '_').toLowerCase()}.png`,
-        mimeType: 'image/png',
+        fileName,
+        mimeType,
         data: blob,
       });
+      return true;
     } catch {
       // Ignore user cancellation
+      return false;
     }
   }
 
@@ -606,9 +702,13 @@ export class NativeBridgeService {
       return;
     }
 
-    if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage && mimeType === 'image/png') {
+    if (
+      typeof window !== 'undefined' &&
+      window.CapyAndroid?.shareImage &&
+      (mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/webp')
+    ) {
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      window.CapyAndroid.shareImage(title, `data:image/png;base64,${uint8ToBase64(bytes)}`);
+      window.CapyAndroid.shareImage(title, `data:${mimeType};base64,${uint8ToBase64(bytes)}`);
       return;
     }
 

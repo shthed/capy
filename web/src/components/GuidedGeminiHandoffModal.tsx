@@ -5,6 +5,7 @@ import {
   ClipboardPaste,
   Copy,
   ExternalLink,
+  Image as ImageIcon,
   ImagePlus,
   Loader2,
   Share2,
@@ -15,6 +16,7 @@ import {
 import { NativeBridge } from '../services/NativeBridge';
 import {
   copyPromptToClipboard,
+  copyTemplateImageToClipboard,
   GuidedGeminiHandoffPackage,
   launchGeminiHandoff,
 } from '../services/ai/NanoBananaService';
@@ -53,6 +55,122 @@ function isBackgroundCanvasShortcutKey(key: string): boolean {
   );
 }
 
+interface GuidedGeminiStep1CardProps {
+  prompt: string;
+  templatePreviewUrl: string;
+  isAndroid: boolean;
+  isProcessing: boolean;
+  isLaunching: boolean;
+  copiedOnly: boolean;
+  copiedImage: boolean;
+  launchStatus: string | null;
+  onCopyPrompt: () => void;
+  onCopyImage: () => void;
+  onLaunchGemini: () => void;
+}
+
+const GuidedGeminiStep1Card: React.FC<GuidedGeminiStep1CardProps> = ({
+  prompt,
+  templatePreviewUrl,
+  isAndroid,
+  isProcessing,
+  isLaunching,
+  copiedOnly,
+  copiedImage,
+  launchStatus,
+  onCopyPrompt,
+  onCopyImage,
+  onLaunchGemini,
+}) => (
+  <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">
+    <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+      <span className="text-xs font-extrabold text-sky-300 min-w-0 break-words">
+        Step 1 — Send Template &amp; Prompt to Gemini
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+        {!isAndroid && (
+          <button
+            type="button"
+            data-testid="guided-gemini-copy-image-btn"
+            disabled={isProcessing}
+            onClick={onCopyImage}
+            className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-h-[44px] max-w-full rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {copiedImage ? (
+              <Check size={13} className="text-emerald-400 shrink-0" />
+            ) : (
+              <ImageIcon size={13} className="text-sky-300 shrink-0" />
+            )}
+            <span className="whitespace-nowrap">
+              {copiedImage ? 'Copied Image' : 'Copy Image'}
+            </span>
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid="guided-gemini-copy-prompt-btn"
+          disabled={isProcessing}
+          onClick={onCopyPrompt}
+          className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-h-[44px] max-w-full rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {copiedOnly ? (
+            <Check size={13} className="text-emerald-400 shrink-0" />
+          ) : (
+            <Copy size={13} className="shrink-0" />
+          )}
+          <span className="whitespace-nowrap">{copiedOnly ? 'Copied' : 'Copy Prompt'}</span>
+        </button>
+      </div>
+    </div>
+
+    <div className="flex flex-col sm:flex-row gap-2.5 items-start min-w-0">
+      {templatePreviewUrl && (
+        <div className="w-full sm:w-28 shrink-0 rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center p-1">
+          <img
+            src={templatePreviewUrl}
+            alt="Prepared puzzle template preview"
+            className="capy-guided-gemini-preview max-h-32 sm:max-h-24 w-auto object-contain rounded"
+          />
+        </div>
+      )}
+
+      <div className="w-full min-w-0 flex-1 rounded-lg bg-slate-900/90 border border-slate-800 p-2 max-h-28 overflow-y-auto">
+        <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap break-words select-text">
+          {prompt}
+        </p>
+      </div>
+    </div>
+
+    <button
+      type="button"
+      data-testid="guided-gemini-launch-btn"
+      disabled={isProcessing || isLaunching}
+      onClick={onLaunchGemini}
+      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer"
+    >
+      {isLaunching ? (
+        <Loader2 size={15} className="animate-spin shrink-0" />
+      ) : isAndroid ? (
+        <Share2 size={15} className="shrink-0" />
+      ) : (
+        <ExternalLink size={15} className="shrink-0" />
+      )}
+      <span className="break-words text-center">
+        {isAndroid ? 'Copy Prompt & Share to Gemini App' : 'Copy Prompt & Open Gemini'}
+      </span>
+    </button>
+
+    {launchStatus && (
+      <p
+        role="status"
+        className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 leading-snug break-words"
+      >
+        {launchStatus}
+      </p>
+    )}
+  </div>
+);
+
 export interface GuidedGeminiHandoffModalProps {
   isOpen: boolean;
   handoff: GuidedGeminiHandoffPackage | null;
@@ -76,9 +194,11 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     const titleId = useId();
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const copiedImageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [templatePreviewUrl, setTemplatePreviewUrl] = useState<string>('');
     const [launchStatus, setLaunchStatus] = useState<string | null>(null);
     const [copiedOnly, setCopiedOnly] = useState<boolean>(false);
+    const [copiedImage, setCopiedImage] = useState<boolean>(false);
     const [localError, setLocalError] = useState<string | null>(null);
     const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
     const [isLaunching, setIsLaunching] = useState<boolean>(false);
@@ -95,6 +215,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     const isSubmittingRef = useRef<boolean>(false);
     const submitSeqRef = useRef<number>(0);
     const isReadingClipboardRef = useRef<boolean>(false);
+    const isCopyingImageRef = useRef<boolean>(false);
+    const copyImageSeqRef = useRef<number>(0);
 
     useEffect(() => {
       if (!isOpen || !handoff) {
@@ -105,16 +227,30 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
       }
     }, [isProcessing, isOpen, handoff, errorMessage]);
 
-    // Manage object URL for template PNG preview and strictly revoke on change/unmount.
+    // Manage object URL for template image preview and strictly revoke on change/unmount.
     useEffect(() => {
       if (!isOpen || !handoff) {
         setTemplatePreviewUrl('');
         setLaunchStatus(null);
         setCopiedOnly(false);
+        setCopiedImage(false);
         setLocalError(null);
         setIsDraggingFile(false);
+        copyImageSeqRef.current += 1;
+        isCopyingImageRef.current = false;
+        if (copiedTimerRef.current !== null) {
+          clearTimeout(copiedTimerRef.current);
+          copiedTimerRef.current = null;
+        }
+        if (copiedImageTimerRef.current !== null) {
+          clearTimeout(copiedImageTimerRef.current);
+          copiedImageTimerRef.current = null;
+        }
         return;
       }
+
+      setCopiedOnly(false);
+      setCopiedImage(false);
 
       let createdUrl: string | null = null;
       if (
@@ -135,9 +271,15 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
       return () => {
         submitSeqRef.current += 1;
         isSubmittingRef.current = false;
+        copyImageSeqRef.current += 1;
+        isCopyingImageRef.current = false;
         if (copiedTimerRef.current !== null) {
           clearTimeout(copiedTimerRef.current);
           copiedTimerRef.current = null;
+        }
+        if (copiedImageTimerRef.current !== null) {
+          clearTimeout(copiedImageTimerRef.current);
+          copiedImageTimerRef.current = null;
         }
         if (createdUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
           try {
@@ -278,8 +420,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         } else {
           setLaunchStatus(
             res.copiedPrompt
-              ? 'Prompt copied & template saved! Attach the template PNG in Gemini, paste the prompt, then paste or upload the result below.'
-              : 'Template saved & Gemini opened! Copy the prompt below, attach the template PNG, then return the result below.'
+              ? 'Prompt copied & template saved! Attach the template image in Gemini, paste the prompt, then paste or upload the result below.'
+              : 'Template saved & Gemini opened! Copy the prompt below, attach the template image, then return the result below.'
           );
         }
       } catch {
@@ -306,6 +448,52 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         setLocalError('Clipboard access was blocked. Select and copy the prompt text manually.');
       }
     }, [handoff]);
+
+    const handleCopyImage = useCallback(async () => {
+      const activeHandoff = handoffRef.current;
+      if (
+        !isOpenRef.current ||
+        !activeHandoff ||
+        isProcessingRef.current ||
+        isCopyingImageRef.current
+      ) {
+        return;
+      }
+      const seq = ++copyImageSeqRef.current;
+      isCopyingImageRef.current = true;
+      setLocalError(null);
+      try {
+        const ok = await copyTemplateImageToClipboard(
+          activeHandoff.templatePngBlob,
+          activeHandoff.templateDataUrl
+        );
+        if (
+          !isOpenRef.current ||
+          handoffRef.current !== activeHandoff ||
+          copyImageSeqRef.current !== seq
+        ) {
+          return;
+        }
+        if (ok) {
+          setCopiedImage(true);
+          if (copiedImageTimerRef.current !== null) {
+            clearTimeout(copiedImageTimerRef.current);
+          }
+          copiedImageTimerRef.current = setTimeout(() => {
+            copiedImageTimerRef.current = null;
+            setCopiedImage(false);
+          }, 2500);
+        } else {
+          setLocalError(
+            'Could not copy image to clipboard in this browser. Tap Copy Prompt & Open Gemini to download the template image instead.'
+          );
+        }
+      } finally {
+        if (copyImageSeqRef.current === seq) {
+          isCopyingImageRef.current = false;
+        }
+      }
+    }, []);
 
     const handlePasteClipboard = useCallback(async () => {
       const activeHandoff = handoffRef.current;
@@ -466,71 +654,19 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
             )}
 
             {/* Step 1: Template & Prompt */}
-            <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">
-              <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-                <span className="text-xs font-extrabold text-sky-300">
-                  Step 1 — Send Template &amp; Prompt to Gemini
-                </span>
-                <button
-                  type="button"
-                  data-testid="guided-gemini-copy-prompt-btn"
-                  disabled={isProcessing}
-                  onClick={() => void handleCopyPromptOnly()}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {copiedOnly ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                  <span>{copiedOnly ? 'Copied' : 'Copy Prompt'}</span>
-                </button>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2.5 items-start min-w-0">
-                {templatePreviewUrl && (
-                  <div className="w-full sm:w-28 shrink-0 rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center p-1">
-                    <img
-                      src={templatePreviewUrl}
-                      alt="Prepared puzzle template preview"
-                      className="capy-guided-gemini-preview max-h-32 sm:max-h-24 w-auto object-contain rounded"
-                    />
-                  </div>
-                )}
-
-                <div className="w-full min-w-0 flex-1 rounded-lg bg-slate-900/90 border border-slate-800 p-2 max-h-28 overflow-y-auto">
-                  <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap break-words select-text">
-                    {handoff.prompt}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                data-testid="guided-gemini-launch-btn"
-                disabled={isProcessing || isLaunching}
-                onClick={() => void handleLaunchGemini()}
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer"
-              >
-                {isLaunching ? (
-                  <Loader2 size={15} className="animate-spin shrink-0" />
-                ) : isAndroid ? (
-                  <Share2 size={15} className="shrink-0" />
-                ) : (
-                  <ExternalLink size={15} className="shrink-0" />
-                )}
-                <span className="break-words text-center">
-                  {isAndroid
-                    ? 'Copy Prompt & Share to Gemini App'
-                    : 'Copy Prompt & Open Gemini'}
-                </span>
-              </button>
-
-              {launchStatus && (
-                <p
-                  role="status"
-                  className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 leading-snug break-words"
-                >
-                  {launchStatus}
-                </p>
-              )}
-            </div>
+            <GuidedGeminiStep1Card
+              prompt={handoff.prompt}
+              templatePreviewUrl={templatePreviewUrl}
+              isAndroid={isAndroid}
+              isProcessing={isProcessing}
+              isLaunching={isLaunching}
+              copiedOnly={copiedOnly}
+              copiedImage={copiedImage}
+              launchStatus={launchStatus}
+              onCopyPrompt={() => void handleCopyPromptOnly()}
+              onCopyImage={() => void handleCopyImage()}
+              onLaunchGemini={() => void handleLaunchGemini()}
+            />
 
             {/* Step 2: Return Generated Image */}
             <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">

@@ -1,19 +1,47 @@
 import type {
-  BorderExtensionSides,
   InfiniteZoomDirection,
   InfiniteZoomProviderMode,
   NanoBananaModelId,
   NanoBananaResolution,
 } from '../../types';
 import { base64ToUint8, uint8ToBase64 } from '../../utils/base64';
-import { BLOCKED_PROMPT_PATTERNS } from '../catalog/CatalogIdeasService';
 import { NativeBridge } from '../NativeBridge';
 import { loadGeminiByokApiKey } from '../storage/SettingsStorage';
 import { reportSwallowed } from '../telemetry';
+import {
+  DEFAULT_NANO_BANANA_MODEL,
+  NanoBananaError,
+  type NanoBananaErrorCode,
+  type PuterAspectRatio,
+  resolveNearestGeminiAspectRatio,
+  resolveNearestPuterRatio,
+  resolveSupportedModelResolution,
+} from './nanoBananaPrompts';
 
-export const MAX_USER_PROMPT_LENGTH = 200;
-export const DEFAULT_NANO_BANANA_MODEL: NanoBananaModelId = 'gemini-nano-banana-2.1';
-export const DEFAULT_NANO_BANANA_RESOLUTION: NanoBananaResolution = '1K';
+export {
+  buildNanoBananaInfillPrompt,
+  buildNanoBananaOutpaintPrompt,
+  DEFAULT_NANO_BANANA_MODEL,
+  DEFAULT_NANO_BANANA_RESOLUTION,
+  getNanoBananaModelMeta,
+  MAX_USER_PROMPT_LENGTH,
+  NANO_BANANA_MODEL_MAP,
+  NANO_BANANA_MODELS,
+  NanoBananaError,
+  resolveNearestGeminiAspectRatio,
+  resolveNearestPuterRatio,
+  resolveSupportedModelResolution,
+  sanitizeUserPrompt,
+} from './nanoBananaPrompts';
+export type {
+  InfillPromptOptions,
+  NanoBananaErrorCode,
+  NanoBananaModelMeta,
+  OutpaintPromptOptions,
+  PromptSanitizationResult,
+  PuterAspectRatio,
+} from './nanoBananaPrompts';
+
 export const PUTER_SDK_SCRIPT_URL = 'https://js.puter.com/v2/';
 export const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 export const GEMINI_APP_URL = 'https://gemini.google.com/';
@@ -22,110 +50,12 @@ export const MAX_RECEIVED_IMAGE_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_NANO_BANANA_TIMEOUT_MS = 60_000;
 export const DEFAULT_PUTER_LOAD_TIMEOUT_MS = 20_000;
 
-export interface NanoBananaModelMeta {
-  id: NanoBananaModelId;
-  label: string;
-  shortLabel: string;
-  description: string;
-  supportedResolutions: readonly NanoBananaResolution[];
-  defaultResolution: NanoBananaResolution;
-}
-
-export const NANO_BANANA_MODELS: readonly NanoBananaModelMeta[] = [
-  {
-    id: 'gemini-nano-banana-2.1',
-    label: 'Nano Banana 2.1 (Default)',
-    shortLabel: '2.1',
-    description: 'Balanced detail, crisp contours, and reliable style continuity at 1K.',
-    supportedResolutions: ['512', '1K', '2K'],
-    defaultResolution: '1K',
-  },
-  {
-    id: 'gemini-3.1-flash-lite-image',
-    label: 'Nano Banana 2 Lite',
-    shortLabel: '2 Lite',
-    description: 'Fastest lightweight image generation for quick zoom iterations.',
-    supportedResolutions: ['512', '1K', '2K'],
-    defaultResolution: '1K',
-  },
-  {
-    id: 'gemini-3.1-flash-image',
-    label: 'Nano Banana 2',
-    shortLabel: '2',
-    description: 'High-fidelity scene detail across 512, 1K, and 2K resolutions.',
-    supportedResolutions: ['512', '1K', '2K'],
-    defaultResolution: '1K',
-  },
-] as const;
-
-export const NANO_BANANA_MODEL_MAP: Record<NanoBananaModelId, NanoBananaModelMeta> = {
-  'gemini-nano-banana-2.1': NANO_BANANA_MODELS[0],
-  'gemini-3.1-flash-lite-image': NANO_BANANA_MODELS[1],
-  'gemini-3.1-flash-image': NANO_BANANA_MODELS[2],
-};
-
-export interface PromptSanitizationResult {
-  sanitized: string;
-  blocked: boolean;
-}
-
-export type NanoBananaErrorCode =
-  | 'PUTER_UNAVAILABLE_ANDROID'
-  | 'PUTER_LOAD_FAILED'
-  | 'PUTER_CANCELLED'
-  | 'PUTER_BALANCE_EXHAUSTED'
-  | 'MISSING_API_KEY'
-  | 'INVALID_API_KEY'
-  | 'RATE_LIMITED'
-  | 'SAFETY_BLOCKED'
-  | 'INVALID_RESPONSE'
-  | 'TIMEOUT'
-  | 'ABORTED'
-  | 'NETWORK_ERROR'
-  | 'INVALID_IMAGE';
-
-export class NanoBananaError extends Error {
-  readonly code: NanoBananaErrorCode;
-  readonly canFallbackToGuided: boolean;
-  readonly cause?: unknown;
-
-  constructor(
-    code: NanoBananaErrorCode,
-    message: string,
-    canFallbackToGuided: boolean = true,
-    cause?: unknown
-  ) {
-    super(message);
-    this.name = 'NanoBananaError';
-    this.code = code;
-    this.canFallbackToGuided = canFallbackToGuided;
-    if (cause !== undefined) {
-      this.cause = cause;
-    }
-  }
-}
-
-export interface InfillPromptOptions {
-  userPrompt?: string;
-  neighborPaletteHex?: string[];
-  depth?: number;
-  width?: number;
-  height?: number;
-}
-
-export interface OutpaintPromptOptions {
-  userPrompt?: string;
-  sides: BorderExtensionSides;
-  existingPaletteHex?: string[];
-  width?: number;
-  height?: number;
-}
-
 export interface NanoBananaGenerateParams {
   prompt: string;
   templatePngBlob?: Blob;
   templateBase64?: string;
   templateDataUrl?: string;
+  templateMimeType?: string;
   width: number;
   height: number;
   model?: NanoBananaModelId;
@@ -146,7 +76,8 @@ export interface PuterTxt2ImgOptions {
   model: NanoBananaModelId;
   input_image: string;
   input_image_mime_type: string;
-  ratio?: string;
+  ratio?: PuterAspectRatio;
+  quality?: NanoBananaResolution;
 }
 
 export interface PuterAiLike {
@@ -173,6 +104,7 @@ export interface DirectGeminiByokProviderOptions {
 export interface GuidedGeminiHandoffInput {
   templatePngBlob: Blob;
   templateDataUrl: string;
+  templateMimeType?: string;
   prompt: string;
   direction: InfiniteZoomDirection;
 }
@@ -181,6 +113,7 @@ export interface GuidedGeminiHandoffPackage {
   prompt: string;
   templatePngBlob: Blob;
   templateDataUrl: string;
+  templateMimeType?: string;
   direction: InfiniteZoomDirection;
   geminiUrl: string;
 }
@@ -199,19 +132,6 @@ export type ImageRgbaDecoder = (
   mimeType: string
 ) => Promise<{ rgba: Uint8ClampedArray; width: number; height: number }>;
 
-const SUPPORTED_ASPECT_RATIOS: ReadonlyArray<{ label: string; ratio: number }> = [
-  { label: '1:1', ratio: 1 },
-  { label: '4:3', ratio: 4 / 3 },
-  { label: '3:4', ratio: 3 / 4 },
-  { label: '3:2', ratio: 3 / 2 },
-  { label: '2:3', ratio: 2 / 3 },
-  { label: '16:9', ratio: 16 / 9 },
-  { label: '9:16', ratio: 9 / 16 },
-  { label: '4:5', ratio: 4 / 5 },
-  { label: '5:4', ratio: 5 / 4 },
-  { label: '21:9', ratio: 21 / 9 },
-];
-
 const ALLOWED_RASTER_MIMES = new Set<string>([
   'image/png',
   'image/jpeg',
@@ -219,248 +139,6 @@ const ALLOWED_RASTER_MIMES = new Set<string>([
   'image/gif',
   'image/bmp',
 ]);
-
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-
-// ---------------------------------------------------------------------------
-// Hardened Linear-Time Prompt Sanitization
-// ---------------------------------------------------------------------------
-
-function containsBlockedPattern(text: string): boolean {
-  if (!text) return false;
-  for (const pattern of BLOCKED_PROMPT_PATTERNS) {
-    if (pattern.global || pattern.sticky) {
-      pattern.lastIndex = 0;
-    }
-    if (pattern.test(text)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function isInvisibleFormatOrJoinerCode(code: number): boolean {
-  return (
-    code === 0x00ad ||
-    code === 0x034f ||
-    code === 0x061c ||
-    code === 0x180e ||
-    (code >= 0x200b && code <= 0x200f) ||
-    (code >= 0x202a && code <= 0x202e) ||
-    (code >= 0x2060 && code <= 0x206f) ||
-    (code >= 0xfe00 && code <= 0xfe0f) ||
-    code === 0xfeff
-  );
-}
-
-function stripZeroWidthAndControls(raw: string): string {
-  const nfkc = raw.normalize('NFKC');
-  let out = '';
-  for (let i = 0; i < nfkc.length; i++) {
-    const code = nfkc.charCodeAt(i);
-    if (isInvisibleFormatOrJoinerCode(code)) {
-      continue;
-    }
-    out += code <= 0x1f || code === 0x7f ? ' ' : nfkc[i];
-  }
-  return out;
-}
-
-function isAsciiWordChar(code: number): boolean {
-  return (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || code === 95;
-}
-
-function isAsciiWhitespace(code: number): boolean {
-  return code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d || code === 0x0c;
-}
-
-function findClosingTagEnd(lower: string, closePrefix: string, startPos: number): number {
-  let searchPos = startPos;
-  while (searchPos < lower.length) {
-    const closeIdx = lower.indexOf(closePrefix, searchPos);
-    if (closeIdx === -1) return -1;
-    let scan = closeIdx + closePrefix.length;
-    while (scan < lower.length && isAsciiWhitespace(lower.charCodeAt(scan))) {
-      scan++;
-    }
-    if (scan < lower.length && lower.charCodeAt(scan) === 0x3e) {
-      return scan + 1;
-    }
-    searchPos = scan;
-  }
-  return -1;
-}
-
-function stripPairedTag(text: string, tagName: string): string {
-  const rawLower = text.toLowerCase();
-  const lower =
-    rawLower.length === text.length
-      ? rawLower
-      : text.replace(/[A-Z]/g, (ch) => ch.toLowerCase());
-  const openPrefix = `<${tagName}`;
-  const closePrefix = `</${tagName}`;
-  const parts: string[] = [];
-  let cursor = 0;
-  let pos = 0;
-
-  while (pos < lower.length) {
-    const openIdx = lower.indexOf(openPrefix, pos);
-    if (openIdx === -1) break;
-    const afterName = openIdx + openPrefix.length;
-    if (afterName < lower.length && isAsciiWordChar(lower.charCodeAt(afterName))) {
-      pos = afterName;
-      continue;
-    }
-    const openEnd = lower.indexOf('>', afterName);
-    if (openEnd === -1) {
-      parts.push(text.slice(cursor, openIdx), ' ');
-      cursor = text.length;
-      break;
-    }
-    const closeEnd = findClosingTagEnd(lower, closePrefix, openEnd + 1);
-    if (closeEnd === -1) {
-      parts.push(text.slice(cursor, openIdx), ' ');
-      cursor = text.length;
-      break;
-    }
-    parts.push(text.slice(cursor, openIdx), ' ');
-    cursor = closeEnd;
-    pos = cursor;
-  }
-
-  if (parts.length === 0) return text;
-  parts.push(text.slice(cursor));
-  return parts.join('');
-}
-
-function stripHtmlAndInjectionFraming(text: string): string {
-  const withoutPaired = stripPairedTag(stripPairedTag(text, 'script'), 'svg');
-  return withoutPaired
-    .replace(/<\|[^<>|]*\|>/g, ' ')
-    .replace(/<[^<>]*>/g, ' ')
-    .replace(/[<>]/g, '')
-    .replace(/```[a-z0-9_-]*/gi, ' ')
-    .replace(/"""/g, ' ')
-    .replace(/###+/g, ' ')
-    .replace(/\b(?:system|assistant|user)\s*:/gi, ' ')
-    .replace(
-      /\b(?:ignore|disregard|forget)\s+(?:all\s+)?(?:previous|prior|above)\s+(?:instructions?|prompts?|rules?)\b/gi,
-      ' '
-    )
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-export function sanitizeUserPrompt(rawPrompt: string): PromptSanitizationResult {
-  if (typeof rawPrompt !== 'string') {
-    return { sanitized: '', blocked: false };
-  }
-  const normalized = stripZeroWidthAndControls(rawPrompt);
-  if (containsBlockedPattern(normalized)) {
-    return { sanitized: '', blocked: true };
-  }
-  const stripped = stripHtmlAndInjectionFraming(normalized);
-  if (containsBlockedPattern(stripped)) {
-    return { sanitized: '', blocked: true };
-  }
-  const truncated = stripped.slice(0, MAX_USER_PROMPT_LENGTH).trim();
-  if (containsBlockedPattern(truncated)) {
-    return { sanitized: '', blocked: true };
-  }
-  return { sanitized: truncated, blocked: false };
-}
-
-// ---------------------------------------------------------------------------
-// Aspect Ratio & Prompt Builders
-// ---------------------------------------------------------------------------
-
-export function resolveNearestGeminiAspectRatio(width: number, height: number): string {
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return '1:1';
-  }
-  const targetRatio = width / height;
-  let bestLabel = '1:1';
-  let bestDelta = Infinity;
-  for (const candidate of SUPPORTED_ASPECT_RATIOS) {
-    const delta = Math.abs(Math.log(targetRatio / candidate.ratio));
-    if (delta < bestDelta) {
-      bestDelta = delta;
-      bestLabel = candidate.label;
-    }
-  }
-  return bestLabel;
-}
-
-function formatPaletteHint(hexList?: string[]): string {
-  if (!Array.isArray(hexList) || hexList.length === 0) return '';
-  const valid = hexList
-    .map((h) => (typeof h === 'string' ? h.trim().toUpperCase() : ''))
-    .filter((h) => HEX_COLOR_RE.test(h));
-  const unique = Array.from(new Set(valid)).slice(0, 8);
-  return unique.length > 0 ? `Harmonize with nearby palette colors (${unique.join(', ')}).` : '';
-}
-
-export function buildNanoBananaInfillPrompt(options: InfillPromptOptions): string {
-  const { sanitized, blocked } = sanitizeUserPrompt(options.userPrompt ?? '');
-  if (blocked) {
-    throw new NanoBananaError(
-      'SAFETY_BLOCKED',
-      'Prompt contains restricted content. Please try a family-friendly description.',
-      false
-    );
-  }
-  const depthNote =
-    typeof options.depth === 'number' && Number.isFinite(options.depth) && options.depth > 1
-      ? ` This is zoom depth ${Math.round(options.depth)}, so depict finer miniature details that naturally belong inside the scene.`
-      : '';
-  const paletteNote = formatPaletteHint(options.neighborPaletteHex);
-  const subjectInstruction = sanitized
-    ? `Paint "${sanitized}" strictly inside the bright magenta (#FF00FF) highlighted region.`
-    : 'Invent rich, cohesive micro-details that naturally belong strictly inside the bright magenta (#FF00FF) highlighted region.';
-
-  return [
-    'Edit this illustration for a color-by-number puzzle.',
-    subjectInstruction,
-    'Replace every bright magenta (#FF00FF) pixel and outline with clean, crisp, clearly bounded color shapes and matching illustration linework that seamlessly connect to the surrounding artwork.',
-    'Do NOT alter, shift, crop, or re-style any pixel outside the magenta (#FF00FF) region. Leave no magenta (#FF00FF) guide pixels remaining.',
-    'Keep shapes clean, bold, and uncluttered without text, watermarks, or tiny noisy speckles so the result segments cleanly into paintable regions.',
-    paletteNote,
-    depthNote.trim(),
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
-
-export function buildNanoBananaOutpaintPrompt(options: OutpaintPromptOptions): string {
-  const { sanitized, blocked } = sanitizeUserPrompt(options.userPrompt ?? '');
-  if (blocked) {
-    throw new NanoBananaError(
-      'SAFETY_BLOCKED',
-      'Prompt contains restricted content. Please try a family-friendly description.',
-      false
-    );
-  }
-  const activeSides: string[] = [];
-  if (options.sides.top) activeSides.push('top');
-  if (options.sides.bottom) activeSides.push('bottom');
-  if (options.sides.left) activeSides.push('left');
-  if (options.sides.right) activeSides.push('right');
-  const sidesDesc = activeSides.length > 0 ? activeSides.join(', ') : 'outer';
-  const paletteNote = formatPaletteHint(options.existingPaletteHex);
-  const subjectInstruction = sanitized
-    ? `Continue the scene outward into the ${sidesDesc} bright magenta (#FF00FF) checkered margin(s) by adding "${sanitized}".`
-    : `Naturally extend the scene outward into the ${sidesDesc} bright magenta (#FF00FF) checkered margin(s), continuing objects, background, lighting, and perspective cleanly across the boundary.`;
-
-  return [
-    'Outpaint this illustration for a color-by-number puzzle.',
-    subjectInstruction,
-    'Keep the entire original inner artwork 100% intact, uncropped, and unshifted in exact alignment.',
-    'Replace all bright magenta (#FF00FF) and checkered margin pixels completely with matching illustration style, clean contours, and crisp paintable color regions, with no text, frames, borders, or watermarks.',
-    paletteNote,
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
 
 // ---------------------------------------------------------------------------
 // Shared Binary / MIME / Magic-Byte Validation Helpers
@@ -538,25 +216,214 @@ function extractBase64FromDataUrl(dataUrl: string): { mimeType: string; base64: 
   return { mimeType, base64 };
 }
 
-async function resolveTemplateBase64(params: NanoBananaGenerateParams): Promise<string> {
-  if (typeof params.templateBase64 === 'string' && params.templateBase64.trim().length > 0) {
-    const trimmed = params.templateBase64.trim();
-    const parsed = extractBase64FromDataUrl(trimmed);
-    return parsed ? parsed.base64 : trimmed;
+function normalizeAllowedRasterMime(rawMime: string | undefined | null): string | null {
+  const normalized = normalizeImageMime(rawMime);
+  return ALLOWED_RASTER_MIMES.has(normalized) ? normalized : null;
+}
+
+function isAsciiWhitespaceByte(b: number): boolean {
+  return b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d || b === 0x0c;
+}
+
+function isSvgOrXmlPayloadBytes(bytes: Uint8Array): boolean {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 4) return false;
+  let offset = 0;
+  if (bytes.byteLength >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    offset = 3;
   }
-  if (typeof params.templateDataUrl === 'string' && params.templateDataUrl.trim().length > 0) {
-    const parsed = extractBase64FromDataUrl(params.templateDataUrl);
-    if (!parsed) {
+  while (offset < bytes.byteLength && isAsciiWhitespaceByte(bytes[offset])) {
+    offset += 1;
+  }
+  if (offset >= bytes.byteLength || bytes[offset] !== 0x3c) {
+    return false;
+  }
+  const headLen = Math.min(bytes.byteLength - offset, 16);
+  let head = '';
+  for (let i = 0; i < headLen; i++) {
+    head += String.fromCharCode(bytes[offset + i]);
+  }
+  const lower = head.toLowerCase();
+  return (
+    lower.startsWith('<svg') ||
+    lower.startsWith('<?xml') ||
+    lower.startsWith('<!doctype') ||
+    lower.startsWith('<!--')
+  );
+}
+
+function decodeBase64PrefixBytes(base64: string, maxChars = 512): Uint8Array | null {
+  const windowStr = base64.trimStart().slice(0, maxChars * 2).replace(/\s+/g, '');
+  if (windowStr.length < 4) return null;
+  const slice =
+    windowStr.length <= maxChars ? windowStr : windowStr.slice(0, Math.floor(maxChars / 4) * 4);
+  try {
+    return base64ToUint8(slice);
+  } catch {
+    return null;
+  }
+}
+
+function isSvgOrXmlBase64Prefix(base64: string): boolean {
+  const bytes = decodeBase64PrefixBytes(base64);
+  return bytes !== null && isSvgOrXmlPayloadBytes(bytes);
+}
+
+function detectRasterMimeFromBase64Prefix(base64: string): string | null {
+  const bytes = decodeBase64PrefixBytes(base64, 32);
+  return bytes ? detectRasterMimeFromMagicBytes(bytes) : null;
+}
+
+function extensionForImageMime(mimeType: string): string {
+  switch (normalizeImageMime(mimeType)) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    case 'image/bmp':
+      return 'bmp';
+    default:
+      return 'png';
+  }
+}
+
+function resolveHandoffTemplateMime(handoff: {
+  templateMimeType?: string;
+  templatePngBlob?: Blob;
+  templateDataUrl?: string;
+}): string {
+  if (typeof handoff.templateDataUrl === 'string' && handoff.templateDataUrl.trim().length > 0) {
+    const parsed = extractBase64FromDataUrl(handoff.templateDataUrl);
+    if (parsed) {
+      const fromUrl =
+        detectRasterMimeFromBase64Prefix(parsed.base64) ||
+        normalizeAllowedRasterMime(parsed.mimeType);
+      if (fromUrl) return fromUrl;
+    }
+  }
+  return (
+    normalizeAllowedRasterMime(handoff.templateMimeType) ||
+    normalizeAllowedRasterMime(handoff.templatePngBlob?.type) ||
+    'image/png'
+  );
+}
+
+function resolveTemplateFromBase64Input(
+  rawBase64: string,
+  explicitMime: string | null
+): { base64: string; mimeType: string } {
+  const trimmed = rawBase64.trim();
+  const parsed = extractBase64FromDataUrl(trimmed);
+  if (parsed) {
+    if (!parsed.base64) {
       throw new NanoBananaError('INVALID_IMAGE', 'Invalid template image data URL.', true);
     }
-    return parsed.base64;
+    if (parsed.mimeType && !ALLOWED_RASTER_MIMES.has(parsed.mimeType)) {
+      throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+    }
+    if (isSvgOrXmlBase64Prefix(parsed.base64)) {
+      throw new NanoBananaError(
+        'INVALID_IMAGE',
+        'Unsupported SVG or XML template image payload.',
+        true
+      );
+    }
+    const mimeType =
+      detectRasterMimeFromBase64Prefix(parsed.base64) ||
+      normalizeAllowedRasterMime(parsed.mimeType) ||
+      explicitMime ||
+      'image/png';
+    return { base64: parsed.base64, mimeType };
+  }
+  if (isSvgOrXmlBase64Prefix(trimmed)) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Unsupported SVG or XML template image payload.',
+      true
+    );
+  }
+  const mimeType = detectRasterMimeFromBase64Prefix(trimmed) || explicitMime || 'image/png';
+  return { base64: trimmed, mimeType };
+}
+
+function resolveTemplateFromDataUrlInput(
+  rawDataUrl: string,
+  explicitMime: string | null,
+  blobType?: string
+): { base64: string; mimeType: string } {
+  const parsed = extractBase64FromDataUrl(rawDataUrl);
+  if (!parsed || !parsed.base64) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Invalid template image data URL.', true);
+  }
+  if (parsed.mimeType && !ALLOWED_RASTER_MIMES.has(parsed.mimeType)) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+  }
+  if (isSvgOrXmlBase64Prefix(parsed.base64)) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Unsupported SVG or XML template image payload.',
+      true
+    );
+  }
+  const mimeType =
+    detectRasterMimeFromBase64Prefix(parsed.base64) ||
+    normalizeAllowedRasterMime(parsed.mimeType) ||
+    explicitMime ||
+    normalizeAllowedRasterMime(blobType) ||
+    'image/png';
+  return { base64: parsed.base64, mimeType };
+}
+
+async function resolveTemplateFromBlobInput(
+  blob: Blob,
+  explicitMime: string | null
+): Promise<{ base64: string; mimeType: string }> {
+  const declared = normalizeImageMime(blob.type);
+  if (declared && !ALLOWED_RASTER_MIMES.has(declared)) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (bytes.byteLength === 0) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Template image blob is empty.', true);
+  }
+  if (isSvgOrXmlPayloadBytes(bytes)) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Unsupported SVG or XML template image payload.',
+      true
+    );
+  }
+  const mimeType =
+    detectRasterMimeFromMagicBytes(bytes) ||
+    explicitMime ||
+    normalizeAllowedRasterMime(blob.type) ||
+    'image/png';
+  return { base64: uint8ToBase64(bytes), mimeType };
+}
+
+async function resolveTemplatePayload(
+  params: NanoBananaGenerateParams
+): Promise<{ base64: string; mimeType: string }> {
+  let explicitMime: string | null = null;
+  if (typeof params.templateMimeType === 'string' && params.templateMimeType.trim().length > 0) {
+    explicitMime = normalizeAllowedRasterMime(params.templateMimeType);
+    if (!explicitMime) {
+      throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+    }
+  }
+  if (typeof params.templateBase64 === 'string' && params.templateBase64.trim().length > 0) {
+    return resolveTemplateFromBase64Input(params.templateBase64, explicitMime);
+  }
+  if (typeof params.templateDataUrl === 'string' && params.templateDataUrl.trim().length > 0) {
+    return resolveTemplateFromDataUrlInput(
+      params.templateDataUrl,
+      explicitMime,
+      params.templatePngBlob?.type
+    );
   }
   if (params.templatePngBlob) {
-    const bytes = new Uint8Array(await params.templatePngBlob.arrayBuffer());
-    if (bytes.byteLength === 0) {
-      throw new NanoBananaError('INVALID_IMAGE', 'Template PNG blob is empty.', true);
-    }
-    return uint8ToBase64(bytes);
+    return resolveTemplateFromBlobInput(params.templatePngBlob, explicitMime);
   }
   throw new NanoBananaError('INVALID_IMAGE', 'A prepared template image is required.', true);
 }
@@ -769,7 +636,14 @@ export async function loadPuterSdk(
 
 const PUTER_BALANCE_KEYWORDS = ['402', 'balance', 'insufficient', 'quota', 'funding'] as const;
 const PUTER_CANCEL_KEYWORDS = ['cancel', 'closed', 'dismiss', 'denied', 'auth'] as const;
-const PUTER_SAFETY_KEYWORDS = ['safety', 'policy', 'blocked', 'prohibited'] as const;
+const PUTER_SAFETY_KEYWORDS = ['safety', 'policy', 'blocked', 'prohibited', 'moderation'] as const;
+
+interface PuterErrorDetails {
+  status?: number;
+  codes: Set<string>;
+  message: string;
+  lower: string;
+}
 
 function containsAnyKeyword(text: string, keywords: readonly string[]): boolean {
   for (const kw of keywords) {
@@ -778,35 +652,106 @@ function containsAnyKeyword(text: string, keywords: readonly string[]): boolean 
   return false;
 }
 
+function asRecord(val: unknown): Record<string, unknown> | null {
+  return val && typeof val === 'object' ? (val as Record<string, unknown>) : null;
+}
+
+function readFirstString(...candidates: unknown[]): string {
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) return c.trim();
+  }
+  return '';
+}
+
+function readFirstStatus(...candidates: unknown[]): number | undefined {
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c)) return c;
+    if (typeof c === 'string') {
+      const trimmed = c.trim();
+      if (/^\d{3}$/.test(trimmed)) return Number(trimmed);
+    }
+  }
+  return undefined;
+}
+
+function collectPuterCodes(
+  errObj: Record<string, unknown> | null,
+  nested: Record<string, unknown> | null
+): { codes: Set<string>; primaryCode: string } {
+  const codes = new Set<string>();
+  let primaryCode = '';
+  const candidates = [
+    errObj?.code,
+    nested?.code,
+    errObj?.errorCode,
+    nested?.errorCode,
+    errObj?.error_code,
+    nested?.error_code,
+  ];
+  for (const raw of candidates) {
+    if (typeof raw !== 'string') continue;
+    const normalized = raw.trim().toLowerCase();
+    if (!normalized) continue;
+    if (!primaryCode) primaryCode = normalized;
+    codes.add(normalized);
+  }
+  return { codes, primaryCode };
+}
+
+function hasCodePrefix(codes: Set<string>, prefix: string): boolean {
+  for (const c of codes) {
+    if (c.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
+function hasCodeSubstring(codes: Set<string>, sub: string): boolean {
+  for (const c of codes) {
+    if (c.includes(sub)) return true;
+  }
+  return false;
+}
+
+function extractPuterErrorDetails(err: unknown): PuterErrorDetails {
+  const errObj = asRecord(err);
+  const nested = asRecord(errObj?.error);
+  const status = readFirstStatus(errObj?.status, nested?.status, errObj?.code, nested?.code);
+  const { codes, primaryCode } = collectPuterCodes(errObj, nested);
+  const fallbackErrorStr = typeof errObj?.error === 'string' ? errObj.error : '';
+  const message =
+    (err instanceof Error && err.message.trim().length > 0 ? err.message.trim() : '') ||
+    readFirstString(errObj?.message, nested?.message, fallbackErrorStr) ||
+    (errObj ? primaryCode || 'Puter generation failed' : String(err ?? 'Puter generation failed'));
+  return { status, codes, message, lower: message.toLowerCase() };
+}
+
+function isPuterSafetyError(details: PuterErrorDetails): boolean {
+  return (
+    details.codes.has('moderation_flagged') ||
+    containsAnyKeyword(details.lower, PUTER_SAFETY_KEYWORDS)
+  );
+}
+
+function isPuterBackendNetworkCode(details: PuterErrorDetails): boolean {
+  return details.codes.has('access_denied') || hasCodePrefix(details.codes, 'upstream_');
+}
+
+function isPuterBalanceCode(details: PuterErrorDetails): boolean {
+  return details.status === 402 || details.codes.has('insufficient_funds');
+}
+
+function isPuterInvalidRequestCode(details: PuterErrorDetails): boolean {
+  return details.codes.has('bad_request') || details.codes.has('prompt_required');
+}
+
 function classifyPuterError(err: unknown): NanoBananaError {
   if (err instanceof NanoBananaError) return err;
-  const errObj = err && typeof err === 'object' ? (err as Record<string, unknown>) : null;
-  const status =
-    typeof errObj?.status === 'number'
-      ? errObj.status
-      : typeof errObj?.code === 'number'
-        ? errObj.code
-        : undefined;
-  const msg =
-    err instanceof Error
-      ? err.message
-      : typeof errObj?.message === 'string'
-        ? errObj.message
-        : String(err ?? 'Puter generation failed');
-  const lower = msg.toLowerCase();
-
   if (err instanceof Error && err.name === 'AbortError') {
     return new NanoBananaError('ABORTED', 'Generation was cancelled.', false, err);
   }
-  if (status === 402 || containsAnyKeyword(lower, PUTER_BALANCE_KEYWORDS)) {
-    return new NanoBananaError(
-      'PUTER_BALANCE_EXHAUSTED',
-      'Your Puter usage balance is exhausted. Switch to Free Guided Gemini Handoff or Direct Gemini API (BYOK).',
-      true,
-      err
-    );
-  }
-  if (containsAnyKeyword(lower, PUTER_SAFETY_KEYWORDS)) {
+  const details = extractPuterErrorDetails(err);
+
+  if (isPuterSafetyError(details)) {
     return new NanoBananaError(
       'SAFETY_BLOCKED',
       'Nano Banana declined this prompt due to safety filters. Try rewording your prompt.',
@@ -814,7 +759,15 @@ function classifyPuterError(err: unknown): NanoBananaError {
       err
     );
   }
-  if (containsAnyKeyword(lower, PUTER_CANCEL_KEYWORDS)) {
+  const hasStructuredNonCancelCode =
+    isPuterBackendNetworkCode(details) ||
+    isPuterBalanceCode(details) ||
+    isPuterInvalidRequestCode(details);
+  if (
+    !hasStructuredNonCancelCode &&
+    (hasCodeSubstring(details.codes, 'cancel') ||
+      containsAnyKeyword(details.lower, PUTER_CANCEL_KEYWORDS))
+  ) {
     return new NanoBananaError(
       'PUTER_CANCELLED',
       'Puter sign-in or generation popup was cancelled.',
@@ -822,7 +775,36 @@ function classifyPuterError(err: unknown): NanoBananaError {
       err
     );
   }
-  return new NanoBananaError('NETWORK_ERROR', `Puter Nano Banana request failed: ${msg}`, true, err);
+  if (isPuterBalanceCode(details) || containsAnyKeyword(details.lower, PUTER_BALANCE_KEYWORDS)) {
+    return new NanoBananaError(
+      'PUTER_BALANCE_EXHAUSTED',
+      'Your Puter usage balance is exhausted. Switch to Free Guided Gemini Handoff or Direct Gemini API (BYOK).',
+      true,
+      err
+    );
+  }
+  if (isPuterBackendNetworkCode(details)) {
+    return new NanoBananaError(
+      'NETWORK_ERROR',
+      `Puter Nano Banana request failed: ${details.message}`,
+      true,
+      err
+    );
+  }
+  if (isPuterInvalidRequestCode(details)) {
+    return new NanoBananaError(
+      'INVALID_RESPONSE',
+      `Puter rejected the image request (${details.message}). Try switching model or resolution, or use Free Guided Gemini Handoff.`,
+      true,
+      err
+    );
+  }
+  return new NanoBananaError(
+    'NETWORK_ERROR',
+    `Puter Nano Banana request failed: ${details.message}`,
+    true,
+    err
+  );
 }
 
 function validateAndWrapPuterImageBytes(
@@ -965,8 +947,10 @@ export class PuterNanoBananaProvider {
     }
 
     const model = params.model ?? DEFAULT_NANO_BANANA_MODEL;
-    const ratio = resolveNearestGeminiAspectRatio(params.width, params.height);
-    const templateBase64 = await resolveTemplateBase64(params);
+    const quality = resolveSupportedModelResolution(model, params.resolution);
+    const ratio = resolveNearestPuterRatio(params.width, params.height);
+    const { base64: templateBase64, mimeType: templateMimeType } =
+      await resolveTemplatePayload(params);
     if (params.signal?.aborted) {
       throw new NanoBananaError('ABORTED', 'Generation was cancelled.', false);
     }
@@ -1005,8 +989,9 @@ export class PuterNanoBananaProvider {
           const rawOutput = await puterAi.txt2img(params.prompt, {
             model,
             input_image: templateBase64,
-            input_image_mime_type: 'image/png',
+            input_image_mime_type: templateMimeType,
             ratio,
+            quality,
           });
           if (controller.signal.aborted) {
             throw timedOut
@@ -1306,16 +1291,17 @@ export class DirectGeminiByokProvider {
     }
 
     const model = params.model ?? DEFAULT_NANO_BANANA_MODEL;
-    const resolution = params.resolution ?? DEFAULT_NANO_BANANA_RESOLUTION;
+    const resolution = resolveSupportedModelResolution(model, params.resolution);
     const aspectRatio = resolveNearestGeminiAspectRatio(params.width, params.height);
-    const templateBase64 = await resolveTemplateBase64(params);
+    const { base64: templateBase64, mimeType: templateMimeType } =
+      await resolveTemplatePayload(params);
     const endpoint = `${GEMINI_API_BASE_URL}/${encodeURIComponent(model)}:generateContent`;
     const requestBody = {
       contents: [
         {
           parts: [
             { text: params.prompt },
-            { inlineData: { mimeType: 'image/png', data: templateBase64 } },
+            { inlineData: { mimeType: templateMimeType, data: templateBase64 } },
           ],
         },
       ],
@@ -1361,15 +1347,39 @@ export function prepareGuidedGeminiHandoff(
   input: GuidedGeminiHandoffInput
 ): GuidedGeminiHandoffPackage {
   if (!input.templatePngBlob || input.templatePngBlob.size <= 0) {
-    throw new NanoBananaError('INVALID_IMAGE', 'Prepared template image is missing.', false);
+    throw new NanoBananaError('INVALID_IMAGE', 'Prepared template image is missing.', true);
   }
-  if (typeof input.templateDataUrl !== 'string' || !input.templateDataUrl.startsWith('data:image/')) {
-    throw new NanoBananaError('INVALID_IMAGE', 'Prepared template data URL is invalid.', false);
+  const declaredBlobMime = normalizeImageMime(input.templatePngBlob.type);
+  if (declaredBlobMime && !ALLOWED_RASTER_MIMES.has(declaredBlobMime)) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+  }
+  if (typeof input.templateMimeType === 'string' && input.templateMimeType.trim().length > 0) {
+    if (!normalizeAllowedRasterMime(input.templateMimeType)) {
+      throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+    }
+  }
+  if (typeof input.templateDataUrl !== 'string') {
+    throw new NanoBananaError('INVALID_IMAGE', 'Prepared template data URL is invalid.', true);
+  }
+  const parsed = extractBase64FromDataUrl(input.templateDataUrl);
+  if (!parsed || !parsed.base64) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Prepared template data URL is invalid.', true);
+  }
+  if (!ALLOWED_RASTER_MIMES.has(parsed.mimeType)) {
+    throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
+  }
+  if (isSvgOrXmlBase64Prefix(parsed.base64)) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Unsupported SVG or XML template image payload.',
+      true
+    );
   }
   return {
     prompt: input.prompt,
     templatePngBlob: input.templatePngBlob,
     templateDataUrl: input.templateDataUrl,
+    templateMimeType: resolveHandoffTemplateMime(input),
     direction: input.direction,
     geminiUrl: GEMINI_APP_URL,
   };
@@ -1404,6 +1414,155 @@ export async function copyPromptToClipboard(prompt: string): Promise<boolean> {
   return false;
 }
 
+async function encodeCanvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  if (typeof canvas.toBlob === 'function') {
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((result) => resolve(result), 'image/png');
+    });
+    if (blob && blob.size > 0) {
+      return blob.type === 'image/png' ? blob : new Blob([blob], { type: 'image/png' });
+    }
+  }
+  if (typeof canvas.toDataURL === 'function') {
+    const parsed = extractBase64FromDataUrl(canvas.toDataURL('image/png'));
+    if (parsed && parsed.base64) {
+      const bytes = base64ToUint8(parsed.base64);
+      if (bytes.byteLength > 0) {
+        return new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+      }
+    }
+  }
+  throw new Error('Failed to encode template canvas to PNG blob');
+}
+
+async function transcodeSourceToPngCanvas(
+  source: CanvasImageSource,
+  width: number,
+  height: number
+): Promise<Blob> {
+  if (width <= 0 || height <= 0) {
+    throw new Error('Template image has invalid dimensions for PNG clipboard copy');
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  try {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Canvas 2D context unavailable for PNG clipboard copy');
+    }
+    ctx.drawImage(source, 0, 0, width, height);
+    return await encodeCanvasToPngBlob(canvas);
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+
+async function transcodeBlobOrDataUrlToPng(blob: Blob, dataUrl?: string): Promise<Blob> {
+  if (blob && blob.size >= 8) {
+    const header = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+    if (detectRasterMimeFromMagicBytes(header) === 'image/png') {
+      return new Blob([blob], { type: 'image/png' });
+    }
+  }
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+    throw new Error('Canvas unavailable for PNG clipboard transcoding');
+  }
+  if (typeof createImageBitmap === 'function' && blob && blob.size > 0) {
+    const bitmap = await createImageBitmap(blob);
+    try {
+      return await transcodeSourceToPngCanvas(bitmap, bitmap.width, bitmap.height);
+    } finally {
+      if (typeof bitmap.close === 'function') {
+        bitmap.close();
+      }
+    }
+  }
+  let objectUrl: string | null = null;
+  const imgSrc =
+    blob && blob.size > 0 && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+      ? (objectUrl = URL.createObjectURL(blob))
+      : dataUrl || '';
+  if (!imgSrc) {
+    throw new Error('No image source available for PNG clipboard transcoding');
+  }
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('Failed to load template image for PNG clipboard copy'));
+      el.src = imgSrc;
+    });
+    const width = img.naturalWidth || img.width;
+    const height = img.naturalHeight || img.height;
+    return await transcodeSourceToPngCanvas(img, width, height);
+  } finally {
+    if (objectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+}
+
+export async function copyTemplateImageToClipboard(blob: Blob, dataUrl?: string): Promise<boolean> {
+  if (
+    typeof navigator === 'undefined' ||
+    !navigator.clipboard ||
+    typeof navigator.clipboard.write !== 'function' ||
+    typeof ClipboardItem === 'undefined'
+  ) {
+    return false;
+  }
+  const hasBlob = typeof Blob !== 'undefined' && blob instanceof Blob && blob.size > 0;
+  const hasDataUrl = typeof dataUrl === 'string' && dataUrl.trim().length > 0;
+  if (!hasBlob && !hasDataUrl) {
+    return false;
+  }
+
+  if (hasBlob && normalizeImageMime(blob.type) === 'image/png') {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      return true;
+    } catch (err) {
+      reportSwallowed('NanoBananaService.copyTemplateImageClipboard', err);
+      return false;
+    }
+  }
+
+  const pngPromise = transcodeBlobOrDataUrlToPng(blob, dataUrl);
+  // Prevent unhandled rejection if ClipboardItem constructor throws synchronously.
+  pngPromise.catch(() => {});
+
+  let firstErr: unknown = null;
+  try {
+    const item = new ClipboardItem({ 'image/png': pngPromise });
+    await navigator.clipboard.write([item]);
+    return true;
+  } catch (err) {
+    firstErr = err;
+    if ((err as { name?: string } | null)?.name === 'NotAllowedError') {
+      reportSwallowed('NanoBananaService.copyTemplateImageClipboard', err);
+      return false;
+    }
+  }
+
+  try {
+    const resolvedPng = await pngPromise;
+    if (!resolvedPng || resolvedPng.size <= 0) {
+      reportSwallowed(
+        'NanoBananaService.copyTemplateImageClipboard',
+        firstErr ?? new Error('Empty PNG blob')
+      );
+      return false;
+    }
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': resolvedPng })]);
+    return true;
+  } catch (fallbackErr) {
+    reportSwallowed('NanoBananaService.copyTemplateImageClipboard', fallbackErr ?? firstErr);
+    return false;
+  }
+}
+
 export async function launchGeminiHandoff(
   handoff: GuidedGeminiHandoffPackage
 ): Promise<{ copiedPrompt: boolean; openedExternal: boolean }> {
@@ -1414,11 +1573,13 @@ export async function launchGeminiHandoff(
     return { copiedPrompt, openedExternal: true };
   }
 
+  const mimeType = resolveHandoffTemplateMime(handoff);
+  const ext = extensionForImageMime(mimeType);
   try {
     await NativeBridge.exportOrShareFile({
       title: 'Capy Infinite Zoom Template',
-      fileName: `capy_zoom_template_${Date.now()}.png`,
-      mimeType: 'image/png',
+      fileName: `capy_zoom_template_${Date.now()}.${ext}`,
+      mimeType,
       data: handoff.templatePngBlob,
     });
   } catch (err) {
@@ -1592,6 +1753,7 @@ export async function decodeReceivedGeminiImage(
 export const GuidedGeminiHandoffProvider = {
   prepareGuidedGeminiHandoff,
   copyPromptToClipboard,
+  copyTemplateImageToClipboard,
   launchGeminiHandoff,
   decodeReceivedGeminiImage,
 };
