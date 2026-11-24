@@ -1,4 +1,6 @@
 ---
 bump: minor
+pr: 656
+epic: 4
 ---
-Add bidirectional local AI Infinite Zoom with 4-connected contiguous region subdivision, directional border extension, inline user-guided prompts, harmonious palette growth, transparent organic cutouts, and Outer/Inner breadcrumbs
+Upgrade Infinite Zoom to a unified single-canvas nested-layer world (up to 256x zoom, single-file .capy v2 saves) powered by Google Nano Banana 2.1 / 2 via Web Puter.js, Free Guided Gemini App Handoff, and optional device-local BYOK API key, with Sparkles visible on completed puzzles

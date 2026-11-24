@@ -9,7 +9,7 @@ High-level product direction for **Capy Paint** ([`web/`](./web/), [`app/`](./ap
 ## Now (Active Focus)
 
 - **Google Play Store Launch (`com.capyboop.paint`)**: Publish the Phone & Tablet release bundle and finalize store listing assets.
-- **Bidirectional Local AI Infinite Zoom**: Zoom into any painted section to reveal new contiguous detail or extend outward past canvas borders with optional on-device prompts (offline-first).
+- **Unified Single-Canvas Infinite Zoom (Nano Banana 2.1 / 2)**: Zoom into any contiguous section (up to `256x`) to embed seamless high-resolution detail layers, or extend outward past canvas borders while preserving `100%` of painted progress inside one unified puzzle and `.capy` v2 save—powered free-first via Web-only Puter.js, Free Guided Gemini App Handoff (Web & Android), and optional device-local Gemini API BYOK.
 - **Puzzle Generation Quality**: Improve segmentation clarity, micro-region merging, and line-art edge fidelity for custom photos and built-in packs.
 
 ## Next (Planned Enhancements)
@@ -24,4 +24,4 @@ High-level product direction for **Capy Paint** ([`web/`](./web/), [`app/`](./ap
 - **Shareable Time-Lapse Video Exports**: Client-side WebM/MP4 coloring replay exports directly from the canvas.
 - **Android TV & Living-Room Co-op**: D-pad/controller focus navigation (`Leanback`) and local party coloring mode.
 - **Additional Storefronts**: Native desktop (macOS/Windows/Linux) and iOS wrappers once Web + Android core workflows stabilize.
-- **Optional Tier 2 In-Browser WebGPU/WASM AI**: Opt-in local model worker for richer generative zoom without server costs.
+- **Optional In-Browser WebGPU/WASM AI**: Opt-in local model worker for offline generative zoom without server costs.

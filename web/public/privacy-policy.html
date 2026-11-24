@@ -69,7 +69,9 @@
       Paint servers. If you opt in to Cloud Sync, custom photo puzzle archives (<code>.capy</code>)
       are backed up solely to your own chosen cloud storage provider (such as Google Drive
       <code>appDataFolder</code>, Microsoft OneDrive, Apple iCloud / WebDAV, or Google Play Games
-      Saved Games as configured) so you can continue coloring across your own devices.
+      Saved Games as configured) so you can continue coloring across your own devices. If you
+      explicitly trigger optional <em>Infinite Zoom AI Artwork</em>, only the cropped artwork
+      template and prompt you submit are sent to the AI provider you selected (see Section 5).
     </p>
 
     <h2>2. Optional Sign-In &amp; BYOC Cloud Save Sync</h2>
@@ -104,22 +106,48 @@
       participants in that room code.
     </p>
 
-    <h2>5. 100% Ad-Free &amp; Zero Tracking SDKs</h2>
+    <h2>5. Optional Infinite Zoom AI Artwork</h2>
+    <p>
+      Capy Paint offers an optional, user-initiated <em>Infinite Zoom</em> feature powered by
+      Google Nano Banana 2.1 / 2 image models. Nothing is sent unless you explicitly start an
+      Infinite Zoom infill or border extension, and Capy Paint does not operate a proxy server or
+      retain your prompts or generated images:
+    </p>
+    <ul>
+      <li><strong>Web-Only Puter.js (Web browsers only):</strong> On the web version, selecting
+        Puter.js lazily loads <code>https://js.puter.com/v2/</code> only when you trigger a
+        generation and sends your cropped template image and optional prompt directly to Puter's
+        service under your Puter account. Puter.js is never loaded or included in the Android app.</li>
+      <li><strong>Free Guided Gemini App Handoff (Web &amp; Android):</strong> Saves or shares your
+        prepared template image and copies the prompt so you can run it directly in Google's free
+        Gemini app or at <a href="https://gemini.google.com">gemini.google.com</a>, then paste,
+        pick, or share the resulting image back into Capy Paint for local segmentation.</li>
+      <li><strong>Optional Direct Gemini API Key (BYOK — Web &amp; Android):</strong> If you choose
+        to enter your own Google AI Studio API key, the key is stored strictly locally on your
+        device in browser/app storage (<code>capy_gemini_byok_key_v1</code>), is never sent to Capy
+        Paint servers, and is never included in <code>.capy</code> exports or cloud backups. Requests
+        containing your template image and prompt go directly from your device over encrypted HTTPS
+        to Google's Gemini API (<code>https://generativelanguage.googleapis.com</code>) using your
+        key. You can clear your saved key at any time from <em>Menu &rarr; Create</em>.</li>
+    </ul>
+
+    <h2>6. 100% Ad-Free &amp; Zero Tracking SDKs</h2>
     <p>
       Capy Paint is 100% ad-free across Web and Android, with zero third-party advertising or
       behavioral tracking SDKs bundled. Gameplay, custom photo segmentation, and local saves run
       completely on-device without forced telemetry or ads.
     </p>
 
-    <h2>6. Google Play Data Safety &amp; Account Summary</h2>
+    <h2>7. Google Play Data Safety &amp; Account Summary</h2>
     <ul>
       <li><strong>Personal Photos &amp; Media:</strong> Processed 100% on-device; stored locally by default and backed up only to your own private BYOC cloud folder (Google Drive <code>appDataFolder</code>, Microsoft OneDrive, Apple iCloud / WebDAV, or Play Games Saved Games) if you opt in to Cloud Sync.</li>
+      <li><strong>Optional Infinite Zoom AI Artwork:</strong> Strictly user-initiated; on Android, templates leave your device only when you manually share them to Google's Gemini app or explicitly configure your own device-local Google AI Studio API key to call <code>generativelanguage.googleapis.com</code> directly over encrypted HTTPS (Capy Paint never receives or stores your key or artwork).</li>
       <li><strong>Optional In-Game Feedback:</strong> Voluntary, user-initiated text submissions sent anonymously over encrypted HTTPS along with app version and platform only; not linked to any personal identity.</li>
       <li><strong>Account Profile &amp; Game Progress:</strong> Stored locally by default; synced via encrypted HTTPS only when you explicitly connect an optional cloud provider.</li>
       <li><strong>Account &amp; Data Deletion:</strong> You can play without an account, sign out at any time, and delete local saves from <em>Settings &rarr; Saves</em> or revoke app access from your cloud provider's account settings.</li>
     </ul>
 
-    <h2>7. Contact &amp; Open Source</h2>
+    <h2>8. Contact &amp; Open Source</h2>
     <p>
       Capy Paint is playable on the web at
       <a href="https://capypaint.com">https://capypaint.com</a> and
