@@ -347,9 +347,20 @@ async function resolveTemplateFromBlobInput(
   if (declared && !ALLOWED_RASTER_MIMES.has(declared)) {
     throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
   }
+  if (blob.size <= 0 || blob.size > MAX_RECEIVED_IMAGE_BYTES) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Template image blob is empty or exceeds the 16 MB safety limit.',
+      true
+    );
+  }
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  if (bytes.byteLength === 0) {
-    throw new NanoBananaError('INVALID_IMAGE', 'Template image blob is empty.', true);
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_RECEIVED_IMAGE_BYTES) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Template image blob is empty or exceeds the 16 MB safety limit.',
+      true
+    );
   }
   const detected = detectRasterMimeFromMagicBytes(bytes);
   if (!detected || !ALLOWED_RASTER_MIMES.has(detected)) {

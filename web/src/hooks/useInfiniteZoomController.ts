@@ -230,11 +230,15 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
   const isMountedRef = useRef<boolean>(true);
 
-  const clearUndoSubdivision = useCallback(() => {
-    if (
+  const isUndoInFlightForCurrentOp = useCallback(
+    () =>
       undoInFlightSeqRef.current !== null &&
-      undoInFlightSeqRef.current === infiniteZoomOpSeqRef.current
-    ) {
+      undoInFlightSeqRef.current === infiniteZoomOpSeqRef.current,
+    []
+  );
+
+  const clearUndoSubdivision = useCallback(() => {
+    if (isUndoInFlightForCurrentOp()) {
       return;
     }
     clearTimeoutBox(undoToastTimerRef);
@@ -243,7 +247,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     revokeUnusedObjectUrl(prev?.previousBlobUrl, activeBlobUrlRef.current);
     setUndoSubdivisionState(null);
     revokeOwnedUrlsNotIn(ownedLayerBlobUrlsRef.current, new Set<string>(liveLayerImagesRef.current.keys()));
-  }, [activeBlobUrlRef, liveLayerImagesRef, undoSubdivisionRef]);
+  }, [activeBlobUrlRef, isUndoInFlightForCurrentOp, liveLayerImagesRef, undoSubdivisionRef]);
 
   const clearGuidedSession = useCallback(() => {
     const pending = pendingGuidedRef.current;
@@ -355,7 +359,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
   const handleEnterRegionSelectionMode = useCallback(
     (initialPrompt?: string) => {
-      if (isInfiniteZoomDisabled || !puzzle) return;
+      if (isInfiniteZoomDisabled || !puzzle || isUndoInFlightForCurrentOp()) return;
       if (isReplayingRef.current) exitReplay();
       clearInfiniteZoomError();
       if (typeof initialPrompt === 'string' && initialPrompt.trim().length > 0) {
@@ -364,7 +368,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       resetSelectionDraft();
       setIsRegionSelectionMode(true);
     },
-    [clearInfiniteZoomError, exitReplay, isInfiniteZoomDisabled, isReplayingRef, puzzle, resetSelectionDraft]
+    [clearInfiniteZoomError, exitReplay, isInfiniteZoomDisabled, isReplayingRef, isUndoInFlightForCurrentOp, puzzle, resetSelectionDraft]
   );
 
   const handleRegionSelectTap = useCallback(
@@ -537,6 +541,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       fallbackErrorMessage: string,
       task: (seq: number, signal: AbortSignal) => Promise<ProviderFlowStatus>
     ) => {
+      if (isUndoInFlightForCurrentOp()) return;
       exitRegionSelectionMode();
       clearUndoSubdivision();
       clearGuidedSession();
@@ -565,7 +570,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         if (seq === infiniteZoomOpSeqRef.current && !awaitingGuided) stopLoadingIndicator();
       }
     },
-    [clearGuidedSession, clearInfiniteZoomError, clearUndoSubdivision, exitRegionSelectionMode, setIsLoading, setLoadingPayload, setLoadingProgress, setLoadingStatus, showInfiniteZoomError, stopLoadingIndicator]
+    [clearGuidedSession, clearInfiniteZoomError, clearUndoSubdivision, exitRegionSelectionMode, isUndoInFlightForCurrentOp, setIsLoading, setLoadingPayload, setLoadingProgress, setLoadingStatus, showInfiniteZoomError, stopLoadingIndicator]
   );
 
   const applyZoomInCommit = useCallback(
@@ -598,7 +603,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   );
 
   const handleConfirmRegionSubdivision = useCallback(async () => {
-    if (!puzzle || !sourceImage || selectedRegionIds.size === 0 || isInfiniteZoomDisabled) return;
+    if (!puzzle || !sourceImage || selectedRegionIds.size === 0 || isInfiniteZoomDisabled || isUndoInFlightForCurrentOp()) return;
     const targetLayerId = selectionLayerId;
     const targetGrid = resolveActiveSelectionGrid(puzzle, targetLayerId);
     if (!targetGrid) return;
@@ -635,7 +640,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           onCommitted: applyZoomInCommit,
         })
     );
-  }, [activeSnapshotId, applyZoomInCommit, dispatchProviderOrGuided, filledRegionIds, infiniteZoomPrompt, isFreeColorMode, isInfiniteZoomDisabled, liveLayerImagesRef, paintedRegionColors, puzzle, readPipelineLiveState, reportProgressForSeq, runAsyncZoomLifecycle, selectedRegionIds, selectionLayerId, snapshots, sourceImage]);
+  }, [activeSnapshotId, applyZoomInCommit, dispatchProviderOrGuided, filledRegionIds, infiniteZoomPrompt, isFreeColorMode, isInfiniteZoomDisabled, isUndoInFlightForCurrentOp, liveLayerImagesRef, paintedRegionColors, puzzle, readPipelineLiveState, reportProgressForSeq, runAsyncZoomLifecycle, selectedRegionIds, selectionLayerId, snapshots, sourceImage]);
 
   const applyZoomOutCommit = useCallback(
     (result: ZoomOutCommitPipelineResult) => {
@@ -666,7 +671,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
   const handleConfirmExtendBorders = useCallback(
     async (sides: BorderExtensionSides, promptOverride?: string) => {
-      if (!puzzle || !sourceImage || isInfiniteZoomDisabled) return;
+      if (!puzzle || !sourceImage || isInfiniteZoomDisabled || isUndoInFlightForCurrentOp()) return;
       if (!canExtendSides(puzzle.width, puzzle.height, sides).allowed) return;
       if (isReplayingRef.current) exitReplay();
 
@@ -696,7 +701,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           })
       );
     },
-    [activeSnapshotId, applyZoomOutCommit, dispatchProviderOrGuided, exitReplay, infiniteZoomPrompt, isFreeColorMode, isInfiniteZoomDisabled, isReplayingRef, puzzle, readPipelineLiveState, reportProgressForSeq, runAsyncZoomLifecycle, snapshots, sourceImage]
+    [activeSnapshotId, applyZoomOutCommit, dispatchProviderOrGuided, exitReplay, infiniteZoomPrompt, isFreeColorMode, isInfiniteZoomDisabled, isReplayingRef, isUndoInFlightForCurrentOp, puzzle, readPipelineLiveState, reportProgressForSeq, runAsyncZoomLifecycle, snapshots, sourceImage]
   );
 
   const handleCompleteGuidedGeminiHandoff = useCallback(
@@ -769,13 +774,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
   const handleUndoSubdivision = useCallback(async () => {
     const snap = undoSubdivisionRef.current;
-    if (
-      !snap ||
-      (undoInFlightSeqRef.current !== null &&
-        undoInFlightSeqRef.current === infiniteZoomOpSeqRef.current)
-    ) {
-      return;
-    }
+    if (!snap || isUndoInFlightForCurrentOp()) return;
     if (snap.snapshotId !== activeSnapshotId) {
       clearUndoSubdivision();
       return;
@@ -839,7 +838,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         setUndoSubdivisionState((prev) => (prev === snap ? null : prev));
       }
     }
-  }, [activeBlobUrlRef, activeSave, activeSnapshotId, applyViewport, clearUndoSubdivision, isFreeColorMode, liveCoopRef, setActiveColorId, setFilledRegionIds, setHintRegionId, setPaintedRegionColors, setPuzzle, setSnapshots, setSourceImage, settingsRef, syncRedoStack, syncUndoStack, undoSubdivisionRef]);
+  }, [activeBlobUrlRef, activeSave, activeSnapshotId, applyViewport, clearUndoSubdivision, isFreeColorMode, isUndoInFlightForCurrentOp, liveCoopRef, setActiveColorId, setFilledRegionIds, setHintRegionId, setPaintedRegionColors, setPuzzle, setSnapshots, setSourceImage, settingsRef, syncRedoStack, syncUndoStack, undoSubdivisionRef]);
 
   return {
     isRegionSelectionMode,

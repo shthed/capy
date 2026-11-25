@@ -55,6 +55,76 @@ function isBackgroundCanvasShortcutKey(key: string): boolean {
   );
 }
 
+const SUPPORTED_CLIPBOARD_RASTER_MIMES = new Set<string>([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+]);
+
+function normalizeClipboardMime(mime: string | null | undefined): string {
+  if (typeof mime !== 'string') return '';
+  return mime.split(';')[0].trim().toLowerCase();
+}
+
+function isSupportedClipboardRasterMime(mime: string | null | undefined): boolean {
+  return SUPPORTED_CLIPBOARD_RASTER_MIMES.has(normalizeClipboardMime(mime));
+}
+
+function isAnyImageMime(mime: string | null | undefined): boolean {
+  return normalizeClipboardMime(mime).startsWith('image/');
+}
+
+function selectPreferredClipboardItemType(
+  items: readonly ClipboardItem[]
+): { item: ClipboardItem; type: string } | null {
+  let fallback: { item: ClipboardItem; type: string } | null = null;
+  for (const item of items) {
+    for (const type of item.types) {
+      if (!isAnyImageMime(type)) continue;
+      if (isSupportedClipboardRasterMime(type)) {
+        return { item, type };
+      }
+      if (!fallback) {
+        fallback = { item, type };
+      }
+    }
+  }
+  return fallback;
+}
+
+function selectPreferredPasteFile(clipboardData: DataTransfer): File | null {
+  let fallbackFile: File | null = null;
+  if (clipboardData.items && clipboardData.items.length > 0) {
+    for (let i = 0; i < clipboardData.items.length; i++) {
+      const item = clipboardData.items[i];
+      if (!item || !isAnyImageMime(item.type)) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      if (isSupportedClipboardRasterMime(item.type) || isSupportedClipboardRasterMime(file.type)) {
+        return file;
+      }
+      if (!fallbackFile) {
+        fallbackFile = file;
+      }
+    }
+  }
+  if (clipboardData.files && clipboardData.files.length > 0) {
+    for (let i = 0; i < clipboardData.files.length; i++) {
+      const file = clipboardData.files[i];
+      if (!file || !isAnyImageMime(file.type)) continue;
+      if (isSupportedClipboardRasterMime(file.type)) {
+        return file;
+      }
+      if (!fallbackFile) {
+        fallbackFile = file;
+      }
+    }
+  }
+  return fallbackFile;
+}
+
 interface GuidedGeminiStep1CardProps {
   prompt: string;
   templatePreviewUrl: string;
@@ -213,6 +283,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     const handoffRef = useRef<GuidedGeminiHandoffPackage | null>(handoff);
     handoffRef.current = handoff;
     const isSubmittingRef = useRef<boolean>(false);
+    const hasPendingSubmitPromiseRef = useRef<boolean>(false);
     const submitSeqRef = useRef<number>(0);
     const isReadingClipboardRef = useRef<boolean>(false);
     const pasteClipboardSeqRef = useRef<number>(0);
@@ -225,8 +296,9 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     useEffect(() => {
       if (!isOpen || !handoff) {
         submitSeqRef.current += 1;
+        hasPendingSubmitPromiseRef.current = false;
         isSubmittingRef.current = false;
-      } else if (!isProcessing) {
+      } else if (!isProcessing && !hasPendingSubmitPromiseRef.current) {
         isSubmittingRef.current = false;
       }
     }, [isProcessing, isOpen, handoff, errorMessage]);
@@ -284,6 +356,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
 
       return () => {
         submitSeqRef.current += 1;
+        hasPendingSubmitPromiseRef.current = false;
         isSubmittingRef.current = false;
         copyImageSeqRef.current += 1;
         isCopyingImageRef.current = false;
@@ -319,12 +392,14 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         try {
           const result = onImageReceived(input);
           if (result && typeof (result as PromiseLike<void>).then === 'function') {
+            hasPendingSubmitPromiseRef.current = true;
             void Promise.resolve(result)
               .catch(() => {
                 // Parent controller owns error display; always release synchronous submit lock.
               })
               .finally(() => {
                 if (submitSeqRef.current === seq) {
+                  hasPendingSubmitPromiseRef.current = false;
                   isSubmittingRef.current = false;
                 }
               });
@@ -333,6 +408,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
           }
         } catch {
           if (submitSeqRef.current === seq) {
+            hasPendingSubmitPromiseRef.current = false;
             isSubmittingRef.current = false;
           }
         }
@@ -389,29 +465,10 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         const clipboardData = e.clipboardData;
         if (!clipboardData) return;
 
-        if (clipboardData.items && clipboardData.items.length > 0) {
-          for (let i = 0; i < clipboardData.items.length; i++) {
-            const item = clipboardData.items[i];
-            if (item && typeof item.type === 'string' && item.type.startsWith('image/')) {
-              const file = item.getAsFile();
-              if (file) {
-                e.preventDefault();
-                handleReceiveInput(file);
-                return;
-              }
-            }
-          }
-        }
-
-        if (clipboardData.files && clipboardData.files.length > 0) {
-          for (let i = 0; i < clipboardData.files.length; i++) {
-            const file = clipboardData.files[i];
-            if (file && typeof file.type === 'string' && file.type.startsWith('image/')) {
-              e.preventDefault();
-              handleReceiveInput(file);
-              return;
-            }
-          }
+        const file = selectPreferredPasteFile(clipboardData);
+        if (file) {
+          e.preventDefault();
+          handleReceiveInput(file);
         }
       };
 
@@ -589,14 +646,12 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
       try {
         const items = await navigator.clipboard.read();
         if (isReadStale()) return;
-        for (const item of items) {
-          const imageMime = item.types.find((type) => type.startsWith('image/'));
-          if (imageMime) {
-            const blob = await item.getType(imageMime);
-            if (isReadStale()) return;
-            handleReceiveInput(blob);
-            return;
-          }
+        const preferred = selectPreferredClipboardItemType(items);
+        if (preferred) {
+          const blob = await preferred.item.getType(preferred.type);
+          if (isReadStale()) return;
+          handleReceiveInput(blob);
+          return;
         }
         if (isReadStale()) return;
         setLocalError(

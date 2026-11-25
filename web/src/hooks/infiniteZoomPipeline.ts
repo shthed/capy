@@ -1031,7 +1031,6 @@ export async function runZoomInCommitPipeline(
       return null;
     }
 
-    persistedToIdb = true;
     const persisted = await persistZoomInBlobsAndPuzzle({
       snapId,
       existingSnap,
@@ -1045,9 +1044,9 @@ export async function runZoomInCommitPipeline(
       isAborted,
     });
     if (!persisted) {
-      persistedToIdb = false;
       return null;
     }
+    persistedToIdb = true;
 
     const liveState = readLiveState();
     const removedIdSet = new Set(embedResult.removedRegionIds);
@@ -1334,7 +1333,6 @@ export async function runZoomOutCommitPipeline(
       modelUsed,
     });
 
-    persistedToIdb = true;
     const persisted = await persistZoomOutBlobsAndPuzzle({
       snapId,
       basePuzzle,
@@ -1349,9 +1347,9 @@ export async function runZoomOutCommitPipeline(
       isAborted,
     });
     if (!persisted) {
-      persistedToIdb = false;
       return null;
     }
+    persistedToIdb = true;
 
     // 100% of painted progress, Undo stack, and Redo stack remain untouched (read live state)!
     const liveState = readLiveState();
