@@ -1,8 +1,9 @@
 import { Dispatch, MutableRefObject, SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
-import { PuzzleData, SavedSnapshot } from '../types';
+import { NormalizedRect, PuzzleData, SavedSnapshot } from '../types';
 import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
 import { getVisiblePalette } from '../components/PaletteDock';
+import type { FocusBoundsRequest } from '../components/puzzleCanvasHelpers';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
 import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import type { CoopLiveState, CoopViewport } from './useCoopSession';
@@ -172,6 +173,8 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
     dx: 0,
     dy: 0,
   });
+  const [focusBoundsRequest, setFocusBoundsRequest] = useState<FocusBoundsRequest | null>(null);
+  const focusSeqRef = useRef<number>(0);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
   const [initialViewport, setInitialViewport] = useState<CoopViewport>({
     zoomScale: 1,
@@ -192,6 +195,19 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
     },
     [viewportRef]
   );
+
+  const focusViewportOnBounds = useCallback((bounds: NormalizedRect) => {
+    focusSeqRef.current += 1;
+    setFocusBoundsRequest({
+      seq: focusSeqRef.current,
+      bounds: {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+      },
+    });
+  }, []);
 
   const clearPendingViewportSave = useCallback(() => {
     if (viewportSaveTimerRef.current !== null) {
@@ -537,9 +553,11 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
     resetViewTrigger,
     restoreViewTrigger,
     panStepRequest,
+    focusBoundsRequest,
     isCanvasTransformed,
     initialViewport,
     applyViewport,
+    focusViewportOnBounds,
     clearPendingViewportSave,
     flushPendingViewportSave,
     handleVisibleColorsChanged,

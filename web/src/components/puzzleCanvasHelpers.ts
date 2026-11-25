@@ -2,6 +2,7 @@ import {
   Difficulty,
   HintFillStyle,
   NestedPuzzleLayer,
+  NormalizedRect,
   PaletteColor,
   PuzzleData,
   Region,
@@ -1633,4 +1634,208 @@ export function drawPuzzleCompositeLayers(
   } else {
     drawInteractiveLayers(ctx, params);
   }
+}
+
+export interface FocusBoundsRequest {
+  seq: number;
+  bounds: NormalizedRect;
+}
+
+export interface ComputeFocusViewportParams {
+  bounds: NormalizedRect;
+  puzzleWidth: number;
+  puzzleHeight: number;
+  containerWidth: number;
+  containerHeight: number;
+  maxZoomScale?: number;
+}
+
+export interface FocusViewportResult {
+  zoomScale: number;
+  panOffsetX: number;
+  panOffsetY: number;
+}
+
+const DEFAULT_FOCUS_VIEWPORT: FocusViewportResult = {
+  zoomScale: 1,
+  panOffsetX: 0,
+  panOffsetY: 0,
+};
+
+/**
+ * Strict viewport bounding for pan/zoom offsets.
+ * Guarantees that the artwork cannot be panned away into empty void
+ * while allowing full edge-to-edge navigation when zoomed in.
+ */
+export function clampCanvasOffset(
+  rawOffset: { x: number; y: number },
+  scale: number,
+  puzzleWidth: number,
+  puzzleHeight: number,
+  containerWidth: number,
+  containerHeight: number,
+  out?: { x: number; y: number }
+): { x: number; y: number } {
+  const safeRawX = Number.isFinite(rawOffset.x) ? rawOffset.x : 0;
+  const safeRawY = Number.isFinite(rawOffset.y) ? rawOffset.y : 0;
+  if (
+    !Number.isFinite(scale) ||
+    scale <= 0 ||
+    !Number.isFinite(containerWidth) ||
+    !Number.isFinite(containerHeight) ||
+    !Number.isFinite(puzzleWidth) ||
+    !Number.isFinite(puzzleHeight) ||
+    containerWidth <= 0 ||
+    containerHeight <= 0 ||
+    puzzleWidth <= 0 ||
+    puzzleHeight <= 0
+  ) {
+    if (out) {
+      out.x = safeRawX;
+      out.y = safeRawY;
+      return out;
+    }
+    return { x: safeRawX, y: safeRawY };
+  }
+
+  const baseScale = Math.min(containerWidth / puzzleWidth, containerHeight / puzzleHeight) * 0.92;
+  const effScale = scale * baseScale;
+  const artW = puzzleWidth * effScale;
+  const artH = puzzleHeight * effScale;
+  const baseOffsetX = (containerWidth - puzzleWidth * baseScale) / 2;
+  const baseOffsetY = (containerHeight - puzzleHeight * baseScale) / 2;
+
+  // Generous boundary margin: allows panning corners deep into view past the viewport center
+  const isZoomed = scale > 1.05;
+  const marginX = isZoomed ? containerWidth * 0.72 : containerWidth * 0.45;
+  const marginY = isZoomed ? containerHeight * 0.72 : containerHeight * 0.45;
+
+  const centeredOffsetX = (containerWidth - artW) / 2 - baseOffsetX;
+  const centeredOffsetY = (containerHeight - artH) / 2 - baseOffsetY;
+
+  let minOffsetX: number;
+  let maxOffsetX: number;
+  let minOffsetY: number;
+  let maxOffsetY: number;
+
+  if (artW <= containerWidth) {
+    minOffsetX = centeredOffsetX - marginX;
+    maxOffsetX = centeredOffsetX + marginX;
+  } else {
+    minOffsetX = containerWidth - marginX - baseOffsetX - artW;
+    maxOffsetX = marginX - baseOffsetX;
+  }
+
+  if (artH <= containerHeight) {
+    minOffsetY = centeredOffsetY - marginY;
+    maxOffsetY = centeredOffsetY + marginY;
+  } else {
+    minOffsetY = containerHeight - marginY - baseOffsetY - artH;
+    maxOffsetY = marginY - baseOffsetY;
+  }
+
+  const cx = Math.max(minOffsetX, Math.min(maxOffsetX, safeRawX));
+  const cy = Math.max(minOffsetY, Math.min(maxOffsetY, safeRawY));
+  if (out) {
+    out.x = cx;
+    out.y = cy;
+    return out;
+  }
+  return { x: cx, y: cy };
+}
+
+/**
+ * Computes the clamped target viewport (zoomScale, panOffsetX, panOffsetY) that frames
+ * a normalized [0..1] world-space rectangle cleanly inside the TopBar / PaletteDock safe area,
+ * honoring resolvePuzzleMaxZoomScale headroom (up to MAX_INFINITE_ZOOM_SCALE = 256).
+ */
+export function computeFocusViewportForBounds(
+  params: ComputeFocusViewportParams
+): FocusViewportResult {
+  const { bounds, puzzleWidth, puzzleHeight, containerWidth, containerHeight, maxZoomScale } =
+    params;
+
+  if (
+    !bounds ||
+    !Number.isFinite(puzzleWidth) ||
+    !Number.isFinite(puzzleHeight) ||
+    !Number.isFinite(containerWidth) ||
+    !Number.isFinite(containerHeight) ||
+    puzzleWidth <= 0 ||
+    puzzleHeight <= 0 ||
+    containerWidth <= 0 ||
+    containerHeight <= 0 ||
+    !Number.isFinite(bounds.x) ||
+    !Number.isFinite(bounds.y) ||
+    !Number.isFinite(bounds.width) ||
+    !Number.isFinite(bounds.height) ||
+    bounds.width <= 0 ||
+    bounds.height <= 0
+  ) {
+    return { ...DEFAULT_FOCUS_VIEWPORT };
+  }
+
+  if (maxZoomScale !== undefined && (!Number.isFinite(maxZoomScale) || maxZoomScale <= 0)) {
+    return { ...DEFAULT_FOCUS_VIEWPORT };
+  }
+
+  const x0 = Math.max(0, Math.min(1, bounds.x));
+  const y0 = Math.max(0, Math.min(1, bounds.y));
+  const x1 = Math.max(0, Math.min(1, bounds.x + bounds.width));
+  const y1 = Math.max(0, Math.min(1, bounds.y + bounds.height));
+  const normW = x1 - x0;
+  const normH = y1 - y0;
+  if (!(normW > 0) || !(normH > 0)) {
+    return { ...DEFAULT_FOCUS_VIEWPORT };
+  }
+
+  const effectiveMaxZoom =
+    maxZoomScale === undefined
+      ? BASE_MAX_ZOOM_SCALE
+      : Math.max(1, Math.min(MAX_INFINITE_ZOOM_SCALE, maxZoomScale));
+
+  const safeTop = Math.min(containerHeight * 0.25, Math.max(64, containerHeight * 0.12));
+  const safeBottom =
+    containerHeight - Math.min(containerHeight * 0.35, Math.max(96, containerHeight * 0.18));
+  const safeHeight = Math.max(1, safeBottom - safeTop);
+  const safeCenterX = containerWidth * 0.5;
+  const safeCenterY = (safeTop + safeBottom) * 0.5;
+  const usableW = Math.max(1, containerWidth * 0.84);
+  const usableH = Math.max(1, safeHeight * 0.88);
+
+  const baseScale = Math.min(containerWidth / puzzleWidth, containerHeight / puzzleHeight) * 0.92;
+  if (!Number.isFinite(baseScale) || baseScale <= 0) {
+    return { ...DEFAULT_FOCUS_VIEWPORT };
+  }
+  const baseOffsetX = (containerWidth - puzzleWidth * baseScale) / 2;
+  const baseOffsetY = (containerHeight - puzzleHeight * baseScale) / 2;
+
+  const boxW = normW * puzzleWidth;
+  const boxH = normH * puzzleHeight;
+  const centerWX = (x0 + normW * 0.5) * puzzleWidth;
+  const centerWY = (y0 + normH * 0.5) * puzzleHeight;
+
+  const fitEffScale = Math.min(usableW / boxW, usableH / boxH);
+  const rawTargetScale = fitEffScale / baseScale;
+  const targetScale = !Number.isFinite(rawTargetScale)
+    ? effectiveMaxZoom
+    : Math.max(1, Math.min(effectiveMaxZoom, rawTargetScale));
+
+  const targetEffScale = targetScale * baseScale;
+  const rawOffsetX = safeCenterX - baseOffsetX - centerWX * targetEffScale;
+  const rawOffsetY = safeCenterY - baseOffsetY - centerWY * targetEffScale;
+  const clamped = clampCanvasOffset(
+    { x: rawOffsetX, y: rawOffsetY },
+    targetScale,
+    puzzleWidth,
+    puzzleHeight,
+    containerWidth,
+    containerHeight
+  );
+
+  return {
+    zoomScale: targetScale,
+    panOffsetX: clamped.x,
+    panOffsetY: clamped.y,
+  };
 }

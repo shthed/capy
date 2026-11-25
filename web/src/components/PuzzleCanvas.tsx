@@ -33,7 +33,9 @@ import {
   applyZoomSnapDetent,
   buildMaskedPreviewCanvas,
   buildPreviewBorderCanvas,
+  clampCanvasOffset,
   collectUnifiedLineRegionIds,
+  computeFocusViewportForBounds,
   computeHighlightOverlayAlpha,
   disposeLayerCanvasCache,
   DrawPuzzleLayersParams,
@@ -41,6 +43,7 @@ import {
   drawPuzzleCompositeLayers,
   evictLruLayerCaches,
   extractImagePixelsRgba,
+  FocusBoundsRequest,
   getNextZoomStop,
   isLayerVisibleAndLargeEnough,
   isReadyCanvasImageSource,
@@ -62,7 +65,9 @@ export {
   ALL_ZOOM_DETENT_STOPS,
   applyZoomSnapDetent,
   BASE_MAX_ZOOM_SCALE,
+  clampCanvasOffset,
   collectUnifiedLineRegionIds,
+  computeFocusViewportForBounds,
   computeMaxZoomScale,
   getNextZoomStop,
   MAX_INFINITE_ZOOM_SCALE,
@@ -73,11 +78,40 @@ export {
   sampleUnifiedRegionAtWorldPoint,
   ZOOM_DETENT_STOPS,
 } from './puzzleCanvasHelpers';
-export type { LayerImageMapLike, UnifiedHitResult } from './puzzleCanvasHelpers';
+export type {
+  ComputeFocusViewportParams,
+  FocusBoundsRequest,
+  FocusViewportResult,
+  LayerImageMapLike,
+  UnifiedHitResult,
+} from './puzzleCanvasHelpers';
 
 const EMPTY_REGION_MAP = new Map<number, Region>();
 const EMPTY_WORLD_REGION_MAP = new Map<number, UnifiedRegionRef>();
 const EMPTY_NESTED_LAYERS: NestedPuzzleLayer[] = [];
+
+const FOCUS_GLIDE_DURATION_MS = 420;
+const FOCUS_EPSILON_SCALE = 0.005;
+const FOCUS_EPSILON_OFFSET_PX = 0.75;
+
+function hasUsableFocusBounds(
+  b: FocusBoundsRequest['bounds'] | null | undefined
+): b is FocusBoundsRequest['bounds'] {
+  if (
+    !b ||
+    !Number.isFinite(b.x) ||
+    !Number.isFinite(b.y) ||
+    !Number.isFinite(b.width) ||
+    !Number.isFinite(b.height) ||
+    b.width <= 0 ||
+    b.height <= 0
+  ) {
+    return false;
+  }
+  const clampedW = Math.max(0, Math.min(1, b.x + b.width)) - Math.max(0, Math.min(1, b.x));
+  const clampedH = Math.max(0, Math.min(1, b.y + b.height)) - Math.max(0, Math.min(1, b.y));
+  return clampedW > 0 && clampedH > 0;
+}
 
 interface PuzzleCanvasProps {
   puzzle: PuzzleData | null;
@@ -121,6 +155,7 @@ interface PuzzleCanvasProps {
   resetViewTrigger?: number;
   restoreViewTrigger?: number;
   panStepRequest?: { seq: number; dx: number; dy: number };
+  focusBoundsRequest?: FocusBoundsRequest | null;
   initialZoomScale?: number;
   initialPanOffsetX?: number;
   initialPanOffsetY?: number;
@@ -382,75 +417,6 @@ export function writeBaseCanvasPixels(
   }
 }
 
-/**
- * Strict viewport bounding for pan/zoom offsets.
- * Guarantees that the artwork cannot be panned away into empty void
- * while allowing full edge-to-edge navigation when zoomed in.
- */
-export function clampCanvasOffset(
-  rawOffset: { x: number; y: number },
-  scale: number,
-  puzzleWidth: number,
-  puzzleHeight: number,
-  containerWidth: number,
-  containerHeight: number,
-  out?: { x: number; y: number }
-): { x: number; y: number } {
-  if (containerWidth <= 0 || containerHeight <= 0 || puzzleWidth <= 0 || puzzleHeight <= 0) {
-    if (out) {
-      out.x = rawOffset.x;
-      out.y = rawOffset.y;
-      return out;
-    }
-    return rawOffset;
-  }
-
-  const baseScale = Math.min(containerWidth / puzzleWidth, containerHeight / puzzleHeight) * 0.92;
-  const effScale = scale * baseScale;
-  const artW = puzzleWidth * effScale;
-  const artH = puzzleHeight * effScale;
-  const baseOffsetX = (containerWidth - puzzleWidth * baseScale) / 2;
-  const baseOffsetY = (containerHeight - puzzleHeight * baseScale) / 2;
-
-  // Generous boundary margin: allows panning corners deep into view past the viewport center
-  const isZoomed = scale > 1.05;
-  const marginX = isZoomed ? containerWidth * 0.72 : containerWidth * 0.45;
-  const marginY = isZoomed ? containerHeight * 0.72 : containerHeight * 0.45;
-
-  const centeredOffsetX = (containerWidth - artW) / 2 - baseOffsetX;
-  const centeredOffsetY = (containerHeight - artH) / 2 - baseOffsetY;
-
-  let minOffsetX: number;
-  let maxOffsetX: number;
-  let minOffsetY: number;
-  let maxOffsetY: number;
-
-  if (artW <= containerWidth) {
-    minOffsetX = centeredOffsetX - marginX;
-    maxOffsetX = centeredOffsetX + marginX;
-  } else {
-    minOffsetX = containerWidth - marginX - baseOffsetX - artW;
-    maxOffsetX = marginX - baseOffsetX;
-  }
-
-  if (artH <= containerHeight) {
-    minOffsetY = centeredOffsetY - marginY;
-    maxOffsetY = centeredOffsetY + marginY;
-  } else {
-    minOffsetY = containerHeight - marginY - baseOffsetY - artH;
-    maxOffsetY = marginY - baseOffsetY;
-  }
-
-  const cx = Math.max(minOffsetX, Math.min(maxOffsetX, rawOffset.x));
-  const cy = Math.max(minOffsetY, Math.min(maxOffsetY, rawOffset.y));
-  if (out) {
-    out.x = cx;
-    out.y = cy;
-    return out;
-  }
-  return { x: cx, y: cy };
-}
-
 export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   puzzle,
   sourceImage,
@@ -492,6 +458,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   resetViewTrigger = 0,
   restoreViewTrigger = 0,
   panStepRequest,
+  focusBoundsRequest = null,
   initialZoomScale = 1.0,
   initialPanOffsetX = 0,
   initialPanOffsetY = 0,
@@ -560,6 +527,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const unifiedTotalCountRef = useRef<number>(unifiedIndex?.totalCount ?? 0);
   const sortedNestedLayersAscRef = useRef<NestedPuzzleLayer[]>(sortedNestedLayersAsc);
   const sortedNestedLayersDescRef = useRef<NestedPuzzleLayer[]>(sortedNestedLayersDesc);
+  const puzzleRef = useRef<PuzzleData | null>(puzzle);
   const maxZoomScaleRef = useRef<number>(maxZoomScale);
   const selectionLayerIdRef = useRef<string | null | undefined>(selectionLayerId);
   const layerImagesPropRef = useRef<LayerImageMapLike | undefined>(layerImages);
@@ -625,6 +593,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Synchronize unified multi-layer refs BEFORE any downstream layout/paint/replay effects run
   useIsomorphicLayoutEffect(() => {
+    puzzleRef.current = puzzle;
     unifiedRegionIndexRef.current = unifiedIndex;
     regionByIdRef.current = unifiedIndex?.byId ?? EMPTY_REGION_MAP;
     rootRegionByIdRef.current = rootRegionById;
@@ -636,6 +605,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     selectionLayerIdRef.current = selectionLayerId;
     layerImagesPropRef.current = layerImages;
   }, [
+    puzzle,
     unifiedIndex,
     rootRegionById,
     sortedNestedLayersAsc,
@@ -770,6 +740,42 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const pointerRingHeadRef = useRef(0);
   const pointerRingCountRef = useRef(0);
   const momentumAnimIdRef = useRef<number | null>(null);
+  const focusAnimIdRef = useRef<number | null>(null);
+  const lastHandledFocusSeqRef = useRef<number>(0);
+  const focusLiveOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const focusRawScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const focusClampedScratchRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const focusAnimStateRef = useRef<{
+    startTimeMs: number;
+    durationMs: number;
+    startScale: number;
+    targetScale: number;
+    scaleRatio: number;
+    scaleDelta: number;
+    startOffsetX: number;
+    startOffsetY: number;
+    targetOffsetX: number;
+    targetOffsetY: number;
+    puzzleWidth: number;
+    puzzleHeight: number;
+    containerW: number;
+    containerH: number;
+  }>({
+    startTimeMs: -1,
+    durationMs: FOCUS_GLIDE_DURATION_MS,
+    startScale: 1,
+    targetScale: 1,
+    scaleRatio: 1,
+    scaleDelta: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    targetOffsetX: 0,
+    targetOffsetY: 0,
+    puzzleWidth: 0,
+    puzzleHeight: 0,
+    containerW: 0,
+    containerH: 0,
+  });
 
   const resetPointerRing = useCallback((x: number, y: number, time: number) => {
     const slot = pointerRingRef.current[0];
@@ -799,9 +805,97 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     }
   }, []);
 
+  const cancelFocusAnimation = useCallback(
+    (commitCurrent: boolean = false) => {
+      if (focusAnimIdRef.current === null) return;
+      cancelAnimationFrame(focusAnimIdRef.current);
+      focusAnimIdRef.current = null;
+      if (commitCurrent) {
+        commitTransformState(true);
+        const w = containerRef.current?.clientWidth || window.innerWidth;
+        const h = containerRef.current?.clientHeight || window.innerHeight;
+        onViewExtentChangedRef.current?.(
+          scaleRef.current,
+          offsetRef.current.x,
+          offsetRef.current.y,
+          w,
+          h
+        );
+      }
+    },
+    [commitTransformState]
+  );
+
+  const stepFocusGlideRef = useRef<(now: number) => void>(() => {});
+  const stepFocusGlide = useCallback(
+    (now: number) => {
+      focusAnimIdRef.current = null;
+      const st = focusAnimStateRef.current;
+      if (st.startTimeMs < 0) {
+        st.startTimeMs = now;
+      }
+      const elapsed = Math.max(0, now - st.startTimeMs);
+      const t = st.durationMs > 0 ? Math.min(1, elapsed / st.durationMs) : 1;
+      const invT = 1 - t;
+      const ease = 1 - invT * invT * invT;
+
+      let nextScale: number;
+      let rawX: number;
+      let rawY: number;
+      if (t >= 1) {
+        nextScale = st.targetScale;
+        rawX = st.targetOffsetX;
+        rawY = st.targetOffsetY;
+      } else {
+        nextScale = st.startScale * Math.pow(st.scaleRatio, ease);
+        const panAlpha =
+          Math.abs(st.scaleDelta) < 1e-4 ? ease : (nextScale - st.startScale) / st.scaleDelta;
+        rawX = st.startOffsetX + (st.targetOffsetX - st.startOffsetX) * panAlpha;
+        rawY = st.startOffsetY + (st.targetOffsetY - st.startOffsetY) * panAlpha;
+      }
+
+      const rawScratch = focusRawScratchRef.current;
+      rawScratch.x = rawX;
+      rawScratch.y = rawY;
+      const clamped = clampCanvasOffset(
+        rawScratch,
+        nextScale,
+        st.puzzleWidth,
+        st.puzzleHeight,
+        st.containerW,
+        st.containerH,
+        focusClampedScratchRef.current
+      );
+
+      scaleRef.current = nextScale;
+      offsetRef.current.x = clamped.x;
+      offsetRef.current.y = clamped.y;
+      scheduleCanvasRedraw();
+
+      if (t < 1) {
+        focusAnimIdRef.current = requestAnimationFrame(stepFocusGlideRef.current);
+      } else {
+        commitTransformState(true);
+        onViewExtentChangedRef.current?.(
+          nextScale,
+          clamped.x,
+          clamped.y,
+          st.containerW,
+          st.containerH
+        );
+      }
+    },
+    [scheduleCanvasRedraw, commitTransformState]
+  );
+
+  useIsomorphicLayoutEffect(() => {
+    stepFocusGlideRef.current = stepFocusGlide;
+  }, [stepFocusGlide]);
+
   useEffect(() => {
     return () => {
       stopMomentum();
+      cancelFocusAnimation(false);
       if (redrawRafIdRef.current !== null) {
         cancelAnimationFrame(redrawRafIdRef.current);
         redrawRafIdRef.current = null;
@@ -811,7 +905,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         transformCommitTimerRef.current = null;
       }
     };
-  }, [stopMomentum]);
+  }, [stopMomentum, cancelFocusAnimation]);
 
   const puzzleWidth = puzzle?.width ?? 0;
   const puzzleHeight = puzzle?.height ?? 0;
@@ -819,6 +913,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   // Reset or restore zoom/offset when a brand-new puzzle geometry or snapshot is loaded or viewport restoration triggers
   useEffect(() => {
     stopMomentum();
+    cancelFocusAnimation(false);
     const clampedInitialScale = Math.min(maxZoomScaleRef.current, Math.max(0.5, initialZoomScale));
     let targetOffset = { x: initialPanOffsetX, y: initialPanOffsetY };
     const w = containerRef.current?.clientWidth || window.innerWidth;
@@ -847,11 +942,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     initialPanOffsetY,
     restoreViewTrigger,
     stopMomentum,
+    cancelFocusAnimation,
   ]);
 
   // Handle FloatingActions & keyboard zoom in/out triggers synchronously on discrete events
   useIsomorphicLayoutEffect(() => {
     if (zoomInTrigger <= 0 || !containerRef.current || !puzzle) return;
+    stopMomentum();
+    cancelFocusAnimation(false);
     const currentScale = scaleRef.current;
     const currentOffset = offsetRef.current;
     const maxZoom = maxZoomScaleRef.current;
@@ -880,6 +978,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   useIsomorphicLayoutEffect(() => {
     if (zoomOutTrigger <= 0 || !containerRef.current || !puzzle) return;
+    stopMomentum();
+    cancelFocusAnimation(false);
     const currentScale = scaleRef.current;
     const currentOffset = offsetRef.current;
     const rawScale = Math.max(0.5, currentScale * Math.pow(0.8, effectiveZoomSensitivityRef.current));
@@ -909,6 +1009,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   useIsomorphicLayoutEffect(() => {
     if (stepZoomTrigger <= 0 || !containerRef.current || !puzzle) return;
     stopMomentum();
+    cancelFocusAnimation(false);
     const currentScale = scaleRef.current;
     const currentOffset = offsetRef.current;
     const newScale = getNextZoomStop(currentScale, maxZoomScaleRef.current);
@@ -931,11 +1032,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     setScale(newScale);
     setOffset(clamped);
     onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
-  }, [stepZoomTrigger, stopMomentum]);
+  }, [stepZoomTrigger, stopMomentum, cancelFocusAnimation]);
 
   useIsomorphicLayoutEffect(() => {
     if (resetViewTrigger <= 0) return;
     stopMomentum();
+    cancelFocusAnimation(false);
     const startScale = scaleRef.current;
     const startOffset = { ...offsetRef.current };
     const w = containerRef.current?.clientWidth || window.innerWidth;
@@ -976,12 +1078,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
     animId = requestAnimationFrame(stepZoomOut);
     return () => cancelAnimationFrame(animId);
-  }, [resetViewTrigger, stopMomentum]);
+  }, [resetViewTrigger, stopMomentum, cancelFocusAnimation]);
 
   // Handle crisp keyboard pan steps (Arrow keys / WASD) clamped via clampCanvasOffset
   useIsomorphicLayoutEffect(() => {
     if (!panStepRequest || panStepRequest.seq <= 0 || !containerRef.current || !puzzle) return;
     stopMomentum();
+    cancelFocusAnimation(false);
     onManualPanStartRef.current?.();
     onViewportGestureRef.current?.();
     onPuzzleInteractionRef.current?.();
@@ -1000,7 +1103,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     offsetRef.current = clamped;
     setOffset(clamped);
     onViewExtentChangedRef.current?.(scaleRef.current, clamped.x, clamped.y, w, h);
-  }, [panStepRequest, stopMomentum]);
+  }, [panStepRequest, stopMomentum, cancelFocusAnimation]);
 
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 0,
@@ -1031,6 +1134,102 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       onViewExtentChangedRef.current?.(nextScale, clamped.x, clamped.y, w, h);
     }
   }, [scale, maxZoomScale, puzzle, containerSize]);
+
+  // Smooth cancellable auto-camera focus glide onto newly generated Zoom In detail areas
+  useEffect(() => {
+    if (
+      !focusBoundsRequest ||
+      focusBoundsRequest.seq <= 0 ||
+      focusBoundsRequest.seq === lastHandledFocusSeqRef.current
+    ) {
+      return;
+    }
+    const activePuzzle = puzzleRef.current;
+    const container = containerRef.current;
+    if (!activePuzzle || !container) return;
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w <= 0 || h <= 0) return;
+
+    const b = focusBoundsRequest.bounds;
+    if (!hasUsableFocusBounds(b)) {
+      lastHandledFocusSeqRef.current = focusBoundsRequest.seq;
+      return;
+    }
+
+    lastHandledFocusSeqRef.current = focusBoundsRequest.seq;
+    stopMomentum();
+    cancelFocusAnimation(false);
+
+    const target = computeFocusViewportForBounds({
+      bounds: b,
+      puzzleWidth: activePuzzle.width,
+      puzzleHeight: activePuzzle.height,
+      containerWidth: w,
+      containerHeight: h,
+      maxZoomScale: maxZoomScaleRef.current,
+    });
+
+    const startScale =
+      Number.isFinite(scaleRef.current) && scaleRef.current > 0 ? scaleRef.current : 1;
+    const startOffsetX = Number.isFinite(offsetRef.current.x) ? offsetRef.current.x : 0;
+    const startOffsetY = Number.isFinite(offsetRef.current.y) ? offsetRef.current.y : 0;
+
+    // Detach offsetRef from any object shared with React `offset` state (zero per-frame allocs)
+    const liveOffset = focusLiveOffsetRef.current;
+    liveOffset.x = startOffsetX;
+    liveOffset.y = startOffsetY;
+    offsetRef.current = liveOffset;
+
+    const isAlreadyAtTarget =
+      Math.abs(target.zoomScale - startScale) <= FOCUS_EPSILON_SCALE &&
+      Math.hypot(target.panOffsetX - startOffsetX, target.panOffsetY - startOffsetY) <=
+        FOCUS_EPSILON_OFFSET_PX;
+
+    if (
+      reducedMotionRef.current ||
+      typeof requestAnimationFrame !== 'function' ||
+      isAlreadyAtTarget
+    ) {
+      scaleRef.current = target.zoomScale;
+      liveOffset.x = target.panOffsetX;
+      liveOffset.y = target.panOffsetY;
+      scheduleCanvasRedraw();
+      commitTransformState(true);
+      onViewExtentChangedRef.current?.(
+        target.zoomScale,
+        target.panOffsetX,
+        target.panOffsetY,
+        w,
+        h
+      );
+      return;
+    }
+
+    const st = focusAnimStateRef.current;
+    st.startTimeMs = -1;
+    st.durationMs = FOCUS_GLIDE_DURATION_MS;
+    st.startScale = startScale;
+    st.targetScale = target.zoomScale;
+    st.scaleRatio = target.zoomScale / startScale;
+    st.scaleDelta = target.zoomScale - startScale;
+    st.startOffsetX = startOffsetX;
+    st.startOffsetY = startOffsetY;
+    st.targetOffsetX = target.panOffsetX;
+    st.targetOffsetY = target.panOffsetY;
+    st.puzzleWidth = activePuzzle.width;
+    st.puzzleHeight = activePuzzle.height;
+    st.containerW = w;
+    st.containerH = h;
+
+    focusAnimIdRef.current = requestAnimationFrame(stepFocusGlideRef.current);
+  }, [
+    focusBoundsRequest,
+    cancelFocusAnimation,
+    stopMomentum,
+    scheduleCanvasRedraw,
+    commitTransformState,
+  ]);
 
   // Smooth predictive camera controller for Replay Follow Mode:
   // - Safe-frame dead-zone: never moves the viewport while upcoming regions remain comfortably inside the screen
@@ -1066,7 +1265,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       isDraggingRef.current ||
       activePointersRef.current.size > 0 ||
       isOneFingerZoomingRef.current ||
-      isDoubleTapPanningRef.current;
+      isDoubleTapPanningRef.current ||
+      focusAnimIdRef.current !== null;
     if (isUserInteracting) return;
 
     const curScale = scaleRef.current;
@@ -1132,7 +1332,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         activePointersRef.current.size > 0 ||
         isOneFingerZoomingRef.current ||
         isDoubleTapPanningRef.current ||
-        momentumAnimIdRef.current !== null;
+        momentumAnimIdRef.current !== null ||
+        focusAnimIdRef.current !== null;
 
       if (targetRegionId !== null && !isUserInteracting && containerRef.current) {
         const curScale = scaleRef.current;
@@ -2165,6 +2366,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const h = container.clientHeight;
       if (w <= 0 || h <= 0) return;
 
+      if (
+        focusAnimIdRef.current !== null &&
+        (focusAnimStateRef.current.containerW !== w || focusAnimStateRef.current.containerH !== h)
+      ) {
+        cancelFocusAnimation(true);
+      }
+
       refreshCanvasRect();
       setContainerSize((prev) =>
         prev.width === w && prev.height === h ? prev : { width: w, height: h }
@@ -2228,7 +2436,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       currentDprCleanup?.();
       currentDprCleanup = null;
     };
-  }, [puzzle, drawCompositeFrame, refreshCanvasRect]);
+  }, [puzzle, drawCompositeFrame, refreshCanvasRect, cancelFocusAnimation]);
 
   // Release offscreen canvas backing buffers and owned layer image URLs cleanly on unmount
   useEffect(() => {
@@ -2361,6 +2569,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const handlePointerDown = (e: React.PointerEvent) => {
     paintedInGestureRef.current = false;
     stopMomentum();
+    cancelFocusAnimation(true);
     refreshCanvasRect();
     resetPointerRing(e.clientX, e.clientY, performance.now());
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -2911,6 +3120,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     if (!containerRef.current || !puzzle || e.deltaY === 0) return;
+    stopMomentum();
+    const hadFocusAnim = focusAnimIdRef.current !== null;
+    cancelFocusAnimation(false);
 
     const baseWheelFactor = e.deltaY < 0 ? 1.2 : 0.82;
     const zoomFactor = Math.pow(baseWheelFactor, effectiveZoomSensitivity);
@@ -2921,14 +3133,20 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     const newScale = applyZoomSnapDetent(clampedRawScale, snapZoomLevels, maxZoom);
     const actualZoom = newScale / currentScale;
 
+    const w = containerRef.current.clientWidth;
+    const h = containerRef.current.clientHeight;
     const rect = refreshCanvasRect();
-    if (!rect) return;
+    if (!rect) {
+      if (hadFocusAnim) {
+        commitTransformState(true);
+        onViewExtentChangedRef.current?.(currentScale, currentOffset.x, currentOffset.y, w, h);
+      }
+      return;
+    }
 
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const w = containerRef.current.clientWidth;
-    const h = containerRef.current.clientHeight;
     const baseScale = Math.min(w / puzzle.width, h / puzzle.height) * 0.92;
     const baseOffsetX = (w - puzzle.width * baseScale) / 2;
     const baseOffsetY = (h - puzzle.height * baseScale) / 2;
@@ -2960,6 +3178,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       commitTransformState(true);
       onViewportGestureRef.current?.();
       onPuzzleInteractionRef.current?.();
+    } else if (hadFocusAnim) {
+      commitTransformState(true);
+      onViewExtentChangedRef.current?.(currentScale, currentOffset.x, currentOffset.y, w, h);
     }
   };
   handleWheelRef.current = handleWheel;
@@ -2976,6 +3197,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Multi-touch 2-finger focal-point pinch-to-zoom & pan
   const handleTouchStart = (e: React.TouchEvent) => {
+    cancelFocusAnimation(true);
     refreshCanvasRect();
     if (e.touches.length >= 2) {
       stopMomentum();

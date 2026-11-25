@@ -7851,38 +7851,1117 @@ async function testClusterF_UiSsrAndControllerHelpers(
     3,
     'After Zoom Out adding a new outer-border swatch when previous activeColorId=2 has 0 outer regions, activeColorId must advance to new swatch 3'
   );
+}
 
-  // Verify commitZoomOutResult actually invokes resolvePostSubdivisionActiveColor + setActiveColorId
-  const controllerSrc = fs.readFileSync(
+// ===========================================================================
+// Cluster G: F13 Controller Decomposition, M1 Compact Templates, M2 generatorConfig & Undo Symmetry
+// ===========================================================================
+async function testClusterG_ControllerDecompositionF13(
+  controllerMod,
+  pipelineMod,
+  persistenceMod,
+  subdividerMod,
+  workerSvcMod,
+  seamMod,
+  storageMod,
+  idbMod,
+  keysMod,
+  codecMod,
+  typesMod
+) {
+  // G1: Hook line-count guardrail (< 900 lines)
+  const hookSrc = fs.readFileSync(
     path.resolve(WEB_ROOT, 'src/hooks/useInfiniteZoomController.ts'),
     'utf8'
   );
-  const zoomOutStart = controllerSrc.indexOf('const commitZoomOutResult = useCallback(');
-  const zoomOutEnd = controllerSrc.indexOf('const handleConfirmExtendBorders = useCallback(');
-  assert.ok(zoomOutStart >= 0 && zoomOutEnd > zoomOutStart, 'commitZoomOutResult block must exist');
-  const commitZoomOutBlock = controllerSrc.slice(zoomOutStart, zoomOutEnd);
+  const hookLineCount = hookSrc.replace(/\n$/, '').split('\n').length;
+  assert.ok(
+    hookLineCount < 900,
+    `useInfiniteZoomController.ts must stay strictly < 900 lines (got ${hookLineCount})`
+  );
+
+  // G2: Zero React imports in extracted persistence and pipeline modules
+  const persistenceSrc = fs.readFileSync(
+    path.resolve(WEB_ROOT, 'src/hooks/infiniteZoomPersistence.ts'),
+    'utf8'
+  );
+  const pipelineSrc = fs.readFileSync(
+    path.resolve(WEB_ROOT, 'src/hooks/infiniteZoomPipeline.ts'),
+    'utf8'
+  );
+  const reactImportRe = /(?:from\s+['"]react['"]|import\s*\(\s*['"]react['"]\s*\)|require\s*\(\s*['"]react['"]\s*\))/;
   assert.equal(
-    commitZoomOutBlock.includes('resolvePostSubdivisionActiveColor('),
-    true,
-    'commitZoomOutResult must call resolvePostSubdivisionActiveColor'
+    reactImportRe.test(persistenceSrc),
+    false,
+    'infiniteZoomPersistence.ts must have ZERO React imports'
   );
   assert.equal(
-    commitZoomOutBlock.includes('setActiveColorId(nextActiveColorId)'),
-    true,
-    'commitZoomOutResult must call setActiveColorId(nextActiveColorId)'
+    reactImportRe.test(pipelineSrc),
+    false,
+    'infiniteZoomPipeline.ts must have ZERO React imports'
   );
-  assert.equal(
-    commitZoomOutBlock.includes('activeColorId: nextActiveColorId'),
-    true,
-    'commitZoomOutResult must persist nextActiveColorId to storage and liveCoopRef'
+
+  // G3: 100% public export parity & strict === referential equality across all 10 runtime exports
+  assert.equal(typeof controllerMod.useInfiniteZoomController, 'function');
+  assert.equal(controllerMod.ZOOM_IN_MAX_NEW_SWATCHES, 10);
+  assert.equal(controllerMod.ZOOM_IN_MAX_NEW_SWATCHES, pipelineMod.ZOOM_IN_MAX_NEW_SWATCHES);
+  const pipelineReExports = [
+    'resolveActiveSelectionGrid',
+    'computeNestedLayerTargetDimensions',
+    'computeZoomInSubdivisionParams',
+    'computeSelectionMeanChroma',
+    'scrubUndoHistoryForRemovedRegions',
+    'resolvePostSubdivisionActiveColor',
+    'buildInPlaceUpdatedSourceCanvas',
+  ];
+  for (const name of pipelineReExports) {
+    assert.equal(
+      typeof controllerMod[name],
+      'function',
+      `useInfiniteZoomController.ts must re-export ${name}`
+    );
+    assert.strictEqual(
+      controllerMod[name],
+      pipelineMod[name],
+      `controllerMod.${name} must strictly equal pipelineMod.${name}`
+    );
+  }
+  assert.strictEqual(
+    controllerMod.resolveLatestChildSave,
+    persistenceMod.resolveLatestChildSave,
+    'controllerMod.resolveLatestChildSave must strictly equal persistenceMod.resolveLatestChildSave'
   );
-  const depArrayStart = commitZoomOutBlock.lastIndexOf('[');
-  const depArrayBlock = commitZoomOutBlock.slice(depArrayStart);
-  assert.equal(
-    depArrayBlock.includes('setActiveColorId') && depArrayBlock.includes('visibleColorIdsRef'),
-    true,
-    'commitZoomOutResult dependency array must include setActiveColorId and visibleColorIdsRef'
+
+  // Helpers for behavioral pipeline & persistence tests
+  const makeMockImageClass = (w = 24, h = 24) =>
+    class MockImage {
+      constructor() {
+        this.width = w;
+        this.height = h;
+        this.naturalWidth = w;
+        this.naturalHeight = h;
+        this.complete = true;
+        this.onload = null;
+        this.onerror = null;
+        this._src = '';
+      }
+      set src(val) {
+        this._src = val;
+        queueMicrotask(() => {
+          this.onload?.();
+        });
+      }
+      get src() {
+        return this._src;
+      }
+    };
+
+  const makeMockUrlApi = () => {
+    let seq = 0;
+    const created = [];
+    const revoked = [];
+    return {
+      created,
+      revoked,
+      api: {
+        createObjectURL() {
+          seq += 1;
+          const url = `blob:mock-iz-${seq}`;
+          created.push(url);
+          return url;
+        },
+        revokeObjectURL(url) {
+          revoked.push(url);
+        },
+      },
+    };
+  };
+
+  const makeSwatch = (id, r, g, b, hex) => ({
+    id,
+    hex,
+    isLight: 0.299 * r + 0.587 * g + 0.114 * b > 150,
+    argb: (0xff << 24) | (b << 16) | (g << 8) | r,
+    r,
+    g,
+    b,
+  });
+
+  const buildRegionStruct = (id, colorId, pixelList, w) => {
+    const pixels = Int32Array.from(pixelList);
+    let minX = w;
+    let maxX = 0;
+    let minY = 1e9;
+    let maxY = 0;
+    let sumX = 0;
+    let sumY = 0;
+    for (let i = 0; i < pixels.length; i++) {
+      const idx = pixels[i];
+      const x = idx % w;
+      const y = Math.floor(idx / w);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      sumX += x;
+      sumY += y;
+    }
+    const area = pixels.length;
+    return {
+      id,
+      colorId,
+      centroidX: area > 0 ? sumX / area : 0,
+      centroidY: area > 0 ? sumY / area : 0,
+      area,
+      minX: area > 0 ? minX : 0,
+      maxX: area > 0 ? maxX : 0,
+      minY: area > 0 ? minY : 0,
+      maxY: area > 0 ? maxY : 0,
+      maxRadius: Math.max(1, Math.min(maxX - minX + 1, maxY - minY + 1) / 2),
+      pixels,
+    };
+  };
+
+  const makeTwoRegionPuzzle = (w = 20, h = 20) => {
+    const pal = [
+      makeSwatch(1, 217, 76, 61, '#d94c3d'),
+      makeSwatch(2, 44, 110, 200, '#2c6ec8'),
+    ];
+    const regionMap = new Int32Array(w * h);
+    const borderMap = new Uint8Array(w * h);
+    const half = Math.floor(w / 2);
+    const r1Pixels = [];
+    const r2Pixels = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = y * w + x;
+        if (x < half) {
+          regionMap[idx] = 1;
+          r1Pixels.push(idx);
+        } else {
+          regionMap[idx] = 2;
+          r2Pixels.push(idx);
+        }
+        if (x === half - 1 || x === half) borderMap[idx] = 1;
+      }
+    }
+    return {
+      width: w,
+      height: h,
+      palette: pal,
+      regions: [
+        buildRegionStruct(1, 1, r1Pixels, w),
+        buildRegionStruct(2, 2, r2Pixels, w),
+      ],
+      regionMap,
+      borderMap,
+    };
+  };
+
+  // G4: Behavioral Zoom In & Zoom Out commit pipelines — M2 generatorConfig pass-through + F5 replacement
+  {
+    const ls = createMemoryLocalStorage();
+    const { mockIndexedDb, stores } = createMockIndexedDb();
+    const urlTracker = makeMockUrlApi();
+    const MockImage = makeMockImageClass(20, 20);
+    const origSubdivide = workerSvcMod.PuzzleWorkerService.subdivideMaskedRegion;
+
+    await withGlobalOverrides(
+      {
+        document: createFakeDocument(),
+        ImageData: FakeImageData,
+        Image: MockImage,
+        URL: urlTracker.api,
+        localStorage: ls,
+        indexedDB: mockIndexedDb,
+        window: {},
+      },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const basePuzzle = makeTwoRegionPuzzle(20, 20);
+          const snapId = 'snap-f13-pipeline';
+          const baseSnap = {
+            id: snapId,
+            title: 'F13 Pipeline Test',
+            lastOpened: Date.now(),
+            filledCount: 0,
+            totalCount: 2,
+            filledRegionIds: [],
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+            palette: basePuzzle.palette,
+            sourceRef: { kind: 'blob', uri: snapId },
+            sampleAssetPath: null,
+            isAutoSample: false,
+          };
+          storageMod.StorageService.saveSnapshots([baseSnap]);
+          const origRootBlob = new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' });
+          stores.images.set(snapId, origRootBlob);
+          stores.puzzles.set(snapId, codecMod.compressPuzzleRecord(basePuzzle));
+
+          const baseImage = new MockImage();
+          const customZoomInConfig = {
+            algorithm: 'LINE_ART',
+            lineHandling: 'UNIFIED_BLACK_REGION',
+            preset: 'STANDARD',
+            paletteDetail: 'HIGH',
+            imageType: 'DRAWING',
+            colorCount: 24,
+            minRegionArea: 32,
+            maxRegions: 360,
+            resolution: 1024,
+            smoothingPasses: 1,
+          };
+
+          let capturedZoomInParams = null;
+          workerSvcMod.PuzzleWorkerService.subdivideMaskedRegion = async (params) => {
+            capturedZoomInParams = params;
+            const w = params.cropWidth;
+            const h = params.cropHeight;
+            const localRegionMap = new Int32Array(w * h);
+            const pixelList = [];
+            for (let i = 0; i < w * h; i++) {
+              if (params.cropMask[i] === 1) {
+                localRegionMap[i] = 1;
+                pixelList.push(i);
+              }
+            }
+            const newSwatch = makeSwatch(3, 40, 167, 69, '#28a745');
+            return {
+              width: w,
+              height: h,
+              localRegionMap,
+              regions: [buildRegionStruct(1, 3, pixelList, w)],
+              palette: [...params.existingPalette, newSwatch],
+              addedSwatches: [newSwatch],
+            };
+          };
+
+          const cropW = 10;
+          const cropH = 20;
+          const cropMask = new Uint8Array(cropW * cropH).fill(1);
+          const originalCropRgba = new Uint8ClampedArray(cropW * cropH * 4).fill(180);
+          const decodedRgba = new Uint8ClampedArray(20 * 20 * 4).fill(210);
+          const preZoomInViewport = { zoomScale: 1.75, panOffsetX: -40, panOffsetY: 22 };
+
+          const zoomInOutcome = await pipelineMod.runZoomInCommitPipeline({
+            snapId,
+            existingSnap: baseSnap,
+            basePuzzle,
+            baseImage,
+            targetLayerId: null,
+            targetGrid: basePuzzle,
+            selectedCopy: new Set([1]),
+            metrics: {
+              regionCount: 1,
+              area: cropW * cropH,
+              bbox: { minX: 0, maxX: 9, minY: 0, maxY: 19, width: cropW, height: cropH },
+              paintedCount: 0,
+              neighborRegionIds: [2],
+              neighborBoundaryHexes: ['#2c6ec8'],
+              mode: 'in-place',
+            },
+            cropMask,
+            originalCropRgba,
+            templateMeta: {
+              offsetX: 0,
+              offsetY: 0,
+              maskWidth: cropW,
+              maskHeight: cropH,
+              templateWidth: 20,
+              templateHeight: 20,
+            },
+            sanitizedPrompt: 'add botanical details',
+            decoded: { rgba: decodedRgba, width: 20, height: 20 },
+            providerUsed: 'PUTER',
+            modelUsed: 'gemini-nano-banana-2.1',
+            isFree: false,
+            isAborted: () => false,
+            readLiveState: () => ({
+              filledRegionIds: new Set([2]),
+              paintedRegionColors: new Map([[2, 2]]),
+              activeColorId: 2,
+              activeSave: baseSnap,
+              undoStack: [],
+              redoStack: [],
+              liveLayerImages: new Map(),
+              viewport: preZoomInViewport,
+              activeBlobUrl: 'blob:prev-root',
+              settings: {
+                ...typesMod.DEFAULT_SETTINGS,
+                autoAdvance: true,
+                generatorConfig: customZoomInConfig,
+              },
+              visibleColorIds: new Set([2, 3]),
+            }),
+          });
+
+          assert.ok(zoomInOutcome, 'runZoomInCommitPipeline must return commit result');
+          assert.deepEqual(
+            capturedZoomInParams.generatorConfig,
+            customZoomInConfig,
+            'Zoom In pipeline must forward settings.generatorConfig to PuzzleWorkerService.subdivideMaskedRegion'
+          );
+          assert.ok(
+            zoomInOutcome.newLayer &&
+              zoomInOutcome.newLayer.worldBounds &&
+              zoomInOutcome.newLayer.worldBounds.width > 0 &&
+              zoomInOutcome.newLayer.worldBounds.height > 0,
+            'Zoom In pipeline must return newLayer.worldBounds for F14 auto-camera focus'
+          );
+          assert.equal(zoomInOutcome.preOpUndo.operationKind, 'zoom-in');
+          assert.deepEqual(
+            zoomInOutcome.preOpUndo.previousViewport,
+            preZoomInViewport,
+            'Zoom In preOpUndo must snapshot previousViewport before focus glide'
+          );
+          assert.equal(
+            zoomInOutcome.nextActiveColorId,
+            3,
+            'Zoom In with autoAdvance=true and exhausted color 2 must advance to new swatch 3'
+          );
+
+          // Now run Zoom Out commit pipeline on a 100%-completed puzzle (replaces brittle fs.readFileSync check!)
+          const customZoomOutConfig = {
+            ...customZoomInConfig,
+            algorithm: 'PHOTO',
+            colorCount: 18,
+            maxRegions: 260,
+          };
+          let capturedZoomOutParams = null;
+          workerSvcMod.PuzzleWorkerService.subdivideMaskedRegion = async (params) => {
+            capturedZoomOutParams = params;
+            const w = params.cropWidth;
+            const h = params.cropHeight;
+            const localRegionMap = new Int32Array(w * h);
+            const pixelList = [];
+            for (let i = 0; i < w * h; i++) {
+              if (params.cropMask[i] === 1) {
+                localRegionMap[i] = 1;
+                pixelList.push(i);
+              }
+            }
+            return {
+              width: w,
+              height: h,
+              localRegionMap,
+              regions: [buildRegionStruct(1, 1, pixelList, w)],
+              palette: params.existingPalette,
+              addedSwatches: [],
+            };
+          };
+
+          const sides = { top: false, right: true, bottom: false, left: false };
+          const check = seamMod.canExtendSides(basePuzzle.width, basePuzzle.height, sides);
+          assert.equal(check.allowed, true);
+          const origInnerRgba = new Uint8ClampedArray(basePuzzle.width * basePuzzle.height * 4).fill(150);
+          const outerGenRgba = new Uint8ClampedArray(check.nextWidth * check.nextHeight * 4).fill(90);
+          const preZoomOutViewport = { zoomScale: 3.2, panOffsetX: 60, panOffsetY: -80 };
+
+          const runZoomOutScenario = async ({ autoAdvance, isFree }) =>
+            pipelineMod.runZoomOutCommitPipeline({
+              snapId,
+              existingSnap: baseSnap,
+              basePuzzle,
+              baseImage,
+              sides,
+              check,
+              originalInnerRgba: origInnerRgba,
+              sanitizedPrompt: 'expand mountain vista',
+              decoded: { rgba: outerGenRgba, width: check.nextWidth, height: check.nextHeight },
+              providerUsed: 'PUTER',
+              modelUsed: 'gemini-nano-banana-2.1',
+              isFree,
+              isAborted: () => false,
+              readLiveState: () => ({
+                filledRegionIds: new Set([1, 2]),
+                paintedRegionColors: new Map([
+                  [1, 1],
+                  [2, 2],
+                ]),
+                activeColorId: 2,
+                activeSave: baseSnap,
+                undoStack: [],
+                redoStack: [],
+                liveLayerImages: new Map(),
+                viewport: preZoomOutViewport,
+                activeBlobUrl: 'blob:prev-zoomout-root',
+                settings: {
+                  ...typesMod.DEFAULT_SETTINGS,
+                  autoAdvance,
+                  generatorConfig: customZoomOutConfig,
+                },
+                visibleColorIds: new Set([1, 2]),
+              }),
+            });
+
+          const zoomOutAutoOn = await runZoomOutScenario({ autoAdvance: true, isFree: false });
+          assert.ok(zoomOutAutoOn, 'runZoomOutCommitPipeline must return commit result');
+          assert.deepEqual(
+            capturedZoomOutParams.generatorConfig,
+            customZoomOutConfig,
+            'Zoom Out pipeline must forward settings.generatorConfig to PuzzleWorkerService.subdivideMaskedRegion'
+          );
+          assert.equal(
+            zoomOutAutoOn.nextActiveColorId,
+            1,
+            'Zoom Out on 100%-completed puzzle with autoAdvance=true must advance activeColorId from 2 -> 1'
+          );
+          const persistedActive = storageMod.StorageService.loadActiveState();
+          assert.equal(
+            persistedActive.activeColorId,
+            zoomOutAutoOn.nextActiveColorId,
+            'commitZoomOutStorageState must persist nextActiveColorId to StorageService active state'
+          );
+          assert.deepEqual(
+            zoomOutAutoOn.fittedViewport,
+            { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+            'Zoom Out must return fittedViewport { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 }'
+          );
+          assert.equal(zoomOutAutoOn.preOpUndo.operationKind, 'zoom-out');
+          assert.deepEqual(
+            zoomOutAutoOn.preOpUndo.previousViewport,
+            preZoomOutViewport,
+            'Zoom Out preOpUndo must preserve pre-operation viewport'
+          );
+
+          const zoomOutAutoOff = await runZoomOutScenario({ autoAdvance: false, isFree: false });
+          assert.equal(
+            zoomOutAutoOff.nextActiveColorId,
+            2,
+            'Zoom Out with autoAdvance=false must keep current activeColorId=2'
+          );
+          const zoomOutFree = await runZoomOutScenario({ autoAdvance: true, isFree: true });
+          assert.equal(
+            zoomOutFree.nextActiveColorId,
+            2,
+            'Zoom Out in Free Color mode must keep current activeColorId=2'
+          );
+        } finally {
+          workerSvcMod.PuzzleWorkerService.subdivideMaskedRegion = origSubdivide;
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+  }
+
+  // G5: M1 compact < 900 KB template encoding preserved on BOTH Zoom In & Zoom Out
+  {
+    const observedMimeAttempts = [];
+    const oversizedDoc = createFakeDocument((canvas) => {
+      canvas.toBlob = (cb, mime = 'image/png', quality) => {
+        observedMimeAttempts.push({ mime, quality, w: canvas.width, h: canvas.height });
+        if (mime === 'image/png') {
+          // Simulate a > 900 KB uncompressed PNG to prove compact JPEG ladder is invoked
+          cb(new Blob([new Uint8Array(seamMod.MAX_AI_TEMPLATE_BYTES + 4096)], { type: 'image/png' }));
+          return;
+        }
+        cb(new Blob([new Uint8Array(12_000)], { type: mime }));
+      };
+    });
+
+    await withGlobalOverrides({ document: oversizedDoc, ImageData: FakeImageData }, async () => {
+      const puz = makeTwoRegionPuzzle(24, 24);
+      const layerCanvas = oversizedDoc.createElement('canvas');
+      layerCanvas.width = 24;
+      layerCanvas.height = 24;
+      const infillTpl = await pipelineMod.buildInfillTemplatePayload(
+        layerCanvas,
+        puz,
+        new Set([1]),
+        { minX: 0, maxX: 11, minY: 0, maxY: 23, width: 12, height: 24 }
+      );
+      assert.ok(
+        infillTpl.templatePngBlob.size <= seamMod.MAX_AI_TEMPLATE_BYTES,
+        `Zoom In template must stay <= 900 KB (got ${infillTpl.templatePngBlob.size})`
+      );
+      assert.equal(
+        infillTpl.templatePngBlob.type,
+        'image/jpeg',
+        'Zoom In template must use compact JPEG ladder when PNG exceeds 900 KB'
+      );
+      assert.ok(
+        infillTpl.templateDataUrl.startsWith('data:image/jpeg;base64,'),
+        'Zoom In template dataUrl must match compact encoded MIME'
+      );
+
+      const rootCanvas = oversizedDoc.createElement('canvas');
+      rootCanvas.width = 24;
+      rootCanvas.height = 24;
+      const outpaintTpl = await pipelineMod.buildOutpaintTemplatePayload(rootCanvas, 24, 24, {
+        top: false,
+        right: true,
+        bottom: false,
+        left: false,
+      });
+      assert.ok(
+        outpaintTpl.templatePngBlob.size <= seamMod.MAX_AI_TEMPLATE_BYTES,
+        `Zoom Out template must stay <= 900 KB (got ${outpaintTpl.templatePngBlob.size})`
+      );
+      assert.equal(
+        outpaintTpl.templatePngBlob.type,
+        'image/jpeg',
+        'Zoom Out template must use compact JPEG ladder when PNG exceeds 900 KB'
+      );
+      assert.ok(
+        outpaintTpl.templateDataUrl.startsWith('data:image/jpeg;base64,'),
+        'Zoom Out template dataUrl must match compact encoded MIME'
+      );
+    });
+  }
+
+  // G6: rollbackAbortedLayerPersist normal & sample-promotion branches
+  {
+    const ls = createMemoryLocalStorage();
+    const { mockIndexedDb, stores } = createMockIndexedDb();
+    const urlTracker = makeMockUrlApi();
+
+    await withGlobalOverrides(
+      { localStorage: ls, indexedDB: mockIndexedDb, URL: urlTracker.api, window: {} },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const basePuzzle = makeTwoRegionPuzzle(16, 16);
+          const prevRootBlob = new Blob([new Uint8Array([9, 8, 7])], { type: 'image/png' });
+          stores.images.set('snap-rb-1', new Blob([new Uint8Array([1, 1, 1])], { type: 'image/png' }));
+          stores.images.set('layer_snap-rb-1_d1', new Blob([new Uint8Array([2, 2, 2])], { type: 'image/png' }));
+
+          await persistenceMod.rollbackAbortedLayerPersist({
+            snapId: 'snap-rb-1',
+            addedLayerBlobKeys: ['layer_snap-rb-1_d1'],
+            newRootBlobUrl: 'blob:rb-new-root',
+            newLayerObjectUrls: ['blob:rb-new-layer'],
+            previousRootBlob: prevRootBlob,
+            promotedFromSample: false,
+            basePuzzle,
+          });
+          assert.equal(stores.images.has('layer_snap-rb-1_d1'), false, 'Rollback must delete added layer blob');
+          assert.equal(stores.images.has('snap-rb-1'), true, 'Normal rollback must restore previousRootBlob');
+          assert.deepEqual(
+            Array.from(new Uint8Array(await stores.images.get('snap-rb-1').arrayBuffer())),
+            [9, 8, 7],
+            'Normal rollback must restore exact previousRootBlob bytes'
+          );
+          assert.equal(stores.puzzles.has('snap-rb-1'), true, 'Normal rollback must restore basePuzzle');
+          assert.ok(
+            urlTracker.revoked.includes('blob:rb-new-root') &&
+              urlTracker.revoked.includes('blob:rb-new-layer'),
+            'Rollback must revoke both newRootBlobUrl and newLayerObjectUrls'
+          );
+
+          // Sample-promotion branch: previousRootBlob === null && promotedFromSample === true deletes BOTH layer key & snapId
+          stores.images.set('snap-sample-promo', new Blob([new Uint8Array([5, 5])], { type: 'image/png' }));
+          stores.images.set('layer_snap-sample-promo_d1', new Blob([new Uint8Array([6, 6])], { type: 'image/png' }));
+          await persistenceMod.rollbackAbortedLayerPersist({
+            snapId: 'snap-sample-promo',
+            addedLayerBlobKeys: ['layer_snap-sample-promo_d1'],
+            newLayerObjectUrls: ['blob:rb-sample-layer'],
+            previousRootBlob: null,
+            promotedFromSample: true,
+          });
+          assert.equal(
+            stores.images.has('layer_snap-sample-promo_d1'),
+            false,
+            'Sample-promotion rollback must delete added layer blob'
+          );
+          assert.equal(
+            stores.images.has('snap-sample-promo'),
+            false,
+            'Sample-promotion rollback must also delete promoted root blob snapId'
+          );
+          assert.ok(urlTracker.revoked.includes('blob:rb-sample-layer'));
+        } finally {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+  }
+
+  // G7: restoreUndoSubdivisionPersistence — symmetric previousViewport restore for BOTH zoom-in & zoom-out
+  {
+    const ls = createMemoryLocalStorage();
+    const { mockIndexedDb, stores } = createMockIndexedDb();
+    const MockImage = makeMockImageClass(16, 16);
+
+    await withGlobalOverrides(
+      {
+        document: createFakeDocument(),
+        ImageData: FakeImageData,
+        Image: MockImage,
+        localStorage: ls,
+        indexedDB: mockIndexedDb,
+        window: {},
+      },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const basePuzzle = makeTwoRegionPuzzle(16, 16);
+          const snapId = 'snap-undo-sym';
+          const initialSave = {
+            id: snapId,
+            title: 'Undo Symmetry Test',
+            lastOpened: Date.now(),
+            filledCount: 1,
+            totalCount: 2,
+            filledRegionIds: [1],
+            zoomScale: 8,
+            panOffsetX: -400,
+            panOffsetY: -200,
+            palette: basePuzzle.palette,
+            sourceRef: { kind: 'blob', uri: snapId },
+            sampleAssetPath: null,
+            isAutoSample: false,
+            previewDataUrl: 'data:image/png;base64,AAAA',
+          };
+          storageMod.StorageService.saveSnapshots([initialSave]);
+
+          // Case 1: Zoom In undo restores pre-Zoom-In viewport (reversing F14 auto-focus glide)
+          stores.images.set('layer_snap-undo-sym_detail_1', new Blob([new Uint8Array([3, 3])], { type: 'image/png' }));
+          const zoomInPrevVp = { zoomScale: 2.5, panOffsetX: -120, panOffsetY: 45 };
+          const zoomInUndoSnap = {
+            operationKind: 'zoom-in',
+            snapshotId: snapId,
+            puzzle: basePuzzle,
+            sourceImage: new MockImage(),
+            previousBlob: null,
+            promotedFromSample: false,
+            previousBlobUrl: 'blob:orig-root',
+            newBlobUrl: 'blob:orig-root',
+            addedLayerBlobKeys: ['layer_snap-undo-sym_detail_1'],
+            previousLayerImages: new Map(),
+            filledRegionIds: new Set([1]),
+            paintedRegionColors: new Map([[1, 1]]),
+            undoStack: [],
+            redoStack: [],
+            activeColorId: 2,
+            previousViewport: zoomInPrevVp,
+            previousMeta: {
+              sampleAssetPath: null,
+              isAutoSample: false,
+              sourceRef: { kind: 'blob', uri: snapId },
+              zoomTree: undefined,
+              previewDataUrl: 'data:image/png;base64,AAAA',
+            },
+            addedRegionCount: 12,
+          };
+
+          const zoomInRestore = await persistenceMod.restoreUndoSubdivisionPersistence({
+            snap: zoomInUndoSnap,
+            isFreeColorMode: false,
+            activeSave: initialSave,
+            liveActiveSave: initialSave,
+            isStale: () => false,
+          });
+          assert.ok(zoomInRestore, 'Zoom In undo persistence restore must succeed');
+          assert.deepEqual(
+            zoomInRestore.restoredViewport,
+            zoomInPrevVp,
+            'Zoom In undo must restore snap.previousViewport symmetrically (not stay at zoomed-in focus)'
+          );
+          assert.equal(
+            stores.images.has('layer_snap-undo-sym_detail_1'),
+            false,
+            'Zoom In undo must delete added detail layer blob from IDB'
+          );
+          const activeAfterZoomInUndo = storageMod.StorageService.loadActiveState();
+          assert.equal(activeAfterZoomInUndo.zoomScale, 2.5);
+          assert.equal(activeAfterZoomInUndo.panOffsetX, -120);
+          assert.equal(activeAfterZoomInUndo.panOffsetY, 45);
+          assert.equal(activeAfterZoomInUndo.activeColorId, 2);
+
+          // Case 2: Zoom Out undo restores pre-Zoom-Out viewport & root blob
+          const prevRootBlob = new Blob([new Uint8Array([42, 43, 44])], { type: 'image/png' });
+          stores.images.set('layer_snap-undo-sym_root_wrap', new Blob([new Uint8Array([7, 7])], { type: 'image/png' }));
+          const zoomOutPrevVp = { zoomScale: 3.2, panOffsetX: 60, panOffsetY: -80 };
+          const zoomOutUndoSnap = {
+            ...zoomInUndoSnap,
+            operationKind: 'zoom-out',
+            previousBlob: prevRootBlob,
+            addedLayerBlobKeys: ['layer_snap-undo-sym_root_wrap'],
+            previousViewport: zoomOutPrevVp,
+            activeColorId: 1,
+          };
+
+          const zoomOutRestore = await persistenceMod.restoreUndoSubdivisionPersistence({
+            snap: zoomOutUndoSnap,
+            isFreeColorMode: false,
+            activeSave: initialSave,
+            liveActiveSave: initialSave,
+            isStale: () => false,
+          });
+          assert.ok(zoomOutRestore, 'Zoom Out undo persistence restore must succeed');
+          assert.deepEqual(
+            zoomOutRestore.restoredViewport,
+            zoomOutPrevVp,
+            'Zoom Out undo must restore snap.previousViewport'
+          );
+          assert.equal(stores.images.has('layer_snap-undo-sym_root_wrap'), false);
+          assert.deepEqual(
+            Array.from(new Uint8Array(await stores.images.get(snapId).arrayBuffer())),
+            [42, 43, 44],
+            'Zoom Out undo must restore previousRootBlob'
+          );
+          const activeAfterZoomOutUndo = storageMod.StorageService.loadActiveState();
+          assert.equal(activeAfterZoomOutUndo.zoomScale, 3.2);
+          assert.equal(activeAfterZoomOutUndo.panOffsetX, 60);
+          assert.equal(activeAfterZoomOutUndo.panOffsetY, -80);
+          assert.equal(activeAfterZoomOutUndo.activeColorId, 1);
+
+          // Case 3: Stale session aborts cleanly returning null
+          const staleRestore = await persistenceMod.restoreUndoSubdivisionPersistence({
+            snap: zoomInUndoSnap,
+            isFreeColorMode: false,
+            activeSave: initialSave,
+            liveActiveSave: initialSave,
+            isStale: () => true,
+          });
+          assert.equal(staleRestore, null, 'Stale undo restore must return null immediately');
+        } finally {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+  }
+}
+
+// ===========================================================================
+// Cluster H: F14 Smooth Auto-Camera Focus (computeFocusViewportForBounds & clampCanvasOffset)
+// ===========================================================================
+function testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod) {
+  const {
+    BASE_MAX_ZOOM_SCALE,
+    MAX_INFINITE_ZOOM_SCALE,
+    clampCanvasOffset,
+    computeFocusViewportForBounds,
+  } = canvasHelpersMod;
+
+  // H0: Re-export identity parity on PuzzleCanvas.tsx (preserves useReplayController.ts & public consumers)
+  assert.strictEqual(
+    puzzleCanvasMod.clampCanvasOffset,
+    clampCanvasOffset,
+    'PuzzleCanvas.tsx must re-export clampCanvasOffset with strict referential equality'
   );
+  assert.strictEqual(
+    puzzleCanvasMod.computeFocusViewportForBounds,
+    computeFocusViewportForBounds,
+    'PuzzleCanvas.tsx must re-export computeFocusViewportForBounds with strict referential equality'
+  );
+
+  // H1: Core centering & TopBar/PaletteDock safe-area framing (desktop 1280x800, 1000x1000 puzzle)
+  {
+    const pw = 1000;
+    const ph = 1000;
+    const cw = 1280;
+    const ch = 800;
+    const bounds = { x: 0.25, y: 0.25, width: 0.25, height: 0.25 };
+    const res = computeFocusViewportForBounds({
+      bounds,
+      puzzleWidth: pw,
+      puzzleHeight: ph,
+      containerWidth: cw,
+      containerHeight: ch,
+      maxZoomScale: 256,
+    });
+    assert.ok(res.zoomScale > 2.5 && res.zoomScale <= 256, `Expected zoomScale > 2.5, got ${res.zoomScale}`);
+
+    const safeTop = Math.min(ch * 0.25, Math.max(64, ch * 0.12));
+    const safeBottom = ch - Math.min(ch * 0.35, Math.max(96, ch * 0.18));
+    const safeCenterY = (safeTop + safeBottom) * 0.5;
+    const usableW = Math.max(1, cw * 0.84);
+    const usableH = Math.max(1, (safeBottom - safeTop) * 0.88);
+    const baseScale = Math.min(cw / pw, ch / ph) * 0.92;
+    const baseOffsetX = (cw - pw * baseScale) / 2;
+    const baseOffsetY = (ch - ph * baseScale) / 2;
+    const effScale = res.zoomScale * baseScale;
+    const sx = res.panOffsetX + baseOffsetX + (bounds.x + bounds.width * 0.5) * pw * effScale;
+    const sy = res.panOffsetY + baseOffsetY + (bounds.y + bounds.height * 0.5) * ph * effScale;
+
+    assert.ok(Math.abs(sx - cw / 2) <= 2, `Projected X ${sx} must center within 2px of ${cw / 2}`);
+    assert.ok(
+      sy >= safeTop && sy <= safeBottom && Math.abs(sy - safeCenterY) <= 2,
+      `Projected Y ${sy} must land within safe area [${safeTop}, ${safeBottom}] near ${safeCenterY}`
+    );
+    assert.ok(bounds.width * pw * effScale <= usableW + 1e-3, 'Projected width must fit usableW');
+    assert.ok(bounds.height * ph * effScale <= usableH + 1e-3, 'Projected height must fit usableH');
+
+    // Exact clampCanvasOffset idempotence
+    const reClamped = clampCanvasOffset(
+      { x: res.panOffsetX, y: res.panOffsetY },
+      res.zoomScale,
+      pw,
+      ph,
+      cw,
+      ch
+    );
+    assert.equal(reClamped.x, res.panOffsetX);
+    assert.equal(reClamped.y, res.panOffsetY);
+  }
+
+  // H2: Dynamic 256x headroom & maxZoomScale normalization
+  {
+    const tinyPatch = { x: 0.495, y: 0.495, width: 0.005, height: 0.005 };
+    const highDepth = computeFocusViewportForBounds({
+      bounds: tinyPatch,
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: MAX_INFINITE_ZOOM_SCALE,
+    });
+    assert.ok(
+      highDepth.zoomScale > BASE_MAX_ZOOM_SCALE && highDepth.zoomScale <= MAX_INFINITE_ZOOM_SCALE,
+      `Tiny patch with 256x headroom must exceed 12x and stay <= 256x (got ${highDepth.zoomScale})`
+    );
+
+    const cappedAt12 = computeFocusViewportForBounds({
+      bounds: tinyPatch,
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: BASE_MAX_ZOOM_SCALE,
+    });
+    assert.equal(cappedAt12.zoomScale, BASE_MAX_ZOOM_SCALE);
+
+    const defaultUndefined = computeFocusViewportForBounds({
+      bounds: tinyPatch,
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+    });
+    assert.equal(
+      defaultUndefined.zoomScale,
+      BASE_MAX_ZOOM_SCALE,
+      'Undefined maxZoomScale must default to BASE_MAX_ZOOM_SCALE (12)'
+    );
+
+    for (const [bx, by, ultraTiny] of [
+      [0.5, 0.5, 0.001],
+      [0.5, 0.5, 1e-7],
+      [0, 0, 1e-320],
+    ]) {
+      const res = computeFocusViewportForBounds({
+        bounds: { x: bx, y: by, width: ultraTiny, height: ultraTiny },
+        puzzleWidth: 1000,
+        puzzleHeight: 1000,
+        containerWidth: 1280,
+        containerHeight: 800,
+        maxZoomScale: 256,
+      });
+      assert.equal(res.zoomScale, 256, `Ultra-tiny (${bx},${by},${ultraTiny}) must cap cleanly at 256`);
+      assert.ok(Number.isFinite(res.panOffsetX) && Number.isFinite(res.panOffsetY));
+    }
+
+    const underflowedSubnormal = computeFocusViewportForBounds({
+      bounds: { x: 0.5, y: 0.5, width: 1e-320, height: 1e-320 },
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: 256,
+    });
+    assert.deepEqual(
+      underflowedSubnormal,
+      { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+      'IEEE-754 absorbed zero-span subnormal rect must return safe finite fallback'
+    );
+
+    const overMax = computeFocusViewportForBounds({
+      bounds: { x: 0.499, y: 0.499, width: 0.001, height: 0.001 },
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: 999,
+    });
+    assert.equal(overMax.zoomScale, MAX_INFINITE_ZOOM_SCALE, 'maxZoomScale > 256 must cap at 256');
+
+    const subOneMax = computeFocusViewportForBounds({
+      bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 },
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: 0.5,
+    });
+    assert.equal(subOneMax.zoomScale, 1, '0 < maxZoomScale < 1 must clamp cleanly to 1');
+
+    const wholePuzzle = computeFocusViewportForBounds({
+      bounds: { x: 0, y: 0, width: 1, height: 1 },
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: 256,
+    });
+    assert.equal(wholePuzzle.zoomScale, 1, 'Whole-puzzle bounds must never zoom below 1.0');
+  }
+
+  // H3: Corner bounds & clampCanvasOffset compliance + non-finite guard
+  {
+    for (const corner of [
+      { x: 0, y: 0, width: 0.15, height: 0.15 },
+      { x: 0.85, y: 0.85, width: 0.15, height: 0.15 },
+    ]) {
+      const res = computeFocusViewportForBounds({
+        bounds: corner,
+        puzzleWidth: 1000,
+        puzzleHeight: 1000,
+        containerWidth: 1280,
+        containerHeight: 800,
+        maxZoomScale: 64,
+      });
+      const clamped = clampCanvasOffset(
+        { x: res.panOffsetX, y: res.panOffsetY },
+        res.zoomScale,
+        1000,
+        1000,
+        1280,
+        800
+      );
+      assert.equal(res.panOffsetX, clamped.x);
+      assert.equal(res.panOffsetY, clamped.y);
+    }
+
+    const nanClamped = clampCanvasOffset({ x: NaN, y: Infinity }, 2, 1000, 1000, 1280, 800);
+    assert.ok(Number.isFinite(nanClamped.x) && Number.isFinite(nanClamped.y));
+    const zeroScaleClamped = clampCanvasOffset({ x: 10, y: -20 }, 0, 1000, 1000, 1280, 800);
+    assert.deepEqual(zeroScaleClamped, { x: 10, y: -20 });
+  }
+
+  // H4: Degenerate, non-finite, zero, negative & out-of-bounds guards
+  {
+    const safeDefault = { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 };
+    const badInputs = [
+      { bounds: { x: NaN, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 0.2, y: Infinity, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 0.2, y: 0.2, width: 0, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: -0.1 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 1.5, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: -0.5, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 0, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: -10, containerHeight: 800, maxZoomScale: 12 },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: NaN },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: Infinity },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: 0 },
+      { bounds: { x: 0.2, y: 0.2, width: 0.2, height: 0.2 }, puzzleWidth: 1000, puzzleHeight: 1000, containerWidth: 1280, containerHeight: 800, maxZoomScale: -4 },
+    ];
+    for (const bad of badInputs) {
+      assert.deepEqual(computeFocusViewportForBounds(bad), safeDefault);
+    }
+
+    // Partial out-of-bounds clamps cleanly into [0, 1]
+    const partial = computeFocusViewportForBounds({
+      bounds: { x: -0.1, y: -0.1, width: 0.4, height: 0.4 },
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: 64,
+    });
+    const exactClamped = computeFocusViewportForBounds({
+      bounds: { x: 0, y: 0, width: 0.3, height: 0.3 },
+      puzzleWidth: 1000,
+      puzzleHeight: 1000,
+      containerWidth: 1280,
+      containerHeight: 800,
+      maxZoomScale: 64,
+    });
+    assert.ok(
+      Math.abs(partial.zoomScale - exactClamped.zoomScale) < 1e-9 &&
+        Math.abs(partial.panOffsetX - exactClamped.panOffsetX) < 1e-9 &&
+        Math.abs(partial.panOffsetY - exactClamped.panOffsetY) < 1e-9,
+      'Partially out-of-bounds rect must clamp to [0, 1] identically (within float epsilon) to pre-clamped rect'
+    );
+  }
+
+  // H5: Tight mobile, narrow, landscape & ultra-short viewports + non-square aspect ratios
+  {
+    const viewports = [
+      { cw: 360, ch: 780, label: 'mobile 360x780' },
+      { cw: 320, ch: 480, label: 'narrow 320x480' },
+      { cw: 640, ch: 360, label: 'landscape 640x360' },
+      { cw: 320, ch: 120, label: 'ultra-short 320x120' },
+    ];
+    for (const vp of viewports) {
+      const safeTop = Math.min(vp.ch * 0.25, Math.max(64, vp.ch * 0.12));
+      const safeBottom = vp.ch - Math.min(vp.ch * 0.35, Math.max(96, vp.ch * 0.18));
+      assert.ok(safeBottom > safeTop, `Safe area must remain positive on ${vp.label}`);
+      const res = computeFocusViewportForBounds({
+        bounds: { x: 0.3, y: 0.3, width: 0.2, height: 0.2 },
+        puzzleWidth: 1000,
+        puzzleHeight: 1000,
+        containerWidth: vp.cw,
+        containerHeight: vp.ch,
+        maxZoomScale: 64,
+      });
+      assert.ok(Number.isFinite(res.zoomScale) && res.zoomScale >= 1, `Finite zoom on ${vp.label}`);
+      assert.ok(Number.isFinite(res.panOffsetX) && Number.isFinite(res.panOffsetY));
+      const baseScale = Math.min(vp.cw / 1000, vp.ch / 1000) * 0.92;
+      const baseOffsetX = (vp.cw - 1000 * baseScale) / 2;
+      const baseOffsetY = (vp.ch - 1000 * baseScale) / 2;
+      const effScale = res.zoomScale * baseScale;
+      const sx = res.panOffsetX + baseOffsetX + 400 * effScale;
+      const sy = res.panOffsetY + baseOffsetY + 400 * effScale;
+      assert.ok(sx >= 0 && sx <= vp.cw, `Projected center X ${sx} must lie inside [0, ${vp.cw}] on ${vp.label}`);
+      assert.ok(sy >= safeTop - 1 && sy <= safeBottom + 1, `Projected center Y ${sy} must lie inside safe area on ${vp.label}`);
+    }
+
+    // Non-square wide 2000x500 and tall 500x2000 puzzles fit limiting axis without clipping
+    for (const [pw, ph] of [
+      [2000, 500],
+      [500, 2000],
+    ]) {
+      const cw = 1280;
+      const ch = 800;
+      const b = { x: 0.25, y: 0.25, width: 0.25, height: 0.25 };
+      const res = computeFocusViewportForBounds({
+        bounds: b,
+        puzzleWidth: pw,
+        puzzleHeight: ph,
+        containerWidth: cw,
+        containerHeight: ch,
+        maxZoomScale: 64,
+      });
+      const baseScale = Math.min(cw / pw, ch / ph) * 0.92;
+      const effScale = res.zoomScale * baseScale;
+      const safeTop = Math.min(ch * 0.25, Math.max(64, ch * 0.12));
+      const safeBottom = ch - Math.min(ch * 0.35, Math.max(96, ch * 0.18));
+      const usableW = Math.max(1, cw * 0.84);
+      const usableH = Math.max(1, (safeBottom - safeTop) * 0.88);
+      assert.ok(b.width * pw * effScale <= usableW + 1e-3, `Wide/tall ${pw}x${ph} must fit usableW`);
+      assert.ok(b.height * ph * effScale <= usableH + 1e-3, `Wide/tall ${pw}x${ph} must fit usableH`);
+    }
+  }
+
+  // H6: FocusBoundsRequest monotonic seq & defensive copy contract
+  {
+    let seq = 0;
+    const makeNextFocusRequest = (bounds) => {
+      seq += 1;
+      return {
+        seq,
+        bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+      };
+    };
+    const mutableBounds = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 };
+    const req1 = makeNextFocusRequest(mutableBounds);
+    mutableBounds.x = 0.99;
+    const req2 = makeNextFocusRequest({ x: 0.2, y: 0.3, width: 0.2, height: 0.2 });
+    assert.equal(req1.seq, 1);
+    assert.equal(req2.seq, 2);
+    assert.equal(req1.bounds.x, 0.1, 'FocusBoundsRequest must defensively copy bounds');
+    assert.ok(req2.seq > req1.seq, 'FocusBoundsRequest seq must be strictly monotonic');
+  }
 }
 
 // ===========================================================================
@@ -7902,10 +8981,15 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     'Testing Infinite Zoom (NanoBananaService, RegionSelectionEngine, SeamCompositor, UnifiedPuzzleLayers, MaskedRegionSubdivider, Worker IPC, Exporters, Canvas/UI/Controller Helpers, CapyCodec, Storage & NativeBridge)...'
   );
 
-  // F7: Load nanoBananaPrompts.ts with zero DOM globals to verify pure zero-DOM module boundary
-  const promptsMod = await withGlobalOverrides(
+  // F7 & F13: Load zero-DOM/zero-React modules with zero DOM globals to verify pure module boundaries
+  const [promptsMod, persistenceMod, pipelineMod] = await withGlobalOverrides(
     { window: undefined, document: undefined },
-    () => vite.ssrLoadModule('/src/services/ai/nanoBananaPrompts.ts')
+    () =>
+      Promise.all([
+        vite.ssrLoadModule('/src/services/ai/nanoBananaPrompts.ts'),
+        vite.ssrLoadModule('/src/hooks/infiniteZoomPersistence.ts'),
+        vite.ssrLoadModule('/src/hooks/infiniteZoomPipeline.ts'),
+      ])
   );
 
   const [
@@ -7928,6 +9012,7 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     serializerMod,
     bridgeMod,
     canvasHelpersMod,
+    puzzleCanvasMod,
     controllerMod,
     floatingMod,
     controlsMod,
@@ -7952,6 +9037,7 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     vite.ssrLoadModule('/src/services/storage/PuzzleSerializer.ts'),
     vite.ssrLoadModule('/src/services/NativeBridge.ts'),
     vite.ssrLoadModule('/src/components/puzzleCanvasHelpers.ts'),
+    vite.ssrLoadModule('/src/components/PuzzleCanvas.tsx'),
     vite.ssrLoadModule('/src/hooks/useInfiniteZoomController.ts'),
     vite.ssrLoadModule('/src/components/FloatingActions.tsx'),
     vite.ssrLoadModule('/src/components/InfiniteZoomControls.tsx'),
@@ -7999,6 +9085,20 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     unifiedMod,
     codecMod
   );
+  await testClusterG_ControllerDecompositionF13(
+    controllerMod,
+    pipelineMod,
+    persistenceMod,
+    subdividerMod,
+    workerSvcMod,
+    seamMod,
+    storageMod,
+    idbMod,
+    keysMod,
+    codecMod,
+    typesMod
+  );
+  testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod);
 
   logUnitPass?.('Infinite Zoom unit tests passed');
 }
