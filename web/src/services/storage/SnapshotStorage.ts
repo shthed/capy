@@ -642,15 +642,31 @@ export interface DeleteSnapshotOptions {
   tombstoneAt?: number;
 }
 
+function resolveTargetDedicatedBlobUri(
+  id: string,
+  targetSnapshot: SavedSnapshot | undefined
+): string | null {
+  if (targetSnapshot?.sourceRef?.kind !== 'blob' || typeof targetSnapshot.sourceRef.uri !== 'string') {
+    return null;
+  }
+  const uri = targetSnapshot.sourceRef.uri.trim();
+  if (uri.length === 0 || uri === id || isLayerImageKey(uri) || isPreviewImageKey(uri)) {
+    return null;
+  }
+  return uri;
+}
+
 async function resolveDeleteImageProtection(
   id: string,
-  survivingSnapshots: SavedSnapshot[]
+  survivingSnapshots: SavedSnapshot[],
+  targetSnapshot?: SavedSnapshot
 ): Promise<{
-  layerImageKeys: string[];
+  extraImageKeys: string[];
   preserveRootImageKey: boolean;
   preservePreviewKey: boolean;
 }> {
   const previewKey = previewStoreKey(id);
+  const dedicatedUri = resolveTargetDedicatedBlobUri(id, targetSnapshot);
   const liveSnapshotIds = new Set<string>();
   const livePreviewKeys = new Set<string>();
   const liveBlobUris = new Set<string>();
@@ -678,15 +694,27 @@ async function resolveDeleteImageProtection(
       ...liveBlobUris,
       ...survivingRead.keys,
     ]);
+    const extraImageKeys = new Set<string>(
+      targetKeys.filter((key) => isLayerImageKey(key) && !survivingProtectedKeys.has(key))
+    );
+    if (dedicatedUri && !survivingProtectedKeys.has(dedicatedUri)) {
+      extraImageKeys.add(dedicatedUri);
+    }
     return {
       preserveRootImageKey: survivingProtectedKeys.has(id),
       preservePreviewKey: survivingProtectedKeys.has(previewKey),
-      layerImageKeys: Array.from(
-        new Set(
-          targetKeys.filter((key) => isLayerImageKey(key) && !survivingProtectedKeys.has(key))
-        )
-      ),
+      extraImageKeys: Array.from(extraImageKeys),
     };
+  }
+
+  const extraImageKeys: string[] = [];
+  if (
+    dedicatedUri &&
+    !liveSnapshotIds.has(dedicatedUri) &&
+    !livePreviewKeys.has(dedicatedUri) &&
+    !liveBlobUris.has(dedicatedUri)
+  ) {
+    extraImageKeys.push(dedicatedUri);
   }
 
   return {
@@ -700,7 +728,7 @@ async function resolveDeleteImageProtection(
       liveSnapshotIds.has(previewKey) ||
       livePreviewKeys.has(previewKey) ||
       liveBlobUris.has(previewKey),
-    layerImageKeys: [],
+    extraImageKeys,
   };
 }
 
@@ -747,9 +775,9 @@ export async function deleteSnapshot(
   if (active?.activeSnapshotId === id) {
     clearActiveState();
   }
-  const { layerImageKeys, preserveRootImageKey, preservePreviewKey } =
-    await resolveDeleteImageProtection(id, resultList);
-  await deleteSnapshotEntries(id, layerImageKeys, {
+  const { extraImageKeys, preserveRootImageKey, preservePreviewKey } =
+    await resolveDeleteImageProtection(id, resultList, target);
+  await deleteSnapshotEntries(id, extraImageKeys, {
     preserveRootImageKey,
     preservePreviewKey,
   });

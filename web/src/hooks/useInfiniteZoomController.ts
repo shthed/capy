@@ -804,7 +804,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         isStale: () =>
           seq !== infiniteZoomOpSeqRef.current ||
           liveCoopRef.current.activeSnapshotId !== expectedSnapshotId,
-        shouldReconcileResetProgress: () =>
+        shouldReconcileActiveSnapshot: () =>
           isMountedRef.current && liveCoopRef.current.activeSnapshotId === expectedSnapshotId,
       });
       if (!result || !isMountedRef.current) {
@@ -812,6 +812,11 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         return;
       }
 
+      const isStaleReconcile = Boolean(result.reconciledStaleActiveSnapshot);
+      if (isStaleReconcile && liveCoopRef.current.activeSnapshotId !== expectedSnapshotId) {
+        revokeUnusedObjectUrl(snap.previousBlobUrl, activeBlobUrlRef.current);
+        return;
+      }
       const isResetReconcile = Boolean(result.resetProgressMidUndo);
       const nextFilled = isResetReconcile ? new Set<number>() : snap.filledRegionIds;
       const nextPainted = isResetReconcile ? new Map<number, number>() : snap.paintedRegionColors;
@@ -839,7 +844,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       syncRedoStack(isResetReconcile ? [] : snap.redoStack);
       setSnapshots(result.updatedSnapshots);
       applyViewport?.(result.restoredViewport);
-      if (!isResetReconcile) NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
+      if (!isStaleReconcile) NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
     } catch (err) {
       reportSwallowed('InfiniteZoom.undoSubdivision', err, { id: expectedSnapshotId });
       revokeUnusedObjectUrl(snap.previousBlobUrl, activeBlobUrlRef.current);

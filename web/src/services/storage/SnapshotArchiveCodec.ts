@@ -65,6 +65,25 @@ function isZeroCopySnapshotRef(snapshot: SavedSnapshot): boolean {
   );
 }
 
+function resolveSnapshotRootImageKey(snapshot: SavedSnapshot): string {
+  if (snapshot.sourceRef?.kind === 'blob') {
+    const trimmed = snapshot.sourceRef.uri.trim();
+    if (trimmed.length > 0 && trimmed !== previewStoreKey(snapshot.id)) {
+      return trimmed;
+    }
+  }
+  return snapshot.id;
+}
+
+async function loadSnapshotRootImageBlob(snapshot: SavedSnapshot): Promise<Blob | null> {
+  const rootKey = resolveSnapshotRootImageKey(snapshot);
+  const blob = await loadImageBlob(rootKey);
+  if (blob || rootKey === snapshot.id) {
+    return blob;
+  }
+  return await loadImageBlob(snapshot.id);
+}
+
 async function collectNestedLayerBlobs(
   compactRecord: CompactPuzzleRecordV2 | null,
   into: Record<string, Blob>
@@ -91,7 +110,9 @@ export async function exportSnapshotBinary(
   const snapshot: SavedSnapshot = preview ? { ...rawSnapshot, previewDataUrl: preview } : rawSnapshot;
 
   const compactRecord = await loadCompactPuzzleRecord(id);
-  const imageBlob = isZeroCopySnapshotRef(snapshot) ? null : await loadImageBlob(id);
+  const imageBlob = isZeroCopySnapshotRef(snapshot)
+    ? null
+    : await loadSnapshotRootImageBlob(snapshot);
   const layerImageBlobs: Record<string, Blob> = {};
   await collectNestedLayerBlobs(compactRecord, layerImageBlobs);
 
@@ -116,7 +137,7 @@ export async function exportAllSnapshotsBinary(options?: {
       await collectNestedLayerBlobs(rec, layerImageBlobs);
     }
     if (!isZeroCopySnapshotRef(snap)) {
-      const blob = await loadImageBlob(snap.id);
+      const blob = await loadSnapshotRootImageBlob(snap);
       if (blob) {
         imageBlobs[snap.id] = blob;
       }
@@ -338,8 +359,9 @@ function validateIncomingSnapshotKeys(
     throw new Error(`Invalid snapshot id "${snap.id}": reserved prefix or key`);
   }
   const snapPreviewKey = previewStoreKey(snap.id);
+  const rootKey = resolveSnapshotRootImageKey(snap);
   if (
-    otherProtectedImageKeys.has(snap.id) ||
+    (rootKey === snap.id && otherProtectedImageKeys.has(snap.id)) ||
     otherProtectedImageKeys.has(snapPreviewKey)
   ) {
     throw new Error(`Snapshot id "${snap.id}" collides with an existing snapshot image key`);
@@ -533,7 +555,7 @@ async function importBinarySingleSave(
     await saveCompactPuzzleRecord(snap.id, preparedRecord);
   }
   if (preparedBlob) {
-    await saveImageBlob(snap.id, preparedBlob);
+    await saveImageBlob(resolveSnapshotRootImageKey(snap), preparedBlob);
   }
   for (const layerImg of preparedLayerBlobs) {
     await saveImageBlob(layerImg.key, layerImg.blob);
@@ -603,7 +625,7 @@ async function importBinaryArchiveSave(
     const imgEntry = getOwnMapValue(decoded.images, snap.id);
     if (imgEntry && imgEntry.bytes.byteLength > 0) {
       imageEntries.push({
-        id: snap.id,
+        id: resolveSnapshotRootImageKey(snap),
         blob: new Blob([new Uint8Array(imgEntry.bytes)], {
           type: imgEntry.mimeType || 'image/webp',
         }),
