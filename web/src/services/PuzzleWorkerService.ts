@@ -213,15 +213,6 @@ export class PuzzleWorkerService {
     detailedProgress: boolean = false
   ): Promise<PuzzleData> {
     return new Promise((resolve, reject) => {
-      // If Web Worker is not supported, fallback to lazy main-thread execution
-      if (typeof Worker === 'undefined') {
-        this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
-          resolve,
-          reject
-        );
-        return;
-      }
-
       let cancelled = false;
       let activeWorker: Worker | null = null;
       let onMsg: ((e: MessageEvent) => void) | null = null;
@@ -234,6 +225,50 @@ export class PuzzleWorkerService {
         cancelled = true;
         cleanupListeners();
       };
+      const clearActiveHooks = () => {
+        if (this.activeCancelCleanup === markCancelled) {
+          this.activeCancelCleanup = null;
+        }
+        if (this.activeReject === reject) {
+          this.activeReject = null;
+        }
+      };
+      const runFallback = () => {
+        this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
+        const guardedProgress = onProgress
+          ? (p: number, s: string, payload?: GenerationProgressPayload) => {
+              if (!cancelled) onProgress(p, s, payload);
+            }
+          : undefined;
+        this.generateOnMainThreadFallback(
+          sourceCanvas,
+          config,
+          guardedProgress,
+          detailedProgress,
+          () => cancelled
+        ).then(
+          (result) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            resolve(result);
+          },
+          (fallbackErr) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            reject(fallbackErr);
+          }
+        );
+      };
+
+      // Cancel previous pending task immediately (before canvas reads or fallback dispatch)
+      this.cancelActive();
+
+      // If Web Worker is not supported, fallback to lazy main-thread execution with cancellation hooks
+      if (typeof Worker === 'undefined') {
+        runFallback();
+        return;
+      }
 
       try {
         const width = sourceCanvas.width;
@@ -244,50 +279,11 @@ export class PuzzleWorkerService {
         const imgData = ctx.getImageData(0, 0, width, height);
         const rgbaBuffer = imgData.data.buffer;
 
-        // Cancel previous pending task if any and terminate busy worker to free CPU immediately
-        this.cancelActive();
-
         const worker = this.getWorker();
         activeWorker = worker;
         const requestId = `gen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         this.activeReject = reject;
         this.activeCancelCleanup = markCancelled;
-
-        const clearActiveHooks = () => {
-          if (this.activeCancelCleanup === markCancelled) {
-            this.activeCancelCleanup = null;
-          }
-          if (this.activeReject === reject) {
-            this.activeReject = null;
-          }
-        };
-        const runFallback = () => {
-          this.activeReject = reject;
-          this.activeCancelCleanup = markCancelled;
-          const guardedProgress = onProgress
-            ? (p: number, s: string, payload?: GenerationProgressPayload) => {
-                if (!cancelled) onProgress(p, s, payload);
-              }
-            : undefined;
-          this.generateOnMainThreadFallback(
-            sourceCanvas,
-            config,
-            guardedProgress,
-            detailedProgress,
-            () => cancelled
-          ).then(
-            (result) => {
-              clearActiveHooks();
-              if (cancelled) return;
-              resolve(result);
-            },
-            (fallbackErr) => {
-              clearActiveHooks();
-              if (cancelled) return;
-              reject(fallbackErr);
-            }
-          );
-        };
 
         const handleMessage = (e: MessageEvent) => {
           if (cancelled) return;
@@ -343,42 +339,11 @@ export class PuzzleWorkerService {
       } catch (err) {
         cleanupListeners();
         if (cancelled) {
-          if (this.activeCancelCleanup === markCancelled) {
-            this.activeCancelCleanup = null;
-          }
-          if (this.activeReject === reject) {
-            this.activeReject = null;
-          }
+          clearActiveHooks();
           return;
         }
         console.warn('Failed to dispatch worker task, falling back to local:', err);
-        this.activeReject = reject;
-        this.activeCancelCleanup = markCancelled;
-        const guardedProgress = onProgress
-          ? (p: number, s: string, payload?: GenerationProgressPayload) => {
-              if (!cancelled) onProgress(p, s, payload);
-            }
-          : undefined;
-        this.generateOnMainThreadFallback(
-          sourceCanvas,
-          config,
-          guardedProgress,
-          detailedProgress,
-          () => cancelled
-        ).then(
-          (result) => {
-            if (this.activeCancelCleanup === markCancelled) this.activeCancelCleanup = null;
-            if (this.activeReject === reject) this.activeReject = null;
-            if (cancelled) return;
-            resolve(result);
-          },
-          (fallbackErr) => {
-            if (this.activeCancelCleanup === markCancelled) this.activeCancelCleanup = null;
-            if (this.activeReject === reject) this.activeReject = null;
-            if (cancelled) return;
-            reject(fallbackErr);
-          }
-        );
+        runFallback();
       }
     });
   }
@@ -395,11 +360,6 @@ export class PuzzleWorkerService {
   ): Promise<MaskedSubdivisionResult> {
     const effectiveOnProgress = onProgress ?? params.onProgress;
     return new Promise((resolve, reject) => {
-      if (typeof Worker === 'undefined') {
-        this.subdivideOnMainThreadFallback(params, effectiveOnProgress).then(resolve, reject);
-        return;
-      }
-
       let cancelled = false;
       let activeWorker: Worker | null = null;
       let onMsg: ((e: MessageEvent) => void) | null = null;
@@ -412,43 +372,49 @@ export class PuzzleWorkerService {
         cancelled = true;
         cleanupListeners();
       };
+      const clearActiveHooks = () => {
+        if (this.activeCancelCleanup === markCancelled) {
+          this.activeCancelCleanup = null;
+        }
+        if (this.activeReject === reject) {
+          this.activeReject = null;
+        }
+      };
+      const runFallback = () => {
+        this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
+        const guardedProgress = effectiveOnProgress
+          ? (p: number, s: string) => {
+              if (!cancelled) effectiveOnProgress(p, s);
+            }
+          : undefined;
+        this.subdivideOnMainThreadFallback(params, guardedProgress, () => cancelled).then(
+          (result) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            resolve(result);
+          },
+          (fallbackErr) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            reject(fallbackErr);
+          }
+        );
+      };
+
+      this.cancelActive();
+
+      if (typeof Worker === 'undefined') {
+        runFallback();
+        return;
+      }
+
       try {
-        this.cancelActive();
         const worker = this.getWorker();
         activeWorker = worker;
         const requestId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         this.activeReject = reject;
         this.activeCancelCleanup = markCancelled;
-
-        const clearActiveHooks = () => {
-          if (this.activeCancelCleanup === markCancelled) {
-            this.activeCancelCleanup = null;
-          }
-          if (this.activeReject === reject) {
-            this.activeReject = null;
-          }
-        };
-        const runFallback = () => {
-          this.activeReject = reject;
-          this.activeCancelCleanup = markCancelled;
-          const guardedProgress = effectiveOnProgress
-            ? (p: number, s: string) => {
-                if (!cancelled) effectiveOnProgress(p, s);
-              }
-            : undefined;
-          this.subdivideOnMainThreadFallback(params, guardedProgress, () => cancelled).then(
-            (result) => {
-              clearActiveHooks();
-              if (cancelled) return;
-              resolve(result);
-            },
-            (fallbackErr) => {
-              clearActiveHooks();
-              if (cancelled) return;
-              reject(fallbackErr);
-            }
-          );
-        };
 
         const handleMessage = (e: MessageEvent) => {
           if (cancelled) return;
@@ -508,36 +474,11 @@ export class PuzzleWorkerService {
       } catch (err) {
         cleanupListeners();
         if (cancelled) {
-          if (this.activeCancelCleanup === markCancelled) {
-            this.activeCancelCleanup = null;
-          }
-          if (this.activeReject === reject) {
-            this.activeReject = null;
-          }
+          clearActiveHooks();
           return;
         }
         console.warn('Failed to dispatch masked subdivision task, falling back to local:', err);
-        this.activeReject = reject;
-        this.activeCancelCleanup = markCancelled;
-        const guardedProgress = effectiveOnProgress
-          ? (p: number, s: string) => {
-              if (!cancelled) effectiveOnProgress(p, s);
-            }
-          : undefined;
-        this.subdivideOnMainThreadFallback(params, guardedProgress, () => cancelled).then(
-          (result) => {
-            if (this.activeCancelCleanup === markCancelled) this.activeCancelCleanup = null;
-            if (this.activeReject === reject) this.activeReject = null;
-            if (cancelled) return;
-            resolve(result);
-          },
-          (fallbackErr) => {
-            if (this.activeCancelCleanup === markCancelled) this.activeCancelCleanup = null;
-            if (this.activeReject === reject) this.activeReject = null;
-            if (cancelled) return;
-            reject(fallbackErr);
-          }
-        );
+        runFallback();
       }
     });
   }

@@ -185,7 +185,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   const infiniteZoomOpSeqRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoInFlightRef = useRef(false);
+  const undoInFlightSeqRef = useRef<number | null>(null);
   const errorToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSwitchLayerIdRef = useRef<string | null>(null);
   const pendingGuidedRef = useRef<PendingGuidedContinuation | null>(null);
@@ -231,7 +231,12 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   const isMountedRef = useRef<boolean>(true);
 
   const clearUndoSubdivision = useCallback(() => {
-    if (undoInFlightRef.current) return;
+    if (
+      undoInFlightSeqRef.current !== null &&
+      undoInFlightSeqRef.current === infiniteZoomOpSeqRef.current
+    ) {
+      return;
+    }
     clearTimeoutBox(undoToastTimerRef);
     const prev = undoSubdivisionRef.current;
     undoSubdivisionRef.current = null;
@@ -291,11 +296,12 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   }, [clearGuidedSession, stopLoadingIndicator]);
 
   const handleBeforeSnapshotResetOrSwitch = useCallback(() => {
+    infiniteZoomOpSeqRef.current += 1;
+    undoInFlightSeqRef.current = null;
     exitRegionSelectionMode();
     clearUndoSubdivision();
     clearGuidedSession();
     clearInfiniteZoomError();
-    infiniteZoomOpSeqRef.current += 1;
     abortControllerBox(abortControllerRef);
     setIsInfiniteZoomRunning(false);
     revokeOwnedUrlsNotIn(ownedLayerBlobUrlsRef.current, new Set());
@@ -308,6 +314,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     return () => {
       isMountedRef.current = false;
       infiniteZoomOpSeqRef.current += 1;
+      undoInFlightSeqRef.current = null;
       clearTimeoutBox(undoToastTimerRef);
       clearTimeoutBox(errorToastTimerRef);
       revokeUnusedObjectUrl(undoSubdivisionRef.current?.previousBlobUrl, activeBlobUrlRef.current);
@@ -762,7 +769,13 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
   const handleUndoSubdivision = useCallback(async () => {
     const snap = undoSubdivisionRef.current;
-    if (!snap || undoInFlightRef.current) return;
+    if (
+      !snap ||
+      (undoInFlightSeqRef.current !== null &&
+        undoInFlightSeqRef.current === infiniteZoomOpSeqRef.current)
+    ) {
+      return;
+    }
     if (snap.snapshotId !== activeSnapshotId) {
       clearUndoSubdivision();
       return;
@@ -770,9 +783,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
     clearTimeoutBox(undoToastTimerRef);
     undoSubdivisionRef.current = null;
-    undoInFlightRef.current = true;
 
     const seq = ++infiniteZoomOpSeqRef.current;
+    undoInFlightSeqRef.current = seq;
     const expectedSnapshotId = snap.snapshotId;
     try {
       const result = await restoreUndoSubdivisionPersistence({
@@ -819,7 +832,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       reportSwallowed('InfiniteZoom.undoSubdivision', err, { id: expectedSnapshotId });
       revokeUnusedObjectUrl(snap.previousBlobUrl, activeBlobUrlRef.current);
     } finally {
-      undoInFlightRef.current = false;
+      if (undoInFlightSeqRef.current === seq) {
+        undoInFlightSeqRef.current = null;
+      }
       if (isMountedRef.current) {
         setUndoSubdivisionState((prev) => (prev === snap ? null : prev));
       }

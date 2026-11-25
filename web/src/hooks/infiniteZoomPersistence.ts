@@ -790,12 +790,50 @@ export function commitZoomOutStorageState(
   return { updatedSnapshots, syncedSave, fittedViewport };
 }
 
+function findStoredSnapshotById(snapshotId: string): SavedSnapshot | undefined {
+  return StorageService.loadSnapshots().find((s) => s.id === snapshotId);
+}
+
+function resolvePreUndoResetEpoch(
+  expectedSnapshotId: string,
+  storedSnap: SavedSnapshot,
+  activeSave: SavedSnapshot | undefined,
+  liveActiveSave: SavedSnapshot | undefined
+): number {
+  return Math.max(
+    0,
+    storedSnap.resetEpoch ?? 0,
+    activeSave?.id === expectedSnapshotId ? activeSave.resetEpoch ?? 0 : 0,
+    liveActiveSave?.id === expectedSnapshotId ? liveActiveSave.resetEpoch ?? 0 : 0
+  );
+}
+
+async function cleanupDeletedSnapshotUndoRecords(
+  expectedSnapshotId: string,
+  keysToDelete: readonly string[]
+): Promise<void> {
+  const imageKeys = keysToDelete.includes(expectedSnapshotId)
+    ? [...keysToDelete]
+    : [...keysToDelete, expectedSnapshotId];
+  await deleteOrphanedEntries([expectedSnapshotId], imageKeys).catch((err) => {
+    reportSwallowed('InfiniteZoom.undoCleanupDeletedSnapshot', err, { id: expectedSnapshotId });
+  });
+}
+
 export async function restoreUndoSubdivisionPersistence(
   params: RestoreUndoSubdivisionPersistenceParams
 ): Promise<RestoreUndoSubdivisionPersistenceResult | null> {
   const { snap, isFreeColorMode, activeSave, liveActiveSave, isStale } = params;
   if (isStale()) return null;
   const expectedSnapshotId = snap.snapshotId;
+  const initialStoredSnap = findStoredSnapshotById(expectedSnapshotId);
+  if (!initialStoredSnap) return null;
+  const preUndoResetEpoch = resolvePreUndoResetEpoch(
+    expectedSnapshotId,
+    initialStoredSnap,
+    activeSave,
+    liveActiveSave
+  );
 
   const isPromotedSample =
     !snap.previousBlob &&
@@ -808,16 +846,21 @@ export async function restoreUndoSubdivisionPersistence(
     : snap.addedLayerBlobKeys;
 
   // Restore previous root blob and puzzle BEFORE deleting orphaned/added layer blobs so a
-  // concurrent snapshot switch or abort can never leave expectedSnapshotId referencing deleted blobs.
+  // concurrent snapshot switch or IDB write failure can never destroy referenced blobs or commit
+  // inconsistent localStorage state.
   if (snap.previousBlob) {
-    await StorageService.saveImageBlob(expectedSnapshotId, snap.previousBlob).catch((err) => {
-      reportSwallowed('InfiniteZoom.undoSaveImageBlob', err, { id: expectedSnapshotId });
-    });
+    await StorageService.saveImageBlob(expectedSnapshotId, snap.previousBlob);
+    if (!findStoredSnapshotById(expectedSnapshotId)) {
+      await cleanupDeletedSnapshotUndoRecords(expectedSnapshotId, keysToDelete);
+      return null;
+    }
   }
 
-  await StorageService.savePuzzleData(expectedSnapshotId, snap.puzzle).catch((err) => {
-    reportSwallowed('InfiniteZoom.undoSavePuzzleData', err, { id: expectedSnapshotId });
-  });
+  await StorageService.savePuzzleData(expectedSnapshotId, snap.puzzle);
+  if (!findStoredSnapshotById(expectedSnapshotId)) {
+    await cleanupDeletedSnapshotUndoRecords(expectedSnapshotId, keysToDelete);
+    return null;
+  }
 
   if (keysToDelete.length > 0) {
     await deleteOrphanedEntries([], keysToDelete).catch((err) => {
@@ -826,9 +869,6 @@ export async function restoreUndoSubdivisionPersistence(
   }
 
   const isFree = Boolean(isFreeColorMode || snap.puzzle.isFreeColor);
-  const nextResetEpoch = collectMonotonicResetEpoch(expectedSnapshotId, activeSave, liveActiveSave);
-  const orderedFilled = Array.from(snap.filledRegionIds);
-  const paintedObj = Object.fromEntries(snap.paintedRegionColors);
   // Restore pre-operation viewport symmetrically for BOTH zoom-in (reversing auto-focus) and zoom-out
   const restoredViewport = snap.previousViewport;
   const totalRegions = getTotalRegionCount(snap.puzzle);
@@ -844,6 +884,19 @@ export async function restoreUndoSubdivisionPersistence(
     );
   }
 
+  const currentStoredSnap = findStoredSnapshotById(expectedSnapshotId);
+  if (!currentStoredSnap) {
+    await cleanupDeletedSnapshotUndoRecords(expectedSnapshotId, keysToDelete);
+    return null;
+  }
+
+  const currentResetEpoch = currentStoredSnap.resetEpoch ?? 0;
+  const resetProgressMidUndo = isStale() && currentResetEpoch > preUndoResetEpoch;
+  const nextResetEpoch = resetProgressMidUndo
+    ? currentResetEpoch
+    : collectMonotonicResetEpoch(expectedSnapshotId, activeSave, liveActiveSave);
+  const orderedFilled = resetProgressMidUndo ? [] : Array.from(snap.filledRegionIds);
+  const paintedObj = resetProgressMidUndo ? {} : Object.fromEntries(snap.paintedRegionColors);
   const estSaveBytes = StorageService.estimatePuzzleSaveBytes(snap.puzzle, previewUrl);
 
   StorageService.updateSnapshotMetadata(expectedSnapshotId, {
@@ -855,7 +908,7 @@ export async function restoreUndoSubdivisionPersistence(
   });
   const updatedSnapshots = StorageService.updateSnapshotProgress(
     expectedSnapshotId,
-    snap.filledRegionIds.size,
+    orderedFilled.length,
     totalRegions,
     orderedFilled,
     restoredViewport.zoomScale,

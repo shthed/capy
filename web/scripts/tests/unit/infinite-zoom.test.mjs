@@ -8916,7 +8916,7 @@ async function testClusterG_ControllerDecompositionF13(
       }
     );
 
-    // Controller ordering invariant: handleUndoSubdivision must guard re-entrancy with undoInFlightRef
+    // Controller ordering invariant: handleUndoSubdivision must guard re-entrancy with sequence-scoped undoInFlightSeqRef
     // and dismiss undoSubdivisionState strictly in `finally` AFTER `await restoreUndoSubdivisionPersistence`
     const undoFnStart = hookSrc.indexOf('const handleUndoSubdivision = useCallback(');
     const undoFnEnd = hookSrc.indexOf('\n  return {', undoFnStart);
@@ -8932,10 +8932,11 @@ async function testClusterG_ControllerDecompositionF13(
       'setUndoSubdivisionState must NOT be called before IDB persistence commits (must run in finally)'
     );
     assert.ok(
-      undoFnBody.includes('undoInFlightRef.current = true') &&
-        undoFnBody.includes('undoInFlightRef.current = false') &&
+      undoFnBody.includes('undoInFlightSeqRef.current = seq') &&
+        undoFnBody.includes('undoInFlightSeqRef.current === seq') &&
+        undoFnBody.includes('undoInFlightSeqRef.current = null') &&
         undoFnBody.includes('prev === snap ? null : prev'),
-      'handleUndoSubdivision must guard re-entrancy via undoInFlightRef and identity-guard toast dismissal'
+      'handleUndoSubdivision must guard re-entrancy via sequence-scoped undoInFlightSeqRef and identity-guard toast dismissal'
     );
   }
 }
@@ -12211,6 +12212,1325 @@ async function testClusterK_Tier5AdversarialHardening({
           }
         );
       }
+    }
+  }
+
+  // K14 (R2-B1): NativeBridge.shareImage strict ISO BMFF ftyp brand check & Android native data: URL magic-byte validation
+  {
+    const svgFtypPolyglot = '<!--ftyp--><svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+    const svgFtypB64 = Buffer.from(svgFtypPolyglot, 'utf8').toString('base64');
+    const mp4FtypBytes = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x32, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    const movFtypBytes = new Uint8Array([
+      0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    const zeroBoxAvifBytes = new Uint8Array([
+      0x00, 0x00, 0x00, 0x00, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    const validAvifBytes = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    const validHeicBytes = new Uint8Array([
+      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63, 0x00, 0x00, 0x00, 0x00,
+    ]);
+
+    const rejectedCases = [
+      ['<!--ftyp--><svg> polyglot blob', 'blob:https://capypaint.com/poly', Buffer.from(svgFtypPolyglot, 'utf8'), 'image/avif'],
+      ['<!--ftyp--><svg> polyglot data URL', `data:image/png;base64,${svgFtypB64}`, Buffer.from(svgFtypPolyglot, 'utf8'), 'image/png'],
+      ['MP4 ftypmp42 blob', 'blob:https://capypaint.com/mp4', mp4FtypBytes, 'image/avif'],
+      ['MOV ftypqt blob', 'blob:https://capypaint.com/mov', movFtypBytes, 'image/heic'],
+      ['Zero-size ISO BMFF box', 'blob:https://capypaint.com/zero-box', zeroBoxAvifBytes, 'image/avif'],
+    ];
+    for (const [label, url, bytes, mime] of rejectedCases) {
+      let webShareCalls = 0;
+      await withGlobalOverrides(
+        {
+          window: {},
+          navigator: {
+            share: async () => {
+              webShareCalls++;
+            },
+          },
+          fetch: async () => new Response(bytes, { headers: { 'content-type': mime } }),
+        },
+        async () => {
+          const ok = await bridgeMod.NativeBridge.shareImage('Bad Share', url);
+          assert.equal(ok, false, `NativeBridge.shareImage must reject ${label}`);
+          assert.equal(webShareCalls, 0, `navigator.share must not fire for ${label}`);
+        }
+      );
+    }
+
+    // Positive controls: valid AVIF & HEIC via blob: and data: URLs
+    for (const [label, url, bytes, mime] of [
+      ['valid AVIF blob', 'blob:https://capypaint.com/ok-avif', validAvifBytes, 'image/avif'],
+      ['valid HEIC data URL', `data:image/heic;base64,${Buffer.from(validHeicBytes).toString('base64')}`, validHeicBytes, 'image/heic'],
+    ]) {
+      let webShareCalls = 0;
+      await withGlobalOverrides(
+        {
+          window: {},
+          navigator: {
+            share: async () => {
+              webShareCalls++;
+            },
+          },
+          fetch: async () => new Response(bytes, { headers: { 'content-type': mime } }),
+        },
+        async () => {
+          const ok = await bridgeMod.NativeBridge.shareImage('Good Share', url);
+          assert.equal(ok, true, `NativeBridge.shareImage must accept ${label}`);
+          assert.equal(webShareCalls, 1, `navigator.share must fire once for ${label}`);
+        }
+      );
+    }
+
+    // Android native shareImage must synchronously reject spoofed data:image/png;base64,<svg> and polyglots
+    const androidForwarded = [];
+    await withGlobalOverrides(
+      {
+        window: {
+          CapyAndroid: {
+            shareImage(_title, url) {
+              androidForwarded.push(url);
+            },
+          },
+        },
+      },
+      async () => {
+        const spoofedSvg = `data:image/png;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>').toString('base64')}`;
+        const polyDataUrl = `data:image/avif;base64,${svgFtypB64}`;
+        const mp4DataUrl = `data:image/avif;base64,${Buffer.from(mp4FtypBytes).toString('base64')}`;
+        assert.equal(
+          await bridgeMod.NativeBridge.shareImage('Android Spoof SVG', spoofedSvg),
+          false,
+          'Android native shareImage must reject spoofed SVG data URL'
+        );
+        assert.equal(
+          await bridgeMod.NativeBridge.shareImage('Android Polyglot', polyDataUrl),
+          false,
+          'Android native shareImage must reject <!--ftyp--><svg> data URL'
+        );
+        assert.equal(
+          await bridgeMod.NativeBridge.shareImage('Android MP4', mp4DataUrl),
+          false,
+          'Android native shareImage must reject MP4 ftypmp42 data URL'
+        );
+        assert.equal(androidForwarded.length, 0, 'CapyAndroid.shareImage must not receive any spoofed payload');
+
+        assert.equal(
+          await bridgeMod.NativeBridge.shareImage('Android Valid PNG', pngDataUrl),
+          true,
+          'Android native shareImage must accept valid raster PNG data URL'
+        );
+        assert.equal(androidForwarded.length, 1);
+      }
+    );
+  }
+
+  // K15 (R2-B2): NanoBananaService full strict base64 syntax & bounds validation across template inputs and handoff
+  {
+    const pngPrefix32 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+    const poisonedRawBase64 = `${pngPrefix32}<svg onload=alert(1)>!!!NOT_BASE64!!!`;
+    const malformedPaddingBase64 = `${pngPrefix32}===AAAA`;
+    const lenMod4Eq1Base64 = `${pngPrefix32}A`; // 33 chars (33 % 4 === 1)
+
+    let puterInvoked = 0;
+    const puterProvider = new nanoMod.PuterNanoBananaProvider({
+      isAndroid: () => false,
+      getPuter: () => ({
+        ai: {
+          async txt2img() {
+            puterInvoked++;
+            return { src: pngDataUrl };
+          },
+        },
+      }),
+    });
+    let byokFetchInvoked = 0;
+    const byokProvider = new nanoMod.DirectGeminiByokProvider({
+      getApiKey: () => 'AIzaTestKey12345',
+      fetchImpl: async () => {
+        byokFetchInvoked++;
+        return new Response('{}', { status: 200 });
+      },
+    });
+
+    for (const [label, req] of [
+      ['raw templateBase64 trailing <svg> garbage', { prompt: 'Test', templateBase64: poisonedRawBase64, width: 512, height: 512 }],
+      ['raw templateBase64 malformed ===AAAA padding', { prompt: 'Test', templateBase64: malformedPaddingBase64, width: 512, height: 512 }],
+      ['raw templateBase64 len % 4 === 1', { prompt: 'Test', templateBase64: lenMod4Eq1Base64, width: 512, height: 512 }],
+      ['templateDataUrl malformed ===AAAA padding', { prompt: 'Test', templateDataUrl: `data:image/png;base64,${malformedPaddingBase64}`, width: 512, height: 512 }],
+      ['templateDataUrl len % 4 === 1', { prompt: 'Test', templateDataUrl: `data:image/png;base64,${lenMod4Eq1Base64}`, width: 512, height: 512 }],
+    ]) {
+      await assert.rejects(
+        () => puterProvider.generate(req),
+        (err) => err instanceof nanoMod.NanoBananaError && err.code === 'INVALID_IMAGE',
+        `PuterNanoBananaProvider must reject ${label}`
+      );
+      await assert.rejects(
+        () => byokProvider.generate(req),
+        (err) => err instanceof nanoMod.NanoBananaError && err.code === 'INVALID_IMAGE',
+        `DirectGeminiByokProvider must reject ${label}`
+      );
+    }
+    assert.equal(puterInvoked, 0, 'Invalid base64 payloads must never reach puter.ai.txt2img');
+    assert.equal(byokFetchInvoked, 0, 'Invalid base64 payloads must never reach Gemini BYOK fetch');
+
+    for (const [label, badB64] of [
+      ['malformed padding tail', malformedPaddingBase64],
+      ['len % 4 === 1 tail', lenMod4Eq1Base64],
+    ]) {
+      assert.throws(
+        () =>
+          nanoMod.prepareGuidedGeminiHandoff({
+            templatePngBlob: pngBlob,
+            templateDataUrl: `data:image/png;base64,${badB64}`,
+            prompt: 'Add detail',
+            direction: 'zoom-in',
+          }),
+        (err) => err instanceof nanoMod.NanoBananaError && err.code === 'INVALID_IMAGE',
+        `prepareGuidedGeminiHandoff must reject ${label}`
+      );
+    }
+
+    // Positive control: valid PNG base64 with embedded newline still succeeds
+    const validWithNewline = `${pngB64.slice(0, 8)}\n${pngB64.slice(8)}`;
+    const okRes = await puterProvider.generate({
+      prompt: 'Valid whitespace base64',
+      templateBase64: validWithNewline,
+      width: 512,
+      height: 512,
+    });
+    assert.equal(okRes.mimeType, 'image/png');
+    assert.equal(puterInvoked, 1);
+  }
+
+  // K16 (R2-B3): Real React 19 createRoot GuidedGeminiHandoffModal — handlePasteClipboard sequence guard & sync onImageReceived lock release
+  {
+    const { GuidedGeminiHandoffModal } = modalMod;
+    const { fakeDoc, container } = createMinimalDomContainer();
+    const mockWin = {
+      addEventListener() {},
+      removeEventListener() {},
+      HTMLIFrameElement: class HTMLIFrameElement {},
+    };
+    fakeDoc.defaultView = mockWin;
+
+    const pendingClipboardReads = [];
+    const blobA = new Blob([pngBytes], { type: 'image/png' });
+    const blobB = new Blob([pngBytes], { type: 'image/png' });
+    const handoffA = {
+      prompt: 'Paste handoff A',
+      templatePngBlob: pngBlob,
+      templateDataUrl: pngDataUrl,
+      direction: 'zoom-in',
+      geminiUrl: 'https://gemini.google.com/app',
+    };
+    const handoffB = {
+      prompt: 'Paste handoff B',
+      templatePngBlob: pngBlob,
+      templateDataUrl: pngDataUrl,
+      direction: 'zoom-out',
+      geminiUrl: 'https://gemini.google.com/app',
+    };
+    const makeClipboardItem = (blob) => ({
+      types: ['image/png'],
+      getType: async () => blob,
+    });
+    const flushMicrotasks = async () => {
+      for (let i = 0; i < 8; i++) {
+        await Promise.resolve();
+      }
+    };
+
+    await withGlobalOverrides(
+      {
+        IS_REACT_ACT_ENVIRONMENT: true,
+        window: mockWin,
+        document: fakeDoc,
+        navigator: {
+          clipboard: {
+            read: () =>
+              new Promise((resolve, reject) => {
+                pendingClipboardReads.push({ resolve, reject });
+              }),
+          },
+        },
+      },
+      async () => {
+        const root = createRoot(container);
+        try {
+          const received = [];
+          const renderModal = async (props) => {
+            await React.act(async () => {
+              root.render(
+                React.createElement(GuidedGeminiHandoffModal, {
+                  onCancel: () => {},
+                  ...props,
+                })
+              );
+            });
+          };
+
+          // Scenario 1: Direct handoffA -> handoffB switch while clipboard.read() is pending on handoffA
+          await renderModal({
+            isOpen: true,
+            handoff: handoffA,
+            onImageReceived: (input) => received.push({ phase: 'A', input }),
+          });
+          await React.act(async () => {
+            assert.equal(clickDomButton(findByTestId(container, 'guided-gemini-paste-btn')), true);
+          });
+          assert.equal(pendingClipboardReads.length, 1, 'Expected clipboard.read() #1 pending for handoffA');
+
+          await renderModal({
+            isOpen: true,
+            handoff: handoffB,
+            onImageReceived: (input) => received.push({ phase: 'B', input }),
+          });
+          await React.act(async () => {
+            assert.equal(clickDomButton(findByTestId(container, 'guided-gemini-paste-btn')), true);
+          });
+          assert.equal(
+            pendingClipboardReads.length,
+            2,
+            'Direct handoffA -> handoffB switch must release isReadingClipboardRef so handoffB paste works immediately'
+          );
+
+          // Resolve stale handoffA read first -> MUST be ignored; then resolve handoffB read -> MUST deliver B
+          await React.act(async () => {
+            pendingClipboardReads.shift().resolve([makeClipboardItem(blobA)]);
+            await flushMicrotasks();
+          });
+          assert.equal(received.length, 0, 'Stale handoffA clipboard read must not fire onImageReceived on handoffB');
+
+          await React.act(async () => {
+            pendingClipboardReads.shift().resolve([makeClipboardItem(blobB)]);
+            await flushMicrotasks();
+          });
+          assert.equal(received.length, 1, 'Active handoffB clipboard read must deliver image');
+          assert.equal(received[0].phase, 'B');
+          assert.equal(received[0].input, blobB);
+
+          // Scenario 2: Close + reopen SAME handoffA while clipboard.read() is pending -> stale read MUST NOT fire
+          received.length = 0;
+          await renderModal({
+            isOpen: true,
+            handoff: handoffA,
+            onImageReceived: (input) => received.push({ phase: 'stale-A', input }),
+          });
+          await React.act(async () => {
+            clickDomButton(findByTestId(container, 'guided-gemini-paste-btn'));
+          });
+          assert.equal(pendingClipboardReads.length, 1);
+
+          await renderModal({
+            isOpen: false,
+            handoff: handoffA,
+            onImageReceived: (input) => received.push({ phase: 'closed', input }),
+          });
+          await renderModal({
+            isOpen: true,
+            handoff: handoffA,
+            onImageReceived: (input) => received.push({ phase: 'reopened-A', input }),
+          });
+          await React.act(async () => {
+            pendingClipboardReads.shift().resolve([makeClipboardItem(blobA)]);
+            await flushMicrotasks();
+          });
+          assert.equal(
+            received.length,
+            0,
+            'Stale clipboard read from pre-close session must NOT fire after reopening same handoffA'
+          );
+
+          // Scenario 3: Synchronous (non-thenable) onImageReceived must release isSubmittingRef for subsequent inputs
+          const syncReceived = [];
+          await renderModal({
+            isOpen: true,
+            handoff: handoffB,
+            isProcessing: false,
+            onImageReceived: (input) => {
+              syncReceived.push(input);
+            },
+          });
+          for (const nextBlob of [blobA, blobB]) {
+            await React.act(async () => {
+              clickDomButton(findByTestId(container, 'guided-gemini-paste-btn'));
+            });
+            assert.equal(pendingClipboardReads.length, 1);
+            await React.act(async () => {
+              pendingClipboardReads.shift().resolve([makeClipboardItem(nextBlob)]);
+              await flushMicrotasks();
+            });
+          }
+          assert.equal(
+            syncReceived.length,
+            2,
+            'Synchronous onImageReceived must release isSubmittingRef so subsequent pastes are not permanently dropped'
+          );
+        } finally {
+          await React.act(async () => {
+            root.unmount();
+          });
+        }
+      }
+    );
+  }
+
+  // K17 (R2-B4): SeamCompositor rejects image/svg+xml & text/html Blobs returned by canvas.toBlob instead of relabeling as JPEG
+  {
+    for (const [label, badMime, body] of [
+      ['image/svg+xml toBlob', 'image/svg+xml', '<svg xmlns="http://www.w3.org/2000/svg"></svg>'],
+      ['text/html toBlob', 'text/html', '<html><body>spoof</body></html>'],
+    ]) {
+      const badCanvas = {
+        width: 256,
+        height: 256,
+        toBlob(cb) {
+          cb(new Blob([body], { type: badMime }));
+        },
+      };
+      await assert.rejects(
+        () => seamMod.canvasToCompactTemplateBlobAndDataUrl(badCanvas),
+        /Failed to encode canvas to compact template blob/,
+        `canvasToCompactTemplateBlobAndDataUrl must reject ${label}`
+      );
+    }
+
+    // Positive control: untyped Blob from toBlob still falls back to requested raster mimeType
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46]);
+    const untypedOkCanvas = {
+      width: 256,
+      height: 256,
+      toBlob(cb) {
+        cb(new Blob([jpegBytes], { type: '' }));
+      },
+    };
+    const encoded = await seamMod.canvasToCompactTemplateBlobAndDataUrl(untypedOkCanvas);
+    assert.equal(encoded.mimeType, 'image/jpeg');
+    assert.ok(encoded.dataUrl.startsWith('data:image/jpeg;base64,'));
+  }
+
+  // K18 (R2-B5): PuzzleWorkerService throwing sourceCanvas cancels previous worker & typeof Worker === 'undefined' supports cancelActive()
+  {
+    let firstTerminated = false;
+    class HangingWorker {
+      constructor() {
+        this.listeners = new Map();
+      }
+      addEventListener(type, fn) {
+        this.listeners.set(type, fn);
+      }
+      removeEventListener(type) {
+        this.listeners.delete(type);
+      }
+      postMessage() {
+        // Deliberately never replies so request #1 stays active in flight
+      }
+      terminate() {
+        firstTerminated = true;
+      }
+    }
+
+    const genCfg = {
+      colorCount: 4,
+      minRegionArea: 2,
+      smoothingIterations: 1,
+      usePerceptualDistance: true,
+      isFreeColor: false,
+      maxDimension: 64,
+    };
+
+    await withGlobalOverrides({ Worker: HangingWorker }, async () => {
+      const p1 = workerSvcMod.PuzzleWorkerService.generate(createFakeCanvas(8, 8), genCfg);
+      const throwingCanvas = {
+        width: 8,
+        height: 8,
+        getContext() {
+          return {
+            getImageData() {
+              throw new Error('SecurityError: tainted canvas');
+            },
+          };
+        },
+      };
+      const p2 = workerSvcMod.PuzzleWorkerService.generate(throwingCanvas, genCfg);
+      await assert.rejects(
+        () => p1,
+        (err) => err instanceof workerSvcMod.GenerationCancelledError,
+        'Throwing sourceCanvas on generate #2 must immediately cancel active request #1'
+      );
+      assert.equal(firstTerminated, true, 'Previous active Worker must be terminated when generate #2 starts');
+      workerSvcMod.PuzzleWorkerService.cancelActive();
+      await assert.rejects(
+        () => p2,
+        (err) => err instanceof workerSvcMod.GenerationCancelledError
+      );
+    });
+
+    // typeof Worker === 'undefined': cancelActive() must reject in-flight generate AND subdivideMaskedRegion
+    await withGlobalOverrides({ Worker: undefined }, async () => {
+      const pNoWorkerGen = workerSvcMod.PuzzleWorkerService.generate(createFakeCanvas(8, 8), genCfg);
+      workerSvcMod.PuzzleWorkerService.cancelActive();
+      await assert.rejects(
+        () => pNoWorkerGen,
+        (err) => err instanceof workerSvcMod.GenerationCancelledError,
+        'No-Worker generate fallback must reject with GenerationCancelledError on cancelActive()'
+      );
+
+      const pNoWorkerSub = workerSvcMod.PuzzleWorkerService.subdivideMaskedRegion({
+        cropWidth: 4,
+        cropHeight: 4,
+        rgbaData: new Uint8ClampedArray(16 * 4).fill(120),
+        cropMask: new Uint8Array(16).fill(1),
+        existingPalette: [{ id: 1, hex: '#787878', isLight: false, argb: 0xff787878, r: 120, g: 120, b: 120 }],
+        isFreeColor: false,
+      });
+      workerSvcMod.PuzzleWorkerService.cancelActive();
+      await assert.rejects(
+        () => pNoWorkerSub,
+        (err) => err instanceof workerSvcMod.GenerationCancelledError,
+        'No-Worker subdivideMaskedRegion fallback must reject with GenerationCancelledError on cancelActive()'
+      );
+    });
+  }
+
+  // K19 (R2-B6): SettingsStorage.saveSettings clamps incompatible nanoBananaResolution & normalizes nanoBananaModel on write
+  {
+    const ls = createMemoryLocalStorage();
+    await withGlobalOverrides({ localStorage: ls, window: {} }, async () => {
+      const storageKey = keysMod.resolveScopedStorageKey(keysMod.SETTINGS_KEY);
+      settingsStorageMod.saveSettings({
+        ...settingsStorageMod.DEFAULT_SETTINGS,
+        nanoBananaModel: 'gemini-3.1-flash-lite-image',
+        nanoBananaResolution: '2K',
+      });
+      const rawLite = JSON.parse(ls.getItem(storageKey));
+      assert.equal(rawLite.nanoBananaModel, 'gemini-3.1-flash-lite-image');
+      assert.equal(rawLite.nanoBananaResolution, '1K', 'saveSettings must clamp Lite 2K -> 1K before persisting');
+
+      settingsStorageMod.saveSettings({
+        ...settingsStorageMod.DEFAULT_SETTINGS,
+        nanoBananaModel: 'gemini-nano-banana-2.1',
+        nanoBananaResolution: '512',
+      });
+      const raw21 = JSON.parse(ls.getItem(storageKey));
+      assert.equal(raw21.nanoBananaResolution, '1K', 'saveSettings must clamp 2.1 512 -> 1K before persisting');
+
+      settingsStorageMod.saveSettings({
+        ...settingsStorageMod.DEFAULT_SETTINGS,
+        nanoBananaModel: 'invalid-model-id',
+        nanoBananaResolution: '512',
+      });
+      const rawFallback = JSON.parse(ls.getItem(storageKey));
+      assert.equal(rawFallback.nanoBananaModel, 'gemini-nano-banana-2.1');
+      assert.equal(rawFallback.nanoBananaResolution, '1K');
+    });
+  }
+
+  // K20 (R2-B7): restoreUndoSubdivisionPersistence fails safely on IDB saveImageBlob / savePuzzleData errors without deleting blobs or corrupting localStorage
+  {
+    const mkFailPuzzle = (w, h, nestedLayers) => ({
+      width: w,
+      height: h,
+      palette: [{ id: 1, hex: '#FF5500', isLight: false, argb: 0xffff5500, r: 255, g: 85, b: 0 }],
+      regions: [
+        {
+          id: 1,
+          colorId: 1,
+          centroidX: w / 2,
+          centroidY: h / 2,
+          area: w * h,
+          minX: 0,
+          maxX: w - 1,
+          minY: 0,
+          maxY: h - 1,
+          maxRadius: 4,
+          pixels: Int32Array.from({ length: w * h }, (_, i) => i),
+        },
+      ],
+      regionMap: new Int32Array(w * h).fill(1),
+      borderMap: new Uint8Array(w * h),
+      isFreeColor: false,
+      ...(nestedLayers ? { nestedLayers } : {}),
+    });
+
+    // Case A: Photo Zoom Out Undo — saveImageBlob QuotaExceededError preserves post-Zoom state & demoted center blob
+    {
+      const ls = createMemoryLocalStorage();
+      const idbBehavior = { failWriteWithError: null };
+      const { mockIndexedDb, stores } = createMockIndexedDb(idbBehavior);
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const snapId = 'snap-undo-fail-img';
+            const origBlob = new Blob([new Uint8Array([11, 11])], { type: 'image/png' });
+            const outerBlob = new Blob([new Uint8Array([99, 99])], { type: 'image/png' });
+            const origPuzzle = mkFailPuzzle(16, 16);
+            const wrappedPuzzle = mkFailPuzzle(24, 24);
+            storageMod.StorageService.saveSnapshots([
+              {
+                id: snapId,
+                title: 'Photo Fail',
+                lastOpened: 2000,
+                filledCount: 0,
+                totalCount: 2,
+                filledRegionIds: [],
+                zoomScale: 1,
+                panOffsetX: 0,
+                panOffsetY: 0,
+                palette: wrappedPuzzle.palette,
+                sourceRef: { kind: 'blob', uri: snapId },
+                previewDataUrl: pngDataUrl,
+              },
+            ]);
+            stores.images.set(snapId, outerBlob);
+            stores.images.set('layer_demoted_center', origBlob);
+            stores.puzzles.set(snapId, wrappedPuzzle);
+            for (let i = 0; i < 4; i++) await Promise.resolve();
+
+            const quotaErr = new Error('QuotaExceededError');
+            quotaErr.name = 'QuotaExceededError';
+            idbBehavior.failWriteWithError = quotaErr;
+
+            await assert.rejects(
+              () =>
+                persistenceMod.restoreUndoSubdivisionPersistence({
+                  snap: {
+                    snapshotId: snapId,
+                    direction: 'zoom-out',
+                    puzzle: origPuzzle,
+                    sourceImage: new MockImage(),
+                    previousBlob: origBlob,
+                    previousBlobUrl: 'blob:orig-fail',
+                    newBlobUrl: 'blob:outer-fail',
+                    promotedFromSample: false,
+                    previousLayerImages: new Map(),
+                    addedLayerBlobKeys: ['layer_demoted_center'],
+                    previousMeta: {
+                      sampleAssetPath: null,
+                      isAutoSample: false,
+                      sourceRef: { kind: 'blob', uri: snapId },
+                      zoomTree: undefined,
+                      previewDataUrl: pngDataUrl,
+                    },
+                    filledRegionIds: new Set(),
+                    paintedRegionColors: new Map(),
+                    activeColorId: 1,
+                    undoStack: [],
+                    redoStack: [],
+                    previousViewport: { zoomScale: 1.5, panOffsetX: 5, panOffsetY: 5 },
+                  },
+                  isFreeColorMode: false,
+                  activeSave: undefined,
+                  liveActiveSave: undefined,
+                  isStale: () => false,
+                }),
+              /QuotaExceededError/
+            );
+
+            assert.equal(stores.images.has('layer_demoted_center'), true, 'Demoted center blob must NOT be deleted when saveImageBlob fails');
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(snapId).arrayBuffer())),
+              [99, 99],
+              'Outer root blob must stay intact when saveImageBlob fails'
+            );
+            assert.equal(stores.puzzles.get(snapId).width, 24, 'Post-Zoom puzzle must NOT be overwritten when saveImageBlob fails');
+          } finally {
+            idbBehavior.failWriteWithError = null;
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
+    }
+
+    // Case B: Promoted Sample Zoom In Undo — savePuzzleData QuotaExceededError preserves layer blobs & blob sourceRef
+    {
+      const ls = createMemoryLocalStorage();
+      const idbBehavior = { failWriteWithError: null };
+      const { mockIndexedDb, stores } = createMockIndexedDb(idbBehavior);
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const snapId = 'snap-undo-fail-puz';
+            const origPuzzle = mkFailPuzzle(16, 16);
+            const nextPuzzle = mkFailPuzzle(16, 16, [
+              {
+                layerId: 'layer_fail_1',
+                depth: 1,
+                worldBounds: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+                width: 8,
+                height: 8,
+                regions: origPuzzle.regions,
+                regionMap: new Int32Array(64).fill(1),
+                borderMap: new Uint8Array(64),
+                imageBlobKey: 'layer_img_fail_1',
+              },
+            ]);
+            storageMod.StorageService.saveSnapshots([
+              {
+                id: snapId,
+                title: 'Sample Fail',
+                lastOpened: 2000,
+                filledCount: 0,
+                totalCount: 2,
+                filledRegionIds: [],
+                zoomScale: 2,
+                panOffsetX: 0,
+                panOffsetY: 0,
+                palette: origPuzzle.palette,
+                sampleAssetPath: null,
+                isAutoSample: false,
+                sourceRef: { kind: 'blob', uri: snapId },
+                previewDataUrl: pngDataUrl,
+              },
+            ]);
+            stores.images.set(snapId, pngBlob);
+            stores.images.set('layer_img_fail_1', pngBlob);
+            stores.puzzles.set(snapId, nextPuzzle);
+            for (let i = 0; i < 4; i++) await Promise.resolve();
+
+            const quotaErr = new Error('QuotaExceededError');
+            quotaErr.name = 'QuotaExceededError';
+            idbBehavior.failWriteWithError = quotaErr;
+
+            await assert.rejects(
+              () =>
+                persistenceMod.restoreUndoSubdivisionPersistence({
+                  snap: {
+                    snapshotId: snapId,
+                    direction: 'zoom-in',
+                    puzzle: origPuzzle,
+                    sourceImage: new MockImage(),
+                    previousBlob: null,
+                    previousBlobUrl: null,
+                    newBlobUrl: null,
+                    promotedFromSample: true,
+                    previousLayerImages: new Map(),
+                    addedLayerBlobKeys: ['layer_img_fail_1'],
+                    previousMeta: {
+                      sampleAssetPath: 'assets/sample.png',
+                      isAutoSample: true,
+                      sourceRef: { kind: 'sample', uri: 'assets/sample.png' },
+                      zoomTree: undefined,
+                      previewDataUrl: pngDataUrl,
+                    },
+                    filledRegionIds: new Set(),
+                    paintedRegionColors: new Map(),
+                    activeColorId: 1,
+                    undoStack: [],
+                    redoStack: [],
+                    previousViewport: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+                  },
+                  isFreeColorMode: false,
+                  activeSave: undefined,
+                  liveActiveSave: undefined,
+                  isStale: () => false,
+                }),
+              /QuotaExceededError/
+            );
+
+            assert.equal(stores.images.has('layer_img_fail_1'), true, 'Nested layer blob must NOT be deleted when savePuzzleData fails');
+            assert.equal(stores.images.has(snapId), true, 'Promoted root blob must NOT be deleted when savePuzzleData fails');
+            assert.equal(stores.puzzles.get(snapId).nestedLayers?.length, 1, 'Puzzle in IDB must remain unchanged');
+            const metaAfter = storageMod.StorageService.loadSnapshots().find((s) => s.id === snapId);
+            assert.equal(metaAfter?.sourceRef?.kind, 'blob', 'localStorage sourceRef must NOT revert when savePuzzleData fails');
+          } finally {
+            idbBehavior.failWriteWithError = null;
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
+    }
+  }
+
+  // K21 (R2-B8): Real React 19 createRoot useInfiniteZoomController — handleBeforeSnapshotResetOrSwitch() mid-Undo clears stale toast & never blocks Puzzle B's Undo
+  {
+    let deferPuzzleWrites = false;
+    const ls = createMemoryLocalStorage();
+    const { mockIndexedDb, stores, pendingWrites } = createMockIndexedDb({
+      shouldDeferStore: (names) => deferPuzzleWrites && names.includes('puzzles'),
+    });
+    let urlCounter = 0;
+    const mockUrlApi = {
+      createObjectURL: () => `blob:k21-${++urlCounter}`,
+      revokeObjectURL: () => {},
+    };
+    const MockImage = makeMockImageClass(16, 16);
+    const { fakeDoc, container } = createMinimalDomContainer();
+    const mockWin = {
+      addEventListener() {},
+      removeEventListener() {},
+      devicePixelRatio: 1,
+      HTMLIFrameElement: class HTMLIFrameElement {},
+    };
+    fakeDoc.defaultView = mockWin;
+
+    const origPuterGenK21 = nanoMod.PuterNanoBananaProvider.prototype.generate;
+    await withGlobalOverrides(
+      {
+        IS_REACT_ACT_ENVIRONMENT: true,
+        localStorage: ls,
+        indexedDB: mockIndexedDb,
+        URL: mockUrlApi,
+        document: fakeDoc,
+        window: mockWin,
+        ImageData: FakeImageData,
+        Image: MockImage,
+        Worker: undefined,
+      },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const mkHookPuzzle = () => ({
+            width: 16,
+            height: 16,
+            palette: [{ id: 1, hex: '#FF0000', isLight: false, argb: 0xffff0000, r: 255, g: 0, b: 0 }],
+            regions: [
+              {
+                id: 1,
+                colorId: 1,
+                centroidX: 8,
+                centroidY: 8,
+                area: 256,
+                minX: 0,
+                maxX: 15,
+                minY: 0,
+                maxY: 15,
+                maxRadius: 8,
+                pixels: Int32Array.from({ length: 256 }, (_, i) => i),
+              },
+            ],
+            regionMap: new Int32Array(256).fill(1),
+            borderMap: new Uint8Array(256),
+            isFreeColor: false,
+          });
+          const puzA = mkHookPuzzle();
+          const puzB = mkHookPuzzle();
+          const saveA = {
+            id: 'snap-k21-a',
+            title: 'Puzzle A',
+            lastOpened: 2000,
+            filledCount: 0,
+            totalCount: 1,
+            filledRegionIds: [],
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+            palette: puzA.palette,
+            sourceRef: { kind: 'blob', uri: 'snap-k21-a' },
+            previewDataUrl: pngDataUrl,
+          };
+          const saveB = {
+            ...saveA,
+            id: 'snap-k21-b',
+            title: 'Puzzle B',
+            sourceRef: { kind: 'blob', uri: 'snap-k21-b' },
+          };
+          storageMod.StorageService.saveSnapshots([saveA, saveB]);
+          stores.images.set('snap-k21-a', pngBlob);
+          stores.images.set('snap-k21-b', pngBlob);
+
+          nanoMod.PuterNanoBananaProvider.prototype.generate = async () => ({
+            blob: pngBlob,
+            dataUrl: pngDataUrl,
+            mimeType: 'image/png',
+            providerUsed: 'PUTER',
+            modelUsed: 'gemini-nano-banana-2.1',
+          });
+
+          let latestApi = null;
+          let applyViewportCalls = 0;
+          const activeBlobUrlRef = { current: 'blob:orig-a' };
+          const visibleColorIdsRef = { current: new Set([1]) };
+          const regionByIdRef = { current: new Map([[1, puzA.regions[0]]]) };
+          const handleLoadSnapshotRef = { current: async () => {} };
+          const liveCoopRef = {
+            current: {
+              activeSnapshotId: 'snap-k21-a',
+              activeSave: saveA,
+              puzzle: puzA,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+              activeColorId: 1,
+            },
+          };
+          const settingsObj = {
+            hapticsEnabled: false,
+            infiniteZoomProvider: 'PUTER',
+            nanoBananaModel: 'gemini-nano-banana-2.1',
+            nanoBananaResolution: '1K',
+            generatorConfig: {
+              colorCount: 4,
+              minRegionArea: 2,
+              smoothingIterations: 1,
+              usePerceptualDistance: true,
+              isFreeColor: false,
+              maxDimension: 64,
+            },
+          };
+          const viewportRef = { current: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 } };
+          const undoStackRef = { current: [] };
+          const redoStackRef = { current: [] };
+          const sourceImage = new MockImage();
+
+          function SwitchHarness({ activeId, save, puz }) {
+            const api = controllerMod.useInfiniteZoomController({
+              puzzle: puz,
+              sourceImage,
+              snapshots: [saveA, saveB],
+              activeSave: save,
+              activeSnapshotId: activeId,
+              activeTitle: save.title,
+              isLoading: false,
+              isReplaying: false,
+              isReplayPlaying: false,
+              exitReplay: () => {},
+              isFreeColorMode: false,
+              coopRoomCode: null,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+              activeColorId: 1,
+              settings: settingsObj,
+              visibleColorIdsRef,
+              regionByIdRef,
+              liveCoopRef,
+              activeBlobUrlRef,
+              viewportRef,
+              undoStackRef,
+              redoStackRef,
+              handleLoadSnapshotRef,
+              setPuzzle: () => {},
+              setSourceImage: () => {},
+              setFilledRegionIds: () => {},
+              setPaintedRegionColors: () => {},
+              setActiveColorId: () => {},
+              setHintRegionId: () => {},
+              setSnapshots: () => {},
+              setIsLoading: () => {},
+              setLoadingProgress: () => {},
+              setLoadingStatus: () => {},
+              setLoadingPayload: () => {},
+              markTutorialActionTried: () => {},
+              triggerFeatureOffer: () => {},
+              syncUndoStack: () => {},
+              syncRedoStack: () => {},
+              applyViewport: () => {
+                applyViewportCalls++;
+              },
+            });
+            latestApi = api;
+            return null;
+          }
+
+          const root = createRoot(container);
+          try {
+            await React.act(async () => {
+              root.render(React.createElement(SwitchHarness, { activeId: 'snap-k21-a', save: saveA, puz: puzA }));
+            });
+
+            // 1. Zoom Out on Puzzle A -> start Undo on Puzzle A with deferred IDB write
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Extend A'
+              );
+            });
+            assert.equal(latestApi.undoSubdivisionState?.snapshotId, 'snap-k21-a');
+
+            deferPuzzleWrites = true;
+            const undoPromiseA = latestApi.handleUndoSubdivision();
+            for (let i = 0; i < 40 && pendingWrites.length === 0; i++) {
+              await new Promise((r) => setTimeout(r, 2));
+            }
+            assert.equal(pendingWrites.length, 1, 'Puzzle A Undo IDB write must be pending');
+            const releasePuzzleAWrite = pendingWrites.shift();
+
+            // 2. Switch to Puzzle B mid-Undo -> handleBeforeSnapshotResetOrSwitch() MUST clear Puzzle A toast immediately
+            await React.act(async () => {
+              latestApi.handleBeforeSnapshotResetOrSwitch();
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                activeSnapshotId: 'snap-k21-b',
+                activeSave: saveB,
+                puzzle: puzB,
+              };
+              activeBlobUrlRef.current = 'blob:orig-b';
+              root.render(React.createElement(SwitchHarness, { activeId: 'snap-k21-b', save: saveB, puz: puzB }));
+            });
+            assert.equal(
+              latestApi.undoSubdivisionState,
+              null,
+              'handleBeforeSnapshotResetOrSwitch() mid-Undo must immediately clear Puzzle A stale toast'
+            );
+
+            // 3. Zoom Out on Puzzle B (with immediate IDB) while Puzzle A's abandoned Undo write is STILL pending!
+            deferPuzzleWrites = false;
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Extend B'
+              );
+            });
+            assert.equal(latestApi.undoSubdivisionState?.snapshotId, 'snap-k21-b', 'Puzzle B must arm its own Undo toast');
+
+            // 4. Click Undo on Puzzle B while Puzzle A's abandoned Undo is STILL pending -> MUST execute (not blocked!)
+            const vpBeforeB = applyViewportCalls;
+            deferPuzzleWrites = true;
+            const undoPromiseB = latestApi.handleUndoSubdivision();
+            for (let i = 0; i < 40 && pendingWrites.length === 0; i++) {
+              await new Promise((r) => setTimeout(r, 2));
+            }
+            assert.equal(pendingWrites.length, 1, 'Puzzle B Undo must NOT be blocked by Puzzle A abandoned Undo');
+
+            // 5. Settle Puzzle A's late abandoned Undo FIRST -> must NOT clear Puzzle B's in-flight guard or toast!
+            await React.act(async () => {
+              releasePuzzleAWrite();
+              await undoPromiseA;
+            });
+            assert.equal(
+              latestApi.undoSubdivisionState?.snapshotId,
+              'snap-k21-b',
+              'Settling abandoned Puzzle A Undo must NOT clear Puzzle B active Undo toast'
+            );
+            await React.act(async () => {
+              latestApi.clearUndoSubdivision();
+            });
+            assert.equal(
+              latestApi.undoSubdivisionState?.snapshotId,
+              'snap-k21-b',
+              'Puzzle B active Undo barrier must stay intact after Puzzle A late finally'
+            );
+
+            // 6. Settle Puzzle B's Undo -> completes cleanly
+            await React.act(async () => {
+              pendingWrites.shift()();
+              await undoPromiseB;
+            });
+            deferPuzzleWrites = false;
+            assert.equal(applyViewportCalls, vpBeforeB + 1, 'Puzzle B Undo must apply restored viewport');
+            assert.equal(latestApi.undoSubdivisionState, null, 'Puzzle B Undo toast must clear after commit');
+          } finally {
+            await React.act(async () => {
+              root.unmount();
+            });
+          }
+        } finally {
+          nanoMod.PuterNanoBananaProvider.prototype.generate = origPuterGenK21;
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+  }
+
+  // K22 (R2-B9): Same-snapshot Reset Progress mid-Undo preserves cleared progress & deleteSnapshot mid-Undo leaves zero resurrected IDB records
+  {
+    const mkRacePuzzle = (w, h) => ({
+      width: w,
+      height: h,
+      palette: [{ id: 1, hex: '#FF5500', isLight: false, argb: 0xffff5500, r: 255, g: 85, b: 0 }],
+      regions: [
+        {
+          id: 1,
+          colorId: 1,
+          centroidX: w / 2,
+          centroidY: h / 2,
+          area: w * h,
+          minX: 0,
+          maxX: w - 1,
+          minY: 0,
+          maxY: h - 1,
+          maxRadius: 4,
+          pixels: Int32Array.from({ length: w * h }, (_, i) => i),
+        },
+      ],
+      regionMap: new Int32Array(w * h).fill(1),
+      borderMap: new Uint8Array(w * h),
+      isFreeColor: false,
+    });
+
+    // Case A: Same-snapshot Reset Progress mid-Undo preserves cleared progress (filledCount=0, resetEpoch=2)
+    {
+      const ls = createMemoryLocalStorage();
+      let stale = false;
+      const { mockIndexedDb, stores, pendingWrites } = createMockIndexedDb({
+        shouldDeferStore: (names) => names.includes('puzzles'),
+      });
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const snapId = 'snap-reset-mid-undo';
+            const origPuzzle = mkRacePuzzle(16, 16);
+            const initialSave = {
+              id: snapId,
+              title: 'Reset Race',
+              lastOpened: 2000,
+              filledCount: 1,
+              totalCount: 2,
+              filledRegionIds: [1],
+              paintedRegionColors: { 1: 1 },
+              resetEpoch: 1,
+              zoomScale: 2,
+              panOffsetX: 0,
+              panOffsetY: 0,
+              palette: origPuzzle.palette,
+              sampleAssetPath: null,
+              isAutoSample: false,
+              sourceRef: { kind: 'blob', uri: snapId },
+              previewDataUrl: pngDataUrl,
+            };
+            storageMod.StorageService.saveSnapshots([initialSave]);
+            stores.images.set(snapId, pngBlob);
+            stores.images.set('layer_reset_race', pngBlob);
+
+            const undoPromise = persistenceMod.restoreUndoSubdivisionPersistence({
+              snap: {
+                snapshotId: snapId,
+                direction: 'zoom-in',
+                puzzle: origPuzzle,
+                sourceImage: new MockImage(),
+                previousBlob: null,
+                previousBlobUrl: null,
+                newBlobUrl: null,
+                promotedFromSample: true,
+                previousLayerImages: new Map(),
+                addedLayerBlobKeys: ['layer_reset_race'],
+                previousMeta: {
+                  sampleAssetPath: 'assets/sample.png',
+                  isAutoSample: true,
+                  sourceRef: { kind: 'sample', uri: 'assets/sample.png' },
+                  zoomTree: undefined,
+                  previewDataUrl: pngDataUrl,
+                },
+                filledRegionIds: new Set([1]),
+                paintedRegionColors: new Map([[1, 1]]),
+                activeColorId: 1,
+                undoStack: [],
+                redoStack: [],
+                previousViewport: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+              },
+              isFreeColorMode: false,
+              activeSave: initialSave,
+              liveActiveSave: initialSave,
+              isStale: () => stale,
+            });
+
+            for (let i = 0; i < 10 && pendingWrites.length === 0; i++) {
+              await Promise.resolve();
+            }
+            assert.equal(pendingWrites.length, 1);
+
+            // Simulate Reset Progress on the SAME snapshot mid-Undo
+            storageMod.StorageService.updateSnapshotProgress(
+              snapId,
+              0,
+              2,
+              [],
+              1,
+              0,
+              0,
+              pngDataUrl,
+              {},
+              origPuzzle.palette,
+              false,
+              undefined,
+              2
+            );
+            storageMod.StorageService.saveActiveState({
+              activeSnapshotId: snapId,
+              activeColorId: 1,
+              filledRegionIds: [],
+              paintedRegionColors: {},
+              isFreeColorMode: false,
+              resetEpoch: 2,
+              zoomScale: 1,
+              panOffsetX: 0,
+              panOffsetY: 0,
+            });
+            stale = true;
+
+            pendingWrites.shift()();
+            const res = await undoPromise;
+            assert.equal(res, null);
+
+            const savedSnap = storageMod.StorageService.loadSnapshots().find((s) => s.id === snapId);
+            assert.equal(savedSnap?.filledCount, 0, 'Mid-Undo Reset Progress must preserve filledCount=0');
+            assert.deepEqual(savedSnap?.filledRegionIds, [], 'Mid-Undo Reset Progress must preserve empty filledRegionIds');
+            assert.deepEqual(savedSnap?.paintedRegionColors, {}, 'Mid-Undo Reset Progress must preserve empty paintedRegionColors');
+            assert.equal(savedSnap?.resetEpoch, 2, 'Mid-Undo Reset Progress must preserve resetEpoch=2');
+            assert.equal(savedSnap?.totalCount, 1, 'Restored puzzle totalRegions must still be synced');
+            assert.equal(savedSnap?.sourceRef?.kind, 'sample', 'Restored puzzle sourceRef must still be synced');
+            assert.deepEqual(storageMod.StorageService.loadActiveState()?.filledRegionIds, []);
+          } finally {
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
+    }
+
+    // Case B: deleteSnapshot mid-Undo during saveImageBlob AND savePuzzleData leaves ZERO resurrected IDB records
+    for (const deferStore of ['images', 'puzzles']) {
+      const ls = createMemoryLocalStorage();
+      let stale = false;
+      const { mockIndexedDb, stores, pendingWrites } = createMockIndexedDb({
+        shouldDeferStore: (names) => names.includes(deferStore),
+      });
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const snapId = `snap-del-race-${deferStore}`;
+            const origPuzzle = mkRacePuzzle(16, 16);
+            const origBlob = new Blob([new Uint8Array([11, 11])], { type: 'image/png' });
+            storageMod.StorageService.saveSnapshots([
+              {
+                id: snapId,
+                title: 'Delete Race',
+                lastOpened: 2000,
+                filledCount: 0,
+                totalCount: 1,
+                filledRegionIds: [],
+                zoomScale: 1,
+                panOffsetX: 0,
+                panOffsetY: 0,
+                palette: origPuzzle.palette,
+                sourceRef: { kind: 'blob', uri: snapId },
+                previewDataUrl: pngDataUrl,
+              },
+            ]);
+            stores.images.set(snapId, pngBlob);
+            stores.images.set(`layer_${snapId}`, pngBlob);
+            stores.puzzles.set(snapId, origPuzzle);
+            for (let i = 0; i < 6; i++) await Promise.resolve();
+            while (pendingWrites.length > 0) pendingWrites.shift()();
+
+            const undoPromise = persistenceMod.restoreUndoSubdivisionPersistence({
+              snap: {
+                snapshotId: snapId,
+                direction: 'zoom-out',
+                puzzle: origPuzzle,
+                sourceImage: new MockImage(),
+                previousBlob: origBlob,
+                previousBlobUrl: 'blob:del-orig',
+                newBlobUrl: 'blob:del-outer',
+                promotedFromSample: false,
+                previousLayerImages: new Map(),
+                addedLayerBlobKeys: [`layer_${snapId}`],
+                previousMeta: {
+                  sampleAssetPath: null,
+                  isAutoSample: false,
+                  sourceRef: { kind: 'blob', uri: snapId },
+                  zoomTree: undefined,
+                  previewDataUrl: pngDataUrl,
+                },
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                activeColorId: 1,
+                undoStack: [],
+                redoStack: [],
+                previousViewport: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+              },
+              isFreeColorMode: false,
+              activeSave: undefined,
+              liveActiveSave: undefined,
+              isStale: () => stale,
+            });
+
+            for (let i = 0; i < 16 && pendingWrites.length === 0; i++) {
+              await new Promise((r) => setTimeout(r, 2));
+            }
+            assert.equal(pendingWrites.length, 1, `Expected deferred ${deferStore} transaction`);
+
+            // Delete snapshot mid-Undo
+            storageMod.StorageService.deleteSnapshot(snapId);
+            stale = true;
+
+            // Drain deferred writes (including cleanup deleteOrphanedEntries)
+            for (let i = 0; i < 20; i++) {
+              while (pendingWrites.length > 0) {
+                pendingWrites.shift()();
+              }
+              await new Promise((r) => setTimeout(r, 2));
+            }
+            const res = await undoPromise;
+            assert.equal(res, null);
+            assert.equal(
+              storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+              false,
+              `Deleted snapshot must stay absent (${deferStore})`
+            );
+            assert.equal(
+              stores.puzzles.has(snapId),
+              false,
+              `Deleted snapshot puzzle must NOT be resurrected in IDB (${deferStore})`
+            );
+            assert.equal(
+              stores.images.has(snapId),
+              false,
+              `Deleted snapshot image must NOT be resurrected in IDB (${deferStore})`
+            );
+            assert.equal(
+              stores.images.has(`layer_${snapId}`),
+              false,
+              `Deleted snapshot layer blob must be cleaned up (${deferStore})`
+            );
+          } finally {
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
     }
   }
 }

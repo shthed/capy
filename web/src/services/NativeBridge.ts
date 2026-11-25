@@ -1,4 +1,4 @@
-import { uint8ToBase64 } from '../utils/base64';
+import { base64ToUint8, uint8ToBase64 } from '../utils/base64';
 
 export type HapticType = 'tick' | 'success' | 'warning' | 'error';
 
@@ -148,6 +148,26 @@ function matchesByteSignature(
   return true;
 }
 
+const ALLOWED_SHARED_FTYP_IMAGE_BRANDS = new Set<string>([
+  'avif',
+  'avis',
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'mif1',
+  'msf1',
+]);
+
+function isValidIsoBmffRasterHeader(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 12) return false;
+  if (!matchesByteSignature(bytes, SHARED_FTYP_MAGIC, 4)) return false;
+  const boxSize = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+  if (bytes[0] !== 0 || bytes[1] !== 0 || boxSize < 12) return false;
+  const majorBrand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+  return ALLOWED_SHARED_FTYP_IMAGE_BRANDS.has(majorBrand);
+}
+
 function hasValidSharedRasterMagicBytes(bytes: Uint8Array): boolean {
   if (!(bytes instanceof Uint8Array) || bytes.byteLength < 3) return false;
   if (matchesByteSignature(bytes, SHARED_PNG_MAGIC)) return true;
@@ -165,7 +185,27 @@ function hasValidSharedRasterMagicBytes(bytes: Uint8Array): boolean {
     return true;
   }
   if (bytes.byteLength >= 14 && matchesByteSignature(bytes, SHARED_BMP_MAGIC)) return true;
-  return bytes.byteLength >= 12 && matchesByteSignature(bytes, SHARED_FTYP_MAGIC, 4);
+  return isValidIsoBmffRasterHeader(bytes);
+}
+
+function isValidRasterSharedDataUrl(trimmedUrl: string): boolean {
+  const commaIdx = trimmedUrl.indexOf(',');
+  if (commaIdx < 0) return false;
+  const base64 = trimmedUrl.slice(commaIdx + 1);
+  if (
+    base64.length === 0 ||
+    base64.length % 4 === 1 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(base64) ||
+    (base64.includes('=') && base64.length % 4 !== 0)
+  ) {
+    return false;
+  }
+  const prefix = base64.length <= 24 ? base64 : base64.slice(0, 24);
+  try {
+    return hasValidSharedRasterMagicBytes(base64ToUint8(prefix));
+  } catch {
+    return false;
+  }
 }
 
 async function isValidRasterSharedBlob(blob: Blob): Promise<boolean> {
@@ -646,8 +686,11 @@ export class NativeBridgeService {
     if (!isAllowedSharedImageDataUrl(trimmedUrl) && !isBlobUrl) {
       return false;
     }
+    if (!isBlobUrl && !isValidRasterSharedDataUrl(trimmedUrl)) {
+      return false;
+    }
     try {
-      if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage) {
+      if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage && !isBlobUrl) {
         window.CapyAndroid.shareImage(title, trimmedUrl);
         return true;
       }

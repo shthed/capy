@@ -4,7 +4,7 @@ import {
   InfiniteZoomProviderMode,
   UserSettings,
 } from '../../types';
-import { resolveSupportedModelResolution } from '../ai/nanoBananaPrompts';
+import { getNanoBananaModelMeta, resolveSupportedModelResolution } from '../ai/nanoBananaPrompts';
 import { NativeBridge } from '../NativeBridge';
 import { reportSwallowed } from '../telemetry';
 import {
@@ -453,9 +453,15 @@ export function saveSettings(settings: UserSettings): void {
     const now = Date.now();
     const prevSavedAt = getMaxPersistedObjectTimestamp(storageKey, backupKey);
     const savedAt = prevSavedAt >= now ? prevSavedAt + 1 : now;
+    const normalizedModel = getNanoBananaModelMeta(settings.nanoBananaModel).id;
     const normalizedSettings: UserSettings = {
       ...settings,
       infiniteZoomProvider: resolvePlatformInfiniteZoomProvider(settings.infiniteZoomProvider),
+      nanoBananaModel: normalizedModel,
+      nanoBananaResolution: resolveSupportedModelResolution(
+        normalizedModel,
+        settings.nanoBananaResolution
+      ),
     };
     const payload = { ...normalizedSettings, undoDefaultMigrated: true, savedAt };
     const serialized = JSON.stringify(payload);

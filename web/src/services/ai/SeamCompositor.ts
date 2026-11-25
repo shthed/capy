@@ -1194,12 +1194,6 @@ interface EncodedCanvasCandidate {
   dataUrl?: string;
 }
 
-function normalizeCompactMime(rawMime: string | undefined, fallbackMime: string): string {
-  const cleaned = (rawMime || '').split(';')[0].trim().toLowerCase();
-  if (cleaned === 'image/jpg' || cleaned === 'image/jpeg') return 'image/jpeg';
-  if (cleaned === 'image/png' || cleaned === 'image/webp') return cleaned;
-  return fallbackMime === 'image/jpg' ? 'image/jpeg' : fallbackMime;
-}
 
 function computeCompactTemplateDimensions(
   width: number,
@@ -1292,10 +1286,16 @@ async function encodeCanvasCandidate(
         canvas.toBlob((result) => resolve(result), mimeType, quality);
       });
       if (rawBlob && rawBlob.size > 0) {
-        const resolvedMime = normalizeCompactMime(rawBlob.type, mimeType);
-        const blob =
-          rawBlob.type === resolvedMime ? rawBlob : new Blob([rawBlob], { type: resolvedMime });
-        return { blob, mimeType: resolvedMime };
+        const declaredType = typeof rawBlob.type === 'string' ? rawBlob.type.trim() : '';
+        const resolvedMime =
+          declaredType.length > 0
+            ? normalizeStrictRasterCompactMime(declaredType)
+            : normalizeStrictRasterCompactMime(mimeType);
+        if (resolvedMime) {
+          const blob =
+            rawBlob.type === resolvedMime ? rawBlob : new Blob([rawBlob], { type: resolvedMime });
+          return { blob, mimeType: resolvedMime };
+        }
       }
     } catch (err) {
       reportSwallowed('SeamCompositor.compactTemplateToBlob', err, { mimeType, quality });

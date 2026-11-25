@@ -215,6 +215,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     const isSubmittingRef = useRef<boolean>(false);
     const submitSeqRef = useRef<number>(0);
     const isReadingClipboardRef = useRef<boolean>(false);
+    const pasteClipboardSeqRef = useRef<number>(0);
     const isCopyingImageRef = useRef<boolean>(false);
     const copyImageSeqRef = useRef<number>(0);
     const isLaunchingRef = useRef<boolean>(false);
@@ -241,6 +242,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         setIsDraggingFile(false);
         copyImageSeqRef.current += 1;
         isCopyingImageRef.current = false;
+        pasteClipboardSeqRef.current += 1;
+        isReadingClipboardRef.current = false;
         launchSeqRef.current += 1;
         isLaunchingRef.current = false;
         setIsLaunching(false);
@@ -284,6 +287,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         isSubmittingRef.current = false;
         copyImageSeqRef.current += 1;
         isCopyingImageRef.current = false;
+        pasteClipboardSeqRef.current += 1;
+        isReadingClipboardRef.current = false;
         launchSeqRef.current += 1;
         isLaunchingRef.current = false;
         copyPromptSeqRef.current += 1;
@@ -323,6 +328,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
                   isSubmittingRef.current = false;
                 }
               });
+          } else if (submitSeqRef.current === seq && !isProcessingRef.current) {
+            isSubmittingRef.current = false;
           }
         } catch {
           if (submitSeqRef.current === seq) {
@@ -572,8 +579,10 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         return;
       }
       isReadingClipboardRef.current = true;
+      const seq = ++pasteClipboardSeqRef.current;
       const isReadStale = () =>
         !isOpenRef.current ||
+        pasteClipboardSeqRef.current !== seq ||
         handoffRef.current !== activeHandoff ||
         isProcessingRef.current ||
         isSubmittingRef.current;
@@ -599,7 +608,9 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
           'Clipboard permission was denied. Press Ctrl+V / Cmd+V to paste, or pick an image file below.'
         );
       } finally {
-        isReadingClipboardRef.current = false;
+        if (pasteClipboardSeqRef.current === seq) {
+          isReadingClipboardRef.current = false;
+        }
       }
     }, [handleReceiveInput]);
 

@@ -238,8 +238,32 @@ function detectRasterMimeFromBase64Prefix(base64: string): string | null {
   return bytes ? detectRasterMimeFromMagicBytes(bytes) : null;
 }
 
+function isStrictValidBase64Payload(compact: string): boolean {
+  if (compact.length === 0 || compact.length > MAX_RECEIVED_IMAGE_BASE64_LENGTH) {
+    return false;
+  }
+  if (compact.length % 4 === 1) {
+    return false;
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact)) {
+    return false;
+  }
+  if (compact.includes('=') && compact.length % 4 !== 0) {
+    return false;
+  }
+  return true;
+}
+
 function requireDetectedRasterMimeFromBase64(base64: string): string {
-  const detected = detectRasterMimeFromBase64Prefix(base64);
+  const compact = base64.replace(/\s+/g, '');
+  if (!isStrictValidBase64Payload(compact)) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Unsupported or invalid raster template image payload.',
+      true
+    );
+  }
+  const detected = detectRasterMimeFromBase64Prefix(compact);
   if (!detected || !ALLOWED_RASTER_MIMES.has(detected)) {
     throw new NanoBananaError(
       'INVALID_IMAGE',
