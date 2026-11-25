@@ -3,6 +3,7 @@ import {
   InfiniteZoomNodeMeta,
   InfiniteZoomProviderMode,
   NanoBananaModelId,
+  NestedPuzzleLayer,
   PuzzleData,
   SavedSnapshot,
 } from '../types';
@@ -11,7 +12,8 @@ import { deleteOrphanedEntries } from '../services/storage/IndexedDbStore';
 import { getTotalRegionCount, isSafeLayerId } from '../engine/UnifiedPuzzleLayers';
 import { generatePreviewDataUrl, hasCutoutExteriorMask } from '../services/artworkExporter';
 import { reportSwallowed } from '../services/telemetry';
-import type { RegionGridLike } from '../services/ai/RegionSelectionEngine';
+import type { RegionGridLike, SelectionBbox } from '../services/ai/RegionSelectionEngine';
+import { INFILL_CONTEXT_PAD_RATIO } from '../services/ai/SeamCompositor';
 import type { CoopViewport } from './useCoopSession';
 import type { UndoHistoryEntry } from './useUndoRedo';
 import { computeNextResetEpoch, hydrateLayerImagesForPuzzle } from './useSnapshotLibrary';
@@ -350,8 +352,233 @@ export async function renderHydratedPreview(
   }
 }
 
+export interface WorldContextTemplateBounds {
+  ctxMinX: number;
+  ctxMinY: number;
+  templateWidth: number;
+  templateHeight: number;
+  ctxWorldX: number;
+  ctxWorldY: number;
+  ctxWorldW: number;
+  ctxWorldH: number;
+  bboxInCanvas: SelectionBbox;
+}
+
+export interface WorldContextCanvasResult {
+  canvas: HTMLCanvasElement;
+  bboxInCanvas: SelectionBbox;
+  padApplied: boolean;
+}
+
+export function computeWorldContextTemplateBounds(
+  nestedLayer: Pick<NestedPuzzleLayer, 'worldBounds'>,
+  targetGridWidth: number,
+  targetGridHeight: number,
+  bbox: SelectionBbox,
+  contextPadRatio: number = INFILL_CONTEXT_PAD_RATIO
+): WorldContextTemplateBounds | null {
+  const wb = nestedLayer.worldBounds;
+  if (
+    !wb ||
+    !Number.isFinite(wb.x) ||
+    !Number.isFinite(wb.y) ||
+    !Number.isFinite(wb.width) ||
+    !Number.isFinite(wb.height) ||
+    wb.width <= 0 ||
+    wb.height <= 0 ||
+    targetGridWidth <= 0 ||
+    targetGridHeight <= 0
+  ) {
+    return null;
+  }
+  const safePad = Number.isFinite(contextPadRatio) && contextPadRatio >= 0 ? contextPadRatio : 0;
+  const padX = safePad > 0 ? Math.max(1, Math.round(bbox.width * safePad)) : 0;
+  const padY = safePad > 0 ? Math.max(1, Math.round(bbox.height * safePad)) : 0;
+
+  const availLeft = Math.max(0, Math.floor((wb.x / wb.width) * targetGridWidth));
+  const availTop = Math.max(0, Math.floor((wb.y / wb.height) * targetGridHeight));
+  const availRight = Math.max(0, Math.floor(((1 - wb.x - wb.width) / wb.width) * targetGridWidth));
+  const availBottom = Math.max(
+    0,
+    Math.floor(((1 - wb.y - wb.height) / wb.height) * targetGridHeight)
+  );
+
+  const ctxMinX = Math.max(-availLeft, bbox.minX - padX);
+  const ctxMinY = Math.max(-availTop, bbox.minY - padY);
+  const ctxMaxX = Math.min(targetGridWidth - 1 + availRight, bbox.maxX + padX);
+  const ctxMaxY = Math.min(targetGridHeight - 1 + availBottom, bbox.maxY + padY);
+  const templateWidth = Math.max(bbox.width, ctxMaxX - ctxMinX + 1);
+  const templateHeight = Math.max(bbox.height, ctxMaxY - ctxMinY + 1);
+
+  const ctxWorldX = wb.x + (ctxMinX / targetGridWidth) * wb.width;
+  const ctxWorldY = wb.y + (ctxMinY / targetGridHeight) * wb.height;
+  const ctxWorldW = (templateWidth / targetGridWidth) * wb.width;
+  const ctxWorldH = (templateHeight / targetGridHeight) * wb.height;
+
+  const offsetX = bbox.minX - ctxMinX;
+  const offsetY = bbox.minY - ctxMinY;
+  return {
+    ctxMinX,
+    ctxMinY,
+    templateWidth,
+    templateHeight,
+    ctxWorldX,
+    ctxWorldY,
+    ctxWorldW,
+    ctxWorldH,
+    bboxInCanvas: {
+      minX: offsetX,
+      minY: offsetY,
+      maxX: offsetX + bbox.width - 1,
+      maxY: offsetY + bbox.height - 1,
+      width: bbox.width,
+      height: bbox.height,
+    },
+  };
+}
+
+function rectsOverlap(
+  ax: number,
+  ay: number,
+  aw: number,
+  ah: number,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number
+): boolean {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+async function resolveNestedLayerImage(
+  layer: NestedPuzzleLayer,
+  liveLayerImages: ReadonlyMap<string, HTMLImageElement>,
+  required: boolean,
+  ownedUrls: string[]
+): Promise<HTMLImageElement | null> {
+  const liveImg = liveLayerImages.get(layer.imageBlobKey);
+  if (liveImg && liveImg.complete && (liveImg.naturalWidth > 0 || liveImg.width > 0)) {
+    return liveImg;
+  }
+  const blob = await StorageService.loadImageBlob(layer.imageBlobKey);
+  if (!blob) {
+    if (required) {
+      throw new Error('Could not load artwork for the selected detail layer.');
+    }
+    return null;
+  }
+  const { img, objectUrl } = await decodeBlobToImage(blob);
+  ownedUrls.push(objectUrl);
+  return img;
+}
+
+async function drawWorldStackIntoCanvas(opts: {
+  basePuzzle: PuzzleData;
+  baseImage: HTMLImageElement;
+  liveLayerImages: ReadonlyMap<string, HTMLImageElement>;
+  worldX: number;
+  worldY: number;
+  worldW: number;
+  worldH: number;
+  canvasWidth: number;
+  canvasHeight: number;
+  maxDepth: number;
+  requiredLayerId: string | null;
+}): Promise<HTMLCanvasElement> {
+  const {
+    basePuzzle,
+    baseImage,
+    liveLayerImages,
+    worldX,
+    worldY,
+    worldW,
+    worldH,
+    canvasWidth,
+    canvasHeight,
+    maxDepth,
+    requiredLayerId,
+  } = opts;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Failed to acquire 2D canvas context');
+  }
+  // Fill opaque white first so transparent regions never flatten to solid black on JPEG encode.
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  ctx.imageSmoothingEnabled = true;
+  if ('imageSmoothingQuality' in ctx) {
+    ctx.imageSmoothingQuality = 'high';
+  }
+
+  const baseW = baseImage.naturalWidth || baseImage.width || basePuzzle.width;
+  const baseH = baseImage.naturalHeight || baseImage.height || basePuzzle.height;
+  if (baseW > 0 && baseH > 0) {
+    const sx = Math.max(0, Math.min(baseW, worldX * baseW));
+    const sy = Math.max(0, Math.min(baseH, worldY * baseH));
+    const sx2 = Math.max(sx, Math.min(baseW, (worldX + worldW) * baseW));
+    const sy2 = Math.max(sy, Math.min(baseH, (worldY + worldH) * baseH));
+    const sw = sx2 - sx;
+    const sh = sy2 - sy;
+    if (sw > 0 && sh > 0) {
+      const dx = ((sx / baseW - worldX) / worldW) * canvasWidth;
+      const dy = ((sy / baseH - worldY) / worldH) * canvasHeight;
+      const dw = (sw / baseW / worldW) * canvasWidth;
+      const dh = (sh / baseH / worldH) * canvasHeight;
+      ctx.drawImage(baseImage, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
+  }
+
+  const layers = (basePuzzle.nestedLayers ?? [])
+    .filter(
+      (l) =>
+        l.depth <= maxDepth &&
+        l.worldBounds &&
+        l.worldBounds.width > 0 &&
+        l.worldBounds.height > 0 &&
+        rectsOverlap(
+          l.worldBounds.x,
+          l.worldBounds.y,
+          l.worldBounds.width,
+          l.worldBounds.height,
+          worldX,
+          worldY,
+          worldW,
+          worldH
+        )
+    )
+    .sort((a, b) => a.depth - b.depth);
+
+  const ownedUrls: string[] = [];
+  try {
+    for (const layer of layers) {
+      const isRequired = layer.layerId === requiredLayerId;
+      const img = await resolveNestedLayerImage(layer, liveLayerImages, isRequired, ownedUrls);
+      if (!img) continue;
+      const wb = layer.worldBounds;
+      const dx = ((wb.x - worldX) / worldW) * canvasWidth;
+      const dy = ((wb.y - worldY) / worldH) * canvasHeight;
+      const dw = (wb.width / worldW) * canvasWidth;
+      const dh = (wb.height / worldH) * canvasHeight;
+      ctx.drawImage(img, dx, dy, dw, dh);
+    }
+  } catch (err) {
+    releaseCanvas(canvas);
+    throw err;
+  } finally {
+    for (const url of ownedUrls) {
+      revokeObjectUrlSafely(url);
+    }
+  }
+  return canvas;
+}
+
 /**
- * Resolves an HTMLCanvasElement for the target layer (root or nested) at exact grid dimensions.
+ * Resolves an HTMLCanvasElement for the target layer (root or nested) at exact grid dimensions,
+ * compositing underlying world artwork behind transparent-masked nested layers so pixels outside
+ * the mask are never transparent black.
  */
 export async function renderLayerSourceToCanvas(
   basePuzzle: PuzzleData,
@@ -367,6 +594,22 @@ export async function renderLayerSourceToCanvas(
   if (!nestedLayer) {
     return renderImageToCanvas(baseImage, targetGrid.width, targetGrid.height);
   }
+  const wb = nestedLayer.worldBounds;
+  if (wb && wb.width > 0 && wb.height > 0) {
+    return drawWorldStackIntoCanvas({
+      basePuzzle,
+      baseImage,
+      liveLayerImages,
+      worldX: wb.x,
+      worldY: wb.y,
+      worldW: wb.width,
+      worldH: wb.height,
+      canvasWidth: targetGrid.width,
+      canvasHeight: targetGrid.height,
+      maxDepth: nestedLayer.depth,
+      requiredLayerId: nestedLayer.layerId,
+    });
+  }
   const liveImg = liveLayerImages.get(nestedLayer.imageBlobKey);
   if (liveImg && liveImg.complete && (liveImg.naturalWidth > 0 || liveImg.width > 0)) {
     return renderImageToCanvas(liveImg, targetGrid.width, targetGrid.height);
@@ -381,6 +624,78 @@ export async function renderLayerSourceToCanvas(
   } finally {
     revokeObjectUrlSafely(objectUrl);
   }
+}
+
+/**
+ * Renders a full-world-composited context canvas for Zoom In template generation.
+ * For Depth 2+ nested selections, extends +25% context padding beyond the nested layer's own
+ * bounding box into the surrounding parent/root artwork so AI models always see rich true-color
+ * surroundings instead of black margins.
+ */
+export async function renderZoomInWorldContextCanvas(
+  basePuzzle: PuzzleData,
+  baseImage: HTMLImageElement,
+  targetLayerId: string | null,
+  targetGrid: RegionGridLike,
+  bbox: SelectionBbox,
+  liveLayerImages: ReadonlyMap<string, HTMLImageElement>
+): Promise<WorldContextCanvasResult> {
+  if (targetLayerId === null) {
+    const maxDepth = (basePuzzle.nestedLayers ?? []).reduce(
+      (acc, layer) => Math.max(acc, layer.depth),
+      0
+    );
+    const canvas = await drawWorldStackIntoCanvas({
+      basePuzzle,
+      baseImage,
+      liveLayerImages,
+      worldX: 0,
+      worldY: 0,
+      worldW: 1,
+      worldH: 1,
+      canvasWidth: targetGrid.width,
+      canvasHeight: targetGrid.height,
+      maxDepth,
+      requiredLayerId: null,
+    });
+    return { canvas, bboxInCanvas: bbox, padApplied: false };
+  }
+  const nestedLayer = basePuzzle.nestedLayers?.find((l) => l.layerId === targetLayerId);
+  if (!nestedLayer) {
+    const canvas = renderImageToCanvas(baseImage, targetGrid.width, targetGrid.height);
+    return { canvas, bboxInCanvas: bbox, padApplied: false };
+  }
+  const bounds = computeWorldContextTemplateBounds(
+    nestedLayer,
+    targetGrid.width,
+    targetGrid.height,
+    bbox,
+    INFILL_CONTEXT_PAD_RATIO
+  );
+  if (!bounds) {
+    const canvas = await renderLayerSourceToCanvas(
+      basePuzzle,
+      baseImage,
+      targetLayerId,
+      targetGrid,
+      liveLayerImages
+    );
+    return { canvas, bboxInCanvas: bbox, padApplied: false };
+  }
+  const canvas = await drawWorldStackIntoCanvas({
+    basePuzzle,
+    baseImage,
+    liveLayerImages,
+    worldX: bounds.ctxWorldX,
+    worldY: bounds.ctxWorldY,
+    worldW: bounds.ctxWorldW,
+    worldH: bounds.ctxWorldH,
+    canvasWidth: bounds.templateWidth,
+    canvasHeight: bounds.templateHeight,
+    maxDepth: nestedLayer.depth,
+    requiredLayerId: nestedLayer.layerId,
+  });
+  return { canvas, bboxInCanvas: bounds.bboxInCanvas, padApplied: true };
 }
 
 export function collectMonotonicResetEpoch(

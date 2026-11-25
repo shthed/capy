@@ -524,7 +524,8 @@ export async function loadPuterSdk(
     const script = document.createElement('script');
     script.src = PUTER_SDK_SCRIPT_URL;
     script.async = true;
-    script.crossOrigin = 'anonymous';
+    // Do NOT set script.crossOrigin = 'anonymous': https://js.puter.com/v2/ is served
+    // without an Access-Control-Allow-Origin header, so CORS-mode script loads fail in browsers.
 
     let failedEarly = false;
     let createdPromise!: Promise<PuterGlobalLike>;

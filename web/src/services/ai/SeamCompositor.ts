@@ -429,6 +429,53 @@ function resampleMaskNearest(
 }
 
 /**
+ * Smoothly upscales a binary mask using pixel-center bilinear interpolation with a >= 0.25
+ * threshold. At >= 0.25 every pixel inside a `mask === 1` source cell is guaranteed to remain 1
+ * (zero transparent holes over removed parent regions) while concave staircase steps become
+ * smooth organic diagonals instead of blocky nearest-neighbor rectangles.
+ */
+function resampleMaskSmooth(
+  mask: Uint8Array,
+  srcW: number,
+  srcH: number,
+  dstW: number,
+  dstH: number
+): Uint8Array {
+  if (srcW === dstW && srcH === dstH) {
+    return new Uint8Array(mask);
+  }
+  if (dstW <= srcW && dstH <= srcH) {
+    return resampleMaskNearest(mask, srcW, srcH, dstW, dstH);
+  }
+  const out = new Uint8Array(dstW * dstH);
+  for (let y = 0; y < dstH; y++) {
+    const sy = ((y + 0.5) * srcH) / dstH - 0.5;
+    const y0 = Math.max(0, Math.min(srcH - 1, Math.floor(sy)));
+    const y1 = Math.min(srcH - 1, y0 + 1);
+    const fy = Math.max(0, Math.min(1, sy - y0));
+    const wy0 = 1 - fy;
+    const row0 = y0 * srcW;
+    const row1 = y1 * srcW;
+    const dstRow = y * dstW;
+    for (let x = 0; x < dstW; x++) {
+      const sx = ((x + 0.5) * srcW) / dstW - 0.5;
+      const x0 = Math.max(0, Math.min(srcW - 1, Math.floor(sx)));
+      const x1 = Math.min(srcW - 1, x0 + 1);
+      const fx = Math.max(0, Math.min(1, sx - x0));
+      const wx0 = 1 - fx;
+      const v00 = mask[row0 + x0] ? 1 : 0;
+      const v10 = mask[row0 + x1] ? 1 : 0;
+      const v01 = mask[row1 + x0] ? 1 : 0;
+      const v11 = mask[row1 + x1] ? 1 : 0;
+      const val =
+        v00 * wx0 * wy0 + v10 * fx * wy0 + v01 * wx0 * fy + v11 * fx * fy;
+      out[dstRow + x] = val >= 0.25 ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+/**
  * Two-pass chamfer distance transform computing inward distance (in pixels) from
  * `mask === 0` or canvas boundary into `mask === 1` pixels.
  */
@@ -559,10 +606,10 @@ export function buildInfillTemplateRgba(
         rgba[outIdx + 2] = 255;
         rgba[outIdx + 3] = 255;
       } else {
-        // Blend 75% magenta #FF00FF with 25% original luminance cue for clear mask targeting
-        rgba[outIdx] = clampByte(rgba[outIdx] * 0.25 + 255 * 0.75);
-        rgba[outIdx + 1] = clampByte(rgba[outIdx + 1] * 0.25);
-        rgba[outIdx + 2] = clampByte(rgba[outIdx + 2] * 0.25 + 255 * 0.75);
+        // Blend 50% magenta #FF00FF with 50% original color so AI sees both the target zone and underlying palette/lighting
+        rgba[outIdx] = clampByte(rgba[outIdx] * 0.5 + 255 * 0.5);
+        rgba[outIdx + 1] = clampByte(rgba[outIdx + 1] * 0.5);
+        rgba[outIdx + 2] = clampByte(rgba[outIdx + 2] * 0.5 + 255 * 0.5);
         rgba[outIdx + 3] = 255;
       }
     }
@@ -776,7 +823,9 @@ export function compositeInfillRgba(params: CompositeInfillRgbaParams): Composit
         ? 0
         : 2;
 
-  const mask = resampleMaskNearest(cropMask, cropWidth, cropHeight, targetWidth, targetHeight);
+  const mask = transparentOutsideMask
+    ? resampleMaskSmooth(cropMask, cropWidth, cropHeight, targetWidth, targetHeight)
+    : resampleMaskNearest(cropMask, cropWidth, cropHeight, targetWidth, targetHeight);
   const subX = (templateMeta.offsetX / templateMeta.templateWidth) * generatedWidth;
   const subY = (templateMeta.offsetY / templateMeta.templateHeight) * generatedHeight;
   const subW = (templateMeta.maskWidth / templateMeta.templateWidth) * generatedWidth;

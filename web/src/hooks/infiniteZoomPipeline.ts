@@ -73,7 +73,7 @@ import {
   releaseCanvas,
   renderHydratedPreview,
   renderImageToCanvas,
-  renderLayerSourceToCanvas,
+  renderZoomInWorldContextCanvas,
   resolveRootBlobPersistencePlan,
   revokeObjectUrlSafely,
   rollbackAbortedLayerPersist,
@@ -612,22 +612,24 @@ export async function buildInfillTemplatePayload(
   layerCanvas: HTMLCanvasElement,
   targetGrid: RegionGridLike,
   selectedCopy: ReadonlySet<number>,
-  bbox: SelectionBbox
+  bbox: SelectionBbox,
+  canvasBbox: SelectionBbox = bbox,
+  contextPadRatio?: number
 ): Promise<InfillTemplatePayload> {
   let tpl: ReturnType<typeof buildInfillTemplateCanvas> | null = null;
   try {
     const cropMask = buildSelectionMask(targetGrid, selectedCopy, bbox);
     const originalCropRgba = readCanvasCropRgba(
       layerCanvas,
-      bbox.minX,
-      bbox.minY,
-      bbox.width,
-      bbox.height
+      canvasBbox.minX,
+      canvasBbox.minY,
+      canvasBbox.width,
+      canvasBbox.height
     );
     if (!originalCropRgba) {
       throw new Error('Could not read pixel data for selected region.');
     }
-    tpl = buildInfillTemplateCanvas(layerCanvas, bbox, cropMask);
+    tpl = buildInfillTemplateCanvas(layerCanvas, canvasBbox, cropMask, contextPadRatio);
     const encoded = await canvasToCompactTemplateBlobAndDataUrl(tpl.canvas);
     return {
       cropMask,
@@ -694,18 +696,26 @@ export async function prepareZoomInOperation(opts: {
     liveLayerImages,
     isAborted,
   } = opts;
-  const layerCanvas = await renderLayerSourceToCanvas(
+  const worldContext = await renderZoomInWorldContextCanvas(
     basePuzzle,
     baseImage,
     targetLayerId,
     targetGrid,
+    metrics.bbox,
     liveLayerImages
   );
   if (isAborted()) {
-    releaseCanvas(layerCanvas);
+    releaseCanvas(worldContext.canvas);
     return null;
   }
-  const tpl = await buildInfillTemplatePayload(layerCanvas, targetGrid, selectedCopy, metrics.bbox);
+  const tpl = await buildInfillTemplatePayload(
+    worldContext.canvas,
+    targetGrid,
+    selectedCopy,
+    metrics.bbox,
+    worldContext.bboxInCanvas,
+    worldContext.padApplied ? 0 : undefined
+  );
   if (isAborted()) return null;
 
   const nextDepth = resolveNextZoomDepth(basePuzzle, targetLayerId);

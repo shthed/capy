@@ -1731,6 +1731,18 @@ async function testSeamCompositor(seamMod) {
   const nestedCenterIdx = (40 * 80 + 40) * 4;
   assert.equal(compNested.rgba[nestedCenterIdx], 240);
   assert.equal(compNested.rgba[nestedCenterIdx + 3], 255);
+  // Every pixel inside the nearest-neighbor upscaled parent mask must remain covered (zero transparent holes)
+  let smoothHoleCount = 0;
+  for (let y = 0; y < 80; y++) {
+    const sy = Math.min(cropH - 1, Math.floor(((y + 0.5) / 80) * cropH));
+    for (let x = 0; x < 80; x++) {
+      const sx = Math.min(cropW - 1, Math.floor(((x + 0.5) / 80) * cropW));
+      if (cropMask[sy * cropW + sx] === 1 && compNested.mask[y * 80 + x] !== 1) {
+        smoothHoleCount++;
+      }
+    }
+  }
+  assert.equal(smoothHoleCount, 0, 'Upscaled smooth nested mask must never leave holes over removed parent pixels');
 
   // 3c. Outpaint template + pixel-locked compositeOutpaintRgba (bit-exact inner artwork preserved)
   const innerW = 60;
@@ -4065,7 +4077,11 @@ async function testClusterA_NanoBananaHardening(nanoMod, bridgeMod) {
         assert.equal(injectedScripts.length, 1, 'Concurrent loadPuterSdk calls must share one <script> element');
         assert.equal(injectedScripts[0].src, nanoMod.PUTER_SDK_SCRIPT_URL);
         assert.equal(injectedScripts[0].async, true);
-        assert.equal(injectedScripts[0].crossOrigin, 'anonymous');
+        assert.equal(
+          injectedScripts[0].crossOrigin,
+          '',
+          'loadPuterSdk must omit crossOrigin because https://js.puter.com/v2/ omits Access-Control-Allow-Origin'
+        );
       }
     );
 
@@ -7977,6 +7993,23 @@ async function testClusterG_ControllerDecompositionF13(
     persistenceMod.resolveLatestChildSave,
     'controllerMod.resolveLatestChildSave must strictly equal persistenceMod.resolveLatestChildSave'
   );
+
+  // World-space +25% context bounds for Depth 2+ nested layer Zoom In templates (eliminates solid-black surrounds)
+  const worldCtx = persistenceMod.computeWorldContextTemplateBounds(
+    { worldBounds: { x: 0.25, y: 0.2, width: 0.4, height: 0.5 } },
+    400,
+    500,
+    { minX: 0, minY: 0, maxX: 399, maxY: 499, width: 400, height: 500 }
+  );
+  assert.ok(worldCtx, 'computeWorldContextTemplateBounds must return valid bounds for interior nested layer');
+  assert.equal(worldCtx.ctxMinX, -100, 'Left +25% context padding must extend into surrounding world space');
+  assert.equal(worldCtx.ctxMinY, -125, 'Top +25% context padding must extend into surrounding world space');
+  assert.equal(worldCtx.templateWidth, 600);
+  assert.equal(worldCtx.templateHeight, 750);
+  assert.equal(worldCtx.bboxInCanvas.minX, 100);
+  assert.equal(worldCtx.bboxInCanvas.minY, 125);
+  assert.ok(worldCtx.ctxWorldX >= 0 && worldCtx.ctxWorldX + worldCtx.ctxWorldW <= 1.0001);
+  assert.ok(worldCtx.ctxWorldY >= 0 && worldCtx.ctxWorldY + worldCtx.ctxWorldH <= 1.0001);
 
   // Helpers for behavioral pipeline & persistence tests
   const makeMockImageClass = (w = 24, h = 24) =>
