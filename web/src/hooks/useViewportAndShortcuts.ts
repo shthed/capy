@@ -3,7 +3,7 @@ import { NormalizedRect, PuzzleData, SavedSnapshot } from '../types';
 import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
 import { getVisiblePalette } from '../components/PaletteDock';
-import type { FocusBoundsRequest } from '../components/puzzleCanvasHelpers';
+import { createFocusBoundsRequest, type FocusBoundsRequest } from '../components/puzzleCanvasHelpers';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
 import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import type { CoopLiveState, CoopViewport } from './useCoopSession';
@@ -197,16 +197,9 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
   );
 
   const focusViewportOnBounds = useCallback((bounds: NormalizedRect) => {
-    focusSeqRef.current += 1;
-    setFocusBoundsRequest({
-      seq: focusSeqRef.current,
-      bounds: {
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-      },
-    });
+    const next = createFocusBoundsRequest(focusSeqRef.current, bounds);
+    focusSeqRef.current = next.seq;
+    setFocusBoundsRequest(next);
   }, []);
 
   const clearPendingViewportSave = useCallback(() => {

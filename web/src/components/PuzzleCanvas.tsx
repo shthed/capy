@@ -69,6 +69,7 @@ export {
   collectUnifiedLineRegionIds,
   computeFocusViewportForBounds,
   computeMaxZoomScale,
+  createFocusBoundsRequest,
   getNextZoomStop,
   MAX_INFINITE_ZOOM_SCALE,
   resolveAnyRegionAtPoint,
@@ -1101,6 +1102,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       h
     );
     offsetRef.current = clamped;
+    setScale(scaleRef.current);
     setOffset(clamped);
     onViewExtentChangedRef.current?.(scaleRef.current, clamped.x, clamped.y, w, h);
   }, [panStepRequest, stopMomentum, cancelFocusAnimation]);
@@ -1916,13 +1918,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     // Only auto-pan if the canvas is zoomed in AND the region is outside the visible viewport
     const isZoomedIn = curScale > 1.05;
     if (showNextRegionHint && isZoomedIn && !isOnScreen) {
+      stopMomentum();
+      cancelFocusAnimation(false);
       const targetX = w / 2 - baseOffsetX - regRef.worldCentroidX * effScale;
       const targetY = h / 2 - baseOffsetY - regRef.worldCentroidY * effScale;
       const clamped = clampCanvasOffset({ x: targetX, y: targetY }, curScale, puzzle.width, puzzle.height, w, h);
       offsetRef.current = clamped;
+      setScale(curScale);
       setOffset(clamped);
     }
-  }, [hintRegionId, puzzle, showNextRegionHint]);
+  }, [hintRegionId, puzzle, showNextRegionHint, stopMomentum, cancelFocusAnimation]);
 
   // Notify view extent updates only when scale or offset actually changes
   const onViewExtentChangedRef = useRef(onViewExtentChanged);

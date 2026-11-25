@@ -1641,6 +1641,26 @@ export interface FocusBoundsRequest {
   bounds: NormalizedRect;
 }
 
+/**
+ * Pure factory creating a monotonically sequenced FocusBoundsRequest with a defensive
+ * copy of the normalized target bounds so caller mutations cannot corrupt queued glides.
+ */
+export function createFocusBoundsRequest(
+  prevSeq: number,
+  bounds: NormalizedRect
+): FocusBoundsRequest {
+  const baseSeq = Number.isFinite(prevSeq) ? Math.floor(prevSeq) : 0;
+  return {
+    seq: Math.max(0, baseSeq) + 1,
+    bounds: {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    },
+  };
+}
+
 export interface ComputeFocusViewportParams {
   bounds: NormalizedRect;
   puzzleWidth: number;

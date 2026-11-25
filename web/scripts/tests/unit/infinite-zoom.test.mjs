@@ -8411,6 +8411,71 @@ async function testClusterG_ControllerDecompositionF13(
         outpaintTpl.templateDataUrl.startsWith('data:image/jpeg;base64,'),
         'Zoom Out template dataUrl must match compact encoded MIME'
       );
+
+      // Defect D regression: throwing inside ctx.getImageData must still release input scratch canvases
+      const throwingDoc = createFakeDocument((canvas) => {
+        const origGetContext = canvas.getContext.bind(canvas);
+        canvas.getContext = (type) => {
+          const ctx = origGetContext(type);
+          if (ctx) {
+            ctx.getImageData = () => {
+              throw new Error('SecurityError: tainted canvas in getImageData');
+            };
+          }
+          return ctx;
+        };
+      });
+      await withGlobalOverrides({ document: throwingDoc, ImageData: FakeImageData }, async () => {
+        const throwLayerCanvas = throwingDoc.createElement('canvas');
+        throwLayerCanvas.width = 24;
+        throwLayerCanvas.height = 24;
+        await assert.rejects(
+          () =>
+            pipelineMod.buildInfillTemplatePayload(
+              throwLayerCanvas,
+              puz,
+              new Set([1]),
+              { minX: 0, maxX: 11, minY: 0, maxY: 23, width: 12, height: 24 }
+            ),
+          /tainted canvas/i,
+          'buildInfillTemplatePayload must propagate ctx.getImageData throw'
+        );
+        assert.equal(
+          throwLayerCanvas.width,
+          0,
+          'buildInfillTemplatePayload must release layerCanvas width to 0 when getImageData throws'
+        );
+        assert.equal(
+          throwLayerCanvas.height,
+          0,
+          'buildInfillTemplatePayload must release layerCanvas height to 0 when getImageData throws'
+        );
+
+        const throwRootCanvas = throwingDoc.createElement('canvas');
+        throwRootCanvas.width = 24;
+        throwRootCanvas.height = 24;
+        await assert.rejects(
+          () =>
+            pipelineMod.buildOutpaintTemplatePayload(throwRootCanvas, 24, 24, {
+              top: false,
+              right: true,
+              bottom: false,
+              left: false,
+            }),
+          /tainted canvas/i,
+          'buildOutpaintTemplatePayload must propagate ctx.getImageData throw'
+        );
+        assert.equal(
+          throwRootCanvas.width,
+          0,
+          'buildOutpaintTemplatePayload must release rootCanvas width to 0 when getImageData throws'
+        );
+        assert.equal(
+          throwRootCanvas.height,
+          0,
+          'buildOutpaintTemplatePayload must release rootCanvas height to 0 when getImageData throws'
+        );
+      });
     });
   }
 
@@ -8614,15 +8679,65 @@ async function testClusterG_ControllerDecompositionF13(
           assert.equal(activeAfterZoomOutUndo.panOffsetY, -80);
           assert.equal(activeAfterZoomOutUndo.activeColorId, 1);
 
-          // Case 3: Stale session aborts cleanly returning null
-          const staleRestore = await persistenceMod.restoreUndoSubdivisionPersistence({
-            snap: zoomInUndoSnap,
+          // Case 3: Stale session aborts cleanly at entry WITHOUT mutating IndexedDB or localStorage
+          const staleLayerKey = 'layer_snap-undo-sym_stale_guard';
+          const staleRootSentinel = new Blob([new Uint8Array([88, 77, 66])], { type: 'image/png' });
+          const staleLayerSentinel = new Blob([new Uint8Array([55, 44, 33])], { type: 'image/png' });
+          stores.images.set(snapId, staleRootSentinel);
+          stores.images.set(staleLayerKey, staleLayerSentinel);
+
+          const staleRegularRestore = await persistenceMod.restoreUndoSubdivisionPersistence({
+            snap: {
+              ...zoomInUndoSnap,
+              addedLayerBlobKeys: [staleLayerKey],
+              previousBlob: new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+            },
             isFreeColorMode: false,
             activeSave: initialSave,
             liveActiveSave: initialSave,
             isStale: () => true,
           });
-          assert.equal(staleRestore, null, 'Stale undo restore must return null immediately');
+          assert.equal(staleRegularRestore, null, 'Stale undo restore must return null immediately');
+          assert.equal(
+            stores.images.has(staleLayerKey),
+            true,
+            'Stale undo restore must NOT delete layer blob key from IndexedDB'
+          );
+          assert.deepEqual(
+            Array.from(new Uint8Array(await stores.images.get(snapId).arrayBuffer())),
+            [88, 77, 66],
+            'Stale undo restore must NOT overwrite root blob key in IndexedDB'
+          );
+
+          // Also verify promotedFromSample branch leaves BOTH root and layer IDB keys untouched when stale
+          const staleSampleRestore = await persistenceMod.restoreUndoSubdivisionPersistence({
+            snap: {
+              ...zoomInUndoSnap,
+              previousBlob: null,
+              promotedFromSample: true,
+              addedLayerBlobKeys: [staleLayerKey],
+            },
+            isFreeColorMode: false,
+            activeSave: initialSave,
+            liveActiveSave: initialSave,
+            isStale: () => true,
+          });
+          assert.equal(staleSampleRestore, null, 'Stale promoted-sample undo restore must return null');
+          assert.equal(
+            stores.images.has(snapId),
+            true,
+            'Stale promoted-sample undo restore must NOT delete root blob key from IndexedDB'
+          );
+          assert.equal(
+            stores.images.has(staleLayerKey),
+            true,
+            'Stale promoted-sample undo restore must NOT delete layer blob key from IndexedDB'
+          );
+          assert.equal(
+            storageMod.StorageService.loadActiveState().zoomScale,
+            3.2,
+            'Stale undo restore must leave persisted activeState untouched'
+          );
         } finally {
           idbMod.evictDbHandle(keysMod.resolveScopedDbName());
           idbMod.clearAllPreviewCaches();
@@ -8641,6 +8756,7 @@ function testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod) {
     MAX_INFINITE_ZOOM_SCALE,
     clampCanvasOffset,
     computeFocusViewportForBounds,
+    createFocusBoundsRequest,
   } = canvasHelpersMod;
 
   // H0: Re-export identity parity on PuzzleCanvas.tsx (preserves useReplayController.ts & public consumers)
@@ -8653,6 +8769,11 @@ function testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod) {
     puzzleCanvasMod.computeFocusViewportForBounds,
     computeFocusViewportForBounds,
     'PuzzleCanvas.tsx must re-export computeFocusViewportForBounds with strict referential equality'
+  );
+  assert.strictEqual(
+    puzzleCanvasMod.createFocusBoundsRequest,
+    createFocusBoundsRequest,
+    'PuzzleCanvas.tsx must re-export createFocusBoundsRequest with strict referential equality'
   );
 
   // H1: Core centering & TopBar/PaletteDock safe-area framing (desktop 1280x800, 1000x1000 puzzle)
@@ -8943,24 +9064,35 @@ function testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod) {
     }
   }
 
-  // H6: FocusBoundsRequest monotonic seq & defensive copy contract
+  // H6: Real production createFocusBoundsRequest monotonic seq, defensive copy & non-finite guard
   {
-    let seq = 0;
-    const makeNextFocusRequest = (bounds) => {
-      seq += 1;
-      return {
-        seq,
-        bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
-      };
-    };
     const mutableBounds = { x: 0.1, y: 0.2, width: 0.3, height: 0.4 };
-    const req1 = makeNextFocusRequest(mutableBounds);
+    const req1 = createFocusBoundsRequest(0, mutableBounds);
     mutableBounds.x = 0.99;
-    const req2 = makeNextFocusRequest({ x: 0.2, y: 0.3, width: 0.2, height: 0.2 });
-    assert.equal(req1.seq, 1);
-    assert.equal(req2.seq, 2);
-    assert.equal(req1.bounds.x, 0.1, 'FocusBoundsRequest must defensively copy bounds');
-    assert.ok(req2.seq > req1.seq, 'FocusBoundsRequest seq must be strictly monotonic');
+    mutableBounds.y = 0.88;
+    mutableBounds.width = 0.01;
+    mutableBounds.height = 0.02;
+
+    const req2 = createFocusBoundsRequest(req1.seq, { x: 0.2, y: 0.3, width: 0.25, height: 0.25 });
+    const req3 = createFocusBoundsRequest(req2.seq, { x: 0.4, y: 0.4, width: 0.1, height: 0.1 });
+
+    assert.equal(req1.seq, 1, 'First focus request from prevSeq=0 must have seq=1');
+    assert.equal(req2.seq, 2, 'Second focus request must increment seq monotonically to 2');
+    assert.equal(req3.seq, 3, 'Third focus request must increment seq monotonically to 3');
+    assert.ok(req2.seq > req1.seq && req3.seq > req2.seq, 'FocusBoundsRequest seq must be strictly monotonic');
+    assert.deepEqual(
+      req1.bounds,
+      { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      'createFocusBoundsRequest must defensively copy bounds so caller mutations cannot corrupt queued glides'
+    );
+    assert.notStrictEqual(req1.bounds, mutableBounds);
+
+    // Safe normalization for non-finite, negative, and fractional prevSeq inputs
+    assert.equal(createFocusBoundsRequest(NaN, { x: 0, y: 0, width: 0.5, height: 0.5 }).seq, 1);
+    assert.equal(createFocusBoundsRequest(Infinity, { x: 0, y: 0, width: 0.5, height: 0.5 }).seq, 1);
+    assert.equal(createFocusBoundsRequest(-Infinity, { x: 0, y: 0, width: 0.5, height: 0.5 }).seq, 1);
+    assert.equal(createFocusBoundsRequest(-7, { x: 0, y: 0, width: 0.5, height: 0.5 }).seq, 1);
+    assert.equal(createFocusBoundsRequest(4.9, { x: 0, y: 0, width: 0.5, height: 0.5 }).seq, 5);
   }
 }
 

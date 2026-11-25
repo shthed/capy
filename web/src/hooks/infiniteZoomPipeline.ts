@@ -614,16 +614,16 @@ export async function buildInfillTemplatePayload(
   selectedCopy: ReadonlySet<number>,
   bbox: SelectionBbox
 ): Promise<InfillTemplatePayload> {
-  const cropMask = buildSelectionMask(targetGrid, selectedCopy, bbox);
-  const originalCropRgba = readCanvasCropRgba(
-    layerCanvas,
-    bbox.minX,
-    bbox.minY,
-    bbox.width,
-    bbox.height
-  );
   let tpl: ReturnType<typeof buildInfillTemplateCanvas> | null = null;
   try {
+    const cropMask = buildSelectionMask(targetGrid, selectedCopy, bbox);
+    const originalCropRgba = readCanvasCropRgba(
+      layerCanvas,
+      bbox.minX,
+      bbox.minY,
+      bbox.width,
+      bbox.height
+    );
     if (!originalCropRgba) {
       throw new Error('Could not read pixel data for selected region.');
     }
@@ -650,9 +650,9 @@ export async function buildOutpaintTemplatePayload(
   baseHeight: number,
   sides: BorderExtensionSides
 ): Promise<OutpaintTemplatePayload> {
-  const originalInnerRgba = readCanvasCropRgba(rootCanvas, 0, 0, baseWidth, baseHeight);
   let tpl: ReturnType<typeof buildOutpaintTemplateCanvas> | null = null;
   try {
+    const originalInnerRgba = readCanvasCropRgba(rootCanvas, 0, 0, baseWidth, baseHeight);
     if (!originalInnerRgba) {
       throw new Error('Could not read pixel data from active puzzle artwork.');
     }

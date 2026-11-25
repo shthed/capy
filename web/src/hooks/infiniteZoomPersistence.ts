@@ -794,6 +794,7 @@ export async function restoreUndoSubdivisionPersistence(
   params: RestoreUndoSubdivisionPersistenceParams
 ): Promise<RestoreUndoSubdivisionPersistenceResult | null> {
   const { snap, isFreeColorMode, activeSave, liveActiveSave, isStale } = params;
+  if (isStale()) return null;
   const expectedSnapshotId = snap.snapshotId;
 
   const isPromotedSample =
