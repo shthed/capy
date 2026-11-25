@@ -1256,13 +1256,21 @@ function createResizedTemplateCanvas(
   }
 }
 
+function normalizeStrictRasterCompactMime(rawMime: string | undefined): string | null {
+  const cleaned = (rawMime || '').split(';')[0].trim().toLowerCase();
+  if (cleaned === 'image/jpg' || cleaned === 'image/jpeg') return 'image/jpeg';
+  if (cleaned === 'image/png' || cleaned === 'image/webp') return cleaned;
+  return null;
+}
+
 function decodeDataUrlToCandidate(
   rawDataUrl: string,
-  fallbackMime: string
+  _fallbackMime: string
 ): EncodedCanvasCandidate | null {
   const match = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i.exec(rawDataUrl.trim());
   if (!match) return null;
-  const mimeType = normalizeCompactMime(match[1], fallbackMime);
+  const mimeType = normalizeStrictRasterCompactMime(match[1]);
+  if (!mimeType) return null;
   const compactBase64 = match[2].replace(/\s+/g, '');
   const bytes = base64ToUint8(compactBase64);
   if (bytes.byteLength === 0) return null;
@@ -1425,13 +1433,21 @@ export async function canvasToCompactTemplateBlobAndDataUrl(
   const baseLongest = Math.max(baseDims.width, baseDims.height);
   const minLongest = Math.min(MIN_COMPACT_TEMPLATE_LONGEST_EDGE, baseLongest);
 
+  const stepDimsList: number[] = [];
+  for (const scale of COMPACT_TEMPLATE_SCALE_STEPS) {
+    stepDimsList.push(
+      scale === 1 ? baseLongest : Math.max(minLongest, Math.round(baseLongest * scale))
+    );
+  }
+  if (stepDimsList[stepDimsList.length - 1] > minLongest) {
+    stepDimsList.push(minLongest);
+  }
+
   let prevW = 0;
   let prevH = 0;
   let best: { candidate: EncodedCanvasCandidate; width: number; height: number } | null = null;
 
-  for (const scale of COMPACT_TEMPLATE_SCALE_STEPS) {
-    const stepMaxDim =
-      scale === 1 ? baseLongest : Math.max(minLongest, Math.round(baseLongest * scale));
+  for (const stepMaxDim of stepDimsList) {
     const dims = computeCompactTemplateDimensions(srcW, srcH, stepMaxDim);
     if (dims.width === prevW && dims.height === prevH) continue;
     prevW = dims.width;

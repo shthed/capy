@@ -1689,6 +1689,18 @@ export async function encodeArchiveSaveBinaryV2(
   return out;
 }
 
+function normalizeAllowedTopLevelImageMimeV2(rawMime: unknown, context: string): string {
+  if (typeof rawMime !== 'string') {
+    throw new Error(`Invalid ${context}`);
+  }
+  const cleaned = rawMime.trim().toLowerCase().split(';')[0].trim();
+  const normalized = cleaned === 'image/jpg' ? 'image/jpeg' : cleaned;
+  if (!ALLOWED_LAYER_IMAGE_MIMES.has(normalized)) {
+    throw new Error(`Unsupported MIME type "${normalized}" in ${context}`);
+  }
+  return normalized;
+}
+
 function validateSingleSavePayloadV2(
   payload: Record<string, unknown>,
   isArchive: boolean,
@@ -1704,8 +1716,11 @@ function validateSingleSavePayloadV2(
   if (payload.imageBytes !== undefined && !(payload.imageBytes instanceof Uint8Array)) {
     throw new Error('Invalid Capy v2 binary imageBytes');
   }
-  if (payload.imageMimeType !== undefined && typeof payload.imageMimeType !== 'string') {
-    throw new Error('Invalid Capy v2 binary imageMimeType');
+  if (payload.imageMimeType !== undefined) {
+    payload.imageMimeType = normalizeAllowedTopLevelImageMimeV2(
+      payload.imageMimeType,
+      'Capy v2 binary imageMimeType'
+    );
   }
   if (payload.layerImages !== undefined) {
     assertValidLayerImagesMap(payload.layerImages);
@@ -1717,7 +1732,10 @@ function validateArchiveImagesMapV2(rawImages: unknown): void {
   if (!rawImages || typeof rawImages !== 'object' || Array.isArray(rawImages)) {
     throw new Error('Invalid Capy v2 archive images map');
   }
-  for (const imgEntry of Object.values(rawImages as Record<string, unknown>)) {
+  for (const [key, imgEntry] of Object.entries(rawImages as Record<string, unknown>)) {
+    if (FORBIDDEN_LAYER_MAP_KEYS.has(key)) {
+      throw new Error(`Forbidden image key "${key}" in Capy v2 archive`);
+    }
     if (
       !imgEntry ||
       typeof imgEntry !== 'object' ||
@@ -1727,6 +1745,10 @@ function validateArchiveImagesMapV2(rawImages: unknown): void {
     ) {
       throw new Error('Invalid image entry in Capy v2 archive');
     }
+    (imgEntry as { mimeType: string }).mimeType = normalizeAllowedTopLevelImageMimeV2(
+      (imgEntry as { mimeType: string }).mimeType,
+      `Capy v2 archive image "${key}"`
+    );
   }
 }
 

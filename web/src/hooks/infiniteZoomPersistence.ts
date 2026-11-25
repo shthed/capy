@@ -807,24 +807,23 @@ export async function restoreUndoSubdivisionPersistence(
     ? [...snap.addedLayerBlobKeys, expectedSnapshotId]
     : snap.addedLayerBlobKeys;
 
-  if (keysToDelete.length > 0) {
-    await deleteOrphanedEntries([], keysToDelete).catch((err) => {
-      reportSwallowed('InfiniteZoom.undoDeleteLayerBlobs', err, { id: expectedSnapshotId });
-    });
-    if (isStale()) return null;
-  }
-
+  // Restore previous root blob and puzzle BEFORE deleting orphaned/added layer blobs so a
+  // concurrent snapshot switch or abort can never leave expectedSnapshotId referencing deleted blobs.
   if (snap.previousBlob) {
     await StorageService.saveImageBlob(expectedSnapshotId, snap.previousBlob).catch((err) => {
       reportSwallowed('InfiniteZoom.undoSaveImageBlob', err, { id: expectedSnapshotId });
     });
-    if (isStale()) return null;
   }
 
   await StorageService.savePuzzleData(expectedSnapshotId, snap.puzzle).catch((err) => {
     reportSwallowed('InfiniteZoom.undoSavePuzzleData', err, { id: expectedSnapshotId });
   });
-  if (isStale()) return null;
+
+  if (keysToDelete.length > 0) {
+    await deleteOrphanedEntries([], keysToDelete).catch((err) => {
+      reportSwallowed('InfiniteZoom.undoDeleteLayerBlobs', err, { id: expectedSnapshotId });
+    });
+  }
 
   const isFree = Boolean(isFreeColorMode || snap.puzzle.isFreeColor);
   const nextResetEpoch = collectMonotonicResetEpoch(expectedSnapshotId, activeSave, liveActiveSave);
@@ -835,7 +834,7 @@ export async function restoreUndoSubdivisionPersistence(
   const totalRegions = getTotalRegionCount(snap.puzzle);
 
   let previewUrl = snap.previousMeta.previewDataUrl;
-  if (!previewUrl) {
+  if (!previewUrl && !isStale()) {
     previewUrl = await renderHydratedPreview(
       snap.puzzle,
       snap.sourceImage,
@@ -843,7 +842,6 @@ export async function restoreUndoSubdivisionPersistence(
       snap.paintedRegionColors,
       'InfiniteZoom.undoPreview'
     );
-    if (isStale()) return null;
   }
 
   const estSaveBytes = StorageService.estimatePuzzleSaveBytes(snap.puzzle, previewUrl);
@@ -870,6 +868,12 @@ export async function restoreUndoSubdivisionPersistence(
     estSaveBytes,
     nextResetEpoch
   );
+
+  // Only skip overwriting active session state & live UI when another puzzle/op superseded us.
+  if (isStale()) {
+    return null;
+  }
+
   const syncedSave = updatedSnapshots.find((s) => s.id === expectedSnapshotId);
 
   StorageService.saveActiveState({

@@ -861,9 +861,10 @@ export class ColorQuantizer {
       };
     }
 
+    const safeK = typeof k === 'number' && Number.isFinite(k) ? Math.floor(k) : 16;
     const actualK = activeMask
-      ? Math.max(1, Math.min(200, samples.sampleCount, Math.max(1, Math.floor(k))))
-      : Math.min(200, Math.max(2, Math.min(totalPixels, k)));
+      ? Math.max(1, Math.min(200, samples.sampleCount, Math.max(1, safeK)))
+      : Math.min(200, Math.max(2, Math.min(totalPixels, safeK)));
 
     const centroids: CentroidArrays = {
       r: new Int32Array(actualK),

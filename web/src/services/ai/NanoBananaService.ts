@@ -9,7 +9,7 @@ import { NativeBridge } from '../NativeBridge';
 import { loadGeminiByokApiKey } from '../storage/SettingsStorage';
 import { reportSwallowed } from '../telemetry';
 import {
-  DEFAULT_NANO_BANANA_MODEL,
+  getNanoBananaModelMeta,
   NanoBananaError,
   type NanoBananaErrorCode,
   type PuterAspectRatio,
@@ -221,37 +221,7 @@ function normalizeAllowedRasterMime(rawMime: string | undefined | null): string 
   return ALLOWED_RASTER_MIMES.has(normalized) ? normalized : null;
 }
 
-function isAsciiWhitespaceByte(b: number): boolean {
-  return b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d || b === 0x0c;
-}
-
-function isSvgOrXmlPayloadBytes(bytes: Uint8Array): boolean {
-  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 4) return false;
-  let offset = 0;
-  if (bytes.byteLength >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    offset = 3;
-  }
-  while (offset < bytes.byteLength && isAsciiWhitespaceByte(bytes[offset])) {
-    offset += 1;
-  }
-  if (offset >= bytes.byteLength || bytes[offset] !== 0x3c) {
-    return false;
-  }
-  const headLen = Math.min(bytes.byteLength - offset, 16);
-  let head = '';
-  for (let i = 0; i < headLen; i++) {
-    head += String.fromCharCode(bytes[offset + i]);
-  }
-  const lower = head.toLowerCase();
-  return (
-    lower.startsWith('<svg') ||
-    lower.startsWith('<?xml') ||
-    lower.startsWith('<!doctype') ||
-    lower.startsWith('<!--')
-  );
-}
-
-function decodeBase64PrefixBytes(base64: string, maxChars = 512): Uint8Array | null {
+function decodeBase64PrefixBytes(base64: string, maxChars = 64): Uint8Array | null {
   const windowStr = base64.trimStart().slice(0, maxChars * 2).replace(/\s+/g, '');
   if (windowStr.length < 4) return null;
   const slice =
@@ -263,14 +233,21 @@ function decodeBase64PrefixBytes(base64: string, maxChars = 512): Uint8Array | n
   }
 }
 
-function isSvgOrXmlBase64Prefix(base64: string): boolean {
-  const bytes = decodeBase64PrefixBytes(base64);
-  return bytes !== null && isSvgOrXmlPayloadBytes(bytes);
-}
-
 function detectRasterMimeFromBase64Prefix(base64: string): string | null {
   const bytes = decodeBase64PrefixBytes(base64, 32);
   return bytes ? detectRasterMimeFromMagicBytes(bytes) : null;
+}
+
+function requireDetectedRasterMimeFromBase64(base64: string): string {
+  const detected = detectRasterMimeFromBase64Prefix(base64);
+  if (!detected || !ALLOWED_RASTER_MIMES.has(detected)) {
+    throw new NanoBananaError(
+      'INVALID_IMAGE',
+      'Unsupported or invalid raster template image payload.',
+      true
+    );
+  }
+  return detected;
 }
 
 function extensionForImageMime(mimeType: string): string {
@@ -309,10 +286,7 @@ function resolveHandoffTemplateMime(handoff: {
   );
 }
 
-function resolveTemplateFromBase64Input(
-  rawBase64: string,
-  explicitMime: string | null
-): { base64: string; mimeType: string } {
+function resolveTemplateFromBase64Input(rawBase64: string): { base64: string; mimeType: string } {
   const trimmed = rawBase64.trim();
   const parsed = extractBase64FromDataUrl(trimmed);
   if (parsed) {
@@ -322,36 +296,15 @@ function resolveTemplateFromBase64Input(
     if (parsed.mimeType && !ALLOWED_RASTER_MIMES.has(parsed.mimeType)) {
       throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
     }
-    if (isSvgOrXmlBase64Prefix(parsed.base64)) {
-      throw new NanoBananaError(
-        'INVALID_IMAGE',
-        'Unsupported SVG or XML template image payload.',
-        true
-      );
-    }
-    const mimeType =
-      detectRasterMimeFromBase64Prefix(parsed.base64) ||
-      normalizeAllowedRasterMime(parsed.mimeType) ||
-      explicitMime ||
-      'image/png';
+    const mimeType = requireDetectedRasterMimeFromBase64(parsed.base64);
     return { base64: parsed.base64, mimeType };
   }
-  if (isSvgOrXmlBase64Prefix(trimmed)) {
-    throw new NanoBananaError(
-      'INVALID_IMAGE',
-      'Unsupported SVG or XML template image payload.',
-      true
-    );
-  }
-  const mimeType = detectRasterMimeFromBase64Prefix(trimmed) || explicitMime || 'image/png';
-  return { base64: trimmed, mimeType };
+  const compact = trimmed.replace(/\s+/g, '');
+  const mimeType = requireDetectedRasterMimeFromBase64(compact);
+  return { base64: compact, mimeType };
 }
 
-function resolveTemplateFromDataUrlInput(
-  rawDataUrl: string,
-  explicitMime: string | null,
-  blobType?: string
-): { base64: string; mimeType: string } {
+function resolveTemplateFromDataUrlInput(rawDataUrl: string): { base64: string; mimeType: string } {
   const parsed = extractBase64FromDataUrl(rawDataUrl);
   if (!parsed || !parsed.base64) {
     throw new NanoBananaError('INVALID_IMAGE', 'Invalid template image data URL.', true);
@@ -359,25 +312,12 @@ function resolveTemplateFromDataUrlInput(
   if (parsed.mimeType && !ALLOWED_RASTER_MIMES.has(parsed.mimeType)) {
     throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
   }
-  if (isSvgOrXmlBase64Prefix(parsed.base64)) {
-    throw new NanoBananaError(
-      'INVALID_IMAGE',
-      'Unsupported SVG or XML template image payload.',
-      true
-    );
-  }
-  const mimeType =
-    detectRasterMimeFromBase64Prefix(parsed.base64) ||
-    normalizeAllowedRasterMime(parsed.mimeType) ||
-    explicitMime ||
-    normalizeAllowedRasterMime(blobType) ||
-    'image/png';
+  const mimeType = requireDetectedRasterMimeFromBase64(parsed.base64);
   return { base64: parsed.base64, mimeType };
 }
 
 async function resolveTemplateFromBlobInput(
-  blob: Blob,
-  explicitMime: string | null
+  blob: Blob
 ): Promise<{ base64: string; mimeType: string }> {
   const declared = normalizeImageMime(blob.type);
   if (declared && !ALLOWED_RASTER_MIMES.has(declared)) {
@@ -387,43 +327,33 @@ async function resolveTemplateFromBlobInput(
   if (bytes.byteLength === 0) {
     throw new NanoBananaError('INVALID_IMAGE', 'Template image blob is empty.', true);
   }
-  if (isSvgOrXmlPayloadBytes(bytes)) {
+  const detected = detectRasterMimeFromMagicBytes(bytes);
+  if (!detected || !ALLOWED_RASTER_MIMES.has(detected)) {
     throw new NanoBananaError(
       'INVALID_IMAGE',
-      'Unsupported SVG or XML template image payload.',
+      'Unsupported or invalid raster template image payload.',
       true
     );
   }
-  const mimeType =
-    detectRasterMimeFromMagicBytes(bytes) ||
-    explicitMime ||
-    normalizeAllowedRasterMime(blob.type) ||
-    'image/png';
-  return { base64: uint8ToBase64(bytes), mimeType };
+  return { base64: uint8ToBase64(bytes), mimeType: detected };
 }
 
 async function resolveTemplatePayload(
   params: NanoBananaGenerateParams
 ): Promise<{ base64: string; mimeType: string }> {
-  let explicitMime: string | null = null;
   if (typeof params.templateMimeType === 'string' && params.templateMimeType.trim().length > 0) {
-    explicitMime = normalizeAllowedRasterMime(params.templateMimeType);
-    if (!explicitMime) {
+    if (!normalizeAllowedRasterMime(params.templateMimeType)) {
       throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
     }
   }
   if (typeof params.templateBase64 === 'string' && params.templateBase64.trim().length > 0) {
-    return resolveTemplateFromBase64Input(params.templateBase64, explicitMime);
+    return resolveTemplateFromBase64Input(params.templateBase64);
   }
   if (typeof params.templateDataUrl === 'string' && params.templateDataUrl.trim().length > 0) {
-    return resolveTemplateFromDataUrlInput(
-      params.templateDataUrl,
-      explicitMime,
-      params.templatePngBlob?.type
-    );
+    return resolveTemplateFromDataUrlInput(params.templateDataUrl);
   }
   if (params.templatePngBlob) {
-    return resolveTemplateFromBlobInput(params.templatePngBlob, explicitMime);
+    return resolveTemplateFromBlobInput(params.templatePngBlob);
   }
   throw new NanoBananaError('INVALID_IMAGE', 'A prepared template image is required.', true);
 }
@@ -635,14 +565,16 @@ export async function loadPuterSdk(
 }
 
 const PUTER_BALANCE_KEYWORDS = ['402', 'balance', 'insufficient', 'quota', 'funding'] as const;
-const PUTER_CANCEL_KEYWORDS = ['cancel', 'closed', 'dismiss', 'denied', 'auth'] as const;
+const PUTER_CANCEL_KEYWORDS = ['cancel', 'closed', 'dismiss', 'denied'] as const;
+const PUTER_CANCEL_AUTH_RE = /(?:^|[^a-z])auth(?:entication)?(?:[^a-z]|$)/;
 const PUTER_SAFETY_KEYWORDS = ['safety', 'policy', 'blocked', 'prohibited', 'moderation'] as const;
+const MAX_PUTER_ERROR_NESTING_DEPTH = 3;
 
 interface PuterErrorDetails {
-  status?: number;
+  statuses: Set<number>;
   codes: Set<string>;
   message: string;
-  lower: string;
+  searchLower: string;
 }
 
 function containsAnyKeyword(text: string, keywords: readonly string[]): boolean {
@@ -656,46 +588,47 @@ function asRecord(val: unknown): Record<string, unknown> | null {
   return val && typeof val === 'object' ? (val as Record<string, unknown>) : null;
 }
 
-function readFirstString(...candidates: unknown[]): string {
-  for (const c of candidates) {
-    if (typeof c === 'string' && c.trim().length > 0) return c.trim();
-  }
-  return '';
-}
-
-function readFirstStatus(...candidates: unknown[]): number | undefined {
-  for (const c of candidates) {
-    if (typeof c === 'number' && Number.isFinite(c)) return c;
-    if (typeof c === 'string') {
-      const trimmed = c.trim();
-      if (/^\d{3}$/.test(trimmed)) return Number(trimmed);
-    }
+function parseNumericStatus(candidate: unknown): number | undefined {
+  if (typeof candidate === 'number' && Number.isFinite(candidate)) return candidate;
+  if (typeof candidate === 'string') {
+    const trimmed = candidate.trim();
+    if (/^\d{3}$/.test(trimmed)) return Number(trimmed);
   }
   return undefined;
 }
 
-function collectPuterCodes(
-  errObj: Record<string, unknown> | null,
-  nested: Record<string, unknown> | null
-): { codes: Set<string>; primaryCode: string } {
-  const codes = new Set<string>();
-  let primaryCode = '';
-  const candidates = [
-    errObj?.code,
-    nested?.code,
-    errObj?.errorCode,
-    nested?.errorCode,
-    errObj?.error_code,
-    nested?.error_code,
-  ];
-  for (const raw of candidates) {
+function collectNodeStatuses(node: Record<string, unknown>, statuses: Set<number>): void {
+  for (const raw of [node.status, node.statusCode, node.code]) {
+    const parsed = parseNumericStatus(raw);
+    if (parsed !== undefined) statuses.add(parsed);
+  }
+}
+
+function collectNodeCodes(
+  node: Record<string, unknown>,
+  codes: Set<string>,
+  currentPrimary: string
+): string {
+  let primaryCode = currentPrimary;
+  for (const raw of [node.code, node.errorCode, node.error_code]) {
     if (typeof raw !== 'string') continue;
     const normalized = raw.trim().toLowerCase();
     if (!normalized) continue;
     if (!primaryCode) primaryCode = normalized;
     codes.add(normalized);
   }
-  return { codes, primaryCode };
+  return primaryCode;
+}
+
+function collectNodeMessages(node: unknown, rec: Record<string, unknown>, out: string[]): void {
+  if (node instanceof Error && node.message.trim().length > 0) {
+    out.push(node.message.trim());
+  } else if (typeof rec.message === 'string' && rec.message.trim().length > 0) {
+    out.push(rec.message.trim());
+  }
+  if (typeof rec.error === 'string' && rec.error.trim().length > 0) {
+    out.push(rec.error.trim());
+  }
 }
 
 function hasCodePrefix(codes: Set<string>, prefix: string): boolean {
@@ -713,22 +646,41 @@ function hasCodeSubstring(codes: Set<string>, sub: string): boolean {
 }
 
 function extractPuterErrorDetails(err: unknown): PuterErrorDetails {
-  const errObj = asRecord(err);
-  const nested = asRecord(errObj?.error);
-  const status = readFirstStatus(errObj?.status, nested?.status, errObj?.code, nested?.code);
-  const { codes, primaryCode } = collectPuterCodes(errObj, nested);
-  const fallbackErrorStr = typeof errObj?.error === 'string' ? errObj.error : '';
-  const message =
-    (err instanceof Error && err.message.trim().length > 0 ? err.message.trim() : '') ||
-    readFirstString(errObj?.message, nested?.message, fallbackErrorStr) ||
-    (errObj ? primaryCode || 'Puter generation failed' : String(err ?? 'Puter generation failed'));
-  return { status, codes, message, lower: message.toLowerCase() };
+  const statuses = new Set<number>();
+  const codes = new Set<string>();
+  const messages: string[] = [];
+  let primaryCode = '';
+
+  const visited = new Set<object>();
+  let current: unknown = err;
+  for (let depth = 0; depth <= MAX_PUTER_ERROR_NESTING_DEPTH; depth++) {
+    const rec = asRecord(current);
+    if (!rec || visited.has(rec)) break;
+    visited.add(rec);
+    collectNodeStatuses(rec, statuses);
+    primaryCode = collectNodeCodes(rec, codes, primaryCode);
+    collectNodeMessages(current, rec, messages);
+    current = rec.error;
+  }
+
+  const fallbackMessage =
+    asRecord(err) !== null
+      ? primaryCode || 'Puter generation failed'
+      : String(err ?? 'Puter generation failed');
+  const message = messages[0] || fallbackMessage;
+  const searchParts = messages.length > 0 ? [...messages, ...codes] : [message, ...codes];
+  return {
+    statuses,
+    codes,
+    message,
+    searchLower: searchParts.join(' ').toLowerCase(),
+  };
 }
 
 function isPuterSafetyError(details: PuterErrorDetails): boolean {
   return (
     details.codes.has('moderation_flagged') ||
-    containsAnyKeyword(details.lower, PUTER_SAFETY_KEYWORDS)
+    containsAnyKeyword(details.searchLower, PUTER_SAFETY_KEYWORDS)
   );
 }
 
@@ -737,11 +689,22 @@ function isPuterBackendNetworkCode(details: PuterErrorDetails): boolean {
 }
 
 function isPuterBalanceCode(details: PuterErrorDetails): boolean {
-  return details.status === 402 || details.codes.has('insufficient_funds');
+  return details.statuses.has(402) || details.codes.has('insufficient_funds');
 }
 
 function isPuterInvalidRequestCode(details: PuterErrorDetails): boolean {
   return details.codes.has('bad_request') || details.codes.has('prompt_required');
+}
+
+function isPuterCancelError(details: PuterErrorDetails): boolean {
+  if (isPuterBackendNetworkCode(details) || isPuterInvalidRequestCode(details)) {
+    return false;
+  }
+  return (
+    hasCodeSubstring(details.codes, 'cancel') ||
+    containsAnyKeyword(details.searchLower, PUTER_CANCEL_KEYWORDS) ||
+    PUTER_CANCEL_AUTH_RE.test(details.searchLower)
+  );
 }
 
 function classifyPuterError(err: unknown): NanoBananaError {
@@ -759,26 +722,21 @@ function classifyPuterError(err: unknown): NanoBananaError {
       err
     );
   }
-  const hasStructuredNonCancelCode =
-    isPuterBackendNetworkCode(details) ||
-    isPuterBalanceCode(details) ||
-    isPuterInvalidRequestCode(details);
   if (
-    !hasStructuredNonCancelCode &&
-    (hasCodeSubstring(details.codes, 'cancel') ||
-      containsAnyKeyword(details.lower, PUTER_CANCEL_KEYWORDS))
+    isPuterBalanceCode(details) ||
+    containsAnyKeyword(details.searchLower, PUTER_BALANCE_KEYWORDS)
   ) {
     return new NanoBananaError(
-      'PUTER_CANCELLED',
-      'Puter sign-in or generation popup was cancelled.',
+      'PUTER_BALANCE_EXHAUSTED',
+      'Your Puter usage balance is exhausted. Switch to Free Guided Gemini Handoff or Direct Gemini API (BYOK).',
       true,
       err
     );
   }
-  if (isPuterBalanceCode(details) || containsAnyKeyword(details.lower, PUTER_BALANCE_KEYWORDS)) {
+  if (isPuterCancelError(details)) {
     return new NanoBananaError(
-      'PUTER_BALANCE_EXHAUSTED',
-      'Your Puter usage balance is exhausted. Switch to Free Guided Gemini Handoff or Direct Gemini API (BYOK).',
+      'PUTER_CANCELLED',
+      'Puter sign-in or generation popup was cancelled.',
       true,
       err
     );
@@ -842,6 +800,94 @@ function extractPuterOutputSource(rawResult: unknown): string | null {
   return null;
 }
 
+async function readResponseBytesBounded(
+  res: Response,
+  maxBytes: number
+): Promise<Uint8Array> {
+  const body = res.body;
+  if (body && typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value || value.byteLength === 0) continue;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          void reader.cancel().catch(() => {});
+          throw new NanoBananaError(
+            'INVALID_RESPONSE',
+            'Puter generated image exceeds the 16 MB safety limit.',
+            true
+          );
+        }
+        chunks.push(value);
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // ignore if already released
+      }
+    }
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return merged;
+  }
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+async function fetchPuterImageUrlBytes(
+  src: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal
+): Promise<Uint8Array> {
+  const isHttps = /^https:/i.test(src);
+  const init: RequestInit | undefined = isHttps
+    ? { credentials: 'omit', ...(signal ? { signal } : {}) }
+    : signal
+      ? { signal }
+      : undefined;
+  const res = await fetchImpl(src, init);
+  if (!res.ok) {
+    throw new NanoBananaError(
+      'NETWORK_ERROR',
+      `Failed to fetch Puter generated image (HTTP ${res.status}).`,
+      true
+    );
+  }
+  const contentTypeHeader = normalizeImageMime(res.headers?.get?.('content-type'));
+  if (
+    contentTypeHeader &&
+    contentTypeHeader !== 'application/octet-stream' &&
+    !ALLOWED_RASTER_MIMES.has(contentTypeHeader)
+  ) {
+    throw new NanoBananaError(
+      'INVALID_RESPONSE',
+      'Puter generated image URL returned an unsupported content type.',
+      true
+    );
+  }
+  const contentLengthHeader = res.headers?.get?.('content-length');
+  if (contentLengthHeader) {
+    const contentLength = Number(contentLengthHeader);
+    if (Number.isFinite(contentLength) && contentLength > MAX_RECEIVED_IMAGE_BYTES) {
+      throw new NanoBananaError(
+        'INVALID_RESPONSE',
+        'Puter generated image exceeds the 16 MB safety limit.',
+        true
+      );
+    }
+  }
+  return readResponseBytesBounded(res, MAX_RECEIVED_IMAGE_BYTES);
+}
+
 async function resolvePuterOutputToBlobAndDataUrl(
   rawResult: unknown,
   fetchImpl: typeof fetch,
@@ -886,26 +932,7 @@ async function resolvePuterOutputToBlobAndDataUrl(
   }
 
   if (/^(?:https:|blob:)/i.test(src)) {
-    const res = await fetchImpl(src, signal ? { signal } : undefined);
-    if (!res.ok) {
-      throw new NanoBananaError(
-        'NETWORK_ERROR',
-        `Failed to fetch Puter generated image (HTTP ${res.status}).`,
-        true
-      );
-    }
-    const contentLengthHeader = res.headers?.get?.('content-length');
-    if (contentLengthHeader) {
-      const contentLength = Number(contentLengthHeader);
-      if (Number.isFinite(contentLength) && contentLength > MAX_RECEIVED_IMAGE_BYTES) {
-        throw new NanoBananaError(
-          'INVALID_RESPONSE',
-          'Puter generated image exceeds the 16 MB safety limit.',
-          true
-        );
-      }
-    }
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    const bytes = await fetchPuterImageUrlBytes(src, fetchImpl, signal);
     return validateAndWrapPuterImageBytes(
       bytes,
       'Puter generated image URL did not return a valid raster image.'
@@ -946,7 +973,7 @@ export class PuterNanoBananaProvider {
       throw new NanoBananaError('ABORTED', 'Generation was cancelled.', false);
     }
 
-    const model = params.model ?? DEFAULT_NANO_BANANA_MODEL;
+    const model = getNanoBananaModelMeta(params.model).id;
     const quality = resolveSupportedModelResolution(model, params.resolution);
     const ratio = resolveNearestPuterRatio(params.width, params.height);
     const { base64: templateBase64, mimeType: templateMimeType } =
@@ -1290,7 +1317,7 @@ export class DirectGeminiByokProvider {
       );
     }
 
-    const model = params.model ?? DEFAULT_NANO_BANANA_MODEL;
+    const model = getNanoBananaModelMeta(params.model).id;
     const resolution = resolveSupportedModelResolution(model, params.resolution);
     const aspectRatio = resolveNearestGeminiAspectRatio(params.width, params.height);
     const { base64: templateBase64, mimeType: templateMimeType } =
@@ -1368,18 +1395,12 @@ export function prepareGuidedGeminiHandoff(
   if (!ALLOWED_RASTER_MIMES.has(parsed.mimeType)) {
     throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
   }
-  if (isSvgOrXmlBase64Prefix(parsed.base64)) {
-    throw new NanoBananaError(
-      'INVALID_IMAGE',
-      'Unsupported SVG or XML template image payload.',
-      true
-    );
-  }
+  const detectedMime = requireDetectedRasterMimeFromBase64(parsed.base64);
   return {
     prompt: input.prompt,
     templatePngBlob: input.templatePngBlob,
     templateDataUrl: input.templateDataUrl,
-    templateMimeType: resolveHandoffTemplateMime(input),
+    templateMimeType: detectedMime || resolveHandoffTemplateMime(input),
     direction: input.direction,
     geminiUrl: GEMINI_APP_URL,
   };
@@ -1504,6 +1525,32 @@ async function transcodeBlobOrDataUrlToPng(blob: Blob, dataUrl?: string): Promis
   }
 }
 
+async function detectClipboardInputRasterMime(
+  blob: Blob,
+  dataUrl: string | undefined,
+  hasBlob: boolean,
+  hasDataUrl: boolean
+): Promise<string | null> {
+  if (hasBlob) {
+    try {
+      const header = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+      const detected = detectRasterMimeFromMagicBytes(header);
+      if (detected && ALLOWED_RASTER_MIMES.has(detected)) return detected;
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  if (hasDataUrl && dataUrl) {
+    const parsed = extractBase64FromDataUrl(dataUrl);
+    if (!parsed || !parsed.base64) return null;
+    if (parsed.mimeType && !ALLOWED_RASTER_MIMES.has(parsed.mimeType)) return null;
+    const detected = detectRasterMimeFromBase64Prefix(parsed.base64);
+    return detected && ALLOWED_RASTER_MIMES.has(detected) ? detected : null;
+  }
+  return null;
+}
+
 export async function copyTemplateImageToClipboard(blob: Blob, dataUrl?: string): Promise<boolean> {
   if (
     typeof navigator === 'undefined' ||
@@ -1519,9 +1566,15 @@ export async function copyTemplateImageToClipboard(blob: Blob, dataUrl?: string)
     return false;
   }
 
-  if (hasBlob && normalizeImageMime(blob.type) === 'image/png') {
+  const detectedMime = await detectClipboardInputRasterMime(blob, dataUrl, hasBlob, hasDataUrl);
+  if (!detectedMime) {
+    return false;
+  }
+
+  if (hasBlob && detectedMime === 'image/png') {
     try {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      const pngBlob = blob.type === 'image/png' ? blob : new Blob([blob], { type: 'image/png' });
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
       return true;
     } catch (err) {
       reportSwallowed('NanoBananaService.copyTemplateImageClipboard', err);

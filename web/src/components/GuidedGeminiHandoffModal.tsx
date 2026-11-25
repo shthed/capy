@@ -217,6 +217,9 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     const isReadingClipboardRef = useRef<boolean>(false);
     const isCopyingImageRef = useRef<boolean>(false);
     const copyImageSeqRef = useRef<number>(0);
+    const isLaunchingRef = useRef<boolean>(false);
+    const launchSeqRef = useRef<number>(0);
+    const copyPromptSeqRef = useRef<number>(0);
 
     useEffect(() => {
       if (!isOpen || !handoff) {
@@ -238,6 +241,10 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         setIsDraggingFile(false);
         copyImageSeqRef.current += 1;
         isCopyingImageRef.current = false;
+        launchSeqRef.current += 1;
+        isLaunchingRef.current = false;
+        setIsLaunching(false);
+        copyPromptSeqRef.current += 1;
         if (copiedTimerRef.current !== null) {
           clearTimeout(copiedTimerRef.current);
           copiedTimerRef.current = null;
@@ -273,6 +280,9 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         isSubmittingRef.current = false;
         copyImageSeqRef.current += 1;
         isCopyingImageRef.current = false;
+        launchSeqRef.current += 1;
+        isLaunchingRef.current = false;
+        copyPromptSeqRef.current += 1;
         if (copiedTimerRef.current !== null) {
           clearTimeout(copiedTimerRef.current);
           copiedTimerRef.current = null;
@@ -406,11 +416,28 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     }, [isOpen, handoff, onCancel, handleReceiveInput]);
 
     const handleLaunchGemini = useCallback(async () => {
-      if (!handoff || isLaunching || isProcessing) return;
+      const activeHandoff = handoffRef.current;
+      if (
+        !isOpenRef.current ||
+        !activeHandoff ||
+        isLaunchingRef.current ||
+        isProcessingRef.current
+      ) {
+        return;
+      }
+      const seq = ++launchSeqRef.current;
+      isLaunchingRef.current = true;
       setLocalError(null);
       setIsLaunching(true);
       try {
-        const res = await launchGeminiHandoff(handoff);
+        const res = await launchGeminiHandoff(activeHandoff);
+        if (
+          !isOpenRef.current ||
+          handoffRef.current !== activeHandoff ||
+          launchSeqRef.current !== seq
+        ) {
+          return;
+        }
         if (isAndroid) {
           setLaunchStatus(
             res.copiedPrompt
@@ -425,16 +452,39 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
           );
         }
       } catch {
-        setLocalError('Could not open Gemini automatically. Copy the prompt below and upload the template image in Gemini.');
+        if (
+          !isOpenRef.current ||
+          handoffRef.current !== activeHandoff ||
+          launchSeqRef.current !== seq
+        ) {
+          return;
+        }
+        setLocalError(
+          'Could not open Gemini automatically. Copy the prompt below and upload the template image in Gemini.'
+        );
       } finally {
-        setIsLaunching(false);
+        if (launchSeqRef.current === seq) {
+          isLaunchingRef.current = false;
+          if (isOpenRef.current && handoffRef.current === activeHandoff) {
+            setIsLaunching(false);
+          }
+        }
       }
-    }, [handoff, isAndroid, isLaunching, isProcessing]);
+    }, [isAndroid]);
 
     const handleCopyPromptOnly = useCallback(async () => {
-      if (!handoff) return;
+      const activeHandoff = handoffRef.current;
+      if (!isOpenRef.current || !activeHandoff) return;
+      const seq = ++copyPromptSeqRef.current;
       setLocalError(null);
-      const ok = await copyPromptToClipboard(handoff.prompt);
+      const ok = await copyPromptToClipboard(activeHandoff.prompt);
+      if (
+        !isOpenRef.current ||
+        handoffRef.current !== activeHandoff ||
+        copyPromptSeqRef.current !== seq
+      ) {
+        return;
+      }
       if (ok) {
         setCopiedOnly(true);
         if (copiedTimerRef.current !== null) {
@@ -447,7 +497,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
       } else {
         setLocalError('Clipboard access was blocked. Select and copy the prompt text manually.');
       }
-    }, [handoff]);
+    }, []);
 
     const handleCopyImage = useCallback(async () => {
       const activeHandoff = handoffRef.current;

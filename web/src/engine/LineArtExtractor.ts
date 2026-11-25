@@ -739,7 +739,7 @@ export class LineArtExtractor {
       activeMask
     );
 
-    if (!isPaperDrawing && darkThreshold === undefined) {
+    if (darkThreshold === undefined) {
       detectColoredInkRidges(lum, isDark, width, height, activeMask);
     }
 
@@ -815,9 +815,12 @@ export class LineArtExtractor {
     }
 
     // Clear all multi-touch line pixels after Pass 1 completes so Pass-1 neighbor checks
-    // never observe in-place mutations from earlier scan coordinates.
+    // never observe in-place mutations from earlier scan coordinates. Snapshot original
+    // positive region IDs so isolated 100%-line-covered masked islands are restored if unseeded.
+    const savedRegionIds = new Int32Array(total);
     for (let i = 0; i < total; i++) {
       if (multiTouchLine[i] === 1) {
+        savedRegionIds[i] = regionMap[i];
         regionMap[i] = -1;
       }
     }
@@ -870,6 +873,14 @@ export class LineArtExtractor {
           regionMap[nIdx] = rId;
           queue[tail++] = nIdx;
         }
+      }
+    }
+
+    // Pass 4: Restore original region IDs for any cleared pixels that received no watershed seed
+    // (e.g., an isolated masked island completely covered by multi-touch line pixels).
+    for (let i = 0; i < total; i++) {
+      if (multiTouchLine[i] === 1 && regionMap[i] === -1 && savedRegionIds[i] > 0) {
+        regionMap[i] = savedRegionIds[i];
       }
     }
   }

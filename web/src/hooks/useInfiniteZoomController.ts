@@ -228,7 +228,10 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     setLoadingPayload(null);
   }, [setIsLoading, setLoadingPayload]);
 
+  const isMountedRef = useRef<boolean>(true);
+
   const clearUndoSubdivision = useCallback(() => {
+    if (undoInFlightRef.current) return;
     clearTimeoutBox(undoToastTimerRef);
     const prev = undoSubdivisionRef.current;
     undoSubdivisionRef.current = null;
@@ -300,8 +303,11 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   }, [clearGuidedSession, clearInfiniteZoomError, clearUndoSubdivision, exitRegionSelectionMode]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     const ownedUrls = ownedLayerBlobUrlsRef.current;
     return () => {
+      isMountedRef.current = false;
+      infiniteZoomOpSeqRef.current += 1;
       clearTimeoutBox(undoToastTimerRef);
       clearTimeoutBox(errorToastTimerRef);
       revokeUnusedObjectUrl(undoSubdivisionRef.current?.previousBlobUrl, activeBlobUrlRef.current);
@@ -814,7 +820,9 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       revokeUnusedObjectUrl(snap.previousBlobUrl, activeBlobUrlRef.current);
     } finally {
       undoInFlightRef.current = false;
-      setUndoSubdivisionState((prev) => (prev === snap ? null : prev));
+      if (isMountedRef.current) {
+        setUndoSubdivisionState((prev) => (prev === snap ? null : prev));
+      }
     }
   }, [activeBlobUrlRef, activeSave, activeSnapshotId, applyViewport, clearUndoSubdivision, isFreeColorMode, liveCoopRef, setActiveColorId, setFilledRegionIds, setHintRegionId, setPaintedRegionColors, setPuzzle, setSnapshots, setSourceImage, settingsRef, syncRedoStack, syncUndoStack, undoSubdivisionRef]);
 

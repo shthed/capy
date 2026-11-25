@@ -127,37 +127,52 @@ function isAllowedSharedImageMime(rawMime: string | undefined | null): boolean {
   return ALLOWED_SHARED_IMAGE_MIMES.has(normalized);
 }
 
-async function isSvgOrXmlSharedBlob(blob: Blob): Promise<boolean> {
-  if (typeof blob.slice !== 'function') return false;
+const SHARED_PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
+const SHARED_JPEG_MAGIC = [0xff, 0xd8, 0xff] as const;
+const SHARED_RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46] as const;
+const SHARED_WEBP_MAGIC = [0x57, 0x45, 0x42, 0x50] as const;
+const SHARED_GIF87_MAGIC = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61] as const;
+const SHARED_GIF89_MAGIC = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61] as const;
+const SHARED_BMP_MAGIC = [0x42, 0x4d] as const;
+const SHARED_FTYP_MAGIC = [0x66, 0x74, 0x79, 0x70] as const;
+
+function matchesByteSignature(
+  bytes: Uint8Array,
+  sig: readonly number[],
+  offset: number = 0
+): boolean {
+  if (bytes.byteLength < offset + sig.length) return false;
+  for (let i = 0; i < sig.length; i++) {
+    if (bytes[offset + i] !== sig[i]) return false;
+  }
+  return true;
+}
+
+function hasValidSharedRasterMagicBytes(bytes: Uint8Array): boolean {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 3) return false;
+  if (matchesByteSignature(bytes, SHARED_PNG_MAGIC)) return true;
+  if (matchesByteSignature(bytes, SHARED_JPEG_MAGIC)) return true;
+  if (
+    matchesByteSignature(bytes, SHARED_RIFF_MAGIC) &&
+    matchesByteSignature(bytes, SHARED_WEBP_MAGIC, 8)
+  ) {
+    return true;
+  }
+  if (
+    matchesByteSignature(bytes, SHARED_GIF87_MAGIC) ||
+    matchesByteSignature(bytes, SHARED_GIF89_MAGIC)
+  ) {
+    return true;
+  }
+  if (bytes.byteLength >= 14 && matchesByteSignature(bytes, SHARED_BMP_MAGIC)) return true;
+  return bytes.byteLength >= 12 && matchesByteSignature(bytes, SHARED_FTYP_MAGIC, 4);
+}
+
+async function isValidRasterSharedBlob(blob: Blob): Promise<boolean> {
+  if (!blob || blob.size < 3 || typeof blob.slice !== 'function') return false;
   try {
-    const bytes = new Uint8Array(await blob.slice(0, 64).arrayBuffer());
-    let offset = 0;
-    if (bytes.byteLength >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-      offset = 3;
-    }
-    while (
-      offset < bytes.byteLength &&
-      (bytes[offset] === 0x20 ||
-        bytes[offset] === 0x09 ||
-        bytes[offset] === 0x0a ||
-        bytes[offset] === 0x0d ||
-        bytes[offset] === 0x0c)
-    ) {
-      offset += 1;
-    }
-    if (offset >= bytes.byteLength || bytes[offset] !== 0x3c) return false;
-    const headLen = Math.min(bytes.byteLength - offset, 16);
-    let head = '';
-    for (let i = 0; i < headLen; i++) {
-      head += String.fromCharCode(bytes[offset + i]);
-    }
-    const lower = head.toLowerCase();
-    return (
-      lower.startsWith('<svg') ||
-      lower.startsWith('<?xml') ||
-      lower.startsWith('<!doctype') ||
-      lower.startsWith('<!--')
-    );
+    const header = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+    return hasValidSharedRasterMagicBytes(header);
   } catch {
     return false;
   }
@@ -646,7 +661,7 @@ export class NativeBridgeService {
       ) {
         return false;
       }
-      if (await isSvgOrXmlSharedBlob(blob)) {
+      if (!(await isValidRasterSharedBlob(blob))) {
         return false;
       }
       const { mimeType, ext } = resolveSharedImageMimeAndExt(trimmedUrl, blob.type);

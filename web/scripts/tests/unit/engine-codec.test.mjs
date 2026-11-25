@@ -1649,6 +1649,416 @@ export async function runEngineCodecTests({ vite, logUnitStart, logUnitPass, sha
       assert.equal(decArchPuzzle96.nestedLayers[0].regions[0].colorId, 65);
     }
 
+    // 9. Tier 5 Adversarial Engine & Codec Regressions (A-B3, A-B4, A-B7, A-G1, A-G2)
+    {
+      const lineArtMod = await vite.ssrLoadModule('/src/engine/LineArtExtractor.ts');
+      const genMod = await vite.ssrLoadModule('/src/engine/PuzzleGenerator.ts');
+
+      // 9a. A-B4: Isolated 100%-line-covered masked island MUST NOT fuse into unrelated Region 1
+      {
+        const w = 16;
+        const h = 16;
+        const mask = new Uint8Array(w * h);
+        const cluster = new Int32Array(w * h);
+        const lMask = new Uint8Array(w * h);
+        // Island A: 4x4 at (1,1)..(4,4) with color 0, no lineMask
+        for (let y = 1; y <= 4; y++) {
+          for (let x = 1; x <= 4; x++) {
+            const idx = y * w + x;
+            mask[idx] = 1;
+            cluster[idx] = 0;
+          }
+        }
+        // Isolated Island B: 2x2 checkerboard at (12,12)..(13,13) with colors 1 & 2, 100% covered by lineMask=1
+        const bCoords = [
+          [12, 12, 1],
+          [13, 12, 2],
+          [12, 13, 2],
+          [13, 13, 1],
+        ];
+        for (const [x, y, c] of bCoords) {
+          const idx = y * w + x;
+          mask[idx] = 1;
+          cluster[idx] = c;
+          lMask[idx] = 1;
+        }
+        const pal3 = [
+          { id: 1, hex: '#FF0000', isLight: false, argb: 0xffff0000, r: 255, g: 0, b: 0 },
+          { id: 2, hex: '#00FF00', isLight: false, argb: 0xff00ff00, r: 0, g: 255, b: 0 },
+          { id: 3, hex: '#0000FF', isLight: false, argb: 0xff0000ff, r: 0, g: 0, b: 255 },
+        ];
+        const seg = segmenterMod.RegionSegmenter.segment(
+          w,
+          h,
+          pal3,
+          cluster,
+          1,
+          2,
+          4.0,
+          lMask,
+          'ABSORB_LINES',
+          undefined,
+          200,
+          undefined,
+          undefined,
+          mask
+        );
+        const islandAId = seg.regionMap[1 * w + 1];
+        assert.ok(islandAId > 0, 'Island A must have a positive region ID');
+        const regA = seg.regions.find((r) => r.id === islandAId);
+        assert.ok(regA, 'Island A region must exist');
+        assert.equal(regA.area, 16, 'Island A area must remain 16 (no fusion from isolated Island B)');
+        assert.equal(regA.maxX, 4, 'Island A maxX must remain 4');
+        assert.equal(regA.maxY, 4, 'Island A maxY must remain 4');
+        for (const [x, y] of bCoords) {
+          const bId = seg.regionMap[y * w + x];
+          assert.ok(bId > 0, `Island B pixel (${x},${y}) must remain assigned to a positive region`);
+          assert.notEqual(
+            bId,
+            islandAId,
+            `Island B pixel (${x},${y}) must NEVER fuse into unrelated Island A region ${islandAId}`
+          );
+        }
+      }
+
+      // 9b. A-B7: ColorQuantizer.quantize with NaN, 0, -5, Infinity k + activeMask
+      {
+        const w = 8;
+        const h = 8;
+        const rgbaSmall = new Uint8ClampedArray(w * h * 4);
+        const maskSmall = new Uint8Array(w * h);
+        for (let i = 0; i < w * h; i++) {
+          rgbaSmall[i * 4] = (i * 19) % 256;
+          rgbaSmall[i * 4 + 1] = (i * 47) % 256;
+          rgbaSmall[i * 4 + 2] = (i * 83) % 256;
+          rgbaSmall[i * 4 + 3] = 255;
+          if (i % 2 === 0) maskSmall[i] = 1;
+        }
+        for (const badK of [Number.NaN, 0, -5, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+          const qRes = quantizerMod.ColorQuantizer.quantize(
+            rgbaSmall,
+            w,
+            h,
+            badK,
+            4,
+            false,
+            true,
+            undefined,
+            maskSmall
+          );
+          assert.ok(qRes.palette.length >= 1, `ColorQuantizer.quantize(k=${badK}) must produce >= 1 swatch`);
+          assert.equal(qRes.assignments.length, w * h);
+          for (let i = 0; i < w * h; i++) {
+            if (maskSmall[i] === 1) {
+              assert.ok(
+                qRes.assignments[i] >= 0 && qRes.assignments[i] < qRes.palette.length,
+                `Active pixel ${i} must have valid cluster assignment for k=${badK}`
+              );
+            } else {
+              assert.equal(qRes.assignments[i], -1);
+            }
+          }
+        }
+      }
+
+      // 9c. A-G1: 3px colored-ink strokes (L ~ 96..107) on light paper (#FAF8F2) + zero thick-block halos + zero smooth-gradient misfires
+      {
+        const w = 64;
+        const h = 64;
+        const inkCases = [
+          ['bright-red', 235, 35, 35],
+          ['forest-green', 30, 150, 45],
+          ['warm-sepia', 140, 88, 46],
+          ['royal-blue', 65, 95, 225],
+        ];
+        for (const [label, ir, ig, ib] of inkCases) {
+          const buf = new Uint8ClampedArray(w * h * 4);
+          for (let i = 0; i < w * h; i++) {
+            buf[i * 4] = 250;
+            buf[i * 4 + 1] = 248;
+            buf[i * 4 + 2] = 242;
+            buf[i * 4 + 3] = 255;
+          }
+          // Draw 3px-wide vertical stroke at x=31,32,33 from y=8..55
+          for (let y = 8; y <= 55; y++) {
+            for (let x = 31; x <= 33; x++) {
+              const p = (y * w + x) * 4;
+              buf[p] = ir;
+              buf[p + 1] = ig;
+              buf[p + 2] = ib;
+            }
+          }
+          const res = lineArtMod.LineArtExtractor.extract(buf, w, h);
+          let centerHits = 0;
+          for (let y = 12; y <= 50; y++) {
+            if (res.lineMask[y * w + 32] === 1) centerHits++;
+          }
+          assert.ok(
+            centerHits >= 35,
+            `3px ${label} ink on light paper must detect solid stroke center (got ${centerHits}/39)`
+          );
+        }
+
+        // Thick 24x24 colored block (L ~ 100) on light paper must NOT produce interior ridge halos
+        const blockBuf = new Uint8ClampedArray(w * h * 4);
+        for (let i = 0; i < w * h; i++) {
+          blockBuf[i * 4] = 250;
+          blockBuf[i * 4 + 1] = 248;
+          blockBuf[i * 4 + 2] = 242;
+          blockBuf[i * 4 + 3] = 255;
+        }
+        for (let y = 20; y < 44; y++) {
+          for (let x = 20; x < 44; x++) {
+            const p = (y * w + x) * 4;
+            blockBuf[p] = 140;
+            blockBuf[p + 1] = 88;
+            blockBuf[p + 2] = 46;
+          }
+        }
+        const blockRes = lineArtMod.LineArtExtractor.extract(blockBuf, w, h);
+        let interiorHits = 0;
+        for (let y = 24; y < 40; y++) {
+          for (let x = 24; x < 40; x++) {
+            if (blockRes.lineMask[y * w + x] === 1) interiorHits++;
+          }
+        }
+        assert.equal(interiorHits, 0, 'Thick 24x24 colored block interior must have zero false ridge detections');
+
+        // Smooth photographic gradient (minL >= 45) must NOT misfire as line art
+        const gradBuf = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const dist = Math.hypot(x - 32, y - 32) / 45;
+            const lumVal = Math.round(45 + Math.min(1, dist) * 205);
+            const p = (y * w + x) * 4;
+            gradBuf[p] = lumVal;
+            gradBuf[p + 1] = lumVal;
+            gradBuf[p + 2] = lumVal;
+            gradBuf[p + 3] = 255;
+          }
+        }
+        const gradRes = lineArtMod.LineArtExtractor.extract(gradBuf, w, h);
+        assert.equal(gradRes.isLineArt, false, 'Smooth radial photographic gradient must not be misclassified as line art');
+      }
+
+      // 9d. A-G2: Extreme activeMask geometries across all 5 generators
+      {
+        const w = 16;
+        const h = 16;
+        const totalPx = w * h;
+        const testRgba = new Uint8ClampedArray(totalPx * 4);
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const p = (y * w + x) * 4;
+            testRgba[p] = (x * 15 + 30) % 256;
+            testRgba[p + 1] = (y * 15 + 60) % 256;
+            testRgba[p + 2] = ((x + y) * 11 + 90) % 256;
+            testRgba[p + 3] = 255;
+          }
+        }
+        const mkMask = (fn, len = totalPx) => {
+          const m = new Uint8Array(len);
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const idx = y * w + x;
+              if (idx < len) m[idx] = fn(x, y, idx);
+            }
+          }
+          return m;
+        };
+        const geometries = [
+          ['1px-top-left', mkMask((x, y) => (x === 0 && y === 0 ? 1 : 0))],
+          ['1px-center', mkMask((x, y) => (x === 8 && y === 8 ? 1 : 0))],
+          ['1px-bottom-right', mkMask((x, y) => (x === w - 1 && y === h - 1 ? 1 : 0))],
+          ['2px-disconnected', mkMask((x, y) => ((x === 0 && y === 0) || (x === w - 1 && y === h - 1) ? 1 : 0))],
+          ['1px-diagonal-stair', mkMask((x, y) => (x === y ? 1 : 0))],
+          ['1px-L-sliver', mkMask((x, y) => (x === 2 || y === 12 ? 1 : 0))],
+          ['short-mismatched', mkMask((x, y) => (x < 4 && y < 4 ? 1 : 0), 64)],
+          ['long-mismatched', mkMask((x, y) => (x < 4 && y < 4 ? 1 : 0), totalPx + 32)],
+          ['non-binary-2-255', mkMask((x, y) => (x === 1 && y === 1 ? 1 : x === 2 ? 2 : x === 3 ? 255 : 0))],
+        ];
+        const allGens = [
+          ['AutoPuzzleGenerator', new genMod.AutoPuzzleGenerator()],
+          ['LineArtPuzzleGenerator', new genMod.LineArtPuzzleGenerator()],
+          ['PainterlyPuzzleGenerator', new genMod.PainterlyPuzzleGenerator()],
+          ['PosterizedPuzzleGenerator', new genMod.PosterizedPuzzleGenerator()],
+          ['MosaicCelPuzzleGenerator', new genMod.MosaicCelPuzzleGenerator()],
+        ];
+        const genCfg = {
+          imageType: 'AUTO',
+          paletteDetail: 'MEDIUM',
+          colorCount: 6,
+          minRegionArea: 2,
+          maxRegions: 50,
+          resolution: 64,
+          smoothingPasses: 1,
+          isFreeColor: false,
+        };
+        for (const [geomName, mask] of geometries) {
+          let expectedActive = 0;
+          for (let i = 0; i < totalPx; i++) {
+            if (mask[i] === 1) expectedActive++;
+          }
+          for (const [genName, gen] of allGens) {
+            const out = gen.generateFromRgba(testRgba, w, h, genCfg, undefined, false, mask);
+            assert.equal(out.width, w, `${genName}/${geomName} width`);
+            assert.equal(out.height, h, `${genName}/${geomName} height`);
+            for (let i = 0; i < totalPx; i++) {
+              if (mask[i] === 1) {
+                assert.ok(out.regionMap[i] >= 1, `${genName}/${geomName} active px ${i} must be >= 1`);
+              } else {
+                assert.equal(out.regionMap[i], 0, `${genName}/${geomName} inactive px ${i} must be 0`);
+              }
+            }
+            const sumArea = out.regions.reduce((acc, r) => acc + r.area, 0);
+            assert.equal(sumArea, expectedActive, `${genName}/${geomName} total region area must match active count`);
+          }
+        }
+      }
+
+      // 9e. A-G2 + A-B3: .capy v2 exact boundary swatch counts (64, 65, 95, 96, 97) + top-level SVG/HTML MIME rejection
+      {
+        const makeBoundaryPuzzle = (swatchCount) => {
+          const bw = swatchCount;
+          const bh = 4;
+          const pal = Array.from({ length: swatchCount }, (_, idx) => {
+            const r = (idx * 37 + 11) % 256;
+            const g = (idx * 61 + 29) % 256;
+            const b = (idx * 97 + 53) % 256;
+            return {
+              id: idx + 1,
+              hex: `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1).toUpperCase()}`,
+              isLight: 0.299 * r + 0.587 * g + 0.114 * b > 140,
+              argb: ((0xff << 24) | (r << 16) | (g << 8) | b) >>> 0,
+              r,
+              g,
+              b,
+            };
+          });
+          const rMap = new Int32Array(bw * bh);
+          const regs = [];
+          for (let i = 0; i < swatchCount; i++) {
+            const pixels = new Int32Array(bh);
+            for (let y = 0; y < bh; y++) {
+              const idx = y * bw + i;
+              rMap[idx] = i + 1;
+              pixels[y] = idx;
+            }
+            regs.push({
+              id: i + 1,
+              colorId: i + 1,
+              centroidX: i + 0.5,
+              centroidY: 2,
+              area: bh,
+              minX: i,
+              maxX: i,
+              minY: 0,
+              maxY: bh - 1,
+              maxRadius: 1,
+              pixels,
+            });
+          }
+          return {
+            width: bw,
+            height: bh,
+            palette: pal,
+            regions: regs,
+            regionMap: rMap,
+            borderMap: codec.buildBorderMapFromRegionMap(rMap, bw, bh),
+            isFreeColor: false,
+          };
+        };
+
+        for (const count of [64, 65, 95, 96, 97]) {
+          const puz = makeBoundaryPuzzle(count);
+          const comp = codec.compressPuzzleRecord(puz);
+          const snap = { ...sampleSnapshot, id: `snap-boundary-${count}`, totalCount: count };
+          const bin = await codec.encodeSingleSaveBinaryV2(snap, comp, fakeImageBlob, {
+            exportDate: fixedExportDate,
+          });
+          const decoded = await codec.decodeBinarySaveV2(bin);
+          const restored = codec.decompressPuzzleRecord(codec.serializableToRecord(decoded.compactPuzzle));
+          assert.equal(restored.palette.length, count, `.capy v2 boundary round-trip must preserve ${count} swatches`);
+          assert.equal(restored.regions[count - 1].colorId, count);
+        }
+
+        // Crafted .capy v2 single save & archive with SVG / HTML top-level image MIME MUST be rejected
+        const buildFramedBinaryV2 = (payloadObj, isArchiveFlag) => {
+          const chunks = [];
+          const replacer = (_k, val) => {
+            if (val instanceof Uint8Array) {
+              const idx = chunks.length;
+              chunks.push(val);
+              return { __chunkIdx: idx, byteLength: val.byteLength };
+            }
+            return val;
+          };
+          const jsonBytes = new TextEncoder().encode(JSON.stringify(payloadObj, replacer));
+          let totalChunkBytes = 0;
+          for (const c of chunks) totalChunkBytes += c.byteLength;
+          const framed = new Uint8Array(4 + jsonBytes.byteLength + totalChunkBytes);
+          const dv = new DataView(framed.buffer);
+          dv.setUint32(0, jsonBytes.byteLength, true);
+          let off = 4;
+          framed.set(jsonBytes, off);
+          off += jsonBytes.byteLength;
+          for (const c of chunks) {
+            framed.set(c, off);
+            off += c.byteLength;
+          }
+          const gz = new Uint8Array(zlib.gzipSync(framed));
+          const out = new Uint8Array(6 + gz.byteLength);
+          out.set([0x43, 0x41, 0x50, 0x59], 0);
+          out[4] = 2;
+          out[5] = 1 | (isArchiveFlag ? 2 : 0);
+          out.set(gz, 6);
+          return out;
+        };
+
+        for (const badMime of ['image/svg+xml', 'text/html', 'application/javascript']) {
+          const badSingle = buildFramedBinaryV2(
+            {
+              format: 'capy-single-save-v2',
+              version: 2,
+              exportDate: fixedExportDate,
+              snapshot: sampleSnapshot,
+              compactPuzzle: null,
+              imageBytes: new Uint8Array([0x3c, 0x73, 0x76, 0x67]),
+              imageMimeType: badMime,
+            },
+            false
+          );
+          await assert.rejects(
+            () => codec.decodeBinarySaveV2(badSingle),
+            /Unsupported MIME type|Invalid Capy v2/i,
+            `Single save with imageMimeType="${badMime}" must be rejected`
+          );
+
+          const badArchive = buildFramedBinaryV2(
+            {
+              format: 'capy-archive-save-v2',
+              version: 2,
+              exportDate: fixedExportDate,
+              snapshots: [sampleSnapshot],
+              compactPuzzles: {},
+              images: {
+                [sampleSnapshot.id]: {
+                  mimeType: badMime,
+                  bytes: new Uint8Array([0x3c, 0x73, 0x76, 0x67]),
+                },
+              },
+            },
+            true
+          );
+          await assert.rejects(
+            () => codec.decodeBinarySaveV2(badArchive),
+            /Unsupported MIME type|Invalid image entry/i,
+            `Archive save with images mimeType="${badMime}" must be rejected`
+          );
+        }
+      }
+    }
+
     shared.puzzleData = puzzleData;
     logUnitPass('ColorQuantizer, RegionSegmenter activeMask, LineArtExtractor colored-ink ridges & CapyCodec v2 96-swatch/DoS hardening verified.');
 }

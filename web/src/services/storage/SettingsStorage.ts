@@ -4,6 +4,7 @@ import {
   InfiniteZoomProviderMode,
   UserSettings,
 } from '../../types';
+import { resolveSupportedModelResolution } from '../ai/nanoBananaPrompts';
 import { NativeBridge } from '../NativeBridge';
 import { reportSwallowed } from '../telemetry';
 import {
@@ -385,8 +386,16 @@ function resolveUserSettings(
       DEFAULT_SETTINGS.detailedLoadingProgress
     ),
     infiniteZoomProvider: resolvePlatformInfiniteZoomProvider(parsed.infiniteZoomProvider),
-    nanoBananaModel: pickSettingsEnum(parsed, 'nanoBananaModel'),
-    nanoBananaResolution: pickSettingsEnum(parsed, 'nanoBananaResolution'),
+    ...(() => {
+      const nanoBananaModel = pickSettingsEnum(parsed, 'nanoBananaModel');
+      return {
+        nanoBananaModel,
+        nanoBananaResolution: resolveSupportedModelResolution(
+          nanoBananaModel,
+          pickSettingsEnum(parsed, 'nanoBananaResolution')
+        ),
+      };
+    })(),
     generatorConfig: sanitizeGeneratorConfig(parsed.generatorConfig),
   };
 }

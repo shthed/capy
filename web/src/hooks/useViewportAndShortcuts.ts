@@ -140,7 +140,9 @@ export function resolveDigitShortcutColorId(
   filledRegionIds: Set<number>,
   sortOrder: PaletteSortOrder,
   isFreeColorMode: boolean,
-  prioritizedColorIds?: ReadonlySet<number>
+  prioritizedColorIds?: ReadonlySet<number>,
+  activeColorId?: number,
+  paintedRegionColors?: ReadonlyMap<number, number>
 ): number | null {
   const index = Number(key) - 1;
   if (!Number.isInteger(index) || index < 0 || index > 8) return null;
@@ -149,7 +151,9 @@ export function resolveDigitShortcutColorId(
     getAllPuzzleRegions(puzzle),
     filledRegionIds,
     sortOrder,
-    isFreeColorMode
+    isFreeColorMode,
+    activeColorId,
+    paintedRegionColors
   );
   const { dockPalette } = partitionDockPaletteByPriority(basePalette, prioritizedColorIds);
   return index < dockPalette.length ? dockPalette[index].id : null;
@@ -540,7 +544,9 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
         curFilled,
         cur.settings.paletteSort,
         cur.isFreeColorMode,
-        visibleNestedColorIdsRef.current
+        visibleNestedColorIdsRef.current,
+        cur.activeColorId,
+        cur.paintedRegionColors
       );
       if (chosenColId === null) return;
       e.preventDefault();

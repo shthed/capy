@@ -5932,7 +5932,33 @@ function resolveChromiumExecutablePath(chromium) {
   return undefined;
 }
 
+function resolveWorkerCount(opts, total) {
+  const cpuCount = Math.max(1, os.cpus()?.length || 1);
+  const rawEnvWorkers = (process.env.CAPY_E2E_WORKERS || '').trim();
+  let envWorkers = null;
+  if (rawEnvWorkers) {
+    if (!/^[1-9]\d*$/.test(rawEnvWorkers)) {
+      throw new Error(
+        `Invalid CAPY_E2E_WORKERS value "${rawEnvWorkers}" (expected a positive integer >= 1)`
+      );
+    }
+    envWorkers = Number.parseInt(rawEnvWorkers, 10);
+  }
+  const requestedWorkers =
+    Number.isInteger(opts.workers) && opts.workers > 0
+      ? opts.workers
+      : envWorkers !== null
+        ? envWorkers
+        : total >= 10
+          ? Math.min(2, cpuCount)
+          : 1;
+  return Math.max(1, Math.min(requestedWorkers, total));
+}
+
 async function runSuite(selectedTests, opts) {
+  const total = selectedTests.length;
+  const concurrency = resolveWorkerCount(opts, total);
+
   const explicitUrl = (process.env.CAPY_TEST_URL || '').trim().replace(/\/+$/, '');
   let baseUrl = explicitUrl;
   let previewServer = null;
@@ -5980,28 +6006,6 @@ async function runSuite(selectedTests, opts) {
         '--no-first-run',
       ],
     });
-
-    const total = selectedTests.length;
-    const cpuCount = Math.max(1, os.cpus()?.length || 1);
-    const rawEnvWorkers = (process.env.CAPY_E2E_WORKERS || '').trim();
-    let envWorkers = null;
-    if (rawEnvWorkers) {
-      if (!/^[1-9]\d*$/.test(rawEnvWorkers)) {
-        throw new Error(
-          `Invalid CAPY_E2E_WORKERS value "${rawEnvWorkers}" (expected a positive integer >= 1)`
-        );
-      }
-      envWorkers = Number.parseInt(rawEnvWorkers, 10);
-    }
-    const requestedWorkers =
-      Number.isInteger(opts.workers) && opts.workers > 0
-        ? opts.workers
-        : envWorkers !== null
-          ? envWorkers
-          : total >= 10
-            ? Math.min(2, cpuCount)
-            : 1;
-    const concurrency = Math.max(1, Math.min(requestedWorkers, total));
 
     // Pre-warm immutable shared synthetic fixtures once before launching concurrent workers
     getCommonFixtures();

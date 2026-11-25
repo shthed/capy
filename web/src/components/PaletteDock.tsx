@@ -94,7 +94,9 @@ export function getVisiblePalette(
   regions: Region[],
   filledRegionIds: Set<number>,
   sortOrder: PaletteSortOrder = 'HUE',
-  isFreeColorMode: boolean = false
+  isFreeColorMode: boolean = false,
+  activeColorId?: number,
+  paintedRegionColors?: ReadonlyMap<number, number>
 ): PaletteColor[] {
   if (isFreeColorMode) {
     const list = [...palette];
@@ -102,6 +104,17 @@ export function getVisiblePalette(
       case 'NUMBER':
         list.sort((a, b) => a.id - b.id);
         break;
+      case 'REMAINING': {
+        const usageMap = new Map<number, number>();
+        for (const r of regions) {
+          if (filledRegionIds.has(r.id)) {
+            const colId = paintedRegionColors?.get(r.id) ?? r.colorId;
+            usageMap.set(colId, (usageMap.get(colId) || 0) + 1);
+          }
+        }
+        list.sort((a, b) => (usageMap.get(b.id) || 0) - (usageMap.get(a.id) || 0));
+        break;
+      }
       case 'HUE':
         list.sort((a, b) => getHue(a.hex) - getHue(b.hex));
         break;
@@ -112,20 +125,28 @@ export function getVisiblePalette(
     return list;
   }
 
-  const uncompleted = palette.filter((c) =>
-    regions.some((r) => r.colorId === c.id && !filledRegionIds.has(r.id))
+  const isPuzzleComplete = regions.length > 0 && filledRegionIds.size >= regions.length;
+  if (isPuzzleComplete) {
+    return [];
+  }
+
+  const remainingMap = new Map<number, number>();
+  for (const r of regions) {
+    if (!filledRegionIds.has(r.id)) {
+      remainingMap.set(r.colorId, (remainingMap.get(r.colorId) || 0) + 1);
+    }
+  }
+
+  const list = palette.filter(
+    (c) =>
+      (remainingMap.get(c.id) || 0) > 0 || (activeColorId !== undefined && c.id === activeColorId)
   );
-  const list = [...uncompleted];
   switch (sortOrder) {
     case 'NUMBER':
       list.sort((a, b) => a.id - b.id);
       break;
     case 'REMAINING':
-      list.sort((a, b) => {
-        const countA = regions.filter((r) => r.colorId === a.id && !filledRegionIds.has(r.id)).length;
-        const countB = regions.filter((r) => r.colorId === b.id && !filledRegionIds.has(r.id)).length;
-        return countB - countA;
-      });
+      list.sort((a, b) => (remainingMap.get(b.id) || 0) - (remainingMap.get(a.id) || 0));
       break;
     case 'HUE':
       list.sort((a, b) => getHue(a.hex) - getHue(b.hex));
