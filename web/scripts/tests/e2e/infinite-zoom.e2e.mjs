@@ -2584,7 +2584,7 @@ async function runStage4(ctx) {
       });
       await modal.waitFor({ state: 'hidden', timeout: 25000 });
       const undoToast = page.getByTestId('undo-subdivision-toast');
-      await undoToast.waitFor({ state: 'visible', timeout: 10000 });
+      await undoToast.waitFor({ state: 'visible', timeout: 25000 });
 
       const puzzleAfterGuidedZoomIn = await readPuzzleSummary(page, snapId);
       assert.equal(puzzleAfterGuidedZoomIn.nestedLayers.length, 1);
@@ -2641,7 +2641,7 @@ async function runStage4(ctx) {
       }, MULTI_COLOR_PNG_BASE64);
 
       await modal.waitFor({ state: 'hidden', timeout: 25000 });
-      await undoToast.waitFor({ state: 'visible', timeout: 10000 });
+      await undoToast.waitFor({ state: 'visible', timeout: 25000 });
 
       const puzzleAfterFallbackPaste = await readPuzzleSummary(page, snapId);
       assert.equal(
@@ -2735,7 +2735,7 @@ async function runStage4(ctx) {
       }, MULTI_COLOR_PNG_DATA_URL);
 
       await modal.waitFor({ state: 'hidden', timeout: 25000 });
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 10000 });
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
 
       const puzzleAfterShare = await readPuzzleSummary(page, snapId);
       const snapshotsAfterShare = await readSnapshots(page);

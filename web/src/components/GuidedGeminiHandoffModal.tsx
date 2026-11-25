@@ -256,8 +256,12 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         return;
       }
 
+      setLaunchStatus(null);
       setCopiedOnly(false);
       setCopiedImage(false);
+      setLocalError(null);
+      setIsLaunching(false);
+      setIsDraggingFile(false);
 
       let createdUrl: string | null = null;
       if (

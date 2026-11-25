@@ -817,13 +817,7 @@ export class LineArtExtractor {
     // Clear all multi-touch line pixels after Pass 1 completes so Pass-1 neighbor checks
     // never observe in-place mutations from earlier scan coordinates. Snapshot original
     // positive region IDs so isolated 100%-line-covered masked islands are restored if unseeded.
-    const savedRegionIds = new Int32Array(total);
-    for (let i = 0; i < total; i++) {
-      if (multiTouchLine[i] === 1) {
-        savedRegionIds[i] = regionMap[i];
-        regionMap[i] = -1;
-      }
-    }
+    const savedRegionIds = this.snapshotAndClearMultiTouchLine(regionMap, multiTouchLine);
 
     // Pass 2: Seed watershed propagation from neighboring colored regions without mutating
     // regionMap in-place during the scan so medial-axis symmetry is preserved.
@@ -878,7 +872,29 @@ export class LineArtExtractor {
 
     // Pass 4: Restore original region IDs for any cleared pixels that received no watershed seed
     // (e.g., an isolated masked island completely covered by multi-touch line pixels).
-    for (let i = 0; i < total; i++) {
+    this.restoreUnseededLinePixels(regionMap, multiTouchLine, savedRegionIds);
+  }
+
+  private static snapshotAndClearMultiTouchLine(
+    regionMap: Int32Array,
+    multiTouchLine: Uint8Array
+  ): Int32Array {
+    const savedRegionIds = new Int32Array(regionMap.length);
+    for (let i = 0; i < regionMap.length; i++) {
+      if (multiTouchLine[i] === 1) {
+        savedRegionIds[i] = regionMap[i];
+        regionMap[i] = -1;
+      }
+    }
+    return savedRegionIds;
+  }
+
+  private static restoreUnseededLinePixels(
+    regionMap: Int32Array,
+    multiTouchLine: Uint8Array,
+    savedRegionIds: Int32Array
+  ): void {
+    for (let i = 0; i < regionMap.length; i++) {
       if (multiTouchLine[i] === 1 && regionMap[i] === -1 && savedRegionIds[i] > 0) {
         regionMap[i] = savedRegionIds[i];
       }

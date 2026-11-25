@@ -10286,10 +10286,195 @@ async function testClusterK_Tier5AdversarialHardening({
   pipelineMod,
   persistenceMod,
   controllerMod,
+  modalMod,
 }) {
   const React = (await import('react')).default;
   const { renderToStaticMarkup } = await import('react-dom/server');
   const { createRoot } = await import('react-dom/client');
+
+  const createMinimalDomContainer = () => {
+    const makeNode = (tag, ns = 'http://www.w3.org/1999/xhtml') => {
+      const attrs = new Map();
+      const listeners = new Map();
+      const node = {
+        nodeType: 1,
+        nodeName: ns === 'http://www.w3.org/1999/xhtml' ? String(tag).toUpperCase() : String(tag),
+        tagName: ns === 'http://www.w3.org/1999/xhtml' ? String(tag).toUpperCase() : String(tag),
+        namespaceURI: ns,
+        childNodes: [],
+        firstChild: null,
+        lastChild: null,
+        parentNode: null,
+        ownerDocument: null,
+        disabled: false,
+        className: '',
+        value: '',
+        style: {
+          setProperty(k, v) {
+            this[k] = v;
+          },
+          removeProperty(k) {
+            delete this[k];
+          },
+        },
+        setAttribute(name, val) {
+          attrs.set(String(name), String(val));
+          if (name === 'disabled') this.disabled = true;
+        },
+        setAttributeNS(_ns, name, val) {
+          attrs.set(String(name), String(val));
+        },
+        getAttribute(name) {
+          return attrs.has(String(name)) ? attrs.get(String(name)) : null;
+        },
+        removeAttribute(name) {
+          attrs.delete(String(name));
+          if (name === 'disabled') this.disabled = false;
+        },
+        hasAttribute(name) {
+          return attrs.has(String(name));
+        },
+        get textContent() {
+          return this.childNodes
+            .map((c) => (c.nodeType === 3 ? c.nodeValue : c.textContent || ''))
+            .join('');
+        },
+        set textContent(val) {
+          for (const c of this.childNodes) c.parentNode = null;
+          this.childNodes = [];
+          const s = String(val ?? '');
+          if (s.length > 0) {
+            const t = { nodeType: 3, nodeValue: s, parentNode: this, ownerDocument: this.ownerDocument };
+            this.childNodes.push(t);
+          }
+          this.firstChild = this.childNodes[0] || null;
+          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
+        },
+        appendChild(child) {
+          if (child.parentNode && typeof child.parentNode.removeChild === 'function') {
+            child.parentNode.removeChild(child);
+          }
+          child.parentNode = this;
+          this.childNodes.push(child);
+          this.firstChild = this.childNodes[0] || null;
+          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
+          return child;
+        },
+        removeChild(child) {
+          const idx = this.childNodes.indexOf(child);
+          if (idx >= 0) this.childNodes.splice(idx, 1);
+          child.parentNode = null;
+          this.firstChild = this.childNodes[0] || null;
+          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
+          return child;
+        },
+        insertBefore(child, ref) {
+          if (child.parentNode && typeof child.parentNode.removeChild === 'function') {
+            child.parentNode.removeChild(child);
+          }
+          const idx = ref ? this.childNodes.indexOf(ref) : -1;
+          child.parentNode = this;
+          if (idx >= 0) this.childNodes.splice(idx, 0, child);
+          else this.childNodes.push(child);
+          this.firstChild = this.childNodes[0] || null;
+          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
+          return child;
+        },
+        addEventListener(type, fn, opts) {
+          const capture = typeof opts === 'boolean' ? opts : Boolean(opts && opts.capture);
+          const key = `${type}:${capture ? 'c' : 'b'}`;
+          if (!listeners.has(key)) listeners.set(key, new Set());
+          listeners.get(key).add(fn);
+        },
+        removeEventListener(type, fn, opts) {
+          const capture = typeof opts === 'boolean' ? opts : Boolean(opts && opts.capture);
+          const key = `${type}:${capture ? 'c' : 'b'}`;
+          listeners.get(key)?.delete(fn);
+        },
+        dispatchEvent(ev) {
+          const path = [];
+          for (let cur = this; cur; cur = cur.parentNode) path.push(cur);
+          ev.target = ev.target || this;
+          ev.composedPath = () => path.slice();
+          for (let i = path.length - 1; i >= 0; i--) {
+            if (ev._stopped) break;
+            ev.currentTarget = path[i];
+            const set = path[i]._listeners?.get(`${ev.type}:c`);
+            if (set) for (const fn of Array.from(set)) fn.call(path[i], ev);
+          }
+          for (let i = 0; i < path.length; i++) {
+            if (ev._stopped) break;
+            ev.currentTarget = path[i];
+            const set = path[i]._listeners?.get(`${ev.type}:b`);
+            if (set) for (const fn of Array.from(set)) fn.call(path[i], ev);
+          }
+          return !ev.defaultPrevented;
+        },
+        _listeners: listeners,
+      };
+      return node;
+    };
+    const fakeDoc = createFakeDocument();
+    const container = makeNode('div');
+    container.ownerDocument = fakeDoc;
+    fakeDoc.createElement = ((origCreate) => (tag) => {
+      if (String(tag).toLowerCase() === 'canvas') return origCreate(tag);
+      const n = makeNode(tag);
+      n.ownerDocument = fakeDoc;
+      return n;
+    })(fakeDoc.createElement.bind(fakeDoc));
+    fakeDoc.createElementNS = (ns, tag) => {
+      const n = makeNode(tag, ns);
+      n.ownerDocument = fakeDoc;
+      return n;
+    };
+    fakeDoc.createTextNode = (text) => ({
+      nodeType: 3,
+      nodeValue: String(text),
+      parentNode: null,
+      ownerDocument: fakeDoc,
+    });
+    fakeDoc.addEventListener = () => {};
+    fakeDoc.removeEventListener = () => {};
+    fakeDoc.activeElement = null;
+    return { fakeDoc, container };
+  };
+
+  const findDomNode = (rootNode, predicate) => {
+    if (!rootNode || rootNode.nodeType !== 1) return null;
+    if (predicate(rootNode)) return rootNode;
+    for (const child of rootNode.childNodes || []) {
+      const found = findDomNode(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  };
+  const findByTestId = (rootNode, testId) =>
+    findDomNode(rootNode, (n) => n.getAttribute('data-testid') === testId);
+  const findByRole = (rootNode, role) =>
+    findDomNode(rootNode, (n) => n.getAttribute('role') === role);
+  const clickDomButton = (btn) => {
+    assert.ok(btn, 'Expected rendered button element to exist before click');
+    if (btn.disabled) return false;
+    const ev = {
+      type: 'click',
+      bubbles: true,
+      cancelable: true,
+      defaultPrevented: false,
+      _stopped: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+      stopPropagation() {
+        this._stopped = true;
+      },
+      stopImmediatePropagation() {
+        this._stopped = true;
+      },
+    };
+    btn.dispatchEvent(ev);
+    return true;
+  };
 
   const makeMockImageClass = (w, h) =>
     class MockImage {
@@ -10606,18 +10791,315 @@ async function testClusterK_Tier5AdversarialHardening({
     );
   }
 
-  // K5 (A-B6): GuidedGeminiHandoffModal stale-await & unmount guards on handleLaunchGemini & handleCopyPromptOnly
+  // K5 (A-B6): Behavioral React 19 createRoot mount of GuidedGeminiHandoffModal —
+  // stale-await, close/unmount, & direct handoffA -> handoffB switch guards on Launch & Copy Prompt
   {
-    const modalSrc = fs.readFileSync(
-      path.join(WEB_ROOT, 'src/components/GuidedGeminiHandoffModal.tsx'),
-      'utf8'
-    );
-    assert.ok(modalSrc.includes('launchSeqRef'), 'Modal must track launchSeqRef');
-    assert.ok(modalSrc.includes('copyPromptSeqRef'), 'Modal must track copyPromptSeqRef');
-    assert.ok(
-      modalSrc.includes('launchSeqRef.current !== seq') &&
-        modalSrc.includes('copyPromptSeqRef.current !== seq'),
-      'handleLaunchGemini and handleCopyPromptOnly must check seq + isOpenRef + handoffRef after await'
+    const { GuidedGeminiHandoffModal } = modalMod;
+    const handoffA = {
+      prompt: 'Prompt Alpha detail for K5',
+      templatePngBlob: pngBlob,
+      templateDataUrl: pngDataUrl,
+      templateMimeType: 'image/png',
+      direction: 'infill',
+      geminiUrl: 'https://gemini.google.com/app',
+    };
+    const handoffB = {
+      prompt: 'Prompt Beta detail for K5',
+      templatePngBlob: pngBlob,
+      templateDataUrl: pngDataUrl,
+      templateMimeType: 'image/png',
+      direction: 'extend-out',
+      geminiUrl: 'https://gemini.google.com/app',
+    };
+
+    const { fakeDoc, container } = createMinimalDomContainer();
+    let shouldWindowOpenThrow = false;
+    let windowOpenThrowCount = 0;
+    const pendingClipboardWrites = [];
+    const scheduled2500Timers = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const realClearTimeout = globalThis.clearTimeout;
+    const trackedSetTimeout = (fn, delay, ...args) => {
+      const id = realSetTimeout(fn, delay, ...args);
+      if (delay === 2500) {
+        scheduled2500Timers.push({ id, cleared: false });
+      }
+      return id;
+    };
+    const trackedClearTimeout = (id) => {
+      for (const entry of scheduled2500Timers) {
+        if (entry.id === id) entry.cleared = true;
+      }
+      return realClearTimeout(id);
+    };
+
+    const mockWin = {
+      addEventListener() {},
+      removeEventListener() {},
+      open() {
+        if (shouldWindowOpenThrow) {
+          windowOpenThrowCount += 1;
+          throw new Error('Blocked popup for K5 catch test');
+        }
+        return {};
+      },
+      devicePixelRatio: 1,
+      HTMLIFrameElement: class HTMLIFrameElement {},
+    };
+    fakeDoc.defaultView = mockWin;
+    let urlCounter = 0;
+    const mockUrlApi = {
+      createObjectURL: () => `blob:k5-modal-${++urlCounter}`,
+      revokeObjectURL: () => {},
+    };
+    const mockNavigator = {
+      clipboard: {
+        writeText(text) {
+          return new Promise((resolve, reject) => {
+            pendingClipboardWrites.push({ text, resolve, reject });
+          });
+        },
+      },
+    };
+
+    const origExportOrShareFile = bridgeMod.NativeBridge.exportOrShareFile;
+    bridgeMod.NativeBridge.exportOrShareFile = async () => true;
+
+    const flushMicrotasks = async () => {
+      for (let i = 0; i < 6; i++) {
+        await Promise.resolve();
+      }
+    };
+
+    await withGlobalOverrides(
+      {
+        IS_REACT_ACT_ENVIRONMENT: true,
+        document: fakeDoc,
+        window: mockWin,
+        navigator: mockNavigator,
+        URL: mockUrlApi,
+        setTimeout: trackedSetTimeout,
+        clearTimeout: trackedClearTimeout,
+      },
+      async () => {
+        const root = createRoot(container);
+        try {
+          const renderModal = async (props) => {
+            await React.act(async () => {
+              root.render(
+                React.createElement(GuidedGeminiHandoffModal, {
+                  onImageReceived: () => {},
+                  onCancel: () => {},
+                  ...props,
+                })
+              );
+            });
+          };
+
+          // Scenario 1: Direct handoffA -> handoffB switch while isOpen stays true mid-await (both resolve)
+          await renderModal({ isOpen: true, handoff: handoffA });
+          let launchBtn = findByTestId(container, 'guided-gemini-launch-btn');
+          let copyPromptBtn = findByTestId(container, 'guided-gemini-copy-prompt-btn');
+          assert.equal(launchBtn.disabled, false, 'Launch button starts enabled on handoffA');
+
+          await React.act(async () => {
+            assert.equal(clickDomButton(launchBtn), true, 'Launch click on handoffA must fire');
+            assert.equal(clickDomButton(copyPromptBtn), true, 'Copy Prompt click on handoffA must fire');
+          });
+          assert.equal(pendingClipboardWrites.length, 2, 'Expected both Launch and Copy Prompt deferred awaits in flight');
+          assert.equal(pendingClipboardWrites[0].text, handoffA.prompt);
+          assert.equal(pendingClipboardWrites[1].text, handoffA.prompt);
+          assert.equal(
+            findByTestId(container, 'guided-gemini-launch-btn').disabled,
+            true,
+            'Launch button must be disabled while handoffA launch is in flight'
+          );
+
+          // Switch directly handoffA -> handoffB while isOpen remains true
+          await renderModal({ isOpen: true, handoff: handoffB });
+          launchBtn = findByTestId(container, 'guided-gemini-launch-btn');
+          copyPromptBtn = findByTestId(container, 'guided-gemini-copy-prompt-btn');
+          assert.equal(
+            launchBtn.disabled,
+            false,
+            'Direct handoffA -> handoffB switch must immediately reset isLaunching to false'
+          );
+          assert.equal(findByRole(container, 'status'), null, 'handoffB must have zero stale launchStatus');
+          assert.equal(findByTestId(container, 'guided-gemini-error'), null, 'handoffB must have zero stale localError');
+
+          // Resolve both stale handoffA promises after switching to handoffB
+          await React.act(async () => {
+            pendingClipboardWrites.shift().resolve();
+            pendingClipboardWrites.shift().resolve();
+            await flushMicrotasks();
+          });
+          assert.equal(
+            findByTestId(container, 'guided-gemini-launch-btn').disabled,
+            false,
+            'Stale handoffA launch settlement must leave handoffB launch button enabled'
+          );
+          assert.equal(
+            findByRole(container, 'status'),
+            null,
+            'Stale handoffA launch resolution must NOT leak launchStatus onto handoffB'
+          );
+          assert.equal(
+            findByTestId(container, 'guided-gemini-error'),
+            null,
+            'Stale handoffA settlement must NOT leak localError onto handoffB'
+          );
+          assert.equal(
+            scheduled2500Timers.length,
+            0,
+            'Stale handoffA copyPrompt resolution after handoff switch must NOT schedule 2500ms copiedTimerRef'
+          );
+          assert.ok(
+            !findByTestId(container, 'guided-gemini-copy-prompt-btn').textContent.includes('Copied'),
+            'Stale handoffA copyPrompt must NOT flip handoffB button text to Copied'
+          );
+
+          // Scenario 2: Direct handoffA -> handoffB switch mid-await when Launch throws & Copy Prompt fails
+          shouldWindowOpenThrow = true;
+          await renderModal({ isOpen: true, handoff: handoffA });
+          await React.act(async () => {
+            clickDomButton(findByTestId(container, 'guided-gemini-launch-btn'));
+            clickDomButton(findByTestId(container, 'guided-gemini-copy-prompt-btn'));
+          });
+          assert.equal(pendingClipboardWrites.length, 2);
+          assert.equal(findByTestId(container, 'guided-gemini-launch-btn').disabled, true);
+
+          await renderModal({ isOpen: true, handoff: handoffB });
+          assert.equal(
+            findByTestId(container, 'guided-gemini-launch-btn').disabled,
+            false,
+            'isLaunching must reset to false on second handoffA -> handoffB switch'
+          );
+
+          await React.act(async () => {
+            // Launch writeText resolves -> window.open throws -> handleLaunchGemini catch branch
+            pendingClipboardWrites.shift().resolve();
+            // Copy Prompt writeText rejects -> copyPromptToClipboard returns false -> handleCopyPromptOnly error branch
+            pendingClipboardWrites.shift().reject(new Error('Clipboard blocked'));
+            await flushMicrotasks();
+          });
+          assert.equal(windowOpenThrowCount, 1, 'Expected launchGeminiHandoff to throw in Scenario 2');
+          assert.equal(
+            findByTestId(container, 'guided-gemini-error'),
+            null,
+            'Stale handoffA launch/copy errors must NOT leak localError onto handoffB'
+          );
+          assert.equal(findByTestId(container, 'guided-gemini-launch-btn').disabled, false);
+          assert.equal(scheduled2500Timers.length, 0);
+
+          // Scenario 3: Close modal (isOpen: true -> false) mid-await
+          shouldWindowOpenThrow = false;
+          await renderModal({ isOpen: true, handoff: handoffA });
+          await React.act(async () => {
+            clickDomButton(findByTestId(container, 'guided-gemini-launch-btn'));
+            clickDomButton(findByTestId(container, 'guided-gemini-copy-prompt-btn'));
+          });
+          assert.equal(pendingClipboardWrites.length, 2);
+          assert.equal(findByTestId(container, 'guided-gemini-launch-btn').disabled, true);
+
+          await renderModal({ isOpen: false, handoff: handoffA });
+          assert.equal(findByTestId(container, 'guided-gemini-modal'), null, 'Modal must unmount content when closed');
+
+          await React.act(async () => {
+            pendingClipboardWrites.shift().resolve();
+            pendingClipboardWrites.shift().resolve();
+            await flushMicrotasks();
+          });
+          assert.equal(
+            scheduled2500Timers.length,
+            0,
+            'Stale copyPrompt resolution after close must NOT schedule 2500ms copiedTimerRef'
+          );
+
+          // Re-open to verify zero leaked launchStatus / localError / isLaunching from closed session
+          await renderModal({ isOpen: true, handoff: handoffA });
+          assert.equal(findByTestId(container, 'guided-gemini-launch-btn').disabled, false);
+          assert.equal(findByRole(container, 'status'), null);
+          assert.equal(findByTestId(container, 'guided-gemini-error'), null);
+
+          // Scenario 4: Full root.unmount() mid-await while isOpen stayed true
+          await React.act(async () => {
+            clickDomButton(findByTestId(container, 'guided-gemini-launch-btn'));
+            clickDomButton(findByTestId(container, 'guided-gemini-copy-prompt-btn'));
+          });
+          assert.equal(pendingClipboardWrites.length, 2);
+
+          await React.act(async () => {
+            root.unmount();
+          });
+          await React.act(async () => {
+            pendingClipboardWrites.shift().resolve();
+            pendingClipboardWrites.shift().resolve();
+            await flushMicrotasks();
+          });
+          assert.equal(
+            scheduled2500Timers.length,
+            0,
+            'Post-unmount copyPrompt resolution must NOT schedule 2500ms copiedTimerRef'
+          );
+
+          // Scenario 5: Positive control — active open modal DOES show launchStatus & schedule/clear 2500ms timer
+          const controlRoot = createRoot(container);
+          try {
+            await React.act(async () => {
+              controlRoot.render(
+                React.createElement(GuidedGeminiHandoffModal, {
+                  isOpen: true,
+                  handoff: handoffA,
+                  onImageReceived: () => {},
+                  onCancel: () => {},
+                })
+              );
+            });
+            await React.act(async () => {
+              clickDomButton(findByTestId(container, 'guided-gemini-launch-btn'));
+              clickDomButton(findByTestId(container, 'guided-gemini-copy-prompt-btn'));
+            });
+            assert.equal(pendingClipboardWrites.length, 2);
+            assert.equal(findByTestId(container, 'guided-gemini-launch-btn').disabled, true);
+            await React.act(async () => {
+              pendingClipboardWrites.shift().resolve();
+              pendingClipboardWrites.shift().resolve();
+              await flushMicrotasks();
+            });
+            assert.equal(
+              findByTestId(container, 'guided-gemini-launch-btn').disabled,
+              false,
+              'Active launch settlement must re-enable launch button'
+            );
+            assert.ok(
+              findByRole(container, 'status')?.textContent.includes('Prompt copied'),
+              'Active launch settlement must render launchStatus'
+            );
+            assert.equal(
+              scheduled2500Timers.length,
+              1,
+              'Active copyPrompt resolution must schedule exactly one 2500ms copiedTimerRef timer'
+            );
+            await React.act(async () => {
+              controlRoot.unmount();
+            });
+            assert.equal(
+              scheduled2500Timers[0].cleared,
+              true,
+              'Unmounting modal must clear active 2500ms copiedTimerRef timer'
+            );
+          } finally {
+            for (const t of scheduled2500Timers) {
+              if (!t.cleared) realClearTimeout(t.id);
+            }
+          }
+        } finally {
+          bridgeMod.NativeBridge.exportOrShareFile = origExportOrShareFile;
+          for (const t of scheduled2500Timers) {
+            if (!t.cleared) realClearTimeout(t.id);
+          }
+        }
+      }
     );
   }
 
@@ -11153,60 +11635,6 @@ async function testClusterK_Tier5AdversarialHardening({
 
   // K11 (B-B2): Behavioral React 19 createRoot mount of useInfiniteZoomController — clearUndoSubdivision barrier & unmount mid-Undo
   {
-    const createMinimalDomContainer = () => {
-      const makeNode = (tag) => ({
-        nodeType: 1,
-        nodeName: tag.toUpperCase(),
-        tagName: tag.toUpperCase(),
-        childNodes: [],
-        firstChild: null,
-        lastChild: null,
-        parentNode: null,
-        ownerDocument: null,
-        style: {},
-        appendChild(child) {
-          child.parentNode = this;
-          this.childNodes.push(child);
-          this.firstChild = this.childNodes[0] || null;
-          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
-          return child;
-        },
-        removeChild(child) {
-          const idx = this.childNodes.indexOf(child);
-          if (idx >= 0) this.childNodes.splice(idx, 1);
-          child.parentNode = null;
-          this.firstChild = this.childNodes[0] || null;
-          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
-          return child;
-        },
-        insertBefore(child, ref) {
-          const idx = ref ? this.childNodes.indexOf(ref) : -1;
-          child.parentNode = this;
-          if (idx >= 0) this.childNodes.splice(idx, 0, child);
-          else this.childNodes.push(child);
-          this.firstChild = this.childNodes[0] || null;
-          this.lastChild = this.childNodes[this.childNodes.length - 1] || null;
-          return child;
-        },
-        addEventListener() {},
-        removeEventListener() {},
-      });
-      const fakeDoc = createFakeDocument();
-      const container = makeNode('div');
-      container.ownerDocument = fakeDoc;
-      fakeDoc.createElement = ((origCreate) => (tag) => {
-        if (String(tag).toLowerCase() === 'canvas') return origCreate(tag);
-        const n = makeNode(tag);
-        n.ownerDocument = fakeDoc;
-        return n;
-      })(fakeDoc.createElement.bind(fakeDoc));
-      fakeDoc.createTextNode = (text) => ({ nodeType: 3, nodeValue: String(text), parentNode: null });
-      fakeDoc.addEventListener = () => {};
-      fakeDoc.removeEventListener = () => {};
-      fakeDoc.activeElement = null;
-      return { fakeDoc, container };
-    };
-
     let deferPuzzleWrites = false;
     const ls = createMemoryLocalStorage();
     const { mockIndexedDb, stores, pendingWrites } = createMockIndexedDb({
@@ -11945,6 +12373,7 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     pipelineMod,
     persistenceMod,
     controllerMod,
+    modalMod,
   });
 
   logUnitPass?.('Infinite Zoom unit tests passed');
