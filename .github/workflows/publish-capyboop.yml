@@ -18,9 +18,29 @@ on:
         required: false
         default: false
         type: boolean
+      triage_issue_number:
+        description: 'Optional capyboop/paint issue number to label/comment/update strictly as capyboop (skips mirror publish)'
+        required: false
+        default: ''
+        type: string
+      triage_labels:
+        description: 'Optional comma-separated labels to apply to the target capyboop/paint issue'
+        required: false
+        default: ''
+        type: string
+      triage_comment:
+        description: 'Optional sanitized public comment body to post as capyboop'
+        required: false
+        default: ''
+        type: string
+      triage_state:
+        description: 'Optional state update for the target capyboop/paint issue (open or closed)'
+        required: false
+        default: ''
+        type: string
 
 concurrency:
-  group: publish-capyboop
+  group: publish-capyboop-${{ inputs.triage_issue_number || 'mirror' }}
   cancel-in-progress: false
 
 permissions:
@@ -30,7 +50,7 @@ permissions:
 jobs:
   publish:
     name: Export & Push Clean capyboop Release
-    if: github.repository == 'shthed/capy'
+    if: github.repository == 'shthed/capy' && !(github.event_name == 'workflow_dispatch' && inputs.triage_issue_number != '')
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
@@ -384,3 +404,123 @@ jobs:
               fi
             done
           fi
+
+  triage-public-issue:
+    name: Triage capyboop/paint Issue as capyboop
+    if: github.repository == 'shthed/capy' && github.event_name == 'workflow_dispatch' && inputs.triage_issue_number != ''
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repository (for persona leak guard)
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Apply sanitized labels, comment, or state on capyboop/paint as capyboop
+        env:
+          CAPYBOOP_SYNC_TOKEN: ${{ secrets.CAPYBOOP_SYNC_TOKEN }}
+          TRIAGE_ISSUE_NUMBER: ${{ inputs.triage_issue_number }}
+          TRIAGE_LABELS: ${{ inputs.triage_labels }}
+          TRIAGE_COMMENT: ${{ inputs.triage_comment }}
+          TRIAGE_STATE: ${{ inputs.triage_state }}
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const { FORBIDDEN_PERSONA_REGEX } = await import(
+            path.resolve(process.cwd(), 'web/scripts/rebrand-persona.mjs')
+          );
+
+          const token = String(process.env.CAPYBOOP_SYNC_TOKEN || '').trim();
+          if (!token) {
+            throw new Error('CAPYBOOP_SYNC_TOKEN secret is not configured.');
+          }
+
+          const issueNum = String(process.env.TRIAGE_ISSUE_NUMBER || '').trim();
+          if (!/^[1-9]\d*$/.test(issueNum)) {
+            throw new Error(`Invalid triage_issue_number: "${issueNum}" (expected positive integer).`);
+          }
+
+          const labels = String(process.env.TRIAGE_LABELS || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          const comment = String(process.env.TRIAGE_COMMENT || '').trim();
+          const state = String(process.env.TRIAGE_STATE || '').trim().toLowerCase();
+
+          if (state && state !== 'open' && state !== 'closed') {
+            throw new Error(`Invalid triage_state: "${state}" (expected "open" or "closed").`);
+          }
+          if (labels.length === 0 && !comment && !state) {
+            throw new Error('At least one of triage_labels, triage_comment, or triage_state is required.');
+          }
+
+          const combinedPayload = `${labels.join(' ')}\n${comment}`;
+          const leakMatch = combinedPayload.match(FORBIDDEN_PERSONA_REGEX);
+          if (leakMatch) {
+            throw new Error(`Refusing public write: forbidden persona/dev token matched ("${leakMatch[0]}").`);
+          }
+
+          const headers = {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'capyboop-issue-triage',
+            'X-GitHub-Api-Version': '2022-11-28',
+          };
+
+          const baseUrl = `https://api.github.com/repos/capyboop/paint/issues/${issueNum}`;
+          const summaryLines = [`### Public Issue Triage (capyboop/paint issue ${issueNum})`, ''];
+
+          if (labels.length > 0) {
+            const labelRes = await fetch(`${baseUrl}/labels`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ labels }),
+            });
+            if (!labelRes.ok) {
+              const errText = await labelRes.text();
+              throw new Error(`Failed to add labels (${labelRes.status}): ${errText.slice(0, 300)}`);
+            }
+            summaryLines.push(`- **Labels added**: ${labels.map((l) => `\`${l}\``).join(', ')}`);
+          }
+
+          if (comment) {
+            const commentRes = await fetch(`${baseUrl}/comments`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ body: comment }),
+            });
+            if (!commentRes.ok) {
+              const errText = await commentRes.text();
+              throw new Error(`Failed to post comment (${commentRes.status}): ${errText.slice(0, 300)}`);
+            }
+            const created = await commentRes.json();
+            summaryLines.push(`- **Comment posted** by \`${created?.user?.login || 'capyboop'}\`: ${created?.html_url || baseUrl}`);
+          }
+
+          if (state) {
+            const stateRes = await fetch(baseUrl, {
+              method: 'PATCH',
+              headers,
+              body: JSON.stringify({ state }),
+            });
+            if (!stateRes.ok) {
+              const errText = await stateRes.text();
+              throw new Error(`Failed to update state (${stateRes.status}): ${errText.slice(0, 300)}`);
+            }
+            summaryLines.push(`- **State updated**: \`${state}\``);
+          }
+
+          const summaryPath = process.env.GITHUB_STEP_SUMMARY;
+          if (summaryPath) {
+            fs.appendFileSync(summaryPath, `${summaryLines.join('\n')}\n`);
+          }
+          console.log(summaryLines.join('\n'));
+          NODE
+
