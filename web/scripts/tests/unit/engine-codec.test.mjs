@@ -781,6 +781,370 @@ export async function runEngineCodecTests({ vite, logUnitStart, logUnitPass, sha
       assert.equal(checker4Res.linePixelCount, 0, '4x4 checkerboard must emit 0 colored-ink ridge pixels');
       assert.equal(checker4Res.isLineArt, false, '4x4 checkerboard must not trigger isLineArt');
 
+      // 8x8 checkerboard (L55/L165) must also emit 0 ridge pixels and stay isLineArt=false
+      const checker8Buf = new Uint8ClampedArray(dw * dh * 4);
+      for (let y = 0; y < dh; y++) {
+        for (let x = 0; x < dw; x++) {
+          const v = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0 ? 55 : 165;
+          const o = (y * dw + x) * 4;
+          checker8Buf[o] = v;
+          checker8Buf[o + 1] = v;
+          checker8Buf[o + 2] = v;
+          checker8Buf[o + 3] = 255;
+        }
+      }
+      const checker8Res = LineArtExtractor.extract(checker8Buf, dw, dh);
+      assert.equal(checker8Res.linePixelCount, 0, '8x8 checkerboard must emit 0 colored-ink ridge pixels');
+      assert.equal(checker8Res.isLineArt, false, '8x8 checkerboard must not trigger isLineArt');
+
+      // F9-3 regression: 2px 30°/60° oblique strokes, closed 45° diamonds (w=2px & w=3px, Manhattan & Euclidean),
+      // 2px X-crossing, and smooth small-crop noise vs tiny colored-ink crops
+      const pointToSegDist = (px, py, x1, y1, x2, y2) => {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lenSq = dx * dx + dy * dy;
+        const t = lenSq > 0 ? Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq)) : 0;
+        return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+      };
+      const countConnectedComponents = (mask, w, h, use8Conn) => {
+        const vis = new Uint8Array(w * h);
+        const queue = new Int32Array(w * h);
+        const dirs = use8Conn
+          ? [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+          : [[0, -1], [-1, 0], [1, 0], [0, 1]];
+        let comps = 0;
+        for (let i = 0; i < w * h; i++) {
+          if (mask[i] !== 1 || vis[i]) continue;
+          comps++;
+          let head = 0;
+          let tail = 0;
+          queue[tail++] = i;
+          vis[i] = 1;
+          while (head < tail) {
+            const cur = queue[head++];
+            const cx = cur % w;
+            const cy = (cur / w) | 0;
+            for (const [dx, dy] of dirs) {
+              const nx = cx + dx;
+              const ny = cy + dy;
+              if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+              const ni = ny * w + nx;
+              if (mask[ni] === 1 && !vis[ni]) {
+                vis[ni] = 1;
+                queue[tail++] = ni;
+              }
+            }
+          }
+        }
+        return comps;
+      };
+
+      // 1) 2px 30° and 60° oblique colored-ink strokes (both crisp & AA) -> >= 90% centerline recall, 0 FP, isLineArt=true
+      const ow = 120;
+      const oh = 120;
+      for (const deg of [30, 60]) {
+        const rad = (deg * Math.PI) / 180;
+        const x1 = 60 - Math.cos(rad) * 45;
+        const y1 = 60 - Math.sin(rad) * 45;
+        const x2 = 60 + Math.cos(rad) * 45;
+        const y2 = 60 + Math.sin(rad) * 45;
+
+        // Crisp 2px oblique stroke
+        const crispBuf = new Uint8ClampedArray(ow * oh * 4);
+        const crispStroke = new Uint8Array(ow * oh);
+        const crispCenter = new Uint8Array(ow * oh);
+        let crispClCount = 0;
+        for (let y = 0; y < oh; y++) {
+          for (let x = 0; x < ow; x++) {
+            const idx = y * ow + x;
+            const d = pointToSegDist(x, y, x1, y1, x2, y2);
+            if (d <= 0.5) {
+              crispCenter[idx] = 1;
+              crispClCount++;
+            }
+            if (d <= 1.0) {
+              crispStroke[idx] = 1;
+              crispBuf[idx * 4] = 74;
+              crispBuf[idx * 4 + 1] = 44;
+              crispBuf[idx * 4 + 2] = 29;
+            } else {
+              crispBuf[idx * 4] = 168;
+              crispBuf[idx * 4 + 1] = 184;
+              crispBuf[idx * 4 + 2] = 200;
+            }
+            crispBuf[idx * 4 + 3] = 255;
+          }
+        }
+        const crispRes = LineArtExtractor.extract(crispBuf, ow, oh);
+        let crispClHits = 0;
+        let crispFp = 0;
+        for (let i = 0; i < ow * oh; i++) {
+          if (crispCenter[i] === 1 && crispRes.lineMask[i] === 1) crispClHits++;
+          if (crispStroke[i] !== 1 && crispRes.lineMask[i] === 1) crispFp++;
+        }
+        const crispRecall = crispClHits / crispClCount;
+        assert.equal(crispRes.isLineArt, true, `Crisp 2px ${deg}° colored-ink stroke must stay isLineArt=true`);
+        assert.ok(
+          crispRecall >= 0.9,
+          `Crisp 2px ${deg}° colored-ink centerline recall must be >= 90% (got ${(crispRecall * 100).toFixed(1)}%)`
+        );
+        assert.equal(crispFp, 0, `Crisp 2px ${deg}° stroke must have 0 background false positives`);
+
+        // AA 2px oblique stroke
+        const aaBuf = new Uint8ClampedArray(ow * oh * 4);
+        const aaCenter = new Uint8Array(ow * oh);
+        let aaClCount = 0;
+        for (let y = 0; y < oh; y++) {
+          for (let x = 0; x < ow; x++) {
+            const idx = y * ow + x;
+            const d = pointToSegDist(x, y, x1, y1, x2, y2);
+            if (d <= 0.6) {
+              aaCenter[idx] = 1;
+              aaClCount++;
+            }
+            const alpha = d <= 0.75 ? 1 : d >= 1.5 ? 0 : (1.5 - d) / 0.75;
+            aaBuf[idx * 4] = Math.round(74 * alpha + 168 * (1 - alpha));
+            aaBuf[idx * 4 + 1] = Math.round(44 * alpha + 184 * (1 - alpha));
+            aaBuf[idx * 4 + 2] = Math.round(29 * alpha + 200 * (1 - alpha));
+            aaBuf[idx * 4 + 3] = 255;
+          }
+        }
+        const aaRes = LineArtExtractor.extract(aaBuf, ow, oh);
+        let aaClHits = 0;
+        let aaFp = 0;
+        for (let i = 0; i < ow * oh; i++) {
+          if (aaCenter[i] === 1 && aaRes.lineMask[i] === 1) aaClHits++;
+          if (aaRes.lineMask[i] === 1 && pointToSegDist(i % ow, (i / ow) | 0, x1, y1, x2, y2) > 1.6) aaFp++;
+        }
+        const aaRecall = aaClHits / aaClCount;
+        assert.equal(aaRes.isLineArt, true, `AA 2px ${deg}° colored-ink stroke must stay isLineArt=true`);
+        assert.ok(
+          aaRecall >= 0.9,
+          `AA 2px ${deg}° colored-ink centerline recall must be >= 90% (got ${(aaRecall * 100).toFixed(1)}%)`
+        );
+        assert.equal(aaFp, 0, `AA 2px ${deg}° stroke must have 0 background false positives`);
+      }
+
+      // 2) Closed 45° colored-ink diamonds (Manhattan & Euclidean at w=2px & w=3px):
+      //    >= 90% total & centerline recall, 0 FP, and single unified ink region in UNIFIED_BLACK_REGION (3 total regions)
+      const { AutoPuzzleGenerator: DiamondAutoGen } = await vite.ssrLoadModule('/src/engine/PuzzleGenerator.ts');
+      const diamondVerts = [
+        [60, 18],
+        [102, 60],
+        [60, 102],
+        [18, 60],
+      ];
+      const diamondEdgeDist = (x, y) =>
+        Math.min(
+          pointToSegDist(x, y, diamondVerts[0][0], diamondVerts[0][1], diamondVerts[1][0], diamondVerts[1][1]),
+          pointToSegDist(x, y, diamondVerts[1][0], diamondVerts[1][1], diamondVerts[2][0], diamondVerts[2][1]),
+          pointToSegDist(x, y, diamondVerts[2][0], diamondVerts[2][1], diamondVerts[3][0], diamondVerts[3][1]),
+          pointToSegDist(x, y, diamondVerts[3][0], diamondVerts[3][1], diamondVerts[0][0], diamondVerts[0][1])
+        );
+      const diamondSpecs = [
+        {
+          label: 'manhattan w=2px',
+          isStroke: (_x, _y, m) => m >= 41 && m <= 43,
+          isCenter: (_x, _y, m) => m === 42,
+          isInner: (_x, _y, m) => m < 41,
+        },
+        {
+          label: 'manhattan w=3px',
+          isStroke: (_x, _y, m) => m >= 41 && m <= 44,
+          isCenter: (_x, _y, m) => m === 42 || m === 43,
+          isInner: (_x, _y, m) => m < 41,
+        },
+        {
+          label: 'euclidean w=2px',
+          isStroke: (x, y) => diamondEdgeDist(x, y) <= 1.0,
+          isCenter: (x, y) => diamondEdgeDist(x, y) <= 0.5,
+          isInner: (_x, _y, m) => m < 42,
+        },
+        {
+          label: 'euclidean w=3px',
+          isStroke: (x, y) => diamondEdgeDist(x, y) <= 1.5,
+          isCenter: (x, y) => diamondEdgeDist(x, y) <= 0.5,
+          isInner: (_x, _y, m) => m < 42,
+        },
+      ];
+      for (const spec of diamondSpecs) {
+        const dBuf = new Uint8ClampedArray(ow * oh * 4);
+        const dExpected = new Uint8Array(ow * oh);
+        const dCenter = new Uint8Array(ow * oh);
+        let dExpCount = 0;
+        let dClCount = 0;
+        for (let y = 0; y < oh; y++) {
+          for (let x = 0; x < ow; x++) {
+            const idx = y * ow + x;
+            const m = Math.abs(x - 60) + Math.abs(y - 60);
+            if (spec.isCenter(x, y, m)) {
+              dCenter[idx] = 1;
+              dClCount++;
+            }
+            if (spec.isStroke(x, y, m)) {
+              dExpected[idx] = 1;
+              dExpCount++;
+              dBuf[idx * 4] = 74;
+              dBuf[idx * 4 + 1] = 44;
+              dBuf[idx * 4 + 2] = 29;
+            } else if (spec.isInner(x, y, m)) {
+              dBuf[idx * 4] = 130;
+              dBuf[idx * 4 + 1] = 175;
+              dBuf[idx * 4 + 2] = 130;
+            } else {
+              dBuf[idx * 4] = 110;
+              dBuf[idx * 4 + 1] = 155;
+              dBuf[idx * 4 + 2] = 195;
+            }
+            dBuf[idx * 4 + 3] = 255;
+          }
+        }
+        const dRes = LineArtExtractor.extract(dBuf, ow, oh);
+        let dHits = 0;
+        let dClHits = 0;
+        let dFp = 0;
+        for (let i = 0; i < ow * oh; i++) {
+          if (dExpected[i] === 1) {
+            if (dRes.lineMask[i] === 1) dHits++;
+          } else if (dRes.lineMask[i] === 1) {
+            dFp++;
+          }
+          if (dCenter[i] === 1 && dRes.lineMask[i] === 1) dClHits++;
+        }
+        const dRecall = dHits / dExpCount;
+        const dClRecall = dClHits / dClCount;
+        assert.equal(dRes.isLineArt, true, `45° colored-ink diamond (${spec.label}) must stay isLineArt=true`);
+        assert.ok(
+          dRecall >= 0.9,
+          `45° diamond (${spec.label}) recall must be >= 90% (got ${(dRecall * 100).toFixed(1)}%)`
+        );
+        assert.ok(
+          dClRecall >= 0.9,
+          `45° diamond (${spec.label}) centerline recall must be >= 90% (got ${(dClRecall * 100).toFixed(1)}%)`
+        );
+        assert.equal(dFp, 0, `45° diamond (${spec.label}) must have 0 false positives (got ${dFp})`);
+
+        const unifiedPuzzle = new DiamondAutoGen().generateFromRgba(dBuf, ow, oh, {
+          algorithm: 'LINE_ART',
+          lineHandling: 'UNIFIED_BLACK_REGION',
+          imageType: 'AUTO',
+          paletteDetail: 'CUSTOM',
+          colorCount: 4,
+          minRegionArea: 12,
+          maxRegions: 40,
+          resolution: 120,
+          smoothingPasses: 1,
+          isFreeColor: false,
+        });
+        const darkRegions = unifiedPuzzle.regions.filter((r) => {
+          const swatch = unifiedPuzzle.palette.find((p) => p.id === r.colorId);
+          return swatch && 0.299 * swatch.r + 0.587 * swatch.g + 0.114 * swatch.b < 90;
+        });
+        assert.equal(
+          darkRegions.length,
+          1,
+          `45° diamond (${spec.label}) in UNIFIED_BLACK_REGION must stay 1 unified ink region (got ${darkRegions.length})`
+        );
+        assert.equal(
+          unifiedPuzzle.regions.length,
+          3,
+          `45° diamond (${spec.label}) in UNIFIED_BLACK_REGION must yield exactly 3 regions (outer, inner, ink; got ${unifiedPuzzle.regions.length})`
+        );
+      }
+
+      // 3) 2px colored-ink X-crossing: high recall (>= 90%), 0 FP, single 4- and 8-connected component
+      {
+        const xBuf = new Uint8ClampedArray(ow * oh * 4);
+        const xExpected = new Uint8Array(ow * oh);
+        let xExpCount = 0;
+        for (let y = 0; y < oh; y++) {
+          for (let x = 0; x < ow; x++) {
+            const idx = y * ow + x;
+            const inBox = x >= 20 && x <= 100 && y >= 20 && y <= 100;
+            const onInk = inBox && (Math.abs(x - y) <= 1 || Math.abs(x + y - 120) <= 1);
+            if (onInk) {
+              xExpected[idx] = 1;
+              xExpCount++;
+              xBuf[idx * 4] = 74;
+              xBuf[idx * 4 + 1] = 44;
+              xBuf[idx * 4 + 2] = 29;
+            } else {
+              xBuf[idx * 4] = 168;
+              xBuf[idx * 4 + 1] = 184;
+              xBuf[idx * 4 + 2] = 200;
+            }
+            xBuf[idx * 4 + 3] = 255;
+          }
+        }
+        const xRes = LineArtExtractor.extract(xBuf, ow, oh);
+        let xHits = 0;
+        let xFp = 0;
+        for (let i = 0; i < ow * oh; i++) {
+          if (xExpected[i] === 1) {
+            if (xRes.lineMask[i] === 1) xHits++;
+          } else if (xRes.lineMask[i] === 1) {
+            xFp++;
+          }
+        }
+        const xRecall = xHits / xExpCount;
+        assert.equal(xRes.isLineArt, true, '2px colored-ink X-crossing must stay isLineArt=true');
+        assert.ok(
+          xRecall >= 0.9,
+          `2px colored-ink X-crossing recall must be >= 90% (got ${(xRecall * 100).toFixed(1)}%)`
+        );
+        assert.equal(xFp, 0, `2px colored-ink X-crossing must have 0 false positives (got ${xFp})`);
+        assert.equal(
+          countConnectedComponents(xRes.lineMask, ow, oh, false),
+          1,
+          '2px colored-ink X-crossing must remain a single 4-connected component (no hollowed spines)'
+        );
+        assert.equal(
+          countConnectedComponents(xRes.lineMask, ow, oh, true),
+          1,
+          '2px colored-ink X-crossing must remain a single 8-connected component'
+        );
+      }
+
+      // 4) Smooth small-crop floor: 32x32 & 44x44 uniform noise stay isLineArt=false; tiny 8x8 & 16x16 colored-ink crops stay isLineArt=true
+      for (const smallDim of [32, 44]) {
+        const smallNoise = new Uint8ClampedArray(smallDim * smallDim * 4);
+        let sn = (120601 + smallDim) >>> 0;
+        for (let i = 0; i < smallDim * smallDim; i++) {
+          sn = (Math.imul(sn, 1664525) + 1013904223) >>> 0;
+          const v = Math.max(0, Math.min(255, Math.round(120 + ((sn / 4294967296) * 2 - 1) * 60)));
+          smallNoise[i * 4] = v;
+          smallNoise[i * 4 + 1] = v;
+          smallNoise[i * 4 + 2] = v;
+          smallNoise[i * 4 + 3] = 255;
+        }
+        const smallNoiseRes = LineArtExtractor.extract(smallNoise, smallDim, smallDim);
+        assert.equal(
+          smallNoiseRes.isLineArt,
+          false,
+          `${smallDim}x${smallDim} uniform L=120+-60 noise must not trigger isLineArt`
+        );
+      }
+      for (const tinyDim of [8, 16]) {
+        const tinyInk = new Uint8ClampedArray(tinyDim * tinyDim * 4);
+        const mid = Math.floor(tinyDim / 2);
+        for (let y = 0; y < tinyDim; y++) {
+          for (let x = 0; x < tinyDim; x++) {
+            const o = (y * tinyDim + x) * 4;
+            const onStroke = x === mid || x === mid - 1;
+            tinyInk[o] = onStroke ? 74 : 168;
+            tinyInk[o + 1] = onStroke ? 44 : 184;
+            tinyInk[o + 2] = onStroke ? 29 : 200;
+            tinyInk[o + 3] = 255;
+          }
+        }
+        const tinyRes = LineArtExtractor.extract(tinyInk, tinyDim, tinyDim);
+        assert.equal(
+          tinyRes.isLineArt,
+          true,
+          `Tiny ${tinyDim}x${tinyDim} colored-ink line-art crop must preserve isLineArt=true`
+        );
+      }
+
       // Smooth gradient & noisy photo preservation (isLineArt === false)
       const photoBuf = new Uint8ClampedArray(lw * lh * 4);
       let seed = 1337;
@@ -968,29 +1332,170 @@ export async function runEngineCodecTests({ vite, logUnitStart, logUnitPass, sha
       const aEmpty = ImageAnalyzer.analyze({ width: aw, height: ah, data: aRgba }, new Uint8Array(aw * ah));
       assert.equal(Number.isFinite(aEmpty.edgeRatio) && Number.isFinite(aEmpty.globalVariance), true);
 
+      // F11-2c-2C regression: AutoPuzzleGenerator & all 4 strategies must guard all invalid dimensions & truncated buffers upfront
       const genMod = await vite.ssrLoadModule('/src/engine/PuzzleGenerator.ts');
-      const nanEmptyPuzzle = new genMod.AutoPuzzleGenerator().generateFromRgba(
-        new Uint8ClampedArray(64),
-        Number.NaN,
-        8,
-        {
-          algorithm: 'AUTO',
-          lineHandling: 'ABSORB_LINES',
-          imageType: 'AUTO',
-          paletteDetail: 'MEDIUM',
-          colorCount: 8,
-          minRegionArea: 16,
-          maxRegions: 50,
-          resolution: 64,
-          smoothingPasses: 1,
-        },
-        undefined,
-        false,
-        new Uint8Array(0)
+      const baseDimGuardConfig = {
+        algorithm: 'AUTO',
+        lineHandling: 'ABSORB_LINES',
+        imageType: 'AUTO',
+        paletteDetail: 'MEDIUM',
+        colorCount: 8,
+        minRegionArea: 16,
+        maxRegions: 50,
+        resolution: 64,
+        smoothingPasses: 1,
+        isFreeColor: false,
+      };
+      const allGenerators = [
+        ['AutoPuzzleGenerator', new genMod.AutoPuzzleGenerator()],
+        ['LineArtPuzzleGenerator', new genMod.LineArtPuzzleGenerator()],
+        ['PainterlyPuzzleGenerator', new genMod.PainterlyPuzzleGenerator()],
+        ['PosterizedPuzzleGenerator', new genMod.PosterizedPuzzleGenerator()],
+        ['MosaicCelPuzzleGenerator', new genMod.MosaicCelPuzzleGenerator()],
+      ];
+      const invalidDims = [
+        [-5, -5],
+        [-5, 10],
+        [0, 0],
+        [Number.NaN, 10],
+        [10, Number.NaN],
+        [Number.POSITIVE_INFINITY, 10],
+        [Number.NEGATIVE_INFINITY, 10],
+        [10.7, 10.3],
+        [Number.MAX_SAFE_INTEGER, 2],
+        [10000, 10000],
+      ];
+      const probeRgba = new Uint8ClampedArray(16 * 16 * 4).fill(180);
+      const activeProbeMask = new Uint8Array(16 * 16).fill(1);
+      const emptyProbeMask = new Uint8Array(0);
+      const dimGuardStartMs = performance.now();
+      for (const isFreeColor of [false, true]) {
+        const dimGuardConfig = { ...baseDimGuardConfig, isFreeColor };
+        for (const [genName, generator] of allGenerators) {
+          for (const [badW, badH] of invalidDims) {
+            for (const [maskLabel, maskArg] of [
+              ['activeMask', activeProbeMask],
+              ['unmasked', undefined],
+              ['emptyMask', emptyProbeMask],
+            ]) {
+              const res = generator.generateFromRgba(
+                probeRgba,
+                badW,
+                badH,
+                dimGuardConfig,
+                undefined,
+                false,
+                maskArg
+              );
+              assert.equal(res.width, 0, `${genName}(${badW},${badH}) [${maskLabel}] width must be 0`);
+              assert.equal(res.height, 0, `${genName}(${badW},${badH}) [${maskLabel}] height must be 0`);
+              assert.equal(res.regionMap.length, 0, `${genName}(${badW},${badH}) [${maskLabel}] regionMap must be empty`);
+              assert.equal(res.borderMap.length, 0, `${genName}(${badW},${badH}) [${maskLabel}] borderMap must be empty`);
+              assert.equal(res.regions.length, 0, `${genName}(${badW},${badH}) [${maskLabel}] regions must be empty`);
+              assert.equal(res.palette.length, 0, `${genName}(${badW},${badH}) [${maskLabel}] palette must be empty`);
+              assert.equal(
+                res.isFreeColor,
+                isFreeColor,
+                `${genName}(${badW},${badH}) [${maskLabel}] isFreeColor must equal ${isFreeColor}`
+              );
+            }
+          }
+        }
+      }
+      assert.ok(
+        performance.now() - dimGuardStartMs < 1000,
+        'All 300 invalid-dimension generator guard checks must return fast (< 1000ms, zero hang)'
       );
-      assert.equal(nanEmptyPuzzle.width, 0, 'createEmptyPuzzleData must sanitize NaN width to 0');
-      assert.equal(nanEmptyPuzzle.height, 0, 'createEmptyPuzzleData must sanitize height to 0 when width is invalid');
-      assert.equal(nanEmptyPuzzle.regionMap.length, 0);
+
+      // Truncated rgbaData guard across AutoPuzzleGenerator & all 4 strategies (unmasked & active mask)
+      const shortRgba = new Uint8ClampedArray(16).fill(200);
+      const shortActiveMask = new Uint8Array(16).fill(1);
+      const truncStartMs = performance.now();
+      for (const [genName, generator] of allGenerators) {
+        for (const [maskLabel, maskArg] of [
+          ['unmasked', undefined],
+          ['activeMask', shortActiveMask],
+        ]) {
+          const truncRes = generator.generateFromRgba(
+            shortRgba,
+            1000,
+            1000,
+            baseDimGuardConfig,
+            undefined,
+            false,
+            maskArg
+          );
+          assert.equal(truncRes.width, 0, `${genName} truncated rgba [${maskLabel}] width must be 0`);
+          assert.equal(truncRes.height, 0, `${genName} truncated rgba [${maskLabel}] height must be 0`);
+          assert.equal(truncRes.regionMap.length, 0);
+          assert.equal(truncRes.borderMap.length, 0);
+          assert.equal(truncRes.regions.length, 0);
+          assert.equal(truncRes.palette.length, 0);
+          assert.equal(truncRes.isFreeColor, false);
+        }
+      }
+      assert.ok(
+        performance.now() - truncStartMs < 100,
+        'Truncated rgbaData guard across all 5 generators must return instantaneously (< 100ms)'
+      );
+
+      // Valid boundary checks across AutoPuzzleGenerator & all 4 strategies: (16,12) empty mask & (1,1) active mask
+      const validEmptyRgba = new Uint8ClampedArray(16 * 12 * 4).fill(180);
+      const validEmptyMask = new Uint8Array(16 * 12);
+      const validOneRgba = new Uint8ClampedArray([200, 80, 60, 255]);
+      const validOneMask = new Uint8Array([1]);
+      for (const [genName, generator] of allGenerators) {
+        const emptyRes = generator.generateFromRgba(
+          validEmptyRgba,
+          16,
+          12,
+          baseDimGuardConfig,
+          undefined,
+          false,
+          validEmptyMask
+        );
+        assert.equal(emptyRes.width, 16, `${genName}(16,12) emptyMask width must stay 16`);
+        assert.equal(emptyRes.height, 12, `${genName}(16,12) emptyMask height must stay 12`);
+        assert.equal(emptyRes.regionMap.length, 16 * 12);
+        assert.equal(emptyRes.borderMap.length, 16 * 12);
+        assert.equal(emptyRes.regions.length, 0);
+        assert.equal(emptyRes.palette.length, 0);
+        assert.equal(emptyRes.isFreeColor, false);
+
+        const oneRes = generator.generateFromRgba(
+          validOneRgba,
+          1,
+          1,
+          baseDimGuardConfig,
+          undefined,
+          false,
+          validOneMask
+        );
+        assert.equal(oneRes.width, 1, `${genName}(1,1) activeMask width must stay 1`);
+        assert.equal(oneRes.height, 1, `${genName}(1,1) activeMask height must stay 1`);
+        assert.equal(oneRes.regionMap.length, 1);
+        assert.equal(oneRes.borderMap.length, 1);
+        assert.equal(oneRes.regionMap[0], 1);
+        assert.equal(oneRes.regions.length, 1);
+        assert.equal(oneRes.regions[0].minX, 0);
+        assert.equal(oneRes.regions[0].maxX, 0);
+        assert.equal(oneRes.regions[0].minY, 0);
+        assert.equal(oneRes.regions[0].maxY, 0);
+      }
+
+      // extractOpaqueAlphaMask invalid dimensions guard
+      for (const [badW, badH] of [
+        [-5, -5],
+        [Number.POSITIVE_INFINITY, 10],
+        [10.7, 10.3],
+        [10000, 10000],
+      ]) {
+        const alphaRes = genMod.extractOpaqueAlphaMask(probeRgba, badW, badH);
+        assert.equal(alphaRes.hasCutoutAlpha, false, `extractOpaqueAlphaMask(${badW},${badH}) must have hasCutoutAlpha=false`);
+        assert.equal(alphaRes.opaqueMask.length, 0, `extractOpaqueAlphaMask(${badW},${badH}) must return empty mask`);
+        assert.equal(alphaRes.opaqueCount, 0);
+        assert.equal(alphaRes.transparentCount, 0);
+      }
     }
 
     // 8. F12 — 96-swatch .capy v2 single & archive round-trip + MAX_GENERATOR_CONFIG.colorCount=64 parity

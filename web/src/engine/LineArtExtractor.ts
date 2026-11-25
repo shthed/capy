@@ -14,9 +14,15 @@ export interface LineArtAnalysis {
 const RIDGE_MAX_LUMINANCE = 115;
 const RIDGE_CONTRAST = 32;
 const MIN_RIDGE_NEIGHBORS = 2;
-const MIN_LINE_COMPONENT_PIXELS = 6;
-const LARGE_NON_PAPER_MIN_COMPONENT_PIXELS = 12;
-const LARGE_NON_PAPER_ACTIVE_THRESHOLD = 2048;
+const MAX_NON_PAPER_MIN_COMPONENT_PIXELS = 12;
+
+const RIDGE_ORIENT_NONE = 0;
+const RIDGE_ORIENT_HV = 1;
+const RIDGE_ORIENT_D1 = 2;
+const RIDGE_ORIENT_D2 = 3;
+const RIDGE_ORIENT_HV_D1 = 4;
+const RIDGE_ORIENT_HV_D2 = 5;
+const RIDGE_ORIENT_HV_BOTH = 6;
 
 // [probeDx, probeDy, tangentTx, tangentTy]
 const RIDGE_AXES: ReadonlyArray<readonly [number, number, number, number]> = [
@@ -327,7 +333,7 @@ function countActiveRidgeNeighbors(
   return count;
 }
 
-function isAnisotropicColoredInkRidge(
+function classifyColoredInkRidgeOrientation(
   lum: Uint8Array,
   width: number,
   height: number,
@@ -335,15 +341,65 @@ function isAnisotropicColoredInkRidge(
   y: number,
   l0: number,
   activeMask?: Uint8Array
-): boolean {
+): number {
   const hMatch = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[0], activeMask);
   const vMatch = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[1], activeMask);
-  if (hMatch && vMatch) return false;
-  if (hMatch || vMatch) return true;
+  if (hMatch !== vMatch) return RIDGE_ORIENT_HV;
 
   const d1Match = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[2], activeMask);
   const d2Match = matchesBilateralRidgeAxis(lum, width, height, x, y, l0, RIDGE_AXES[3], activeMask);
-  return d1Match !== d2Match;
+  if (d1Match === d2Match) {
+    return hMatch && vMatch && !d1Match ? RIDGE_ORIENT_HV_BOTH : RIDGE_ORIENT_NONE;
+  }
+
+  if (hMatch && vMatch) {
+    return d1Match ? RIDGE_ORIENT_HV_D1 : RIDGE_ORIENT_HV_D2;
+  }
+  return d1Match ? RIDGE_ORIENT_D1 : RIDGE_ORIENT_D2;
+}
+
+function matchesOrientPair(code: number, a: number, b: number): boolean {
+  return code === a || code === b;
+}
+
+function isConsistentAmbiguousRidge(
+  ridgeOrient: Uint8Array,
+  width: number,
+  idx: number,
+  orient: number
+): boolean {
+  const left = ridgeOrient[idx - 1];
+  const right = ridgeOrient[idx + 1];
+  const up = ridgeOrient[idx - width];
+  const down = ridgeOrient[idx + width];
+
+  const bridgesHv =
+    (left === RIDGE_ORIENT_HV && right === RIDGE_ORIENT_HV) ||
+    (up === RIDGE_ORIENT_HV && down === RIDGE_ORIENT_HV);
+  if (orient === RIDGE_ORIENT_HV_BOTH) {
+    return bridgesHv;
+  }
+
+  const samePure = orient === RIDGE_ORIENT_HV_D1 ? RIDGE_ORIENT_D1 : RIDGE_ORIENT_D2;
+  const oppPure = orient === RIDGE_ORIENT_HV_D1 ? RIDGE_ORIENT_D2 : RIDGE_ORIENT_D1;
+  const oppAmb = orient === RIDGE_ORIENT_HV_D1 ? RIDGE_ORIENT_HV_D2 : RIDGE_ORIENT_HV_D1;
+
+  if (
+    matchesOrientPair(left, oppPure, oppAmb) ||
+    matchesOrientPair(right, oppPure, oppAmb) ||
+    matchesOrientPair(up, oppPure, oppAmb) ||
+    matchesOrientPair(down, oppPure, oppAmb)
+  ) {
+    return false;
+  }
+
+  return (
+    bridgesHv ||
+    matchesOrientPair(left, samePure, orient) ||
+    matchesOrientPair(right, samePure, orient) ||
+    matchesOrientPair(up, samePure, orient) ||
+    matchesOrientPair(down, samePure, orient)
+  );
 }
 
 function detectColoredInkRidges(
@@ -355,7 +411,8 @@ function detectColoredInkRidges(
 ): void {
   if (width < 5 || height < 5) return;
 
-  const rawRidge = new Uint8Array(width * height);
+  const total = width * height;
+  const ridgeOrient = new Uint8Array(total);
   for (let y = 2; y < height - 2; y++) {
     const row = y * width;
     for (let x = 2; x < width - 2; x++) {
@@ -366,7 +423,26 @@ function detectColoredInkRidges(
       const l0 = lum[idx];
       if (l0 > RIDGE_MAX_LUMINANCE) continue;
 
-      if (isAnisotropicColoredInkRidge(lum, width, height, x, y, l0, activeMask)) {
+      ridgeOrient[idx] = classifyColoredInkRidgeOrientation(
+        lum,
+        width,
+        height,
+        x,
+        y,
+        l0,
+        activeMask
+      );
+    }
+  }
+
+  const rawRidge = new Uint8Array(total);
+  for (let y = 2; y < height - 2; y++) {
+    const row = y * width;
+    for (let x = 2; x < width - 2; x++) {
+      const idx = row + x;
+      const o = ridgeOrient[idx];
+      if (o === RIDGE_ORIENT_NONE) continue;
+      if (o <= RIDGE_ORIENT_D2 || isConsistentAmbiguousRidge(ridgeOrient, width, idx, o)) {
         rawRidge[idx] = 1;
       }
     }
@@ -553,13 +629,10 @@ function extractThinNonPaperLines(
     }
   }
 
-  const baseMinPixels =
-    activeCount >= LARGE_NON_PAPER_ACTIVE_THRESHOLD
-      ? LARGE_NON_PAPER_MIN_COMPONENT_PIXELS
-      : MIN_LINE_COMPONENT_PIXELS;
+  const effectiveSpan = Math.min(width, height, Math.floor(Math.sqrt(activeCount)));
   const minComponentPixels = Math.min(
-    baseMinPixels,
-    Math.max(2, Math.floor(Math.min(width, height) / 4))
+    MAX_NON_PAPER_MIN_COMPONENT_PIXELS,
+    Math.max(2, Math.floor(effectiveSpan / 3))
   );
   const linePixelCount = pruneSmallComponents8(
     cleanLineMask,

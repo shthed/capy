@@ -57,6 +57,13 @@ function createColoringBookPalette(): PaletteColor[] {
   }));
 }
 
+function hasValidGeneratorDimensions(width: number, height: number): boolean {
+  if (!Number.isSafeInteger(width) || width <= 0) return false;
+  if (!Number.isSafeInteger(height) || height <= 0) return false;
+  const total = width * height;
+  return Number.isSafeInteger(total) && total <= MAX_PUZZLE_PIXELS;
+}
+
 export function extractOpaqueAlphaMask(
   rgbaData: Uint8ClampedArray,
   width: number,
@@ -67,9 +74,17 @@ export function extractOpaqueAlphaMask(
   opaqueCount: number;
   transparentCount: number;
 } {
-  const total = Math.max(0, width * height);
+  if (!hasValidGeneratorDimensions(width, height)) {
+    return {
+      hasCutoutAlpha: false,
+      opaqueMask: new Uint8Array(0),
+      opaqueCount: 0,
+      transparentCount: 0,
+    };
+  }
+  const total = width * height;
   const opaqueMask = new Uint8Array(total);
-  const limit = Math.min(total, Math.floor(rgbaData.length / 4));
+  const limit = Math.min(total, rgbaData ? Math.floor(rgbaData.length / 4) : 0);
   let opaqueCount = 0;
   let transparentCount = 0;
   for (let i = 0; i < limit; i++) {
@@ -93,20 +108,53 @@ function hasAnyActivePixel(activeMask: Uint8Array, total: number): boolean {
 }
 
 function createEmptyPuzzleData(width: number, height: number, isFreeColor?: boolean): PuzzleData {
-  const safeW = Number.isFinite(width) && width > 0 ? Math.floor(width) : 0;
-  const safeH = Number.isFinite(height) && height > 0 ? Math.floor(height) : 0;
+  const valid = hasValidGeneratorDimensions(width, height);
+  const safeW = valid ? width : 0;
+  const safeH = valid ? height : 0;
   const total = safeW * safeH;
-  const validTotal =
-    safeW > 0 && safeH > 0 && Number.isSafeInteger(total) && total <= MAX_PUZZLE_PIXELS ? total : 0;
   return {
-    width: validTotal > 0 ? safeW : 0,
-    height: validTotal > 0 ? safeH : 0,
+    width: safeW,
+    height: safeH,
     palette: [],
     regions: [],
-    regionMap: new Int32Array(validTotal),
-    borderMap: new Uint8Array(validTotal),
-    ...(isFreeColor ? { isFreeColor: true } : {}),
+    regionMap: new Int32Array(total),
+    borderMap: new Uint8Array(total),
+    isFreeColor: isFreeColor === true,
   };
+}
+
+function guardGeneratorEntry(
+  rgbaData: Uint8ClampedArray,
+  width: number,
+  height: number,
+  config: GeneratorConfig,
+  activeMask?: Uint8Array
+): PuzzleData | null {
+  const isFreeColor = config?.isFreeColor === true;
+  if (!hasValidGeneratorDimensions(width, height)) {
+    return createEmptyPuzzleData(0, 0, isFreeColor);
+  }
+  const total = width * height;
+  if (activeMask && !hasAnyActivePixel(activeMask, total)) {
+    return createEmptyPuzzleData(width, height, isFreeColor);
+  }
+  if (!rgbaData || rgbaData.length < total * 4) {
+    return createEmptyPuzzleData(0, 0, isFreeColor);
+  }
+  return null;
+}
+
+function readCanvasRgbaForGenerator(
+  sourceCanvas: HTMLCanvasElement
+): { data: Uint8ClampedArray; width: number; height: number } | null {
+  if (!sourceCanvas || !hasValidGeneratorDimensions(sourceCanvas.width, sourceCanvas.height)) {
+    return null;
+  }
+  const ctx =
+    sourceCanvas.getContext('2d', { willReadFrequently: true }) || sourceCanvas.getContext('2d');
+  if (!ctx) return null;
+  const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  return { data: imgData.data, width: sourceCanvas.width, height: sourceCanvas.height };
 }
 
 export type ProgressCallback = (
@@ -186,6 +234,9 @@ function scaleRgba(
   srcH: number,
   maxDim: number
 ): { data: Uint8ClampedArray; width: number; height: number } {
+  if (!hasValidGeneratorDimensions(srcW, srcH)) {
+    return { data: new Uint8ClampedArray(0), width: 0, height: 0 };
+  }
   const maxSourceDim = Math.max(srcW, srcH);
   const targetDim = maxDim > 0 ? Math.min(maxDim, 2048) : maxSourceDim;
   const scale = srcW > targetDim || srcH > targetDim ? targetDim / maxSourceDim : 1.0;
@@ -228,6 +279,14 @@ function scaleRgbaAndMask(
   srcH: number,
   maxDim: number
 ): { data: Uint8ClampedArray; mask?: Uint8Array; width: number; height: number } {
+  if (!hasValidGeneratorDimensions(srcW, srcH)) {
+    return {
+      data: new Uint8ClampedArray(0),
+      mask: srcMask ? new Uint8Array(0) : undefined,
+      width: 0,
+      height: 0,
+    };
+  }
   if (!srcMask) {
     return scaleRgba(srcData, srcW, srcH, maxDim);
   }
@@ -619,14 +678,12 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx =
-      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
-      sourceCanvas.getContext('2d')!;
-    const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const canvasData = readCanvasRgbaForGenerator(sourceCanvas);
+    if (!canvasData) return createEmptyPuzzleData(0, 0, config?.isFreeColor === true);
     return this.generateFromRgba(
-      imgData.data,
-      sourceCanvas.width,
-      sourceCanvas.height,
+      canvasData.data,
+      canvasData.width,
+      canvasData.height,
       config,
       onProgress
     );
@@ -641,9 +698,8 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
     _detailedProgress?: boolean,
     activeMask?: Uint8Array
   ): PuzzleData {
-    if (activeMask && !hasAnyActivePixel(activeMask, srcWidth * srcHeight)) {
-      return createEmptyPuzzleData(srcWidth, srcHeight, config.isFreeColor === true);
-    }
+    const earlyEmpty = guardGeneratorEntry(rgbaData, srcWidth, srcHeight, config, activeMask);
+    if (earlyEmpty) return earlyEmpty;
 
     onProgress?.(0.18, 'Preparing line art canvas...');
 
@@ -746,14 +802,12 @@ export class PainterlyPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx =
-      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
-      sourceCanvas.getContext('2d')!;
-    const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const canvasData = readCanvasRgbaForGenerator(sourceCanvas);
+    if (!canvasData) return createEmptyPuzzleData(0, 0, config?.isFreeColor === true);
     return this.generateFromRgba(
-      imgData.data,
-      sourceCanvas.width,
-      sourceCanvas.height,
+      canvasData.data,
+      canvasData.width,
+      canvasData.height,
       config,
       onProgress
     );
@@ -768,9 +822,8 @@ export class PainterlyPuzzleGenerator implements PuzzleGenerator {
     _detailedProgress?: boolean,
     activeMask?: Uint8Array
   ): PuzzleData {
-    if (activeMask && !hasAnyActivePixel(activeMask, srcWidth * srcHeight)) {
-      return createEmptyPuzzleData(srcWidth, srcHeight, config.isFreeColor === true);
-    }
+    const earlyEmpty = guardGeneratorEntry(rgbaData, srcWidth, srcHeight, config, activeMask);
+    if (earlyEmpty) return earlyEmpty;
 
     onProgress?.(0.18, 'Preparing photo canvas...');
 
@@ -847,14 +900,12 @@ export class PosterizedPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx =
-      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
-      sourceCanvas.getContext('2d')!;
-    const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const canvasData = readCanvasRgbaForGenerator(sourceCanvas);
+    if (!canvasData) return createEmptyPuzzleData(0, 0, config?.isFreeColor === true);
     return this.generateFromRgba(
-      imgData.data,
-      sourceCanvas.width,
-      sourceCanvas.height,
+      canvasData.data,
+      canvasData.width,
+      canvasData.height,
       config,
       onProgress
     );
@@ -869,9 +920,8 @@ export class PosterizedPuzzleGenerator implements PuzzleGenerator {
     _detailedProgress?: boolean,
     activeMask?: Uint8Array
   ): PuzzleData {
-    if (activeMask && !hasAnyActivePixel(activeMask, srcWidth * srcHeight)) {
-      return createEmptyPuzzleData(srcWidth, srcHeight, config.isFreeColor === true);
-    }
+    const earlyEmpty = guardGeneratorEntry(rgbaData, srcWidth, srcHeight, config, activeMask);
+    if (earlyEmpty) return earlyEmpty;
 
     onProgress?.(0.18, 'Preparing posterized canvas...');
 
@@ -1148,14 +1198,12 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
     config: GeneratorConfig,
     onProgress?: ProgressCallback
   ): PuzzleData {
-    const ctx =
-      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
-      sourceCanvas.getContext('2d')!;
-    const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const canvasData = readCanvasRgbaForGenerator(sourceCanvas);
+    if (!canvasData) return createEmptyPuzzleData(0, 0, config?.isFreeColor === true);
     return this.generateFromRgba(
-      imgData.data,
-      sourceCanvas.width,
-      sourceCanvas.height,
+      canvasData.data,
+      canvasData.width,
+      canvasData.height,
       config,
       onProgress
     );
@@ -1170,9 +1218,8 @@ export class MosaicCelPuzzleGenerator implements PuzzleGenerator {
     _detailedProgress?: boolean,
     activeMask?: Uint8Array
   ): PuzzleData {
-    if (activeMask && !hasAnyActivePixel(activeMask, srcWidth * srcHeight)) {
-      return createEmptyPuzzleData(srcWidth, srcHeight, config.isFreeColor === true);
-    }
+    const earlyEmpty = guardGeneratorEntry(rgbaData, srcWidth, srcHeight, config, activeMask);
+    if (earlyEmpty) return earlyEmpty;
 
     onProgress?.(0.18, 'Preparing mosaic canvas...');
 
@@ -1453,14 +1500,12 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     onProgress?: ProgressCallback,
     detailedProgress: boolean = false
   ): PuzzleData {
-    const ctx =
-      sourceCanvas.getContext('2d', { willReadFrequently: true }) ||
-      sourceCanvas.getContext('2d')!;
-    const imgData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const canvasData = readCanvasRgbaForGenerator(sourceCanvas);
+    if (!canvasData) return createEmptyPuzzleData(0, 0, config?.isFreeColor === true);
     return this.generateFromRgba(
-      imgData.data,
-      sourceCanvas.width,
-      sourceCanvas.height,
+      canvasData.data,
+      canvasData.width,
+      canvasData.height,
       config,
       onProgress,
       detailedProgress
@@ -1476,9 +1521,8 @@ export class AutoPuzzleGenerator implements PuzzleGenerator {
     detailedProgress: boolean = false,
     activeMask?: Uint8Array
   ): PuzzleData {
-    if (activeMask && !hasAnyActivePixel(activeMask, width * height)) {
-      return createEmptyPuzzleData(width, height, config.isFreeColor === true);
-    }
+    const earlyEmpty = guardGeneratorEntry(rgbaData, width, height, config, activeMask);
+    if (earlyEmpty) return earlyEmpty;
 
     const targetRes = config.resolution || 1024;
     let highestProgress = 0.02;
