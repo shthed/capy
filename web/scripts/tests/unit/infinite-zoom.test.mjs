@@ -9097,6 +9097,771 @@ function testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod) {
 }
 
 // ===========================================================================
+// Cluster I — Visual Seam Smoothing & Screen-Space Silhouette Hairline (F15)
+// ===========================================================================
+async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod, puzzleCanvasMod) {
+  const {
+    PARENT_SMOOTH_TEXEL_THRESHOLD,
+    LAYER_SILHOUETTE_MIN_SCREEN_PX,
+    LAYER_SILHOUETTE_LINE_WIDTH_PX,
+    LAYER_SILHOUETTE_STROKE_STYLE,
+    computeLayerTexelRatio,
+    resolveLayerImageSmoothing,
+    drawPuzzleCompositeLayers,
+    extractLayerSilhouetteContours,
+    buildLayerSilhouettePath,
+    strokeLayerSilhouette,
+    disposeLayerCanvasCache,
+    collectVisibleNestedLayers,
+    hasOverlappingDeeperVisibleLayer,
+    collectProminentVisibleLayerIds,
+  } = canvasHelpersMod;
+
+  // Verify constants & PuzzleCanvas re-export parity
+  assert.equal(PARENT_SMOOTH_TEXEL_THRESHOLD, 1.25);
+  assert.equal(LAYER_SILHOUETTE_MIN_SCREEN_PX, 24);
+  assert.equal(LAYER_SILHOUETTE_LINE_WIDTH_PX, 1.15);
+  assert.equal(LAYER_SILHOUETTE_STROKE_STYLE, 'rgba(51, 65, 85, 0.52)');
+  assert.strictEqual(puzzleCanvasMod.computeLayerTexelRatio, computeLayerTexelRatio);
+  assert.strictEqual(puzzleCanvasMod.resolveLayerImageSmoothing, resolveLayerImageSmoothing);
+  assert.strictEqual(puzzleCanvasMod.extractLayerSilhouetteContours, extractLayerSilhouetteContours);
+  assert.strictEqual(puzzleCanvasMod.buildLayerSilhouettePath, buildLayerSilhouettePath);
+  assert.strictEqual(puzzleCanvasMod.collectProminentVisibleLayerIds, collectProminentVisibleLayerIds);
+
+  // I1: computeLayerTexelRatio math & guardrails
+  {
+    assert.ok(Math.abs(computeLayerTexelRatio(1000, 1000, 1, 1) - 1.0) < 1e-9);
+    assert.ok(Math.abs(computeLayerTexelRatio(1000, 1000, 4, 1) - 4.0) < 1e-9);
+    assert.ok(Math.abs(computeLayerTexelRatio(125, 1000, 8, 1) - 1.0) < 1e-9);
+    assert.ok(Math.abs(computeLayerTexelRatio(250, 1000, 4, 2) - 2.0) < 1e-9);
+    assert.ok(Math.abs(computeLayerTexelRatio(400, 800, 2.5, 1.5) - 1.875) < 1e-9);
+
+    const invalidCases = [
+      [0, 1000, 1, 1],
+      [-50, 1000, 1, 1],
+      [1000, 0, 1, 1],
+      [1000, -10, 1, 1],
+      [1000, 1000, 0, 1],
+      [1000, 1000, -2, 1],
+      [1000, 1000, 1, 0],
+      [1000, 1000, 1, -1],
+      [NaN, 1000, 1, 1],
+      [1000, Infinity, 1, 1],
+      [1000, 1000, -Infinity, 1],
+      [1000, 1000, 1, NaN],
+    ];
+    for (const args of invalidCases) {
+      assert.equal(
+        computeLayerTexelRatio(...args),
+        0,
+        `computeLayerTexelRatio(${args.join(', ')}) must return 0`
+      );
+    }
+  }
+
+  // I2: resolveLayerImageSmoothing & drawPuzzleCompositeLayers state hygiene
+  {
+    const rootWithChildMagnified = resolveLayerImageSmoothing(2.5, false, true);
+    assert.deepEqual(rootWithChildMagnified, {
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+
+    const rootNoChildMagnified = resolveLayerImageSmoothing(2.5, false, false);
+    assert.deepEqual(rootNoChildMagnified, {
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'low',
+    });
+
+    const rootDownscale = resolveLayerImageSmoothing(0.75, false, false);
+    assert.deepEqual(rootDownscale, {
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+
+    const nestedDownscale = resolveLayerImageSmoothing(0.8, true, false);
+    assert.deepEqual(nestedDownscale, {
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+
+    const nestedSharpNative = resolveLayerImageSmoothing(1.1, true, false);
+    assert.deepEqual(nestedSharpNative, {
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: 'high',
+    });
+
+    const nestedBoundary = resolveLayerImageSmoothing(1.25, true, false);
+    assert.deepEqual(nestedBoundary, {
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: 'high',
+    });
+
+    const nestedMagnifiedAncestor = resolveLayerImageSmoothing(2.0, true, true);
+    assert.deepEqual(nestedMagnifiedAncestor, {
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+
+    // Scratch zero-allocation reuse
+    const scratch = { imageSmoothingEnabled: false, imageSmoothingQuality: 'low' };
+    const returned = resolveLayerImageSmoothing(3.0, false, true, scratch);
+    assert.strictEqual(returned, scratch);
+    assert.equal(scratch.imageSmoothingEnabled, true);
+    assert.equal(scratch.imageSmoothingQuality, 'high');
+
+    // drawPuzzleCompositeLayers applies smoothing during draw and restores even if draw throws
+    const observedDuringDraw = [];
+    const mockCtx = {
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: 'low',
+      save() {},
+      restore() {},
+      drawImage() {
+        observedDuringDraw.push({
+          enabled: this.imageSmoothingEnabled,
+          quality: this.imageSmoothingQuality,
+        });
+      },
+    };
+    const fakeCanvas = { width: 10, height: 10 };
+    const baseParams = {
+      puzzle: { width: 10, height: 10 },
+      sourceImage: null,
+      hasTransparentMask: false,
+      isEffectivePreview: false,
+      showPreviewBorders: false,
+      isFreeColorMode: false,
+      isRegionSelectionMode: false,
+      hasHighlightPixels: false,
+      hasSelectionPixels: false,
+      highlightStyle: 'FULL_REGION',
+      animateHint: false,
+      reducedMotion: true,
+      hintIntensity: 0.7,
+      currentPulseAlpha: 0.7,
+      baseCanvas: fakeCanvas,
+      borderCanvas: null,
+      highlightCanvas: null,
+      maskedPreviewCanvas: null,
+      selectionCanvas: null,
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    };
+    drawPuzzleCompositeLayers(mockCtx, baseParams);
+    assert.equal(observedDuringDraw.length, 1);
+    assert.deepEqual(observedDuringDraw[0], { enabled: true, quality: 'high' });
+    assert.equal(mockCtx.imageSmoothingEnabled, false, 'Must restore imageSmoothingEnabled');
+    assert.equal(mockCtx.imageSmoothingQuality, 'low', 'Must restore imageSmoothingQuality');
+
+    const throwingCtx = {
+      imageSmoothingEnabled: false,
+      imageSmoothingQuality: 'medium',
+      save() {},
+      restore() {},
+      drawImage() {
+        assert.equal(this.imageSmoothingEnabled, true);
+        assert.equal(this.imageSmoothingQuality, 'high');
+        throw new Error('synthetic draw failure');
+      },
+    };
+    assert.throws(() => drawPuzzleCompositeLayers(throwingCtx, baseParams), /synthetic draw failure/);
+    assert.equal(throwingCtx.imageSmoothingEnabled, false);
+    assert.equal(throwingCtx.imageSmoothingQuality, 'medium');
+  }
+
+  // I3: extractLayerSilhouetteContours boundary tracing & collinear merging
+  {
+    // Empty / all-zero / negative / invalid dims / truncated buffer
+    assert.equal(extractLayerSilhouetteContours(new Int32Array(16), 4, 4).length, 0);
+    assert.equal(extractLayerSilhouetteContours(new Int32Array([-1, -2, 0, -3]), 2, 2).length, 0);
+    assert.equal(extractLayerSilhouetteContours(new Int32Array([1, 1]), 4, 4).length, 0);
+    assert.equal(extractLayerSilhouetteContours(new Int32Array([1]), 0, 1).length, 0);
+    assert.equal(extractLayerSilhouetteContours(new Int32Array([1]), 1, -2).length, 0);
+
+    // 1x1 full pixel -> 4 exact segments
+    const single1x1 = extractLayerSilhouetteContours(new Int32Array([7]), 1, 1);
+    assert.equal(single1x1.length, 16, '1x1 pixel must produce 4 closed segments (16 floats)');
+
+    // 1x1 filled pixel inside 3x3 transparent exterior -> 4 segments around (1,1)..(2,2)
+    const centerIn3x3 = new Int32Array(9);
+    centerIn3x3[4] = 5;
+    const centerSegs = extractLayerSilhouetteContours(centerIn3x3, 3, 3);
+    assert.equal(centerSegs.length, 16);
+    for (let i = 0; i < centerSegs.length; i += 2) {
+      assert.ok(centerSegs[i] >= 1 && centerSegs[i] <= 2, 'X must lie on [1, 2]');
+      assert.ok(centerSegs[i + 1] >= 1 && centerSegs[i + 1] <= 2, 'Y must lie on [1, 2]');
+    }
+
+    // 4x4 filled block of TWO distinct regions (1 & 2) inside 6x6 -> collinear-merged to 4 outer segments, 0 interior seams
+    const twoRegionBlock = new Int32Array(36);
+    for (let y = 1; y <= 4; y++) {
+      for (let x = 1; x <= 4; x++) {
+        twoRegionBlock[y * 6 + x] = x <= 2 ? 1 : 2;
+      }
+    }
+    const blockSegs = extractLayerSilhouetteContours(twoRegionBlock, 6, 6);
+    assert.equal(
+      blockSegs.length,
+      16,
+      '4x4 multi-region block must merge to exactly 4 outer perimeter segments with zero internal seams'
+    );
+    for (let i = 0; i < blockSegs.length; i += 2) {
+      assert.ok(blockSegs[i] === 1 || blockSegs[i] === 5, `Expected X in {1,5}, got ${blockSegs[i]}`);
+      assert.ok(
+        blockSegs[i + 1] === 1 || blockSegs[i + 1] === 5,
+        `Expected Y in {1,5}, got ${blockSegs[i + 1]}`
+      );
+    }
+
+    // Full-bleed rectangular Zoom Out 32x16 -> collinear-merged to exact 4 segments
+    const fullBleed = new Int32Array(32 * 16).fill(3);
+    const fullSegs = extractLayerSilhouetteContours(fullBleed, 32, 16);
+    assert.equal(fullSegs.length, 16, 'Full-bleed 32x16 layer must merge to 4 outer segments');
+
+    // Disconnected islands -> 2 independent 4-segment loops (32 floats)
+    const islands = new Int32Array(5 * 5);
+    islands[0] = 1;
+    islands[4 * 5 + 4] = 2;
+    const islandSegs = extractLayerSilhouetteContours(islands, 5, 5);
+    assert.equal(islandSegs.length, 32, 'Two isolated 1x1 islands must produce 8 segments (2 loops)');
+
+    // Hollow donut (3x3 outer filled, center 0) -> outer loop + inner hole loop = 8 segments (32 floats)
+    const donut = new Int32Array(9).fill(1);
+    donut[4] = 0;
+    const donutSegs = extractLayerSilhouetteContours(donut, 3, 3);
+    assert.equal(donutSegs.length, 32, '3x3 donut must produce outer loop + inner hole loop (8 segments)');
+
+    // Diagonal checkerboard saddle -> 2 non-crossing 4-segment loops (32 floats)
+    const saddle = new Int32Array([1, 0, 0, 1]);
+    const saddleSegs = extractLayerSilhouetteContours(saddle, 2, 2);
+    assert.equal(saddleSegs.length, 32, 'Diagonal checkerboard saddle must split into two 4-segment loops');
+
+    // Concave staircase / L-shape -> all coordinates finite, within bounds, chained closed loops
+    const stair = new Int32Array(8 * 8);
+    for (let y = 1; y <= 6; y++) {
+      for (let x = 1; x <= y; x++) {
+        stair[y * 8 + x] = 1;
+      }
+    }
+    const stairSegs = extractLayerSilhouetteContours(stair, 8, 8);
+    assert.ok(stairSegs.length >= 24 && stairSegs.length % 4 === 0);
+    let subStartX = stairSegs[0];
+    let subStartY = stairSegs[1];
+    let closedLoops = 0;
+    for (let i = 0; i < stairSegs.length; i += 4) {
+      const x0 = stairSegs[i];
+      const y0 = stairSegs[i + 1];
+      const x1 = stairSegs[i + 2];
+      const y1 = stairSegs[i + 3];
+      assert.ok(
+        Number.isFinite(x0) && Number.isFinite(y0) && Number.isFinite(x1) && Number.isFinite(y1),
+        'All smoothed silhouette coordinates must be finite'
+      );
+      assert.ok(x0 >= 0 && x0 <= 8 && x1 >= 0 && x1 <= 8);
+      assert.ok(y0 >= 0 && y0 <= 8 && y1 >= 0 && y1 <= 8);
+      if (x1 === subStartX && y1 === subStartY) {
+        closedLoops++;
+        if (i + 4 < stairSegs.length) {
+          subStartX = stairSegs[i + 4];
+          subStartY = stairSegs[i + 5];
+        }
+      } else {
+        assert.equal(stairSegs[i + 4], x1, 'Consecutive loop segments must share exact endpoints');
+        assert.equal(stairSegs[i + 5], y1, 'Consecutive loop segments must share exact endpoints');
+      }
+    }
+    assert.equal(closedLoops, 1, 'Staircase polygon must form 1 cleanly closed contour loop');
+  }
+
+  // I4: buildLayerSilhouettePath (Path2D absent & stubbed), strokeLayerSilhouette, disposeLayerCanvasCache
+  {
+    const squareSegs = extractLayerSilhouetteContours(new Int32Array([1]), 1, 1);
+
+    await withGlobalOverrides({ Path2D: undefined }, () => {
+      assert.equal(buildLayerSilhouettePath(squareSegs, 10, 20, 2, 3), null);
+    });
+
+    const recordedOps = [];
+    class FakePath2D {
+      constructor() {
+        this.ops = [];
+        recordedOps.push(this.ops);
+      }
+      moveTo(x, y) {
+        this.ops.push(['moveTo', x, y]);
+      }
+      lineTo(x, y) {
+        this.ops.push(['lineTo', x, y]);
+      }
+      closePath() {
+        this.ops.push(['closePath']);
+      }
+    }
+
+    await withGlobalOverrides({ Path2D: FakePath2D }, () => {
+      assert.equal(buildLayerSilhouettePath(new Float32Array(0), 0, 0, 1, 1), null);
+      assert.equal(buildLayerSilhouettePath(squareSegs, 0, 0, 0, 1), null);
+      const path = buildLayerSilhouettePath(squareSegs, 100, 200, 10, 20);
+      assert.ok(path instanceof FakePath2D);
+      assert.equal(path.ops[0][0], 'moveTo');
+      assert.equal(path.ops[path.ops.length - 1][0], 'closePath');
+      assert.equal(path.ops.filter((op) => op[0] === 'lineTo').length, 3);
+
+      // strokeLayerSilhouette with Path2D
+      const strokeCalls = [];
+      const ctxWithPath = {
+        lineWidth: 0,
+        lineJoin: 'miter',
+        lineCap: 'butt',
+        strokeStyle: '#000',
+        save() {},
+        restore() {},
+        stroke(arg) {
+          strokeCalls.push({
+            arg,
+            lineWidth: this.lineWidth,
+            lineJoin: this.lineJoin,
+            lineCap: this.lineCap,
+            strokeStyle: this.strokeStyle,
+          });
+        },
+      };
+      strokeLayerSilhouette(ctxWithPath, squareSegs, path, 100, 200, 10, 20, 1, 1, 2.5);
+      assert.equal(strokeCalls.length, 1);
+      assert.strictEqual(strokeCalls[0].arg, path);
+      assert.ok(Math.abs(strokeCalls[0].lineWidth - 1.15 / 2.5) < 1e-9);
+      assert.equal(strokeCalls[0].lineJoin, 'round');
+      assert.equal(strokeCalls[0].lineCap, 'round');
+      assert.equal(strokeCalls[0].strokeStyle, 'rgba(51, 65, 85, 0.52)');
+    });
+
+    // Fallback stroking when Path2D is null
+    const fallbackOps = [];
+    const fallbackCtx = {
+      lineWidth: 0,
+      lineJoin: 'miter',
+      lineCap: 'butt',
+      strokeStyle: '#000',
+      save() {
+        fallbackOps.push('save');
+      },
+      restore() {
+        fallbackOps.push('restore');
+      },
+      beginPath() {
+        fallbackOps.push('beginPath');
+      },
+      moveTo(x, y) {
+        fallbackOps.push(['moveTo', x, y]);
+      },
+      lineTo(x, y) {
+        fallbackOps.push(['lineTo', x, y]);
+      },
+      closePath() {
+        fallbackOps.push('closePath');
+      },
+      stroke() {
+        fallbackOps.push(['stroke', this.lineWidth, this.lineJoin, this.lineCap, this.strokeStyle]);
+      },
+    };
+    strokeLayerSilhouette(fallbackCtx, squareSegs, null, 10, 20, 40, 80, 1, 1, 4);
+    assert.equal(fallbackOps[0], 'save');
+    assert.equal(fallbackOps[1], 'beginPath');
+    assert.equal(fallbackOps[fallbackOps.length - 1], 'restore');
+    const strokeOp = fallbackOps.find((op) => Array.isArray(op) && op[0] === 'stroke');
+    assert.ok(strokeOp, 'Fallback must call ctx.stroke()');
+    assert.ok(Math.abs(strokeOp[1] - 1.15 / 4) < 1e-9);
+    assert.equal(strokeOp[2], 'round');
+    assert.equal(strokeOp[3], 'round');
+    assert.equal(strokeOp[4], 'rgba(51, 65, 85, 0.52)');
+
+    // disposeLayerCanvasCache clears silhouette & unfilled cache fields
+    const mockCache = {
+      baseCanvas: { width: 64, height: 64 },
+      borderCanvas: { width: 64, height: 64 },
+      highlightCanvas: { width: 64, height: 64 },
+      highlightImageData: {},
+      hasHighlightPixels: true,
+      selectionCanvas: { width: 64, height: 64 },
+      selectionImageData: {},
+      hasSelectionPixels: true,
+      maskedPreviewCanvas: { width: 64, height: 64 },
+      sourceImage: {},
+      sourcePixels: new Uint8ClampedArray(16),
+      lastMaskedPreviewImage: {},
+      silhouetteSegments: new Float32Array([0, 0, 1, 0]),
+      silhouettePath: { fake: true },
+      silhouetteComputed: true,
+      silhouetteWorldX: 10,
+      silhouetteWorldY: 20,
+      silhouetteWorldW: 30,
+      silhouetteWorldH: 40,
+      lastFilledSetRef: new Set([1]),
+      lastFilledSetSize: 1,
+      hasUnfilledRegions: true,
+    };
+    disposeLayerCanvasCache(mockCache);
+    assert.equal(mockCache.baseCanvas.width, 0);
+    assert.equal(mockCache.silhouetteSegments, null);
+    assert.equal(mockCache.silhouettePath, null);
+    assert.equal(mockCache.silhouetteComputed, false);
+    assert.ok(Number.isNaN(mockCache.silhouetteWorldX));
+    assert.ok(Number.isNaN(mockCache.silhouetteWorldY));
+    assert.ok(Number.isNaN(mockCache.silhouetteWorldW));
+    assert.ok(Number.isNaN(mockCache.silhouetteWorldH));
+    assert.equal(mockCache.lastFilledSetRef, null);
+    assert.equal(mockCache.lastFilledSetSize, -1);
+    assert.equal(mockCache.hasUnfilledRegions, false);
+  }
+
+  // I5: collectVisibleNestedLayers, hasOverlappingDeeperVisibleLayer & collectProminentVisibleLayerIds
+  {
+    const mkLayer = (layerId, depth, worldBounds) => ({
+      layerId,
+      depth,
+      width: 64,
+      height: 64,
+      worldBounds,
+      regions: [],
+      regionMap: new Int32Array(64 * 64),
+      borderMap: new Uint8Array(64 * 64),
+    });
+    const layers = [
+      mkLayer('small-detail', 1, { x: 0.1, y: 0.1, width: 0.12, height: 0.12 }),
+      mkLayer('large-layer', 1, { x: 0.4, y: 0.4, width: 0.4, height: 0.4 }),
+      mkLayer('deeper-inside-large', 2, { x: 0.5, y: 0.5, width: 0.1, height: 0.1 }),
+      mkLayer('offscreen-layer', 1, { x: 2.0, y: 2.0, width: 0.3, height: 0.3 }),
+    ];
+    const scratchVis = [];
+    const vis = collectVisibleNestedLayers(
+      { width: 1000, height: 1000 },
+      layers,
+      0,
+      0,
+      1000,
+      1000,
+      1,
+      scratchVis
+    );
+    assert.strictEqual(vis, scratchVis);
+    assert.deepEqual(
+      vis.map((l) => l.layerId),
+      ['small-detail', 'large-layer', 'deeper-inside-large']
+    );
+    assert.equal(hasOverlappingDeeperVisibleLayer(vis, 0), false);
+    assert.equal(hasOverlappingDeeperVisibleLayer(vis, 1), true);
+    assert.equal(hasOverlappingDeeperVisibleLayer(vis, 2), false);
+
+    // At scale=1, viewport 800x800, effScale=0.8:
+    // small-detail screen size = 120 * 0.8 = 96px (< 200px = 25% of 800) and scale <= 1.5 -> excluded
+    // large-layer screen size = 400 * 0.8 = 320px (>= 200px) -> included
+    // deeper-inside-large screen size = 100 * 0.8 = 80px (< 200px) -> excluded
+    const prominent1x = collectProminentVisibleLayerIds(
+      1000,
+      1000,
+      layers,
+      0,
+      0,
+      1000,
+      1000,
+      1.0,
+      0.8,
+      800,
+      800,
+      new Set()
+    );
+    assert.deepEqual([...prominent1x], ['large-layer']);
+
+    // At scale=2.0 (> 1.5), effScale=1.6:
+    // small-detail screen size = 192px >= 72px -> included
+    // deeper-inside-large screen size = 160px >= 72px -> included
+    const prominent2x = collectProminentVisibleLayerIds(
+      1000,
+      1000,
+      layers,
+      0,
+      0,
+      1000,
+      1000,
+      2.0,
+      1.6,
+      800,
+      800,
+      new Set()
+    );
+    assert.equal(prominent2x.has('small-detail'), true);
+    assert.equal(prominent2x.has('large-layer'), true);
+    assert.equal(prominent2x.has('deeper-inside-large'), true);
+    assert.equal(prominent2x.has('offscreen-layer'), false);
+
+    // At scale=2.0 (> 1.5) with tiny < 72px layer -> excluded
+    const tinyLayers = [mkLayer('tiny', 2, { x: 0.1, y: 0.1, width: 0.03, height: 0.03 })];
+    const prominentTiny = collectProminentVisibleLayerIds(
+      1000,
+      1000,
+      tinyLayers,
+      0,
+      0,
+      1000,
+      1000,
+      2.0,
+      1.6,
+      800,
+      800,
+      new Set()
+    );
+    assert.equal(prominentTiny.size, 0, 'Layer < 72px on screen even when scale > 1.5 must be excluded');
+
+    // Empty nested layers -> empty set
+    assert.equal(
+      collectProminentVisibleLayerIds(1000, 1000, [], 0, 0, 1000, 1000, 2.0, 1.6, 800, 800, new Set()).size,
+      0
+    );
+  }
+}
+
+// ===========================================================================
+// Cluster J — PaletteDock 96-Color Floating & Keyboard Shortcuts Alignment (F16)
+// ===========================================================================
+async function testClusterJ_PaletteDockFloatingAndShortcutsF16(paletteDockMod, viewportHooksMod) {
+  const React = (await import('react')).default;
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const {
+    PaletteDock,
+    getDisplayNumberMap,
+    getVisiblePalette,
+    partitionDockPaletteByPriority,
+  } = paletteDockMod;
+  const { resolveDigitShortcutColorId } = viewportHooksMod;
+
+  const makePalette = (count) =>
+    Array.from({ length: count }, (_, idx) => {
+      const id = idx + 1;
+      const r = (id * 37) % 256;
+      const g = (id * 73) % 256;
+      const b = (id * 113) % 256;
+      const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b
+        .toString(16)
+        .padStart(2, '0')}`;
+      return { id, hex, isLight: r * 0.299 + g * 0.587 + b * 0.114 > 160 };
+    });
+
+  // J1: partitionDockPaletteByPriority core & boundary contracts
+  {
+    const sample10 = makePalette(10);
+
+    const noArg = partitionDockPaletteByPriority(sample10);
+    assert.strictEqual(noArg.dockPalette, sample10, 'Omitted priority must preserve exact reference');
+    assert.equal(noArg.floatedCount, 0);
+
+    const emptySet = partitionDockPaletteByPriority(sample10, new Set());
+    assert.strictEqual(emptySet.dockPalette, sample10, 'Empty priority set must preserve exact reference');
+    assert.equal(emptySet.floatedCount, 0);
+
+    const emptyPalette = partitionDockPaletteByPriority([], new Set([1, 2]));
+    assert.deepEqual(emptyPalette.dockPalette, []);
+    assert.equal(emptyPalette.floatedCount, 0);
+
+    const nonMatching = partitionDockPaletteByPriority(sample10, new Set([999, -1]));
+    assert.strictEqual(
+      nonMatching.dockPalette,
+      sample10,
+      'Non-matching priority IDs must preserve exact reference'
+    );
+    assert.equal(nonMatching.floatedCount, 0);
+
+    const partial = partitionDockPaletteByPriority(sample10, new Set([3, 6, 10]));
+    assert.equal(partial.floatedCount, 3);
+    assert.deepEqual(
+      partial.dockPalette.map((c) => c.id),
+      [3, 6, 10, 1, 2, 4, 5, 7, 8, 9]
+    );
+
+    const full = partitionDockPaletteByPriority(
+      sample10,
+      new Set(sample10.map((c) => c.id))
+    );
+    assert.equal(full.floatedCount, 10);
+    assert.deepEqual(
+      full.dockPalette.map((c) => c.id),
+      sample10.map((c) => c.id)
+    );
+  }
+
+  // J2: 96-color palette stability & displayNumberMap invariance across all 4 sort orders
+  const palette96 = makePalette(96);
+  const nestedColorIds = [12, 23, 37, 44, 58, 65, 72, 81, 88, 96];
+  const nestedSet = new Set(nestedColorIds);
+  const regions96 = [];
+  let nextRegId = 1;
+  for (let i = 0; i < 96; i++) {
+    const colorId = palette96[i].id;
+    const copies = (i % 4) + 1;
+    for (let c = 0; c < copies; c++) {
+      regions96.push({
+        id: nextRegId++,
+        colorId,
+        pixels: 100,
+        centroid: { x: 10, y: 10 },
+        bounds: { minX: 0, minY: 0, maxX: 10, maxY: 10 },
+      });
+    }
+  }
+  const sortOrders = ['NUMBER', 'REMAINING', 'HUE', 'LIGHTNESS'];
+  const emptyFilled = new Set();
+
+  for (const sortOrder of sortOrders) {
+    const displayMapBefore = getDisplayNumberMap(palette96, regions96, sortOrder);
+    const visible = getVisiblePalette(palette96, regions96, emptyFilled, sortOrder, false);
+    assert.equal(visible.length, 96);
+
+    const { dockPalette, floatedCount } = partitionDockPaletteByPriority(visible, nestedSet);
+    assert.equal(dockPalette.length, 96);
+    assert.equal(floatedCount, 10);
+
+    const floatedIds = dockPalette.slice(0, floatedCount).map((c) => c.id);
+    const restIds = dockPalette.slice(floatedCount).map((c) => c.id);
+    assert.ok(floatedIds.every((id) => nestedSet.has(id)));
+    assert.ok(restIds.every((id) => !nestedSet.has(id)));
+
+    const expectedFloatedOrder = visible.filter((c) => nestedSet.has(c.id)).map((c) => c.id);
+    const expectedRestOrder = visible.filter((c) => !nestedSet.has(c.id)).map((c) => c.id);
+    assert.deepEqual(floatedIds, expectedFloatedOrder, `Floated group must preserve ${sortOrder} order`);
+    assert.deepEqual(restIds, expectedRestOrder, `Remaining group must preserve ${sortOrder} order`);
+
+    const displayMapAfter = getDisplayNumberMap(palette96, regions96, sortOrder);
+    assert.deepEqual([...displayMapAfter.entries()], [...displayMapBefore.entries()]);
+  }
+
+  // J3: resolveDigitShortcutColorId keyboard 1..9 alignment
+  {
+    const puzzle96 = {
+      width: 64,
+      height: 64,
+      palette: palette96,
+      regions: regions96,
+      regionMap: new Int32Array(64 * 64),
+      borderMap: new Uint8Array(64 * 64),
+    };
+    const threeNested = new Set([16, 41, 83]);
+
+    for (const sortOrder of sortOrders) {
+      const visible = getVisiblePalette(palette96, regions96, emptyFilled, sortOrder, false);
+      const { dockPalette: partitioned } = partitionDockPaletteByPriority(visible, threeNested);
+
+      // Standard 0-nested priority: keys 1..9 match visible[0..8]
+      for (let d = 1; d <= 9; d++) {
+        assert.equal(
+          resolveDigitShortcutColorId(String(d), puzzle96, emptyFilled, sortOrder, false, new Set()),
+          visible[d - 1].id,
+          `${sortOrder} standard key ${d} must match visible[${d - 1}]`
+        );
+      }
+      // Nested priority: keys 1..3 pick floated nested colors, 4..9 pick first 6 non-floated
+      for (let d = 1; d <= 9; d++) {
+        assert.equal(
+          resolveDigitShortcutColorId(String(d), puzzle96, emptyFilled, sortOrder, false, threeNested),
+          partitioned[d - 1].id,
+          `${sortOrder} floated key ${d} must match partitioned[${d - 1}]`
+        );
+      }
+    }
+
+    // Free Colour Mode & completed-color exclusion
+    const completedColor16Regions = new Set(
+      regions96.filter((r) => r.colorId === 16).map((r) => r.id)
+    );
+    assert.equal(
+      resolveDigitShortcutColorId('1', puzzle96, completedColor16Regions, 'NUMBER', false, threeNested),
+      41,
+      'Completed nested color 16 must be excluded in standard mode so key 1 selects 41'
+    );
+    assert.equal(
+      resolveDigitShortcutColorId('1', puzzle96, completedColor16Regions, 'NUMBER', true, threeNested),
+      16,
+      'Free Colour Mode keeps color 16 selectable so key 1 selects 16'
+    );
+
+    // Out-of-range keys return null
+    assert.equal(resolveDigitShortcutColorId('0', puzzle96, emptyFilled, 'NUMBER', false, threeNested), null);
+    assert.equal(resolveDigitShortcutColorId('a', puzzle96, emptyFilled, 'NUMBER', false, threeNested), null);
+    const tinyPuzzle = { ...puzzle96, palette: palette96.slice(0, 2), regions: regions96.filter((r) => r.colorId <= 2) };
+    assert.equal(resolveDigitShortcutColorId('3', tinyPuzzle, emptyFilled, 'NUMBER', false, new Set()), null);
+  }
+
+  // J4: PaletteDock React SSR markup verification
+  {
+    const baseDockProps = {
+      palette: palette96,
+      regions: regions96,
+      activeColorId: 1,
+      filledRegionIds: emptyFilled,
+      sortOrder: 'NUMBER',
+      prioritizeOnScreen: false,
+      visibleColorIds: new Set([1, 2]),
+      raiseDock: false,
+      onColorSelected: () => {},
+      onColorHintRequested: () => {},
+    };
+
+    const renderDock = (extra) =>
+      renderToStaticMarkup(React.createElement(PaletteDock, { ...baseDockProps, ...extra }));
+
+    // 1. Standard 0-nested-layer (omitted & empty Set)
+    for (const extra of [{}, { prioritizedColorIds: new Set() }]) {
+      const html = renderDock(extra);
+      assert.ok(!html.includes('data-nested-floated="true"'), '0-nested dock must have zero floated swatches');
+      assert.ok(!html.includes('data-testid="palette-nested-divider"'), '0-nested dock must have zero divider');
+      const ids = [...html.matchAll(/data-testid="palette-swatch-(\d+)"/g)].map((m) => Number(m[1]));
+      assert.equal(ids.length, 96);
+      assert.deepEqual(ids.slice(0, 5), [1, 2, 3, 4, 5]);
+    }
+
+    // 2. Partial nested priority (4 colors in 96-color palette)
+    const fourNested = new Set([20, 45, 70, 96]);
+    const partialHtml = renderDock({ prioritizedColorIds: fourNested });
+    const floatedMatches = [...partialHtml.matchAll(/data-nested-floated="true"/g)];
+    assert.equal(floatedMatches.length, 4, 'Exactly 4 swatches must carry data-nested-floated="true"');
+    const dividerMatches = [...partialHtml.matchAll(/data-testid="palette-nested-divider"/g)];
+    assert.equal(dividerMatches.length, 1, 'Exactly 1 vertical divider must render for partial float');
+
+    const partialSwatchNums = [...partialHtml.matchAll(/data-testid="palette-swatch-(\d+)"/g)].map((m) =>
+      Number(m[1])
+    );
+    assert.equal(partialSwatchNums.length, 96);
+    assert.deepEqual(
+      partialSwatchNums.slice(0, 4),
+      [20, 45, 70, 96],
+      'Floated swatches must preserve their invariant displayNumberMap numbers'
+    );
+    assert.deepEqual(partialSwatchNums.slice(4, 8), [1, 2, 3, 4]);
+
+    const idxSwatch4 = partialHtml.indexOf('data-testid="palette-swatch-96"');
+    const idxDivider = partialHtml.indexOf('data-testid="palette-nested-divider"');
+    const idxSwatch5 = partialHtml.indexOf('data-testid="palette-swatch-1"');
+    assert.ok(
+      idxSwatch4 > 0 && idxDivider > idxSwatch4 && idxSwatch5 > idxDivider,
+      'Divider must appear strictly between the 4th floated swatch and the 5th (first non-floated) swatch'
+    );
+
+    // 3. Full nested priority (all 96 prioritized) -> all floated, zero divider
+    const fullHtml = renderDock({ prioritizedColorIds: new Set(palette96.map((c) => c.id)) });
+    assert.equal([...fullHtml.matchAll(/data-nested-floated="true"/g)].length, 96);
+    assert.equal(
+      [...fullHtml.matchAll(/data-testid="palette-nested-divider"/g)].length,
+      0,
+      'Full-float dock must NOT render a trailing dangling divider'
+    );
+
+    // 4. Non-matching priority IDs -> zero floated, zero divider
+    const unmatchedHtml = renderDock({ prioritizedColorIds: new Set([500, 999]) });
+    assert.equal([...unmatchedHtml.matchAll(/data-nested-floated="true"/g)].length, 0);
+    assert.equal([...unmatchedHtml.matchAll(/data-testid="palette-nested-divider"/g)].length, 0);
+  }
+}
+
+// ===========================================================================
 // Main Exported Unit Suite
 // ===========================================================================
 export async function runInfiniteZoomUnitTests(ctxOrVite) {
@@ -9149,6 +9914,8 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     floatingMod,
     controlsMod,
     modalMod,
+    paletteDockMod,
+    viewportHooksMod,
   ] = await Promise.all([
     vite.ssrLoadModule('/src/services/ai/NanoBananaService.ts'),
     vite.ssrLoadModule('/src/services/ai/RegionSelectionEngine.ts'),
@@ -9174,6 +9941,8 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     vite.ssrLoadModule('/src/components/FloatingActions.tsx'),
     vite.ssrLoadModule('/src/components/InfiniteZoomControls.tsx'),
     vite.ssrLoadModule('/src/components/GuidedGeminiHandoffModal.tsx'),
+    vite.ssrLoadModule('/src/components/PaletteDock.tsx'),
+    vite.ssrLoadModule('/src/hooks/useViewportAndShortcuts.ts'),
   ]);
 
   await testNanoBananaService(nanoMod, promptsMod);
@@ -9231,6 +10000,8 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     typesMod
   );
   testClusterH_AutoCameraFocusF14(canvasHelpersMod, puzzleCanvasMod);
+  await testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod, puzzleCanvasMod);
+  await testClusterJ_PaletteDockFloatingAndShortcutsF16(paletteDockMod, viewportHooksMod);
 
   logUnitPass?.('Infinite Zoom unit tests passed');
 }

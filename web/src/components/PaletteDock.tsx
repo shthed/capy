@@ -17,6 +17,7 @@ interface PaletteDockProps {
   sortOrder: PaletteSortOrder;
   prioritizeOnScreen: boolean;
   visibleColorIds: Set<number>;
+  prioritizedColorIds?: ReadonlySet<number>;
   raiseDock: boolean;
   isFreeColorMode?: boolean;
   isReplaying?: boolean;
@@ -145,6 +146,47 @@ export function getDockPalette(
   return basePalette;
 }
 
+export interface PartitionedDockPalette {
+  dockPalette: PaletteColor[];
+  floatedCount: number;
+}
+
+/**
+ * Stable-partitions `sortedPalette` so colors in `prioritizedColorIds` (e.g.
+ * zoomed-in nested-layer colors) float to the front while preserving exact
+ * relative `sortedPalette` order inside both floated and remaining groups.
+ * Returns `sortedPalette` reference untouched with `floatedCount: 0` when no
+ * swatches are prioritized (100% unchanged standard 0-nested-layer behavior).
+ */
+export function partitionDockPaletteByPriority(
+  sortedPalette: readonly PaletteColor[],
+  prioritizedColorIds?: ReadonlySet<number>
+): PartitionedDockPalette {
+  if (!prioritizedColorIds || prioritizedColorIds.size === 0 || sortedPalette.length === 0) {
+    return { dockPalette: sortedPalette as PaletteColor[], floatedCount: 0 };
+  }
+  const floated: PaletteColor[] = [];
+  const rest: PaletteColor[] = [];
+  for (let i = 0; i < sortedPalette.length; i++) {
+    const color = sortedPalette[i];
+    if (prioritizedColorIds.has(color.id)) {
+      floated.push(color);
+    } else {
+      rest.push(color);
+    }
+  }
+  if (floated.length === 0) {
+    return { dockPalette: sortedPalette as PaletteColor[], floatedCount: 0 };
+  }
+  if (rest.length === 0) {
+    return { dockPalette: floated, floatedCount: floated.length };
+  }
+  return {
+    dockPalette: floated.concat(rest),
+    floatedCount: floated.length,
+  };
+}
+
 export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   palette,
   regions,
@@ -154,6 +196,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   sortOrder,
   prioritizeOnScreen,
   visibleColorIds,
+  prioritizedColorIds,
   raiseDock,
   isFreeColorMode = false,
   isReplaying = false,
@@ -165,9 +208,9 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
   onSyncActiveColor,
   onColorHintRequested,
   onOpenPaletteOptions,
-  onAddCustomColor,
-  onUpdateColor,
-  onApplyPresetPalette,
+  onAddCustomColor: _onAddCustomColor,
+  onUpdateColor: _onUpdateColor,
+  onApplyPresetPalette: _onApplyPresetPalette,
 }) => {
   const effectiveUiScale = uiScale ?? (largeText ? 1.25 : 1.0);
   const onColorSelectedRef = useRef(onColorSelected);
@@ -244,8 +287,23 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     return getDisplayNumberMap(palette, regions, sortOrder);
   }, [palette, regions, sortOrder]);
 
-  // Keep dock strictly in sorted order (never pull active or visible swatches to front)
-  const dockPalette = sortedPalette;
+  // Stable-partition dock so prominently visible nested-layer colors float to front
+  // while keeping standard 0-nested-layer puzzles 100% in sorted order
+  const { dockPalette, floatedCount } = useMemo(
+    () => partitionDockPaletteByPriority(sortedPalette, prioritizedColorIds),
+    [sortedPalette, prioritizedColorIds]
+  );
+
+  const hasNestedDivider = floatedCount > 0 && floatedCount < dockPalette.length;
+
+  const floatedSignature = useMemo(() => {
+    if (floatedCount === 0) return '';
+    let sig = `${floatedCount}:`;
+    for (let i = 0; i < floatedCount; i++) {
+      sig += i === 0 ? `${dockPalette[i].id}` : `,${dockPalette[i].id}`;
+    }
+    return sig;
+  }, [dockPalette, floatedCount]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
@@ -264,8 +322,9 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
       if (clientW <= 0) return;
       const swatchW = Math.round(46 * effectiveUiScale);
       const swatchGap = Math.round(8 * effectiveUiScale);
+      const dividerExtraW = hasNestedDivider ? 2 + swatchGap : 0;
       const naturalWidth =
-        itemCount * swatchW + Math.max(0, itemCount - 1) * swatchGap + 24;
+        itemCount * swatchW + Math.max(0, itemCount - 1) * swatchGap + dividerExtraW + 24;
       setIsScrollable(naturalWidth > clientW);
     };
 
@@ -277,7 +336,7 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     }
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, [itemCount, effectiveUiScale]);
+  }, [itemCount, hasNestedDivider, effectiveUiScale]);
 
   // Smoothly center the active color in view when activeColorId or dock layout changes
   useEffect(() => {
@@ -300,7 +359,15 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
     } else {
       container.scrollLeft = targetLeft;
     }
-  }, [activeColorId, reducedMotion, isScrollable, sortOrder, dockPalette.length, effectiveUiScale]);
+  }, [
+    activeColorId,
+    reducedMotion,
+    isScrollable,
+    sortOrder,
+    dockPalette.length,
+    floatedSignature,
+    effectiveUiScale,
+  ]);
 
   // Enable horizontal mouse wheel scrolling across the color chooser
   useEffect(() => {
@@ -374,8 +441,9 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
           }}
         >
         <div data-testid="palette-dock-tray" className="capy-palette-tray flex items-center gap-2">
-        {dockPalette.map((color) => {
+        {dockPalette.map((color, index) => {
           const isActive = color.id === activeColorId;
+          const isFloated = index < floatedCount;
           const isVisibleOnScreen = visibleColorIds.has(color.id);
           const dispNum = displayNumberMap.get(color.id);
           const badgeVal = isFreeColorMode
@@ -383,47 +451,59 @@ export const PaletteDock: React.FC<PaletteDockProps> = React.memo(({
             : remainingCountMap.get(color.id) || 0;
 
           return (
-            <button
-              key={color.id}
-              ref={isActive ? activeSwatchRef : undefined}
-              type="button"
-              data-testid={`palette-swatch-${dispNum}`}
-              aria-label={`Color #${dispNum}${
-                isFreeColorMode
-                  ? ` (${badgeVal} painted)`
-                  : ` (${badgeVal} remaining)`
-              }`}
-              aria-pressed={isActive}
-              onClick={() => handleSwatchClick(color)}
-              title={`Color #${dispNum}${
-                isFreeColorMode
-                  ? ` (${badgeVal} painted)`
-                  : ` (${badgeVal} remaining)`
-              }${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
-              className={`capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-[transform,opacity,box-shadow,background-color] active:scale-95 shadow-md ${
-                isActive
-                  ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-xl opacity-100 z-10'
-                  : isVisibleOnScreen && prioritizeOnScreen
-                  ? 'ring-1 ring-white/60 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
-                  : 'opacity-90 hover:opacity-100 hover:scale-102'
-              }`}
-              style={{ backgroundColor: color.hex }}
-            >
-              <span
-                className={`text-[12px] font-extrabold leading-tight ${
-                  color.isLight ? 'text-slate-950' : 'text-white'
+            <React.Fragment key={color.id}>
+              <button
+                ref={isActive ? activeSwatchRef : undefined}
+                type="button"
+                data-testid={`palette-swatch-${dispNum}`}
+                data-nested-floated={isFloated ? 'true' : undefined}
+                aria-label={`Color #${dispNum}${
+                  isFreeColorMode
+                    ? ` (${badgeVal} painted)`
+                    : ` (${badgeVal} remaining)`
                 }`}
-              >
-                {dispNum}
-              </span>
-              <span
-                className={`text-[9.5px] font-bold leading-tight ${
-                  color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
+                aria-pressed={isActive}
+                onClick={() => handleSwatchClick(color)}
+                title={`Color #${dispNum}${
+                  isFreeColorMode
+                    ? ` (${badgeVal} painted)`
+                    : ` (${badgeVal} remaining)`
+                }${isFloated ? ' • Detail Area' : ''}${isVisibleOnScreen ? ' • On Screen' : ''}${isActive ? ' (Selected)' : ''}`}
+                className={`capy-swatch-btn flex-shrink-0 relative flex flex-col items-center justify-center w-[46px] h-[40px] rounded-xl transition-[transform,opacity,box-shadow,background-color] active:scale-95 shadow-md ${
+                  isActive
+                    ? 'ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-950 scale-105 shadow-xl opacity-100 z-10'
+                    : isFloated
+                    ? 'ring-1 ring-amber-300/80 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
+                    : isVisibleOnScreen && prioritizeOnScreen
+                    ? 'ring-1 ring-white/60 shadow-md opacity-95 hover:opacity-100 hover:scale-102'
+                    : 'opacity-90 hover:opacity-100 hover:scale-102'
                 }`}
+                style={{ backgroundColor: color.hex }}
               >
-                {badgeVal}
-              </span>
-            </button>
+                <span
+                  className={`text-[12px] font-extrabold leading-tight ${
+                    color.isLight ? 'text-slate-950' : 'text-white'
+                  }`}
+                >
+                  {dispNum}
+                </span>
+                <span
+                  className={`text-[9.5px] font-bold leading-tight ${
+                    color.isLight ? 'text-slate-900/90' : 'text-slate-100/90'
+                  }`}
+                >
+                  {badgeVal}
+                </span>
+              </button>
+              {hasNestedDivider && index === floatedCount - 1 && (
+                <span
+                  data-testid="palette-nested-divider"
+                  role="separator"
+                  aria-orientation="vertical"
+                  className="flex-shrink-0 w-[2px] h-7 rounded-full bg-amber-400/60"
+                />
+              )}
+            </React.Fragment>
           );
         })}
 

@@ -19,6 +19,10 @@ const ZOOM_SNAP_TOLERANCE = 0.04;
 
 export const MAX_LIVE_LAYER_CACHES = 12;
 export const MIN_LAYER_RENDER_SCREEN_PX = 6;
+export const PARENT_SMOOTH_TEXEL_THRESHOLD = 1.25;
+export const LAYER_SILHOUETTE_MIN_SCREEN_PX = 24;
+export const LAYER_SILHOUETTE_LINE_WIDTH_PX = 1.15;
+export const LAYER_SILHOUETTE_STROKE_STYLE = 'rgba(51, 65, 85, 0.52)';
 
 export interface CanvasRegionGridLike {
   width: number;
@@ -65,6 +69,16 @@ export interface LayerCanvasCache {
   dirtyMaxX: number;
   dirtyMaxY: number;
   lastAccessedFrame: number;
+  silhouetteSegments: Float32Array | null;
+  silhouettePath: Path2D | null;
+  silhouetteComputed: boolean;
+  silhouetteWorldX: number;
+  silhouetteWorldY: number;
+  silhouetteWorldW: number;
+  silhouetteWorldH: number;
+  lastFilledSetRef: ReadonlySet<number> | null;
+  lastFilledSetSize: number;
+  hasUnfilledRegions: boolean;
 }
 
 export interface UnifiedHitResult {
@@ -131,6 +145,8 @@ export interface DrawPuzzleLayersParams {
   highlightCanvas: HTMLCanvasElement | null;
   maskedPreviewCanvas: HTMLCanvasElement | null;
   selectionCanvas: HTMLCanvasElement | null;
+  imageSmoothingEnabled?: boolean;
+  imageSmoothingQuality?: ImageSmoothingQuality;
 }
 
 const INTERNAL_HIT_SCRATCH: UnifiedHitResult = { regionId: 0, layerId: null, depth: 0 };
@@ -529,6 +545,16 @@ export function disposeLayerCanvasCache(cache: LayerCanvasCache): void {
   cache.sourceImage = null;
   cache.sourcePixels = null;
   cache.lastMaskedPreviewImage = null;
+  cache.silhouetteSegments = null;
+  cache.silhouettePath = null;
+  cache.silhouetteComputed = false;
+  cache.silhouetteWorldX = NaN;
+  cache.silhouetteWorldY = NaN;
+  cache.silhouetteWorldW = NaN;
+  cache.silhouetteWorldH = NaN;
+  cache.lastFilledSetRef = null;
+  cache.lastFilledSetSize = -1;
+  cache.hasUnfilledRegions = false;
 }
 
 /**
@@ -1629,10 +1655,28 @@ export function drawPuzzleCompositeLayers(
   ctx: CanvasRenderingContext2D,
   params: DrawPuzzleLayersParams
 ): void {
-  if (params.isEffectivePreview) {
-    drawPreviewLayers(ctx, params);
-  } else {
-    drawInteractiveLayers(ctx, params);
+  const hasOverride =
+    typeof params.imageSmoothingEnabled === 'boolean' ||
+    params.imageSmoothingQuality !== undefined;
+  const prevEnabled = hasOverride ? ctx.imageSmoothingEnabled : true;
+  const prevQuality = hasOverride ? ctx.imageSmoothingQuality : 'low';
+  if (typeof params.imageSmoothingEnabled === 'boolean') {
+    ctx.imageSmoothingEnabled = params.imageSmoothingEnabled;
+  }
+  if (params.imageSmoothingQuality !== undefined) {
+    ctx.imageSmoothingQuality = params.imageSmoothingQuality;
+  }
+  try {
+    if (params.isEffectivePreview) {
+      drawPreviewLayers(ctx, params);
+    } else {
+      drawInteractiveLayers(ctx, params);
+    }
+  } finally {
+    if (hasOverride) {
+      ctx.imageSmoothingEnabled = prevEnabled;
+      ctx.imageSmoothingQuality = prevQuality;
+    }
   }
 }
 
@@ -1859,3 +1903,550 @@ export function computeFocusViewportForBounds(
     panOffsetY: clamped.y,
   };
 }
+
+export interface LayerSmoothingConfig {
+  imageSmoothingEnabled: boolean;
+  imageSmoothingQuality: ImageSmoothingQuality;
+}
+
+/**
+ * Computes device pixels per layer texel along one axis:
+ * (worldSpan / layerDim) * effScale * effDpr.
+ * Returns 0 for any non-finite or <= 0 input.
+ */
+export function computeLayerTexelRatio(
+  worldSpan: number,
+  layerDim: number,
+  effScale: number,
+  effDpr: number
+): number {
+  if (
+    !Number.isFinite(worldSpan) ||
+    !Number.isFinite(layerDim) ||
+    !Number.isFinite(effScale) ||
+    !Number.isFinite(effDpr) ||
+    worldSpan <= 0 ||
+    layerDim <= 0 ||
+    effScale <= 0 ||
+    effDpr <= 0
+  ) {
+    return 0;
+  }
+  const ratio = (worldSpan / layerDim) * effScale * effDpr;
+  return Number.isFinite(ratio) && ratio > 0 ? ratio : 0;
+}
+
+/**
+ * Resolves per-layer Canvas2D smoothing settings without allocating when `out` is provided.
+ * - Magnified outer/ancestor parent layers behind visible nested layers (texelRatio > 1.25):
+ *   imageSmoothingEnabled = true, imageSmoothingQuality = 'high' (never ctx.filter blur).
+ * - Sharp nested layers (texelRatio <= 1.25):
+ *   imageSmoothingEnabled = texelRatio < 1.0, imageSmoothingQuality = 'high' when downscaling.
+ * - Magnified nested layers (texelRatio > 1.25):
+ *   imageSmoothingEnabled = true, imageSmoothingQuality = 'high'.
+ * - Standard root layer with no visible nested layers:
+ *   imageSmoothingEnabled = true, quality = 'high' when downscaling else 'low'.
+ */
+export function resolveLayerImageSmoothing(
+  texelRatio: number,
+  isNestedLayer: boolean,
+  hasVisibleDeeperChild: boolean,
+  out?: LayerSmoothingConfig
+): LayerSmoothingConfig {
+  const safeRatio = Number.isFinite(texelRatio) && texelRatio > 0 ? texelRatio : 0;
+  let enabled: boolean;
+  let quality: ImageSmoothingQuality;
+
+  if (!isNestedLayer) {
+    enabled = true;
+    quality =
+      (hasVisibleDeeperChild && safeRatio > PARENT_SMOOTH_TEXEL_THRESHOLD) ||
+      (safeRatio > 0 && safeRatio < 1.0)
+        ? 'high'
+        : 'low';
+  } else if (safeRatio === 0 || safeRatio > PARENT_SMOOTH_TEXEL_THRESHOLD) {
+    enabled = true;
+    quality = 'high';
+  } else {
+    enabled = safeRatio < 1.0;
+    quality = 'high';
+  }
+
+  if (out) {
+    out.imageSmoothingEnabled = enabled;
+    out.imageSmoothingQuality = quality;
+    return out;
+  }
+  return { imageSmoothingEnabled: enabled, imageSmoothingQuality: quality };
+}
+
+const SILHOUETTE_DIR_DX = [1, 0, -1, 0] as const;
+const SILHOUETTE_DIR_DY = [0, 1, 0, -1] as const;
+
+function addSilhouetteDirectedEdge(
+  outMask: Map<number, number>,
+  vertexKey: number,
+  dirBit: number
+): void {
+  const prev = outMask.get(vertexKey) ?? 0;
+  outMask.set(vertexKey, prev | dirBit);
+}
+
+function buildSilhouetteEdgeMask(
+  regionMap: Int32Array,
+  width: number,
+  height: number
+): { outMask: Map<number, number>; totalEdges: number } {
+  const outMask = new Map<number, number>();
+  let totalEdges = 0;
+  const stride = width + 1;
+
+  for (let y = 0; y < height; y++) {
+    const rowOff = y * width;
+    const vRow = y * stride;
+    const vRowNext = (y + 1) * stride;
+    for (let x = 0; x < width; x++) {
+      const idx = rowOff + x;
+      if (regionMap[idx] <= 0) continue;
+      if (y === 0 || regionMap[idx - width] <= 0) {
+        addSilhouetteDirectedEdge(outMask, vRow + x, 1);
+        totalEdges++;
+      }
+      if (x === width - 1 || regionMap[idx + 1] <= 0) {
+        addSilhouetteDirectedEdge(outMask, vRow + x + 1, 2);
+        totalEdges++;
+      }
+      if (y === height - 1 || regionMap[idx + width] <= 0) {
+        addSilhouetteDirectedEdge(outMask, vRowNext + x + 1, 4);
+        totalEdges++;
+      }
+      if (x === 0 || regionMap[idx - 1] <= 0) {
+        addSilhouetteDirectedEdge(outMask, vRowNext + x, 8);
+        totalEdges++;
+      }
+    }
+  }
+
+  return { outMask, totalEdges };
+}
+
+function consumeSilhouetteDir(outMask: Map<number, number>, key: number, dir: number): void {
+  const mask = (outMask.get(key) ?? 0) & ~(1 << dir);
+  if (mask === 0) {
+    outMask.delete(key);
+  } else {
+    outMask.set(key, mask);
+  }
+}
+
+function pickNextSilhouetteDir(mask: number, dir: number): number {
+  const right = (dir + 1) & 3;
+  if (mask & (1 << right)) return right;
+  if (mask & (1 << dir)) return dir;
+  const left = (dir + 3) & 3;
+  if (mask & (1 << left)) return left;
+  const back = (dir + 2) & 3;
+  if (mask & (1 << back)) return back;
+  return -1;
+}
+
+function traceMergedSilhouetteLoop(
+  startKey: number,
+  startDir: number,
+  stride: number,
+  outMask: Map<number, number>,
+  loopX: number[],
+  loopY: number[],
+  maxSteps: number
+): void {
+  loopX.length = 0;
+  loopY.length = 0;
+
+  const startY = Math.floor(startKey / stride);
+  const startX = startKey - startY * stride;
+
+  consumeSilhouetteDir(outMask, startKey, startDir);
+  let curX = startX + SILHOUETTE_DIR_DX[startDir];
+  let curY = startY + SILHOUETTE_DIR_DY[startDir];
+  let dir = startDir;
+  let steps = 1;
+
+  while (steps <= maxSteps) {
+    const curKey = curY * stride + curX;
+    if (curKey === startKey) {
+      if (dir !== startDir) {
+        loopX.push(startX);
+        loopY.push(startY);
+      }
+      break;
+    }
+    const mask = outMask.get(curKey) ?? 0;
+    const nextDir = pickNextSilhouetteDir(mask, dir);
+    if (nextDir < 0) break;
+    if (nextDir !== dir) {
+      loopX.push(curX);
+      loopY.push(curY);
+    }
+    consumeSilhouetteDir(outMask, curKey, nextDir);
+    curX += SILHOUETTE_DIR_DX[nextDir];
+    curY += SILHOUETTE_DIR_DY[nextDir];
+    dir = nextDir;
+    steps++;
+  }
+}
+
+function appendSmoothedClosedLoopSegments(
+  loopX: readonly number[],
+  loopY: readonly number[],
+  outSegments: number[]
+): void {
+  const n = loopX.length;
+  if (n < 3) return;
+
+  let vx: ArrayLike<number> = loopX;
+  let vy: ArrayLike<number> = loopY;
+
+  if (n >= 6) {
+    const sx = new Float64Array(n);
+    const sy = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const prevIdx = i === 0 ? n - 1 : i - 1;
+      const nextIdx = i === n - 1 ? 0 : i + 1;
+      const x = loopX[i];
+      const y = loopY[i];
+      const px = loopX[prevIdx];
+      const py = loopY[prevIdx];
+      const nx = loopX[nextIdx];
+      const ny = loopY[nextIdx];
+      const lenPrev = Math.abs(x - px) + Math.abs(y - py);
+      const lenNext = Math.abs(nx - x) + Math.abs(ny - y);
+      if (lenPrev <= 2 && lenNext <= 2) {
+        sx[i] = 0.25 * px + 0.5 * x + 0.25 * nx;
+        sy[i] = 0.25 * py + 0.5 * y + 0.25 * ny;
+      } else {
+        sx[i] = x;
+        sy[i] = y;
+      }
+    }
+    vx = sx;
+    vy = sy;
+  }
+
+  for (let i = 0; i < n; i++) {
+    const next = i === n - 1 ? 0 : i + 1;
+    outSegments.push(vx[i], vy[i], vx[next], vy[next]);
+  }
+}
+
+function firstBitDir(mask: number): number {
+  if (mask & 1) return 0;
+  if (mask & 2) return 1;
+  if (mask & 4) return 2;
+  if (mask & 8) return 3;
+  return -1;
+}
+
+/**
+ * Extracts closed, collinear-merged outer silhouette boundary contours from a
+ * layer's regionMap (tracing edges where regionMap[i] > 0 borders <= 0 or OOB).
+ * Returns packed [x0, y0, x1, y1, ...] segments in layer-local pixel-corner coords.
+ */
+export function extractLayerSilhouetteContours(
+  regionMap: Int32Array,
+  width: number,
+  height: number
+): Float32Array {
+  if (
+    !isValidGridDimensions(width, height) ||
+    !regionMap ||
+    regionMap.length < width * height
+  ) {
+    return new Float32Array(0);
+  }
+
+  const { outMask, totalEdges } = buildSilhouetteEdgeMask(regionMap, width, height);
+  if (totalEdges === 0 || outMask.size === 0) {
+    return new Float32Array(0);
+  }
+
+  const stride = width + 1;
+  const maxSteps = totalEdges + 4;
+  const loopX: number[] = [];
+  const loopY: number[] = [];
+  const outSegments: number[] = [];
+
+  while (outMask.size > 0) {
+    const firstEntry = outMask.entries().next();
+    if (firstEntry.done) break;
+    const [startKey, mask] = firstEntry.value;
+    const startDir = firstBitDir(mask);
+    if (startDir < 0) {
+      outMask.delete(startKey);
+      continue;
+    }
+    traceMergedSilhouetteLoop(startKey, startDir, stride, outMask, loopX, loopY, maxSteps);
+    appendSmoothedClosedLoopSegments(loopX, loopY, outSegments);
+  }
+
+  return outSegments.length > 0 ? Float32Array.from(outSegments) : new Float32Array(0);
+}
+
+type SilhouettePathTarget = Pick<CanvasRenderingContext2D, 'moveTo' | 'lineTo' | 'closePath'>;
+
+function traceSilhouetteSegmentsToTarget(
+  target: SilhouettePathTarget,
+  segments: Float32Array,
+  worldX: number,
+  worldY: number,
+  scaleX: number,
+  scaleY: number
+): boolean {
+  let added = false;
+  let hasSubpath = false;
+  let subStartX = NaN;
+  let subStartY = NaN;
+  let lastX = NaN;
+  let lastY = NaN;
+
+  const limit = segments.length - (segments.length % 4);
+  for (let i = 0; i < limit; i += 4) {
+    const x0 = segments[i];
+    const y0 = segments[i + 1];
+    const x1 = segments[i + 2];
+    const y1 = segments[i + 3];
+    if (
+      !Number.isFinite(x0) ||
+      !Number.isFinite(y0) ||
+      !Number.isFinite(x1) ||
+      !Number.isFinite(y1) ||
+      (x0 === x1 && y0 === y1)
+    ) {
+      continue;
+    }
+    const wx0 = worldX + x0 * scaleX;
+    const wy0 = worldY + y0 * scaleY;
+    const wx1 = worldX + x1 * scaleX;
+    const wy1 = worldY + y1 * scaleY;
+
+    if (!hasSubpath || x0 !== lastX || y0 !== lastY) {
+      target.moveTo(wx0, wy0);
+      subStartX = x0;
+      subStartY = y0;
+      hasSubpath = true;
+    }
+    if (x1 === subStartX && y1 === subStartY) {
+      target.closePath();
+      hasSubpath = false;
+    } else {
+      target.lineTo(wx1, wy1);
+    }
+    lastX = x1;
+    lastY = y1;
+    added = true;
+  }
+
+  return added;
+}
+
+/**
+ * Builds a world-space Path2D from extracted layer-local silhouette segments.
+ * Returns null if Path2D is unavailable or segments/scales are invalid.
+ */
+export function buildLayerSilhouettePath(
+  segments: Float32Array | null,
+  worldX: number,
+  worldY: number,
+  scaleX: number,
+  scaleY: number
+): Path2D | null {
+  if (
+    typeof Path2D === 'undefined' ||
+    !segments ||
+    segments.length < 4 ||
+    !Number.isFinite(worldX) ||
+    !Number.isFinite(worldY) ||
+    !isPositiveFinite(scaleX) ||
+    !isPositiveFinite(scaleY)
+  ) {
+    return null;
+  }
+  const path = new Path2D();
+  return traceSilhouetteSegmentsToTarget(path, segments, worldX, worldY, scaleX, scaleY)
+    ? path
+    : null;
+}
+
+/**
+ * Strokes a cached world-space silhouette hairline at constant screen-space width (~1.15px),
+ * falling back to direct segment tracing when Path2D is unavailable.
+ */
+export function strokeLayerSilhouette(
+  ctx: CanvasRenderingContext2D,
+  segments: Float32Array | null,
+  path: Path2D | null,
+  wx: number,
+  wy: number,
+  ww: number,
+  wh: number,
+  layerWidth: number,
+  layerHeight: number,
+  effScale: number
+): void {
+  if (!isPositiveFinite(effScale)) return;
+  if (!path && (!segments || segments.length < 4)) return;
+
+  ctx.save();
+  ctx.lineWidth = LAYER_SILHOUETTE_LINE_WIDTH_PX / effScale;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = LAYER_SILHOUETTE_STROKE_STYLE;
+  if (path) {
+    ctx.stroke(path);
+  } else if (segments && isPositiveFinite(layerWidth) && isPositiveFinite(layerHeight)) {
+    ctx.beginPath();
+    if (
+      traceSilhouetteSegmentsToTarget(
+        ctx,
+        segments,
+        wx,
+        wy,
+        ww / layerWidth,
+        wh / layerHeight
+      )
+    ) {
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/**
+ * Pre-culls visible nested layers into a caller-provided scratch array (zero rAF allocations).
+ */
+export function collectVisibleNestedLayers(
+  puzzle: PuzzleData,
+  sortedLayersAsc: readonly NestedPuzzleLayer[],
+  visLeft: number,
+  visTop: number,
+  visRight: number,
+  visBottom: number,
+  effScale: number,
+  out: NestedPuzzleLayer[]
+): NestedPuzzleLayer[] {
+  out.length = 0;
+  for (let i = 0; i < sortedLayersAsc.length; i++) {
+    const layer = sortedLayersAsc[i];
+    if (
+      isLayerVisibleAndLargeEnough(
+        puzzle.width,
+        puzzle.height,
+        layer,
+        visLeft,
+        visTop,
+        visRight,
+        visBottom,
+        effScale
+      )
+    ) {
+      out.push(layer);
+    }
+  }
+  return out;
+}
+
+/**
+ * Returns true iff any later (deeper) visible layer in ascending-depth order overlaps
+ * `visibleLayersAsc[index]`'s worldBounds. Zero allocations.
+ */
+export function hasOverlappingDeeperVisibleLayer(
+  visibleLayersAsc: readonly NestedPuzzleLayer[],
+  index: number
+): boolean {
+  const current = visibleLayersAsc[index];
+  if (!current || !isValidNormalizedRect(current.worldBounds)) return false;
+  const a = current.worldBounds;
+  const aRight = a.x + a.width;
+  const aBottom = a.y + a.height;
+
+  for (let j = index + 1; j < visibleLayersAsc.length; j++) {
+    const deeper = visibleLayersAsc[j];
+    if (!deeper || deeper.depth <= current.depth || !isValidNormalizedRect(deeper.worldBounds)) {
+      continue;
+    }
+    const b = deeper.worldBounds;
+    if (a.x < b.x + b.width && aRight > b.x && a.y < b.y + b.height && aBottom > b.y) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Populates `outSet` with layerIds of nested layers that intersect the current viewport
+ * and occupy a prominent fraction of the viewport (either >= 25% of min viewport dim,
+ * or zoomed > 1.5x with at least 72x72 CSS px on screen).
+ */
+export function collectProminentVisibleLayerIds(
+  puzzleWidth: number,
+  puzzleHeight: number,
+  nestedLayers: readonly NestedPuzzleLayer[],
+  visLeft: number,
+  visTop: number,
+  visRight: number,
+  visBottom: number,
+  scale: number,
+  effScale: number,
+  containerWidth: number,
+  containerHeight: number,
+  outSet: Set<string>
+): Set<string> {
+  outSet.clear();
+  if (
+    nestedLayers.length === 0 ||
+    !isPositiveFinite(puzzleWidth) ||
+    !isPositiveFinite(puzzleHeight) ||
+    !isPositiveFinite(effScale) ||
+    !isPositiveFinite(containerWidth) ||
+    !isPositiveFinite(containerHeight) ||
+    !Number.isFinite(visLeft) ||
+    !Number.isFinite(visTop) ||
+    !Number.isFinite(visRight) ||
+    !Number.isFinite(visBottom)
+  ) {
+    return outSet;
+  }
+
+  const minViewportDim = Math.min(containerWidth, containerHeight);
+  const prominentThreshold = minViewportDim * 0.25;
+  const isZoomedIn = Number.isFinite(scale) && scale > 1.5;
+
+  for (let i = 0; i < nestedLayers.length; i++) {
+    const layer = nestedLayers[i];
+    if (
+      !layer ||
+      !isValidGridDimensions(layer.width, layer.height) ||
+      !isValidNormalizedRect(layer.worldBounds)
+    ) {
+      continue;
+    }
+    const b = layer.worldBounds;
+    const wx = b.x * puzzleWidth;
+    const wy = b.y * puzzleHeight;
+    const ww = b.width * puzzleWidth;
+    const wh = b.height * puzzleHeight;
+    if (wx + ww < visLeft || wx > visRight || wy + wh < visTop || wy > visBottom) {
+      continue;
+    }
+    const screenW = ww * effScale;
+    const screenH = wh * effScale;
+    if (
+      Math.max(screenW, screenH) >= prominentThreshold ||
+      (isZoomedIn && screenW >= 72 && screenH >= 72)
+    ) {
+      outSet.add(layer.layerId);
+    }
+  }
+
+  return outSet;
+}
+

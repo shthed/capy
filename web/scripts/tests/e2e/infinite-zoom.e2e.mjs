@@ -5,21 +5,21 @@
  * Exact 4 Stages (deterministic, zero external network dependencies, zero console/page errors):
  *   Stage 1: Sparkles visibility on 100% completed puzzles (hidden only during active Replay
  *            playback, visible when paused/idle, entering Zoom dismisses ReplayControls cleanly),
- *            Menu > Create provider/model/resolution/BYOK controls & device-local key isolation,
- *            Android WebView Puter exclusion & zero js.puter.com loads, and 360x780 + Large Text
- *            (1.25x) plus 640x360 short-landscape responsive/touch-target checks.
- *   Stage 2: Unified Zoom In via mocked window.puter.ai.txt2img, non-adjacent switch prompt,
- *            single-canvas invariants (no child snapshot, no parent breadcrumb), 1-tap Undo Split,
- *            dynamic max zoom > 12x, and multi-layer painting (outer root + nested detail layer)
- *            with shared PaletteDock and unified Undo/Redo.
- *   Stage 3: Unified Zoom Out (Directional Border Extension) via mocked Direct Gemini BYOK route,
- *            0-side & 2.5:1 aspect guards, 100% painted progress + affine-rebased nested layer
- *            preservation, 1-tap Undo Extend, outer border painting, single-file .capy v2 binary
- *            export (zero BYOK key leak), and fresh isolated context import round-trip.
- *   Stage 4: Free Guided Gemini App Handoff end-to-end: Web template download + gemini.google.com
- *            launch stub, invalid SVG & corrupt PNG rejection + recovery via file input, Puter 402
- *            automatic Guided fallback + synthetic window clipboard paste completion, and Android
- *            WebView shareImage + LIFO __capyReceiveSharedImage interception without stray saves.
+ *            Menu > Create provider/model/model-validated resolution/BYOK controls & device-local
+ *            key isolation, Android WebView Puter exclusion & zero js.puter.com loads, and
+ *            360x780 + Large Text (1.25x) plus 640x360 short-landscape checks (incl. Copy Image).
+ *   Stage 2: Unified Zoom In via mocked window.puter.ai.txt2img (ratio { w, h }, quality, dynamic
+ *            MIME, <= 900 KB compact template), non-adjacent switch prompt, single-canvas
+ *            invariants, smooth auto-camera focus + 1-tap Undo Split viewport restore, dynamic
+ *            max zoom > 12x, and multi-layer painting with shared PaletteDock & unified Undo/Redo.
+ *   Stage 3: Unified Zoom Out (Directional Border Extension) via mocked Direct Gemini BYOK route
+ *            (dynamic MIME, <= 900 KB compact template), 0-side & 2.5:1 aspect guards, 100%
+ *            painted progress + affine-rebased nested layer preservation, 1-tap Undo Extend,
+ *            outer border painting, single-file .capy v2 export (zero BYOK leak), and import.
+ *   Stage 4: Free Guided Gemini App Handoff end-to-end: Web 1-tap Copy Image (PNG clipboard write),
+ *            compact template download (<= 900 KB) + gemini.google.com launch stub, invalid SVG &
+ *            corrupt PNG rejection + recovery, Puter structured 402/insufficient_funds automatic
+ *            Guided fallback + synthetic paste, and Android shareImage + LIFO share-back.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -52,6 +52,28 @@ const VALID_GEMINI_ASPECT_RATIOS = new Set([
   '5:4',
   '21:9',
 ]);
+const ALLOWED_TEMPLATE_MIMES = new Set(['image/jpeg', 'image/webp', 'image/png']);
+const MAX_AI_TEMPLATE_BYTES = 900 * 1024;
+
+function assertValidPuterRatio(ratio, label) {
+  assert.ok(
+    ratio && typeof ratio === 'object' && !Array.isArray(ratio),
+    `${label}: expected Puter ratio { w, h } object, got ${JSON.stringify(ratio)}`
+  );
+  assert.ok(
+    Number.isInteger(ratio.w) &&
+      Number.isInteger(ratio.h) &&
+      ratio.w >= 1 &&
+      ratio.w <= 32 &&
+      ratio.h >= 1 &&
+      ratio.h <= 32,
+    `${label}: expected integer Puter ratio within 1..32, got ${JSON.stringify(ratio)}`
+  );
+  assert.ok(
+    VALID_GEMINI_ASPECT_RATIOS.has(`${ratio.w}:${ratio.h}`),
+    `${label}: expected supported Gemini aspect ratio, got "${ratio.w}:${ratio.h}"`
+  );
+}
 
 // ============================================================================
 // Pure-Node Deterministic Multi-Color PNG Generator
@@ -223,12 +245,21 @@ async function injectPuterMock(page, { pngDataUrl, mode = 'ok' }) {
           async txt2img(prompt, options) {
             window.__puterCalls.push({
               prompt,
-              options: options ? { ...options } : null,
+              options: options
+                ? {
+                    ...options,
+                    ratio:
+                      options.ratio && typeof options.ratio === 'object'
+                        ? { ...options.ratio }
+                        : options.ratio,
+                  }
+                : null,
             });
             const activeMode = window.__puterMode;
             if (activeMode === '402') {
               const err = new Error('Insufficient balance (402)');
               err.status = 402;
+              err.code = 'insufficient_funds';
               throw err;
             }
             if (activeMode === 'cancelled') {
@@ -246,6 +277,42 @@ async function injectPuterMock(page, { pngDataUrl, mode = 'ok' }) {
     },
     { dataUrl: pngDataUrl, initialMode: mode }
   );
+}
+
+/**
+ * Installs a deterministic navigator.clipboard.write spy BEFORE module load so Web
+ * 1-tap Copy Image tests verify PNG-normalized ClipboardItem writes offline.
+ */
+async function injectClipboardWriteSpy(page) {
+  await page.addInitScript(() => {
+    window.__clipboardImageWrites = [];
+    const spyClipboard = {
+      async write(items) {
+        const item = Array.isArray(items) ? items[0] : null;
+        const types = item && Array.isArray(item.types) ? [...item.types] : [];
+        let mimeType = '';
+        let byteLength = 0;
+        let headerHex = '';
+        if (item && typeof item.getType === 'function' && types.includes('image/png')) {
+          const blob = await item.getType('image/png');
+          mimeType = blob.type || '';
+          const buf = new Uint8Array(await blob.arrayBuffer());
+          byteLength = buf.byteLength;
+          headerHex = Array.from(buf.slice(0, 8))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+        }
+        window.__clipboardImageWrites.push({ types, mimeType, byteLength, headerHex });
+      },
+      async writeText() {
+        return undefined;
+      },
+    };
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: spyClipboard,
+    });
+  });
 }
 
 /**
@@ -988,18 +1055,40 @@ async function runStage1(ctx) {
         'Default model must be gemini-nano-banana-2.1'
       );
 
-      const resOptions = await resSelect
-        .locator('option')
-        .evaluateAll((opts) => opts.map((o) => o.value));
-      assert.deepEqual(resOptions, ['512', '1K', '2K'], 'CreateTab must expose 512, 1K, 2K');
+      const readResOptions = () =>
+        resSelect.locator('option').evaluateAll((opts) => opts.map((o) => o.value));
+
+      assert.deepEqual(
+        await readResOptions(),
+        ['1K', '2K'],
+        'Nano Banana 2.1 must expose model-validated 1K, 2K resolutions'
+      );
       assert.equal(await resSelect.inputValue(), '1K', 'Default resolution must be 1K');
 
-      // Switch model & resolution and verify UserSettings persistence
+      // Nano Banana 2 Lite supports 1K only
+      await modelSelect.selectOption('gemini-3.1-flash-lite-image');
+      assert.deepEqual(
+        await readResOptions(),
+        ['1K'],
+        'Nano Banana 2 Lite must expose 1K resolution only'
+      );
+      assert.equal(await resSelect.inputValue(), '1K');
+
+      // Nano Banana 2 supports 512, 1K, 2K; verify UserSettings persistence + clamp back to 1K on Lite
       await modelSelect.selectOption('gemini-3.1-flash-image');
+      assert.deepEqual(
+        await readResOptions(),
+        ['512', '1K', '2K'],
+        'Nano Banana 2 must expose 512, 1K, 2K resolutions'
+      );
       await resSelect.selectOption('2K');
       const settingsAfterPick = await readUserSettings(page);
       assert.equal(settingsAfterPick.nanoBananaModel, 'gemini-3.1-flash-image');
       assert.equal(settingsAfterPick.nanoBananaResolution, '2K');
+
+      await modelSelect.selectOption('gemini-3.1-flash-lite-image');
+      assert.equal(await resSelect.inputValue(), '1K', 'Switching to Lite must clamp 2K -> 1K');
+      assert.equal((await readUserSettings(page)).nanoBananaResolution, '1K');
 
       // Switch to GEMINI_BYOK and verify device-local storage isolation
       await providerSelect.selectOption('GEMINI_BYOK');
@@ -1242,6 +1331,10 @@ async function runStage1(ctx) {
       await assertInsideViewport(page, guidedModal, '360x780 LargeText GuidedGeminiModal');
       await assertNoHorizontalOverflow(page, guidedModal, '360x780 LargeText GuidedGeminiModal');
       await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-copy-image-btn'),
+        '360x780 guided-gemini-copy-image-btn'
+      );
+      await assertMinTouchTarget(
         page.getByTestId('guided-gemini-launch-btn'),
         '360x780 guided-gemini-launch-btn'
       );
@@ -1355,6 +1448,10 @@ async function runStage1(ctx) {
       await guidedModal.waitFor({ state: 'visible', timeout: 10000 });
       await assertInsideViewport(page, guidedModal, '640x360 Landscape GuidedGeminiModal');
       await assertNoHorizontalOverflow(page, guidedModal, '640x360 Landscape GuidedGeminiModal');
+      await assertMinTouchTarget(
+        page.getByTestId('guided-gemini-copy-image-btn'),
+        '640x360 guided-gemini-copy-image-btn'
+      );
       await assertMinTouchTarget(
         page.getByTestId('guided-gemini-cancel-btn'),
         '640x360 guided-gemini-cancel-btn'
@@ -1545,17 +1642,27 @@ async function runStage2(ctx) {
     assert.equal(puterCalls.length, 1, `Expected 1 Puter call, got ${puterCalls.length}`);
     const call = puterCalls[0];
     assert.equal(call.options?.model, 'gemini-nano-banana-2.1', 'Expected default Nano Banana 2.1 model');
-    assert.equal(call.options?.input_image_mime_type, 'image/png', 'Expected image/png MIME type');
+    assert.ok(
+      ALLOWED_TEMPLATE_MIMES.has(call.options?.input_image_mime_type),
+      `Expected compact raster MIME (image/jpeg|image/webp|image/png), got "${call.options?.input_image_mime_type}"`
+    );
+    assert.equal(
+      call.options?.quality,
+      '1K',
+      `Expected validated 1K quality on Nano Banana 2.1, got "${call.options?.quality}"`
+    );
     assert.ok(
       typeof call.options?.input_image === 'string' &&
         call.options.input_image.length > 100 &&
         !call.options.input_image.startsWith('data:'),
       'Expected non-empty raw base64 input_image without data URL prefix'
     );
+    const decodedTemplateBytes = Buffer.from(call.options.input_image, 'base64').byteLength;
     assert.ok(
-      VALID_GEMINI_ASPECT_RATIOS.has(call.options?.ratio),
-      `Expected valid Gemini aspect ratio, got "${call.options?.ratio}"`
+      decodedTemplateBytes > 0 && decodedTemplateBytes <= MAX_AI_TEMPLATE_BYTES,
+      `Expected compact AI template <= ${MAX_AI_TEMPLATE_BYTES} bytes, got ${decodedTemplateBytes}`
     );
+    assertValidPuterRatio(call.options?.ratio, 'Stage 2 Zoom In Puter ratio');
     assert.ok(
       typeof call.prompt === 'string' && call.prompt.includes('Tiny wildflowers and moss'),
       `Expected sanitized user prompt inside Puter prompt, got "${call.prompt}"`
@@ -1590,6 +1697,13 @@ async function runStage2(ctx) {
       `Expected total regions to grow (${puzzleAfterFirstZoom.totalRegionCount} > ${puzzleBefore.totalRegionCount})`
     );
 
+    // Verify M3 auto-camera focus glide settles (zoomScale > 1.05) before 1-tap Undo
+    const autoFocused = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return typeof sess.zoomScale === 'number' && sess.zoomScale > 1.05;
+    }, 5000);
+    assert.equal(autoFocused, true, 'Expected Zoom In to smoothly auto-focus camera (zoomScale > 1.05)');
+
     // 1-Tap Undo Infinite Zoom (BEFORE painting, since painting clears the undo toast)
     await page.getByTestId('undo-subdivision-btn').click();
     await undoToast.waitFor({ state: 'hidden', timeout: 10000 });
@@ -1619,6 +1733,22 @@ async function runStage2(ctx) {
       '1-tap Undo Split must restore exact pre-zoom region count'
     );
     assert.equal((await readSnapshots(page)).length, snapshotsBefore.length);
+
+    const undoViewportRestored = await waitForCondition(async () => {
+      const sess = await readActiveSession(page);
+      return (
+        typeof sess.zoomScale === 'number' &&
+        sess.zoomScale <= 1.05 &&
+        Math.abs(sess.panOffsetX || 0) <= 1 &&
+        Math.abs(sess.panOffsetY || 0) <= 1
+      );
+    }, 4000);
+    assert.equal(
+      undoViewportRestored,
+      true,
+      'Expected 1-tap Undo Split to restore pre-zoom viewport before re-selection'
+    );
+    await waitForAnimationFrames(page, 2);
 
     // Re-apply Zoom In on A + B
     await dismissFeatureOfferIfVisible(page);
@@ -1888,6 +2018,15 @@ async function runStage3(ctx) {
       const undoToast = page.getByTestId('undo-subdivision-toast');
       await undoToast.waitFor({ state: 'visible', timeout: 25000 });
 
+      // Wait for M3 auto-camera focus glide (420ms) + viewport persistence debounce (350ms)
+      // so findUnifiedRegionTargets reads the settled camera transform rather than stale 1x.
+      const stage3Focused = await waitForCondition(async () => {
+        const sess = await readActiveSession(page);
+        return typeof sess.zoomScale === 'number' && sess.zoomScale > 1.05;
+      }, 5000);
+      assert.equal(stage3Focused, true, 'Stage 3: expected auto-camera focus after Zoom In');
+      await waitForAnimationFrames(page, 2);
+
       const afterZoomInTargets = await findUnifiedRegionTargets(page, snapId);
       assert.ok(
         afterZoomInTargets?.unfilledNestedTargets?.length > 0,
@@ -1971,6 +2110,22 @@ async function runStage3(ctx) {
         geminiRequests[0].body?.generationConfig?.imageConfig?.imageSize,
         '1K',
         'Expected 1K resolution in Gemini imageConfig'
+      );
+      const inlinePart = geminiRequests[0].body?.contents?.[0]?.parts?.find((p) => p?.inlineData);
+      assert.ok(
+        ALLOWED_TEMPLATE_MIMES.has(inlinePart?.inlineData?.mimeType),
+        `Expected compact raster inlineData.mimeType, got "${inlinePart?.inlineData?.mimeType}"`
+      );
+      const byokTemplateBytes = Buffer.from(inlinePart.inlineData.data || '', 'base64').byteLength;
+      assert.ok(
+        byokTemplateBytes > 0 && byokTemplateBytes <= MAX_AI_TEMPLATE_BYTES,
+        `Expected BYOK Zoom Out template <= ${MAX_AI_TEMPLATE_BYTES} bytes, got ${byokTemplateBytes}`
+      );
+      assert.ok(
+        VALID_GEMINI_ASPECT_RATIOS.has(
+          geminiRequests[0].body?.generationConfig?.imageConfig?.aspectRatio
+        ),
+        `Expected valid Gemini aspectRatio string, got "${geminiRequests[0].body?.generationConfig?.imageConfig?.aspectRatio}"`
       );
 
       // Verify unified Zoom Out invariants: NO separate 0% save, 100% painted progress & nested layer preserved
@@ -2106,6 +2261,7 @@ async function runStage3(ctx) {
 
       // Step 7: Paint a newly added outer border region in the SAME unified canvas
       await dismissFeatureOfferIfVisible(page);
+      await waitForAnimationFrames(page, 2);
       const postExtendTargets = await findUnifiedRegionTargets(page, snapId);
       assert.ok(
         postExtendTargets?.unfilledRootTargets?.length > 0,
@@ -2294,6 +2450,7 @@ async function runStage4(ctx) {
       const puterSpy = await attachPuterNetworkSpy(page);
       await injectWindowOpenStub(page);
       await injectPuterMock(page, { pngDataUrl: MULTI_COLOR_PNG_DATA_URL, mode: '402' });
+      await injectClipboardWriteSpy(page);
 
       await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
       await waitForPuzzleLoaded(page);
@@ -2338,14 +2495,48 @@ async function runStage4(ctx) {
         'Guided Gemini modal must display the engineered infill prompt'
       );
 
-      // Click launch button -> verify template PNG download AND window.open('https://gemini.google.com/')
+      // Verify Web 1-tap Copy Image button writes PNG-normalized bytes to clipboard
+      const copyImgBtn = page.getByTestId('guided-gemini-copy-image-btn');
+      await copyImgBtn.waitFor({ state: 'visible', timeout: 5000 });
+      await assertMinTouchTarget(copyImgBtn, 'Stage 4A guided-gemini-copy-image-btn');
+      await copyImgBtn.click();
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="guided-gemini-copy-image-btn"]')
+            ?.textContent?.includes('Copied Image'),
+        { timeout: 5000 }
+      );
+      const clipboardWrites = await page.evaluate(() => window.__clipboardImageWrites || []);
+      assert.ok(clipboardWrites.length >= 1, 'Expected Copy Image to invoke navigator.clipboard.write');
+      assert.ok(
+        clipboardWrites[0].types.includes('image/png'),
+        `Expected image/png ClipboardItem type, got ${JSON.stringify(clipboardWrites[0].types)}`
+      );
+      assert.equal(clipboardWrites[0].mimeType, 'image/png', 'Copied blob must be image/png');
+      assert.ok(clipboardWrites[0].byteLength > 8, 'Copied PNG blob must be non-empty');
+      assert.equal(
+        clipboardWrites[0].headerHex,
+        '89504e470d0a1a0a',
+        `Copied blob must have PNG magic bytes, got "${clipboardWrites[0].headerHex}"`
+      );
+
+      // Click launch button -> verify compact template image download AND window.open('https://gemini.google.com/')
       const [templateDownload] = await Promise.all([
         page.waitForEvent('download', { timeout: 10000 }),
         page.getByTestId('guided-gemini-launch-btn').click(),
       ]);
+      assert.match(
+        templateDownload.suggestedFilename(),
+        /\.(?:jpe?g|webp|png)$/i,
+        `Expected compact template image download (.jpg/.jpeg/.webp/.png), got "${templateDownload.suggestedFilename()}"`
+      );
+      const downloadedTemplatePath = await templateDownload.path();
+      assert.ok(downloadedTemplatePath, 'Expected Playwright to persist downloaded template file');
+      const downloadedTemplateSize = fs.statSync(downloadedTemplatePath).size;
       assert.ok(
-        templateDownload.suggestedFilename().toLowerCase().endsWith('.png'),
-        `Expected PNG template download, got "${templateDownload.suggestedFilename()}"`
+        downloadedTemplateSize > 0 && downloadedTemplateSize <= MAX_AI_TEMPLATE_BYTES,
+        `Expected downloaded template <= ${MAX_AI_TEMPLATE_BYTES} bytes, got ${downloadedTemplateSize}`
       );
       await page.waitForFunction(
         () => (window.__openedUrls || []).some((u) => u.includes('gemini.google.com')),
@@ -2426,6 +2617,12 @@ async function runStage4(ctx) {
       );
       const puterCalls = await page.evaluate(() => window.__puterCalls || []);
       assert.equal(puterCalls.length, 1, 'Expected Puter provider to be attempted before 402 fallback');
+      assertValidPuterRatio(puterCalls[0].options?.ratio, 'Stage 4A Zoom Out Puter ratio');
+      assert.equal(puterCalls[0].options?.quality, '1K', 'Expected 1K quality on Zoom Out Puter call');
+      assert.ok(
+        ALLOWED_TEMPLATE_MIMES.has(puterCalls[0].options?.input_image_mime_type),
+        `Expected compact raster MIME on Zoom Out Puter call, got "${puterCalls[0].options?.input_image_mime_type}"`
+      );
 
       // Complete via synthetic window ClipboardEvent('paste') with valid multi-color PNG File
       await page.evaluate((base64Png) => {
@@ -2498,6 +2695,11 @@ async function runStage4(ctx) {
 
       const modal = page.getByTestId('guided-gemini-modal');
       await modal.waitFor({ state: 'visible', timeout: 10000 });
+      assert.equal(
+        await page.getByTestId('guided-gemini-copy-image-btn').count(),
+        0,
+        'Android WebView must NOT render Web-only guided-gemini-copy-image-btn'
+      );
 
       const launchBtn = page.getByTestId('guided-gemini-launch-btn');
       assert.ok(
@@ -2512,9 +2714,16 @@ async function runStage4(ctx) {
 
       const shareCalls = await page.evaluate(() => window.__androidBridgeCalls?.shareImage || []);
       assert.equal(shareCalls.length, 1, 'Android launch must invoke window.CapyAndroid.shareImage');
+      assert.match(
+        shareCalls[0].dataUrl,
+        /^data:image\/(?:jpeg|webp|png);base64,/i,
+        `Android shareImage must pass prepared compact template image data URL, got "${shareCalls[0].dataUrl.slice(0, 48)}"`
+      );
+      const sharedBase64 = shareCalls[0].dataUrl.slice(shareCalls[0].dataUrl.indexOf(',') + 1);
+      const sharedBytes = Buffer.from(sharedBase64, 'base64').byteLength;
       assert.ok(
-        shareCalls[0].dataUrl.startsWith('data:image/png;base64,'),
-        'Android shareImage must pass prepared PNG template data URL'
+        sharedBytes > 0 && sharedBytes <= MAX_AI_TEMPLATE_BYTES,
+        `Android shareImage template must be <= ${MAX_AI_TEMPLATE_BYTES} bytes, got ${sharedBytes}`
       );
 
       // Simulate Android OS Share-Back via window.__capyReceiveSharedImage -> LIFO interceptor

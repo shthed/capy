@@ -497,11 +497,11 @@ export const App: React.FC = () => {
 
   // 5. Viewport, Fullscreen & Keyboard Shortcuts Controller
   const {
-    visibleColorIds, visibleColorIdsRef, visibleRegionIdsRef, isFullscreen,
+    visibleColorIds, visibleColorIdsRef, visibleRegionIdsRef, visibleNestedColorIds, isFullscreen,
     zoomInTrigger, zoomOutTrigger, resetViewTrigger, restoreViewTrigger,
     panStepRequest, focusBoundsRequest, isCanvasTransformed, initialViewport,
     applyViewport, focusViewportOnBounds, clearPendingViewportSave,
-    handleVisibleColorsChanged, handleVisibleRegionsChanged, handleToggleFullscreen,
+    handleVisibleColorsChanged, handleVisibleRegionsChanged, handleVisibleNestedColorsChanged, handleToggleFullscreen,
     handleViewExtentChanged, handleViewportGesture, handleZoomIn, handleZoomOut,
     handleResetView,
   } = useViewportAndShortcuts({
@@ -1088,6 +1088,7 @@ export const App: React.FC = () => {
         onBatchRegionsClicked={attemptBatchFillRegions}
         onVisibleColorsChanged={handleVisibleColorsChanged}
         onVisibleRegionsChanged={handleVisibleRegionsChanged}
+        onVisibleNestedColorsChanged={handleVisibleNestedColorsChanged}
         onTogglePreview={handleCanvasTogglePreview}
         activeSnapshotId={activeSnapshotId}
         isRegionSelectionMode={isRegionSelectionMode}
@@ -1200,6 +1201,7 @@ export const App: React.FC = () => {
           sortOrder={settings.paletteSort}
           prioritizeOnScreen={settings.prioritizeOnScreen}
           visibleColorIds={visibleColorIds}
+          prioritizedColorIds={visibleNestedColorIds}
           raiseDock={settings.raisePaletteDock}
           isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}

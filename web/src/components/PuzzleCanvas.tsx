@@ -31,33 +31,42 @@ import {
 } from '../types';
 import {
   applyZoomSnapDetent,
+  buildLayerSilhouettePath,
   buildMaskedPreviewCanvas,
   buildPreviewBorderCanvas,
   clampCanvasOffset,
+  collectProminentVisibleLayerIds,
   collectUnifiedLineRegionIds,
+  collectVisibleNestedLayers,
   computeFocusViewportForBounds,
   computeHighlightOverlayAlpha,
+  computeLayerTexelRatio,
   disposeLayerCanvasCache,
   DrawPuzzleLayersParams,
   drawPuzzleBackdropIfOpaque,
   drawPuzzleCompositeLayers,
   evictLruLayerCaches,
   extractImagePixelsRgba,
+  extractLayerSilhouetteContours,
   FocusBoundsRequest,
   getNextZoomStop,
-  isLayerVisibleAndLargeEnough,
+  hasOverlappingDeeperVisibleLayer,
   isReadyCanvasImageSource,
+  LAYER_SILHOUETTE_MIN_SCREEN_PX,
   LayerCanvasCache,
   LayerImageMapLike,
+  LayerSmoothingConfig,
   lookupLayerImageFromMap,
   MAX_LIVE_LAYER_CACHES,
   MIN_LAYER_RENDER_SCREEN_PX,
   renderHighlightLayerToImageData,
   renderSelectionOverlayToImageData,
   resolveAnyUnifiedRegionAtPoint,
+  resolveLayerImageSmoothing,
   resolvePuzzleMaxZoomScale,
   resolveUnifiedNearTapRegion,
   sampleUnifiedRegionAtWorldPoint,
+  strokeLayerSilhouette,
   UnifiedHitResult,
 } from './puzzleCanvasHelpers';
 
@@ -65,15 +74,20 @@ export {
   ALL_ZOOM_DETENT_STOPS,
   applyZoomSnapDetent,
   BASE_MAX_ZOOM_SCALE,
+  buildLayerSilhouettePath,
   clampCanvasOffset,
+  collectProminentVisibleLayerIds,
   collectUnifiedLineRegionIds,
   computeFocusViewportForBounds,
+  computeLayerTexelRatio,
   computeMaxZoomScale,
   createFocusBoundsRequest,
+  extractLayerSilhouetteContours,
   getNextZoomStop,
   MAX_INFINITE_ZOOM_SCALE,
   resolveAnyRegionAtPoint,
   resolveAnyUnifiedRegionAtPoint,
+  resolveLayerImageSmoothing,
   resolvePuzzleMaxZoomScale,
   resolveUnifiedNearTapRegion,
   sampleUnifiedRegionAtWorldPoint,
@@ -84,12 +98,17 @@ export type {
   FocusBoundsRequest,
   FocusViewportResult,
   LayerImageMapLike,
+  LayerSmoothingConfig,
   UnifiedHitResult,
 } from './puzzleCanvasHelpers';
 
 const EMPTY_REGION_MAP = new Map<number, Region>();
 const EMPTY_WORLD_REGION_MAP = new Map<number, UnifiedRegionRef>();
 const EMPTY_NESTED_LAYERS: NestedPuzzleLayer[] = [];
+const LAYER_SMOOTHING_SCRATCH: LayerSmoothingConfig = {
+  imageSmoothingEnabled: true,
+  imageSmoothingQuality: 'high',
+};
 
 const FOCUS_GLIDE_DURATION_MS = 420;
 const FOCUS_EPSILON_SCALE = 0.005;
@@ -183,6 +202,7 @@ interface PuzzleCanvasProps {
   onBatchRegionsClicked: (regionIds: Set<number>) => void;
   onVisibleColorsChanged: (colorIds: Set<number>) => void;
   onVisibleRegionsChanged: (regionIds: Set<number>) => void;
+  onVisibleNestedColorsChanged?: (colorIds: Set<number>) => void;
   onTogglePreview: () => void;
   activeSnapshotId?: string | null;
   isRegionSelectionMode?: boolean;
@@ -480,6 +500,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   onBatchRegionsClicked,
   onVisibleColorsChanged,
   onVisibleRegionsChanged,
+  onVisibleNestedColorsChanged,
   onTogglePreview,
   activeSnapshotId = null,
   isRegionSelectionMode = false,
@@ -570,6 +591,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   const selectionImageDataRef = useRef<ImageData | null>(null);
   const hasSelectionPixelsRef = useRef<boolean>(false);
   const selectionLineScratchRef = useRef<Set<number>>(new Set());
+  const visibleNestedLayersScratchRef = useRef<NestedPuzzleLayer[]>([]);
+  const lastNestedColorsNonEmptyRef = useRef<boolean>(false);
   const drawLayersParamsRef = useRef<DrawPuzzleLayersParams>({
     puzzle: null as unknown as PuzzleData,
     sourceImage: null,
@@ -930,9 +953,9 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       );
     }
     scaleRef.current = clampedInitialScale;
-    offsetRef.current = targetOffset;
+    offsetRef.current = { x: targetOffset.x, y: targetOffset.y };
     setScale(clampedInitialScale);
-    setOffset(targetOffset);
+    setOffset({ x: targetOffset.x, y: targetOffset.y });
     onViewExtentChangedRef.current?.(clampedInitialScale, targetOffset.x, targetOffset.y, w, h);
   }, [
     puzzleWidth,
@@ -973,7 +996,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     scaleRef.current = newScale;
     offsetRef.current = clamped;
     setScale(newScale);
-    setOffset(clamped);
+    setOffset({ x: clamped.x, y: clamped.y });
     onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
   }, [zoomInTrigger]);
 
@@ -1002,7 +1025,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     scaleRef.current = newScale;
     offsetRef.current = clamped;
     setScale(newScale);
-    setOffset(clamped);
+    setOffset({ x: clamped.x, y: clamped.y });
     onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
   }, [zoomOutTrigger]);
 
@@ -1031,7 +1054,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     scaleRef.current = newScale;
     offsetRef.current = clamped;
     setScale(newScale);
-    setOffset(clamped);
+    setOffset({ x: clamped.x, y: clamped.y });
     onViewExtentChangedRef.current?.(newScale, clamped.x, clamped.y, w, h);
   }, [stepZoomTrigger, stopMomentum, cancelFocusAnimation]);
 
@@ -1063,15 +1086,14 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const t = Math.min(1, (now - startTime) / duration);
       const ease = 1 - Math.pow(1 - t, 3); // Cubic ease-out
       const nextScale = startScale + (1.0 - startScale) * ease;
-      const nextOffset = {
-        x: startOffset.x * (1 - ease),
-        y: startOffset.y * (1 - ease),
-      };
+      const nextX = startOffset.x * (1 - ease);
+      const nextY = startOffset.y * (1 - ease);
       scaleRef.current = nextScale;
-      offsetRef.current = nextOffset;
+      offsetRef.current.x = nextX;
+      offsetRef.current.y = nextY;
       setScale(nextScale);
-      setOffset(nextOffset);
-      onViewExtentChangedRef.current?.(nextScale, nextOffset.x, nextOffset.y, w, h);
+      setOffset({ x: nextX, y: nextY });
+      onViewExtentChangedRef.current?.(nextScale, nextX, nextY, w, h);
       if (t < 1) {
         animId = requestAnimationFrame(stepZoomOut);
       }
@@ -1103,7 +1125,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     );
     offsetRef.current = clamped;
     setScale(scaleRef.current);
-    setOffset(clamped);
+    setOffset({ x: clamped.x, y: clamped.y });
     onViewExtentChangedRef.current?.(scaleRef.current, clamped.x, clamped.y, w, h);
   }, [panStepRequest, stopMomentum, cancelFocusAnimation]);
 
@@ -1130,7 +1152,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     }
     if (offsetChanged) {
       offsetRef.current = clamped;
-      setOffset(clamped);
+      setOffset({ x: clamped.x, y: clamped.y });
     }
     if (scaleChanged || offsetChanged) {
       onViewExtentChangedRef.current?.(nextScale, clamped.x, clamped.y, w, h);
@@ -1308,7 +1330,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         h
       );
       offsetRef.current = clamped;
-      setOffset(clamped);
+      setOffset({ x: clamped.x, y: clamped.y });
       onViewExtentChangedRef.current?.(curScale, clamped.x, clamped.y, w, h);
     }
   }, [isFollowingReplay, reducedMotion, puzzle, replayFollowRegionId]);
@@ -1460,13 +1482,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
             vel.vx = (vel.vx - omega * tempX) * exp;
             vel.vy = (vel.vy - omega * tempY) * exp;
 
-            const nextOffset = {
-              x: anchor.x + (dx + tempX) * exp,
-              y: anchor.y + (dy + tempY) * exp,
-            };
-            offsetRef.current = nextOffset;
-            setOffset(nextOffset);
-            onViewExtentChangedRef.current?.(curScale, nextOffset.x, nextOffset.y, w, h);
+            const nextX = anchor.x + (dx + tempX) * exp;
+            const nextY = anchor.y + (dy + tempY) * exp;
+            offsetRef.current.x = nextX;
+            offsetRef.current.y = nextY;
+            setOffset({ x: nextX, y: nextY });
+            onViewExtentChangedRef.current?.(curScale, nextX, nextY, w, h);
           } else if (dist > 0) {
             vel.vx = 0;
             vel.vy = 0;
@@ -1925,7 +1946,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       const clamped = clampCanvasOffset({ x: targetX, y: targetY }, curScale, puzzle.width, puzzle.height, w, h);
       offsetRef.current = clamped;
       setScale(curScale);
-      setOffset(clamped);
+      setOffset({ x: clamped.x, y: clamped.y });
     }
   }, [hintRegionId, puzzle, showNextRegionHint, stopMomentum, cancelFocusAnimation]);
 
@@ -2030,7 +2051,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // Calculate visible regions/colors with debouncing across root and all nested layers in world coords
   useEffect(() => {
-    if (!puzzle || !containerRef.current) return;
+    if (!puzzle || !containerRef.current) {
+      if (!puzzle && lastNestedColorsNonEmptyRef.current) {
+        lastNestedColorsNonEmptyRef.current = false;
+        onVisibleNestedColorsChanged?.(new Set());
+      }
+      return;
+    }
     const { clientWidth: w, clientHeight: h } = containerRef.current;
     if (w <= 0 || h <= 0) return;
 
@@ -2049,17 +2076,39 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
       const colorSet = new Set<number>();
       const regionSet = new Set<number>();
+      const nestedColorSet = new Set<number>();
+      const prominentLayerIds = collectProminentVisibleLayerIds(
+        puzzle.width,
+        puzzle.height,
+        sortedNestedLayersDescRef.current,
+        visLeft,
+        visTop,
+        visRight,
+        visBottom,
+        scale,
+        effScale,
+        w,
+        h,
+        new Set<string>()
+      );
+      const isFreeColor = Boolean(isFreeColorMode || puzzle.isFreeColor);
 
       for (const entry of worldRegionByIdRef.current.values()) {
-        if (filledRegionIds.has(entry.region.id)) continue;
+        const isFilled = filledRegionIds.has(entry.region.id);
+        if (isFilled && (!isFreeColor || prominentLayerIds.size === 0)) continue;
         if (
           entry.worldMaxX >= visLeft &&
           entry.worldMinX <= visRight &&
           entry.worldMaxY >= visTop &&
           entry.worldMinY <= visBottom
         ) {
-          colorSet.add(entry.region.colorId);
-          regionSet.add(entry.region.id);
+          if (!isFilled) {
+            colorSet.add(entry.region.colorId);
+            regionSet.add(entry.region.id);
+          }
+          if (entry.layerId !== null && prominentLayerIds.has(entry.layerId)) {
+            nestedColorSet.add(entry.region.colorId);
+          }
         }
       }
 
@@ -2068,12 +2117,25 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         colorSet.add(activeColorId);
       }
 
+      lastNestedColorsNonEmptyRef.current = nestedColorSet.size > 0;
       onVisibleColorsChanged(colorSet);
       onVisibleRegionsChanged(regionSet);
+      onVisibleNestedColorsChanged?.(nestedColorSet);
     }, 80);
 
     return () => clearTimeout(timer);
-  }, [scale, offset, containerSize, puzzle, activeColorId, filledRegionIds, onVisibleColorsChanged, onVisibleRegionsChanged]);
+  }, [
+    scale,
+    offset,
+    containerSize,
+    puzzle,
+    activeColorId,
+    filledRegionIds,
+    isFreeColorMode,
+    onVisibleColorsChanged,
+    onVisibleRegionsChanged,
+    onVisibleNestedColorsChanged,
+  ]);
 
   // Main GPU-Accelerated Composite Rendering Routine (invocable directly from rAF without React state updates)
   const drawCompositeFrame = useCallback(
@@ -2201,11 +2263,33 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           ? maskedPreviewCanvasRef.current
           : null;
       layerParams.selectionCanvas = selectionCanvasRef.current;
+      const sortedNestedLayers = sortedNestedLayersAscRef.current;
+      const visibleNestedLayers = collectVisibleNestedLayers(
+        puzzle,
+        sortedNestedLayers,
+        visLeft,
+        visTop,
+        visRight,
+        visBottom,
+        effScale,
+        visibleNestedLayersScratchRef.current
+      );
+      const rootTexelRatio = Math.max(
+        computeLayerTexelRatio(puzzle.width, puzzle.width, effScale, effDpr),
+        computeLayerTexelRatio(puzzle.height, puzzle.height, effScale, effDpr)
+      );
+      const rootSmoothing = resolveLayerImageSmoothing(
+        rootTexelRatio,
+        false,
+        visibleNestedLayers.length > 0,
+        LAYER_SMOOTHING_SCRATCH
+      );
+      layerParams.imageSmoothingEnabled = rootSmoothing.imageSmoothingEnabled;
+      layerParams.imageSmoothingQuality = rootSmoothing.imageSmoothingQuality;
       drawPuzzleCompositeLayers(ctx, layerParams);
 
       // 2. Composite Visible Non-Culled Nested Layers (ascending depth, lazy GPU LRU cache, zero rAF allocs)
-      const sortedNestedLayers = sortedNestedLayersAscRef.current;
-      if (sortedNestedLayers.length > 0) {
+      if (visibleNestedLayers.length > 0) {
         if (paletteByIdRef.current.size === 0 && puzzle.palette.length > 0) {
           for (let pi = 0; pi < puzzle.palette.length; pi++) {
             paletteByIdRef.current.set(puzzle.palette[pi].id, puzzle.palette[pi]);
@@ -2214,7 +2298,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         drawVisibleNestedLayers(
           ctx,
           puzzle,
-          sortedNestedLayers,
+          visibleNestedLayers,
           layerCachesRef.current,
           paletteByIdRef.current,
           layerImagesPropRef.current,
@@ -2240,11 +2324,8 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
           currentPulseAlpha,
           highlightVersionRef.current,
           selectionVersionRef.current,
-          visLeft,
-          visTop,
-          visRight,
-          visBottom,
           effScale,
+          effDpr,
           currentFrame
         );
       }
@@ -2395,7 +2476,7 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         );
         if (clamped.x !== curOffset.x || clamped.y !== curOffset.y) {
           offsetRef.current = clamped;
-          setOffset(clamped);
+          setOffset({ x: clamped.x, y: clamped.y });
         }
         onViewExtentChangedRef.current?.(scaleRef.current, clamped.x, clamped.y, w, h);
       }
@@ -3799,6 +3880,16 @@ function ensureLayerCanvasCache(
       dirtyMaxX: -1,
       dirtyMaxY: -1,
       lastAccessedFrame: currentFrame,
+      silhouetteSegments: null,
+      silhouettePath: null,
+      silhouetteComputed: false,
+      silhouetteWorldX: NaN,
+      silhouetteWorldY: NaN,
+      silhouetteWorldW: NaN,
+      silhouetteWorldH: NaN,
+      lastFilledSetRef: null,
+      lastFilledSetSize: -1,
+      hasUnfilledRegions: false,
     };
     caches.set(layer.layerId, cache);
   }
@@ -4057,10 +4148,73 @@ function drawSingleNestedLayerInteractive(
   }
 }
 
+function syncLayerHasUnfilledRegions(
+  cache: LayerCanvasCache,
+  layer: NestedPuzzleLayer,
+  filledRegionIds: ReadonlySet<number>
+): boolean {
+  if (
+    cache.lastFilledSetRef === filledRegionIds &&
+    cache.lastFilledSetSize === filledRegionIds.size
+  ) {
+    return cache.hasUnfilledRegions;
+  }
+  let hasUnfilled = false;
+  const regions = layer.regions;
+  for (let i = 0; i < regions.length; i++) {
+    if (!filledRegionIds.has(regions[i].id)) {
+      hasUnfilled = true;
+      break;
+    }
+  }
+  cache.lastFilledSetRef = filledRegionIds;
+  cache.lastFilledSetSize = filledRegionIds.size;
+  cache.hasUnfilledRegions = hasUnfilled;
+  return hasUnfilled;
+}
+
+function ensureLayerSilhouetteCache(
+  cache: LayerCanvasCache,
+  layer: NestedPuzzleLayer,
+  wx: number,
+  wy: number,
+  ww: number,
+  wh: number
+): void {
+  if (
+    cache.silhouetteComputed &&
+    cache.silhouetteWorldX === wx &&
+    cache.silhouetteWorldY === wy &&
+    cache.silhouetteWorldW === ww &&
+    cache.silhouetteWorldH === wh
+  ) {
+    return;
+  }
+  if (!cache.silhouetteComputed) {
+    const segments = extractLayerSilhouetteContours(layer.regionMap, layer.width, layer.height);
+    cache.silhouetteSegments = segments.length > 0 ? segments : null;
+    cache.silhouetteComputed = true;
+  }
+  cache.silhouettePath =
+    cache.silhouetteSegments && layer.width > 0 && layer.height > 0
+      ? buildLayerSilhouettePath(
+          cache.silhouetteSegments,
+          wx,
+          wy,
+          ww / layer.width,
+          wh / layer.height
+        )
+      : null;
+  cache.silhouetteWorldX = wx;
+  cache.silhouetteWorldY = wy;
+  cache.silhouetteWorldW = ww;
+  cache.silhouetteWorldH = wh;
+}
+
 function drawVisibleNestedLayers(
   ctx: CanvasRenderingContext2D,
   puzzle: PuzzleData,
-  sortedLayers: readonly NestedPuzzleLayer[],
+  visibleLayers: readonly NestedPuzzleLayer[],
   caches: Map<string, LayerCanvasCache>,
   paletteMap: Map<number, PaletteColor>,
   propImages: LayerImageMapLike | undefined,
@@ -4086,11 +4240,8 @@ function drawVisibleNestedLayers(
   currentPulseAlpha: number,
   highlightVersion: number,
   selectionVersion: number,
-  visLeft: number,
-  visTop: number,
-  visRight: number,
-  visBottom: number,
   effScale: number,
+  effDpr: number,
   currentFrame: number
 ): void {
   const isColoring = Boolean(isFreeColorMode || puzzle.isFreeColor);
@@ -4102,78 +4253,105 @@ function drawVisibleNestedLayers(
     isRegionSelectionMode && selectedRegionIds && selectedRegionIds.size > 0
   );
 
-  for (let i = 0; i < sortedLayers.length; i++) {
-    const layer = sortedLayers[i];
-    if (
-      !isLayerVisibleAndLargeEnough(
-        puzzle.width,
-        puzzle.height,
+  const prevSmoothEnabled = ctx.imageSmoothingEnabled;
+  const prevSmoothQuality = ctx.imageSmoothingQuality;
+  try {
+    for (let i = 0; i < visibleLayers.length; i++) {
+      const layer = visibleLayers[i];
+      const cache = ensureLayerCanvasCache(
+        puzzle,
         layer,
-        visLeft,
-        visTop,
-        visRight,
-        visBottom,
-        effScale,
-        MIN_LAYER_RENDER_SCREEN_PX
-      )
-    ) {
-      continue;
+        caches,
+        paletteMap,
+        propImages,
+        hydratedImages,
+        filledRegionIds,
+        paintedRegionColors,
+        regionColorMode,
+        isFreeColorMode,
+        currentFrame
+      );
+      if (!cache) continue;
+
+      const b = layer.worldBounds;
+      const wx = b.x * puzzle.width;
+      const wy = b.y * puzzle.height;
+      const ww = b.width * puzzle.width;
+      const wh = b.height * puzzle.height;
+
+      const layerTexelRatio = Math.max(
+        computeLayerTexelRatio(ww, layer.width, effScale, effDpr),
+        computeLayerTexelRatio(wh, layer.height, effScale, effDpr)
+      );
+      const hasDeeperChild = hasOverlappingDeeperVisibleLayer(visibleLayers, i);
+      const smooth = resolveLayerImageSmoothing(
+        layerTexelRatio,
+        true,
+        hasDeeperChild,
+        LAYER_SMOOTHING_SCRATCH
+      );
+      ctx.imageSmoothingEnabled = smooth.imageSmoothingEnabled;
+      ctx.imageSmoothingQuality = smooth.imageSmoothingQuality;
+
+      if (isEffectivePreview) {
+        drawSingleNestedLayerPreview(ctx, cache, layer, showPreviewBorders, wx, wy, ww, wh);
+      } else {
+        drawSingleNestedLayerInteractive(
+          ctx,
+          puzzle,
+          cache,
+          layer,
+          filledRegionIds,
+          isColoring,
+          wantHighlights,
+          wantSelection,
+          selectedRegionIds,
+          selectionLayerId,
+          activeColorId,
+          hintRegionId,
+          highlightMatching,
+          highlightStyle,
+          hintFillStyle,
+          hintColorArgb,
+          animateHint,
+          reducedMotion,
+          hintIntensity,
+          currentPulseAlpha,
+          highlightVersion,
+          selectionVersion,
+          wx,
+          wy,
+          ww,
+          wh
+        );
+      }
+
+      const isLargeEnoughForHairline =
+        Math.max(ww * effScale, wh * effScale) >= LAYER_SILHOUETTE_MIN_SCREEN_PX;
+      const shouldDrawHairline =
+        isLargeEnoughForHairline &&
+        (isEffectivePreview
+          ? showPreviewBorders
+          : syncLayerHasUnfilledRegions(cache, layer, filledRegionIds));
+      if (shouldDrawHairline) {
+        ensureLayerSilhouetteCache(cache, layer, wx, wy, ww, wh);
+        strokeLayerSilhouette(
+          ctx,
+          cache.silhouetteSegments,
+          cache.silhouettePath,
+          wx,
+          wy,
+          ww,
+          wh,
+          layer.width,
+          layer.height,
+          effScale
+        );
+      }
     }
-
-    const cache = ensureLayerCanvasCache(
-      puzzle,
-      layer,
-      caches,
-      paletteMap,
-      propImages,
-      hydratedImages,
-      filledRegionIds,
-      paintedRegionColors,
-      regionColorMode,
-      isFreeColorMode,
-      currentFrame
-    );
-    if (!cache) continue;
-
-    const b = layer.worldBounds;
-    const wx = b.x * puzzle.width;
-    const wy = b.y * puzzle.height;
-    const ww = b.width * puzzle.width;
-    const wh = b.height * puzzle.height;
-
-    if (isEffectivePreview) {
-      drawSingleNestedLayerPreview(ctx, cache, layer, showPreviewBorders, wx, wy, ww, wh);
-      continue;
-    }
-
-    drawSingleNestedLayerInteractive(
-      ctx,
-      puzzle,
-      cache,
-      layer,
-      filledRegionIds,
-      isColoring,
-      wantHighlights,
-      wantSelection,
-      selectedRegionIds,
-      selectionLayerId,
-      activeColorId,
-      hintRegionId,
-      highlightMatching,
-      highlightStyle,
-      hintFillStyle,
-      hintColorArgb,
-      animateHint,
-      reducedMotion,
-      hintIntensity,
-      currentPulseAlpha,
-      highlightVersion,
-      selectionVersion,
-      wx,
-      wy,
-      ww,
-      wh
-    );
+  } finally {
+    ctx.imageSmoothingEnabled = prevSmoothEnabled;
+    ctx.imageSmoothingQuality = prevSmoothQuality;
   }
 }
 

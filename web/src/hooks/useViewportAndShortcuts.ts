@@ -1,8 +1,8 @@
 import { Dispatch, MutableRefObject, SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
-import { NormalizedRect, PuzzleData, SavedSnapshot } from '../types';
+import { NormalizedRect, PaletteSortOrder, PuzzleData, SavedSnapshot } from '../types';
 import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
-import { getVisiblePalette } from '../components/PaletteDock';
+import { getVisiblePalette, partitionDockPaletteByPriority } from '../components/PaletteDock';
 import { createFocusBoundsRequest, type FocusBoundsRequest } from '../components/puzzleCanvasHelpers';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
 import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
@@ -128,6 +128,33 @@ export function mergeNumberSetIfChanged(prev: Set<number>, next: Set<number>): S
   return next;
 }
 
+const EMPTY_NESTED_COLOR_IDS = new Set<number>();
+
+/**
+ * Pure helper resolving which colorId keyboard digit shortcuts `1`..`9` select,
+ * aligned with PaletteDock's `partitionDockPaletteByPriority` visual order.
+ */
+export function resolveDigitShortcutColorId(
+  key: string,
+  puzzle: PuzzleData,
+  filledRegionIds: Set<number>,
+  sortOrder: PaletteSortOrder,
+  isFreeColorMode: boolean,
+  prioritizedColorIds?: ReadonlySet<number>
+): number | null {
+  const index = Number(key) - 1;
+  if (!Number.isInteger(index) || index < 0 || index > 8) return null;
+  const basePalette = getVisiblePalette(
+    puzzle.palette,
+    getAllPuzzleRegions(puzzle),
+    filledRegionIds,
+    sortOrder,
+    isFreeColorMode
+  );
+  const { dockPalette } = partitionDockPaletteByPriority(basePalette, prioritizedColorIds);
+  return index < dockPalette.length ? dockPalette[index].id : null;
+}
+
 function getDocumentFullscreenActive(): boolean {
   if (typeof document === 'undefined') return false;
   return Boolean(
@@ -161,8 +188,19 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
 
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
   const [visibleRegionIds, setVisibleRegionIds] = useState<Set<number>>(new Set());
+  const [nestedColorsState, setNestedColorsState] = useState<{
+    puzzle: PuzzleData | null;
+    colorIds: Set<number>;
+  }>({ puzzle: null, colorIds: EMPTY_NESTED_COLOR_IDS });
+  const hasNestedLayers = Boolean(puzzle?.nestedLayers && puzzle.nestedLayers.length > 0);
+  const visibleNestedColorIds =
+    hasNestedLayers && nestedColorsState.puzzle === puzzle
+      ? nestedColorsState.colorIds
+      : EMPTY_NESTED_COLOR_IDS;
+  const puzzleRef = useLatest(puzzle);
   const visibleColorIdsRef = useLatest(visibleColorIds);
   const visibleRegionIdsRef = useLatest(visibleRegionIds);
+  const visibleNestedColorIdsRef = useLatest(visibleNestedColorIds);
 
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
@@ -308,6 +346,31 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
   const handleVisibleRegionsChanged = useCallback((next: Set<number>) => {
     setVisibleRegionIds((prev) => mergeNumberSetIfChanged(prev, next));
   }, []);
+
+  const handleVisibleNestedColorsChanged = useCallback(
+    (next: Set<number>) => {
+      const curPuzzle = puzzleRef.current;
+      const curHasNested = Boolean(curPuzzle?.nestedLayers && curPuzzle.nestedLayers.length > 0);
+      setNestedColorsState((prev) => {
+        if (!curHasNested || !curPuzzle) {
+          return prev.colorIds.size === 0 && prev.puzzle === curPuzzle
+            ? prev
+            : { puzzle: curPuzzle, colorIds: EMPTY_NESTED_COLOR_IDS };
+        }
+        const merged =
+          prev.puzzle === curPuzzle
+            ? mergeNumberSetIfChanged(prev.colorIds, next)
+            : next.size === 0
+              ? EMPTY_NESTED_COLOR_IDS
+              : next;
+        if (prev.puzzle === curPuzzle && prev.colorIds === merged) {
+          return prev;
+        }
+        return { puzzle: curPuzzle, colorIds: merged };
+      });
+    },
+    [puzzleRef]
+  );
 
   const handleToggleFullscreen = useCallback(async () => {
     markTutorialActionTried('peek_fullscreen');
@@ -471,17 +534,16 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
       const curPuzzle = cur.puzzle ?? activePuzzle;
       const curFilled = cur.filledRegionIds;
       if ((isReplaying && !wasAwaiting) || curFilled.size >= getTotalRegionCount(curPuzzle)) return;
-      const selectablePalette = getVisiblePalette(
-        curPuzzle.palette,
-        getAllPuzzleRegions(curPuzzle),
+      const chosenColId = resolveDigitShortcutColorId(
+        e.key,
+        curPuzzle,
         curFilled,
         cur.settings.paletteSort,
-        cur.isFreeColorMode
+        cur.isFreeColorMode,
+        visibleNestedColorIdsRef.current
       );
-      const index = Number(e.key) - 1;
-      if (index < 0 || index >= selectablePalette.length) return;
+      if (chosenColId === null) return;
       e.preventDefault();
-      const chosenColId = selectablePalette[index].id;
       NativeBridge.haptic('tick', cur.settings.hapticsEnabled);
       liveCoopRef.current = { ...cur, activeColorId: chosenColId };
       setActiveColorId(chosenColId);
@@ -495,6 +557,7 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
       markTutorialActionTried,
       setActiveColorId,
       setHintRegionId,
+      visibleNestedColorIdsRef,
     ]
   );
 
@@ -538,8 +601,10 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
   return {
     visibleColorIds,
     visibleRegionIds,
+    visibleNestedColorIds,
     visibleColorIdsRef,
     visibleRegionIdsRef,
+    visibleNestedColorIdsRef,
     isFullscreen,
     zoomInTrigger,
     zoomOutTrigger,
@@ -555,6 +620,7 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
     flushPendingViewportSave,
     handleVisibleColorsChanged,
     handleVisibleRegionsChanged,
+    handleVisibleNestedColorsChanged,
     handleToggleFullscreen,
     handleViewExtentChanged,
     handleViewportGesture,

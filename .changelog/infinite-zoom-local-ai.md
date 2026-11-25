@@ -3,4 +3,4 @@ bump: minor
 pr: 656
 epic: 4
 ---
-Upgrade Infinite Zoom to a unified single-canvas nested-layer world (up to 256x zoom, single-file .capy v2 saves) powered by Google Nano Banana 2.1 / 2 via Web Puter.js, Free Guided Gemini App Handoff, and optional device-local BYOK API key, with Sparkles visible on completed puzzles
+Upgrade Infinite Zoom to a unified nested-layer canvas (up to 256x zoom, smooth auto-focus, seam smoothing, 96-color floated dock, .capy v2 saves) using shared activeMask segmentation and Nano Banana 2.1 / 2 via Puter.js, Free Guided Gemini Handoff with 1-tap Copy Image, or device-local BYOK
