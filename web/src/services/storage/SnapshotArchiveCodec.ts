@@ -327,14 +327,8 @@ async function collectOtherLiveProtectedImageKeysStrict(
   const protectedKeys = new Set<string>();
   const otherSnapshots = existingSnapshots.filter((s) => !replacingIds.has(s.id));
   for (const snap of otherSnapshots) {
-    protectedKeys.add(snap.id);
+    protectedKeys.add(resolveSnapshotRootImageKey(snap));
     protectedKeys.add(previewStoreKey(snap.id));
-    if (snap.sourceRef?.kind === 'blob' && typeof snap.sourceRef.uri === 'string') {
-      const trimmedUri = snap.sourceRef.uri.trim();
-      if (trimmedUri.length > 0) {
-        protectedKeys.add(trimmedUri);
-      }
-    }
   }
   const layerRead = await collectReferencedLayerImageKeysStrict(
     otherSnapshots.map((s) => s.id)
@@ -462,14 +456,16 @@ async function validateAndRemapImportBatch<TLayer extends NestedLayerLike>(param
     replacingIds
   );
 
-  const allLiveRootIds = new Set<string>([
-    ...existingSnapshots.map((s) => s.id),
-    ...incomingSnapshots.map((s) => s.id),
-  ]);
-  const allLivePreviewKeys = new Set<string>([
-    ...existingSnapshots.map((s) => previewStoreKey(s.id)),
-    ...incomingSnapshots.map((s) => previewStoreKey(s.id)),
-  ]);
+  const survivingExisting = existingSnapshots.filter((s) => !replacingIds.has(s.id));
+  const postImportSnapshots = [...survivingExisting, ...incomingSnapshots];
+  const allLiveRootIds = new Set<string>(
+    postImportSnapshots
+      .filter((s) => resolveSnapshotRootImageKey(s) === s.id)
+      .map((s) => s.id)
+  );
+  const allLivePreviewKeys = new Set<string>(
+    postImportSnapshots.map((s) => previewStoreKey(s.id))
+  );
 
   const claimedBatchBlobUris = new Set<string>();
   const batchBlobUris = new Set<string>();

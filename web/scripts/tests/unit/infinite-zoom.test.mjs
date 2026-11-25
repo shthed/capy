@@ -16083,6 +16083,213 @@ async function testClusterK_Tier5AdversarialHardening({
           0,
           'Incoming snapshot claiming another live snapshot dedicated root_... key must fail closed'
         );
+
+        // Part D (R6-P3): Full binary archive with BOTH snap-parent (root_...) and snap-sibling (uri = parentId)
+        // imports cleanly into a clean device AND as a re-import upgrade with exact distinct bytes
+        ls.clear();
+        stores.puzzles.clear();
+        stores.images.clear();
+        idbMod.clearAllPreviewCaches();
+        storageMod.StorageService.saveSnapshots([parentSnap, siblingSnap]);
+        stores.puzzles.set(parentId, compactRec);
+        stores.puzzles.set(siblingId, compactRec);
+        stores.images.set(rootKey, outerBlob);
+        stores.images.set(parentId, staleSiblingBlob);
+
+        const bothArchiveBin = await storageMod.StorageService.exportAllSnapshotsBinary();
+        const bothArchiveJson = await storageMod.StorageService.exportAllSnapshots();
+        const siblingSingleBin = await storageMod.StorageService.exportSnapshotBinary(siblingId);
+
+        // D1: Clean-device full binary archive import
+        ls.clear();
+        stores.puzzles.clear();
+        stores.images.clear();
+        idbMod.clearAllPreviewCaches();
+        const cleanBothRes = await storageMod.StorageService.importSnapshotData(bothArchiveBin);
+        assert.equal(
+          cleanBothRes.importedCount,
+          2,
+          `Clean-device full binary archive with parent (root_...) + sibling (parentId) must import cleanly (error: ${cleanBothRes.error})`
+        );
+        const cleanLoadedSnaps = storageMod.StorageService.loadSnapshots();
+        const cleanParent = cleanLoadedSnaps.find((s) => s.id === parentId);
+        const cleanSibling = cleanLoadedSnaps.find((s) => s.id === siblingId);
+        assert.equal(cleanParent?.sourceRef?.uri, rootKey);
+        assert.equal(cleanSibling?.sourceRef?.uri, parentId);
+        const cleanParentBlob = await storageMod.StorageService.loadImageBlob(
+          snapshotLibraryMod.resolveBlobIdForSnapshot(cleanParent)
+        );
+        const cleanSiblingBlob = await storageMod.StorageService.loadImageBlob(
+          snapshotLibraryMod.resolveBlobIdForSnapshot(cleanSibling)
+        );
+        assert.ok(cleanParentBlob && cleanSiblingBlob, 'Both distinct blobs must reload cleanly');
+        assert.deepEqual(
+          Array.from(new Uint8Array(await cleanParentBlob.arrayBuffer())),
+          outerBytes,
+          'Parent blob reloaded from clean archive import must match outerBytes'
+        );
+        assert.deepEqual(
+          Array.from(new Uint8Array(await cleanSiblingBlob.arrayBuffer())),
+          staleSiblingBytes,
+          'Sibling blob reloaded from clean archive import must match sibling bytes'
+        );
+
+        // D2: Re-import upgrade over an existing device that previously had un-promoted parent + sibling
+        ls.clear();
+        stores.puzzles.clear();
+        stores.images.clear();
+        idbMod.clearAllPreviewCaches();
+        storageMod.StorageService.saveSnapshots([oldParentSnap, siblingSnap]);
+        stores.puzzles.set(parentId, compactRec);
+        stores.puzzles.set(siblingId, compactRec);
+        stores.images.set(parentId, staleSiblingBlob);
+        const upgradeBothRes = await storageMod.StorageService.importSnapshotData(bothArchiveBin);
+        assert.equal(
+          upgradeBothRes.importedCount,
+          2,
+          `Re-import upgrade binary archive with promoted parent + sibling must succeed (error: ${upgradeBothRes.error})`
+        );
+        const upgradedSnaps = storageMod.StorageService.loadSnapshots();
+        const upgradedParentBlob = await storageMod.StorageService.loadImageBlob(
+          snapshotLibraryMod.resolveBlobIdForSnapshot(upgradedSnaps.find((s) => s.id === parentId))
+        );
+        const upgradedSiblingBlob = await storageMod.StorageService.loadImageBlob(
+          snapshotLibraryMod.resolveBlobIdForSnapshot(upgradedSnaps.find((s) => s.id === siblingId))
+        );
+        assert.deepEqual(
+          Array.from(new Uint8Array(await upgradedParentBlob.arrayBuffer())),
+          outerBytes
+        );
+        assert.deepEqual(
+          Array.from(new Uint8Array(await upgradedSiblingBlob.arrayBuffer())),
+          staleSiblingBytes
+        );
+
+        // Part E (R6-P3b): Sequential single-save import (snap-parent first, then snap-sibling) on clean device
+        ls.clear();
+        stores.puzzles.clear();
+        stores.images.clear();
+        idbMod.clearAllPreviewCaches();
+        const seqParentRes = await storageMod.StorageService.importSnapshotData(singleBin);
+        assert.equal(seqParentRes.importedCount, 1);
+        const seqSiblingRes = await storageMod.StorageService.importSnapshotData(siblingSingleBin);
+        assert.equal(
+          seqSiblingRes.importedCount,
+          1,
+          `Sequential single-save import of snap-sibling after promoted snap-parent must succeed (error: ${seqSiblingRes.error})`
+        );
+        assert.deepEqual(
+          Array.from(new Uint8Array(await stores.images.get(rootKey).arrayBuffer())),
+          outerBytes
+        );
+        assert.deepEqual(
+          Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+          staleSiblingBytes
+        );
+
+        // Part F (R6-P3c): Cloud Sync re-import of updated snap-sibling (filledCount: 1) while promoted snap-parent exists
+        const updatedSiblingSnap = {
+          ...siblingSnap,
+          filledCount: 1,
+          filledRegionIds: [1],
+          lastOpened: 3000,
+        };
+        const updatedSiblingBytes = [22, 33, 44, 55];
+        const updatedSiblingBlob = new Blob([new Uint8Array(updatedSiblingBytes)], { type: 'image/png' });
+        const updatedSiblingBin = await codecMod.encodeSingleSaveBinaryV2(
+          updatedSiblingSnap,
+          compactRec,
+          updatedSiblingBlob
+        );
+        const siblingSyncRes = await storageMod.StorageService.importSnapshotData(updatedSiblingBin);
+        assert.equal(
+          siblingSyncRes.importedCount,
+          1,
+          `Cloud Sync re-import of updated snap-sibling while promoted snap-parent exists must succeed (error: ${siblingSyncRes.error})`
+        );
+        const syncedSibling = storageMod.StorageService.loadSnapshots().find((s) => s.id === siblingId);
+        assert.equal(syncedSibling?.filledCount, 1);
+        assert.deepEqual(
+          Array.from(new Uint8Array(await stores.images.get(rootKey).arrayBuffer())),
+          outerBytes,
+          'Promoted snap-parent rootKey blob must remain untouched on sibling Cloud Sync re-import'
+        );
+        assert.deepEqual(
+          Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+          updatedSiblingBytes
+        );
+
+        // Part G (R6-P3d): JSON archive (exportAllSnapshots) with promoted snap-parent + snap-sibling imports cleanly on clean device
+        ls.clear();
+        stores.puzzles.clear();
+        stores.images.clear();
+        idbMod.clearAllPreviewCaches();
+        const cleanJsonArchiveRes = await storageMod.StorageService.importSnapshotData(bothArchiveJson);
+        assert.equal(
+          cleanJsonArchiveRes.importedCount,
+          2,
+          `Clean-device JSON archive with promoted snap-parent + snap-sibling must import cleanly (error: ${cleanJsonArchiveRes.error})`
+        );
+        const jsonLoaded = storageMod.StorageService.loadSnapshots();
+        assert.equal(jsonLoaded.find((s) => s.id === parentId)?.sourceRef?.uri, rootKey);
+        assert.equal(jsonLoaded.find((s) => s.id === siblingId)?.sourceRef?.uri, parentId);
+
+        // Part H (R6-A1 negative in-batch hijack guards): all malicious/colliding batches must fail closed (importedCount === 0)
+        ls.clear();
+        stores.puzzles.clear();
+        stores.images.clear();
+        idbMod.clearAllPreviewCaches();
+        const normalSnap = mkK33Snap('snap-k33-normal', 'snap-k33-normal');
+        const evilClaimNormalSnap = mkK33Snap('snap-k33-evil', 'snap-k33-normal');
+        const hijackOrder1Bin = await codecMod.encodeArchiveSaveBinaryV2(
+          [normalSnap, evilClaimNormalSnap],
+          { [normalSnap.id]: compactRec, [evilClaimNormalSnap.id]: compactRec },
+          { [normalSnap.id]: outerBlob, [evilClaimNormalSnap.id]: staleSiblingBlob }
+        );
+        const hijackOrder1Res = await storageMod.StorageService.importSnapshotData(hijackOrder1Bin);
+        assert.equal(
+          hijackOrder1Res.importedCount,
+          0,
+          'Archive with [snap-normal, snap-evil claiming snap-normal] must fail closed'
+        );
+        const hijackOrder2Bin = await codecMod.encodeArchiveSaveBinaryV2(
+          [evilClaimNormalSnap, normalSnap],
+          { [normalSnap.id]: compactRec, [evilClaimNormalSnap.id]: compactRec },
+          { [normalSnap.id]: outerBlob, [evilClaimNormalSnap.id]: staleSiblingBlob }
+        );
+        const hijackOrder2Res = await storageMod.StorageService.importSnapshotData(hijackOrder2Bin);
+        assert.equal(
+          hijackOrder2Res.importedCount,
+          0,
+          'Archive with [snap-evil claiming snap-normal, snap-normal] must fail closed regardless of batch order'
+        );
+
+        const dupSharedKey = persistenceMod.makeUniqueRootBlobKey('snap-k33-dup');
+        const dupA = mkK33Snap('snap-k33-dup-a', dupSharedKey);
+        const dupB = mkK33Snap('snap-k33-dup-b', dupSharedKey);
+        const dupUriBin = await codecMod.encodeArchiveSaveBinaryV2(
+          [dupA, dupB],
+          { [dupA.id]: compactRec, [dupB.id]: compactRec },
+          { [dupA.id]: outerBlob, [dupB.id]: staleSiblingBlob }
+        );
+        const dupUriRes = await storageMod.StorageService.importSnapshotData(dupUriBin);
+        assert.equal(
+          dupUriRes.importedCount,
+          0,
+          'Archive with two incoming snapshots claiming the same sourceRef.uri must fail closed'
+        );
+
+        const downgradeArchiveBin = await codecMod.encodeArchiveSaveBinaryV2(
+          [oldParentSnap, siblingSnap],
+          { [oldParentSnap.id]: compactRec, [siblingSnap.id]: compactRec },
+          { [oldParentSnap.id]: outerBlob, [siblingSnap.id]: staleSiblingBlob }
+        );
+        const downgradeArchiveRes = await storageMod.StorageService.importSnapshotData(downgradeArchiveBin);
+        assert.equal(
+          downgradeArchiveRes.importedCount,
+          0,
+          'Archive with un-promoted snap-parent and snap-sibling claiming parentId must fail closed'
+        );
       } finally {
         idbMod.evictDbHandle(keysMod.resolveScopedDbName());
         idbMod.clearAllPreviewCaches();
