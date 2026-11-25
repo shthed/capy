@@ -65,7 +65,6 @@ import {
   decodeBlobToImage,
   encodeImageToPuzzleBlob,
   encodeRgbaToBlob,
-  isSamplePromotionMeta,
   loadPreviousRootBlobIfOwned,
   makeUniqueLayerId,
   persistZoomInBlobsAndPuzzle,
@@ -75,6 +74,7 @@ import {
   renderHydratedPreview,
   renderImageToCanvas,
   renderLayerSourceToCanvas,
+  resolveRootBlobPersistencePlan,
   revokeObjectUrlSafely,
   rollbackAbortedLayerPersist,
   UndoInfiniteZoomSnapshot,
@@ -1001,6 +1001,7 @@ export async function runZoomInCommitPipeline(
   let committed = false;
   let previousRootBlob: Blob | null = null;
   let promotedFromSample = false;
+  let addedRootBlobKey: string | undefined;
 
   try {
     if (isAborted()) {
@@ -1024,8 +1025,12 @@ export async function runZoomInCommitPipeline(
     const prePersistLive = readLiveState();
     const previousLayerImages = new Map(prePersistLive.liveLayerImages);
     const previousViewport = { ...prePersistLive.viewport };
-    previousRootBlob = await loadPreviousRootBlobIfOwned(existingSnap, snapId);
-    promotedFromSample = !previousRootBlob && isSamplePromotionMeta(existingSnap);
+    const rootPlan = resolveRootBlobPersistencePlan(existingSnap, snapId, 'zoom-in');
+    previousRootBlob = rootPlan.ownedPreviousRootBlobKey
+      ? await loadPreviousRootBlobIfOwned(existingSnap, snapId)
+      : null;
+    promotedFromSample = !previousRootBlob && rootPlan.needsRootMaterialization;
+    addedRootBlobKey = rootPlan.addedRootBlobKey;
     if (isAborted()) {
       revokeObjectUrlSafely(layerObjectUrl);
       return null;
@@ -1041,6 +1046,8 @@ export async function runZoomInCommitPipeline(
       layerPngBlob,
       layerObjectUrl,
       promotedFromSample,
+      rootImageBlobKey: rootPlan.targetRootBlobKey,
+      addedRootBlobKey,
       isAborted,
     });
     if (!persisted) {
@@ -1079,6 +1086,7 @@ export async function runZoomInCommitPipeline(
       await rollbackAbortedLayerPersist({
         snapId,
         addedLayerBlobKeys: [imageBlobKey],
+        addedRootBlobKey,
         newLayerObjectUrls: [layerObjectUrl],
         previousRootBlob,
         promotedFromSample,
@@ -1096,6 +1104,7 @@ export async function runZoomInCommitPipeline(
       sourceImage: baseImage,
       previousBlob: previousRootBlob,
       promotedFromSample,
+      ...(addedRootBlobKey ? { addedRootBlobKey } : {}),
       previousBlobUrl: postPreviewLive.activeBlobUrl,
       newBlobUrl: postPreviewLive.activeBlobUrl,
       addedLayerBlobKeys: [imageBlobKey],
@@ -1127,6 +1136,7 @@ export async function runZoomInCommitPipeline(
       previewUrl,
       isFree,
       viewport: postPreviewLive.viewport,
+      rootImageBlobKey: rootPlan.targetRootBlobKey,
     });
 
     committed = true;
@@ -1152,6 +1162,7 @@ export async function runZoomInCommitPipeline(
         await rollbackAbortedLayerPersist({
           snapId,
           addedLayerBlobKeys: [imageBlobKey],
+          addedRootBlobKey,
           newLayerObjectUrls: [layerObjectUrl],
           previousRootBlob,
           promotedFromSample,
@@ -1298,6 +1309,7 @@ export async function runZoomOutCommitPipeline(
   let committed = false;
   let previousRootBlob: Blob | null = null;
   let promotedFromSample = false;
+  let addedRootBlobKey: string | undefined;
 
   try {
     if (isAborted()) {
@@ -1314,8 +1326,12 @@ export async function runZoomOutCommitPipeline(
       return null;
     }
 
-    previousRootBlob = await loadPreviousRootBlobIfOwned(existingSnap, snapId);
-    promotedFromSample = !previousRootBlob && isSamplePromotionMeta(existingSnap);
+    const rootPlan = resolveRootBlobPersistencePlan(existingSnap, snapId, 'zoom-out');
+    previousRootBlob = rootPlan.ownedPreviousRootBlobKey
+      ? await loadPreviousRootBlobIfOwned(existingSnap, snapId)
+      : null;
+    promotedFromSample = !previousRootBlob && rootPlan.needsRootMaterialization;
+    addedRootBlobKey = rootPlan.addedRootBlobKey;
     if (isAborted()) {
       revokeObjectUrlSafely(prevRootObjUrl);
       revokeObjectUrlSafely(outerObjUrl);
@@ -1342,6 +1358,8 @@ export async function runZoomOutCommitPipeline(
       outerBlob,
       previousRootBlob,
       promotedFromSample,
+      rootImageBlobKey: rootPlan.targetRootBlobKey,
+      addedRootBlobKey,
       outerObjUrl,
       prevRootObjUrl,
       isAborted,
@@ -1380,6 +1398,7 @@ export async function runZoomOutCommitPipeline(
       await rollbackAbortedLayerPersist({
         snapId,
         addedLayerBlobKeys: [previousRootImageBlobKey],
+        addedRootBlobKey,
         newRootBlobUrl: outerObjUrl,
         newLayerObjectUrls: [prevRootObjUrl],
         previousRootBlob,
@@ -1398,6 +1417,7 @@ export async function runZoomOutCommitPipeline(
       sourceImage: baseImage,
       previousBlob: previousRootBlob,
       promotedFromSample,
+      ...(addedRootBlobKey ? { addedRootBlobKey } : {}),
       previousBlobUrl,
       newBlobUrl: outerObjUrl,
       addedLayerBlobKeys: [previousRootImageBlobKey],
@@ -1425,6 +1445,7 @@ export async function runZoomOutCommitPipeline(
       modelUsed,
       previewUrl,
       isFree,
+      rootImageBlobKey: rootPlan.targetRootBlobKey,
     });
 
     committed = true;
@@ -1450,6 +1471,7 @@ export async function runZoomOutCommitPipeline(
         await rollbackAbortedLayerPersist({
           snapId,
           addedLayerBlobKeys: [previousRootImageBlobKey],
+          addedRootBlobKey,
           newRootBlobUrl: outerObjUrl,
           newLayerObjectUrls: [prevRootObjUrl],
           previousRootBlob,

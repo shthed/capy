@@ -31,6 +31,7 @@ export interface UndoInfiniteZoomSnapshot {
   sourceImage: HTMLImageElement;
   previousBlob: Blob | null;
   promotedFromSample?: boolean;
+  addedRootBlobKey?: string;
   previousBlobUrl: string | null;
   newBlobUrl: string | null;
   addedLayerBlobKeys: string[];
@@ -47,9 +48,17 @@ export interface UndoInfiniteZoomSnapshot {
 
 export type UndoSubdivisionSnapshot = UndoInfiniteZoomSnapshot;
 
+export interface RootBlobPersistencePlan {
+  targetRootBlobKey: string;
+  addedRootBlobKey?: string;
+  needsRootMaterialization: boolean;
+  ownedPreviousRootBlobKey: string | null;
+}
+
 export interface RollbackAbortedLayerPersistOpts {
   snapId: string;
   addedLayerBlobKeys: string[];
+  addedRootBlobKey?: string;
   newRootBlobUrl?: string | null;
   newLayerObjectUrls?: string[];
   previousRootBlob?: Blob | null;
@@ -67,6 +76,8 @@ export interface PersistZoomInBlobsOpts {
   layerPngBlob: Blob;
   layerObjectUrl: string;
   promotedFromSample: boolean;
+  rootImageBlobKey?: string;
+  addedRootBlobKey?: string;
   isAborted: () => boolean;
 }
 
@@ -79,6 +90,8 @@ export interface PersistZoomOutBlobsOpts {
   outerBlob: Blob;
   previousRootBlob: Blob | null;
   promotedFromSample: boolean;
+  rootImageBlobKey?: string;
+  addedRootBlobKey?: string;
   outerObjUrl: string;
   prevRootObjUrl: string;
   isAborted: () => boolean;
@@ -101,6 +114,7 @@ export interface ZoomInStorageCommitParams {
   previewUrl: string;
   isFree: boolean;
   viewport: CoopViewport;
+  rootImageBlobKey?: string;
 }
 
 export interface ZoomInStorageCommitResult {
@@ -122,6 +136,7 @@ export interface ZoomOutStorageCommitParams {
   modelUsed: NanoBananaModelId;
   previewUrl: string;
   isFree: boolean;
+  rootImageBlobKey?: string;
 }
 
 export interface ZoomOutStorageCommitResult {
@@ -136,6 +151,7 @@ export interface RestoreUndoSubdivisionPersistenceParams {
   activeSave: SavedSnapshot | undefined;
   liveActiveSave: SavedSnapshot | undefined;
   isStale: () => boolean;
+  shouldReconcileResetProgress?: () => boolean;
 }
 
 export interface RestoreUndoSubdivisionPersistenceResult {
@@ -143,6 +159,7 @@ export interface RestoreUndoSubdivisionPersistenceResult {
   syncedSave: SavedSnapshot | undefined;
   restoredViewport: CoopViewport;
   nextResetEpoch: number;
+  resetProgressMidUndo?: boolean;
 }
 
 export function revokeObjectUrlSafely(url: string | null | undefined): void {
@@ -385,6 +402,44 @@ export function makeUniqueLayerId(prefix: string): string {
   return isSafeLayerId(candidate) ? candidate : `layer_${stamp}_${rand}`;
 }
 
+export function makeUniqueRootBlobKey(snapId: string): string {
+  const safeSnap = snapId
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/\.{2,}/g, '_')
+    .slice(0, 64);
+  const stamp = Date.now().toString(36);
+  const rand = Math.random().toString(36).slice(2, 8);
+  const candidate = `root_${safeSnap}_${stamp}_${rand}`;
+  if (
+    /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$/.test(candidate) &&
+    !candidate.includes('..') &&
+    !candidate.startsWith('layer_') &&
+    !candidate.startsWith('preview_')
+  ) {
+    return candidate;
+  }
+  return `root_${stamp}_${rand}`;
+}
+
+export function adjustSnapshotUndoCount(
+  counts: Map<string, number>,
+  snapshotId: string,
+  delta: 1 | -1
+): void {
+  const next = (counts.get(snapshotId) ?? 0) + delta;
+  if (next <= 0) {
+    counts.delete(snapshotId);
+  } else {
+    counts.set(snapshotId, next);
+  }
+}
+
+export function formatUndoInfiniteZoomErrorMessage(err: unknown): string {
+  return err instanceof Error && err.message
+    ? `Could not undo Infinite Zoom: ${err.message}`
+    : 'Could not undo Infinite Zoom because storage is full.';
+}
+
 export function isSamplePromotionMeta(
   meta:
     | {
@@ -394,6 +449,22 @@ export function isSamplePromotionMeta(
     | undefined
 ): boolean {
   return !meta || Boolean(meta.sampleAssetPath) || meta.sourceRef?.kind !== 'blob';
+}
+
+export function needsDedicatedRootBlobPromotion(
+  meta:
+    | {
+        sampleAssetPath?: string | null;
+        sourceRef?: SavedSnapshot['sourceRef'];
+      }
+    | undefined,
+  snapId: string
+): boolean {
+  if (isSamplePromotionMeta(meta)) {
+    return true;
+  }
+  const uri = meta?.sourceRef?.kind === 'blob' ? meta.sourceRef.uri?.trim() : '';
+  return !uri || uri !== snapId;
 }
 
 export function buildZoomInZoomTreeMeta(
@@ -477,26 +548,67 @@ export function resolveLatestChildSave(
   return fallback;
 }
 
+function isBlobKeyProtectedBySurvivingSnapshots(blobKey: string): boolean {
+  return StorageService.loadSnapshots().some(
+    (s) =>
+      s.id === blobKey || (s.sourceRef?.kind === 'blob' && s.sourceRef.uri?.trim() === blobKey)
+  );
+}
+
+function isBlobKeySharedByOtherSnapshots(blobKey: string, ownerSnapshotId: string): boolean {
+  return StorageService.loadSnapshots().some(
+    (s) =>
+      s.id !== ownerSnapshotId &&
+      (s.id === blobKey || (s.sourceRef?.kind === 'blob' && s.sourceRef.uri?.trim() === blobKey))
+  );
+}
+
+export function resolveRootBlobPersistencePlan(
+  existingSnap: SavedSnapshot | undefined,
+  snapId: string,
+  operationKind: 'zoom-in' | 'zoom-out'
+): RootBlobPersistencePlan {
+  const isPromotion = needsDedicatedRootBlobPromotion(existingSnap, snapId);
+  const snapIdSharedBySiblings = isBlobKeySharedByOtherSnapshots(snapId, snapId);
+
+  if (!isPromotion && !snapIdSharedBySiblings) {
+    return {
+      targetRootBlobKey: snapId,
+      needsRootMaterialization: false,
+      ownedPreviousRootBlobKey: snapId,
+    };
+  }
+
+  if (!isPromotion && operationKind === 'zoom-in') {
+    // Sibling-shared root blob on Zoom In: root artwork is not modified, so keep sourceRef intact
+    // and never overwrite or delete the shared root blob.
+    return {
+      targetRootBlobKey: snapId,
+      needsRootMaterialization: false,
+      ownedPreviousRootBlobKey: null,
+    };
+  }
+
+  const targetRootBlobKey = snapIdSharedBySiblings ? makeUniqueRootBlobKey(snapId) : snapId;
+  return {
+    targetRootBlobKey,
+    addedRootBlobKey: targetRootBlobKey,
+    needsRootMaterialization: true,
+    ownedPreviousRootBlobKey: null,
+  };
+}
+
 export async function loadPreviousRootBlobIfOwned(
   existingSnap: SavedSnapshot | undefined,
   snapId: string
 ): Promise<Blob | null> {
-  if (!existingSnap || existingSnap.sampleAssetPath || existingSnap.sourceRef?.kind !== 'blob') {
+  if (needsDedicatedRootBlobPromotion(existingSnap, snapId)) {
+    return null;
+  }
+  if (isBlobKeySharedByOtherSnapshots(snapId, snapId)) {
     return null;
   }
   return await StorageService.loadImageBlob(snapId).catch(() => null);
-}
-
-function isRootBlobProtectedBySurvivingSnapshots(snapshotId: string): boolean {
-  return StorageService.loadSnapshots().some(
-    (s) => s.id === snapshotId || (s.sourceRef?.kind === 'blob' && s.sourceRef.uri?.trim() === snapshotId)
-  );
-}
-
-function isRootBlobSharedBySiblingSnapshots(snapshotId: string): boolean {
-  return StorageService.loadSnapshots().some(
-    (s) => s.id !== snapshotId && s.sourceRef?.kind === 'blob' && s.sourceRef.uri?.trim() === snapshotId
-  );
 }
 
 export async function rollbackAbortedLayerPersist(
@@ -511,26 +623,32 @@ export async function rollbackAbortedLayerPersist(
     }
   }
   if (!findStoredSnapshotById(opts.snapId)) {
-    const protectRootBlob = isRootBlobProtectedBySurvivingSnapshots(opts.snapId);
-    const filteredLayerKeys = protectRootBlob
-      ? opts.addedLayerBlobKeys.filter((k) => k !== opts.snapId)
-      : [...opts.addedLayerBlobKeys];
-    const imageKeys =
-      protectRootBlob || filteredLayerKeys.includes(opts.snapId)
-        ? filteredLayerKeys
-        : [...filteredLayerKeys, opts.snapId];
-    await deleteOrphanedEntries([opts.snapId], imageKeys).catch((err) => {
+    const imageKeys = new Set<string>();
+    for (const key of opts.addedLayerBlobKeys) {
+      if (!isBlobKeyProtectedBySurvivingSnapshots(key)) {
+        imageKeys.add(key);
+      }
+    }
+    if (opts.addedRootBlobKey && !isBlobKeyProtectedBySurvivingSnapshots(opts.addedRootBlobKey)) {
+      imageKeys.add(opts.addedRootBlobKey);
+    }
+    if (!isBlobKeyProtectedBySurvivingSnapshots(opts.snapId)) {
+      imageKeys.add(opts.snapId);
+    }
+    await deleteOrphanedEntries([opts.snapId], Array.from(imageKeys)).catch((err) => {
       reportSwallowed('InfiniteZoom.rollbackCleanupDeletedSnapshot', err, { id: opts.snapId });
     });
     return;
   }
-  const deletePromotedRoot =
+  const candidateRootDeleteKey = opts.addedRootBlobKey ?? opts.snapId;
+  const deleteAddedRoot =
     !opts.previousRootBlob &&
-    opts.promotedFromSample &&
-    !isRootBlobSharedBySiblingSnapshots(opts.snapId);
-  const keysToDelete = deletePromotedRoot
-    ? [...opts.addedLayerBlobKeys, opts.snapId]
-    : opts.addedLayerBlobKeys;
+    Boolean(opts.addedRootBlobKey || opts.promotedFromSample) &&
+    !isBlobKeySharedByOtherSnapshots(candidateRootDeleteKey, opts.snapId);
+  const keysToDelete =
+    deleteAddedRoot && !opts.addedLayerBlobKeys.includes(candidateRootDeleteKey)
+      ? [...opts.addedLayerBlobKeys, candidateRootDeleteKey]
+      : opts.addedLayerBlobKeys;
   if (keysToDelete.length > 0) {
     await deleteOrphanedEntries([], keysToDelete).catch((err) => {
       reportSwallowed('InfiniteZoom.rollbackDeleteLayerBlobs', err, { id: opts.snapId });
@@ -548,39 +666,70 @@ export async function rollbackAbortedLayerPersist(
   }
 }
 
+function resolvePersistZoomInTargets(opts: PersistZoomInBlobsOpts): {
+  needsRootMaterialization: boolean;
+  targetRootBlobKey: string;
+  effectiveAddedRootBlobKey: string | undefined;
+  effectivePromoted: boolean;
+} {
+  const needsRootMaterialization =
+    Boolean(opts.addedRootBlobKey) ||
+    needsDedicatedRootBlobPromotion(opts.existingSnap, opts.snapId);
+  const targetRootBlobKey =
+    opts.rootImageBlobKey ??
+    (needsRootMaterialization && isBlobKeySharedByOtherSnapshots(opts.snapId, opts.snapId)
+      ? makeUniqueRootBlobKey(opts.snapId)
+      : opts.snapId);
+  return {
+    needsRootMaterialization,
+    targetRootBlobKey,
+    effectiveAddedRootBlobKey:
+      opts.addedRootBlobKey ?? (needsRootMaterialization ? targetRootBlobKey : undefined),
+    effectivePromoted: opts.promotedFromSample || needsRootMaterialization,
+  };
+}
+
 export async function persistZoomInBlobsAndPuzzle(opts: PersistZoomInBlobsOpts): Promise<boolean> {
   const {
     snapId,
-    existingSnap,
     basePuzzle,
     baseImage,
     nextPuzzle,
     imageBlobKey,
     layerPngBlob,
     layerObjectUrl,
-    promotedFromSample,
     isAborted,
   } = opts;
-  const needsSamplePromotion = isSamplePromotionMeta(existingSnap);
+  const {
+    needsRootMaterialization,
+    targetRootBlobKey,
+    effectiveAddedRootBlobKey,
+    effectivePromoted,
+  } = resolvePersistZoomInTargets(opts);
   let wroteRootBlob = false;
   let wroteLayerBlob = false;
 
+  const rollback = (restoreBasePuzzle: boolean) =>
+    rollbackAbortedLayerPersist({
+      snapId,
+      addedLayerBlobKeys: wroteLayerBlob ? [imageBlobKey] : [],
+      addedRootBlobKey: wroteRootBlob ? effectiveAddedRootBlobKey : undefined,
+      newLayerObjectUrls: [layerObjectUrl],
+      promotedFromSample: wroteRootBlob && effectivePromoted,
+      ...(restoreBasePuzzle ? { basePuzzle } : {}),
+    });
+
   try {
-    if (needsSamplePromotion) {
+    if (needsRootMaterialization) {
       const rootBlob = await encodeImageToPuzzleBlob(baseImage, basePuzzle);
       if (isAborted()) {
         revokeObjectUrlSafely(layerObjectUrl);
         return false;
       }
-      await StorageService.saveImageBlob(snapId, rootBlob);
+      await StorageService.saveImageBlob(targetRootBlobKey, rootBlob);
       wroteRootBlob = true;
       if (isAborted()) {
-        await rollbackAbortedLayerPersist({
-          snapId,
-          addedLayerBlobKeys: [],
-          newLayerObjectUrls: [layerObjectUrl],
-          promotedFromSample,
-        });
+        await rollback(false);
         return false;
       }
     }
@@ -588,35 +737,19 @@ export async function persistZoomInBlobsAndPuzzle(opts: PersistZoomInBlobsOpts):
     await StorageService.saveImageBlob(imageBlobKey, layerPngBlob);
     wroteLayerBlob = true;
     if (isAborted()) {
-      await rollbackAbortedLayerPersist({
-        snapId,
-        addedLayerBlobKeys: [imageBlobKey],
-        newLayerObjectUrls: [layerObjectUrl],
-        promotedFromSample: wroteRootBlob && promotedFromSample,
-      });
+      await rollback(false);
       return false;
     }
 
     await StorageService.savePuzzleData(snapId, nextPuzzle);
     if (isAborted()) {
-      await rollbackAbortedLayerPersist({
-        snapId,
-        addedLayerBlobKeys: [imageBlobKey],
-        newLayerObjectUrls: [layerObjectUrl],
-        promotedFromSample: wroteRootBlob && promotedFromSample,
-        basePuzzle,
-      });
+      await rollback(true);
       return false;
     }
     return true;
   } catch (err) {
     if (wroteRootBlob || wroteLayerBlob) {
-      await rollbackAbortedLayerPersist({
-        snapId,
-        addedLayerBlobKeys: wroteLayerBlob ? [imageBlobKey] : [],
-        newLayerObjectUrls: [layerObjectUrl],
-        promotedFromSample: wroteRootBlob && promotedFromSample,
-      });
+      await rollback(false);
     } else {
       revokeObjectUrlSafely(layerObjectUrl);
     }
@@ -634,10 +767,18 @@ export async function persistZoomOutBlobsAndPuzzle(opts: PersistZoomOutBlobsOpts
     outerBlob,
     previousRootBlob,
     promotedFromSample,
+    rootImageBlobKey,
+    addedRootBlobKey,
     outerObjUrl,
     prevRootObjUrl,
     isAborted,
   } = opts;
+  const targetRootBlobKey =
+    rootImageBlobKey ??
+    (isBlobKeySharedByOtherSnapshots(snapId, snapId) ? makeUniqueRootBlobKey(snapId) : snapId);
+  const effectiveAddedRootBlobKey =
+    addedRootBlobKey ?? (targetRootBlobKey !== snapId ? targetRootBlobKey : undefined);
+  const effectivePreviousRootBlob = effectiveAddedRootBlobKey ? null : previousRootBlob;
   let wroteDemotedCenterBlob = false;
   let wroteOuterRootBlob = false;
 
@@ -654,15 +795,16 @@ export async function persistZoomOutBlobsAndPuzzle(opts: PersistZoomOutBlobsOpts
       return false;
     }
 
-    await StorageService.saveImageBlob(snapId, outerBlob);
+    await StorageService.saveImageBlob(targetRootBlobKey, outerBlob);
     wroteOuterRootBlob = true;
     if (isAborted()) {
       await rollbackAbortedLayerPersist({
         snapId,
         addedLayerBlobKeys: [previousRootImageBlobKey],
+        addedRootBlobKey: effectiveAddedRootBlobKey,
         newRootBlobUrl: outerObjUrl,
         newLayerObjectUrls: [prevRootObjUrl],
-        previousRootBlob,
+        previousRootBlob: effectivePreviousRootBlob,
         promotedFromSample,
       });
       return false;
@@ -673,9 +815,10 @@ export async function persistZoomOutBlobsAndPuzzle(opts: PersistZoomOutBlobsOpts
       await rollbackAbortedLayerPersist({
         snapId,
         addedLayerBlobKeys: [previousRootImageBlobKey],
+        addedRootBlobKey: effectiveAddedRootBlobKey,
         newRootBlobUrl: outerObjUrl,
         newLayerObjectUrls: [prevRootObjUrl],
-        previousRootBlob,
+        previousRootBlob: effectivePreviousRootBlob,
         promotedFromSample,
         basePuzzle,
       });
@@ -687,9 +830,10 @@ export async function persistZoomOutBlobsAndPuzzle(opts: PersistZoomOutBlobsOpts
       await rollbackAbortedLayerPersist({
         snapId,
         addedLayerBlobKeys: wroteDemotedCenterBlob ? [previousRootImageBlobKey] : [],
+        addedRootBlobKey: wroteOuterRootBlob ? effectiveAddedRootBlobKey : undefined,
         newRootBlobUrl: outerObjUrl,
         newLayerObjectUrls: [prevRootObjUrl],
-        previousRootBlob: wroteOuterRootBlob ? previousRootBlob : undefined,
+        previousRootBlob: wroteOuterRootBlob ? effectivePreviousRootBlob : undefined,
         promotedFromSample: wroteOuterRootBlob ? promotedFromSample : false,
       });
     } else {
@@ -720,6 +864,7 @@ export function commitZoomInStorageState(
     previewUrl,
     isFree,
     viewport,
+    rootImageBlobKey,
   } = params;
 
   const nextZoomTree = buildZoomInZoomTreeMeta(
@@ -742,7 +887,7 @@ export function commitZoomInStorageState(
   StorageService.updateSnapshotMetadata(snapId, {
     sampleAssetPath: null,
     isAutoSample: false,
-    sourceRef: { kind: 'blob', uri: snapId },
+    sourceRef: { kind: 'blob', uri: rootImageBlobKey ?? snapId },
     zoomTree: nextZoomTree,
   });
   const updatedSnapshots = StorageService.updateSnapshotProgress(
@@ -792,6 +937,7 @@ export function commitZoomOutStorageState(
     modelUsed,
     previewUrl,
     isFree,
+    rootImageBlobKey,
   } = params;
 
   const nextZoomTree = buildZoomOutZoomTreeMeta(
@@ -810,7 +956,7 @@ export function commitZoomOutStorageState(
   StorageService.updateSnapshotMetadata(snapId, {
     sampleAssetPath: null,
     isAutoSample: false,
-    sourceRef: { kind: 'blob', uri: snapId },
+    sourceRef: { kind: 'blob', uri: rootImageBlobKey ?? snapId },
     zoomTree: nextZoomTree,
   });
   const updatedSnapshots = StorageService.updateSnapshotProgress(
@@ -864,15 +1010,16 @@ async function cleanupDeletedSnapshotUndoRecords(
   expectedSnapshotId: string,
   keysToDelete: readonly string[]
 ): Promise<void> {
-  const protectRootBlob = isRootBlobProtectedBySurvivingSnapshots(expectedSnapshotId);
-  const filteredKeys = protectRootBlob
-    ? keysToDelete.filter((k) => k !== expectedSnapshotId)
-    : [...keysToDelete];
-  const imageKeys =
-    protectRootBlob || filteredKeys.includes(expectedSnapshotId)
-      ? filteredKeys
-      : [...filteredKeys, expectedSnapshotId];
-  await deleteOrphanedEntries([expectedSnapshotId], imageKeys).catch((err) => {
+  const imageKeys = new Set<string>();
+  for (const key of keysToDelete) {
+    if (!isBlobKeyProtectedBySurvivingSnapshots(key)) {
+      imageKeys.add(key);
+    }
+  }
+  if (!isBlobKeyProtectedBySurvivingSnapshots(expectedSnapshotId)) {
+    imageKeys.add(expectedSnapshotId);
+  }
+  await deleteOrphanedEntries([expectedSnapshotId], Array.from(imageKeys)).catch((err) => {
     reportSwallowed('InfiniteZoom.undoCleanupDeletedSnapshot', err, { id: expectedSnapshotId });
   });
 }
@@ -935,7 +1082,14 @@ async function restoreUndoIdbEntries(
 export async function restoreUndoSubdivisionPersistence(
   params: RestoreUndoSubdivisionPersistenceParams
 ): Promise<RestoreUndoSubdivisionPersistenceResult | null> {
-  const { snap, isFreeColorMode, activeSave, liveActiveSave, isStale } = params;
+  const {
+    snap,
+    isFreeColorMode,
+    activeSave,
+    liveActiveSave,
+    isStale,
+    shouldReconcileResetProgress,
+  } = params;
   if (isStale()) return null;
   const expectedSnapshotId = snap.snapshotId;
   const initialStoredSnap = findStoredSnapshotById(expectedSnapshotId);
@@ -947,16 +1101,21 @@ export async function restoreUndoSubdivisionPersistence(
     liveActiveSave
   );
 
-  const isPromotedSample =
+  const isDedicatedPromotion =
     !snap.previousBlob &&
     Boolean(
-      snap.promotedFromSample ??
-        (snap.previousMeta.sampleAssetPath || snap.previousMeta.sourceRef?.kind !== 'blob')
+      snap.addedRootBlobKey ||
+        snap.promotedFromSample ||
+        needsDedicatedRootBlobPromotion(snap.previousMeta, expectedSnapshotId)
     );
+  const candidateRootDeleteKey = snap.addedRootBlobKey ?? expectedSnapshotId;
+  const shouldDeleteAddedRoot =
+    isDedicatedPromotion &&
+    !isBlobKeySharedByOtherSnapshots(candidateRootDeleteKey, expectedSnapshotId);
   const keysToDelete =
-    isPromotedSample && !isRootBlobSharedBySiblingSnapshots(expectedSnapshotId)
-      ? [...snap.addedLayerBlobKeys, expectedSnapshotId]
-      : snap.addedLayerBlobKeys;
+    shouldDeleteAddedRoot && !snap.addedLayerBlobKeys.includes(candidateRootDeleteKey)
+      ? [...snap.addedLayerBlobKeys, candidateRootDeleteKey]
+      : [...snap.addedLayerBlobKeys];
 
   // Restore previous root blob and puzzle BEFORE deleting orphaned/added layer blobs so a
   // concurrent snapshot switch or IDB write failure can never destroy referenced blobs or commit
@@ -1023,8 +1182,11 @@ export async function restoreUndoSubdivisionPersistence(
     nextResetEpoch
   );
 
+  const reconcileResetProgress =
+    resetProgressMidUndo && Boolean(shouldReconcileResetProgress?.());
+
   // Only skip overwriting active session state & live UI when another puzzle/op superseded us.
-  if (isStale()) {
+  if (isStale() && !reconcileResetProgress) {
     return null;
   }
 
@@ -1047,5 +1209,6 @@ export async function restoreUndoSubdivisionPersistence(
     syncedSave,
     restoredViewport,
     nextResetEpoch,
+    ...(reconcileResetProgress ? { resetProgressMidUndo: true } : {}),
   };
 }

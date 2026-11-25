@@ -10318,6 +10318,7 @@ async function testClusterK_Tier5AdversarialHardening({
   settingsStorageMod,
   idbMod,
   keysMod,
+  codecMod,
   bridgeMod,
   paletteDockMod,
   viewportHooksMod,
@@ -14808,6 +14809,1111 @@ async function testClusterK_Tier5AdversarialHardening({
       }
     );
   }
+
+  // K30 (R4-B1): Real React 19 createRoot useInfiniteZoomController — same-snapshot Reset Progress mid-Undo
+  // reconciles live UI to origPuzzle with cleared progress (zero split-brain) AND keeps overlapping Zoom Out #2
+  // blocked on that snapshot (even after Reset Progress or A->B->A switch) while cross-puzzle Puzzle B stays unblocked
+  {
+    const mkK30Puzzle = () => ({
+      width: 16,
+      height: 16,
+      palette: [{ id: 1, hex: '#FF0000', isLight: false, argb: 0xffff0000, r: 255, g: 0, b: 0 }],
+      regions: [
+        {
+          id: 1,
+          colorId: 1,
+          centroidX: 8,
+          centroidY: 8,
+          area: 256,
+          minX: 0,
+          maxX: 15,
+          minY: 0,
+          maxY: 15,
+          maxRadius: 8,
+          pixels: Int32Array.from({ length: 256 }, (_, i) => i),
+        },
+      ],
+      regionMap: new Int32Array(256).fill(1),
+      borderMap: new Uint8Array(256),
+      isFreeColor: false,
+    });
+
+    let deferPuzzleWrites = false;
+    const ls = createMemoryLocalStorage();
+    const { mockIndexedDb, stores, pendingWrites } = createMockIndexedDb({
+      shouldDeferStore: (names) => deferPuzzleWrites && names.includes('puzzles'),
+    });
+    let urlCounter = 0;
+    const mockUrlApi = {
+      createObjectURL: () => `blob:k30-${++urlCounter}`,
+      revokeObjectURL: () => {},
+    };
+    const MockImage = makeMockImageClass(16, 16);
+    const { fakeDoc, container } = createMinimalDomContainer();
+    const mockWin = {
+      addEventListener() {},
+      removeEventListener() {},
+      devicePixelRatio: 1,
+      HTMLIFrameElement: class HTMLIFrameElement {},
+    };
+    fakeDoc.defaultView = mockWin;
+
+    const origPuterGenK30 = nanoMod.PuterNanoBananaProvider.prototype.generate;
+    await withGlobalOverrides(
+      {
+        IS_REACT_ACT_ENVIRONMENT: true,
+        localStorage: ls,
+        indexedDB: mockIndexedDb,
+        URL: mockUrlApi,
+        document: fakeDoc,
+        window: mockWin,
+        ImageData: FakeImageData,
+        Image: MockImage,
+        Worker: undefined,
+      },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const origPuzA = mkK30Puzzle();
+          const origPuzB = mkK30Puzzle();
+          const saveA = {
+            id: 'snap-k30-a',
+            title: 'Puzzle K30 A',
+            lastOpened: 2000,
+            filledCount: 1,
+            totalCount: 1,
+            filledRegionIds: [1],
+            paintedRegionColors: { 1: 1 },
+            resetEpoch: 0,
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+            palette: origPuzA.palette,
+            sourceRef: { kind: 'blob', uri: 'snap-k30-a' },
+            previewDataUrl: pngDataUrl,
+          };
+          const saveB = {
+            ...saveA,
+            id: 'snap-k30-b',
+            title: 'Puzzle K30 B',
+            filledCount: 0,
+            filledRegionIds: [],
+            paintedRegionColors: {},
+            sourceRef: { kind: 'blob', uri: 'snap-k30-b' },
+          };
+          storageMod.StorageService.saveSnapshots([saveA, saveB]);
+          stores.images.set('snap-k30-a', pngBlob);
+          stores.images.set('snap-k30-b', pngBlob);
+          stores.puzzles.set('snap-k30-a', origPuzA);
+          stores.puzzles.set('snap-k30-b', origPuzB);
+
+          let puterCalls = 0;
+          nanoMod.PuterNanoBananaProvider.prototype.generate = async () => {
+            puterCalls++;
+            return {
+              blob: pngBlob,
+              dataUrl: pngDataUrl,
+              mimeType: 'image/png',
+              providerUsed: 'PUTER',
+              modelUsed: 'gemini-nano-banana-2.1',
+            };
+          };
+
+          let latestApi = null;
+          let latestPuzzle = origPuzA;
+          let latestFilled = new Set([1]);
+          let latestPainted = new Map([[1, 1]]);
+          let latestUndoStack = [{ regionId: 1, prevFilled: false }];
+          let latestRedoStack = [{ regionId: 1, prevFilled: true }];
+          const activeBlobUrlRef = { current: 'blob:k30-orig-a' };
+          const visibleColorIdsRef = { current: new Set([1]) };
+          const regionByIdRef = { current: new Map([[1, origPuzA.regions[0]]]) };
+          const handleLoadSnapshotRef = { current: async () => {} };
+          const liveCoopRef = {
+            current: {
+              activeSnapshotId: 'snap-k30-a',
+              activeSave: saveA,
+              puzzle: origPuzA,
+              filledRegionIds: new Set([1]),
+              paintedRegionColors: new Map([[1, 1]]),
+              activeColorId: 1,
+            },
+          };
+          const settingsObj = {
+            hapticsEnabled: false,
+            infiniteZoomProvider: 'PUTER',
+            nanoBananaModel: 'gemini-nano-banana-2.1',
+            nanoBananaResolution: '1K',
+            generatorConfig: {
+              colorCount: 4,
+              minRegionArea: 2,
+              smoothingIterations: 1,
+              usePerceptualDistance: true,
+              isFreeColor: false,
+              maxDimension: 64,
+            },
+          };
+          const viewportRef = { current: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 } };
+          const undoStackRef = { current: latestUndoStack };
+          const redoStackRef = { current: latestRedoStack };
+
+          let setHarnessState = null;
+          function K30Harness() {
+            const [activeId, setActiveId] = React.useState('snap-k30-a');
+            const [puz, setPuz] = React.useState(origPuzA);
+            const [srcImg, setSrcImg] = React.useState(() => new MockImage());
+            const [snaps, setSnaps] = React.useState([saveA, saveB]);
+            const [filled, setFilled] = React.useState(() => new Set([1]));
+            const [painted, setPainted] = React.useState(() => new Map([[1, 1]]));
+            latestPuzzle = puz;
+            latestFilled = filled;
+            latestPainted = painted;
+            setHarnessState = { setActiveId, setPuz, setSrcImg, setSnaps, setFilled, setPainted };
+            const activeSaveNow = snaps.find((s) => s.id === activeId);
+            const api = controllerMod.useInfiniteZoomController({
+              puzzle: puz,
+              sourceImage: srcImg,
+              snapshots: snaps,
+              activeSave: activeSaveNow,
+              activeSnapshotId: activeId,
+              activeTitle: activeSaveNow?.title ?? 'Puzzle',
+              isLoading: false,
+              isReplaying: false,
+              isReplayPlaying: false,
+              exitReplay: () => {},
+              isFreeColorMode: false,
+              coopRoomCode: null,
+              filledRegionIds: filled,
+              paintedRegionColors: painted,
+              activeColorId: 1,
+              settings: settingsObj,
+              visibleColorIdsRef,
+              regionByIdRef,
+              liveCoopRef,
+              activeBlobUrlRef,
+              viewportRef,
+              undoStackRef,
+              redoStackRef,
+              handleLoadSnapshotRef,
+              setPuzzle: setPuz,
+              setSourceImage: setSrcImg,
+              setFilledRegionIds: setFilled,
+              setPaintedRegionColors: setPainted,
+              setActiveColorId: () => {},
+              setHintRegionId: () => {},
+              setSnapshots: setSnaps,
+              setIsLoading: () => {},
+              setLoadingProgress: () => {},
+              setLoadingStatus: () => {},
+              setLoadingPayload: () => {},
+              markTutorialActionTried: () => {},
+              triggerFeatureOffer: () => {},
+              syncUndoStack: (u) => {
+                latestUndoStack = typeof u === 'function' ? u(latestUndoStack) : u;
+                undoStackRef.current = latestUndoStack;
+              },
+              syncRedoStack: (r) => {
+                latestRedoStack = typeof r === 'function' ? r(latestRedoStack) : r;
+                redoStackRef.current = latestRedoStack;
+              },
+              applyViewport: () => {},
+            });
+            latestApi = api;
+            return null;
+          }
+
+          const root = createRoot(container);
+          try {
+            await React.act(async () => {
+              root.render(React.createElement(K30Harness));
+            });
+
+            // 1. Zoom Out #1 on Puzzle A
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Extend A #1'
+              );
+            });
+            assert.equal(puterCalls, 1);
+            assert.equal(latestPuzzle.width, 22);
+            const wrappedPuzzleA = latestPuzzle;
+            const layer1Key = wrappedPuzzleA.nestedLayers?.[0]?.imageBlobKey;
+            assert.ok(layer1Key, 'Zoom Out #1 must create layer1Key');
+
+            // 2. Start Undo #1 on Puzzle A with deferred IDB puzzle write
+            deferPuzzleWrites = true;
+            const undoPromiseA = latestApi.handleUndoSubdivision();
+            for (let i = 0; i < 40 && pendingWrites.length === 0; i++) {
+              await new Promise((r) => setTimeout(r, 2));
+            }
+            assert.equal(pendingWrites.length, 1, 'Undo #1 IDB puzzle write must be pending');
+            const releaseUndoA = pendingWrites.shift();
+
+            // 3. Simulate same-snapshot Reset Progress mid-Undo (calls handleBeforeSnapshotResetOrSwitch & bumps resetEpoch to 1)
+            await React.act(async () => {
+              latestApi.handleBeforeSnapshotResetOrSwitch();
+              const updatedAfterReset = storageMod.StorageService.updateSnapshotProgress(
+                'snap-k30-a',
+                0,
+                latestPuzzle.regions.length + 1,
+                [],
+                1,
+                0,
+                0,
+                pngDataUrl,
+                {},
+                latestPuzzle.palette,
+                false,
+                undefined,
+                1
+              );
+              storageMod.StorageService.saveActiveState({
+                activeSnapshotId: 'snap-k30-a',
+                activeColorId: 1,
+                filledRegionIds: [],
+                paintedRegionColors: {},
+                isFreeColorMode: false,
+                resetEpoch: 1,
+                zoomScale: 1,
+                panOffsetX: 0,
+                panOffsetY: 0,
+              });
+              setHarnessState.setFilled(new Set());
+              setHarnessState.setPainted(new Map());
+              setHarnessState.setSnaps(updatedAfterReset);
+              latestUndoStack = [];
+              latestRedoStack = [];
+              undoStackRef.current = [];
+              redoStackRef.current = [];
+              liveCoopRef.current = {
+                ...liveCoopRef.current,
+                activeSave: updatedAfterReset.find((s) => s.id === 'snap-k30-a'),
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+              };
+            });
+            assert.equal(latestApi.undoSubdivisionState, null, 'Reset Progress must clear Undo toast immediately');
+
+            // 4. Attempt selection mode & Zoom Out #2 on Puzzle A while Undo #1 is STILL in flight -> MUST be blocked!
+            await React.act(async () => {
+              latestApi.handleEnterRegionSelectionMode('Blocked after Reset');
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Blocked ZO2 after Reset'
+              );
+            });
+            assert.equal(latestApi.isRegionSelectionMode, false, 'Selection mode must stay blocked on Puzzle A mid-Undo after Reset Progress');
+            assert.equal(puterCalls, 1, 'Zoom Out #2 on Puzzle A must stay blocked mid-Undo after Reset Progress');
+
+            // 5. Switch to Puzzle B while Puzzle A Undo #1 is STILL in flight -> Puzzle B MUST remain unblocked!
+            deferPuzzleWrites = false;
+            await React.act(async () => {
+              latestApi.handleBeforeSnapshotResetOrSwitch();
+              liveCoopRef.current = {
+                activeSnapshotId: 'snap-k30-b',
+                activeSave: saveB,
+                puzzle: origPuzB,
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                activeColorId: 1,
+              };
+              activeBlobUrlRef.current = 'blob:k30-orig-b';
+              setHarnessState.setActiveId('snap-k30-b');
+              setHarnessState.setPuz(origPuzB);
+            });
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Allowed Extend B'
+              );
+            });
+            assert.equal(puterCalls, 2, 'Cross-puzzle Puzzle B must NOT be blocked by Puzzle A in-flight Undo');
+            assert.equal(latestApi.undoSubdivisionState?.snapshotId, 'snap-k30-b');
+
+            // 6. Switch BACK to Puzzle A (A -> B -> A) while Puzzle A Undo #1 is STILL in flight -> MUST stay blocked, then flush Undo #1 -> reconciles UI cleanly!
+            await React.act(async () => {
+              latestApi.handleBeforeSnapshotResetOrSwitch();
+              const snapANow = storageMod.StorageService.loadSnapshots().find((s) => s.id === 'snap-k30-a');
+              liveCoopRef.current = {
+                activeSnapshotId: 'snap-k30-a',
+                activeSave: snapANow,
+                puzzle: wrappedPuzzleA,
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                activeColorId: 1,
+              };
+              activeBlobUrlRef.current = 'blob:k30-wrapped-a';
+              setHarnessState.setActiveId('snap-k30-a');
+              setHarnessState.setPuz(wrappedPuzzleA);
+            });
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Still Blocked A after A->B->A'
+              );
+            });
+            assert.equal(puterCalls, 2, 'Puzzle A must remain blocked after A->B->A switch while Undo #1 is still in flight');
+
+            // 7. Flush Undo #1 on Puzzle A -> reconciles live React UI back to 16x16 origPuzzle with cleared progress!
+            await React.act(async () => {
+              releaseUndoA();
+              await undoPromiseA;
+            });
+            assert.equal(latestPuzzle.width, 16, 'Same-snapshot Reset Progress mid-Undo must reconcile live React UI puzzle width to 16');
+            assert.equal(latestPuzzle.nestedLayers?.length ?? 0, 0, 'Reconciled React UI must NOT retain deleted layer1Key');
+            assert.equal(stores.puzzles.get('snap-k30-a')?.width, 16, 'IDB puzzle width must match live React UI (16)');
+            assert.equal(stores.images.has(layer1Key), false, 'IDB must have deleted layer1Key');
+            assert.equal(latestFilled.size, 0, 'Reconciled React UI must preserve cleared filledRegionIds');
+            assert.equal(latestPainted.size, 0, 'Reconciled React UI must preserve cleared paintedRegionColors');
+            assert.equal(latestUndoStack.length, 0, 'Reconciled React UI must preserve cleared undoStack');
+            assert.equal(latestRedoStack.length, 0, 'Reconciled React UI must preserve cleared redoStack');
+            const storedSnapA = storageMod.StorageService.loadSnapshots().find((s) => s.id === 'snap-k30-a');
+            assert.equal(storedSnapA?.filledCount, 0);
+            assert.equal(storedSnapA?.resetEpoch, 1);
+            assert.equal(storedSnapA?.totalCount, 1);
+            assert.deepEqual(storageMod.StorageService.loadActiveState()?.filledRegionIds, []);
+            assert.equal(storageMod.StorageService.loadActiveState()?.resetEpoch, 1);
+
+            // 8. Now that Undo #1 settled, Zoom Out #2 on Puzzle A succeeds cleanly with zero missing layer blobs!
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Allowed Extend A #2'
+              );
+            });
+            assert.equal(puterCalls, 3, 'Zoom Out #2 on Puzzle A must succeed once Undo #1 settles');
+            assert.equal(latestPuzzle.nestedLayers?.length, 1);
+            const layer2Key = latestPuzzle.nestedLayers[0].imageBlobKey;
+            assert.equal(stores.images.has(layer2Key), true, 'Zoom Out #2 nested layer blob must exist in IDB');
+          } finally {
+            await React.act(async () => {
+              root.unmount();
+            });
+          }
+        } finally {
+          nanoMod.PuterNanoBananaProvider.prototype.generate = origPuterGenK30;
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+  }
+
+  // K31 (R4-B2): Shared & external sourceRef.uri handling across Zoom In, Zoom Out, Undo, and abort rollback
+  {
+    const mkK31Puzzle = () => ({
+      width: 16,
+      height: 16,
+      palette: [{ id: 1, hex: '#3366FF', isLight: false, argb: 0xff3366ff, r: 51, g: 102, b: 255 }],
+      regions: [
+        {
+          id: 1,
+          colorId: 1,
+          centroidX: 8,
+          centroidY: 8,
+          area: 256,
+          minX: 0,
+          maxX: 15,
+          minY: 0,
+          maxY: 15,
+          maxRadius: 8,
+          pixels: Int32Array.from({ length: 256 }, (_, i) => i),
+        },
+      ],
+      regionMap: new Int32Array(256).fill(1),
+      borderMap: new Uint8Array(256),
+      isFreeColor: false,
+    });
+    const makeDecodedRgba = (w, h, r, g, b) => {
+      const rgba = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0; i < w * h; i++) {
+        rgba[i * 4] = r;
+        rgba[i * 4 + 1] = g;
+        rgba[i * 4 + 2] = b;
+        rgba[i * 4 + 3] = 255;
+      }
+      return rgba;
+    };
+    const k31Settings = {
+      hapticsEnabled: false,
+      infiniteZoomProvider: 'PUTER',
+      nanoBananaModel: 'gemini-nano-banana-2.1',
+      nanoBananaResolution: '1K',
+      generatorConfig: {
+        colorCount: 4,
+        minRegionArea: 2,
+        smoothingIterations: 1,
+        usePerceptualDistance: true,
+        isFreeColor: false,
+        maxDimension: 64,
+      },
+    };
+
+    // Case 1: Zoom In on external sourceRef.uri !== snapId materializes images[childId] so reload succeeds,
+    // keeps images[parentId] untouched, and Undo deletes images[childId] while restoring sourceRef -> parentId
+    {
+      const ls = createMemoryLocalStorage();
+      const { mockIndexedDb, stores } = createMockIndexedDb();
+      let urlSeq = 0;
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          URL: { createObjectURL: () => `blob:k31-c1-${++urlSeq}`, revokeObjectURL: () => {} },
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          Worker: undefined,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const parentId = 'snap-k31-c1-parent';
+            const childId = 'snap-k31-c1-child';
+            const basePuzzle = mkK31Puzzle();
+            const parentBlob = new Blob([new Uint8Array([11, 11])], { type: 'image/png' });
+            const childSnap = {
+              id: childId,
+              title: 'External Ref Child',
+              lastOpened: 2000,
+              filledCount: 0,
+              totalCount: 1,
+              filledRegionIds: [],
+              zoomScale: 1,
+              panOffsetX: 0,
+              panOffsetY: 0,
+              palette: basePuzzle.palette,
+              sourceRef: { kind: 'blob', uri: parentId },
+              previewDataUrl: pngDataUrl,
+            };
+            storageMod.StorageService.saveSnapshots([childSnap]);
+            stores.images.set(parentId, parentBlob);
+            stores.puzzles.set(childId, basePuzzle);
+
+            const prepared = await pipelineMod.prepareZoomInOperation({
+              basePuzzle,
+              baseImage: new MockImage(),
+              targetLayerId: null,
+              targetGrid: basePuzzle,
+              selectedCopy: new Set([1]),
+              metrics: {
+                regionCount: 1,
+                totalArea: 256,
+                areaFraction: 1,
+                bbox: { minX: 0, minY: 0, maxX: 15, maxY: 15, width: 16, height: 16 },
+                mode: 'in-place',
+                isFilledSelection: false,
+              },
+              promptText: 'Detail',
+              liveLayerImages: new Map(),
+              isAborted: () => false,
+            });
+            assert.ok(prepared);
+
+            const commitRes = await pipelineMod.runZoomInCommitPipeline({
+              snapId: childId,
+              existingSnap: childSnap,
+              basePuzzle,
+              baseImage: new MockImage(),
+              targetLayerId: null,
+              targetGrid: basePuzzle,
+              selectedCopy: new Set([1]),
+              metrics: {
+                regionCount: 1,
+                totalArea: 256,
+                areaFraction: 1,
+                bbox: { minX: 0, minY: 0, maxX: 15, maxY: 15, width: 16, height: 16 },
+                mode: 'in-place',
+                isFilledSelection: false,
+              },
+              cropMask: prepared.cropMask,
+              originalCropRgba: prepared.originalCropRgba,
+              templateMeta: prepared.maskInTemplateRect,
+              sanitizedPrompt: prepared.sanitizedPrompt,
+              decoded: {
+                rgba: makeDecodedRgba(prepared.width, prepared.height, 40, 200, 120),
+                width: prepared.width,
+                height: prepared.height,
+                mimeType: 'image/png',
+              },
+              providerUsed: 'PUTER',
+              modelUsed: 'gemini-nano-banana-2.1',
+              isFree: false,
+              isAborted: () => false,
+              readLiveState: () => ({
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                activeColorId: 1,
+                activeSave: childSnap,
+                undoStack: [],
+                redoStack: [],
+                liveLayerImages: new Map(),
+                viewport: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+                activeBlobUrl: 'blob:k31-c1-orig',
+                settings: k31Settings,
+                visibleColorIds: new Set([1]),
+              }),
+            });
+            assert.ok(commitRes, 'Zoom In on external sourceRef.uri snapshot must commit');
+            const updatedChild = commitRes.updatedSnapshots.find((s) => s.id === childId);
+            assert.deepEqual(updatedChild?.sourceRef, { kind: 'blob', uri: childId });
+            assert.notEqual(
+              await storageMod.StorageService.loadImageBlob(childId),
+              null,
+              'Zoom In on external sourceRef.uri must materialize images[childId] so reload succeeds'
+            );
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+              [11, 11],
+              'Parent root blob must stay untouched'
+            );
+
+            // Undo must clean up materialized images[childId] and restore sourceRef -> parentId
+            const undoRes = await persistenceMod.restoreUndoSubdivisionPersistence({
+              snap: commitRes.preOpUndo,
+              isFreeColorMode: false,
+              activeSave: updatedChild,
+              liveActiveSave: updatedChild,
+              isStale: () => false,
+            });
+            assert.ok(undoRes);
+            assert.equal(stores.images.has(childId), false, 'Undo of Zoom In on external ref must delete materialized images[childId]');
+            assert.equal(stores.images.has(commitRes.imageBlobKey), false);
+            assert.deepEqual(
+              undoRes.updatedSnapshots.find((s) => s.id === childId)?.sourceRef,
+              { kind: 'blob', uri: parentId }
+            );
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+              [11, 11]
+            );
+          } finally {
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
+    }
+
+    // Case 2: Zoom Out on sibling-shared images[parentId] writes outerBlob to a dedicated valid root blob key,
+    // leaves images[parentId] ([11, 11]) untouched for surviving sibling, and Undo deletes dedicated root key cleanly
+    {
+      const ls = createMemoryLocalStorage();
+      const { mockIndexedDb, stores } = createMockIndexedDb();
+      let urlSeq = 0;
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          URL: { createObjectURL: () => `blob:k31-c2-${++urlSeq}`, revokeObjectURL: () => {} },
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          Worker: undefined,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const parentId = 'snap-k31-c2-shared-parent';
+            const siblingId = 'snap-k31-c2-shared-sibling';
+            const basePuzzle = mkK31Puzzle();
+            const sharedOriginalBlob = new Blob([new Uint8Array([11, 11])], { type: 'image/png' });
+            const parentSnap = {
+              id: parentId,
+              title: 'Shared Parent',
+              lastOpened: 2000,
+              filledCount: 0,
+              totalCount: 1,
+              filledRegionIds: [],
+              zoomScale: 1,
+              panOffsetX: 0,
+              panOffsetY: 0,
+              palette: basePuzzle.palette,
+              sourceRef: { kind: 'blob', uri: parentId },
+              previewDataUrl: pngDataUrl,
+            };
+            const siblingSnap = {
+              ...parentSnap,
+              id: siblingId,
+              title: 'Surviving Sibling',
+              sourceRef: { kind: 'blob', uri: parentId },
+            };
+            storageMod.StorageService.saveSnapshots([parentSnap, siblingSnap]);
+            stores.images.set(parentId, sharedOriginalBlob);
+            stores.puzzles.set(parentId, basePuzzle);
+
+            const sides = { top: false, right: true, bottom: false, left: false };
+            const prepared = await pipelineMod.prepareZoomOutOperation({
+              basePuzzle,
+              baseImage: new MockImage(),
+              sides,
+              promptText: 'Extend shared',
+              isAborted: () => false,
+            });
+            assert.ok(prepared);
+
+            const commitRes = await pipelineMod.runZoomOutCommitPipeline({
+              snapId: parentId,
+              existingSnap: parentSnap,
+              basePuzzle,
+              baseImage: new MockImage(),
+              sides,
+              check: prepared.check,
+              originalInnerRgba: prepared.originalInnerRgba,
+              sanitizedPrompt: prepared.sanitizedPrompt,
+              decoded: {
+                rgba: makeDecodedRgba(prepared.width, prepared.height, 220, 80, 40),
+                width: prepared.width,
+                height: prepared.height,
+                mimeType: 'image/png',
+              },
+              providerUsed: 'PUTER',
+              modelUsed: 'gemini-nano-banana-2.1',
+              isFree: false,
+              isAborted: () => false,
+              readLiveState: () => ({
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                activeColorId: 1,
+                activeSave: parentSnap,
+                undoStack: [],
+                redoStack: [],
+                liveLayerImages: new Map(),
+                viewport: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+                activeBlobUrl: 'blob:k31-c2-orig',
+                settings: k31Settings,
+                visibleColorIds: new Set([1]),
+              }),
+            });
+            assert.ok(commitRes);
+
+            const updatedParent = commitRes.updatedSnapshots.find((s) => s.id === parentId);
+            const dedicatedKey = updatedParent?.sourceRef?.uri;
+            assert.equal(updatedParent?.sourceRef?.kind, 'blob');
+            assert.ok(
+              dedicatedKey && dedicatedKey !== parentId,
+              'Zoom Out on sibling-shared snapshot must allocate a dedicated root blob key'
+            );
+            assert.equal(dedicatedKey.startsWith('layer_'), false);
+            assert.equal(dedicatedKey.startsWith('preview_'), false);
+            assert.doesNotThrow(
+              () => codecMod.assertValidSourceRef(updatedParent.sourceRef),
+              'Dedicated root blob sourceRef must pass CapyCodec validation'
+            );
+            assert.equal(stores.images.has(dedicatedKey), true, 'Dedicated outer root blob must be stored in IDB');
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+              [11, 11],
+              'Sibling-shared images[parentId] MUST remain [11, 11] untouched for surviving sibling'
+            );
+
+            // Undo must delete dedicatedKey cleanly and restore parentSnap.sourceRef -> parentId while preserving [11, 11]
+            const undoRes = await persistenceMod.restoreUndoSubdivisionPersistence({
+              snap: commitRes.preOpUndo,
+              isFreeColorMode: false,
+              activeSave: updatedParent,
+              liveActiveSave: updatedParent,
+              isStale: () => false,
+            });
+            assert.ok(undoRes);
+            assert.equal(stores.images.has(dedicatedKey), false, 'Undo must delete dedicated root blob key cleanly');
+            assert.equal(stores.images.has(commitRes.previousRootImageBlobKey), false);
+            assert.deepEqual(
+              undoRes.updatedSnapshots.find((s) => s.id === parentId)?.sourceRef,
+              { kind: 'blob', uri: parentId },
+              'Undo must restore parentSnap sourceRef back to parentId'
+            );
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+              [11, 11],
+              'Sibling-shared images[parentId] must stay [11, 11] after Undo'
+            );
+          } finally {
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
+    }
+
+    // Case 3: Zoom Out + Undo AND abort rollback on external sourceRef.uri !== snapId leave ZERO orphaned images[childId]
+    {
+      const ls = createMemoryLocalStorage();
+      const { mockIndexedDb, stores } = createMockIndexedDb();
+      let urlSeq = 0;
+      const MockImage = makeMockImageClass(16, 16);
+      await withGlobalOverrides(
+        {
+          localStorage: ls,
+          indexedDB: mockIndexedDb,
+          URL: { createObjectURL: () => `blob:k31-c3-${++urlSeq}`, revokeObjectURL: () => {} },
+          document: createFakeDocument(),
+          ImageData: FakeImageData,
+          Image: MockImage,
+          Worker: undefined,
+          window: {},
+        },
+        async () => {
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+          try {
+            const parentId = 'snap-k31-c3-parent';
+            const childId = 'snap-k31-c3-child';
+            const basePuzzle = mkK31Puzzle();
+            const parentBlob = new Blob([new Uint8Array([11, 11])], { type: 'image/png' });
+            const childSnap = {
+              id: childId,
+              title: 'External Ref Child ZO',
+              lastOpened: 2000,
+              filledCount: 0,
+              totalCount: 1,
+              filledRegionIds: [],
+              zoomScale: 1,
+              panOffsetX: 0,
+              panOffsetY: 0,
+              palette: basePuzzle.palette,
+              sourceRef: { kind: 'blob', uri: parentId },
+              previewDataUrl: pngDataUrl,
+            };
+            storageMod.StorageService.saveSnapshots([childSnap]);
+            stores.images.set(parentId, parentBlob);
+            stores.puzzles.set(childId, basePuzzle);
+
+            const sides = { top: false, right: true, bottom: false, left: false };
+            const prepared = await pipelineMod.prepareZoomOutOperation({
+              basePuzzle,
+              baseImage: new MockImage(),
+              sides,
+              promptText: 'Extend external child',
+              isAborted: () => false,
+            });
+            assert.ok(prepared);
+
+            const commitRes = await pipelineMod.runZoomOutCommitPipeline({
+              snapId: childId,
+              existingSnap: childSnap,
+              basePuzzle,
+              baseImage: new MockImage(),
+              sides,
+              check: prepared.check,
+              originalInnerRgba: prepared.originalInnerRgba,
+              sanitizedPrompt: prepared.sanitizedPrompt,
+              decoded: {
+                rgba: makeDecodedRgba(prepared.width, prepared.height, 90, 90, 220),
+                width: prepared.width,
+                height: prepared.height,
+                mimeType: 'image/png',
+              },
+              providerUsed: 'PUTER',
+              modelUsed: 'gemini-nano-banana-2.1',
+              isFree: false,
+              isAborted: () => false,
+              readLiveState: () => ({
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                activeColorId: 1,
+                activeSave: childSnap,
+                undoStack: [],
+                redoStack: [],
+                liveLayerImages: new Map(),
+                viewport: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 },
+                activeBlobUrl: 'blob:k31-c3-orig',
+                settings: k31Settings,
+                visibleColorIds: new Set([1]),
+              }),
+            });
+            assert.ok(commitRes);
+            assert.equal(stores.images.has(childId), true);
+
+            const undoRes = await persistenceMod.restoreUndoSubdivisionPersistence({
+              snap: commitRes.preOpUndo,
+              isFreeColorMode: false,
+              activeSave: commitRes.syncedSave,
+              liveActiveSave: commitRes.syncedSave,
+              isStale: () => false,
+            });
+            assert.ok(undoRes);
+            assert.equal(
+              stores.images.has(childId),
+              false,
+              'Zoom Out + Undo on external sourceRef.uri must leave ZERO orphaned images[childId] blob'
+            );
+            assert.equal(stores.images.has(commitRes.previousRootImageBlobKey), false);
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+              [11, 11],
+              'Parent blob must stay intact after child Zoom Out Undo'
+            );
+
+            // Also verify abort rollback cleans up newly created images[childId] without touching images[parentId]
+            let abortChecks = 0;
+            const abortedOk = await persistenceMod.persistZoomOutBlobsAndPuzzle({
+              snapId: childId,
+              basePuzzle,
+              nextPuzzle: commitRes.nextPuzzle,
+              previousRootImageBlobKey: 'layer_k31_c3_abort_center',
+              previousRootLayerBlob: pngBlob,
+              outerBlob: new Blob([new Uint8Array([99, 99])], { type: 'image/png' }),
+              previousRootBlob: null,
+              promotedFromSample: true,
+              rootImageBlobKey: childId,
+              addedRootBlobKey: childId,
+              outerObjUrl: 'blob:k31-c3-abort-outer',
+              prevRootObjUrl: 'blob:k31-c3-abort-prev',
+              isAborted: () => ++abortChecks >= 2,
+            });
+            assert.equal(abortedOk, false);
+            assert.equal(stores.images.has(childId), false, 'Abort rollback must delete newly created images[childId]');
+            assert.equal(stores.images.has('layer_k31_c3_abort_center'), false);
+            assert.deepEqual(
+              Array.from(new Uint8Array(await stores.images.get(parentId).arrayBuffer())),
+              [11, 11]
+            );
+          } finally {
+            idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+            idbMod.clearAllPreviewCaches();
+          }
+        }
+      );
+    }
+  }
+
+  // K32 (R4-B3): Real React 19 createRoot useInfiniteZoomController surfaces actionable error feedback
+  // when handleUndoSubdivision rejects with IDB QuotaExceededError while keeping pre-Undo puzzle intact
+  {
+    let failPuzzlesWrite = false;
+    const quotaErr = new Error('QuotaExceededError while restoring puzzle');
+    quotaErr.name = 'QuotaExceededError';
+    const ls = createMemoryLocalStorage();
+    const { mockIndexedDb, stores } = createMockIndexedDb({
+      shouldFailWrite: (storeName) => (failPuzzlesWrite && storeName === 'puzzles' ? quotaErr : null),
+    });
+    let urlCounter = 0;
+    const mockUrlApi = {
+      createObjectURL: () => `blob:k32-${++urlCounter}`,
+      revokeObjectURL: () => {},
+    };
+    const MockImage = makeMockImageClass(16, 16);
+    const { fakeDoc, container } = createMinimalDomContainer();
+    const mockWin = {
+      addEventListener() {},
+      removeEventListener() {},
+      devicePixelRatio: 1,
+      HTMLIFrameElement: class HTMLIFrameElement {},
+    };
+    fakeDoc.defaultView = mockWin;
+
+    const origPuterGenK32 = nanoMod.PuterNanoBananaProvider.prototype.generate;
+    await withGlobalOverrides(
+      {
+        IS_REACT_ACT_ENVIRONMENT: true,
+        localStorage: ls,
+        indexedDB: mockIndexedDb,
+        URL: mockUrlApi,
+        document: fakeDoc,
+        window: mockWin,
+        ImageData: FakeImageData,
+        Image: MockImage,
+        Worker: undefined,
+      },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const origPuz = {
+            width: 16,
+            height: 16,
+            palette: [{ id: 1, hex: '#FF0000', isLight: false, argb: 0xffff0000, r: 255, g: 0, b: 0 }],
+            regions: [
+              {
+                id: 1,
+                colorId: 1,
+                centroidX: 8,
+                centroidY: 8,
+                area: 256,
+                minX: 0,
+                maxX: 15,
+                minY: 0,
+                maxY: 15,
+                maxRadius: 8,
+                pixels: Int32Array.from({ length: 256 }, (_, i) => i),
+              },
+            ],
+            regionMap: new Int32Array(256).fill(1),
+            borderMap: new Uint8Array(256),
+            isFreeColor: false,
+          };
+          const save = {
+            id: 'snap-k32',
+            title: 'Puzzle K32',
+            lastOpened: 2000,
+            filledCount: 0,
+            totalCount: 1,
+            filledRegionIds: [],
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+            palette: origPuz.palette,
+            sourceRef: { kind: 'blob', uri: 'snap-k32' },
+            previewDataUrl: pngDataUrl,
+          };
+          storageMod.StorageService.saveSnapshots([save]);
+          stores.images.set('snap-k32', pngBlob);
+          stores.puzzles.set('snap-k32', origPuz);
+
+          nanoMod.PuterNanoBananaProvider.prototype.generate = async () => ({
+            blob: pngBlob,
+            dataUrl: pngDataUrl,
+            mimeType: 'image/png',
+            providerUsed: 'PUTER',
+            modelUsed: 'gemini-nano-banana-2.1',
+          });
+
+          let latestApi = null;
+          let latestPuzzle = origPuz;
+          const activeBlobUrlRef = { current: 'blob:k32-orig' };
+          const visibleColorIdsRef = { current: new Set([1]) };
+          const regionByIdRef = { current: new Map([[1, origPuz.regions[0]]]) };
+          const handleLoadSnapshotRef = { current: async () => {} };
+          const liveCoopRef = {
+            current: {
+              activeSnapshotId: 'snap-k32',
+              activeSave: save,
+              puzzle: origPuz,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+              activeColorId: 1,
+            },
+          };
+          const settingsObj = {
+            hapticsEnabled: false,
+            infiniteZoomProvider: 'PUTER',
+            nanoBananaModel: 'gemini-nano-banana-2.1',
+            nanoBananaResolution: '1K',
+            generatorConfig: {
+              colorCount: 4,
+              minRegionArea: 2,
+              smoothingIterations: 1,
+              usePerceptualDistance: true,
+              isFreeColor: false,
+              maxDimension: 64,
+            },
+          };
+          const viewportRef = { current: { zoomScale: 1, panOffsetX: 0, panOffsetY: 0 } };
+          const undoStackRef = { current: [] };
+          const redoStackRef = { current: [] };
+
+          function K32Harness() {
+            const [puz, setPuz] = React.useState(origPuz);
+            const [srcImg, setSrcImg] = React.useState(() => new MockImage());
+            const [snaps, setSnaps] = React.useState([save]);
+            latestPuzzle = puz;
+            const api = controllerMod.useInfiniteZoomController({
+              puzzle: puz,
+              sourceImage: srcImg,
+              snapshots: snaps,
+              activeSave: snaps[0],
+              activeSnapshotId: 'snap-k32',
+              activeTitle: save.title,
+              isLoading: false,
+              isReplaying: false,
+              isReplayPlaying: false,
+              exitReplay: () => {},
+              isFreeColorMode: false,
+              coopRoomCode: null,
+              filledRegionIds: new Set(),
+              paintedRegionColors: new Map(),
+              activeColorId: 1,
+              settings: settingsObj,
+              visibleColorIdsRef,
+              regionByIdRef,
+              liveCoopRef,
+              activeBlobUrlRef,
+              viewportRef,
+              undoStackRef,
+              redoStackRef,
+              handleLoadSnapshotRef,
+              setPuzzle: setPuz,
+              setSourceImage: setSrcImg,
+              setFilledRegionIds: () => {},
+              setPaintedRegionColors: () => {},
+              setActiveColorId: () => {},
+              setHintRegionId: () => {},
+              setSnapshots: setSnaps,
+              setIsLoading: () => {},
+              setLoadingProgress: () => {},
+              setLoadingStatus: () => {},
+              setLoadingPayload: () => {},
+              markTutorialActionTried: () => {},
+              triggerFeatureOffer: () => {},
+              syncUndoStack: () => {},
+              syncRedoStack: () => {},
+              applyViewport: () => {},
+            });
+            latestApi = api;
+            return null;
+          }
+
+          const root = createRoot(container);
+          try {
+            await React.act(async () => {
+              root.render(React.createElement(K32Harness));
+            });
+
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Extend K32'
+              );
+            });
+            assert.equal(latestPuzzle.width, 22);
+            assert.equal(latestApi.undoSubdivisionState?.snapshotId, 'snap-k32');
+            assert.equal(latestApi.infiniteZoomError, null);
+
+            failPuzzlesWrite = true;
+            await React.act(async () => {
+              await latestApi.handleUndoSubdivision();
+            });
+
+            assert.equal(latestPuzzle.width, 22, 'Pre-Undo puzzle must remain intact after QuotaExceededError');
+            assert.equal(latestApi.undoSubdivisionState, null, 'Undo toast must clear after failed Undo');
+            assert.ok(
+              latestApi.infiniteZoomError &&
+                latestApi.infiniteZoomError.message.includes('Could not undo Infinite Zoom:') &&
+                latestApi.infiniteZoomError.message.includes('QuotaExceededError'),
+              `Expected actionable Undo error feedback, got: ${JSON.stringify(latestApi.infiniteZoomError)}`
+            );
+
+            // Recovery: subsequent operation is not wedged after Undo failure
+            failPuzzlesWrite = false;
+            await React.act(async () => {
+              await latestApi.handleConfirmExtendBorders(
+                { top: false, right: true, bottom: false, left: false },
+                'Extend K32 recovery'
+              );
+            });
+            assert.ok(latestPuzzle.width > 22, 'Subsequent Zoom Out must succeed after failed Undo cleans up');
+          } finally {
+            await React.act(async () => {
+              root.unmount();
+            });
+          }
+        } finally {
+          nanoMod.PuterNanoBananaProvider.prototype.generate = origPuterGenK32;
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+  }
 }
 
 // ===========================================================================
@@ -14962,6 +16068,7 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     settingsStorageMod,
     idbMod,
     keysMod,
+    codecMod,
     bridgeMod,
     paletteDockMod,
     viewportHooksMod,
