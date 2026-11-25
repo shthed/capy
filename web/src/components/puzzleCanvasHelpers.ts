@@ -2276,6 +2276,28 @@ export function buildLayerSilhouettePath(
     : null;
 }
 
+function hasValidSilhouetteFallbackInputs(
+  segments: Float32Array | null | undefined,
+  wx: number,
+  wy: number,
+  ww: number,
+  wh: number,
+  layerWidth: number,
+  layerHeight: number
+): segments is Float32Array {
+  return (
+    Boolean(segments && segments.length >= 4) &&
+    Number.isFinite(wx) &&
+    Number.isFinite(wy) &&
+    isPositiveFinite(ww) &&
+    isPositiveFinite(wh) &&
+    isPositiveFinite(layerWidth) &&
+    isPositiveFinite(layerHeight) &&
+    isPositiveFinite(ww / layerWidth) &&
+    isPositiveFinite(wh / layerHeight)
+  );
+}
+
 /**
  * Strokes a cached world-space silhouette hairline at constant screen-space width (~1.15px),
  * falling back to direct segment tracing when Path2D is unavailable.
@@ -2293,31 +2315,36 @@ export function strokeLayerSilhouette(
   effScale: number
 ): void {
   if (!isPositiveFinite(effScale)) return;
-  if (!path && (!segments || segments.length < 4)) return;
+  const canStrokeFallback =
+    !path && hasValidSilhouetteFallbackInputs(segments, wx, wy, ww, wh, layerWidth, layerHeight);
+  if (!path && !canStrokeFallback) return;
 
   ctx.save();
-  ctx.lineWidth = LAYER_SILHOUETTE_LINE_WIDTH_PX / effScale;
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = LAYER_SILHOUETTE_STROKE_STYLE;
-  if (path) {
-    ctx.stroke(path);
-  } else if (segments && isPositiveFinite(layerWidth) && isPositiveFinite(layerHeight)) {
-    ctx.beginPath();
-    if (
-      traceSilhouetteSegmentsToTarget(
-        ctx,
-        segments,
-        wx,
-        wy,
-        ww / layerWidth,
-        wh / layerHeight
-      )
-    ) {
-      ctx.stroke();
+  try {
+    ctx.lineWidth = LAYER_SILHOUETTE_LINE_WIDTH_PX / effScale;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = LAYER_SILHOUETTE_STROKE_STYLE;
+    if (path) {
+      ctx.stroke(path);
+    } else if (segments) {
+      ctx.beginPath();
+      if (
+        traceSilhouetteSegmentsToTarget(
+          ctx,
+          segments,
+          wx,
+          wy,
+          ww / layerWidth,
+          wh / layerHeight
+        )
+      ) {
+        ctx.stroke();
+      }
     }
+  } finally {
+    ctx.restore();
   }
-  ctx.restore();
 }
 
 /**

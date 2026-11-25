@@ -9476,6 +9476,122 @@ async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod
     assert.equal(strokeOp[3], 'round');
     assert.equal(strokeOp[4], 'rgba(51, 65, 85, 0.52)');
 
+    // Regression: invalid world bounds / dimensions on segment fallback must be a clean no-op before ctx.save()
+    const invalidFallbackCases = [
+      { label: 'wx=NaN', wx: Number.NaN, wy: 0, ww: 10, wh: 10, lw: 4, lh: 4, effScale: 2 },
+      { label: 'wy=Infinity', wx: 0, wy: Number.POSITIVE_INFINITY, ww: 10, wh: 10, lw: 4, lh: 4, effScale: 2 },
+      { label: 'ww=0', wx: 0, wy: 0, ww: 0, wh: 10, lw: 4, lh: 4, effScale: 2 },
+      { label: 'wh=-5', wx: 0, wy: 0, ww: 10, wh: -5, lw: 4, lh: 4, effScale: 2 },
+      { label: 'ww=NaN', wx: 0, wy: 0, ww: Number.NaN, wh: 10, lw: 4, lh: 4, effScale: 2 },
+      { label: 'wh=Infinity', wx: 0, wy: 0, ww: 10, wh: Number.POSITIVE_INFINITY, lw: 4, lh: 4, effScale: 2 },
+      { label: 'layerWidth=0', wx: 0, wy: 0, ww: 10, wh: 10, lw: 0, lh: 4, effScale: 2 },
+      { label: 'layerHeight=-4', wx: 0, wy: 0, ww: 10, wh: 10, lw: 4, lh: -4, effScale: 2 },
+    ];
+    for (const tc of invalidFallbackCases) {
+      const counts = { save: 0, restore: 0, beginPath: 0, moveTo: 0, lineTo: 0, closePath: 0, stroke: 0 };
+      const noopCtx = {
+        lineWidth: 0,
+        lineJoin: 'miter',
+        lineCap: 'butt',
+        strokeStyle: '#000',
+        save() {
+          counts.save++;
+        },
+        restore() {
+          counts.restore++;
+        },
+        beginPath() {
+          counts.beginPath++;
+        },
+        moveTo() {
+          counts.moveTo++;
+        },
+        lineTo() {
+          counts.lineTo++;
+        },
+        closePath() {
+          counts.closePath++;
+        },
+        stroke() {
+          counts.stroke++;
+        },
+      };
+      strokeLayerSilhouette(noopCtx, squareSegs, null, tc.wx, tc.wy, tc.ww, tc.wh, tc.lw, tc.lh, tc.effScale);
+      assert.deepEqual(
+        counts,
+        { save: 0, restore: 0, beginPath: 0, moveTo: 0, lineTo: 0, closePath: 0, stroke: 0 },
+        `strokeLayerSilhouette fallback must be a clean no-op for ${tc.label}`
+      );
+    }
+
+    // Regression: ctx.restore() must ALWAYS run (saveDepth === 0) if ctx.stroke() or tracing throws
+    const makeThrowingStrokeCtx = (throwOn) => {
+      const state = { saveCount: 0, restoreCount: 0, saveDepth: 0 };
+      const ctx = {
+        lineWidth: 0,
+        lineJoin: 'miter',
+        lineCap: 'butt',
+        strokeStyle: '#000',
+        save() {
+          state.saveCount++;
+          state.saveDepth++;
+        },
+        restore() {
+          state.restoreCount++;
+          state.saveDepth--;
+        },
+        beginPath() {},
+        moveTo() {
+          if (throwOn === 'moveTo') {
+            throw new Error('synthetic moveTo failure');
+          }
+        },
+        lineTo() {},
+        closePath() {},
+        stroke() {
+          if (throwOn === 'stroke') {
+            throw new Error('synthetic stroke failure');
+          }
+        },
+      };
+      return { ctx, state };
+    };
+
+    {
+      // Path2D branch throw
+      const { ctx, state } = makeThrowingStrokeCtx('stroke');
+      const fakePath = new FakePath2D();
+      assert.throws(
+        () => strokeLayerSilhouette(ctx, squareSegs, fakePath, 10, 20, 40, 80, 4, 4, 2),
+        /synthetic stroke failure/
+      );
+      assert.equal(state.saveCount, 1);
+      assert.equal(state.restoreCount, 1);
+      assert.equal(state.saveDepth, 0, 'Path2D stroke throw must not leak ctx.save()');
+    }
+    {
+      // Segment fallback stroke() throw
+      const { ctx, state } = makeThrowingStrokeCtx('stroke');
+      assert.throws(
+        () => strokeLayerSilhouette(ctx, squareSegs, null, 10, 20, 40, 80, 4, 4, 2),
+        /synthetic stroke failure/
+      );
+      assert.equal(state.saveCount, 1);
+      assert.equal(state.restoreCount, 1);
+      assert.equal(state.saveDepth, 0, 'Segment fallback stroke throw must not leak ctx.save()');
+    }
+    {
+      // Segment fallback trace (moveTo) throw
+      const { ctx, state } = makeThrowingStrokeCtx('moveTo');
+      assert.throws(
+        () => strokeLayerSilhouette(ctx, squareSegs, null, 10, 20, 40, 80, 4, 4, 2),
+        /synthetic moveTo failure/
+      );
+      assert.equal(state.saveCount, 1);
+      assert.equal(state.restoreCount, 1);
+      assert.equal(state.saveDepth, 0, 'Segment fallback moveTo throw must not leak ctx.save()');
+    }
+
     // disposeLayerCanvasCache clears silhouette & unfilled cache fields
     const mockCache = {
       baseCanvas: { width: 64, height: 64 },
