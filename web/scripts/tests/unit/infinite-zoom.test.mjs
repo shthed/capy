@@ -749,6 +749,7 @@ function createMockIndexedDb(behavior = {}) {
     puzzles: new Map(),
     images: new Map(),
   };
+  const pendingWrites = [];
   const mockIndexedDb = {
     open(_dbName, _version) {
       const dbHandle = {
@@ -759,7 +760,13 @@ function createMockIndexedDb(behavior = {}) {
         onversionchange: null,
         onclose: null,
         close() {},
-        transaction(_storeNames, mode) {
+        transaction(storeNames, mode) {
+          const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+          const shouldDefer =
+            mode === 'readwrite' &&
+            !behavior.failWriteWithError &&
+            Boolean(behavior.shouldDeferStore?.(names));
+          const deferredOps = [];
           const tx = {
             error: null,
             oncomplete: null,
@@ -777,6 +784,8 @@ function createMockIndexedDb(behavior = {}) {
                       if (tx.onabort) tx.onabort({ target: tx });
                       else if (tx.onerror) tx.onerror({ target: tx });
                     });
+                  } else if (shouldDefer) {
+                    deferredOps.push(() => map.set(key, value));
                   } else {
                     map.set(key, value);
                   }
@@ -799,20 +808,35 @@ function createMockIndexedDb(behavior = {}) {
                   return req;
                 },
                 delete(key) {
-                  map.delete(key);
+                  if (shouldDefer) {
+                    deferredOps.push(() => map.delete(key));
+                  } else {
+                    map.delete(key);
+                  }
                   return { onsuccess: null, onerror: null };
                 },
                 clear() {
-                  map.clear();
+                  if (shouldDefer) {
+                    deferredOps.push(() => map.clear());
+                  } else {
+                    map.clear();
+                  }
                   return { onsuccess: null, onerror: null };
                 },
               };
             },
           };
           if (mode === 'readwrite' && !behavior.failWriteWithError) {
-            queueMicrotask(() => {
-              if (tx.oncomplete) tx.oncomplete();
-            });
+            if (shouldDefer) {
+              pendingWrites.push(() => {
+                for (const op of deferredOps) op();
+                if (tx.oncomplete) tx.oncomplete();
+              });
+            } else {
+              queueMicrotask(() => {
+                if (tx.oncomplete) tx.oncomplete();
+              });
+            }
           }
           return tx;
         },
@@ -831,7 +855,7 @@ function createMockIndexedDb(behavior = {}) {
       return req;
     },
   };
-  return { mockIndexedDb, stores };
+  return { mockIndexedDb, stores, pendingWrites };
 }
 
 // ---------------------------------------------------------------------------
@@ -8745,6 +8769,161 @@ async function testClusterG_ControllerDecompositionF13(
       }
     );
   }
+
+  // G7b: Undo Extend IDB commit ordering & toast-dismissal-after-persistence contract (T3-04 regression guard)
+  {
+    const ls = createMemoryLocalStorage();
+    let deferPuzzleWrites = false;
+    const { mockIndexedDb, pendingWrites } = createMockIndexedDb({
+      shouldDeferStore: (names) => deferPuzzleWrites && names.includes('puzzles'),
+    });
+    const MockImage = makeMockImageClass(16, 16);
+
+    await withGlobalOverrides(
+      {
+        document: createFakeDocument(),
+        ImageData: FakeImageData,
+        Image: MockImage,
+        localStorage: ls,
+        indexedDB: mockIndexedDb,
+        window: {},
+      },
+      async () => {
+        idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+        idbMod.clearAllPreviewCaches();
+        try {
+          const snapId = 'snap-undo-idb-barrier';
+          const preExtendPuzzle = makeTwoRegionPuzzle(20, 12);
+          const extendedPuzzle = makeTwoRegionPuzzle(27, 16);
+          const initialSave = {
+            id: snapId,
+            title: 'Undo IDB Ordering Test',
+            lastOpened: Date.now(),
+            filledCount: 0,
+            totalCount: 2,
+            filledRegionIds: [],
+            zoomScale: 1,
+            panOffsetX: 0,
+            panOffsetY: 0,
+            palette: extendedPuzzle.palette,
+            sourceRef: { kind: 'blob', uri: snapId },
+            sampleAssetPath: null,
+            isAutoSample: false,
+            previewDataUrl: 'data:image/png;base64,AAAA',
+          };
+          storageMod.StorageService.saveSnapshots([initialSave]);
+          await storageMod.StorageService.savePuzzleData(snapId, extendedPuzzle);
+
+          const beforeUndo = await storageMod.StorageService.loadPuzzleData(snapId);
+          assert.equal(beforeUndo.width, 27, 'Precondition: extended puzzle (27px) is stored in IDB');
+
+          deferPuzzleWrites = true;
+          let settled = false;
+          const undoPromise = persistenceMod
+            .restoreUndoSubdivisionPersistence({
+              snap: {
+                operationKind: 'zoom-out',
+                snapshotId: snapId,
+                puzzle: preExtendPuzzle,
+                sourceImage: new MockImage(),
+                previousBlob: new Blob([new Uint8Array([9, 8, 7])], { type: 'image/png' }),
+                promotedFromSample: false,
+                previousBlobUrl: 'blob:pre-extend',
+                newBlobUrl: 'blob:extended',
+                addedLayerBlobKeys: ['layer_snap-undo-idb-barrier_demoted'],
+                previousLayerImages: new Map(),
+                filledRegionIds: new Set(),
+                paintedRegionColors: new Map(),
+                undoStack: [],
+                redoStack: [],
+                activeColorId: 1,
+                previousViewport: { zoomScale: 1.75, panOffsetX: -30, panOffsetY: 18 },
+                previousMeta: {
+                  sampleAssetPath: null,
+                  isAutoSample: false,
+                  sourceRef: { kind: 'blob', uri: snapId },
+                  zoomTree: undefined,
+                  previewDataUrl: 'data:image/png;base64,AAAA',
+                },
+                addedRegionCount: 4,
+              },
+              isFreeColorMode: false,
+              activeSave: initialSave,
+              liveActiveSave: initialSave,
+              isStale: () => false,
+            })
+            .then((res) => {
+              settled = true;
+              return res;
+            });
+
+          // Flush microtasks until the puzzles IDB write transaction is queued and blocked
+          for (let i = 0; i < 32 && pendingWrites.length === 0; i++) {
+            await Promise.resolve();
+          }
+          assert.equal(
+            pendingWrites.length,
+            1,
+            'restoreUndoSubdivisionPersistence must open a puzzles IDB write transaction'
+          );
+          assert.equal(
+            settled,
+            false,
+            'restoreUndoSubdivisionPersistence must NOT settle before the puzzles IDB transaction commits'
+          );
+
+          const midFlightPuzzle = await storageMod.StorageService.loadPuzzleData(snapId);
+          assert.equal(
+            midFlightPuzzle.width,
+            27,
+            'Mid-flight IDB read still sees extended puzzle until the deferred write commits'
+          );
+
+          // Release the IDB write commit and verify immediate post-resolve IDB consistency
+          const commitWrite = pendingWrites.shift();
+          commitWrite();
+          const undoResult = await undoPromise;
+          assert.equal(settled, true);
+          assert.ok(undoResult, 'Undo persistence must resolve cleanly once IDB commits');
+
+          const afterUndo = await storageMod.StorageService.loadPuzzleData(snapId);
+          assert.equal(
+            afterUndo.width,
+            20,
+            'Immediately after restoreUndoSubdivisionPersistence settles, IDB must return pre-extend width'
+          );
+          assert.equal(afterUndo.height, 12);
+          assert.equal(storageMod.StorageService.loadActiveState().zoomScale, 1.75);
+        } finally {
+          deferPuzzleWrites = false;
+          idbMod.evictDbHandle(keysMod.resolveScopedDbName());
+          idbMod.clearAllPreviewCaches();
+        }
+      }
+    );
+
+    // Controller ordering invariant: handleUndoSubdivision must guard re-entrancy with undoInFlightRef
+    // and dismiss undoSubdivisionState strictly in `finally` AFTER `await restoreUndoSubdivisionPersistence`
+    const undoFnStart = hookSrc.indexOf('const handleUndoSubdivision = useCallback(');
+    const undoFnEnd = hookSrc.indexOf('\n  return {', undoFnStart);
+    assert.ok(undoFnStart > 0 && undoFnEnd > undoFnStart, 'handleUndoSubdivision callback must exist');
+    const undoFnBody = hookSrc.slice(undoFnStart, undoFnEnd);
+    const awaitRestoreIdx = undoFnBody.indexOf('await restoreUndoSubdivisionPersistence(');
+    const finallyIdx = undoFnBody.indexOf('finally {');
+    const firstDismissIdx = undoFnBody.indexOf('setUndoSubdivisionState(');
+    assert.ok(awaitRestoreIdx > 0, 'handleUndoSubdivision must await restoreUndoSubdivisionPersistence');
+    assert.ok(finallyIdx > awaitRestoreIdx, 'handleUndoSubdivision must wrap restore in try/finally');
+    assert.ok(
+      firstDismissIdx > finallyIdx,
+      'setUndoSubdivisionState must NOT be called before IDB persistence commits (must run in finally)'
+    );
+    assert.ok(
+      undoFnBody.includes('undoInFlightRef.current = true') &&
+        undoFnBody.includes('undoInFlightRef.current = false') &&
+        undoFnBody.includes('prev === snap ? null : prev'),
+      'handleUndoSubdivision must guard re-entrancy via undoInFlightRef and identity-guard toast dismissal'
+    );
+  }
 }
 
 // ===========================================================================
@@ -9669,10 +9848,25 @@ async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod
     assert.equal(hasOverlappingDeeperVisibleLayer(vis, 1), true);
     assert.equal(hasOverlappingDeeperVisibleLayer(vis, 2), false);
 
-    // At scale=1, viewport 800x800, effScale=0.8:
-    // small-detail screen size = 120 * 0.8 = 96px (< 200px = 25% of 800) and scale <= 1.5 -> excluded
-    // large-layer screen size = 400 * 0.8 = 320px (>= 200px) -> included
-    // deeper-inside-large screen size = 100 * 0.8 = 80px (< 200px) -> excluded
+    // Fit-to-Screen / Reset View (scale <= 1.05) and zoomed-out (scale < 1.0) views must
+    // always unfloat nested-layer swatches so canonical sorted palette order is restored,
+    // even for large nested layers occupying >= 25% of the viewport.
+    const prominent05x = collectProminentVisibleLayerIds(
+      1000,
+      1000,
+      layers,
+      0,
+      0,
+      1000,
+      1000,
+      0.5,
+      0.4,
+      800,
+      800,
+      new Set(['stale-layer'])
+    );
+    assert.equal(prominent05x.size, 0, 'Zoomed-out view (scale = 0.5) must return empty set');
+
     const prominent1x = collectProminentVisibleLayerIds(
       1000,
       1000,
@@ -9685,9 +9879,45 @@ async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod
       0.8,
       800,
       800,
+      new Set(['stale-layer'])
+    );
+    assert.equal(prominent1x.size, 0, 'Fit-to-Screen / Reset View (scale = 1.0) must unfloat all nested layers');
+
+    const prominentBoundary = collectProminentVisibleLayerIds(
+      1000,
+      1000,
+      layers,
+      0,
+      0,
+      1000,
+      1000,
+      1.05,
+      0.84,
+      800,
+      800,
+      new Set(['stale-layer'])
+    );
+    assert.equal(prominentBoundary.size, 0, 'Exact boundary scale = 1.05 must remain unfloated');
+
+    // Once zoomed past 1.05x (scale = 1.25 <= 1.5), viewport 800x800, effScale = 1.0:
+    // small-detail screen size = 120px (< 200px = 25% of 800) and scale <= 1.5 -> excluded
+    // large-layer screen size = 400px (>= 200px) -> included via >= 25% prominence branch
+    // deeper-inside-large screen size = 100px (< 200px) -> excluded
+    const prominent125x = collectProminentVisibleLayerIds(
+      1000,
+      1000,
+      layers,
+      0,
+      0,
+      1000,
+      1000,
+      1.25,
+      1.0,
+      800,
+      800,
       new Set()
     );
-    assert.deepEqual([...prominent1x], ['large-layer']);
+    assert.deepEqual([...prominent125x], ['large-layer']);
 
     // At scale=2.0 (> 1.5), effScale=1.6:
     // small-detail screen size = 192px >= 72px -> included
@@ -9728,6 +9958,53 @@ async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod
       new Set()
     );
     assert.equal(prominentTiny.size, 0, 'Layer < 72px on screen even when scale > 1.5 must be excluded');
+
+    // Mobile 360x780 1/3-cell regression (T4-04):
+    // 320x320 puzzle, cell worldBounds 0.33125 x 0.33125 (106x106 world px).
+    // At scale = 1.0 (baseScale = 1.035), rendered size is 109.71px >= 90px (25% of 360),
+    // yet Reset View must still unfloat; when auto-focused at scale = 2.75, it must float.
+    const mobileCellLayers = [
+      mkLayer('cell-layer', 1, { x: 0, y: 0, width: 0.33125, height: 0.33125 }),
+    ];
+    const mobileBaseScale = Math.min(360 / 320, 780 / 320) * 0.92;
+    const mobileResetProminent = collectProminentVisibleLayerIds(
+      320,
+      320,
+      mobileCellLayers,
+      0,
+      0,
+      320,
+      320,
+      1.0,
+      1.0 * mobileBaseScale,
+      360,
+      780,
+      new Set(['cell-layer'])
+    );
+    assert.equal(
+      mobileResetProminent.size,
+      0,
+      '360x780 mobile Reset View (scale = 1.0) must unfloat 1/3-cell nested layer'
+    );
+    const mobileFocusedProminent = collectProminentVisibleLayerIds(
+      320,
+      320,
+      mobileCellLayers,
+      0,
+      0,
+      150,
+      150,
+      2.75,
+      2.75 * mobileBaseScale,
+      360,
+      780,
+      new Set()
+    );
+    assert.deepEqual(
+      [...mobileFocusedProminent],
+      ['cell-layer'],
+      '360x780 mobile auto-focus (scale = 2.75) must float 1/3-cell nested layer'
+    );
 
     // Empty nested layers -> empty set
     assert.equal(

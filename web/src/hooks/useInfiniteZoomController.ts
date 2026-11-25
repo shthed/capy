@@ -185,6 +185,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
   const infiniteZoomOpSeqRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const undoToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoInFlightRef = useRef(false);
   const errorToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSwitchLayerIdRef = useRef<string | null>(null);
   const pendingGuidedRef = useRef<PendingGuidedContinuation | null>(null);
@@ -755,7 +756,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
   const handleUndoSubdivision = useCallback(async () => {
     const snap = undoSubdivisionRef.current;
-    if (!snap) return;
+    if (!snap || undoInFlightRef.current) return;
     if (snap.snapshotId !== activeSnapshotId) {
       clearUndoSubdivision();
       return;
@@ -763,50 +764,58 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
 
     clearTimeoutBox(undoToastTimerRef);
     undoSubdivisionRef.current = null;
-    setUndoSubdivisionState(null);
+    undoInFlightRef.current = true;
 
     const seq = ++infiniteZoomOpSeqRef.current;
     const expectedSnapshotId = snap.snapshotId;
-    const result = await restoreUndoSubdivisionPersistence({
-      snap,
-      isFreeColorMode,
-      activeSave,
-      liveActiveSave: liveCoopRef.current.activeSave,
-      isStale: () =>
-        seq !== infiniteZoomOpSeqRef.current ||
-        liveCoopRef.current.activeSnapshotId !== expectedSnapshotId,
-    });
-    if (!result) {
+    try {
+      const result = await restoreUndoSubdivisionPersistence({
+        snap,
+        isFreeColorMode,
+        activeSave,
+        liveActiveSave: liveCoopRef.current.activeSave,
+        isStale: () =>
+          seq !== infiniteZoomOpSeqRef.current ||
+          liveCoopRef.current.activeSnapshotId !== expectedSnapshotId,
+      });
+      if (!result) {
+        revokeUnusedObjectUrl(snap.previousBlobUrl, activeBlobUrlRef.current);
+        return;
+      }
+
+      revokeUnusedObjectUrl(snap.newBlobUrl, snap.previousBlobUrl);
+      activeBlobUrlRef.current = snap.previousBlobUrl;
+
+      const restoredLayerImages = new Map(snap.previousLayerImages);
+      revokeOwnedUrlsNotIn(ownedLayerBlobUrlsRef.current, new Set<string>(restoredLayerImages.keys()));
+
+      liveCoopRef.current = {
+        ...liveCoopRef.current,
+        puzzle: snap.puzzle,
+        activeSave: result.syncedSave ?? liveCoopRef.current.activeSave,
+        filledRegionIds: snap.filledRegionIds,
+        paintedRegionColors: snap.paintedRegionColors,
+        activeColorId: snap.activeColorId,
+      };
+      setLiveLayerImages(restoredLayerImages);
+      setSourceImage(snap.sourceImage);
+      setPuzzle(snap.puzzle);
+      setFilledRegionIds(snap.filledRegionIds);
+      setPaintedRegionColors(snap.paintedRegionColors);
+      setActiveColorId(snap.activeColorId);
+      setHintRegionId(null);
+      syncUndoStack(snap.undoStack);
+      syncRedoStack(snap.redoStack);
+      setSnapshots(result.updatedSnapshots);
+      applyViewport?.(result.restoredViewport);
+      NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
+    } catch (err) {
+      reportSwallowed('InfiniteZoom.undoSubdivision', err, { id: expectedSnapshotId });
       revokeUnusedObjectUrl(snap.previousBlobUrl, activeBlobUrlRef.current);
-      return;
+    } finally {
+      undoInFlightRef.current = false;
+      setUndoSubdivisionState((prev) => (prev === snap ? null : prev));
     }
-
-    revokeUnusedObjectUrl(snap.newBlobUrl, snap.previousBlobUrl);
-    activeBlobUrlRef.current = snap.previousBlobUrl;
-
-    const restoredLayerImages = new Map(snap.previousLayerImages);
-    revokeOwnedUrlsNotIn(ownedLayerBlobUrlsRef.current, new Set<string>(restoredLayerImages.keys()));
-
-    liveCoopRef.current = {
-      ...liveCoopRef.current,
-      puzzle: snap.puzzle,
-      activeSave: result.syncedSave ?? liveCoopRef.current.activeSave,
-      filledRegionIds: snap.filledRegionIds,
-      paintedRegionColors: snap.paintedRegionColors,
-      activeColorId: snap.activeColorId,
-    };
-    setLiveLayerImages(restoredLayerImages);
-    setSourceImage(snap.sourceImage);
-    setPuzzle(snap.puzzle);
-    setFilledRegionIds(snap.filledRegionIds);
-    setPaintedRegionColors(snap.paintedRegionColors);
-    setActiveColorId(snap.activeColorId);
-    setHintRegionId(null);
-    syncUndoStack(snap.undoStack);
-    syncRedoStack(snap.redoStack);
-    setSnapshots(result.updatedSnapshots);
-    applyViewport?.(result.restoredViewport);
-    NativeBridge.haptic('tick', settingsRef.current.hapticsEnabled);
   }, [activeBlobUrlRef, activeSave, activeSnapshotId, applyViewport, clearUndoSubdivision, isFreeColorMode, liveCoopRef, setActiveColorId, setFilledRegionIds, setHintRegionId, setPaintedRegionColors, setPuzzle, setSnapshots, setSourceImage, settingsRef, syncRedoStack, syncUndoStack, undoSubdivisionRef]);
 
   return {

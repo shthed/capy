@@ -2409,9 +2409,19 @@ export function hasOverlappingDeeperVisibleLayer(
 }
 
 /**
+ * Minimum zoom scale above Fit-to-Screen (`1.0x`) required before nested-layer
+ * swatches float to the front of `PaletteDock`. Matches Capy's canonical
+ * `scale > 1.05` transformed-viewport threshold so `Reset View` (`1.0x`),
+ * Fit-to-Screen, and zoomed-out views always restore canonical sorted palette order.
+ */
+export const PROMINENT_NESTED_MIN_ZOOM_SCALE = 1.05;
+
+/**
  * Populates `outSet` with layerIds of nested layers that intersect the current viewport
- * and occupy a prominent fraction of the viewport (either >= 25% of min viewport dim,
- * or zoomed > 1.5x with at least 72x72 CSS px on screen).
+ * while zoomed in (`scale > PROMINENT_NESTED_MIN_ZOOM_SCALE`) and occupy a prominent
+ * fraction of the viewport (either >= 25% of min viewport dim, or zoomed > 1.5x with
+ * at least 72x72 CSS px on screen). Fit-to-Screen / Reset View (`scale <= 1.05`) and
+ * zoomed-out views always return an empty `outSet`.
  */
 export function collectProminentVisibleLayerIds(
   puzzleWidth: number,
@@ -2430,6 +2440,8 @@ export function collectProminentVisibleLayerIds(
   outSet.clear();
   if (
     nestedLayers.length === 0 ||
+    !Number.isFinite(scale) ||
+    scale <= PROMINENT_NESTED_MIN_ZOOM_SCALE ||
     !isPositiveFinite(puzzleWidth) ||
     !isPositiveFinite(puzzleHeight) ||
     !isPositiveFinite(effScale) ||
@@ -2445,7 +2457,7 @@ export function collectProminentVisibleLayerIds(
 
   const minViewportDim = Math.min(containerWidth, containerHeight);
   const prominentThreshold = minViewportDim * 0.25;
-  const isZoomedIn = Number.isFinite(scale) && scale > 1.5;
+  const isZoomedIn = scale > 1.5;
 
   for (let i = 0; i < nestedLayers.length; i++) {
     const layer = nestedLayers[i];
