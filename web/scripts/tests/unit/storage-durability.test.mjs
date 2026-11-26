@@ -75,11 +75,6 @@ export async function runStorageDurabilityTests({ vite, projectRoot, logUnitStar
         'utf8'
       );
       fs.writeFileSync(
-        path.join(tmpCompileRepo, 'TODO.md'),
-        `# Queue\n\n### TASK-2.5: Finish release\n\nDetails here.\n\n### BUG-4: Keep me\n\nKeep details.\n`,
-        'utf8'
-      );
-      fs.writeFileSync(
         path.join(tmpCompileRepo, 'CHANGELOG.md'),
         `### 3.0.7 - 2026-11-12 (Beta)\n\n- [#495](../../pull/495) Beta item\n\n### 3.0.1 - 2026-11-10 (Production)\n\n- [#488](../../pull/488) Prod item\n`,
         'utf8'
@@ -114,9 +109,6 @@ export async function runStorageDurabilityTests({ vite, projectRoot, logUnitStar
       assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'web/src/version.ts'), 'utf8').includes("'3.1.0'"), true);
       assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'app/build.gradle.kts'), 'utf8').includes('versionCode = 30100'), true);
       assert.equal(fs.readFileSync(path.join(tmpCompileRepo, 'app/build.gradle.kts'), 'utf8').includes('versionName = "3.1.0"'), true);
-      const todoAfter = fs.readFileSync(path.join(tmpCompileRepo, 'TODO.md'), 'utf8');
-      assert.equal(todoAfter.includes('TASK-2.5'), false);
-      assert.equal(todoAfter.includes('BUG-4'), true);
       assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/01-fix.md')), false);
       assert.equal(fs.existsSync(path.join(tmpCompileRepo, '.changelog/README.md')), true);
       const compiledCl = fs.readFileSync(path.join(tmpCompileRepo, 'CHANGELOG.md'), 'utf8');

@@ -1,4 +1,8 @@
-### 3.1.4 - 2026-11-26 (Production, Beta)
+### 3.1.5 - 2026-11-26 (Production, Beta)
+
+- [#672](../../pull/672) Add automated Markdown `#anchor` validation to the sanity gate and prune retired `TODO.md` cleanup logic from the changelog compiler
+
+### 3.1.4 - 2026-11-26
 
 - [#667](../../pull/667) Switch all automated GitHub Actions PR merges, beta syncs, and puzzle regeneration strictly to github-actions[bot] via GITHUB_TOKEN with post-merge workflow dispatch so personal user accounts never appear on automated actions
 - [#666](../../pull/666) Sync player, store, community, and technical architecture documentation by updating stack/toolchain versions, adding omitted services and storage keys, standardizing US English, and breaking mega-bullets into scannable sections

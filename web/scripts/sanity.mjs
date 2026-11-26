@@ -6,7 +6,7 @@
  * 1. `web/package.json` SemVer (`MAJOR.MINOR.PATCH`), `version.ts`, and `app/build.gradle.kts` formula parity.
  * 2. `CHANGELOG.md` compact mobile-first contract, channel marker invariants, and PR bullet links.
  * 3. Markdown hygiene across all repository `.md` files (zero emojis, zero ASCII/Unicode box-drawing art,
- *    zero >=3-column wide tables, and zero broken relative intra-repo file links).
+ *    zero >=3-column wide tables, and zero broken relative intra-repo file or `#anchor` links).
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -739,6 +739,62 @@ export function validatePublicTrackerPolicy(repoRoot) {
   }
 }
 
+export function slugifyGithubHeading(headingText) {
+  let text = String(headingText || '')
+    .replace(/\s+#+\s*$/, '')
+    .trim();
+  // Replace inline images and links with their visible label text
+  text = text.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  // Strip inline code backticks and HTML tags
+  text = text.replace(/`([^`]*)`/g, '$1');
+  text = text.replace(/<[^>]+>/g, '');
+  // Strip Markdown emphasis/strikethrough delimiters while preserving underscores inside identifiers
+  text = text.replace(/\*\*|__|~~/g, '');
+  text = text.replace(/\*/g, '');
+  text = text.replace(/(^|\s)_+|_+(\s|$)/g, '$1$2');
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, '')
+    .replace(/\s/g, '-');
+}
+
+function safeDecodeUri(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+export function extractMarkdownAnchors(markdownText) {
+  const withoutFences = String(markdownText || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/```[\s\S]*?```/g, (m) => '\n'.repeat(m.split('\n').length - 1));
+  const anchors = new Set();
+  const seenSlugs = new Map();
+
+  for (const m of withoutFences.matchAll(/^[ \t]{0,3}#{1,6}[ \t]+(.+?)\s*$/gm)) {
+    const baseSlug = slugifyGithubHeading(m[1]);
+    if (!baseSlug) continue;
+    const count = seenSlugs.get(baseSlug) || 0;
+    seenSlugs.set(baseSlug, count + 1);
+    anchors.add(count === 0 ? baseSlug : `${baseSlug}-${count}`);
+  }
+
+  for (const m of withoutFences.matchAll(/<[a-z][a-z0-9-]*\b[^>]*\bid=["']([^"']+)["']/gi)) {
+    const id = m[1].trim().toLowerCase();
+    if (id) anchors.add(id);
+  }
+  for (const m of withoutFences.matchAll(/<a\b[^>]*\bname=["']([^"']+)["']/gi)) {
+    const id = m[1].trim().toLowerCase();
+    if (id) anchors.add(id);
+  }
+
+  return anchors;
+}
+
 export function runSanityChecks({
   repoRoot = DEFAULT_REPO_ROOT,
   requireProjectMd = DEFAULT_REQUIRE_PROJECT_MD,
@@ -862,9 +918,21 @@ export function runSanityChecks({
   const mdFiles = collectMarkdownFiles(root);
   assert.equal(mdFiles.length >= 10, true, 'Expected >= 10 repository .md files');
 
+  const anchorsByFile = new Map();
+  const getAnchors = (absPath) => {
+    const resolved = path.resolve(absPath);
+    let cached = anchorsByFile.get(resolved);
+    if (!cached) {
+      cached = extractMarkdownAnchors(fs.readFileSync(resolved, 'utf8'));
+      anchorsByFile.set(resolved, cached);
+    }
+    return cached;
+  };
+
   for (const mdPath of mdFiles) {
     const relFile = path.relative(root, mdPath).replace(/\\/g, '/');
     const rawText = fs.readFileSync(mdPath, 'utf8');
+    anchorsByFile.set(path.resolve(mdPath), extractMarkdownAnchors(rawText));
     if (enforceEpicNaming) {
       validateEpicNaming(rawText, relFile);
     }
@@ -923,12 +991,24 @@ export function runSanityChecks({
         cleanTarget.startsWith('mailto:') ||
         cleanTarget.startsWith('tel:') ||
         cleanTarget.startsWith('data:') ||
-        cleanTarget.startsWith('#') ||
         /^(?:\.\.\/){2,}(?:pull|issues|milestone)\/\d+(?:[/?#].*)?$/.test(cleanTarget)
       ) {
         continue;
       }
-      const pathPart = decodeURIComponent(cleanTarget.split('#')[0].split('?')[0]);
+      if (cleanTarget.startsWith('#')) {
+        const fragment = safeDecodeUri(cleanTarget.slice(1)).trim().toLowerCase();
+        if (!fragment) continue;
+        assert.equal(
+          getAnchors(mdPath).has(fragment),
+          true,
+          `Broken Markdown anchor in ${relFile}: "${rawTarget}" (heading "#${fragment}" not found)`
+        );
+        continue;
+      }
+      const hashIdx = cleanTarget.indexOf('#');
+      const pathRaw = hashIdx === -1 ? cleanTarget : cleanTarget.slice(0, hashIdx);
+      const fragmentRaw = hashIdx === -1 ? '' : cleanTarget.slice(hashIdx + 1);
+      const pathPart = safeDecodeUri(pathRaw.split('?')[0]);
       if (!pathPart) continue;
       const resolvedTarget = path.resolve(path.dirname(mdPath), pathPart);
       assert.equal(
@@ -936,6 +1016,17 @@ export function runSanityChecks({
         true,
         `Broken relative link in ${relFile}: "${rawTarget}" -> ${resolvedTarget}`
       );
+      if (fragmentRaw && resolvedTarget.toLowerCase().endsWith('.md')) {
+        const fragment = safeDecodeUri(fragmentRaw).trim().toLowerCase();
+        if (fragment) {
+          const relTarget = path.relative(root, resolvedTarget).replace(/\\/g, '/');
+          assert.equal(
+            getAnchors(resolvedTarget).has(fragment),
+            true,
+            `Broken Markdown anchor in ${relFile}: "${rawTarget}" (heading "#${fragment}" not found in ${relTarget})`
+          );
+        }
+      }
     }
   }
 

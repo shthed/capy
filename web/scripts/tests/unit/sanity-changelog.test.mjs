@@ -8,7 +8,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
+  extractMarkdownAnchors,
   runSanityChecks,
+  slugifyGithubHeading,
   validateChangelogChannelOrder,
   validateEpicNaming,
   /* capy-dev-only:start */
@@ -1350,6 +1352,72 @@ export async function runSanityChangelogTests({ vite, projectRoot, webPkgJson, l
         /ISSUE_TEMPLATE\/bug_report\.yml must not link outside capyboop\/paint/
       );
       fs.writeFileSync(bugTemplatePath, 'name: Bug Report\n', 'utf8');
+
+      // 9c. Markdown #anchor slugging and broken same-file / cross-file anchor detection
+      assert.equal(
+        slugifyGithubHeading('2. Core Technical Guardrails (Web & App)'),
+        '2-core-technical-guardrails-web--app'
+      );
+      assert.equal(
+        slugifyGithubHeading('Using `CAPY_BOT_TOKEN` & [Docs](./DEV.md)'),
+        'using-capy_bot_token--docs'
+      );
+      const parsedAnchors = extractMarkdownAnchors(
+        [
+          '# Overview',
+          '## Setup',
+          '```md',
+          '## Ignored Code Fence Heading',
+          '```',
+          '## Setup',
+          '<a name="legacy-anchor"></a>',
+          '<div id="custom-div-id"></div>',
+        ].join('\n')
+      );
+      assert.equal(parsedAnchors.has('overview'), true);
+      assert.equal(parsedAnchors.has('setup'), true);
+      assert.equal(parsedAnchors.has('setup-1'), true);
+      assert.equal(parsedAnchors.has('ignored-code-fence-heading'), false);
+      assert.equal(parsedAnchors.has('legacy-anchor'), true);
+      assert.equal(parsedAnchors.has('custom-div-id'), true);
+
+      const devMdPath = path.join(tmpStrictRepo, 'DEV.md');
+      const prevDevMd = fs.readFileSync(devMdPath, 'utf8');
+      const readmeMdPath = path.join(tmpStrictRepo, 'README.md');
+      const prevReadmeMd = fs.readFileSync(readmeMdPath, 'utf8');
+      fs.writeFileSync(
+        readmeMdPath,
+        `${prevReadmeMd}\n## Web & App Guide\n\n## Web & App Guide\n`,
+        'utf8'
+      );
+      fs.writeFileSync(
+        devMdPath,
+        `${prevDevMd}\n## Local Section\n\nSee [local](#local-section), [guide](./README.md#web--app-guide), and [second](./README.md#web--app-guide-1).\n`,
+        'utf8'
+      );
+      runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true });
+
+      fs.writeFileSync(
+        devMdPath,
+        `${prevDevMd}\nSee [broken local](#missing-local-heading).\n`,
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /Broken Markdown anchor in DEV\.md.*#missing-local-heading/
+      );
+
+      fs.writeFileSync(
+        devMdPath,
+        `${prevDevMd}\nSee [broken cross-file](./README.md#missing-remote-heading).\n`,
+        'utf8'
+      );
+      assert.throws(
+        () => runSanityChecks({ repoRoot: tmpStrictRepo, requireProjectMd: true }),
+        /Broken Markdown anchor in DEV\.md.*#missing-remote-heading.*README\.md/
+      );
+      fs.writeFileSync(devMdPath, prevDevMd, 'utf8');
+      fs.writeFileSync(readmeMdPath, prevReadmeMd, 'utf8');
 
       // 10. Missing PROJECT.md fails requireProjectMd: true
       fs.unlinkSync(path.join(tmpStrictRepo, 'PROJECT.md'));
