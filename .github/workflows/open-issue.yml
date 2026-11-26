@@ -22,6 +22,11 @@ on:
         required: false
         type: boolean
         default: false
+      comment_id:
+        description: 'Optional existing bot issue/PR comment ID to edit in place (requires body; ignores title/labels)'
+        required: false
+        type: string
+        default: ''
       labels:
         description: 'Optional comma-separated GitHub label names'
         required: false
@@ -38,7 +43,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: open-issue-${{ inputs.issue_number || inputs.title }}
+  group: open-issue-${{ inputs.comment_id || inputs.issue_number || inputs.title }}
   cancel-in-progress: false
 
 jobs:
@@ -59,6 +64,7 @@ jobs:
           INPUT_TITLE: ${{ inputs.title }}
           INPUT_BODY: ${{ inputs.body }}
           INPUT_COMMENT_ONLY: ${{ inputs.comment_only }}
+          INPUT_COMMENT_ID: ${{ inputs.comment_id }}
           INPUT_LABELS: ${{ inputs.labels }}
           INPUT_MILESTONE: ${{ inputs.milestone }}
         with:
@@ -68,6 +74,7 @@ jobs:
             const title = String(process.env.INPUT_TITLE || '').trim();
             const body = String(process.env.INPUT_BODY || '').trim();
             const commentOnly = String(process.env.INPUT_COMMENT_ONLY || '').toLowerCase() === 'true';
+            const rawCommentId = String(process.env.INPUT_COMMENT_ID || '').trim();
             const rawLabels = String(process.env.INPUT_LABELS || '').trim();
             const rawMilestone = String(process.env.INPUT_MILESTONE || '').trim();
 
@@ -85,6 +92,25 @@ jobs:
               core.setFailed(
                 `Forbidden public mirror cross-reference "${crossRefMatch[0]}" in issue title or body. Use plain text (e.g. \`capyboop/paint\` public issue N) instead of live URLs or #N shorthand.`
               );
+              return;
+            }
+
+            if (rawCommentId) {
+              if (!/^\d+$/.test(rawCommentId)) {
+                core.setFailed(`Invalid comment_id "${rawCommentId}". Expected a positive integer.`);
+                return;
+              }
+              const { data: updatedComment } = await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: Number(rawCommentId),
+                body,
+              });
+              const resolvedNum = rawNum && /^\d+$/.test(rawNum) ? rawNum : '';
+              core.setOutput('issue_number', resolvedNum);
+              core.setOutput('issue_url', updatedComment.html_url);
+              core.setOutput('action', 'comment-updated');
+              core.info(`Bot comment updated: ${rawCommentId} (${updatedComment.html_url})`);
               return;
             }
 
