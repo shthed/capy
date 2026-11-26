@@ -4,7 +4,7 @@
 [![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://capypaint.com/capy.apk)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange?style=for-the-badge)](./LICENSE.md)
 
-**Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages.
+**Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Color coloring pages.
 
 - **[Play Capy in Your Browser (`capypaint.com`)](https://capypaint.com/)**
 - **[Download the Android APK (Stable)](https://capypaint.com/capy.apk)** ([Official GitHub Releases](https://github.com/shthed/capy/releases))
@@ -19,33 +19,37 @@
 ## Visual Showcase and Gallery
 
 <p align="center">
-  <img src="./docs/gallery/desktop_gameplay.png" alt="Capy Desktop Gameplay" width="90%" />
+  <img src="./docs/gallery/puzzle_completion.webp" alt="Capy Paint puzzle completion with victory confetti and timelapse replay" width="90%" />
   <br>
-  <em>Interactive color-by-number canvas with responsive Palette Dock, dynamic active region highlighting, and centroid glow badges.</em>
+  <em>Tap in the final pieces to trigger the victory confetti burst and watch your finished artwork come to life in a chronological timelapse replay.</em>
 </p>
 
-| **Fine Zoom and Active Highlighting** | **Free Colour / Coloring Page Mode** |
+| **Desktop Gameplay** | **Fine Zoom and Active Highlighting** |
 | :---: | :---: |
-| <img src="./docs/gallery/zoomed_detail.png" alt="Fine Zoom and Active Highlighting" width="100%" /> | <img src="./docs/gallery/coloring_page_mode.png" alt="Free Colour / Coloring Page Mode" width="100%" /> |
-| *Continuous zoom up to 12x with poles-of-inaccessibility labels and active region fills* | *Mushroom Forest with custom HSL/Hex palette picker and quick presets* |
+| <img src="./docs/gallery/desktop_gameplay.png" alt="Capy Desktop Gameplay" width="100%" /> | <img src="./docs/gallery/zoomed_detail.png" alt="Fine Zoom and Active Highlighting" width="100%" /> |
+| *Color-by-number canvas with the Palette Dock, live progress tracking, and crisp painted regions* | *Zoom in closely for tiny details with legible numbers and highlighted matching shapes* |
 
-| **Settings and Appearance Customizer** | **Mobile Portrait Experience** |
+| **Free Color / Coloring Page Mode** | **Daily Puzzle and Artwork Gallery** |
 | :---: | :---: |
-| <img src="./docs/gallery/settings_customizer.png" alt="Settings and Appearance Customizer" width="100%" /> | <img src="./docs/gallery/mobile_gameplay.png" alt="Mobile Portrait Experience" width="55%" /> |
-| *Circular background swatches, custom pipette color pickers, and smooth pan momentum* | *Full edge-to-edge touch UI with Google Maps-style one-finger drag zoom* |
+| <img src="./docs/gallery/coloring_page_mode.png" alt="Free Color / Coloring Page Mode" width="100%" /> | <img src="./docs/gallery/create_gallery.png" alt="Daily Puzzle and Artwork Gallery" width="100%" /> |
+| *Mushroom Forest in Free Color mode with the custom color picker and quick swatches* | *Puzzle of the Day, searchable built-in artwork gallery, and one-tap photo import* |
+
+| **Settings and Accessibility** | **Mobile Portrait Experience** |
+| :---: | :---: |
+| <img src="./docs/gallery/settings_customizer.png" alt="Settings and Accessibility" width="100%" /> | <img src="./docs/gallery/mobile_gameplay.png" alt="Mobile Portrait Experience" width="55%" /> |
+| *Grouped settings for text and UI sizing, Fat-Finger Tap Assist, canvas themes, and gameplay* | *Edge-to-edge touch UI with smooth one-finger zoom and thumb-friendly swatches* |
 
 ---
 
 ## Why You'll Love Capy
 
-- **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
-- **Turn Any Photo into a Puzzle or Printable Sheet**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, dive into **Infinite Zoom 2x Detail Tiles** with one-tap **Parent Puzzle** breadcrumbs, or export crisp monochrome **Printable Vector SVG (`.svg`) Coloring Sheets** for physical paper coloring.
-- **Shareable Links and Optional Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or enable opt-in **Co-op Rooms** (`?coop=1`) to paint the same puzzle simultaneously with live collaborator ripples and real-time undo sync.
-- **Compact `.capy` v2 Saves and Optional BYOC Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) keep your library portable locally, with opt-in Bring-Your-Own-Cloud (BYOC) cross-device sync across Google Drive, Microsoft OneDrive, Apple CloudKit, and Android Google Play Games Services v2.
-- **Daily Featured Puzzle, Searchable Gallery and Lifetime Stats**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), keep a local **Puzzle Idea Notebook**, send optional anonymous in-game feedback from Settings, and track your **Lifetime Stats**.
-- **Smooth Navigation and Inclusive Accessibility**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, **Fat-Finger Mode** with configurable touch reach radius presets (`12px`, `22px`, `34px`), Low-Vision **Large Text** scaling, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
-- **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
-- **100% Offline-First and Private**: All image processing and coloring run locally inside a sandboxed Web Worker. Play completely offline with zero forced accounts or ads.
+- **Two Ways to Play**: Relax with classic **Color by Number** or choose your own shades in **Free Color** mode.
+- **Turn Any Photo into Art**: Import your favorite photos of pets, trips, or drawings to create instant playable puzzles—or export clean coloring pages to print on paper.
+- **Color Together or Share Progress**: Send a quick link to share your puzzle with friends, or paint side by side in live **Co-op Rooms**.
+- **Smooth, Effortless Painting**: Drag with the **Paint Brush** to fill matching spaces fast, zoom in cleanly for tiny details, and watch a timelapse replay of your finished artwork.
+- **Daily Puzzle and Built-In Gallery**: Enjoy a fresh **Puzzle of the Day**, browse ready-to-play illustrations by theme, and celebrate milestones in your **Lifetime Stats**.
+- **Built for Everyone**: Includes forgiving **Fat-Finger Tap Assist**, adjustable text and button sizes, keyboard shortcuts, and a **Reduced Motion** option.
+- **Offline, Private, and Ad-Free**: Play anywhere without an internet connection, ads, or a required account—with optional cross-device save sync through Google Drive, OneDrive, iCloud, or Google Play Games.
 
 ---
 
@@ -61,13 +65,13 @@
 
 ## Controls and Gestures Cheat Sheet
 
-- **Tap Region**: In **Easy Mode** (default), auto-selects the tapped region's color and fills it immediately; in **Normal Mode**, fills the region when it matches the active swatch; in **Free Colour Mode**, paints with any selected color.
+- **Tap Region**: In **Easy Mode** (default), auto-selects the tapped region's color and fills it immediately; in **Normal Mode**, fills the region when it matches the active swatch; in **Free Color Mode**, paints with any selected color.
 - **Drag Canvas**: Pans the artwork smoothly across the screen with inertial gliding momentum.
 - **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible and sensitivity-scalable via Settings).
 - **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`, with optional magnetic zoom detents (`1x`, `2x`, `4x`, `8x`, `12x`) in Settings.
 - **Desktop Keyboard Shortcuts**: Keys `1`--`9` select the corresponding palette swatch, `+` / `=` zoom in, `-` / `_` zoom out, `0` resets the viewport to `1x` fit view, and `ArrowUp`/`W`, `ArrowDown`/`S`, `ArrowLeft`/`A`, `ArrowRight`/`D` pan the canvas by `64px` steps (automatically ignored when modals or text inputs are active or browser modifiers are held).
 - **Paint Brush Button**: Toggles continuous drag-to-paint stroke mode.
-- **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Colour mode or via Settings toggle).
+- **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Color mode or via Settings toggle).
 - **Long-Press Undo Button (`>= 450ms`)**: Opens the interactive YouTube-style Replay timeline scrubber (`0.5x`–`20x`) to scrub history and resume play from any step.
 - **Redo Button (`Ctrl+Y` / `Ctrl+Shift+Z`)**: Steps forward to re-apply previously undone regions.
 - **Preview Eye Button**: Toggles unmasked preview of the original source artwork.
