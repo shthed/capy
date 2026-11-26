@@ -16,10 +16,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = path.resolve(__dirname, '../..');
 const BUMP_RANK = { patch: 1, minor: 2, major: 3 };
 
-function escapeRegExp(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 export function computeNextSemVer(currentVersion, bump) {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(currentVersion || '').trim());
   assert.ok(match, `Invalid SemVer version: ${currentVersion}`);
@@ -96,40 +92,6 @@ export function resolvePrNumberForFragment({ fragment, filename, slug, prMap = {
   );
 }
 
-export function removeTaskSectionsFromTodo(todoText, taskIds) {
-  if (!taskIds || taskIds.length === 0) return todoText;
-  let updated = String(todoText || '').replace(/\r\n/g, '\n');
-
-  for (const rawTaskId of taskIds) {
-    const taskId = String(rawTaskId || '').trim();
-    if (!taskId) continue;
-    const lines = updated.split('\n');
-    const out = [];
-    const headerRe = new RegExp(`^###\\s+${escapeRegExp(taskId)}(?:[:\\s]|$)`, 'i');
-    let skipping = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!skipping && headerRe.test(line)) {
-        skipping = true;
-        continue;
-      }
-      if (skipping) {
-        if (/^###\s+/.test(line) || /^##\s+/.test(line) || /^---\s*$/.test(line)) {
-          skipping = false;
-          out.push(line);
-        }
-        continue;
-      }
-      out.push(line);
-    }
-
-    updated = out.join('\n').replace(/\n{3,}/g, '\n\n');
-  }
-
-  return `${updated.trimEnd()}\n`;
-}
-
 function stripBetaTagFromLine(line) {
   if (!line.startsWith('### ')) return line;
   return line
@@ -204,7 +166,6 @@ export function compileChangelog({
 
   let nextVerInfo = null;
   let appendedSameDay = false;
-  const removedTasks = [];
 
   if (parsedFragments.length > 0) {
     const bullets = parsedFragments.map((f) => {
@@ -243,10 +204,6 @@ export function compileChangelog({
       const linesWithoutPriorBeta = existingLines.map(stripBetaTagFromLine);
       const newSection = `### ${activeVersion} - ${dateStr} (Beta)\n\n${bullets.join('\n')}\n\n`;
       changelogText = `${newSection}${linesWithoutPriorBeta.join('\n').replace(/^\n+/, '')}`;
-    }
-
-    for (const f of parsedFragments) {
-      if (f.task) removedTasks.push(f.task);
     }
   }
 
@@ -326,15 +283,6 @@ export function compileChangelog({
       fs.writeFileSync(changelogPath, `${changelogText.trimEnd()}\n`, 'utf8');
     }
 
-    const todoPath = path.join(root, 'TODO.md');
-    if (removedTasks.length > 0 && fs.existsSync(todoPath)) {
-      const prevTodo = fs.readFileSync(todoPath, 'utf8');
-      const nextTodo = removeTaskSectionsFromTodo(prevTodo, removedTasks);
-      if (nextTodo !== prevTodo) {
-        fs.writeFileSync(todoPath, nextTodo, 'utf8');
-      }
-    }
-
     for (const f of parsedFragments) {
       fs.rmSync(f.fullPath, { force: true });
     }
@@ -345,7 +293,6 @@ export function compileChangelog({
     compiledCount: parsedFragments.length,
     appendedSameDay,
     promoted: Boolean(promote),
-    removedTasks,
     changelogText,
   };
 }
@@ -385,6 +332,6 @@ if (isCliEntry) {
   const opts = parseCliArgs(process.argv.slice(2));
   const res = compileChangelog(opts);
   console.log(
-    `[changelog:compile] version=${res.version} compiled=${res.compiledCount} promoted=${res.promoted} removedTasks=${res.removedTasks.length}`
+    `[changelog:compile] version=${res.version} compiled=${res.compiledCount} promoted=${res.promoted}`
   );
 }

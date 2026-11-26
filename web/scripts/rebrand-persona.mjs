@@ -20,6 +20,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
 
+// Includes retired dev-only paths (CLAUDE.md, GEMINI.md, capy.prompt.yml, sync-agile-tracker.yml,
+// etc.) so historical commit replay stays zero-leak when scrubbing older commits.
 export const DEV_ONLY_RELATIVE_PATHS = new Set([
   'AGENTS.md',
   'CAPYBOOP.md',
