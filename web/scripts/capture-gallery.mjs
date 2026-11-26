@@ -334,9 +334,9 @@ async function captureGallery() {
     }
 
     // ----------------------------------------------------
-    // 6. Animated Puzzle Completion & Confetti Replay (960x600 WebP)
+    // 6. Animated Puzzle Completion & Timelapse Replay (960x600 WebP)
     // ----------------------------------------------------
-    console.log('6) Capturing Animated Puzzle Completion & Victory Confetti...');
+    console.log('6) Capturing Animated Puzzle Completion & Timelapse Replay...');
     await captureCompletionAnimation(browser, baseUrl);
 
     console.log('All gallery screenshots captured and saved successfully!');
@@ -428,7 +428,7 @@ async function captureCompletionAnimation(browser, baseUrl) {
         .sort((a, b) => a.cx * 0.72 + a.cy * 0.48 - (b.cx * 0.72 + b.cy * 0.48))
         .map((r) => r.id);
 
-      // Update active session & snapshots to prefilled (~99%) and set crisp 14x replay speed
+      // Update active session & snapshots to prefilled (~99%) and set crisp 8x replay speed
       active.filledRegionIds = prefilled;
       active.zoomScale = 1;
       active.panOffsetX = 0;
@@ -510,20 +510,20 @@ async function captureCompletionAnimation(browser, baseUrl) {
       await snapFrame(210);
     }
 
-    // Tap the final 5th region to trigger 100% golden badge, victory confetti, and 8x replay!
+    // Tap the final 5th region to trigger 100% golden badge and automatic 8x timelapse replay
     const lastReg = prep.finalRegions[prep.finalRegions.length - 1];
     await page.mouse.click(
       box.x + baseOffsetX + lastReg.cx * baseScale,
       box.y + baseOffsetY + lastReg.cy * baseScale
     );
 
-    // Capture smooth live frames (~16-18 fps) across the confetti burst + 8x replay sweep (~3.6s)
+    // Capture smooth live frames across the 8x timelapse replay sweep
     const startMs = Date.now();
     let replayFinishedAt = null;
     while (Date.now() - startMs < 6500) {
       const t0 = Date.now();
       await snapFrame(115);
-      // Detect when replay reaches 100% (skip button becomes disabled) and let confetti settle
+      // Detect when replay reaches 100% (skip button becomes disabled) and let the final frame settle
       if (replayFinishedAt === null) {
         const skipDisabled = await page
           .getByTestId('replay-skip-btn')
@@ -532,7 +532,7 @@ async function captureCompletionAnimation(browser, baseUrl) {
         if (skipDisabled && Date.now() - startMs > 1500) {
           replayFinishedAt = Date.now();
         }
-      } else if (Date.now() - replayFinishedAt > 700) {
+      } else if (Date.now() - replayFinishedAt > 350) {
         break;
       }
       const elapsed = Date.now() - t0;
