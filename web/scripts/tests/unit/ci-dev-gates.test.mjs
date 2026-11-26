@@ -1279,6 +1279,7 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     );
     assert.equal(cleanupClosedPrYaml.includes("github.actor != 'dependabot[bot]'"), true);
     assert.equal(cleanupClosedPrYaml.includes('timeout-minutes: 10'), true);
+    assert.equal(cleanupClosedPrYaml.includes('workflow_dispatch:'), true);
 
     const cleanupBranchesYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/cleanup-branches.yml'),
@@ -1288,15 +1289,26 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     assert.equal(cleanupBranchesYaml.includes('BRANCH_CLEANUP_UNMERGED_MIN_AGE_DAYS'), true);
     assert.equal(cleanupBranchesYaml.includes('timeout-minutes: 10'), true);
 
+    // Owner guardrail: no GitHub Actions workflow may use a personal shthed PAT (CAPY_BOT_TOKEN);
+    // all automated PR, review, merge, and sync actions must run strictly as github-actions[bot].
+    const workflowDir = path.resolve(projectRoot, '../.github/workflows');
+    for (const wfFile of fs.readdirSync(workflowDir).filter((f) => f.endsWith('.yml'))) {
+      const wfText = fs.readFileSync(path.join(workflowDir, wfFile), 'utf8');
+      assert.equal(
+        wfText.includes('CAPY_BOT_TOKEN'),
+        false,
+        `${wfFile} must not reference personal PAT CAPY_BOT_TOKEN (use GITHUB_TOKEN / github-actions[bot])`
+      );
+    }
+
     const syncBetaYaml = fs.readFileSync(
       path.resolve(projectRoot, '../.github/workflows/sync-beta-from-main.yml'),
       'utf8'
     );
     assert.equal(syncBetaYaml.includes('git merge-base --is-ancestor origin/main origin/beta'), true);
     assert.equal(syncBetaYaml.includes('git merge --no-ff origin/main'), true);
-    assert.equal(syncBetaYaml.includes('github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}'), true);
+    assert.equal(syncBetaYaml.includes('github-token: ${{ secrets.GITHUB_TOKEN }}'), true);
     assert.equal(syncBetaYaml.includes('pr-review-gate.yml'), true);
-    assert.equal(syncBetaYaml.includes('draft: !hasPatToken'), true);
     assert.equal(syncBetaYaml.includes('WORKFLOW_DIFFS'), true);
     assert.equal(syncBetaYaml.includes('git push origin HEAD:refs/heads/beta'), true);
     assert.equal(syncBetaYaml.includes('beta ruleset 27162684'), true);
@@ -1324,6 +1336,8 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     assert.equal(prReviewGateYaml.includes('gemini-3.8-flash'), true);
     assert.equal(prReviewGateYaml.includes('gemini-4-argon'), true);
     assert.equal(prReviewGateYaml.includes('ACTIONS_GITHUB_TOKEN'), true);
+    assert.equal(prReviewGateYaml.includes('actions: write'), true);
+    assert.equal(prReviewGateYaml.includes('dispatchPostMergeWorkflows'), true);
     assert.equal(prReviewGateYaml.includes('safeAddLabel'), true);
     assert.equal(prReviewGateYaml.includes('isVerifiedMainSync'), true);
     assert.equal(prReviewGateYaml.includes('strictAiReady'), true);

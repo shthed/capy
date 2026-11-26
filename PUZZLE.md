@@ -150,7 +150,7 @@ When small regions (such as red mushrooms, bright berries, or flowers) sit insid
    $$R_{\text{avg}} = \frac{1}{|R|}\sum_{p \in R} R_p, \quad G_{\text{avg}} = \frac{1}{|R|}\sum_{p \in R} G_p, \quad B_{\text{avg}} = \frac{1}{|R|}\sum_{p \in R} B_p$$
    The region is then mapped to the closest palette swatch in Red-Mean perceptual space so vibrant focal details retain their authentic hue.
 
-### 4.5 Free Colour Mode & Black-and-White Coloring Book Segmentation
+### 4.5 Free Color Mode & Black-and-White Coloring Book Segmentation
 When opening black-and-white line art or hybrid coloring book pages:
 1. **Black & White Detection**: [`ImageAnalyzer.ts`](./web/src/engine/ImageAnalyzer.ts) evaluates pixel saturation and color diversity; if chromatic pixels make up $< 8\%$ of the image, `isBlackAndWhite` is flagged.
 2. **Adaptive Otsu Line Extraction for Paper Drawings**:
@@ -159,11 +159,11 @@ When opening black-and-white line art or hybrid coloring book pages:
    * Accommodates high-density line drawings (up to $35\%$ line pixels) so intricate coloring pages classify cleanly as `LINE_ART`.
 3. **Natural Cell Preservation**:
    * Relaxes region caps (`maxRegions` up to `2,000`, `minRegionArea = 10`) so intricate closed cells (mushroom spots, leaf veins, grass blades) survive as distinct paintable regions.
-4. **Two-Pass Source Accent Locking & Graph Coloring Cell Assignment (`BF-4`)**: When `isBwColoring` is active, `LineArtPuzzleGenerator.generateFromRgba` performs a two-pass coloring assignment:
+4. **Two-Pass Source Accent Locking & Graph Coloring Cell Assignment**: When `isBwColoring` is active, `LineArtPuzzleGenerator.generateFromRgba` performs a two-pass coloring assignment:
    * **Pass 1 (Explicit Source Accent Fill Preservation)**: Inspects each segmented region's interior source pixels (`lineMask[pIdx] === 0`). If $> 25\%$ of a region's interior pixels are explicitly chromatic ($\max(R, G, B) - \min(R, G, B) > 35$ and $\max(R, G, B) > 50$, such as pre-colored eyes, berries, or spot accents on a hybrid coloring page), the engine computes the mean RGB of those chromatic pixels and locks `reg.colorId` to the closest perceptual palette color (`lockedSourceColor`).
    * **Pass 2 (Balanced Greedy Graph Coloring)**: Generates a vibrant 20-color curated starter palette and assigns distinct, non-clashing palette colors to all remaining uncolored paper regions while treating locked source-colored neighbor regions (`lockedSourceColor`) as fixed boundary constraints.
-5. **Free Colour Painting Engine**: When Free Colour Mode is active:
-   * Players can tap or drag with any selected color swatch to fill or repaint any region freely while preserving first-fill chronological replay order (`BF-1`).
+5. **Free Color Painting Engine**: When Free Color Mode is active:
+   * Players can tap or drag with any selected color swatch to fill or repaint any region freely while preserving first-fill chronological replay order.
    * Custom colors can be added on the fly via the palette color picker (`+` button) or swapped with curated theme presets (Vibrant Classic, Mushroom Fantasy, Pastel Dreams, Earthy Nature, Neon Pop).
    * Region number labels are hidden by default for a clean coloring-page aesthetic.
 6. **Multiply Composite Canvas Rendering**:
@@ -175,8 +175,11 @@ When opening black-and-white line art or hybrid coloring book pages:
 
 To guarantee **zero UI frame drops and smooth touch responsiveness**:
 * Puzzle generation runs inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts).
-* Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads** (`rgbaBuffer` inbound; `regionMap`, `borderMap`, and a single contiguous `packedPixelsBuffer` outbound, unpacked into zero-copy `Int32Array.subarray` views via `pixelsOffset`/`pixelsLength`). Pole-of-inaccessibility label placement in [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) reuses a single `Int32Array(total)` `distGrid` and `bfsQueue` across regions to eliminate per-region `Map` heap spikes.
-* Progress updates stream back via `onProgress(pct, status, payload)` with a **strictly monotonic high-water mark** (`0.00` $\rightarrow$ `1.00`). In default **Simple Progress (Fast Mode)** (`detailedProgress = false`), progress IPC is throttled and diagnostic swatch cloning is skipped for maximum generation throughput; toggling **Detailed Progress** sends `{ type: 'SET_DETAILED_PROGRESS', detailed: true }` live to the running worker.
+* Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads**:
+  * Inbound: `rgbaBuffer`.
+  * Outbound: `regionMap`, `borderMap`, and a single contiguous `packedPixelsBuffer` unpacked into zero-copy `Int32Array.subarray` views via `pixelsOffset`/`pixelsLength`.
+  * Pole-of-inaccessibility label placement in [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) reuses a single `Int32Array(total)` `distGrid` and `bfsQueue` across regions to eliminate per-region `Map` heap spikes.
+* Progress updates stream back via `onProgress(pct, status, payload)` with a **strictly monotonic high-water mark** (`0.00` $\rightarrow$ `1.00`). In default **Simple Progress (Fast Mode)** (`detailedProgress = false`), progress IPC is throttled and diagnostic swatch cloning is skipped; toggling **Detailed Progress** sends `{ type: 'SET_DETAILED_PROGRESS', detailed: true }` live to the running worker.
 
 ### 5.1 Canonical 6-Stage Pipeline (`GENERATION_PIPELINE_STEPS`)
 
@@ -192,15 +195,15 @@ Defined in [`web/src/types/index.ts`](./web/src/types/index.ts) and rendered in 
 ### 5.2 Live Auto-Detection Telemetry (`GenerationInspectionDetails`)
 
 When `detailedProgress` is enabled, `GenerationProgressPayload.inspection` (`GenerationInspectionDetails` in [`web/src/types/index.ts`](./web/src/types/index.ts)) exposes live diagnostic fields:
-* **Style & Heuristics**: `detectedType` (`'Line Art / Illustration' | 'Photograph / Realism' | 'Flat Vector / Graphic'`), `isLineArt`, `isBlackAndWhite`, `edgeRatio`, `localVariance`, `globalVariance`, `colorClusterCount`, and `strategyRationale`.
-* **Palette & Region Metrics**: `paletteDetail`, `colorCount`, `paletteColors` (live emerging hex swatches), `maxRegions`, `finalRegionCount`, `minActualArea`, and `maxActualArea`.
+* **Style & Heuristics**: `detectedType` (`'Line Art / Illustration' | 'Photograph / Realism' | 'Flat Vector / Graphic'`), `isLineArt`, `isBlackAndWhite`, `edgeRatio`, `localVariance`, `globalVariance`, `colorClusterCount`, `chosenStrategy`, and `strategyRationale`.
+* **Palette & Region Metrics**: `paletteDetail`, `colorCount`, `paletteColors` (`Array<{ r: number; g: number; b: number }>` emerging RGB swatches), `minRegionArea`, `maxRegions`, `finalRegionCount`, `minActualArea`, and `maxActualArea`.
 * **Canvas & Footprint Metrics**: `sourceWidth`, `sourceHeight`, `targetWidth`, `targetHeight`, `resolution`, and `estimatedSaveSizeKb`.
 
 ---
 
 ## 6. Configuration Reference (`GeneratorConfig`)
 
-All fields of `GeneratorConfig` ([`web/src/types/index.ts`](./web/src/types/index.ts), `DEFAULT_SETTINGS.generatorConfig` in [`StorageService.ts`](./web/src/services/StorageService.ts)):
+All fields of `GeneratorConfig` ([`DEFAULT_GENERATOR_CONFIG` in `web/src/types/index.ts`](./web/src/types/index.ts), persisted under `DEFAULT_SETTINGS.generatorConfig` in [`SettingsStorage.ts`](./web/src/services/storage/SettingsStorage.ts)):
 
 - **`imageType`**: `'AUTO' | 'DRAWING' | 'PHOTO'` (default `'AUTO'`) -- High-level artwork hint guiding style classification.
 - **`preset`**: `'LOW' | 'MEDIUM' | 'HIGH' | 'CUSTOM'` (default `'MEDIUM'`) -- Difficulty preset controlling default region density and minimum cell size.
@@ -212,4 +215,4 @@ All fields of `GeneratorConfig` ([`web/src/types/index.ts`](./web/src/types/inde
 - **`maxRegions`**: `number` (default `200`, range `40`--`2000`) -- Upper bound on total puzzle regions.
 - **`resolution`**: `number` (default `1024`) -- Working longest-edge canvas dimension in pixels (or percentage-scaled artwork target).
 - **`smoothingPasses`**: `number` (default `2`) -- Circular morphological majority smoothing iterations.
-- **`isFreeColor`** *(optional)*: `boolean` -- Flags puzzles created directly for Free Colour / Coloring Page mode.
+- **`isFreeColor`** *(optional)*: `boolean` -- Flags puzzles created directly for Free Color / Coloring Page mode.
