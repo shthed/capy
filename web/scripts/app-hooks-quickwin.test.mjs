@@ -120,7 +120,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-1',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -171,7 +170,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-2',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: true,
@@ -207,7 +205,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-wrap',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -237,7 +234,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-3',
         settings: {
           hapticsEnabled: false,
-          reducedMotion: false,
           autoAdvance: false,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -274,7 +270,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-free',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
