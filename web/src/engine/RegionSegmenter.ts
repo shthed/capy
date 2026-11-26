@@ -21,34 +21,40 @@ export class RegionSegmenter {
    *     to the centerline of the artwork's drawn ink strokes.
    *  5. Region Color Recalibration: Re-evaluates true average source RGB so colors are faithful.
    */
-  static segment(
+  /**
+   * Phase A (Steps 1--3): 4-connected flood fill, Union-Find region merging (min area,
+   * sliver dissolution, maxRegions min-heap cap), and in-place flattening into `regionMap`.
+   *
+   * Isolated in a helper stack frame so all O(regionCounter) Union-Find, CSR offset, and
+   * min-heap scratch buffers become eligible for GC before Phase D allocates `borderMap`,
+   * `distGrid`, and `bfsQueue`.
+   */
+  private static mergeConnectedComponents(
     width: number,
     height: number,
+    total: number,
     palette: PaletteColor[],
     pixelClusters: Int32Array,
-    minRegionArea: number = 48,
-    maxMergePasses: number = 8,
-    maxPerimeterToAreaRatio: number = 2.0,
-    lineMask?: Uint8Array,
-    lineHandling: LineHandlingMode = 'ABSORB_LINES',
-    sourceRgba?: Uint8ClampedArray | Uint8Array,
-    maxRegions: number = 200,
+    regionMap: Int32Array,
+    compPixels: Int32Array,
+    minRegionArea: number,
+    maxMergePasses: number,
+    maxPerimeterToAreaRatio: number,
+    maxRegions: number,
     onProgress?: (progress: number, status: string) => void,
     cellPartitionMap?: Int32Array
-  ): SegmentationResult {
-    const total = width * height;
-    const initialClusters = new Int32Array(pixelClusters);
-    const queueBuffer = new Int32Array(total);
-
+  ): Int32Array {
     onProgress?.(0.68, 'Tracing connected components...');
 
-    // 1. Initial 4-connected components flood fill
-    const regionMap = new Int32Array(total);
+    // 1. Initial 4-connected components flood fill directly into flat CSR buffer `compPixels`
     regionMap.fill(-1);
     let regionCounter = 0;
+    let compCursor = 0;
 
-    const pixelLists: number[][] = [];
-    const regionClusterList: number[] = [];
+    let compCap = Math.min(total + 1, 4096);
+    if (compCap < 2) compCap = 2;
+    let compOffsets = new Int32Array(compCap);
+    let regionCluster = new Int32Array(compCap - 1);
 
     for (let y = 0; y < height; y++) {
       const yRow = y * width;
@@ -56,82 +62,101 @@ export class RegionSegmenter {
         const startIdx = yRow + x;
         if (regionMap[startIdx] !== -1) continue;
 
-        const targetCluster = initialClusters[startIdx];
+        const targetCluster = pixelClusters[startIdx];
         const targetCell = cellPartitionMap ? cellPartitionMap[startIdx] : 0;
         const currentRegionId = regionCounter++;
-        regionClusterList.push(targetCluster);
 
-        const currentPixels: number[] = [];
+        if (currentRegionId + 1 >= compOffsets.length) {
+          const nextCap = Math.min(total + 1, Math.max(compOffsets.length * 2, currentRegionId + 2));
+          const nextOffsets = new Int32Array(nextCap);
+          nextOffsets.set(compOffsets);
+          compOffsets = nextOffsets;
+
+          const nextClusters = new Int32Array(Math.max(1, nextCap - 1));
+          nextClusters.set(regionCluster);
+          regionCluster = nextClusters;
+        }
+
+        regionCluster[currentRegionId] = targetCluster;
+        compOffsets[currentRegionId] = compCursor;
+
         regionMap[startIdx] = currentRegionId;
-        let head = 0;
-        let tail = 0;
-        queueBuffer[tail++] = startIdx;
+        let head = compCursor;
+        let tail = compCursor;
+        compPixels[tail++] = startIdx;
 
         while (head < tail) {
-          const curr = queueBuffer[head++];
-          currentPixels.push(curr);
-
+          const curr = compPixels[head++];
           const cx = curr % width;
-          const cy = Math.floor(curr / width);
+          const cy = (curr - cx) / width;
 
           if (cx > 0) {
             const n = curr - 1;
             if (
               regionMap[n] === -1 &&
-              initialClusters[n] === targetCluster &&
+              pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
               regionMap[n] = currentRegionId;
-              queueBuffer[tail++] = n;
+              compPixels[tail++] = n;
             }
           }
           if (cx < width - 1) {
             const n = curr + 1;
             if (
               regionMap[n] === -1 &&
-              initialClusters[n] === targetCluster &&
+              pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
               regionMap[n] = currentRegionId;
-              queueBuffer[tail++] = n;
+              compPixels[tail++] = n;
             }
           }
           if (cy > 0) {
             const n = curr - width;
             if (
               regionMap[n] === -1 &&
-              initialClusters[n] === targetCluster &&
+              pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
               regionMap[n] = currentRegionId;
-              queueBuffer[tail++] = n;
+              compPixels[tail++] = n;
             }
           }
           if (cy < height - 1) {
             const n = curr + width;
             if (
               regionMap[n] === -1 &&
-              initialClusters[n] === targetCluster &&
+              pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
               regionMap[n] = currentRegionId;
-              queueBuffer[tail++] = n;
+              compPixels[tail++] = n;
             }
           }
         }
 
-        pixelLists.push(currentPixels);
+        compCursor = tail;
+        compOffsets[currentRegionId + 1] = compCursor;
       }
     }
 
-    // 2. Disjoint-Set (Union-Find) + per-root component lists for O(area) adjacency lookups
+    if (regionCounter === 0) {
+      return new Int32Array(0);
+    }
+
+    // 2. Disjoint-Set (Union-Find) + intrusive singly-linked component lists for O(1) merges
     const parent = new Int32Array(regionCounter);
     const regionArea = new Int32Array(regionCounter);
-    const rootComponents: number[][] = new Array(regionCounter);
+    const rootHead = new Int32Array(regionCounter);
+    const rootTail = new Int32Array(regionCounter);
+    const compNext = new Int32Array(regionCounter);
     for (let i = 0; i < regionCounter; i++) {
       parent[i] = i;
-      regionArea[i] = pixelLists[i].length;
-      rootComponents[i] = [i];
+      regionArea[i] = compOffsets[i + 1] - compOffsets[i];
+      rootHead[i] = i;
+      rootTail[i] = i;
+      compNext[i] = -1;
     }
 
     function findRoot(i: number): number {
@@ -146,21 +171,31 @@ export class RegionSegmenter {
       return root;
     }
 
-    const collectNeighborTouches = (targetRoot: number): { touches: Map<number, number>; perimeter: number } => {
-      const touches = new Map<number, number>();
+    // Reusable ordered neighbor-touch accumulator (exact Map insertion-order semantics, zero allocations)
+    const touchCounts = new Int32Array(regionCounter);
+    const touchedRoots = new Int32Array(regionCounter);
+    let touchLen = 0;
+
+    const collectNeighborTouches = (targetRoot: number): number => {
+      for (let i = 0; i < touchLen; i++) {
+        touchCounts[touchedRoots[i]] = 0;
+      }
+      touchLen = 0;
       let perimeter = 0;
-      const comps = rootComponents[targetRoot];
-      for (let c = 0; c < comps.length; c++) {
-        const pixels = pixelLists[comps[c]];
-        for (let i = 0; i < pixels.length; i++) {
-          const idx = pixels[i];
+
+      for (let comp = rootHead[targetRoot]; comp !== -1; comp = compNext[comp]) {
+        const start = compOffsets[comp];
+        const end = compOffsets[comp + 1];
+        for (let i = start; i < end; i++) {
+          const idx = compPixels[i];
           const px = idx % width;
-          const py = Math.floor(idx / width);
+          const py = (idx - px) / width;
 
           if (px > 0) {
             const nRoot = findRoot(regionMap[idx - 1]);
             if (nRoot !== targetRoot) {
-              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+              touchCounts[nRoot]++;
               perimeter++;
             }
           } else {
@@ -170,7 +205,8 @@ export class RegionSegmenter {
           if (px < width - 1) {
             const nRoot = findRoot(regionMap[idx + 1]);
             if (nRoot !== targetRoot) {
-              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+              touchCounts[nRoot]++;
               perimeter++;
             }
           } else {
@@ -180,7 +216,8 @@ export class RegionSegmenter {
           if (py > 0) {
             const nRoot = findRoot(regionMap[idx - width]);
             if (nRoot !== targetRoot) {
-              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+              touchCounts[nRoot]++;
               perimeter++;
             }
           } else {
@@ -190,7 +227,8 @@ export class RegionSegmenter {
           if (py < height - 1) {
             const nRoot = findRoot(regionMap[idx + width]);
             if (nRoot !== targetRoot) {
-              touches.set(nRoot, (touches.get(nRoot) || 0) + 1);
+              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+              touchCounts[nRoot]++;
               perimeter++;
             }
           } else {
@@ -198,16 +236,18 @@ export class RegionSegmenter {
           }
         }
       }
-      return { touches, perimeter };
+      return perimeter;
     };
 
-    const pickBestMergeNeighbor = (root: number, neighborTouches: Map<number, number>): number => {
-      const currColor = palette[regionClusterList[root]] || palette[0];
+    const pickBestMergeNeighbor = (root: number): number => {
+      const currColor = palette[regionCluster[root]] || palette[0];
       let bestNeighbor = -1;
       let bestScore = -1;
 
-      for (const [nRoot, touch] of neighborTouches.entries()) {
-        const nColor = palette[regionClusterList[nRoot]] || palette[0];
+      for (let i = 0; i < touchLen; i++) {
+        const nRoot = touchedRoots[i];
+        const touch = touchCounts[nRoot];
+        const nColor = palette[regionCluster[nRoot]] || palette[0];
         let distSq = 0;
         if (currColor && nColor) {
           distSq = ColorQuantizer.perceptualDistanceSq(
@@ -233,12 +273,17 @@ export class RegionSegmenter {
     const mergeRootInto = (srcRoot: number, dstRoot: number): void => {
       parent[srcRoot] = dstRoot;
       regionArea[dstRoot] += regionArea[srcRoot];
-      const srcComps = rootComponents[srcRoot];
-      const dstComps = rootComponents[dstRoot];
-      for (let i = 0; i < srcComps.length; i++) {
-        dstComps.push(srcComps[i]);
+      const srcHead = rootHead[srcRoot];
+      if (srcHead !== -1) {
+        if (rootTail[dstRoot] !== -1) {
+          compNext[rootTail[dstRoot]] = srcHead;
+        } else {
+          rootHead[dstRoot] = srcHead;
+        }
+        rootTail[dstRoot] = rootTail[srcRoot];
+        rootHead[srcRoot] = -1;
+        rootTail[srcRoot] = -1;
       }
-      rootComponents[srcRoot] = [];
     };
 
     // Phase 1: Dissolve all regions strictly smaller than minRegionArea
@@ -252,10 +297,10 @@ export class RegionSegmenter {
         const root = findRoot(r);
         if (root !== r || regionArea[root] >= targetMin) continue;
 
-        const { touches } = collectNeighborTouches(root);
-        if (touches.size === 0) continue;
+        collectNeighborTouches(root);
+        if (touchLen === 0) continue;
 
-        const bestNeighbor = pickBestMergeNeighbor(root, touches);
+        const bestNeighbor = pickBestMergeNeighbor(root);
         if (bestNeighbor >= 0) {
           mergeRootInto(root, bestNeighbor);
           mergedThisPass++;
@@ -272,11 +317,11 @@ export class RegionSegmenter {
         const root = findRoot(r);
         if (root !== r || regionArea[root] > sliverAreaCeiling) continue;
 
-        const { touches, perimeter } = collectNeighborTouches(root);
-        if (touches.size === 0) continue;
+        const perimeter = collectNeighborTouches(root);
+        if (touchLen === 0) continue;
 
         if (perimeter / regionArea[root] > maxPerimeterToAreaRatio) {
-          const bestNeighbor = pickBestMergeNeighbor(root, touches);
+          const bestNeighbor = pickBestMergeNeighbor(root);
           if (bestNeighbor >= 0) {
             mergeRootInto(root, bestNeighbor);
           }
@@ -290,16 +335,17 @@ export class RegionSegmenter {
 
     // Collect active unique roots deterministically and seed an O(R log R) binary min-heap
     const seenRoots = new Uint8Array(regionCounter);
-    const activeRootIds: number[] = [];
+    const activeRootIds = new Int32Array(regionCounter);
+    let activeRootCount = 0;
     for (let i = 0; i < regionCounter; i++) {
       const root = findRoot(i);
       if (seenRoots[root] === 0) {
         seenRoots[root] = 1;
-        activeRootIds.push(root);
+        activeRootIds[activeRootCount++] = root;
       }
     }
 
-    if (activeRootIds.length > effectiveMaxRegions) {
+    if (activeRootCount > effectiveMaxRegions) {
       const maxHeapCap = Math.max(16, regionCounter * 2 + 4);
       const heapAreas = new Int32Array(maxHeapCap);
       const heapRoots = new Int32Array(maxHeapCap);
@@ -351,13 +397,13 @@ export class RegionSegmenter {
         }
       };
 
-      for (let i = 0; i < activeRootIds.length; i++) {
+      for (let i = 0; i < activeRootCount; i++) {
         const root = activeRootIds[i];
         heapPush(regionArea[root], root);
       }
 
       const isolatedRoots = new Uint8Array(regionCounter);
-      let mergeableCount = activeRootIds.length;
+      let mergeableCount = activeRootCount;
 
       while (mergeableCount > effectiveMaxRegions && heapSize > 0) {
         const topArea = heapAreas[0];
@@ -374,14 +420,14 @@ export class RegionSegmenter {
           continue;
         }
 
-        const { touches } = collectNeighborTouches(smallestRoot);
-        if (touches.size === 0) {
+        collectNeighborTouches(smallestRoot);
+        if (touchLen === 0) {
           isolatedRoots[smallestRoot] = 1;
           mergeableCount--;
           continue;
         }
 
-        const bestNeighbor = pickBestMergeNeighbor(smallestRoot, touches);
+        const bestNeighbor = pickBestMergeNeighbor(smallestRoot);
         if (bestNeighbor >= 0) {
           mergeRootInto(smallestRoot, bestNeighbor);
           mergeableCount--;
@@ -392,30 +438,64 @@ export class RegionSegmenter {
       }
     }
 
-    // 3. Flatten into final region map with 1-based sequential IDs
-    const finalRegionMap = new Int32Array(total);
-    const rootToFinalId = new Map<number, number>();
-    const finalRegionsList: { id: number; clusterId: number; pixels: number[] }[] = [];
+    // 3. Flatten directly into `regionMap` in place with 1-based sequential IDs
+    const rootToFinalId = new Int32Array(regionCounter); // 0 = unassigned
+    const finalClusterIdsList: number[] = [];
 
     for (let r = 0; r < regionCounter; r++) {
       const root = findRoot(r);
-      let finalId = rootToFinalId.get(root);
+      let finalId = rootToFinalId[root];
 
-      if (finalId === undefined) {
-        finalId = finalRegionsList.length + 1;
-        rootToFinalId.set(root, finalId);
-        finalRegionsList.push({
-          id: finalId,
-          clusterId: regionClusterList[root],
-          pixels: [],
-        });
+      if (finalId === 0) {
+        finalId = finalClusterIdsList.length + 1;
+        rootToFinalId[root] = finalId;
+        finalClusterIdsList.push(regionCluster[root]);
       }
 
-      const pixels = pixelLists[r];
-      for (let i = 0; i < pixels.length; i++) {
-        finalRegionMap[pixels[i]] = finalId;
+      const start = compOffsets[r];
+      const end = compOffsets[r + 1];
+      for (let i = start; i < end; i++) {
+        regionMap[compPixels[i]] = finalId;
       }
     }
+
+    return Int32Array.from(finalClusterIdsList);
+  }
+
+  static segment(
+    width: number,
+    height: number,
+    palette: PaletteColor[],
+    pixelClusters: Int32Array,
+    minRegionArea: number = 48,
+    maxMergePasses: number = 8,
+    maxPerimeterToAreaRatio: number = 2.0,
+    lineMask?: Uint8Array,
+    lineHandling: LineHandlingMode = 'ABSORB_LINES',
+    sourceRgba?: Uint8ClampedArray | Uint8Array,
+    maxRegions: number = 200,
+    onProgress?: (progress: number, status: string) => void,
+    cellPartitionMap?: Int32Array
+  ): SegmentationResult {
+    const total = width * height;
+    const finalRegionMap = new Int32Array(total);
+    const compPixels = new Int32Array(total);
+
+    const finalClusterIds = RegionSegmenter.mergeConnectedComponents(
+      width,
+      height,
+      total,
+      palette,
+      pixelClusters,
+      finalRegionMap,
+      compPixels,
+      minRegionArea,
+      maxMergePasses,
+      maxPerimeterToAreaRatio,
+      maxRegions,
+      onProgress,
+      cellPartitionMap
+    );
 
     // 4. Symmetrical Line Alignment
     if (lineMask && lineHandling === 'ABSORB_LINES') {
@@ -427,7 +507,7 @@ export class RegionSegmenter {
     for (let idx = 0; idx < total; idx++) {
       if (finalRegionMap[idx] <= 0) {
         const px = idx % width;
-        const py = Math.floor(idx / width);
+        const py = (idx - px) / width;
         let fallbackId = 1;
 
         if (px > 0 && finalRegionMap[idx - 1] > 0) fallbackId = finalRegionMap[idx - 1];
@@ -439,23 +519,57 @@ export class RegionSegmenter {
       }
     }
 
-    // Populate region pixels strictly in ascending scanline order (0..total-1)
+    // 4.5. Counting-sort CSR for final regions in strictly ascending scanline order (0..total-1)
+    const rawFinalCount = finalClusterIds.length;
+    const finalCounts = new Int32Array(rawFinalCount + 1);
     for (let idx = 0; idx < total; idx++) {
       const rid = finalRegionMap[idx];
-      if (rid > 0 && rid <= finalRegionsList.length) {
-        finalRegionsList[rid - 1].pixels.push(idx);
+      if (rid > 0 && rid <= rawFinalCount) {
+        finalCounts[rid]++;
       }
     }
 
-    // Filter out any empty regions and re-index sequentially
-    const activeFinalRegions = finalRegionsList.filter((r) => r.pixels.length > 0);
-    for (let i = 0; i < activeFinalRegions.length; i++) {
-      const newId = i + 1;
-      const reg = activeFinalRegions[i];
-      if (reg.id !== newId) {
-        reg.id = newId;
-        for (let p = 0; p < reg.pixels.length; p++) {
-          finalRegionMap[reg.pixels[p]] = newId;
+    const oldIdToNewId = new Int32Array(rawFinalCount + 1);
+    let activeCount = 0;
+    let needsRemap = false;
+    for (let oldId = 1; oldId <= rawFinalCount; oldId++) {
+      if (finalCounts[oldId] > 0) {
+        const newId = ++activeCount;
+        oldIdToNewId[oldId] = newId;
+        if (newId !== oldId) needsRemap = true;
+      }
+    }
+
+    const activeClusterIds = new Int32Array(activeCount);
+    const finalOffsets = new Int32Array(activeCount + 1);
+    let totalActivePixels = 0;
+    for (let oldId = 1; oldId <= rawFinalCount; oldId++) {
+      const newId = oldIdToNewId[oldId];
+      if (newId > 0) {
+        activeClusterIds[newId - 1] = finalClusterIds[oldId - 1];
+        finalOffsets[newId - 1] = totalActivePixels;
+        totalActivePixels += finalCounts[oldId];
+      }
+    }
+    finalOffsets[activeCount] = totalActivePixels;
+
+    // Reuse compPixels as the contiguous backing buffer for Region.pixels subarray views
+    const packedFinalPixels =
+      totalActivePixels === total ? compPixels : new Int32Array(totalActivePixels);
+    const writeCursors = new Int32Array(activeCount);
+    for (let i = 0; i < activeCount; i++) {
+      writeCursors[i] = finalOffsets[i];
+    }
+
+    for (let idx = 0; idx < total; idx++) {
+      const oldRid = finalRegionMap[idx];
+      if (oldRid > 0 && oldRid <= rawFinalCount) {
+        const newRid = oldIdToNewId[oldRid];
+        if (newRid > 0) {
+          if (needsRemap && newRid !== oldRid) {
+            finalRegionMap[idx] = newRid;
+          }
+          packedFinalPixels[writeCursors[newRid - 1]++] = idx;
         }
       }
     }
@@ -485,10 +599,13 @@ export class RegionSegmenter {
     const distGrid = new Int32Array(total);
     const bfsQueue = new Int32Array(total);
 
-    const regions: Region[] = activeFinalRegions.map((reg) => {
-      const regionId = reg.id;
-      const count = reg.pixels.length;
-      const pixelData = reg.pixels;
+    const regions: Region[] = new Array(activeCount);
+    for (let rIdx = 0; rIdx < activeCount; rIdx++) {
+      const regionId = rIdx + 1;
+      const start = finalOffsets[rIdx];
+      const end = finalOffsets[rIdx + 1];
+      const count = end - start;
+      const pixelData = packedFinalPixels.subarray(start, end);
 
       let sumX = 0;
       let sumY = 0;
@@ -500,7 +617,7 @@ export class RegionSegmenter {
       for (let i = 0; i < count; i++) {
         const idx = pixelData[i];
         const px = idx % width;
-        const py = Math.floor(idx / width);
+        const py = (idx - px) / width;
 
         sumX += px;
         sumY += py;
@@ -540,7 +657,7 @@ export class RegionSegmenter {
         for (let i = 0; i < count; i++) {
           const idx = pixelData[i];
           const px = idx % width;
-          const py = Math.floor(idx / width);
+          const py = (idx - px) / width;
 
           const isBoundary =
             px === 0 ||
@@ -566,7 +683,7 @@ export class RegionSegmenter {
           const idx = bfsQueue[head++];
           const nextDist = distGrid[idx] + 1;
           const px = idx % width;
-          const py = Math.floor(idx / width);
+          const py = (idx - px) / width;
 
           if (px > 0) {
             const n1 = idx - 1;
@@ -620,13 +737,13 @@ export class RegionSegmenter {
         }
 
         bestPx = maxIdx % width;
-        bestPy = Math.floor(maxIdx / width);
+        bestPy = (maxIdx - bestPx) / width;
         maxDistance = maxDist;
       }
 
       // Region Color Recalibration:
       // Compute the true average color of pixels in this region from source artwork.
-      let resolvedColorId = reg.clusterId + 1;
+      let resolvedColorId = activeClusterIds[rIdx] + 1;
       if (sourceRgba && count > 0) {
         let sumPixR = 0, sumPixG = 0, sumPixB = 0;
         for (let i = 0; i < count; i++) {
@@ -650,7 +767,7 @@ export class RegionSegmenter {
         }
       }
 
-      return {
+      regions[rIdx] = {
         id: regionId,
         colorId: resolvedColorId,
         centroidX: bestPx + 0.5,
@@ -661,9 +778,9 @@ export class RegionSegmenter {
         minY,
         maxY,
         maxRadius: maxDistance,
-        pixels: new Int32Array(pixelData),
+        pixels: pixelData,
       };
-    });
+    }
 
     return {
       regions,
