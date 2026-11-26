@@ -1798,6 +1798,59 @@ async function testSeamCompositor(seamMod) {
   assert.equal(compOut.rgba[1], 195);
   assert.equal(compOut.rgba[2], 95);
   assert.equal(compOut.rgba[3], 255);
+
+  // 3d. Outpaint auto-alignment detects +6% horizontal stretch / shift and snaps seam via 9-slice warp
+  const alignInnerW = 60;
+  const alignInnerH = 50;
+  const alignCheck = canExtendSides(alignInnerW, alignInnerH, outSides);
+  const alignInner = new Uint8ClampedArray(alignInnerW * alignInnerH * 4);
+  for (let y = 0; y < alignInnerH; y++) {
+    for (let x = 0; x < alignInnerW; x++) {
+      const i = (y * alignInnerW + x) * 4;
+      alignInner[i] = ((x * 7 + y * 3) % 2 == 0 ? 220 : 40);
+      alignInner[i + 1] = Math.round((x / alignInnerW) * 240);
+      alignInner[i + 2] = Math.round((y / alignInnerH) * 240);
+      alignInner[i + 3] = 255;
+    }
+  }
+  const driftedGen = new Uint8ClampedArray(alignCheck.nextWidth * alignCheck.nextHeight * 4);
+  const driftX = (alignCheck.offsetX - 2) / alignCheck.nextWidth;
+  const driftY = (alignCheck.offsetY + 2) / alignCheck.nextHeight;
+  const driftW = (alignCheck.innerWidth * 1.06) / alignCheck.nextWidth;
+  const driftH = (alignCheck.innerHeight * 0.96) / alignCheck.nextHeight;
+  for (let y = 0; y < alignCheck.nextHeight; y++) {
+    const v = (y + 0.5) / alignCheck.nextHeight;
+    for (let x = 0; x < alignCheck.nextWidth; x++) {
+      const u = (x + 0.5) / alignCheck.nextWidth;
+      const idx = (y * alignCheck.nextWidth + x) * 4;
+      if (u >= driftX && u < driftX + driftW && v >= driftY && v < driftY + driftH) {
+        const ix = Math.min(alignInnerW - 1, Math.floor(((u - driftX) / driftW) * alignInnerW));
+        const iy = Math.min(alignInnerH - 1, Math.floor(((v - driftY) / driftH) * alignInnerH));
+        const si = (iy * alignInnerW + ix) * 4;
+        driftedGen[idx] = alignInner[si];
+        driftedGen[idx + 1] = alignInner[si + 1];
+        driftedGen[idx + 2] = alignInner[si + 2];
+        driftedGen[idx + 3] = 255;
+      } else {
+        driftedGen[idx] = 80;
+        driftedGen[idx + 1] = 160;
+        driftedGen[idx + 2] = 110;
+        driftedGen[idx + 3] = 255;
+      }
+    }
+  }
+  const est = seamMod.estimateOutpaintAlignedInnerRect(
+    alignInner,
+    alignInnerW,
+    alignInnerH,
+    driftedGen,
+    alignCheck.nextWidth,
+    alignCheck.nextHeight,
+    alignCheck
+  );
+  assert.equal(est.applied, true, 'estimateOutpaintAlignedInnerRect must detect drifted AI outpaint');
+  assert.ok(Math.abs(est.x - driftX) < 0.025, `Expected aligned x near ${driftX.toFixed(3)}, got ${est.x.toFixed(3)}`);
+  assert.ok(Math.abs(est.width - driftW) < 0.03, `Expected aligned width near ${driftW.toFixed(3)}, got ${est.width.toFixed(3)}`);
 }
 
 // -------------------------------------------------------------------------
@@ -9893,6 +9946,13 @@ async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod
     assert.equal(mockCache.lastFilledSetRef, null);
     assert.equal(mockCache.lastFilledSetSize, -1);
     assert.equal(mockCache.hasUnfilledRegions, false);
+
+    // Zoom Out demoted center layers must suppress rectangular silhouette hairline; Zoom In layers keep it
+    assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer({ layerId: 'root_wrap_1795624927' }), true);
+    assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer({ layerId: 'inner_root_d1' }), true);
+    assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer({ layerId: 'layer_abc_center' }), true);
+    assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer({ layerId: 'zoom_in_d1_abc' }), false);
+    assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer(null), false);
   }
 
   // I5: collectVisibleNestedLayers, hasOverlappingDeeperVisibleLayer & collectProminentVisibleLayerIds

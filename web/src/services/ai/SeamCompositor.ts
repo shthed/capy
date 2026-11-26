@@ -977,12 +977,276 @@ function applyOutpaintOuterFeather(
   }
 }
 
+interface AlignmentSamplePoint {
+  u: number;
+  v: number;
+  r: number;
+  g: number;
+  b: number;
+  wgt: number;
+}
+
+export interface AlignedInnerRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  applied: boolean;
+}
+
+const OUTPAINT_ALIGN_MAX_DIM = 160;
+const OUTPAINT_ALIGN_CLIP_L1 = 120;
+const OUTPAINT_ALIGN_MIN_REL_IMPROVEMENT = 0.1;
+const OUTPAINT_ALIGN_MIN_ABS_IMPROVEMENT = 4;
+
+function buildAlignmentSamplePoints(
+  innerSmall: Uint8ClampedArray,
+  inW: number,
+  inH: number
+): AlignmentSamplePoint[] {
+  const pts: AlignmentSamplePoint[] = [];
+  const step = Math.max(1, Math.floor(Math.min(inW, inH) / 48));
+  const edgeBandX = Math.max(4, Math.round(inW * 0.12));
+  const edgeBandY = Math.max(4, Math.round(inH * 0.12));
+  for (let y = 0; y < inH; y += step) {
+    const nearY = y < edgeBandY || y >= inH - edgeBandY;
+    for (let x = 0; x < inW; x += step) {
+      const nearX = x < edgeBandX || x >= inW - edgeBandX;
+      const nearEdge = nearX || nearY;
+      if (!nearEdge && (x % (step * 2) !== 0 || y % (step * 2) !== 0)) continue;
+      const idx = (y * inW + x) * 4;
+      if (innerSmall[idx + 3] < 200) continue;
+      pts.push({
+        u: (x + 0.5) / inW,
+        v: (y + 0.5) / inH,
+        r: innerSmall[idx],
+        g: innerSmall[idx + 1],
+        b: innerSmall[idx + 2],
+        wgt: nearEdge ? 2 : 1,
+      });
+    }
+  }
+  return pts;
+}
+
+function evaluateAlignmentError(
+  pts: readonly AlignmentSamplePoint[],
+  genSmall: Uint8ClampedArray,
+  sw: number,
+  sh: number,
+  fx: number,
+  fy: number,
+  fw: number,
+  fh: number
+): number {
+  let tot = 0;
+  let wsum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const gx = Math.round((fx + p.u * fw) * sw - 0.5);
+    const gy = Math.round((fy + p.v * fh) * sh - 0.5);
+    if (gx < 0 || gx >= sw || gy < 0 || gy >= sh) {
+      tot += (OUTPAINT_ALIGN_CLIP_L1 + 30) * p.wgt;
+    } else {
+      const idx = (gy * sw + gx) * 4;
+      const d =
+        Math.abs(p.r - genSmall[idx]) +
+        Math.abs(p.g - genSmall[idx + 1]) +
+        Math.abs(p.b - genSmall[idx + 2]);
+      tot += (d > OUTPAINT_ALIGN_CLIP_L1 ? OUTPAINT_ALIGN_CLIP_L1 : d) * p.wgt;
+    }
+    wsum += p.wgt;
+  }
+  return wsum > 0 ? tot / wsum : Infinity;
+}
+
+function isValidAlignedRectCandidate(
+  fx: number,
+  fy: number,
+  fw: number,
+  fh: number,
+  expX: number,
+  expY: number,
+  expW: number,
+  expH: number
+): boolean {
+  if (fw < expW * 0.85 || fw > expW * 1.15 || fh < expH * 0.85 || fh > expH * 1.15) {
+    return false;
+  }
+  const minMargin = 0.01;
+  if (expX > 0 && fx < minMargin) return false;
+  if (expX === 0 && Math.abs(fx) > 0.03) return false;
+  if (expX + expW < 1 && fx + fw > 1 - minMargin) return false;
+  if (expX + expW >= 1 && Math.abs(fx + fw - 1) > 0.03) return false;
+  if (expY > 0 && fy < minMargin) return false;
+  if (expY === 0 && Math.abs(fy) > 0.03) return false;
+  if (expY + expH < 1 && fy + fh > 1 - minMargin) return false;
+  if (expY + expH >= 1 && Math.abs(fy + fh - 1) > 0.03) return false;
+  return fx >= 0 && fy >= 0 && fx + fw <= 1 && fy + fh <= 1;
+}
+
+/**
+ * Estimates the normalized [0..1] inner rectangle where the AI model placed `lockedInner` inside
+ * `generatedRgba`, compensating for the ±2--8% scale/offset drift common in diffusion outpainting.
+ * Returns exact identity (`applied: false`) whenever the generated image is already aligned,
+ * too small, or synthetic/uniform.
+ */
+export function estimateOutpaintAlignedInnerRect(
+  lockedInner: Uint8ClampedArray,
+  innerW: number,
+  innerH: number,
+  generatedRgba: Uint8ClampedArray,
+  genW: number,
+  genH: number,
+  check: ExtendSidesCheck
+): AlignedInnerRect {
+  const outW = check.nextWidth;
+  const outH = check.nextHeight;
+  const expX = check.offsetX / outW;
+  const expY = check.offsetY / outH;
+  const expW = check.innerWidth / outW;
+  const expH = check.innerHeight / outH;
+  const identity: AlignedInnerRect = { x: expX, y: expY, width: expW, height: expH, applied: false };
+
+  if (outW < 48 || outH < 48 || innerW < 24 || innerH < 24 || genW < 48 || genH < 48) {
+    return identity;
+  }
+  const scale = Math.min(1, OUTPAINT_ALIGN_MAX_DIM / Math.max(outW, outH));
+  const sw = Math.max(16, Math.round(outW * scale));
+  const sh = Math.max(16, Math.round(outH * scale));
+  const inW = Math.max(12, Math.round(innerW * scale));
+  const inH = Math.max(12, Math.round(innerH * scale));
+
+  const genSmall = resampleRgbaSubRect(generatedRgba, genW, genH, 0, 0, genW, genH, sw, sh);
+  const innerSmall = resampleRgbaSubRect(lockedInner, innerW, innerH, 0, 0, innerW, innerH, inW, inH);
+  const pts = buildAlignmentSamplePoints(innerSmall, inW, inH);
+  if (pts.length < 32) return identity;
+
+  const baseErr = evaluateAlignmentError(pts, genSmall, sw, sh, expX, expY, expW, expH);
+  let bestErr = baseErr;
+  let bestX = expX;
+  let bestY = expY;
+  let bestW = expW;
+  let bestH = expH;
+
+  for (let dsx = -8; dsx <= 8; dsx += 2) {
+    const fw = expW * (1 + dsx * 0.01);
+    for (let dsy = -8; dsy <= 8; dsy += 2) {
+      const fh = expH * (1 + dsy * 0.01);
+      for (let dtx = -6; dtx <= 6; dtx += 2) {
+        const fx = expX + dtx * 0.005;
+        for (let dty = -6; dty <= 6; dty += 2) {
+          const fy = expY + dty * 0.005;
+          if (!isValidAlignedRectCandidate(fx, fy, fw, fh, expX, expY, expW, expH)) continue;
+          const err = evaluateAlignmentError(pts, genSmall, sw, sh, fx, fy, fw, fh);
+          if (err < bestErr) {
+            bestErr = err;
+            bestX = fx;
+            bestY = fy;
+            bestW = fw;
+            bestH = fh;
+          }
+        }
+      }
+    }
+  }
+
+  const steps = [0.004, 0.002, 0.001];
+  const dirs = [
+    [1, 0, 0, 0],
+    [-1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, -1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, -1, 0],
+    [0, 0, 0, 1],
+    [0, 0, 0, -1],
+  ];
+  for (let si = 0; si < steps.length; si++) {
+    const step = steps[si];
+    let improved = true;
+    let iter = 0;
+    while (improved && iter < 16) {
+      improved = false;
+      iter++;
+      for (let di = 0; di < dirs.length; di++) {
+        const d = dirs[di];
+        const fx = bestX + d[0] * step;
+        const fy = bestY + d[1] * step;
+        const fw = bestW + d[2] * step;
+        const fh = bestH + d[3] * step;
+        if (!isValidAlignedRectCandidate(fx, fy, fw, fh, expX, expY, expW, expH)) continue;
+        const err = evaluateAlignmentError(pts, genSmall, sw, sh, fx, fy, fw, fh);
+        if (err < bestErr - 0.02) {
+          bestErr = err;
+          bestX = fx;
+          bestY = fy;
+          bestW = fw;
+          bestH = fh;
+          improved = true;
+        }
+      }
+    }
+  }
+
+  const improvedEnough =
+    baseErr - bestErr >= OUTPAINT_ALIGN_MIN_ABS_IMPROVEMENT &&
+    bestErr <= baseErr * (1 - OUTPAINT_ALIGN_MIN_REL_IMPROVEMENT);
+  if (!improvedEnough) return identity;
+  return { x: bestX, y: bestY, width: bestW, height: bestH, applied: true };
+}
+
+function mapNineSliceAxis(u: number, e0: number, e1: number, f0: number, f1: number): number {
+  if (e0 > 0 && u < e0) {
+    return (u / e0) * f0;
+  }
+  if (e1 < 1 && u > e1) {
+    return f1 + ((u - e1) / (1 - e1)) * (1 - f1);
+  }
+  const span = e1 - e0;
+  return span > 0 ? f0 + ((u - e0) / span) * (f1 - f0) : u;
+}
+
+function resampleRgbaNineSlice(
+  src: Uint8ClampedArray,
+  srcW: number,
+  srcH: number,
+  dstW: number,
+  dstH: number,
+  e0x: number,
+  e1x: number,
+  e0y: number,
+  e1y: number,
+  f0x: number,
+  f1x: number,
+  f0y: number,
+  f1y: number
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(dstW * dstH * 4);
+  const srcXMap = new Float32Array(dstW);
+  for (let x = 0; x < dstW; x++) {
+    const u = (x + 0.5) / dstW;
+    srcXMap[x] = mapNineSliceAxis(u, e0x, e1x, f0x, f1x) * srcW - 0.5;
+  }
+  for (let y = 0; y < dstH; y++) {
+    const v = (y + 0.5) / dstH;
+    const sy = mapNineSliceAxis(v, e0y, e1y, f0y, f1y) * srcH - 0.5;
+    const rowBase = y * dstW;
+    for (let x = 0; x < dstW; x++) {
+      sampleBilinearRgba(src, srcW, srcH, srcXMap[x], sy, out, (rowBase + x) * 4);
+    }
+  }
+  return out;
+}
+
 /**
  * Composites Nano Banana outpainted outer borders strictly outside `(check.offsetX, check.offsetY, check.innerWidth, check.innerHeight)`.
  *
  * STRICT PIXEL LOCK:
  * - Every pixel strictly inside the inner rectangle is copied 100% bit-for-bit untouched from `originalInnerRgba`
  *   (when unscaled; cleanly resampled if `2048px` cap scaled down inner).
+ * - Automatically detects and corrects small AI scale/offset drift via continuous 9-slice alignment so
+ *   outer border objects snap cleanly onto all 4 edges of the locked inner artwork.
  * - Only outer pixels within `1..featherPx` of the inner boundary are smoothly feathered against the nearest
  *   inner boundary pixel — ZERO inner pixels are ever modified!
  */
@@ -1006,18 +1270,6 @@ export function compositeOutpaintRgba(
 
   const outW = check.nextWidth;
   const outH = check.nextHeight;
-  const out = resampleRgbaSubRect(
-    generatedRgba,
-    generatedWidth,
-    generatedHeight,
-    0,
-    0,
-    generatedWidth,
-    generatedHeight,
-    outW,
-    outH
-  );
-
   const lockedInner =
     check.innerWidth === innerWidth && check.innerHeight === innerHeight
       ? originalInnerRgba
@@ -1032,6 +1284,44 @@ export function compositeOutpaintRgba(
           check.innerWidth,
           check.innerHeight
         );
+
+  const aligned = estimateOutpaintAlignedInnerRect(
+    lockedInner,
+    check.innerWidth,
+    check.innerHeight,
+    generatedRgba,
+    generatedWidth,
+    generatedHeight,
+    check
+  );
+
+  const out = aligned.applied
+    ? resampleRgbaNineSlice(
+        generatedRgba,
+        generatedWidth,
+        generatedHeight,
+        outW,
+        outH,
+        check.offsetX / outW,
+        (check.offsetX + check.innerWidth) / outW,
+        check.offsetY / outH,
+        (check.offsetY + check.innerHeight) / outH,
+        aligned.x,
+        aligned.x + aligned.width,
+        aligned.y,
+        aligned.y + aligned.height
+      )
+    : resampleRgbaSubRect(
+        generatedRgba,
+        generatedWidth,
+        generatedHeight,
+        0,
+        0,
+        generatedWidth,
+        generatedHeight,
+        outW,
+        outH
+      );
 
   applyOutpaintOuterFeather(out, lockedInner, check, featherPx);
 

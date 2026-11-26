@@ -2489,3 +2489,14 @@ export function collectProminentVisibleLayerIds(
   return outSet;
 }
 
+/**
+ * Returns true when a nested layer is a demoted previous-root center frame created by Zoom Out
+ * (`root_wrap*` / `inner_root_*` / `*_center`). Unlike organic Zoom In detail patches, Zoom Out
+ * center frames sit seamlessly at 1:1 inside newly outpainted outer borders and should not have a
+ * dark rectangular silhouette frame stroked across the scene.
+ */
+export function isZoomOutDemotedCenterLayer(layer: Pick<NestedPuzzleLayer, 'layerId'> | null | undefined): boolean {
+  const id = layer?.layerId;
+  if (typeof id !== 'string' || id.length === 0) return false;
+  return id.startsWith('root_wrap') || id.startsWith('inner_root_') || id.endsWith('_center');
+}

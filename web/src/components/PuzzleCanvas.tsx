@@ -52,6 +52,7 @@ import {
   getNextZoomStop,
   hasOverlappingDeeperVisibleLayer,
   isReadyCanvasImageSource,
+  isZoomOutDemotedCenterLayer,
   LAYER_SILHOUETTE_MIN_SCREEN_PX,
   LayerCanvasCache,
   LayerImageMapLike,
@@ -4330,6 +4331,7 @@ function drawVisibleNestedLayers(
         Math.max(ww * effScale, wh * effScale) >= LAYER_SILHOUETTE_MIN_SCREEN_PX;
       const shouldDrawHairline =
         isLargeEnoughForHairline &&
+        !isZoomOutDemotedCenterLayer(layer) &&
         (isEffectivePreview
           ? showPreviewBorders
           : syncLayerHasUnfilledRegions(cache, layer, filledRegionIds));
