@@ -16,6 +16,7 @@ All AI-performed GitHub actions MUST execute as `github-actions[bot]` via reposi
   - **WIP Draft vs. Locally-Verified Ready PRs**:
     - **WIP Draft PRs** (unfinished work staying in Draft) MUST include at least one `- [ ] <item>` checklist entry describing what work remains before marking Ready; resolve and remove all `- [ ]` items before running `gh pr ready <num>`.
     - **Locally-Verified Ready PRs** (all code, docs, and local checks already complete) may pass the finalized `100%` PR body directly on the first `open-pr.yml` dispatch and immediately run `gh pr ready <num>` without a throwaway Draft body.
+  - **Version-Agnostic `beta` Titles & Fragments**: Never include `vX.Y.Z` version numbers in regular `beta` PR titles or `.changelog/` fragment filenames (if a release ships before merge, the squash commit history becomes misleading). Reserve version numbers strictly for `changelog:compile` and `beta -> main` Release Promotion PRs.
   - Note: `open-pr.yml` searches `state: 'open'` PRs; to fix a typo or broken link in an already-merged PR body as `github-actions[bot]`, dispatch `open-issue.yml -f issue_number=<num> -f body="..."`.
 - **Bot-Authored Issues ([`open-issue.yml`](../../.github/workflows/open-issue.yml))**:
   - Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, log it as a bot-authored GitHub Issue via `gh workflow run open-issue.yml` with a structured summary and checklist.
