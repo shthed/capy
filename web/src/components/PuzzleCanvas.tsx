@@ -31,6 +31,7 @@ import {
 } from '../types';
 import {
   applyZoomSnapDetent,
+  bleedOpaqueEdgeIntoCoveredHoles,
   buildLayerSilhouettePath,
   buildMaskedPreviewCanvas,
   buildPreviewBorderCanvas,
@@ -75,6 +76,7 @@ export {
   ALL_ZOOM_DETENT_STOPS,
   applyZoomSnapDetent,
   BASE_MAX_ZOOM_SCALE,
+  bleedOpaqueEdgeIntoCoveredHoles,
   buildLayerSilhouettePath,
   clampCanvasOffset,
   collectProminentVisibleLayerIds,
@@ -1646,6 +1648,16 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
         srcPixels,
         isColoring
       );
+      if (puzzle.nestedLayers && puzzle.nestedLayers.length > 0) {
+        bleedOpaqueEdgeIntoCoveredHoles(
+          data,
+          regionMap,
+          width,
+          height,
+          ROOT_WORLD_BOUNDS,
+          puzzle.nestedLayers
+        );
+      }
 
       baseCtx.putImageData(imgData, 0, 0);
       baseImageDataRef.current = imgData;
@@ -3621,6 +3633,7 @@ interface RootDirtyBounds {
   maxY: number;
 }
 
+const ROOT_WORLD_BOUNDS = { x: 0, y: 0, width: 1, height: 1 } as const;
 const ROOT_DIRTY_SCRATCH: RootDirtyBounds = { minX: 0, minY: 0, maxX: -1, maxY: -1 };
 
 function applySingleRegionBaseUpdate(
@@ -3684,21 +3697,42 @@ function applySingleRegionBaseUpdate(
 
 function flushDirtyLayerCaches(
   layerCaches: Map<string, LayerCanvasCache>,
-  dirtyLayers: Set<string>
+  dirtyLayers: Set<string>,
+  allNestedLayers: readonly NestedPuzzleLayer[] | undefined
 ): void {
   for (const layerId of dirtyLayers) {
     const cache = layerCaches.get(layerId);
     if (!cache || cache.dirtyMaxX < cache.dirtyMinX || cache.dirtyMaxY < cache.dirtyMinY) continue;
+    const deeper = allNestedLayers?.filter((l) => l.depth > cache.layerRef.depth);
+    let minX = cache.dirtyMinX;
+    let minY = cache.dirtyMinY;
+    let maxX = cache.dirtyMaxX;
+    let maxY = cache.dirtyMaxY;
+    if (deeper && deeper.length > 0) {
+      bleedOpaqueEdgeIntoCoveredHoles(
+        cache.baseImageData.data,
+        cache.layerRef.regionMap,
+        cache.width,
+        cache.height,
+        cache.layerRef.worldBounds,
+        deeper,
+        { minX, minY, maxX, maxY }
+      );
+      minX = Math.max(0, minX - 2);
+      minY = Math.max(0, minY - 2);
+      maxX = Math.min(cache.width - 1, maxX + 2);
+      maxY = Math.min(cache.height - 1, maxY + 2);
+    }
     const lCtx = cache.baseCanvas.getContext('2d');
     if (lCtx) {
       lCtx.putImageData(
         cache.baseImageData,
         0,
         0,
-        cache.dirtyMinX,
-        cache.dirtyMinY,
-        cache.dirtyMaxX - cache.dirtyMinX + 1,
-        cache.dirtyMaxY - cache.dirtyMinY + 1
+        minX,
+        minY,
+        maxX - minX + 1,
+        maxY - minY + 1
       );
     }
     cache.dirtyMinX = cache.width;
@@ -3806,18 +3840,37 @@ function applyIncrementalBaseCanvasUpdate(
   }
 
   if (rootDirty.maxX >= rootDirty.minX && rootDirty.maxY >= rootDirty.minY) {
+    let flushMinX = rootDirty.minX;
+    let flushMinY = rootDirty.minY;
+    let flushMaxX = rootDirty.maxX;
+    let flushMaxY = rootDirty.maxY;
+    if (puzzle.nestedLayers && puzzle.nestedLayers.length > 0) {
+      bleedOpaqueEdgeIntoCoveredHoles(
+        data,
+        puzzle.regionMap,
+        puzzle.width,
+        puzzle.height,
+        ROOT_WORLD_BOUNDS,
+        puzzle.nestedLayers,
+        rootDirty
+      );
+      flushMinX = Math.max(0, flushMinX - 2);
+      flushMinY = Math.max(0, flushMinY - 2);
+      flushMaxX = Math.min(puzzle.width - 1, flushMaxX + 2);
+      flushMaxY = Math.min(puzzle.height - 1, flushMaxY + 2);
+    }
     baseCtx.putImageData(
       imgData,
       0,
       0,
-      rootDirty.minX,
-      rootDirty.minY,
-      rootDirty.maxX - rootDirty.minX + 1,
-      rootDirty.maxY - rootDirty.minY + 1
+      flushMinX,
+      flushMinY,
+      flushMaxX - flushMinX + 1,
+      flushMaxY - flushMinY + 1
     );
   }
 
-  flushDirtyLayerCaches(layerCaches, dirtyLayers);
+  flushDirtyLayerCaches(layerCaches, dirtyLayers, puzzle.nestedLayers);
 }
 
 function ensureLayerCanvasCache(
@@ -3926,6 +3979,17 @@ function ensureLayerCanvasCache(
         cache.sourcePixels,
         Boolean(isFreeColorMode || puzzle.isFreeColor)
       );
+      const deeperLayers = puzzle.nestedLayers?.filter((l) => l.depth > layer.depth);
+      if (deeperLayers && deeperLayers.length > 0) {
+        bleedOpaqueEdgeIntoCoveredHoles(
+          cache.baseImageData.data,
+          layer.regionMap,
+          layer.width,
+          layer.height,
+          layer.worldBounds,
+          deeperLayers
+        );
+      }
       baseCtx.putImageData(cache.baseImageData, 0, 0);
     }
     cache.lastMode = regionColorMode;
@@ -4180,10 +4244,18 @@ function ensureLayerSilhouetteCache(
   wx: number,
   wy: number,
   ww: number,
-  wh: number
+  wh: number,
+  skipFilledRegionIds: ReadonlySet<number> | null
 ): void {
+  const includeFilled = skipFilledRegionIds === null;
+  const filledChanged =
+    cache.silhouetteIncludeFilled !== includeFilled ||
+    (!includeFilled &&
+      (cache.silhouetteFilledRef !== skipFilledRegionIds ||
+        cache.silhouetteFilledSize !== skipFilledRegionIds.size));
   if (
     cache.silhouetteComputed &&
+    !filledChanged &&
     cache.silhouetteWorldX === wx &&
     cache.silhouetteWorldY === wy &&
     cache.silhouetteWorldW === ww &&
@@ -4191,10 +4263,18 @@ function ensureLayerSilhouetteCache(
   ) {
     return;
   }
-  if (!cache.silhouetteComputed) {
-    const segments = extractLayerSilhouetteContours(layer.regionMap, layer.width, layer.height);
+  if (!cache.silhouetteComputed || filledChanged) {
+    const segments = extractLayerSilhouetteContours(
+      layer.regionMap,
+      layer.width,
+      layer.height,
+      skipFilledRegionIds
+    );
     cache.silhouetteSegments = segments.length > 0 ? segments : null;
     cache.silhouetteComputed = true;
+    cache.silhouetteIncludeFilled = includeFilled;
+    cache.silhouetteFilledRef = skipFilledRegionIds;
+    cache.silhouetteFilledSize = skipFilledRegionIds ? skipFilledRegionIds.size : -1;
   }
   cache.silhouettePath =
     cache.silhouetteSegments && layer.width > 0 && layer.height > 0
@@ -4336,7 +4416,15 @@ function drawVisibleNestedLayers(
           ? showPreviewBorders
           : syncLayerHasUnfilledRegions(cache, layer, filledRegionIds));
       if (shouldDrawHairline) {
-        ensureLayerSilhouetteCache(cache, layer, wx, wy, ww, wh);
+        ensureLayerSilhouetteCache(
+          cache,
+          layer,
+          wx,
+          wy,
+          ww,
+          wh,
+          isEffectivePreview ? null : filledRegionIds
+        );
         strokeLayerSilhouette(
           ctx,
           cache.silhouetteSegments,

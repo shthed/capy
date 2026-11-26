@@ -9953,6 +9953,50 @@ async function testClusterI_VisualSeamSmoothingAndSilhouetteF15(canvasHelpersMod
     assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer({ layerId: 'layer_abc_center' }), true);
     assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer({ layerId: 'zoom_in_d1_abc' }), false);
     assert.equal(canvasHelpersMod.isZoomOutDemotedCenterLayer(null), false);
+
+    // Painted boundary regions must omit silhouette edges while unfilled boundary regions retain them
+    const partialRm = new Int32Array([
+      0, 0, 0, 0,
+      0, 10, 20, 0,
+      0, 10, 20, 0,
+      0, 0, 0, 0,
+    ]);
+    const allSegs = extractLayerSilhouetteContours(partialRm, 4, 4);
+    const partialSegs = extractLayerSilhouetteContours(partialRm, 4, 4, new Set([10]));
+    const noneSegs = extractLayerSilhouetteContours(partialRm, 4, 4, new Set([10, 20]));
+    assert.ok(allSegs.length > 0 && partialSegs.length > 0 && partialSegs.length < allSegs.length, 'Partially painted boundary must omit filled edges');
+    assert.equal(noneSegs.length, 0, 'Fully painted boundary must emit 0 silhouette segments');
+
+    // Covered-hole color bleed must fill 2px inside child-covered holes with opaque parent color while keeping uncovered cutout exterior transparent
+    const pW = 8;
+    const pH = 8;
+    const pRm = new Int32Array(pW * pH);
+    const pData = new Uint8ClampedArray(pW * pH * 4);
+    for (let y = 1; y < 7; y++) {
+      for (let x = 1; x < 7; x++) {
+        // Leave inner 2x2 hole at (3..4, 3..4) with regionMap=0 covered by child layer
+        if (x >= 3 && x <= 4 && y >= 3 && y <= 4) continue;
+        const i = y * pW + x;
+        pRm[i] = 1;
+        pData[i * 4] = 90;
+        pData[i * 4 + 1] = 60;
+        pData[i * 4 + 2] = 30;
+        pData[i * 4 + 3] = 255;
+      }
+    }
+    const childRm = new Int32Array(4 * 4).fill(50);
+    canvasHelpersMod.bleedOpaqueEdgeIntoCoveredHoles(
+      pData,
+      pRm,
+      pW,
+      pH,
+      { x: 0, y: 0, width: 1, height: 1 },
+      [{ layerId: 'child_d1', depth: 1, width: 4, height: 4, worldBounds: { x: 3 / 8, y: 3 / 8, width: 2 / 8, height: 2 / 8 }, regions: [], regionMap: childRm, borderMap: new Uint8Array(16) }]
+    );
+    const holeIdx = (3 * pW + 3) * 4;
+    assert.equal(pData[holeIdx + 3], 255, 'Child-covered parent hole must be opaque after bleed to prevent white backdrop halo');
+    assert.equal(pData[holeIdx], 90);
+    assert.equal(pData[0 * 4 + 3], 0, 'Uncovered cutout exterior at (0,0) must remain transparent alpha=0');
   }
 
   // I5: collectVisibleNestedLayers, hasOverlappingDeeperVisibleLayer & collectProminentVisibleLayerIds

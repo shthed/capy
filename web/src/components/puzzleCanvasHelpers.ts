@@ -79,6 +79,9 @@ export interface LayerCanvasCache {
   lastFilledSetRef: ReadonlySet<number> | null;
   lastFilledSetSize: number;
   hasUnfilledRegions: boolean;
+  silhouetteFilledRef?: ReadonlySet<number> | null;
+  silhouetteFilledSize?: number;
+  silhouetteIncludeFilled?: boolean;
 }
 
 export interface UnifiedHitResult {
@@ -555,6 +558,9 @@ export function disposeLayerCanvasCache(cache: LayerCanvasCache): void {
   cache.lastFilledSetRef = null;
   cache.lastFilledSetSize = -1;
   cache.hasUnfilledRegions = false;
+  cache.silhouetteFilledRef = null;
+  cache.silhouetteFilledSize = -1;
+  cache.silhouetteIncludeFilled = false;
 }
 
 /**
@@ -1995,11 +2001,16 @@ function addSilhouetteDirectedEdge(
 function buildSilhouetteEdgeMask(
   regionMap: Int32Array,
   width: number,
-  height: number
-): { outMask: Map<number, number>; totalEdges: number } {
+  height: number,
+  skipFilledRegionIds?: ReadonlySet<number> | null
+): { outMask: Map<number, number>; inCount: Map<number, number>; totalEdges: number } {
   const outMask = new Map<number, number>();
+  const inCount = new Map<number, number>();
   let totalEdges = 0;
   const stride = width + 1;
+  const bumpIn = (destKey: number) => {
+    inCount.set(destKey, (inCount.get(destKey) ?? 0) + 1);
+  };
 
   for (let y = 0; y < height; y++) {
     const rowOff = y * width;
@@ -2007,27 +2018,37 @@ function buildSilhouetteEdgeMask(
     const vRowNext = (y + 1) * stride;
     for (let x = 0; x < width; x++) {
       const idx = rowOff + x;
-      if (regionMap[idx] <= 0) continue;
+      const rId = regionMap[idx];
+      if (rId <= 0) continue;
+      if (skipFilledRegionIds && skipFilledRegionIds.has(rId)) continue;
       if (y === 0 || regionMap[idx - width] <= 0) {
         addSilhouetteDirectedEdge(outMask, vRow + x, 1);
+        bumpIn(vRow + x + 1);
         totalEdges++;
       }
       if (x === width - 1 || regionMap[idx + 1] <= 0) {
         addSilhouetteDirectedEdge(outMask, vRow + x + 1, 2);
+        bumpIn(vRowNext + x + 1);
         totalEdges++;
       }
       if (y === height - 1 || regionMap[idx + width] <= 0) {
         addSilhouetteDirectedEdge(outMask, vRowNext + x + 1, 4);
+        bumpIn(vRowNext + x);
         totalEdges++;
       }
       if (x === 0 || regionMap[idx - 1] <= 0) {
         addSilhouetteDirectedEdge(outMask, vRowNext + x, 8);
+        bumpIn(vRow + x);
         totalEdges++;
       }
     }
   }
 
-  return { outMask, totalEdges };
+  return { outMask, inCount, totalEdges };
+}
+
+function countBits4(mask: number): number {
+  return (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
 }
 
 function consumeSilhouetteDir(outMask: Map<number, number>, key: number, dir: number): void {
@@ -2058,12 +2079,14 @@ function traceMergedSilhouetteLoop(
   loopX: number[],
   loopY: number[],
   maxSteps: number
-): void {
+): boolean {
   loopX.length = 0;
   loopY.length = 0;
 
   const startY = Math.floor(startKey / stride);
   const startX = startKey - startY * stride;
+  loopX.push(startX);
+  loopY.push(startY);
 
   consumeSilhouetteDir(outMask, startKey, startDir);
   let curX = startX + SILHOUETTE_DIR_DX[startDir];
@@ -2074,15 +2097,20 @@ function traceMergedSilhouetteLoop(
   while (steps <= maxSteps) {
     const curKey = curY * stride + curX;
     if (curKey === startKey) {
-      if (dir !== startDir) {
-        loopX.push(startX);
-        loopY.push(startY);
+      if (dir === startDir && loopX.length > 1) {
+        // Start vertex was collinear with closing edge — drop redundant start vertex
+        loopX.shift();
+        loopY.shift();
       }
-      break;
+      return true;
     }
     const mask = outMask.get(curKey) ?? 0;
     const nextDir = pickNextSilhouetteDir(mask, dir);
-    if (nextDir < 0) break;
+    if (nextDir < 0) {
+      loopX.push(curX);
+      loopY.push(curY);
+      return false;
+    }
     if (nextDir !== dir) {
       loopX.push(curX);
       loopY.push(curY);
@@ -2093,20 +2121,22 @@ function traceMergedSilhouetteLoop(
     dir = nextDir;
     steps++;
   }
+  return false;
 }
 
 function appendSmoothedClosedLoopSegments(
   loopX: readonly number[],
   loopY: readonly number[],
-  outSegments: number[]
+  outSegments: number[],
+  isClosed: boolean = true
 ): void {
   const n = loopX.length;
-  if (n < 3) return;
+  if (isClosed ? n < 3 : n < 2) return;
 
   let vx: ArrayLike<number> = loopX;
   let vy: ArrayLike<number> = loopY;
 
-  if (n >= 6) {
+  if (isClosed && n >= 6) {
     const sx = new Float64Array(n);
     const sy = new Float64Array(n);
     for (let i = 0; i < n; i++) {
@@ -2132,7 +2162,8 @@ function appendSmoothedClosedLoopSegments(
     vy = sy;
   }
 
-  for (let i = 0; i < n; i++) {
+  const limit = isClosed ? n : n - 1;
+  for (let i = 0; i < limit; i++) {
     const next = i === n - 1 ? 0 : i + 1;
     outSegments.push(vx[i], vy[i], vx[next], vy[next]);
   }
@@ -2146,15 +2177,29 @@ function firstBitDir(mask: number): number {
   return -1;
 }
 
+function pickNextOpenChainStart(
+  outMask: Map<number, number>,
+  inCount: Map<number, number>
+): number | null {
+  for (const [key, mask] of outMask) {
+    if (countBits4(mask) > (inCount.get(key) ?? 0)) {
+      return key;
+    }
+  }
+  return null;
+}
+
 /**
- * Extracts closed, collinear-merged outer silhouette boundary contours from a
- * layer's regionMap (tracing edges where regionMap[i] > 0 borders <= 0 or OOB).
+ * Extracts closed (or open-chain when `skipFilledRegionIds` omits already-painted boundary pixels),
+ * collinear-merged outer silhouette boundary contours from a layer's regionMap (tracing edges
+ * where regionMap[i] > 0 borders <= 0 or OOB).
  * Returns packed [x0, y0, x1, y1, ...] segments in layer-local pixel-corner coords.
  */
 export function extractLayerSilhouetteContours(
   regionMap: Int32Array,
   width: number,
-  height: number
+  height: number,
+  skipFilledRegionIds?: ReadonlySet<number> | null
 ): Float32Array {
   if (
     !isValidGridDimensions(width, height) ||
@@ -2164,7 +2209,12 @@ export function extractLayerSilhouetteContours(
     return new Float32Array(0);
   }
 
-  const { outMask, totalEdges } = buildSilhouetteEdgeMask(regionMap, width, height);
+  const { outMask, inCount, totalEdges } = buildSilhouetteEdgeMask(
+    regionMap,
+    width,
+    height,
+    skipFilledRegionIds
+  );
   if (totalEdges === 0 || outMask.size === 0) {
     return new Float32Array(0);
   }
@@ -2176,16 +2226,32 @@ export function extractLayerSilhouetteContours(
   const outSegments: number[] = [];
 
   while (outMask.size > 0) {
-    const firstEntry = outMask.entries().next();
-    if (firstEntry.done) break;
-    const [startKey, mask] = firstEntry.value;
+    const openStart = skipFilledRegionIds ? pickNextOpenChainStart(outMask, inCount) : null;
+    let startKey: number;
+    let mask: number;
+    if (openStart !== null) {
+      startKey = openStart;
+      mask = outMask.get(openStart) ?? 0;
+    } else {
+      const firstEntry = outMask.entries().next();
+      if (firstEntry.done) break;
+      [startKey, mask] = firstEntry.value;
+    }
     const startDir = firstBitDir(mask);
     if (startDir < 0) {
       outMask.delete(startKey);
       continue;
     }
-    traceMergedSilhouetteLoop(startKey, startDir, stride, outMask, loopX, loopY, maxSteps);
-    appendSmoothedClosedLoopSegments(loopX, loopY, outSegments);
+    const isClosed = traceMergedSilhouetteLoop(
+      startKey,
+      startDir,
+      stride,
+      outMask,
+      loopX,
+      loopY,
+      maxSteps
+    );
+    appendSmoothedClosedLoopSegments(loopX, loopY, outSegments, isClosed);
   }
 
   return outSegments.length > 0 ? Float32Array.from(outSegments) : new Float32Array(0);
@@ -2500,3 +2566,171 @@ export function isZoomOutDemotedCenterLayer(layer: Pick<NestedPuzzleLayer, 'laye
   if (typeof id !== 'string' || id.length === 0) return false;
   return id.startsWith('root_wrap') || id.startsWith('inner_root_') || id.endsWith('_center');
 }
+
+function isParentPixelCoveredByChild(
+  px: number,
+  py: number,
+  parentW: number,
+  parentH: number,
+  parentWb: NormalizedRect,
+  child: NestedPuzzleLayer
+): boolean {
+  const cb = child.worldBounds;
+  const u = parentWb.x + ((px + 0.5) / parentW) * parentWb.width;
+  const v = parentWb.y + ((py + 0.5) / parentH) * parentWb.height;
+  if (u < cb.x || u >= cb.x + cb.width || v < cb.y || v >= cb.y + cb.height) return false;
+  const cx = Math.max(0, Math.min(child.width - 1, Math.floor(((u - cb.x) / cb.width) * child.width)));
+  const cy = Math.max(0, Math.min(child.height - 1, Math.floor(((v - cb.y) / cb.height) * child.height)));
+  return child.regionMap[cy * child.width + cx] > 0;
+}
+
+function sampleOpaqueNeighborAvg(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  requireRegionMap: Int32Array | null,
+  outRgb: [number, number, number]
+): boolean {
+  let sr = 0;
+  let sg = 0;
+  let sb = 0;
+  let count = 0;
+  for (let dy = -1; dy <= 1; dy++) {
+    const ny = y + dy;
+    if (ny < 0 || ny >= height) continue;
+    const row = ny * width;
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const nx = x + dx;
+      if (nx < 0 || nx >= width) continue;
+      const nIdx = row + nx;
+      if (requireRegionMap && requireRegionMap[nIdx] <= 0) continue;
+      const p = nIdx * 4;
+      if (data[p + 3] < 255) continue;
+      sr += data[p];
+      sg += data[p + 1];
+      sb += data[p + 2];
+      count++;
+    }
+  }
+  if (count === 0) return false;
+  outRgb[0] = Math.round(sr / count);
+  outRgb[1] = Math.round(sg / count);
+  outRgb[2] = Math.round(sb / count);
+  return true;
+}
+
+function runCoveredHoleBleedPass(
+  data: Uint8ClampedArray,
+  regionMap: Int32Array,
+  width: number,
+  height: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  parentWb: NormalizedRect,
+  child: NestedPuzzleLayer,
+  requireRegionMap: Int32Array | null
+): void {
+  const writes: number[] = [];
+  const rgb: [number, number, number] = [0, 0, 0];
+  for (let y = minY; y <= maxY; y++) {
+    const row = y * width;
+    for (let x = minX; x <= maxX; x++) {
+      const idx = row + x;
+      if (regionMap[idx] > 0) continue;
+      if (data[idx * 4 + 3] === 255) continue;
+      if (!isParentPixelCoveredByChild(x, y, width, height, parentWb, child)) continue;
+      if (sampleOpaqueNeighborAvg(data, width, height, x, y, requireRegionMap, rgb)) {
+        writes.push(idx, rgb[0], rgb[1], rgb[2]);
+      }
+    }
+  }
+  for (let i = 0; i < writes.length; i += 4) {
+    const p = writes[i] * 4;
+    data[p] = writes[i + 1];
+    data[p + 1] = writes[i + 2];
+    data[p + 2] = writes[i + 3];
+    data[p + 3] = 255;
+  }
+}
+
+/**
+ * Dilates adjacent opaque parent pixels 2px inward into carved-out `regionMap <= 0` holes
+ * that are strictly covered by deeper nested layers. Prevents bilinear parent smoothing from
+ * blending opaque parent edges with alpha=0 holes and leaking the white backdrop halo.
+ * Genuine transparent cutout exteriors (not covered by any child layer) stay alpha=0.
+ */
+export function bleedOpaqueEdgeIntoCoveredHoles(
+  data: Uint8ClampedArray,
+  regionMap: Int32Array,
+  width: number,
+  height: number,
+  parentWorldBounds: NormalizedRect,
+  deeperLayers: readonly NestedPuzzleLayer[] | undefined,
+  dirtyBounds?: { minX: number; minY: number; maxX: number; maxY: number } | null
+): void {
+  if (
+    !deeperLayers ||
+    deeperLayers.length === 0 ||
+    !isValidGridDimensions(width, height) ||
+    !isValidNormalizedRect(parentWorldBounds) ||
+    regionMap.length < width * height ||
+    data.length < width * height * 4
+  ) {
+    return;
+  }
+
+  for (let i = 0; i < deeperLayers.length; i++) {
+    const child = deeperLayers[i];
+    if (!isUsableNestedLayerGrid(child)) continue;
+    const cb = child.worldBounds;
+    let minX = Math.max(
+      0,
+      Math.floor(((cb.x - parentWorldBounds.x) / parentWorldBounds.width) * width) - 1
+    );
+    let minY = Math.max(
+      0,
+      Math.floor(((cb.y - parentWorldBounds.y) / parentWorldBounds.height) * height) - 1
+    );
+    let maxX = Math.min(
+      width - 1,
+      Math.ceil(((cb.x + cb.width - parentWorldBounds.x) / parentWorldBounds.width) * width) + 1
+    );
+    let maxY = Math.min(
+      height - 1,
+      Math.ceil(((cb.y + cb.height - parentWorldBounds.y) / parentWorldBounds.height) * height) + 1
+    );
+    if (dirtyBounds) {
+      minX = Math.max(minX, Math.max(0, dirtyBounds.minX - 2));
+      minY = Math.max(minY, Math.max(0, dirtyBounds.minY - 2));
+      maxX = Math.min(maxX, Math.min(width - 1, dirtyBounds.maxX + 2));
+      maxY = Math.min(maxY, Math.min(height - 1, dirtyBounds.maxY + 2));
+    }
+    if (maxX < minX || maxY < minY) continue;
+
+    // Clear prior bleed strictly inside covered hole pixels of this sub-rect so undo/repaint updates cleanly
+    for (let y = minY; y <= maxY; y++) {
+      const row = y * width;
+      for (let x = minX; x <= maxX; x++) {
+        const idx = row + x;
+        if (regionMap[idx] <= 0 && isParentPixelCoveredByChild(x, y, width, height, parentWorldBounds, child)) {
+          const p = idx * 4;
+          data[p] = 0;
+          data[p + 1] = 0;
+          data[p + 2] = 0;
+          data[p + 3] = 0;
+        }
+      }
+    }
+
+    // Pass 1: bleed direct opaque parent pixels (regionMap > 0) 1px into covered hole
+    runCoveredHoleBleedPass(data, regionMap, width, height, minX, minY, maxX, maxY, parentWorldBounds, child, regionMap);
+    // Pass 2: extend bleed 1 more pixel inward for 2px bilinear filter safety
+    runCoveredHoleBleedPass(data, regionMap, width, height, minX, minY, maxX, maxY, parentWorldBounds, child, null);
+  }
+}
+
