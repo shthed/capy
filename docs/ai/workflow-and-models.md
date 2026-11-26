@@ -71,6 +71,6 @@ Selecting the right capability tier and slash workflow maximizes code quality on
 
 ## 4. Hybrid Automated Sprint Execution Modes
 
-- **Mode 1 -- Atomic Single-Task PRs (`1-Task = 1-PR` -> `beta`, Default)**: Start a fresh `#NNN` chat for one ready `BUG-*` or `TASK-*` on `feature/*`, `fix/*`, or `docs/*` branched from updated `origin/beta`, verify locally, open a bot-authored Draft PR targeting `beta`, mark ready after checks pass, and pass strict `100%` AI review (`capy/review-gate`) with zero active Owner holds.
+- **Mode 1 -- Atomic Single-Task PRs (`1-Task = 1-PR` -> `beta`, Default)**: Start a fresh `#NNN` chat for one focused GitHub Issue or task on `feature/*`, `fix/*`, or `docs/*` branched from updated `origin/beta`, verify locally, open a bot-authored PR targeting `beta`, mark ready after checks pass, and pass strict `100%` AI review (`capy/review-gate`) with zero active Owner holds.
 - **Mode 2 -- Cohesive Story / Sprint-Slice PRs (`/goal` or `/teamwork` -> `beta`)**: Execute a cohesive Story or P0 batch on one `automation/sprint-*` or `feature/*` branch off `origin/beta` with atomic per-task commits, non-overlapping file ownership across workers, and full local `npm run test:sanity && npm run lint && npm run build && npm test` verification before opening one PR targeting `beta`.
 - **Retrospective Note (`.agents/` Hygiene)**: Never commit `.agents/teamwork/` scratch files into branches (learned from [#485](../../../../pull/485)); keep `.agents/*` gitignored locally while stripping `.agents/` rules from `.gitignore` during clean-room export.

@@ -55,8 +55,8 @@ Capy keeps planning lightweight across two complementary places: a concise high-
 
 ### Canonical Reference Formatting (PRs & Issues)
 
-- **PR References Always Use Clickable `#NNN` Links**: Always write PR numbers across docs (`PROJECT.md`, `ROADMAP.md`, `CHANGELOG.md`) as relative clickable Markdown links `[#NNN](../../pull/NNN)` (never plain `#NNN` or backticked `` `#NNN` ``, and without hardcoded repository owner URLs).
-- **Focused Issue References**: Link focused GitHub Issues with their title (`[#NNN — Issue Title](../../issues/NNN)`) when referencing active plans, bugs, or ops checklists.
+- **Repository `.md` Guides**: Write PR numbers as relative clickable Markdown links `[#NNN](../../pull/NNN)` (or `[#NNN — PR Title](../../pull/NNN)` in prose) and focused Issues as `[#NNN — Issue Title](../../issues/NNN)` without hardcoded repository owner URLs.
+- **GitHub PRs, Issues & Comments**: Always use full repository URLs (`https://github.com/shthed/capy/pull/NNN`, `https://github.com/shthed/capy/blob/<sha>/...`)—never `./` or `../../` relative paths, which resolve relative to `/pull/` or `/issues/` and return 404.
 
 ### Backlog & Triage Rules
 
@@ -65,7 +65,7 @@ Capy keeps planning lightweight across two complementary places: a concise high-
 2. **Focused GitHub Issues & Milestones**:
    - Use standard focused GitHub Issues for concrete player bugs, feature requests, ops checklists (e.g., Play Store release steps), and reviewable specs rather than umbrella Epic wrapper issues or a separate `TODO.md` file.
 <!-- capy-dev-only:start -->
-   - **Owner-Review Plans & Review/Audit Documents (Mandatory Issue Logging)**: Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, it MUST log that plan or review as a bot-authored GitHub Issue on the private development repository via `open-issue.yml` (as `github-actions[bot]`, including a clickable Antigravity web session URL `` `[<Role> (<short-id>)](https://antigravity.google.com/remote/<session-id>?project=<project-id>)` `` and a structured summary/checklist) so the Project Owner can review, coordinate, and comment directly on GitHub.
+   - **Owner-Review Plans & Review/Audit Documents (Mandatory Issue Logging)**: Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, it MUST log that plan or review as a bot-authored GitHub Issue on the private development repository via `open-issue.yml` (as `github-actions[bot]`, with a structured summary and checklist) so the Project Owner can review, coordinate, and comment directly on GitHub.
 <!-- capy-dev-only:end -->
 3. **Definition of Ready (Anti-Busywork Gate)**:
    - Start coding on an issue only when it delivers concrete player or reliability value, satisfies all external prerequisites, and verifies exact file/symbol paths against `origin/beta`/`origin/main`.
@@ -74,37 +74,14 @@ Capy keeps planning lightweight across two complementary places: a concise high-
    - **Sync `ROADMAP.md` & `CHANGELOG.md`**: Drop a concise `.changelog/` fragment on feature/bugfix PRs targeting `beta` and update [`ROADMAP.md`](./ROADMAP.md) whenever high-level `Now / Next / Later` priorities shift.
 5. **Issue Linking (`Closes #NNN` vs. `Refs #NNN`)**:
    - Use `Closes #NNN` on PRs that completely resolve a focused GitHub Issue, and `Refs #NNN` on partial slices so open multi-PR issues stay open until finished.
-7. **Canonical Mobile-First Card & `<details>` Template**:
-   - Keep **Description**, **Value**, **Why Now**, and 1-line **Tasks** visible; wrap verbose metadata inside `<details><summary>...</summary></details>` with blank lines after `</summary>` and before `</details>`:
-   ````markdown
-   ### US-X.Y: Concise Outcome-Focused Title
-
-   - **Description**: Plain-English summary of what is built or fixed.
-   - **Value**: Concrete benefit to player experience, accessibility, or reliability.
-   - **Why Now**: Justification for why this item earns its current sprint priority.
-   - **Tasks**:
-     - **TASK-X.Ya** `[quick-win]`: Independently mergeable 1-PR slice summary.
-     - **TASK-X.Yb**: Follow-up 1-PR slice summary.
-
-   <details>
-   <summary>Engineering Metadata, Files & Acceptance Criteria</summary>
-
-   - **Type & Priority**: `Story` | `priority: high` | `domain: canvas, ui`
-   - **Complexity**: `medium`
-   - **Target Files**: `./web/src/...`
-   - **Acceptance Criteria**:
-     - Concrete, testable invariants verified by `npm test` or `./gradlew app:testDebugUnitTest`.
-
-   </details>
-   ````
-8. **Standard Issue & Milestone `gh` CLI Playbook**:
+6. **Standard Issue & Milestone `gh` CLI Playbook**:
    ```bash
    # Inspect open Issues and Sprint Milestones
    gh issue list --state open --json number,title,milestone,labels
    gh api repos/{owner}/{repo}/milestones?state=open --jq '.[] | {number, title, open_issues, closed_issues}'
 
    # Close a completed Issue & Sprint Milestone after beta -> main promotion
-   gh issue close <issue-num> --comment "Completed in [#NNN](../../pull/NNN) (vX.Y.Z Production release)."
+   gh issue close <issue-num> --comment "Completed in #NNN (vX.Y.Z Production release)."
    gh api -X PATCH repos/{owner}/{repo}/milestones/<milestone-num> -f state=closed
    ```
 <!-- capy-dev-only:start -->
@@ -125,16 +102,16 @@ Capy keeps planning lightweight across two complementary places: a concise high-
 
 - **Linear Branching & Clean Titles**:
   - Always `git fetch --all --prune` and branch linearly from `origin/beta` (`feature/`, `fix/`, `docs/`, `ci/`, `deps/`, `chore/`). Rebase promptly (`git fetch origin beta && git rebase origin/beta`) whenever `origin/beta` advances.
-  - Write clean, prefix-free action-oriented PR titles (e.g., `Add floating precision loupe magnifier for micro-regions`). For standard PRs targeting `beta`, avoid `feat():`, `EPIC-*`, `US-*`, version tags, or comma-separated laundry lists in titles; **Release Promotion PRs merging `beta -> main` include the target version number** (e.g., `Promote Capy Paint v3.0.8 to main`) in both the PR title and PR description.
+  - Write clean, prefix-free action-oriented PR titles (e.g., `Add floating precision loupe magnifier for micro-regions`). For standard PRs targeting `beta`, avoid `feat():`, `EPIC-*`, `US-*`, version tags, or comma-separated laundry lists in titles; **Release Promotion PRs merging `beta -> main` include the target version number** (e.g., `Promote Capy Paint v3.1.3 to main`) in both the PR title and PR description.
 - **Labels, Milestones & Top-of-PR Ordering**:
   - Attach subsystem labels (`web`, `android`), work-type labels (`feature`, `fix`, `docs`, `ui`, `testing`, `ci`, `deps`), and optionally the active Sprint Milestone.
   - **Line 1 Plain-English `## Summary` First**: Start every PR description on **line 1** with a concise, plain-English `## Summary` (`1`--`3` everyday sentences or bullets for non-technical readers—no commit SHAs, file paths, symbol names, or CLI flags).
-  - **Links, Issue Scope & Technical Overview Underneath**: Directly below `## Summary`, place preview links (when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys), clickable **Test Results** links, and any linked focused GitHub Issue (`Closes #NNN` or `Refs #NNN`), followed by scannable technical overview bullets explaining *what* changed and *why*, plus commit-SHA-pinned code links (`blob/<40-char-sha>/<path>#L<start>-L<end>`).
+  - **Links, Issue Scope & Technical Overview Underneath**: Directly below `## Summary`, place preview links (when [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) deploys), clickable **Test Results** links, and any linked focused GitHub Issue (`Closes #NNN` or `Refs #NNN`), followed by scannable technical overview bullets explaining *what* changed and *why*, plus full commit-SHA-pinned code links (`https://github.com/shthed/capy/blob/<40-char-sha>/<path>#L<start>-L<end>`).
 - **PR Sync-on-Push**:
   - Whenever follow-up commits are pushed, a PR is rebased, or scope/version changes, update the PR title, top `## Summary`, overview bullets, target version, verification test list, SHA-pinned line references, labels, and Milestone so reviewers always see accurate state.
 - **Reopening Closed Unmerged PRs**: Recover `refs/pull/<number>/head` onto the original head branch name, push to `origin`, run `gh pr reopen <number>`, rebase onto `origin/beta`, and `git push --force-with-lease`. Merged PRs are immutable—always open a new PR off `origin/beta`.
 <!-- capy-dev-only:start -->
-- **Private Bot PRs, PR Readiness Checklist & Auto-Merge Gate**: Full `open-pr.yml`, `open-issue.yml`, `PR Readiness Score: 100%` / `PR Readiness Checklist`, `pr-review-gate.yml`, and `Needs Your Testing / Approval` protocols live in [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md).
+- **Private Bot PRs, PR Readiness Checklist & Auto-Merge Gate**: Full `open-pr.yml`, `open-issue.yml`, `PR Readiness Score: 100%` / `PR Readiness Checklist`, `pr-review-gate.yml`, `review:owner-required` major-UI hold, and `Needs Your Testing / Approval` protocols live in [`docs/ai/pr-readiness.md`](./docs/ai/pr-readiness.md).
 <!-- capy-dev-only:end -->
 
 ---
@@ -145,12 +122,12 @@ Capy keeps planning lightweight across two complementary places: a concise high-
   1. Play-test the Beta build and APK.
   2. Compile any pending [`.changelog/`](./.changelog/README.md) fragments via `npm run changelog:compile -- --promote` (or reconcile [`CHANGELOG.md`](./CHANGELOG.md) top headings manually):
      - Compiles `.changelog/*.md` (`bump: patch|minor|major`, `<= 320` chars) into `### <ver> - <YYYY-MM-DD> (Beta)` (or appends into an existing same-day `(Beta)` heading without double-bumping), syncs [`web/package.json`](./web/package.json) and `web/package-lock.json`, promotes the current `(Beta)` heading to `(Production, Beta)` when `main` and `beta` serve the identical version, and removes `(Production)` from the superseded prior Production release (`sanity.mjs` requires `exactly 1` Production heading, `<= 1` Beta heading, `<= 1` Alpha heading, and line 1 starting with `### `).
-     - **Daily / Promotion Release Batching**: Prefer dropping a `.changelog/<slug>.md` fragment on feature/bugfix PRs targeting `beta` and compiling once per day (or per `beta -> main` promotion) via `npm run changelog:compile` so version numbers stay cleanly batched (~1 release per day) rather than creating one version per PR. Whenever `main` and `beta` diverge on patch versions (e.g., `main` serves `3.0.7` while `beta` advances to `3.0.8`), use distinct `### MAJOR.MINOR.PATCH - YYYY-MM-DD` headings (`(Production)` on `main`, `(Beta)` **only** on the single newest Beta head, untagged on superseded releases; `sanity.mjs` enforces `betaHeadingCount <= 1`).
+     - **Daily / Promotion Release Batching**: Prefer dropping a `.changelog/<slug>.md` fragment on feature/bugfix PRs targeting `beta` and compiling once per day (or per `beta -> main` promotion) via `npm run changelog:compile` so version numbers stay cleanly batched (~1 release per day) rather than creating one version per PR. Whenever `main` and `beta` diverge on patch versions (e.g., `main` serves `3.1.2` while `beta` advances to `3.1.3`), use distinct `### MAJOR.MINOR.PATCH - YYYY-MM-DD` headings (`(Production)` on `main`, `(Beta)` **only** on the single newest Beta head, untagged on superseded releases; `sanity.mjs` enforces `betaHeadingCount <= 1`).
      - **Relative Clickable PR Link Bullet Contract**: Every entry must be a single flat bullet (`- [#NNN](../../pull/NNN) <summary>`) starting with the relative clickable Markdown PR link followed by **1--2 concise plain-English sentences** with no trailing period (zero nested bullets, zero category subheadings, never unlinked `#NNN` or `(PR #NNN)`).
-  3. Open the `beta -> main` Release Promotion PR **with the target version number (`v<MAJOR.MINOR.PATCH>`) included in both the PR title and PR description** (e.g., `Promote Capy Paint v3.0.8 to main`) so `Build & Test` and async `Playwright E2E` in [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) execute cleanly.
+  3. Open the `beta -> main` Release Promotion PR **with the target version number (`v<MAJOR.MINOR.PATCH>`) included in both the PR title and PR description** (e.g., `Promote Capy Paint v3.1.3 to main`) so `Build & Test`, `Android APK`, and `Playwright E2E` in [`deploy-branch.yml`](./.github/workflows/deploy-branch.yml) execute cleanly.
 - **Post-Merge Release Actions & GitHub Releases Cadence** *(after `beta -> main` merges)*:
   1. `git fetch origin main`, tag `v<MAJOR.MINOR.PATCH>` on `origin/main`, and push the tag (`git tag -a v<ver> -m "v<ver>" && git push origin v<ver>`) to trigger [`release.yml`](./.github/workflows/release.yml) on every Production promotion. [`release.yml`](./.github/workflows/release.yml) builds signed `capy-<tag>.apk`, unversioned `capy.apk` (backing `https://capypaint.com/capy.apk`), Play Store `capy-<tag>.aab`, and `capy-web-<tag>.tgz`, attaching notes extracted from [`CHANGELOG.md`](./CHANGELOG.md) via [`.github/scripts/compile-changelog.mjs`](./.github/scripts/compile-changelog.mjs).
-  2. Re-align `origin/beta` to `origin/main` (`git push --force-with-lease origin origin/main:refs/heads/beta`) whenever no unpromoted `beta`-only PRs sit ahead, preventing history divergence on subsequent `beta` PRs.
+  2. Verify `origin/beta` is cleanly back-merged from `origin/main` via `--merge` (keeping shared merge-base ancestry intact without force-pushing).
   3. Close resolved focused GitHub Issues and completed Sprint Milestones.
 <!-- capy-dev-only:start -->
 - **Clean-Room Public Mirror & Tag-Gated Release Sync (`publish-capyboop.yml`)**: Every push to `shthed/capy` `main` triggers [`publish-capyboop.yml`](./.github/workflows/publish-capyboop.yml) -> [`web/scripts/rebrand-persona.mjs`](./web/scripts/rebrand-persona.mjs), stripping `capy-dev-only` blocks, dev-only docs (`AGENTS.md`, `CAPYBOOP.md`, `docs/ai/`), and internal workflows and asserting zero persona/AI-dev leaks before pushing to `capyboop/paint`. `publish-capyboop.yml` only pushes tag `v<version>` to `capyboop/paint` when a matching `v<version>` tag already exists on `shthed/capy`. Always verify `npm run persona:capyboop -- --dry-run` whenever editing docs or scripts.
@@ -177,7 +154,7 @@ Whenever a process collision, stale PR state, merge conflict, CI surprise, or ve
 
 - **Shared Primary Checkout & Version Collisions (PR [#489](../../pull/489) vs. PR [#490](../../pull/490))**: Concurrent streams shared the single primary checkout and both claimed `3.0.2` in `web/package.json` and `CHANGELOG.md`, leaving [#489](../../pull/489) `CONFLICTING`/`DIRTY` -> *Guardrail*: Isolate concurrent feature streams in separate worktrees off fresh `origin/beta` and use `.changelog/` fragments to avoid `CHANGELOG.md` / `web/package.json` collisions.
 - **Stacked PRs & `beta` vs. `main` Divergence (PRs [#481](../../pull/481)/[#482](../../pull/482)/[#484](../../pull/484) & [#487](../../pull/487)/[#488](../../pull/488)/[#490](../../pull/490))**: Merging `beta -> main` ([#488](../../pull/488)) without re-aligning `origin/beta` left `main` and `beta` diverged -> *Guardrail*: Check `git ls-remote origin` before branching, keep stacked PRs rebased, and sync `origin/beta` after clean `beta -> main` promotions.
-- **Out-of-Sync PR Descriptions & `EPIC-2` Scope Creep (PR [#489](../../pull/489))**: Follow-up pushes left PR metadata stale and unapproved features attached `epic:2` -> *Guardrail*: Keep PR titles, summaries, labels, and milestones synced on every push, enforce strict `EPIC-2` vs. `EPIC-3` triage, and use clickable `[EPIC-N]` / `[#NNN]` naming.
+- **Out-of-Sync PR Descriptions & Scope Creep (PR [#489](../../pull/489))**: Follow-up pushes left PR metadata stale and unapproved features drifted in scope -> *Guardrail*: Keep PR titles, summaries, labels, and milestones synced on every push and enforce strict focused-issue scope triage.
 - **`CHANGELOG.md` Same-Day Patch Rollup Collision & Stale Channel Suffixes (PRs [#485](../../pull/485)--[#490](../../pull/490))**: Rolling `3.0.0`--`3.0.2` under one `### 3.0` heading failed once `main` (`3.0.1`) and `beta` (`3.0.2`) diverged -> *Guardrail*: Apply the Same-Day Patch Heading Split rule (`3.0.1` vs `3.0.2`/`3.0.3`), immediately strip superseded channel markers, and enforce clickable `[#NNN](...)` bullets.
 - **Brittle Fixed `waitForTimeout` E2E Waits (PR [#486](../../pull/486) Review)**: Fixed sleeps around `replay-controls-window` flaked intermittently under VM load -> *Guardrail*: Replace timing-sensitive waits in [`web/scripts/test.mjs`](./web/scripts/test.mjs) with deterministic DOM state polling/dismissal.
 <!-- capy-dev-only:start -->
