@@ -429,10 +429,6 @@ export const AboutTab: React.FC<AboutTabProps> = ({
                   <span className="text-slate-200 font-semibold">Tailwind CSS</span> — MIT License
                 </li>
                 <li>
-                  <span className="text-slate-200 font-semibold">canvas-confetti</span> — ISC
-                  License
-                </li>
-                <li>
                   <span className="text-slate-200 font-semibold">AndroidX &amp; WebKit</span> —
                   Apache License 2.0
                 </li>

@@ -17,7 +17,7 @@ export interface FinishPaintStrokeParams {
   snapshotId: string | null;
   settings: Pick<
     UserSettings,
-    'hapticsEnabled' | 'reducedMotion' | 'autoAdvance' | 'paletteSort' | 'prioritizeOnScreen'
+    'hapticsEnabled' | 'autoAdvance' | 'paletteSort' | 'prioritizeOnScreen'
   >;
   viewport: PaintStrokeViewport;
   visibleColorIds: Set<number>;
@@ -36,7 +36,6 @@ export interface FinishPaintStrokeEffects<TSnapshot = unknown> {
     snapshotId: string | null
   ) => void;
   onHaptic: (type: 'tick' | 'success', enabled: boolean) => void;
-  onConfetti: () => void;
   onStartReplay: (orderedRegionIds: number[]) => void;
   onActiveColorAutoAdvanced: (nextColorId: number) => void;
   onUpdateSnapshotProgress: (
@@ -91,9 +90,9 @@ function isColorCompletedInPuzzle(
 }
 
 /**
- * Shared post-stroke completion, haptic, confetti, replay, auto-advance, and
+ * Shared post-stroke completion, haptic, replay, auto-advance, and
  * snapshot/session persistence routine used by both single-region and batch
- * paint strokes across Free Colour and Standard modes.
+ * paint strokes across Free Color and Standard modes.
  *
  * Preserves the viewport untouched on completion (zero viewport movement).
  */
@@ -131,9 +130,6 @@ export function finishPaintStroke<TSnapshot = unknown>(
   if (isComplete) {
     effects.onRecordFirstTimeCompletion(wasPuzzleIncomplete, true, snapshotId);
     effects.onHaptic('success', settings.hapticsEnabled);
-    if (!settings.reducedMotion) {
-      effects.onConfetti();
-    }
     effects.onStartReplay(orderedFilledRegionIds);
   } else {
     effects.onHaptic(hapticType, settings.hapticsEnabled);

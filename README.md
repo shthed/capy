@@ -19,9 +19,9 @@
 ## Visual Showcase and Gallery
 
 <p align="center">
-  <img src="./docs/gallery/puzzle_completion.webp" alt="Capy Paint puzzle completion with victory confetti and timelapse replay" width="90%" />
+  <img src="./docs/gallery/puzzle_completion.webp" alt="Capy Paint puzzle completion and chronological timelapse replay" width="90%" />
   <br>
-  <em>Tap in the final pieces to trigger the victory confetti burst and watch your finished artwork come to life in a chronological timelapse replay.</em>
+  <em>Tap in the final pieces to complete the artwork and watch your painting come to life in a chronological timelapse replay.</em>
 </p>
 
 | **Desktop Gameplay** | **Fine Zoom and Active Highlighting** |
@@ -59,7 +59,7 @@
 2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any region directly in default **Easy Mode** to auto-select its color). Matching puzzle shapes highlight instantly.
 3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on the **Paint Brush** tool to color continuously by dragging.
 4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
-5. **Celebrate**: Complete all colors to trigger the victory confetti burst, watch your chronological replay, and download your finished masterpiece.
+5. **Celebrate**: Complete all colors to watch your chronological timelapse replay and download your finished masterpiece.
 
 ---
 

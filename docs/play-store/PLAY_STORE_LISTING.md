@@ -30,7 +30,7 @@ TURN ANY PHOTO INTO A PUZZLE OR PRINTABLE SHEET
 THOUGHTFUL TOOLS & ACCESSIBILITY
 - Drag effortlessly with Continuous Paint Mode to color connected areas in one sweep.
 - Stuck on a tiny shape? Tap the lightbulb or second-tap any active swatch for smart directional hints.
-- Built-in Undo/Redo, chronological YouTube-style timeline Replay (0.5x to 20x speed) with Follow Painting camera tracking, and animated celebratory confetti.
+- Built-in Undo/Redo and chronological YouTube-style timeline Replay (0.5x to 20x speed) with Follow Painting camera tracking.
 - Accessibility options including Low-Vision Large Text mode, Reduced Motion toggles, customizable highlight styles, and optional tactile woodblock audio + hardware haptics.
 
 PRIVATE, COMPACT & OFFLINE-FIRST
