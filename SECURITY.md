@@ -8,7 +8,7 @@
 
 Security fixes are applied to the latest production release:
 
-- **Production (`main` / [`https://capypaint.com/`](https://capypaint.com/) / [`https://paint.capyboop.com/`](https://paint.capyboop.com/))**: Supported
+- **Production (`main` / [capypaint.com](https://capypaint.com/) / [paint.capyboop.com](https://paint.capyboop.com/))**: Supported
 - **Older Releases (prior Git tags)**: Not supported
 
 ---
@@ -35,5 +35,5 @@ We will acknowledge receipt, investigate, and coordinate a fix before public dis
 ## Security Architecture Notes
 
 - **Local-First Processing**: All image segmentation and coloring run locally in a Web Worker; photos are not uploaded to backend servers.
-- **Cloud Sync**: Optional Bring-Your-Own-Cloud (BYOC) sync (Google Drive, Microsoft OneDrive, Apple CloudKit, and Android Play Games Services) stores only the player's own encrypted-in-transit `.capy` save payloads.
-- **Co-op Relay & Feedback (`worker/`)**: Room state uses ephemeral `4`--`8`-character room codes in Cloudflare Durable Objects with origin validation, and anonymous in-game feedback uses a rate-limited `/api/feedback` relay in `worker/`.
+- **Cloud Sync**: Optional Bring-Your-Own-Cloud (BYOC) sync (Google Drive, Microsoft OneDrive, Apple CloudKit, and Android Play Games Services; feature-gated off by default) stores only the player's own encrypted-in-transit `.capy` save payloads.
+- **Co-op Relay & Feedback (`worker/`)**: Opt-in room state uses ephemeral `4`--`8`-character room codes in Cloudflare Durable Objects with origin validation, and anonymous in-game feedback uses a rate-limited `/api/feedback` relay in `worker/`.
