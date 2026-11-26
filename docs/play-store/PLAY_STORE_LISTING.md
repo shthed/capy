@@ -1,6 +1,6 @@
 # Capy Paint — Google Play Store Listing & Release Ops Guide
 
-Complete store copy, form declarations, and asset checklist for publishing **Capy Paint** (`com.capyboop.paint`) to Google Play Console targeting `v3.0.8` (`versionCode = 30008`, sourced from [`web/package.json`](../../web/package.json)).
+Complete store copy, form declarations, and asset checklist for publishing **Capy Paint** (`com.capyboop.paint`) to Google Play Console targeting `v3.1.3` (`versionCode = 30103`, dynamically sourced from [`web/package.json`](../../web/package.json)).
 
 ---
 
@@ -19,7 +19,7 @@ Unwind with Capy Paint, a cozy, 100% ad-free color-by-number and free-coloring p
 PICK & PAINT AT YOUR OWN PACE
 - Start coloring right away with crisp, pre-generated built-in artworks including Capy Forest, Capybara, Mushroom Forest, and Snail Guitar.
 - Play a fresh deterministic Puzzle of the Day offline every day featuring rotating built-in artworks and curated preset styles.
-- Choose Easy Mode (tap any shape to auto-pick its matching color), Normal Mode, or Free Color creative mode with custom HSL/Hex palettes and 5 curated themes.
+- Choose Auto-Select Color (Easy), Precise (Standard), or Free Color creative mode with custom HSL/Hex palettes and curated themes.
 
 TURN ANY PHOTO INTO A PUZZLE OR PRINTABLE SHEET
 - Import favorite family photos, pets, sketches, or landscapes straight from your Android Photo Picker. All color quantization and region segmentation runs 100% locally on your device.
@@ -28,14 +28,14 @@ TURN ANY PHOTO INTO A PUZZLE OR PRINTABLE SHEET
 - Export crisp black-and-white Printable Vector SVG coloring sheets for physical paper play.
 
 THOUGHTFUL TOOLS & ACCESSIBILITY
-- Drag effortlessly with Continuous Paint Mode to color connected areas in one sweep.
-- Stuck on a tiny shape? Tap the lightbulb or second-tap any active swatch for smart directional hints.
+- Drag effortlessly with Paint Mode to color connected areas in one sweep.
+- Stuck on a tiny shape? Second-tap any active color swatch to highlight and center the next unfinished region.
 - Built-in Undo/Redo and chronological YouTube-style timeline Replay (0.5x to 20x speed) with Follow Painting camera tracking.
-- Accessibility options including Low-Vision Large Text mode, Reduced Motion toggles, customizable highlight styles, and optional tactile woodblock audio + hardware haptics.
+- Accessibility options including Large Text & Buttons, independent Text Size (85% to 150%) and UI Size (85% to 140%) sliders, Fat-Finger Tap Assist with adjustable reach, Reduced Motion, customizable highlight styles, and optional tactile audio + hardware haptics.
 
 PRIVATE, COMPACT & OFFLINE-FIRST
 - No forced accounts, zero behavioral tracking SDKs, and zero third-party ads.
-- Your saves, thumbnails, and custom photo puzzles live safely on your device with portable .capy archive exports and Share Progress links.
+- Your saves, thumbnails, and custom photo puzzles live safely on your device with portable .capy archive exports, built-in Browser Storage cleanup, and Share Progress links.
 ```
 
 ---
@@ -56,20 +56,20 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
   - [`docs/play-store/screenshots/tablet_2_create_gallery.png`](./screenshots/tablet_2_create_gallery.png) — Tablet Create gallery & Puzzle of the Day
 
 > [!IMPORTANT]
-> **Target Form Factors (Do Not Opt Into Android TV Yet)**: Upload Phone and Tablet builds/screenshots **only**. Keep the Android TV form factor unchecked in Google Play Console Release > Setup > Form Factors until full `1920x1080` TV D-pad cursor/reticle (`US-3.6`) and Phone/Remote Companion (`US-4.4`) ship in a follow-up post-Play-Store launch release.
+> **Target Form Factors (Do Not Opt Into Android TV Yet)**: Upload Phone and Tablet builds/screenshots **only**. Keep the Android TV form factor unchecked in Google Play Console Release > Setup > Form Factors until full `1920x1080` TV D-pad cursor/reticle navigation and living-room Co-op ship in a follow-up post-Play-Store launch release.
 
 ---
 
 ## 3. Data Safety, Privacy & Content Rating Answers
 
 - **Privacy Policy URL**: [https://capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html) (backed by [`web/public/privacy-policy.html`](../../web/public/privacy-policy.html); also served via [https://paint.capyboop.com/privacy-policy.html](https://paint.capyboop.com/privacy-policy.html) and fallback GitHub Pages URL: [https://shthed.github.io/capy/privacy-policy.html](https://shthed.github.io/capy/privacy-policy.html))
-- **Developer Contact Email (Store Settings)**: Set a monitored public support email address under Play Console **Store settings -> Store listing contact details** before submitting for review (required by Google Play Console on every published store listing).
+- **Developer Contact Email (Store Settings)**: Set [capyboop@gmail.com](mailto:capyboop@gmail.com) (matching [`SECURITY.md`](../../SECURITY.md)) under Play Console **Store settings -> Store listing contact details** before submitting for review.
 - **App Access**: All core gameplay, custom photo puzzles, built-in artworks, the daily Puzzle of the Day, saves, SVG exports, and replay features work immediately with zero login required (`All functionality is available without special access`).
 - **Advertising**: `No, my app does not contain ads.`
-- **Data Safety (`v3.0.8`)**:
+- **Data Safety (`v3.1.3`)**:
   - Core gameplay, photo segmentation, and saves are 100% local-first on-device with zero advertising, analytics, or behavioral tracking SDKs bundled, and startup Play Games sign-in remains disabled ([`MainActivity.kt`](../../app/src/main/java/com/capyboop/paint/MainActivity.kt) never invokes `requestPlayGamesSignIn()` on launch, [`AndroidManifest.xml`](../../app/src/main/AndroidManifest.xml) sets `SUPPRESS_GAME_PROFILE_CREATION="true"`, and `CAPY_PLAY_GAMES_APP_ID` stays unset for initial launch).
   - **Optional Anonymous In-Game Feedback (`About -> Send Feedback`)**: Voluntary, user-initiated text submissions are sent over encrypted HTTPS to the Capy Paint feedback relay along with app version and platform only (no account, email, or personal identity required) to open an anonymous issue on `capyboop/paint`. In Play Console Data Safety, disclose this optional, ephemeral/user-initiated text submission (not linked to user identity, encrypted in transit, not shared with third-party ad/analytics networks) so Play Console answers stay 100% aligned with [`web/public/privacy-policy.html`](../../web/public/privacy-policy.html).
-  - **Optional BYOC Cloud Sync**: Cloud/Co-op UI remains feature-gated off by default in `v3.0.8`. Once opt-in Bring-Your-Own-Cloud providers (Google Drive `appDataFolder`, Microsoft OneDrive, Apple iCloud / WebDAV, or Google Play Games Services v2) are enabled for end users in [EPIC-5](../../../../issues/480), update Data Safety to include opt-in cloud save sync.
+  - **Optional BYOC Cloud Sync**: Cloud/Co-op UI remains feature-gated off by default in `v3.1.3`. Once opt-in Bring-Your-Own-Cloud providers (Google Drive `appDataFolder`, Microsoft OneDrive, Apple CloudKit, or Google Play Games Services v2) are enabled by default for end users, update Data Safety to include opt-in cloud save sync.
 - **IARC Content Rating Questionnaire**:
   - Category: `Games` (`Reference, News, or Educational` = No; `Game` = Yes).
   - Violence / Fear / Sexuality / Gambling / Substances / Profanity: `No` across all prompts (`Everyone` / `PEGI 3` / `USK 0`).
@@ -80,10 +80,10 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 
 ## 4. Play Console Release Steps (Human Ops)
 
-1. Verify GitHub Actions signing secrets on the source repository (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`, already configured in repository Actions secrets) per [`.github/workflows/release.yml`](../../.github/workflows/release.yml), keeping `CAPY_PLAY_GAMES_APP_ID` unset for the initial `v3.0.8` Phone & Tablet launch.
-2. Create and push tag `v3.0.8` (matching [`web/package.json`](../../web/package.json)) from updated `main` (`git tag -a v3.0.8 -m "v3.0.8" && git push origin v3.0.8`) to build the signed Play Store `capy-v3.0.8.aab` artifact cleanly.
+1. Verify GitHub Actions signing secrets on the source repository (`CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, `CAPY_KEY_PASSWORD`) per [`.github/workflows/release.yml`](../../.github/workflows/release.yml), keeping `CAPY_PLAY_GAMES_APP_ID` unset for the initial Phone & Tablet launch.
+2. Create and push tag `v<version>` matching [`web/package.json`](../../web/package.json) (currently `v3.1.3`, `versionCode = 30103`) from updated `main` (`git tag -a v3.1.3 -m "v3.1.3" && git push origin v3.1.3`) to build the signed Play Store `capy-v3.1.3.aab` artifact cleanly.
 3. In Google Play Console (`com.capyboop.paint`):
-   - Configure your monitored **Developer contact email** (and optional website [https://capypaint.com/](https://capypaint.com/) or [https://paint.capyboop.com/](https://paint.capyboop.com/)) under **Store settings -> Store listing contact details**.
+   - Configure **Developer contact email** ([capyboop@gmail.com](mailto:capyboop@gmail.com)) and website ([capypaint.com](https://capypaint.com/) or [paint.capyboop.com](https://paint.capyboop.com/)) under **Store settings -> Store listing contact details**.
    - Upload `app_icon_512.png`, `feature_graphic.png`, and the `screenshots/` PNGs under **Main store listing** (Phone and Tablet tabs only; skip TV/Wear).
    - Complete **App content** (Privacy Policy URL, Ads = No, App Access = No restrictions, Content Rating = Everyone, Data Safety aligned with [`web/public/privacy-policy.html`](../../web/public/privacy-policy.html) for local-first storage + optional anonymous `Send Feedback`).
-   - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.0.8.aab` (`versionCode = 30008`), verify zero pre-launch manifest warnings, and roll out to testers / Production.
+   - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.1.3.aab` (`versionCode = 30103`), verify zero pre-launch manifest warnings, and roll out to testers / Production.
