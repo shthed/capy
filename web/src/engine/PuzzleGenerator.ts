@@ -254,7 +254,7 @@ export class LineArtPuzzleGenerator implements PuzzleGenerator {
         onProgress
       );
       palette = quantized.palette;
-      effectiveAssignments = new Int32Array(quantized.assignments);
+      effectiveAssignments = quantized.assignments;
 
       // If UNIFIED_BLACK_REGION: assign thin line pixels to dedicated black cluster
       const lineHandling = config.lineHandling || 'ABSORB_LINES';
