@@ -8,7 +8,7 @@ Private specification for AI-authored Pull Requests, Issues, `PR Readiness Score
 
 ## 1. Bot-Authored PRs (`open-pr.yml`) & Issues (`open-issue.yml`)
 
-All AI-performed GitHub actions MUST execute as `github-actions[bot]` via repository workflows rather than running `gh pr create` or `gh pr review` as the human repository owner:
+All AI-performed GitHub actions (PRs, issues, reviews, merges, and post-merge workflow dispatches) MUST execute strictly as `github-actions[bot]` via `GITHUB_TOKEN` rather than running as or authenticating with `shthed` (`shthed` must ONLY appear on actions performed personally by the human Project Owner; never use a personal `shthed` PAT in workflows):
 
 - **Bot-Authored Pull Requests ([`open-pr.yml`](../../.github/workflows/open-pr.yml))**:
   - Open and update PRs via `gh workflow run open-pr.yml -f head=<branch> -f base=beta -f title="..." -f body="..." -f draft=true -f labels="..." -f milestone="..."`.
@@ -16,13 +16,13 @@ All AI-performed GitHub actions MUST execute as `github-actions[bot]` via reposi
   - **WIP Draft vs. Locally-Verified Ready PRs**:
     - **WIP Draft PRs** (unfinished work staying in Draft) MUST include at least one `- [ ] <item>` checklist entry describing what work remains before marking Ready; resolve and remove all `- [ ]` items before running `gh pr ready <num>`.
     - **Locally-Verified Ready PRs** (all code, docs, and local checks already complete) may pass the finalized `100%` PR body directly on the first `open-pr.yml` dispatch and immediately run `gh pr ready <num>` without a throwaway Draft body.
-  - **Version-Agnostic `beta` Titles & Fragments**: Never include `vX.Y.Z` version numbers in regular `beta` PR titles or `.changelog/` fragment filenames (if a release ships before merge, the squash commit history becomes misleading). Reserve version numbers strictly for `changelog:compile` and `beta -> main` Release Promotion PRs.
+  - **Version-Agnostic `beta` Titles & Fragments**: Never include `vX.Y.Z` version numbers in regular `beta` PR titles, issue titles, or `.changelog/` fragment filenames (if a release ships before merge, squash history becomes misleading). Reserve version numbers strictly for `changelog:compile` and `beta -> main` Release Promotion PRs.
   - Note: `open-pr.yml` searches `state: 'open'` PRs; to fix a typo or broken link in an already-merged PR body as `github-actions[bot]`, dispatch `open-issue.yml -f issue_number=<num> -f body="..."`.
 - **Bot-Authored Issues ([`open-issue.yml`](../../.github/workflows/open-issue.yml))**:
   - Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, log it as a bot-authored GitHub Issue via `gh workflow run open-issue.yml` with a structured summary and checklist.
 - **Link Formatting & Creating Session Attribution**:
   - **Always use full `https://github.com/shthed/capy/...` URLs** inside GitHub PR descriptions, Issue bodies, PR/Issue comments, and chat responses (for example, `[README.md](https://github.com/shthed/capy/blob/<40-char-sha>/README.md)` or `[#NNN — PR Title](https://github.com/shthed/capy/pull/NNN)`). Never use `./`, `../`, or `../../pull/NNN` inside GitHub PR/Issue text—GitHub resolves those relative to `/pull/` and returns 404.
-  - Include a clickable creating-session web URL `` `[<Role> (<short-id>)](https://antigravity.google.com/remote/<session-id>?project=<project-id>)` `` when the project ID is available in the environment; otherwise note the short session ID with `(session link unavailable locally)` rather than guessing.
+  - **Clickable Antigravity Session Links**: Always include a clickable remote session URL using the Capy project ID `ec566d37-5975-45ad-93ae-80e6e32daaa5`: `[Session <short-id>](https://antigravity.google.com/remote/<session-uuid>?project=ec566d37-5975-45ad-93ae-80e6e32daaa5)`.
   - Both `open-pr.yml` and `open-issue.yml` enforce [`cross-repo-guardrail.md`](./cross-repo-guardrail.md) automatically.
 
 ---
