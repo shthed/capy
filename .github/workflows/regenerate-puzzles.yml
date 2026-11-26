@@ -113,7 +113,12 @@ jobs:
           fi
 
           echo "Direct push to protected beta declined; pushing bot branch chore/regenerate-puzzles instead."
-          git push --force-with-lease origin HEAD:refs/heads/chore/regenerate-puzzles
+          REMOTE_PUZZLE_SHA=$(git ls-remote --heads origin chore/regenerate-puzzles | awk '{print $1}')
+          if [ -n "${REMOTE_PUZZLE_SHA}" ]; then
+            git push --force-with-lease="refs/heads/chore/regenerate-puzzles:${REMOTE_PUZZLE_SHA}" origin HEAD:refs/heads/chore/regenerate-puzzles
+          else
+            git push --force-with-lease="refs/heads/chore/regenerate-puzzles:" origin HEAD:refs/heads/chore/regenerate-puzzles
+          fi
           echo "direct_pushed=false" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch beta deploy or open bot PR for regenerated .capy archives
