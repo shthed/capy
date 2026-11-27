@@ -708,7 +708,7 @@ export async function runCiPagesWorkflowTests({ projectRoot, logUnitStart, logUn
       globalThis.document = { body: {}, documentElement: {} };
       try {
         const frames = [
-          { y: 602, anims: [new FakeCSSTransition('running', true)] },
+          { y: 602, anims: [new FakeCSSTransition('idle', true)] },
           { y: 602, anims: [new FakeCSSTransition('running', false)] },
           { y: 658, anims: [] },
           { y: 658, anims: [] },

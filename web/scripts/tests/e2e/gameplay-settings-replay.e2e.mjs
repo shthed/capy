@@ -946,14 +946,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     const filledBeforeUnselected = await page.evaluate(
       () => (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || []).length
     );
-    const undoBoxUnselected = await (await page.waitForSelector('[data-testid="undo-btn"]')).boundingBox();
-    await page.mouse.move(
-      undoBoxUnselected.x + undoBoxUnselected.width / 2,
-      undoBoxUnselected.y + undoBoxUnselected.height / 2
-    );
-    await page.mouse.down();
-    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 5000 });
-    await page.mouse.up();
+    await longPressUndoForReplay(page, { timeout: 5000 });
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 3000 });
     const unselectedSwatch = page
       .locator('[aria-label="Palette dock"] button[data-testid^="palette-swatch-"][aria-pressed="false"]')
