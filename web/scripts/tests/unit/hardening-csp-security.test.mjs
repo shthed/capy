@@ -13,10 +13,14 @@ const REPO_ROOT = path.resolve(WEB_ROOT, '..');
 
 function extractInlineScriptHashes(htmlContent) {
   const hashes = [];
-  const scriptRe = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptRe = /<script\b(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
   let match;
   while ((match = scriptRe.exec(htmlContent)) !== null) {
-    const body = match[1];
+    const attrs = match[1] || '';
+    if (/\btype\s*=\s*(?:["']application\/ld\+json["']|application\/ld\+json(?:\s|$))/i.test(attrs)) {
+      continue;
+    }
+    const body = match[2];
     if (!body || body.trim().length === 0) continue;
     const digest = crypto.createHash('sha256').update(body, 'utf8').digest('base64');
     hashes.push(`'sha256-${digest}'`);
@@ -276,6 +280,103 @@ export async function runHardeningCspSecurityTests(vite) {
       headersText,
       /(?:^|\n)\/\r?\n\s+Cache-Control:\s*no-cache/m,
       'web/public/_headers must set explicit / Cache-Control: no-cache'
+    );
+    assert.match(
+      headersText,
+      /(?:^|\n)\/robots\.txt\r?\n\s+Content-Type:\s*text\/plain;\s*charset=utf-8/m,
+      'web/public/_headers must serve /robots.txt as text/plain; charset=utf-8'
+    );
+    assert.match(
+      headersText,
+      /(?:^|\n)\/sitemap\.xml\r?\n\s+Content-Type:\s*application\/xml;\s*charset=utf-8/m,
+      'web/public/_headers must serve /sitemap.xml as application/xml; charset=utf-8'
+    );
+
+    // Verify SEO crawlability, canonical tags, Open Graph/Twitter cards, JSON-LD structured data, and preview noindex guards
+    const robotsTxt = fs.readFileSync(path.join(WEB_ROOT, 'public/robots.txt'), 'utf8');
+    assert.match(robotsTxt, /^User-agent:\s*\*/m, 'robots.txt must declare User-agent: *');
+    assert.match(robotsTxt, /^Allow:\s*\/$/m, 'robots.txt must allow root crawling');
+    assert.match(robotsTxt, /^Disallow:\s*\/api\/$/m, 'robots.txt must disallow /api/');
+    assert.match(
+      robotsTxt,
+      /^Sitemap:\s*https:\/\/capypaint\.com\/sitemap\.xml$/m,
+      'robots.txt must reference canonical sitemap.xml URL'
+    );
+
+    const sitemapXml = fs.readFileSync(path.join(WEB_ROOT, 'public/sitemap.xml'), 'utf8');
+    assert.equal(
+      sitemapXml.includes('<loc>https://capypaint.com/</loc>'),
+      true,
+      'sitemap.xml must include canonical https://capypaint.com/'
+    );
+    assert.equal(
+      sitemapXml.includes('<loc>https://capypaint.com/privacy-policy.html</loc>'),
+      true,
+      'sitemap.xml must include canonical https://capypaint.com/privacy-policy.html'
+    );
+    assert.equal(
+      /github\.io|\/alpha\/|\/beta\//i.test(sitemapXml),
+      false,
+      'sitemap.xml must not list preview or GitHub Pages URLs'
+    );
+
+    assert.equal(
+      fs.existsSync(path.join(WEB_ROOT, 'public/assets/og-image.jpg')),
+      true,
+      'web/public/assets/og-image.jpg must exist for Open Graph / Twitter previews'
+    );
+    assert.match(
+      indexHtml,
+      /<link\s+rel="canonical"\s+href="https:\/\/capypaint\.com\/"\s*\/>/i,
+      'web/index.html must define canonical URL https://capypaint.com/'
+    );
+    assert.match(
+      indexHtml,
+      /<meta\s+name="robots"\s+content="index,\s*follow,\s*max-image-preview:large"\s*\/>/i,
+      'web/index.html must enable max-image-preview:large indexing'
+    );
+    assert.match(
+      indexHtml,
+      /<meta\s+property="og:image"\s+content="https:\/\/capypaint\.com\/assets\/og-image\.jpg"\s*\/>/i,
+      'web/index.html must define og:image pointing to https://capypaint.com/assets/og-image.jpg'
+    );
+    assert.match(
+      indexHtml,
+      /<meta\s+name="twitter:card"\s+content="summary_large_image"\s*\/>/i,
+      'web/index.html must define twitter:card summary_large_image'
+    );
+    assert.match(indexHtml, /<noscript>[\s\S]*<h1\b/i, 'web/index.html must include semantic <noscript> heading');
+
+    const ldJsonMatch = /<script\s+type="application\/ld\+json">([\s\S]*?)<\/script>/i.exec(indexHtml);
+    assert.ok(ldJsonMatch, 'web/index.html must embed JSON-LD structured data');
+    const ldJson = JSON.parse(ldJsonMatch[1]);
+    assert.equal(ldJson['@context'], 'https://schema.org', 'JSON-LD must use https://schema.org context');
+    assert.equal(Array.isArray(ldJson['@graph']), true, 'JSON-LD must define @graph');
+    const graphTypes = ldJson['@graph'].flatMap((node) =>
+      Array.isArray(node['@type']) ? node['@type'] : [node['@type']]
+    );
+    for (const requiredType of ['Organization', 'WebSite', 'VideoGame', 'WebApplication']) {
+      assert.equal(
+        graphTypes.includes(requiredType),
+        true,
+        `JSON-LD @graph must include ${requiredType}`
+      );
+    }
+
+    assert.match(
+      privacyHtml,
+      /<link\s+rel="canonical"\s+href="https:\/\/capypaint\.com\/privacy-policy\.html"\s*\/>/i,
+      'privacy-policy.html must declare its canonical URL'
+    );
+    assert.match(
+      notFoundHtml,
+      /<meta\s+name="robots"\s+content="noindex,\s*follow"\s*\/>/i,
+      '404.html must set robots noindex, follow'
+    );
+    assert.match(
+      prIndexHtml,
+      /<meta\s+name="robots"\s+content="noindex,\s*nofollow"\s*\/>/i,
+      'pr-index.html must set robots noindex, nofollow'
     );
   }
 
