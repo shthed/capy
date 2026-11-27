@@ -53,6 +53,7 @@ permissions:
   pull-requests: write
   issues: write
   statuses: write
+  actions: write
 
 concurrency:
   group: pr-review-gate-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.inputs.pr_number || github.run_id }}
@@ -82,7 +83,7 @@ jobs:
         env:
           ACTIONS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
@@ -112,7 +113,102 @@ jobs:
               repo,
               pull_number: prNumber,
             });
+
+            // GITHUB_TOKEN merges run strictly as github-actions[bot] (never impersonating shthed),
+            // and explicitly trigger downstream workflows via workflow_dispatch (permitted with actions: write).
+            let postMergeDispatched = false;
+            const dispatchPostMergeWorkflows = async (targetBaseRef, headRef) => {
+              if (postMergeDispatched) return;
+              if (typeof github.rest?.actions?.createWorkflowDispatch !== 'function') return;
+              postMergeDispatched = true;
+
+              let changedFilenames = [];
+              if (typeof github.rest?.pulls?.listFiles === 'function') {
+                try {
+                  const files = await github.paginate(github.rest.pulls.listFiles, {
+                    owner,
+                    repo,
+                    pull_number: prNumber,
+                    per_page: 100,
+                  });
+                  changedFilenames = files.map((f) => String(f?.filename || '')).filter(Boolean);
+                } catch (err) {
+                  core.warning(`Failed to list files for post-merge dispatch on PR #${prNumber}: ${err.message}`);
+                }
+              }
+
+              const isDocsOnlyFile = (f) =>
+                /\.md$/i.test(f) || /^(?:docs|notes)\//.test(f) || f === '.gitignore' || f === 'LICENSE';
+              const hasNonDocsChanges =
+                changedFilenames.length === 0 || changedFilenames.some((f) => !isDocsOnlyFile(f));
+              const isPuzzleAssetFile = (f) =>
+                f.startsWith('web/src/engine/') ||
+                (f.startsWith('web/public/assets/') &&
+                  !f.endsWith('.capy') &&
+                  !f.startsWith('web/public/assets/presets/') &&
+                  !/^web\/public\/assets\/icon-/.test(f) &&
+                  f !== 'web/public/assets/apple-touch-icon.png') ||
+                f === 'web/scripts/generate-sample-saves.mjs' ||
+                f === 'web/src/services/CapyCodec.ts' ||
+                f === 'web/src/services/StorageService.ts' ||
+                f === 'web/src/services/PuzzleWorkerService.ts' ||
+                f === 'web/src/services/DailyPuzzleService.ts' ||
+                f === 'web/src/types/index.ts' ||
+                f === '.github/workflows/regenerate-puzzles.yml';
+              const hasPuzzleAssetChanges = changedFilenames.some(isPuzzleAssetFile);
+
+              const safeDispatch = async (workflow_id, ref, inputs) => {
+                try {
+                  const params = { owner, repo, workflow_id, ref };
+                  if (inputs && Object.keys(inputs).length > 0) params.inputs = inputs;
+                  await github.rest.actions.createWorkflowDispatch(params);
+                  core.info(`Dispatched ${workflow_id} on ref=${ref} after bot merge of PR #${prNumber}.`);
+                } catch (err) {
+                  core.warning(`Post-merge dispatch of ${workflow_id} (${ref}) failed: ${err.message}`);
+                }
+              };
+
+              const cleanHeadRef = String(headRef || '').trim();
+              if (targetBaseRef === 'beta') {
+                if (hasNonDocsChanges) {
+                  await safeDispatch('deploy-branch.yml', 'main', { target_branch: 'beta' });
+                }
+                if (hasPuzzleAssetChanges) {
+                  await safeDispatch('regenerate-puzzles.yml', 'beta');
+                }
+                if (cleanHeadRef && cleanHeadRef !== 'main' && cleanHeadRef !== 'beta') {
+                  await safeDispatch('cleanup-closed-pr.yml', 'main', {
+                    pr_number: String(prNumber),
+                    head_ref: cleanHeadRef,
+                  });
+                }
+              } else if (targetBaseRef === 'main') {
+                if (hasNonDocsChanges) {
+                  await safeDispatch('deploy-branch.yml', 'main', { target_branch: 'main' });
+                  await safeDispatch('deploy-cloudflare.yml', 'main');
+                }
+                await safeDispatch('publish-capyboop.yml', 'main');
+                await safeDispatch('sync-beta-from-main.yml', 'main');
+                if (cleanHeadRef && cleanHeadRef !== 'main' && cleanHeadRef !== 'beta') {
+                  await safeDispatch('cleanup-closed-pr.yml', 'main', {
+                    pr_number: String(prNumber),
+                    head_ref: cleanHeadRef,
+                  });
+                }
+              }
+            };
+
             if (pr.state !== 'open') {
+              const mergedAtMs = Date.parse(pr.merged_at || '') || 0;
+              const mergedRecentlyByBot =
+                Boolean(pr.merged) &&
+                String(pr.merged_by?.login || '').toLowerCase() === 'github-actions[bot]' &&
+                context.eventName === 'workflow_run' &&
+                mergedAtMs > 0 &&
+                Date.now() - mergedAtMs < 10 * 60 * 1000;
+              if (mergedRecentlyByBot) {
+                await dispatchPostMergeWorkflows((pr.base?.ref || 'main').trim(), pr.head?.ref);
+              }
               core.info(`PR #${prNumber} is ${pr.state}; skipping review gate.`);
               return;
             }
@@ -1037,6 +1133,7 @@ jobs:
                       sha: headSha,
                       merge_method: desiredMergeMethod.toLowerCase(),
                     });
+                    await dispatchPostMergeWorkflows(baseRef, pr.head?.ref);
                     return true;
                   } catch (mergeErr) {
                     const mergeMsg = String(mergeErr?.message || mergeErr || '');
@@ -1056,6 +1153,7 @@ jobs:
                             merge_action: 'direct_merge',
                           }
                         );
+                        await dispatchPostMergeWorkflows(baseRef, pr.head?.ref);
                         return true;
                       } catch (asyncMergeErr) {
                         if (Number(asyncMergeErr?.status) !== 409) {
@@ -1101,16 +1199,17 @@ jobs:
                   }
                 }
 
-                // Auto-merge can sit forever when GitHub reports `blocked` for non-check ruleset
-                // requirements (for example extra approval for unattributed changes) even though the
-                // strict 100% AI gate passed. Per Owner directive, merge directly once blocking CI is green.
+                // Re-check live PR state: if auto-merge completed immediately as github-actions[bot],
+                // dispatch post-merge workflows; if still open & blocked despite green checks, merge directly.
                 try {
                   const { data: livePr } = await github.rest.pulls.get({
                     owner,
                     repo,
                     pull_number: prNumber,
                   });
-                  if (
+                  if (livePr?.merged) {
+                    await dispatchPostMergeWorkflows(baseRef, livePr.head?.ref || pr.head?.ref);
+                  } else if (
                     livePr?.state === 'open' &&
                     !livePr.merged &&
                     !livePr.draft &&

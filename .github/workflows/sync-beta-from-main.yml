@@ -27,12 +27,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge origin/main into sync/beta-from-main
         id: sync_git
-        env:
-          HAS_BOT_TOKEN: ${{ secrets.CAPY_BOT_TOKEN != '' }}
         run: |
           set -euo pipefail
 
@@ -83,15 +81,15 @@ jobs:
           fi
 
           WORKFLOW_DIFFS=$(git diff --name-only origin/beta..HEAD -- .github/workflows/ || true)
-          if [ -n "${WORKFLOW_DIFFS}" ] && [ "${HAS_BOT_TOKEN}" != "true" ]; then
+          if [ -n "${WORKFLOW_DIFFS}" ]; then
             {
-              echo "### Beta Ancestry Sync Blocked: Workflow Diff Requires \`CAPY_BOT_TOKEN\` or Local Push"
+              echo "### Beta Ancestry Sync Blocked: Workflow Diff Requires Local Sync"
               echo "- Merging \`origin/main\` (\`${MAIN_SHA}\`) into \`origin/beta\` (\`${BETA_SHA}\`) touches workflow files:"
               echo '```text'
               echo "${WORKFLOW_DIFFS}"
               echo '```'
-              echo "- \`secrets.CAPY_BOT_TOKEN\` is unset and GitHub App \`GITHUB_TOKEN\` lacks \`workflows: write\` permission to push \`.github/workflows/*\` changes."
-              echo "- Sync manually from an isolated worktree (with \`workflow\` OAuth scope) and merge via \`--merge\`:"
+              echo "- \`GITHUB_TOKEN\` (\`github-actions[bot]\`) lacks \`workflows: write\` permission to push \`.github/workflows/*\` changes (personal PATs are never used in workflows)."
+              echo "- Sync from an isolated worktree (with \`workflow\` OAuth scope) and merge via \`--merge\`:"
               echo '```bash'
               echo 'git fetch origin +refs/heads/main:refs/remotes/origin/main +refs/heads/beta:refs/remotes/origin/beta'
               echo 'git checkout -B sync/beta-from-main origin/beta'
@@ -113,7 +111,7 @@ jobs:
           fi
 
           PUSH_ERR=$(cat push_err.log || true)
-          echo "::warning::Direct push to origin/beta was rejected (beta ruleset 27162684 currently blocks direct pushes with bypass_actors: []): ${PUSH_ERR}. Falling back to sync/beta-from-main PR."
+          echo "::warning::Direct push to origin/beta was rejected (beta ruleset 27162684 blocks direct pushes): ${PUSH_ERR}. Falling back to sync/beta-from-main PR."
 
           REMOTE_SYNC_SHA=$(git ls-remote --heads origin sync/beta-from-main | awk '{print $1}')
           if [ -n "${REMOTE_SYNC_SHA}" ]; then
@@ -139,18 +137,16 @@ jobs:
         if: steps.sync_git.outputs.direct_pushed == 'true' || steps.sync_git.outputs.needs_sync == 'true' || steps.sync_git.outputs.merge_conflict == 'true'
         uses: actions/github-script@v9
         env:
-          HAS_BOT_TOKEN: ${{ secrets.CAPY_BOT_TOKEN != '' }}
           DIRECT_PUSHED: ${{ steps.sync_git.outputs.direct_pushed }}
           NEEDS_SYNC: ${{ steps.sync_git.outputs.needs_sync }}
           MERGE_CONFLICT: ${{ steps.sync_git.outputs.merge_conflict }}
           MAIN_SHA: ${{ steps.sync_git.outputs.main_sha }}
           BETA_SHA: ${{ steps.sync_git.outputs.beta_sha }}
         with:
-          github-token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const hasPatToken = process.env.HAS_BOT_TOKEN === 'true';
             const directPushed = process.env.DIRECT_PUSHED === 'true';
             const mergeConflict = process.env.MERGE_CONFLICT === 'true';
             const mainSha = process.env.MAIN_SHA || '';
@@ -251,19 +247,17 @@ jobs:
                 }
               }
 
-              if (!hasPatToken) {
-                try {
-                  await github.rest.actions.createWorkflowDispatch({
-                    owner,
-                    repo,
-                    workflow_id: 'deploy-branch.yml',
-                    ref: 'main',
-                    inputs: { target_branch: 'beta' },
-                  });
-                  core.info('Dispatched deploy-branch.yml for target_branch=beta.');
-                } catch (err) {
-                  core.warning(`Failed to dispatch deploy-branch.yml for beta: ${err.message}`);
-                }
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner,
+                  repo,
+                  workflow_id: 'deploy-branch.yml',
+                  ref: 'main',
+                  inputs: { target_branch: 'beta' },
+                });
+                core.info('Dispatched deploy-branch.yml for target_branch=beta.');
+              } catch (err) {
+                core.warning(`Failed to dispatch deploy-branch.yml for beta: ${err.message}`);
               }
 
               await core.summary
@@ -273,7 +267,7 @@ jobs:
                     `- **Main HEAD**: \`${mainSha}\``,
                     `- **Previous Beta**: \`${betaSha}\``,
                     `- **Stale Sync PRs Closed**: \`${openPrs.length}\``,
-                    `- **Token Mode**: \`${hasPatToken ? 'CAPY_BOT_TOKEN' : 'GITHUB_TOKEN'}\``,
+                    '- **Token Mode**: `GITHUB_TOKEN` (`github-actions[bot]`)',
                   ].join('\n') + '\n'
                 )
                 .write();
@@ -292,17 +286,7 @@ jobs:
               `- **Main HEAD**: \`${mainSha}\``,
               `- **Beta Base**: \`${betaSha}\``,
               '- **Merge Policy**: **Auto-merges strictly via merge commit (`gh pr merge <PR_NUM> --merge`)** once `Build & Test` (fast sanity check when `HEAD` tree matches `origin/main`) and `capy/review-gate` (auto-passed & auto-merged by `pr-review-gate.yml` once `origin/main` ancestry + zero unreviewed commits/diffs are verified with zero holds) pass. **Humans: NEVER click "Squash and merge" or "Rebase and merge" on sync PRs**, or `origin/main` ancestry will not be preserved on `beta`.',
-              '- **Token Mode**: ' +
-                (hasPatToken
-                  ? 'Created/updated with `CAPY_BOT_TOKEN` (`draft: false`; `pull_request` workflows trigger immediately and `.github/workflows/*` diffs can be pushed cleanly).'
-                  : 'Created/updated with `GITHUB_TOKEN` (new PRs start with `draft: true`; automatic `opened`/`synchronize` evaluation of `pr-review-gate.yml` and `deploy-branch.yml` requires `CAPY_BOT_TOKEN`, and `GITHUB_TOKEN` lacks `workflows: write` if `origin/main` includes `.github/workflows/*` changes not yet on `beta`).'),
-              ...(hasPatToken
-                ? []
-                : [
-                    '',
-                    '> [!NOTE]',
-                    '> Created/updated with `GITHUB_TOKEN` (`draft: true` on new PR creation). Automatic `synchronize`/`opened` evaluation of `pr-review-gate.yml` and `deploy-branch.yml` **requires `CAPY_BOT_TOKEN`** (pushes made with `GITHUB_TOKEN` trigger `action_required` / zero-job skips from GitHub Actions). With `CAPY_BOT_TOKEN` unset, run non-bot `gh pr ready <PR_NUM>` once ready (or manually dispatch `gh workflow run pr-review-gate.yml -f pr_number=<PR_NUM>` and `gh workflow run deploy-branch.yml -f target_branch=sync/beta-from-main`) to evaluate `capy/review-gate` and CI.',
-                  ]),
+              '- **Token Mode**: Created/updated strictly as `github-actions[bot]` via `GITHUB_TOKEN`, dispatching `deploy-branch.yml` and `pr-review-gate.yml` automatically via `workflow_dispatch`.',
             ].join('\n');
 
             const { data: openPrs } = await github.rest.pulls.list({
@@ -345,7 +329,7 @@ jobs:
                 base: baseBranch,
                 title,
                 body,
-                draft: !hasPatToken,
+                draft: false,
               });
               pr = created;
               action = 'created';
@@ -381,6 +365,32 @@ jobs:
               }
             }
 
+            // Explicitly trigger CI & review gate via workflow_dispatch (permitted with GITHUB_TOKEN + actions: write)
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'deploy-branch.yml',
+                ref: headBranch,
+                inputs: { target_branch: headBranch },
+              });
+              core.info(`Dispatched deploy-branch.yml on ref=${headBranch} for sync PR #${pr.number}.`);
+            } catch (err) {
+              core.warning(`Failed to dispatch deploy-branch.yml for sync PR #${pr.number}: ${err.message}`);
+            }
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'pr-review-gate.yml',
+                ref: 'main',
+                inputs: { pr_number: String(pr.number) },
+              });
+              core.info(`Dispatched pr-review-gate.yml for sync PR #${pr.number}.`);
+            } catch (err) {
+              core.warning(`Failed to dispatch pr-review-gate.yml for sync PR #${pr.number}: ${err.message}`);
+            }
+
             core.info(`Sync PR #${pr.number} (${action}): ${pr.html_url}`);
             await core.summary
               .addRaw(
@@ -389,7 +399,7 @@ jobs:
                   `- **URL**: ${pr.html_url}`,
                   `- **Merge Command**: \`gh pr merge ${pr.number} --merge\``,
                   `- **Draft**: \`${Boolean(pr.draft)}\``,
-                  `- **Token Mode**: \`${hasPatToken ? 'CAPY_BOT_TOKEN' : 'GITHUB_TOKEN'}\``,
+                  '- **Token Mode**: `GITHUB_TOKEN` (`github-actions[bot]`)',
                 ].join('\n') + '\n'
               )
               .write();

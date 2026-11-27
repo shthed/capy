@@ -1,5 +1,4 @@
 import { Dispatch, MutableRefObject, SetStateAction, useCallback, useEffect, useRef } from 'react';
-import confetti from 'canvas-confetti';
 import {
   PaletteColor,
   PalettePreset,
@@ -322,13 +321,6 @@ export function usePaintController(params: UsePaintControllerParams) {
         {
           onRecordFirstTimeCompletion: recordFirstTimePuzzleCompletionIfNeeded,
           onHaptic: (type, enabled) => NativeBridge.haptic(type, enabled),
-          onConfetti: () => {
-            confetti({
-              particleCount: 120,
-              spread: 80,
-              origin: { y: 0.6 },
-            });
-          },
           onStartReplay: startReplay,
           onActiveColorAutoAdvanced: (nextColorId) => {
             liveCoopRef.current = { ...liveCoopRef.current, activeColorId: nextColorId };

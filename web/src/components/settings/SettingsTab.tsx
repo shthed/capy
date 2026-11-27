@@ -95,7 +95,7 @@ const AccessibilitySection: React.FC<AccessibilitySectionProps> = ({
         />
         <SettingToggleRow
           label="Reduced Motion"
-          description="Skip confetti bursts, camera glides, and pulsing hints"
+          description="Skip camera glides, pan momentum, and pulsing hints"
           checked={Boolean(settings.reducedMotion)}
           onToggle={() => updateSetting('reducedMotion', !settings.reducedMotion)}
           testId="setting-reduced-motion"

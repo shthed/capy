@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
+  actions: write
 
 concurrency:
   group: regenerate-puzzles-beta
@@ -39,7 +41,7 @@ jobs:
         with:
           ref: beta
           fetch-depth: 0
-          token: ${{ secrets.CAPY_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v7
@@ -91,7 +93,8 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Commit and push regenerated .capy archives directly to beta
+      - name: Commit and push regenerated .capy archives as github-actions[bot]
+        id: push_puzzles
         if: steps.diff_check.outputs.changed == 'true'
         run: |
           set -euo pipefail
@@ -101,16 +104,72 @@ jobs:
           git add web/public/assets/sample_saves.capy web/public/assets/daily_saves.capy
           git commit -m "Regenerate Max-settings sample and daily .capy puzzles"
 
-          # Rebase cleanly onto latest origin/beta in case another PR merged while Chromium ran
-          for attempt in 1 2 3; do
-            git fetch origin +refs/heads/beta:refs/remotes/origin/beta
-            git rebase origin/beta
-            if git push origin HEAD:refs/heads/beta; then
-              echo "Pushed regenerated .capy archives directly to beta on attempt ${attempt}."
-              exit 0
-            fi
-            echo "Push to beta raced on attempt ${attempt}; retrying after fresh fetch..."
-            sleep 3
-          done
-          echo "::error::Failed to push regenerated .capy archives to beta after 3 attempts." >&2
-          exit 1
+          git fetch origin +refs/heads/beta:refs/remotes/origin/beta
+          git rebase origin/beta
+          if git push origin HEAD:refs/heads/beta 2>push_err.log; then
+            echo "Pushed regenerated .capy archives directly to beta."
+            echo "direct_pushed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Direct push to protected beta declined; pushing bot branch chore/regenerate-puzzles instead."
+          REMOTE_PUZZLE_SHA=$(git ls-remote --heads origin chore/regenerate-puzzles | awk '{print $1}')
+          if [ -n "${REMOTE_PUZZLE_SHA}" ]; then
+            git push --force-with-lease="refs/heads/chore/regenerate-puzzles:${REMOTE_PUZZLE_SHA}" origin HEAD:refs/heads/chore/regenerate-puzzles
+          else
+            git push --force-with-lease="refs/heads/chore/regenerate-puzzles:" origin HEAD:refs/heads/chore/regenerate-puzzles
+          fi
+          echo "direct_pushed=false" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch beta deploy or open bot PR for regenerated .capy archives
+        if: steps.diff_check.outputs.changed == 'true'
+        uses: actions/github-script@v9
+        env:
+          DIRECT_PUSHED: ${{ steps.push_puzzles.outputs.direct_pushed }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            if (process.env.DIRECT_PUSHED === 'true') {
+              await github.rest.actions.createWorkflowDispatch({
+                owner,
+                repo,
+                workflow_id: 'deploy-branch.yml',
+                ref: 'main',
+                inputs: { target_branch: 'beta' },
+              });
+              return;
+            }
+            const headBranch = 'chore/regenerate-puzzles';
+            const { data: existing } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${headBranch}`,
+              base: 'beta',
+              state: 'open',
+              per_page: 5,
+            });
+            const title = 'chore: regenerate sample and daily .capy puzzles';
+            const body = [
+              '## Summary',
+              '',
+              'Updates the pre-generated built-in gallery and daily puzzle `.capy` archives after engine or asset changes so players launch with fresh, verified Max-Detail puzzles.',
+              '',
+              '### PR Readiness Score: 100%',
+              '',
+              '<details>',
+              '<summary>PR Readiness Checklist</summary>',
+              '',
+              '- **100%** — **Pre-Baked Archives Regenerated**: `npm run generate:samples` completed cleanly in CI.',
+              '- **100%** — **Automated Verification**: `npm run test:sanity`, `npm run lint`, `npm run build`, and `npm run test:unit` passed on the regenerated archives.',
+              '',
+              '</details>',
+              '',
+              'Automated `.capy` puzzle regeneration passed all local build and unit gates.',
+            ].join('\n');
+            if (existing.length > 0) {
+              await github.rest.pulls.update({ owner, repo, pull_number: existing[0].number, title, body });
+            } else {
+              await github.rest.pulls.create({ owner, repo, head: headBranch, base: 'beta', title, body, draft: true });
+            }

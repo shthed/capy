@@ -638,7 +638,7 @@ function resolveLineArtPaletteAndAssignments(
     activeMask
   );
   const palette = quantized.palette;
-  const effectiveAssignments = new Int32Array(quantized.assignments);
+  const effectiveAssignments = quantized.assignments;
   if (palette.length > 0 && lineHandling === 'UNIFIED_BLACK_REGION') {
     applyUnifiedBlackLineAssignments(palette, effectiveAssignments, lineMask, total, activeMask);
   }

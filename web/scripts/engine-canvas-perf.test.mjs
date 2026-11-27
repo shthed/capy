@@ -35,6 +35,21 @@ export async function runEngineCanvasPerfTests(vite) {
       'RegionSegmenter.ts must not allocate per-region idxToPos Map'
     );
     assert.equal(
+      segSrc.includes('pixelLists'),
+      false,
+      'RegionSegmenter.ts must not allocate boxed pixelLists: number[][]'
+    );
+    assert.equal(
+      segSrc.includes('rootComponents'),
+      false,
+      'RegionSegmenter.ts must not allocate boxed rootComponents: number[][]'
+    );
+    assert.equal(
+      segSrc.includes('finalRegionsList'),
+      false,
+      'RegionSegmenter.ts must not allocate boxed finalRegionsList pixel arrays'
+    );
+    assert.equal(
       /const\s+distGrid\s*=\s*new\s+Int32Array\(total\)/.test(segSrc),
       true,
       'RegionSegmenter.ts must allocate one reusable Int32Array(total) distGrid outside region loop'
@@ -79,6 +94,20 @@ export async function runEngineCanvasPerfTests(vite) {
 
     assert.equal(runA.regions.length, 3, 'Expected 3 segmented regions');
     assert.equal(runB.regions.length, runA.regions.length);
+
+    const sharedPixelsBuf = runA.regions[0].pixels.buffer;
+    assert.equal(
+      sharedPixelsBuf.byteLength,
+      total * Int32Array.BYTES_PER_ELEMENT,
+      'RegionSegmenter CSR backing buffer must hold exactly total pixels'
+    );
+    for (let i = 0; i < runA.regions.length; i++) {
+      assert.equal(
+        runA.regions[i].pixels.buffer,
+        sharedPixelsBuf,
+        `Region ${i + 1} pixels must be a zero-copy subarray view over the shared CSR buffer`
+      );
+    }
 
     for (let i = 0; i < runA.regions.length; i++) {
       const a = runA.regions[i];

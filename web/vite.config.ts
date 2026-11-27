@@ -186,7 +186,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.includes('lucide-react') || id.includes('canvas-confetti')) {
+            if (id.includes('lucide-react')) {
               return 'vendor-ui';
             }
             return 'vendor';

@@ -1,4 +1,18 @@
-### 3.1.2 - 2026-11-23 (Production, Beta)
+### 3.1.5 - 2026-11-26 (Production, Beta)
+
+- [#672](../../pull/672) Add automated Markdown `#anchor` validation to the sanity gate and prune retired `TODO.md` cleanup logic from the changelog compiler
+
+### 3.1.4 - 2026-11-26
+
+- [#667](../../pull/667) Switch all automated GitHub Actions PR merges, beta syncs, and puzzle regeneration strictly to github-actions[bot] via GITHUB_TOKEN with post-merge workflow dispatch so personal user accounts never appear on automated actions
+- [#666](../../pull/666) Sync player, store, community, and technical architecture documentation by updating stack/toolchain versions, adding omitted services and storage keys, standardizing US English, and breaking mega-bullets into scannable sections
+
+### 3.1.3 - 2026-11-26
+
+- [#662](../../pull/662) Remove the victory confetti burst and `canvas-confetti` dependency on puzzle completion, keeping the golden 100% badge and automatic chronological timelapse replay
+- [#661](../../pull/661) Refresh the README with high-DPI screenshots, an animated puzzle-completion timelapse showcase, and a cleaner player-focused feature overview
+
+### 3.1.2 - 2026-11-23
 
 - [#657](../../pull/657) Remove the redundant TODO.md backlog file and slim ROADMAP.md into a concise Now, Next, and Later vision doc linked to GitHub Issues and CHANGELOG.md
 - [#655](../../pull/655) Update Android Gradle plugin (9.5.2), `fragment-ktx` (1.9.1), and Gradle wrapper (9.9.2)

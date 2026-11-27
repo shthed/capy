@@ -4,7 +4,7 @@
 [![Android APK](https://img.shields.io/badge/Android-Download_APK-green?style=for-the-badge&logo=android&logoColor=white)](https://capypaint.com/capy.apk)
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-orange?style=for-the-badge)](./LICENSE.md)
 
-**Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Colour coloring pages.
+**Capy** is a serene, delightful color-by-number game you can play directly in your web browser or on Android. Transform any photo or artwork into a crisp, playable color puzzle with smart number guides, or relax with Free Color coloring pages.
 
 - **[Play Capy in Your Browser (`capypaint.com`)](https://capypaint.com/)**
 - **[Download the Android APK (Stable)](https://capypaint.com/capy.apk)** ([Official GitHub Releases](https://github.com/shthed/capy/releases))
@@ -19,60 +19,63 @@
 ## Visual Showcase and Gallery
 
 <p align="center">
-  <img src="./docs/gallery/desktop_gameplay.png" alt="Capy Desktop Gameplay" width="90%" />
+  <img src="./docs/gallery/puzzle_completion.webp" alt="Capy Paint puzzle completion and chronological timelapse replay" width="90%" />
   <br>
-  <em>Interactive color-by-number canvas with responsive Palette Dock, dynamic active region highlighting, and centroid glow badges.</em>
+  <em>Tap in the final pieces to complete the artwork and watch your painting come to life in a chronological timelapse replay.</em>
 </p>
 
-| **Fine Zoom and Active Highlighting** | **Free Colour / Coloring Page Mode** |
+| **Desktop Gameplay** | **Fine Zoom and Active Highlighting** |
 | :---: | :---: |
-| <img src="./docs/gallery/zoomed_detail.png" alt="Fine Zoom and Active Highlighting" width="100%" /> | <img src="./docs/gallery/coloring_page_mode.png" alt="Free Colour / Coloring Page Mode" width="100%" /> |
-| *Continuous zoom up to 12x with poles-of-inaccessibility labels and active region fills* | *Mushroom Forest with custom HSL/Hex palette picker and quick presets* |
+| <img src="./docs/gallery/desktop_gameplay.png" alt="Capy Desktop Gameplay" width="100%" /> | <img src="./docs/gallery/zoomed_detail.png" alt="Fine Zoom and Active Highlighting" width="100%" /> |
+| *Color-by-number canvas with the Palette Dock, live progress tracking, and crisp painted regions* | *Zoom in closely for tiny details with legible numbers and highlighted matching shapes* |
 
-| **Settings and Appearance Customizer** | **Mobile Portrait Experience** |
+| **Free Color / Coloring Page Mode** | **Daily Puzzle and Artwork Gallery** |
 | :---: | :---: |
-| <img src="./docs/gallery/settings_customizer.png" alt="Settings and Appearance Customizer" width="100%" /> | <img src="./docs/gallery/mobile_gameplay.png" alt="Mobile Portrait Experience" width="55%" /> |
-| *Circular background swatches, custom pipette color pickers, and smooth pan momentum* | *Full edge-to-edge touch UI with Google Maps-style one-finger drag zoom* |
+| <img src="./docs/gallery/coloring_page_mode.png" alt="Free Color / Coloring Page Mode" width="100%" /> | <img src="./docs/gallery/create_gallery.png" alt="Daily Puzzle and Artwork Gallery" width="100%" /> |
+| *Mushroom Forest in Free Color mode with the custom color picker and quick swatches* | *Puzzle of the Day, searchable built-in artwork gallery, and one-tap photo import* |
+
+| **Settings and Accessibility** | **Mobile Portrait Experience** |
+| :---: | :---: |
+| <img src="./docs/gallery/settings_customizer.png" alt="Settings and Accessibility" width="100%" /> | <img src="./docs/gallery/mobile_gameplay.png" alt="Mobile Portrait Experience" width="55%" /> |
+| *Grouped settings for text and UI sizing, Fat-Finger Tap Assist, canvas themes, and gameplay* | *Edge-to-edge touch UI with smooth one-finger zoom and thumb-friendly swatches* |
 
 ---
 
 ## Why You'll Love Capy
 
-- **Two Ways to Play**: Classic **Color by Number** guided coloring or relaxed **Free Colour** creative mode.
-- **Turn Any Photo into a Puzzle or Printable Sheet**: Tap the photo upload button to convert your favorite pictures, pets, landscapes, or drawings into instant playable puzzles, explore **Unified Single-Canvas Infinite Zoom** powered by optional Google Nano Banana 2.1 / 2 (zoom up to `256x` to embed seamless nested detail layers or extend artwork borders in any direction while preserving `100%` of painted progress in one `.capy` v2 save—via Web-only Puter.js, Free Guided Gemini App Handoff on Web & Android, or optional device-local Gemini API BYOK), or export crisp monochrome **Printable Vector SVG (`.svg`) Coloring Sheets** for physical paper coloring.
-- **Shareable Links and Optional Co-op**: Share a compact `< 2 KB` progress URL (`#s=<token>`) with friends, or enable opt-in **Co-op Rooms** (`?coop=1`) to paint the same puzzle simultaneously with live collaborator ripples and real-time undo sync.
-- **Compact `.capy` v2 Saves and Optional BYOC Cloud Sync**: Ultra-compact RLE binary saves (`~140x` smaller footprint) keep your library portable locally, with opt-in Bring-Your-Own-Cloud (BYOC) cross-device sync across Google Drive, Microsoft OneDrive, Apple CloudKit, and Android Google Play Games Services v2.
-- **Daily Featured Puzzle, Searchable Gallery and Lifetime Stats**: Play a fresh deterministic UTC **Puzzle of the Day** completely offline, filter artwork by category tags (`Animals`, `Coloring`, `Nature`, `Line Art`, `Detailed`, `Music`), keep a local **Puzzle Idea Notebook**, send optional anonymous in-game feedback from Settings, and track your **Lifetime Stats**.
-- **Smooth Navigation and Inclusive Accessibility**: One-finger double-tap-and-drag zoom, fluid pinch-to-zoom up to 12x, inertial gliding pan momentum, **Fat-Finger Mode** with configurable touch reach radius presets (`12px`, `22px`, `34px`), Low-Vision **Large Text** scaling, full desktop keyboard gameplay shortcuts, and a **Reduced Motion** accessibility mode.
-- **Continuous Paint Mode**: Drag your finger across the screen to quickly fill connected matching regions without tapping each one individually.
-- **100% Offline-First and Private**: All image processing and coloring run locally inside a sandboxed Web Worker. Play completely offline with zero forced accounts or ads.
+- **Two Ways to Play**: Relax with classic **Color by Number** or choose your own shades in **Free Color** mode.
+- **Turn Any Photo into Art**: Import your favorite photos of pets, trips, or drawings to create instant playable puzzles—or export clean coloring pages to print on paper.
+- **Unified Single-Canvas Infinite Zoom**: Zoom up to `256x` to add seamless nested detail layers inside any section or extend artwork borders outward while keeping `100%` of painted progress in one `.capy` v2 save—powered by optional Google Nano Banana 2.1 / 2 (Web-only Puter.js, Free Guided Gemini App Handoff on Web & Android, or device-local Gemini API BYOK).
+- **Share Progress or Paint Together**: Send a quick link to share your puzzle with friends, or opt in to live **Co-op Rooms** to color side by side.
+- **Smooth, Effortless Painting**: Drag with **Paint Mode** to fill matching spaces fast, zoom in cleanly for tiny details, and watch a timelapse replay of your finished artwork.
+- **Daily Puzzle and Built-In Gallery**: Enjoy a fresh **Puzzle of the Day**, browse ready-to-play illustrations by theme, and celebrate milestones in your **Lifetime Stats**.
+- **Built for Everyone**: Includes forgiving **Fat-Finger Tap Assist**, independent **Text Size** and **UI Size** sliders, keyboard shortcuts, and a **Reduced Motion** option.
+- **Offline, Private, and Ad-Free**: Play anywhere without an internet connection, ads, or a required account—with built-in storage cleanup in **Saves** and optional opt-in cross-device sync through Google Drive, OneDrive, Apple iCloud, or Google Play Games.
 
 ---
 
 ## How to Play
 
-1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capy Forest*, *Capybara*, *Mushroom Forest*, and *Snail Guitar*) with zero generation wait, launch the **Puzzle of the Day** in the **Create** tab, or import your own photo.
-2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any region directly in default **Easy Mode** to auto-select its color). Matching puzzle shapes highlight instantly.
-3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on the **Paint Brush** tool to color continuously by dragging.
-4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out, configurable in Settings), or pinch with two fingers to inspect fine micro-regions.
-5. **Celebrate**: Complete all colors to trigger the victory confetti burst, watch your chronological replay, and download your finished masterpiece.
+1. **Pick an Artwork**: Start playing instantly with pre-generated built-in favorites (*Capy Forest*, *Capybara*, *Mushroom Forest*, and *Snail Guitar*), launch the **Puzzle of the Day** in the **Create** tab, or import your own photo.
+2. **Choose a Color**: Tap any numbered swatch in the bottom **Palette Dock** (or simply tap any shape directly in default **Auto-Select Color (Easy)** mode). Matching shapes highlight right away.
+3. **Tap or Drag to Paint**: Tap numbered shapes on the canvas to fill them, or turn on **Paint Mode** (brush button) to color continuously by dragging.
+4. **Zoom and Pan**: Double-tap and drag (down to zoom in, up to zoom out), or pinch with two fingers to inspect tiny details.
+5. **Celebrate**: Complete all colors to watch your chronological timelapse replay and download your finished masterpiece.
 
 ---
 
 ## Controls and Gestures Cheat Sheet
 
-- **Tap Region**: In **Easy Mode** (default), auto-selects the tapped region's color and fills it immediately; in **Normal Mode**, fills the region when it matches the active swatch; in **Free Colour Mode**, paints with any selected color.
-- **Drag Canvas**: Pans the artwork smoothly across the screen with inertial gliding momentum.
-- **Double-Tap and Drag Down / Up**: Google Maps-style one-finger focal zoom—drag down to zoom in, drag up to zoom out (reversible and sensitivity-scalable via Settings).
-- **Pinch / Mouse Wheel**: Multi-touch focal zoom in or out between `0.5x` and `12x`, with optional magnetic zoom detents (`1x`, `2x`, `4x`, `8x`, `12x`) in Settings.
-- **Desktop Keyboard Shortcuts**: Keys `1`--`9` select the corresponding palette swatch, `+` / `=` zoom in, `-` / `_` zoom out, `0` resets the viewport to `1x` fit view, and `ArrowUp`/`W`, `ArrowDown`/`S`, `ArrowLeft`/`A`, `ArrowRight`/`D` pan the canvas by `64px` steps (automatically ignored when modals or text inputs are active or browser modifiers are held).
-- **Paint Brush Button**: Toggles continuous drag-to-paint stroke mode.
-- **Undo Button (`Ctrl+Z` / `Cmd+Z`)**: Undoes the last painted region (enabled automatically in Free Colour mode or via Settings toggle).
-- **Long-Press Undo Button (`>= 450ms`)**: Opens the interactive YouTube-style Replay timeline scrubber (`0.5x`–`20x`) to scrub history and resume play from any step.
-- **Redo Button (`Ctrl+Y` / `Ctrl+Shift+Z`)**: Steps forward to re-apply previously undone regions.
-- **Preview Eye Button**: Toggles unmasked preview of the original source artwork.
-- **Lightbulb / Active Swatch Second Tap**: Targets and animates the next unpainted region for the active color.
-- **`Escape` Key**: Cancels inline save renaming first, or closes the topmost open popover, modal, or replay bar (`Enter` saves an inline save rename).
+- **Tap Shape**: In **Auto-Select Color (Easy)** (default), selects and fills the tapped shape's color automatically; in **Precise (Standard)**, fills shapes matching your active swatch; in **Free Color Mode**, paints with any selected color.
+- **Drag Canvas**: Pans smoothly across the artwork.
+- **Double-Tap and Drag**: One-finger zoom—drag down to zoom in, drag up to zoom out (reversible and adjustable in **Settings**).
+- **Pinch / Mouse Wheel**: Zoom smoothly between `0.5x` and `12x` (with optional snap stops in **Settings**).
+- **Paint Mode (Brush Button)**: Toggles continuous drag-to-paint mode.
+- **Active Swatch Second Tap**: Finds and centers the next unpainted shape for your current color.
+- **Undo / Redo (`Ctrl+Z` / `Cmd+Z`, `Ctrl+Y` / `Cmd+Shift+Z`)**: Enabled by default in all modes (configurable in **Settings**).
+- **Long-Press Undo**: Opens the interactive **Replay** timeline scrubber (`0.5x`--`20x`) to scrub history or resume from any step.
+- **Preview Eye Button**: Peeks at the original source artwork.
+- **Desktop Keyboard Shortcuts**: `1`--`9` select swatches, `+`/`=` and `-`/`_` zoom, `0` resets the view, Arrow keys or `WASD` pan, and `Escape` closes the active modal or popover. *(Full gesture thresholds and settings live in [`WEB.md`](./WEB.md).)*
 
 ---
 
@@ -87,7 +90,7 @@ npm run dev
 ```
 Open `http://localhost:3000` in your browser.
 
-Verify repository hygiene, strict TypeScript types, production bundling, and the unified automated test suite (binary codec, engine, gestures, settings, and Playwright E2E gameplay):
+Verify repository hygiene, strict TypeScript types, production bundling, and automated tests (binary codec, engine, gestures, settings, and Playwright E2E gameplay):
 ```bash
 npm run test:sanity && npm run lint && npm run build && npm test
 ```
@@ -98,9 +101,9 @@ npm run test:sanity && npm run lint && npm run build && npm test
 
 Contributions, bug reports, feature requests, and puzzle ideas are welcome on [`capyboop/paint`](https://github.com/capyboop/paint):
 
-- **Report a Bug, Request a Feature, or Share a Puzzle Idea**: Use the [GitHub Issue Templates](https://github.com/capyboop/paint/issues/new/choose).
-- **Submit a Pull Request**: Follow [`CONTRIBUTING.md`](./CONTRIBUTING.md) for local setup, required checks (`npm run test:sanity && npm run lint && npm run build && npm test`), and PR guidelines.
-- **Help and Troubleshooting**: See [`SUPPORT.md`](./SUPPORT.md) for player support, download links, and offline/privacy FAQ.
+- **Report a Bug, Request a Feature, or Share a Puzzle Idea**: Use the [GitHub Issue Templates](https://github.com/capyboop/paint/issues/new/choose) or tap **About -> Send Feedback** inside the app.
+- **Submit a Pull Request**: Follow [`CONTRIBUTING.md`](./CONTRIBUTING.md) for local setup, required checks, and PR guidelines.
+- **Help and Troubleshooting**: See [`SUPPORT.md`](./SUPPORT.md) for player support, storage cleanup tips, downloads, and privacy FAQ.
 - **Security Vulnerabilities**: Report security issues privately via [`SECURITY.md`](./SECURITY.md).
 
 ---
@@ -109,21 +112,18 @@ Contributions, bug reports, feature requests, and puzzle ideas are welcome on [`
 
 All detailed architectural guides, computer vision algorithms, and native bridge specifications live in dedicated documentation files:
 
-- **Contributing Guide**: [`CONTRIBUTING.md`](./CONTRIBUTING.md) -- Public contributor setup, required checks, PR guidelines, and license terms.
-- **Support and FAQ**: [`SUPPORT.md`](./SUPPORT.md) -- Player help, official downloads, issue routing, and privacy notes.
-- **Security Policy**: [`SECURITY.md`](./SECURITY.md) -- Supported versions and private vulnerability reporting instructions.
-- **Web Architecture and UI Reference**: [`WEB.md`](./WEB.md) -- React 19, Vite 6, 3-tier offscreen canvas rendering, 6-mode gesture engine, Worker IPC, storage keys, and `UserSettings` dictionary.
+- **Web Architecture and UI Reference**: [`WEB.md`](./WEB.md) -- React 19, Vite 8, TypeScript 7, 3-tier offscreen canvas rendering, 6-mode gesture engine, Worker IPC, storage keys, and `UserSettings` dictionary.
 - **Android Native Launcher**: [`APP.md`](./APP.md) -- Kotlin launcher, AndroidX `WebViewAssetLoader`, Google Play Games Services v2 `SnapshotsClient` sync, Pixel API 33+ haptics, and disk backups.
-- **Cloud Sync, Google Account / Play Games and Multiplayer Sharing**: [`CLOUD.md`](./CLOUD.md) -- Google Identity Services OAuth 2.0 (`drive.appdata`), Play Games v2 login, CRDT Cloud Sync, `< 2 KB` shareable URL links, simultaneous Co-op rooms, and Cloudflare Workers edge hosting (`capypaint.com`).
+- **Cloud Sync, Accounts and Multiplayer Sharing**: [`CLOUD.md`](./CLOUD.md) -- Google Drive, OneDrive, Apple CloudKit, and Play Games CRDT sync, `< 2 KB` shareable URL links, opt-in Co-op rooms, and Cloudflare Workers edge hosting (`capypaint.com` / `paint.capyboop.com`).
 - **Puzzle Generation Engine**: [`PUZZLE.md`](./PUZZLE.md) -- Web Worker 5-strategy segmentation, adaptive Otsu/Sobel line extraction, Red-Mean K-Means++ clustering, and watershed border alignment.
-- **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Unified Vite SSR + Playwright E2E verification suite, multi-touch gesture patterns, and CI pipelines.
-- **Versioning Scheme and Changelog**: [`CHANGELOG.md`](./CHANGELOG.md) -- Semantic Versioning (`MAJOR.MINOR.PATCH`), Android `versionCode` mapping, and chronological release history.
+- **Testing Architecture**: [`TESTING.md`](./TESTING.md) -- Unified Vite SSR unit + parallel Playwright E2E verification suite and CI pipelines.
+- **Release History**: [`CHANGELOG.md`](./CHANGELOG.md) -- Chronological release history and active channel markers.
 - **Product Roadmap**: [`ROADMAP.md`](./ROADMAP.md) -- Concise high-level Now / Next / Later vision linked to [GitHub Issues](https://github.com/capyboop/paint/issues) and [`CHANGELOG.md`](./CHANGELOG.md).
-- **Project Management and Release Governance**: [`PROJECT.md`](./PROJECT.md) -- Lightweight issue/PR governance, PR sync and readiness gates, release promotion, `CHANGELOG.md` channel markers, and continuous improvement retro log.
-- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Engineering workflow, shared technical guardrails, 3-tier CI/CD architecture, SemVer versioning, and troubleshooting.
+- **Project Management and Release Governance**: [`PROJECT.md`](./PROJECT.md) -- Lightweight issue/PR governance, release promotion, `CHANGELOG.md` channel markers, and continuous improvement retro log.
+- **Development and Maintenance Guide**: [`DEV.md`](./DEV.md) -- Engineering workflow, shared technical guardrails, 3-tier CI/CD architecture, SemVer & `versionCode` versioning, and troubleshooting.
 <!-- capy-dev-only:start -->
 - **AI Agent Operational Playbook**: [`AGENTS.md`](./AGENTS.md) -- Auto-loaded AI guardrails, mobile-first formatting rules, and PR readiness contract for AI coding agents.
 - **Company Structure and AI Agent Handbook**: [`CAPYBOOP.md`](./CAPYBOOP.md) -- CapyBoop Games organizational chart, standing AI agent chat roles, startup kickoff prompts for instance recovery, and cross-chat coordination protocols.
 <!-- capy-dev-only:end -->
-- **Privacy Policy and Data Safety**: [`web/public/privacy-policy.html`](./web/public/privacy-policy.html) -- Local-first photo processing and optional Google Drive `appDataFolder` / Play Games Cloud Sync disclosures.
+- **Privacy Policy and Data Safety**: [`web/public/privacy-policy.html`](./web/public/privacy-policy.html) -- Local-first photo processing and optional cloud/feedback disclosures.
 - **License**: [`LICENSE.md`](./LICENSE.md) -- Capybara Chill Preamble and CC BY-NC-SA 4.0 terms.

@@ -34,7 +34,6 @@ function makeRecorderEffects() {
   const calls = {
     firstTimeCompletion: [],
     haptics: [],
-    confettiCount: 0,
     replays: [],
     autoAdvanced: [],
     updateSnapshotProgress: [],
@@ -47,9 +46,6 @@ function makeRecorderEffects() {
     },
     onHaptic: (type, enabled) => {
       calls.haptics.push({ type, enabled });
-    },
-    onConfetti: () => {
-      calls.confettiCount += 1;
     },
     onStartReplay: (orderedRegionIds) => {
       calls.replays.push(orderedRegionIds);
@@ -124,7 +120,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-1',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -142,7 +137,6 @@ export async function runAppHooksQuickwinTests(vite) {
     assert.equal(result.hapticType, 'tick');
     assert.deepEqual(calls.haptics, [{ type: 'tick', enabled: true }]);
     assert.equal(calls.firstTimeCompletion.length, 0);
-    assert.equal(calls.confettiCount, 0);
     assert.equal(calls.replays.length, 0);
     assert.equal(calls.autoAdvanced.length, 0);
     assert.equal(calls.updateSnapshotProgress.length, 1);
@@ -176,7 +170,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-2',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: true,
@@ -212,7 +205,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-wrap',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -242,7 +234,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-3',
         settings: {
           hapticsEnabled: false,
-          reducedMotion: false,
           autoAdvance: false,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -279,7 +270,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-free',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -302,12 +292,12 @@ export async function runAppHooksQuickwinTests(vite) {
     assert.deepEqual(calls.saveActiveState[0].paintedRegionColors, { 101: 2, 102: 2 });
   }
 
-  // 6. finishPaintStroke: puzzle completion triggers stats, success haptic, confetti (unless reducedMotion), replay, and zero viewport movement
+  // 6. finishPaintStroke: puzzle completion triggers stats, success haptic, replay, and zero viewport movement
   {
     const puzzle = makeTestPuzzle();
     const viewport = { zoomScale: 3.1, panOffsetX: -120, panOffsetY: 85 };
 
-    // 6a: reducedMotion = false -> confetti fires
+    // 6a: completion with active snapshot records stats, haptic, replay, and preserves viewport
     const rec1 = makeRecorderEffects();
     const res1 = finishPaintStroke(
       {
@@ -320,7 +310,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: 'snap-done',
         settings: {
           hapticsEnabled: true,
-          reducedMotion: false,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -339,7 +328,6 @@ export async function runAppHooksQuickwinTests(vite) {
       { wasIncomplete: true, isNowComplete: true, snapshotId: 'snap-done' },
     ]);
     assert.deepEqual(rec1.calls.haptics, [{ type: 'success', enabled: true }]);
-    assert.equal(rec1.calls.confettiCount, 1);
     assert.deepEqual(rec1.calls.replays, [[101, 102, 103, 104]]);
     // Viewport must remain untouched on completion (DEV.md §2)
     assert.deepEqual(viewport, { zoomScale: 3.1, panOffsetX: -120, panOffsetY: 85 });
@@ -347,7 +335,7 @@ export async function runAppHooksQuickwinTests(vite) {
     assert.equal(rec1.calls.saveActiveState[0].panOffsetX, -120);
     assert.equal(rec1.calls.saveActiveState[0].panOffsetY, 85);
 
-    // 6b: reducedMotion = true -> confetti suppressed, snapshotId = null -> persistence skipped
+    // 6b: completion with snapshotId = null skips persistence while still triggering replay
     const rec2 = makeRecorderEffects();
     finishPaintStroke(
       {
@@ -360,7 +348,6 @@ export async function runAppHooksQuickwinTests(vite) {
         snapshotId: null,
         settings: {
           hapticsEnabled: true,
-          reducedMotion: true,
           autoAdvance: true,
           paletteSort: 'ORIGINAL',
           prioritizeOnScreen: false,
@@ -371,7 +358,6 @@ export async function runAppHooksQuickwinTests(vite) {
       rec2.effects
     );
 
-    assert.equal(rec2.calls.confettiCount, 0, 'reducedMotion must suppress confetti');
     assert.equal(rec2.calls.replays.length, 1);
     assert.equal(rec2.calls.updateSnapshotProgress.length, 0);
     assert.equal(rec2.calls.saveActiveState.length, 0);
@@ -382,7 +368,6 @@ export async function runAppHooksQuickwinTests(vite) {
     const emptyPuzzle = makeTestPuzzle({ regions: [] });
     const baseSettings = {
       hapticsEnabled: true,
-      reducedMotion: false,
       autoAdvance: true,
       paletteSort: 'ORIGINAL',
       prioritizeOnScreen: false,
@@ -414,7 +399,6 @@ export async function runAppHooksQuickwinTests(vite) {
       assert.equal(res.nextActiveColorId, 1);
       assert.deepEqual(rec.calls.haptics, [{ type: 'tick', enabled: true }]);
       assert.equal(rec.calls.firstTimeCompletion.length, 0);
-      assert.equal(rec.calls.confettiCount, 0);
       assert.equal(rec.calls.replays.length, 0);
       assert.equal(rec.calls.autoAdvanced.length, 0);
     }
@@ -446,7 +430,6 @@ export async function runAppHooksQuickwinTests(vite) {
     );
     assert.deepEqual(unmatchedRec.calls.haptics, [{ type: 'tick', enabled: true }]);
     assert.equal(unmatchedRec.calls.firstTimeCompletion.length, 0);
-    assert.equal(unmatchedRec.calls.confettiCount, 0);
     assert.equal(unmatchedRec.calls.replays.length, 0);
   }
 

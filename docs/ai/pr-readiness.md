@@ -8,17 +8,23 @@ Private specification for AI-authored Pull Requests, Issues, `PR Readiness Score
 
 ## 1. Bot-Authored PRs (`open-pr.yml`) & Issues (`open-issue.yml`)
 
-All AI-performed GitHub actions MUST execute as `github-actions[bot]` via repository workflows rather than running `gh pr create` or `gh pr review` as the human repository owner:
+All AI-performed GitHub actions (PRs, issues, reviews, merges, and post-merge workflow dispatches) MUST execute strictly as `github-actions[bot]` via `GITHUB_TOKEN` rather than running as or authenticating with `shthed` (`shthed` must ONLY appear on actions performed personally by the human Project Owner; never use a personal `shthed` PAT in workflows):
 
 - **Bot-Authored Pull Requests ([`open-pr.yml`](../../.github/workflows/open-pr.yml))**:
   - Open and update PRs via `gh workflow run open-pr.yml -f head=<branch> -f base=beta -f title="..." -f body="..." -f draft=true -f labels="..." -f milestone="..."`.
   - New PRs are created as `draft=true` so running `gh pr ready <num>` emits `pull_request: ready_for_review` and triggers `CI` (`Build & Test`, `Android APK`, `Playwright E2E`, `Deploy Pages`) and `Gate`.
-  - **Mandatory Draft Outstanding-Work Checklist**: Every Draft PR (except automated `sync/beta-from-main` or `dependabot[bot]`) MUST include at least one `- [ ] <item>` checklist entry describing what work remains before it is marked Ready for Review. Complete and remove all `- [ ]` items before running `gh pr ready <num>`.
+  - **WIP Draft vs. Locally-Verified Ready PRs**:
+    - **WIP Draft PRs** (unfinished work staying in Draft) MUST include at least one `- [ ] <item>` checklist entry describing what work remains before marking Ready; resolve and remove all `- [ ]` items before running `gh pr ready <num>`.
+    - **Locally-Verified Ready PRs** (all code, docs, and local checks already complete) may pass the finalized `100%` PR body directly on the first `open-pr.yml` dispatch and immediately run `gh pr ready <num>` without a throwaway Draft body.
+  - **Version-Agnostic `beta` Titles & Fragments**: Never include `vX.Y.Z` version numbers in regular `beta` PR titles, issue titles, or `.changelog/` fragment filenames (if a release ships before merge, squash history becomes misleading). Reserve version numbers strictly for `changelog:compile` and `beta -> main` Release Promotion PRs.
+  - Note: `open-pr.yml` searches `state: 'open'` PRs; to fix a typo or broken link in an already-merged PR body as `github-actions[bot]`, dispatch `open-issue.yml -f issue_number=<num> -f body="..."`.
 - **Bot-Authored Issues ([`open-issue.yml`](../../.github/workflows/open-issue.yml))**:
-  - Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, log it as a bot-authored GitHub Issue via `gh workflow run open-issue.yml` with a clickable Antigravity web session URL and structured summary/checklist.
-- **Creating Session Link Standard**:
-  - Because GitHub strips custom `conversation://` URI schemes, every GitHub PR description, Issue body, and PR/Issue comment MUST link the creating session using its clickable web URL: `` `[<Role> (<short-id>)](https://antigravity.google.com/remote/<session-id>?project=<project-id>)` ``.
-  - Both `open-pr.yml` and `open-issue.yml` enforce the [`cross-repo-guardrail.md`](./cross-repo-guardrail.md) check automatically.
+  - Whenever an AI agent finishes a **plan ready for Owner review** (e.g., an implementation plan) or produces a **code/product review or audit document**, log it as a bot-authored GitHub Issue via `gh workflow run open-issue.yml` with a structured summary and checklist.
+  - **Always Clean Up on Close**: When finishing or closing a tracked Issue or PR, audit both the body and prior bot comments—update stale bot comments in place via `gh workflow run open-issue.yml -f issue_number=<num> -f comment_id=<id> -f body="..."` so no outdated version tags, broken session links, or obsolete "remaining work" lines linger after closure.
+- **Link Formatting & Creating Session Attribution**:
+  - **Always use full `https://github.com/shthed/capy/...` URLs** inside GitHub PR descriptions, Issue bodies, PR/Issue comments, and chat responses (for example, `[README.md](https://github.com/shthed/capy/blob/<40-char-sha>/README.md)` or `[#NNN — PR Title](https://github.com/shthed/capy/pull/NNN)`). Never use `./`, `../`, or `../../pull/NNN` inside GitHub PR/Issue text—GitHub resolves those relative to `/pull/` and returns 404.
+  - **Clickable Antigravity Session Links**: Always include a clickable remote session URL using the Capy project ID `ec566d37-5975-45ad-93ae-80e6e32daaa5`: `[Session <short-id>](https://antigravity.google.com/remote/<session-uuid>?project=ec566d37-5975-45ad-93ae-80e6e32daaa5)`.
+  - Both `open-pr.yml` and `open-issue.yml` enforce [`cross-repo-guardrail.md`](./cross-repo-guardrail.md) automatically.
 
 ---
 
@@ -50,18 +56,19 @@ All scoped requirements, local tests, CI checks, and docs updates are complete w
 
 ---
 
-## 3. Strict `100%` AI Review Gate ([`pr-review-gate.yml`](../../.github/workflows/pr-review-gate.yml))
+## 3. Strict `100%` AI Review Gate & Major-UI Hold ([`pr-review-gate.yml`](../../.github/workflows/pr-review-gate.yml))
 
-1. After local verification passes and all Draft `- [ ]` items are resolved, run `gh pr ready <num>` FIRST.
+1. After local verification passes and any Draft `- [ ]` items are resolved, run `gh pr ready <num>` FIRST.
 2. An independent read-only Reviewer agent inspects the PR and submits its verdict as `github-actions[bot]` via:
    `gh workflow run pr-review-gate.yml -f pr_number=<num> -f head_sha=<40_CHAR_HEAD_SHA> -f ai_verdict=APPROVED -f ai_score=100 -f ai_summary="..."`
 3. `ai-review` verifies `head_sha === pr.head.sha`, enforces the cross-repo reference guardrail on `ai_summary`, posts `<!-- capy-review: actor=ai-agent verdict=APPROVED sha=<40_CHAR_HEAD_SHA> score=100% -->`, and applies `review:ai-approved`.
-4. `review-gate` verifies valid `## Summary`, `### PR Readiness Score: 100%`, zero `< 100%` items, zero unchecked `- [ ]` tasks, zero forbidden `capyboop/paint` cross-references in PR title/body, and zero active Owner holds (`CHANGES_REQUESTED`, `HOLD`, `DO NOT MERGE`, `review:changes-requested`) before passing `capy/review-gate` and enabling auto-merge (`--squash` on standard `beta` PRs; `--merge` on `main` and `sync/beta-from-main`).
-5. Never apply `review:owner-approved` or post human `APPROVED`/`LGTM` comments on behalf of the Project Owner unless explicitly instructed.
+4. `review-gate` verifies valid `## Summary`, `### PR Readiness Score: 100%`, zero `< 100%` items, zero unchecked `- [ ]` tasks, zero forbidden `capyboop/paint` cross-references in PR title/body, and zero active Owner holds (`CHANGES_REQUESTED`, `HOLD`, `DO NOT MERGE`, `review:changes-requested`).
+5. **Major UI Hold (`review:owner-required`)**: PRs introducing major UI changes (layout overhauls, new or reorganized modals, settings, navigation, visual redesigns, or tutorial flows) MUST carry the `review:owner-required` label. When present, `capy/review-gate` holds at `pending` and disables auto-merge until explicit Human Project Owner approval (`APPROVED` review on current HEAD or `review:owner-approved`).
+6. All other PRs targeting `beta` or `main` pass `capy/review-gate` and auto-merge automatically once required CI checks are green (`--squash` on standard `beta` PRs; `--merge` on `main` and `sync/beta-from-main`). Never apply `review:owner-approved` or post human `APPROVED`/`LGTM` comments on behalf of the Project Owner unless explicitly instructed.
 
 ---
 
 ## 4. Closing Reports & Owner Questions
 
-- Always close status reports, handoffs, and review updates with an explicit **Needs Your Testing / Approval** summary listing any clickable PRs (`[#NNN — PR Title](../../../../pull/NNN)`) or preview/Beta links awaiting Project Owner action (noting any holds), or explicitly confirming when nothing needs Owner testing or approval yet.
-- Whenever you have a question that needs the Project Owner's answer, always repeat the question clearly at the end of your response so it is never missed.
+- Always close status reports, handoffs, and review updates with an explicit **Needs Your Testing / Approval** summary listing any clickable PRs (`[#NNN — PR Title](https://github.com/shthed/capy/pull/NNN)`) or preview/Beta links awaiting Project Owner action (noting any holds), or explicitly confirming when nothing needs Owner testing or approval yet.
+- Whenever you have a question that needs the Project Owner's answer, repeat the question clearly at the end of your response so it is never missed.
