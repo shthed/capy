@@ -5796,6 +5796,42 @@ async function testClusterB_SeamCompositorHardening(seamMod) {
     );
   }
 
+  // Tiny single-region infill template (e.g., 30x29) upscales cleanly to minDim (512px) preserving aspect ratio
+  {
+    assert.deepEqual(
+      seamMod.computeCompactTemplateDimensions(30, 29, 1536, seamMod.MIN_AI_INFILL_TEMPLATE_DIMENSION_PX),
+      { width: 512, height: 495 }
+    );
+    assert.deepEqual(
+      seamMod.computeCompactTemplateDimensions(1536, 838, 1536, seamMod.MIN_AI_INFILL_TEMPLATE_DIMENSION_PX),
+      { width: 1536, height: 838 }
+    );
+    const tinyCanvas = createFakeCanvas(30, 29);
+    const createdScratch = [];
+    await withGlobalOverrides(
+      {
+        document: {
+          createElement() {
+            const c = createFakeCanvas(1, 1);
+            createdScratch.push(c);
+            return c;
+          },
+        },
+      },
+      async () => {
+        const upscaled = await seamMod.canvasToCompactTemplateBlobAndDataUrl(tinyCanvas, {
+          minDim: seamMod.MIN_AI_INFILL_TEMPLATE_DIMENSION_PX,
+        });
+        assert.equal(upscaled.width, 512);
+        assert.equal(upscaled.height, 495);
+        assert.equal(upscaled.mimeType, 'image/jpeg');
+        assert.equal(createdScratch.length, 1);
+        assert.equal(createdScratch[0].width, 0, 'Upscale scratch canvas must be released in finally');
+        assert.equal(createdScratch[0].height, 0, 'Upscale scratch canvas must be released in finally');
+      }
+    );
+  }
+
   // Quality ladder step-down when q=0.86 exceeds maxBytes
   {
     const triedQualities = [];

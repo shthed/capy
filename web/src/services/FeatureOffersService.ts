@@ -74,7 +74,7 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
     id: 'infinite_zoom',
     title: 'Infinite Zoom Ready',
     message:
-      'Use the Outer / Inner buttons top-left to move between linked zoom views, or open the right-side Infinite Zoom button anytime to add detail or extend borders.',
+      'Pinch or scroll to explore nested details seamlessly on one canvas, or tap the right-side Infinite Zoom button anytime to add detail or extend borders.',
     tutorialStepIndex: 8,
   },
   saves_export: {

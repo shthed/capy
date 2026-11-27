@@ -53,6 +53,7 @@ import {
   compositeInfillRgba,
   compositeOutpaintRgba,
   ExtendSidesCheck,
+  MIN_AI_INFILL_TEMPLATE_DIMENSION_PX,
   NESTED_LAYER_MAX_DIM_PX,
   TemplateMaskRect,
 } from '../services/ai/SeamCompositor';
@@ -630,12 +631,14 @@ export async function buildInfillTemplatePayload(
       throw new Error('Could not read pixel data for selected region.');
     }
     tpl = buildInfillTemplateCanvas(layerCanvas, canvasBbox, cropMask, contextPadRatio);
-    const encoded = await canvasToCompactTemplateBlobAndDataUrl(tpl.canvas);
+    const encoded = await canvasToCompactTemplateBlobAndDataUrl(tpl.canvas, {
+      minDim: MIN_AI_INFILL_TEMPLATE_DIMENSION_PX,
+    });
     return {
       cropMask,
       originalCropRgba,
-      width: tpl.width,
-      height: tpl.height,
+      width: encoded.width,
+      height: encoded.height,
       maskInTemplateRect: tpl.maskInTemplateRect,
       templatePngBlob: encoded.blob,
       templateDataUrl: encoded.dataUrl,

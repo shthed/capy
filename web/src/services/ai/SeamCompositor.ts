@@ -1510,9 +1510,12 @@ export async function canvasToPngBlobAndDataUrl(
   return { blob, dataUrl };
 }
 
+export const MIN_AI_INFILL_TEMPLATE_DIMENSION_PX = 512;
+
 export interface CompactTemplateEncodeOptions {
   maxBytes?: number;
   maxDim?: number;
+  minDim?: number;
 }
 
 export interface CompactTemplateEncodeResult {
@@ -1533,15 +1536,23 @@ interface EncodedCanvasCandidate {
   dataUrl?: string;
 }
 
-
-function computeCompactTemplateDimensions(
+export function computeCompactTemplateDimensions(
   width: number,
   height: number,
-  maxDim: number
+  maxDim: number,
+  minDim: number = 0
 ): { width: number; height: number } {
   const safeW = Math.max(1, Math.round(width));
   const safeH = Math.max(1, Math.round(height));
   const longest = Math.max(safeW, safeH);
+  const clampedMin = minDim > 0 ? Math.min(maxDim, minDim) : 0;
+  if (clampedMin > 0 && longest < clampedMin) {
+    const scale = clampedMin / longest;
+    return {
+      width: Math.max(1, Math.round(safeW * scale)),
+      height: Math.max(1, Math.round(safeH * scale)),
+    };
+  }
   if (longest <= maxDim) {
     return { width: safeW, height: safeH };
   }
@@ -1767,8 +1778,9 @@ export async function canvasToCompactTemplateBlobAndDataUrl(
   }
   const maxBytes = resolvePositiveIntOption(options?.maxBytes, MAX_AI_TEMPLATE_BYTES, 1);
   const maxDim = resolvePositiveIntOption(options?.maxDim, MAX_AI_TEMPLATE_DIMENSION_PX, 1);
+  const minDim = resolvePositiveIntOption(options?.minDim, 0, 1);
 
-  const baseDims = computeCompactTemplateDimensions(srcW, srcH, maxDim);
+  const baseDims = computeCompactTemplateDimensions(srcW, srcH, maxDim, minDim);
   const baseLongest = Math.max(baseDims.width, baseDims.height);
   const minLongest = Math.min(MIN_COMPACT_TEMPLATE_LONGEST_EDGE, baseLongest);
 
@@ -1787,7 +1799,7 @@ export async function canvasToCompactTemplateBlobAndDataUrl(
   let best: { candidate: EncodedCanvasCandidate; width: number; height: number } | null = null;
 
   for (const stepMaxDim of stepDimsList) {
-    const dims = computeCompactTemplateDimensions(srcW, srcH, stepMaxDim);
+    const dims = computeCompactTemplateDimensions(baseDims.width, baseDims.height, stepMaxDim);
     if (dims.width === prevW && dims.height === prevH) continue;
     prevW = dims.width;
     prevH = dims.height;
