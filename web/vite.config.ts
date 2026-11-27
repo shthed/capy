@@ -60,10 +60,14 @@ export function parseAndroidSha256Fingerprints(rawEnv?: string): string[] {
 
 export function extractInlineScriptHashes(htmlContent: string): string[] {
   const hashes: string[] = [];
-  const scriptRe = /<script\b(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptRe = /<script\b(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
   while ((match = scriptRe.exec(htmlContent)) !== null) {
-    const body = match[1];
+    const attrs = match[1] || '';
+    if (/\btype\s*=\s*(?:["']application\/ld\+json["']|application\/ld\+json(?:\s|$))/i.test(attrs)) {
+      continue;
+    }
+    const body = match[2];
     if (!body || body.trim().length === 0) continue;
     const digest = crypto.createHash('sha256').update(body, 'utf8').digest('base64');
     const token = `'sha256-${digest}'`;

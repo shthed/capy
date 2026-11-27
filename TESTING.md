@@ -32,7 +32,7 @@ Testing an interactive HTML5 2D Canvas color-by-number game with Web Workers, bi
    - `npm test` invokes [`web/scripts/test.mjs`](./web/scripts/test.mjs), delegating Part 1 to modular Vite SSR unit suites under `web/scripts/tests/unit/` (plus 13 standalone domain/hook test modules) and Part 2 to **11 parallel isolated Browser E2E suites (28 stages across 7 module files)** under `web/scripts/tests/e2e/` (`runner.mjs` + `helpers.mjs`), binding an ephemeral preview port automatically when `CAPY_TEST_URL` is unset so concurrent runs never collide.
 2. **Deterministic Pre-Baked + Live Worker & Event-Driven E2E Coverage**:
    - Verifies both instant zero-worker startup via `./assets/sample_saves.capy` and live `puzzle.worker.ts` custom photo segmentation, IndexedDB (`capy_game_storage_v8`) persistence, and 100% offline PWA reload.
-   - Uses deterministic locator visibility, DOM attribute, canvas dimension, `waitForAnimationFrames`, `getStableBoundingBox`, `waitForCondition`, and URL-hash waits across `web/scripts/tests/e2e/`, reserving annotated `INTENTIONAL_TIMING_WINDOW` sleeps strictly for real debounce (`350ms`), animation, timer-starvation, and negative-absence checks.
+   - Uses deterministic locator visibility, DOM attribute, canvas dimension, `waitForAnimationFrames`, atomic `getStableBoundingBox`, `longPressUndoForReplay`, `waitForCondition`, and URL-hash waits across `web/scripts/tests/e2e/`, reserving annotated `INTENTIONAL_TIMING_WINDOW` sleeps strictly for real debounce (`350ms`), animation, timer-starvation, and negative-absence checks.
 
 ---
 

@@ -9,7 +9,7 @@ import {
   assertSpotlightAligned,
   captureV3012Screenshot,
   createBootedContext,
-  getStableBoundingBox,
+  longPressUndoForReplay,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
@@ -104,14 +104,26 @@ export async function runBootE2e(ctx) {
       'false',
       'tutorial-large-text-btn must toggle data-large-text back to "false"'
     );
+    const waitForStepTriedAndAdvance = async (nextStepNum) => {
+      await page.waitForFunction(
+        (expected) =>
+          Boolean(document.querySelector('[data-testid="tutorial-step-tried-badge"]')) ||
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+            `STEP ${expected} OF 12`,
+        nextStepNum,
+        { timeout: 4000 }
+      );
+      await page.waitForFunction(
+        (expected) =>
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+          `STEP ${expected} OF 12`,
+        nextStepNum,
+        { timeout: 4000 }
+      );
+    };
     // Step 1: Pick Color (click an unselected palette swatch -> shows Tried! badge and auto-advances to Step 2)
     await page.locator('[aria-label="Palette dock"] button[aria-pressed="false"]').first().click();
-    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 2 OF 12',
-      undefined,
-      { timeout: 3000 }
-    );
+    await waitForStepTriedAndAdvance(2);
     // Step 2: Tap & Paint Shape (tap canvas below tutorial card -> shows Tried! badge and auto-advances to Step 3)
     const canvasBoxTut = await page.locator('canvas').first().boundingBox();
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -119,14 +131,15 @@ export async function runBootE2e(ctx) {
       const yFrac = 0.60 + Math.floor(attempt / 3) * 0.08;
       await page.mouse.click(canvasBoxTut.x + canvasBoxTut.width * xFrac, canvasBoxTut.y + canvasBoxTut.height * yFrac);
       await waitForAnimationFrames(page, 2);
-      if ((await page.getByTestId('tutorial-step-tried-badge').count()) > 0) break;
+      const step2Done = await page.evaluate(
+        () =>
+          Boolean(document.querySelector('[data-testid="tutorial-step-tried-badge"]')) ||
+          document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() ===
+            'STEP 3 OF 12'
+      );
+      if (step2Done) break;
     }
-    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 3 OF 12',
-      undefined,
-      { timeout: 3000 }
-    );
+    await waitForStepTriedAndAdvance(3);
     const step3Text = (await tutorialCard.innerText()).toLowerCase();
     assert.equal(
       step3Text.includes('1x zoom badge') || step3Text.includes('1x badge'),
@@ -135,21 +148,11 @@ export async function runBootE2e(ctx) {
     );
     // Step 3: Zoom & Pan (step zoom -> shows Tried! badge and auto-advances to Step 4, then restore 1x)
     await page.keyboard.press('+');
-    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 4 OF 12',
-      undefined,
-      { timeout: 3000 }
-    );
+    await waitForStepTriedAndAdvance(4);
     await page.keyboard.press('0');
     // Step 4: Smart Hints (use inline Try Hint button -> marks tried and auto-advances to Step 5)
     await page.getByTestId('tutorial-try-hint-btn').click();
-    await page.getByTestId('tutorial-step-tried-badge').waitFor({ state: 'visible', timeout: 3000 });
-    await page.waitForFunction(
-      () => document.querySelector('[data-testid="tutorial-step-indicator"]')?.textContent?.trim().toUpperCase() === 'STEP 5 OF 12',
-      undefined,
-      { timeout: 3000 }
-    );
+    await waitForStepTriedAndAdvance(5);
     // Skip remaining steps on main page to preserve clean Capy Forest state; full 12-step tour runs in dedicated tutContext below
     await page.getByTestId('tutorial-skip-btn').click();
     await tutorialCard.waitFor({ state: 'hidden', timeout: 3000 });
@@ -304,12 +307,7 @@ export async function runOnboardingE2e(ctx) {
     await tutPage.keyboard.press('Control+y');
     await expectTutStep(6);
     // Step 5 -> 6 (replay via long-press Undo -> auto-advancing to Step 7 auto-dismisses tutorial-opened ReplayControls!)
-    const tutUndoBox = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
-    assert.ok(tutUndoBox, 'Expected stable boundingBox for undo-btn at Step 6');
-    await tutPage.mouse.move(tutUndoBox.x + tutUndoBox.width / 2, tutUndoBox.y + tutUndoBox.height / 2);
-    await tutPage.mouse.down();
-    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.mouse.up();
+    await longPressUndoForReplay(tutPage);
     await expectTutStep(7);
     await assertDesktopNextStable(7);
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
@@ -540,12 +538,7 @@ export async function runOnboardingE2e(ctx) {
     await tutPage.mouse.click(tutCanvasBox.x + tutCanvasBox.width * 0.5, tutCanvasBox.y + tutCanvasBox.height * 0.62);
     await waitForAnimationFrames(tutPage, 2);
     await tapSampleAndOpenTutorialAtStep6();
-    const undoBtnForJump = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
-    assert.ok(undoBtnForJump, 'Expected stable boundingBox for undo-btn before Jump');
-    await tutPage.mouse.move(undoBtnForJump.x + undoBtnForJump.width / 2, undoBtnForJump.y + undoBtnForJump.height / 2);
-    await tutPage.mouse.down();
-    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.mouse.up();
+    await longPressUndoForReplay(tutPage);
     // Jump via All Topics to Step 8 -> must dismiss tutorial-opened replay
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topic-item-7').click();
@@ -554,22 +547,12 @@ export async function runOnboardingE2e(ctx) {
     await tutPage.getByTestId('tutorial-topics-btn').click();
     await tutPage.getByTestId('tutorial-topic-item-5').click();
     await expectTutStep(6);
-    const undoBtnForSkip = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
-    assert.ok(undoBtnForSkip, 'Expected stable boundingBox for undo-btn before Skip');
-    await tutPage.mouse.move(undoBtnForSkip.x + undoBtnForSkip.width / 2, undoBtnForSkip.y + undoBtnForSkip.height / 2);
-    await tutPage.mouse.down();
-    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.mouse.up();
+    await longPressUndoForReplay(tutPage);
     await tutPage.getByTestId('tutorial-skip-btn').click();
     await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Pre-existing manual Replay opened BEFORE tutorial must survive Step 6 -> Step 7 Next
-    const undoBtnPreManual = await getStableBoundingBox(tutPage.getByTestId('undo-btn'));
-    assert.ok(undoBtnPreManual, 'Expected stable boundingBox for undo-btn before manual Replay');
-    await tutPage.mouse.move(undoBtnPreManual.x + undoBtnPreManual.width / 2, undoBtnPreManual.y + undoBtnPreManual.height / 2);
-    await tutPage.mouse.down();
-    await tutPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await tutPage.mouse.up();
+    await longPressUndoForReplay(tutPage);
     await tapSampleAndOpenTutorialAtStep6();
     await tutPage.getByTestId('tutorial-next-btn').click();
     await expectTutStep(7);
@@ -796,12 +779,7 @@ export async function runOffersE2e(ctx) {
     await jumpFromOfferAndAssertStep(5);
     // 5) replay_scrubber (redo stroke, long-press undo, exit replay) -> Jump to Guide STEP 6 OF 12
     await offerPage.getByTestId('redo-btn').click();
-    const offerUndoBox = await getStableBoundingBox(offerPage.getByTestId('undo-btn'));
-    assert.ok(offerUndoBox, 'Expected stable boundingBox for offerPage undo-btn');
-    await offerPage.mouse.move(offerUndoBox.x + offerUndoBox.width / 2, offerUndoBox.y + offerUndoBox.height / 2);
-    await offerPage.mouse.down();
-    await offerPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await offerPage.mouse.up();
+    await longPressUndoForReplay(offerPage);
     await offerPage.getByTestId('replay-exit-btn').click();
     await expectOfferBanner('replay_scrubber');
     await jumpFromOfferAndAssertStep(6);

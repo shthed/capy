@@ -222,7 +222,7 @@ flowchart TD
 - **Resize Clamping & Zero-Alloc Hot Paths**:
   - `ResizeObserver` on `containerRef` (with `window` `resize` fallback) immediately re-clamps `offsetRef.current`, refreshes `canvasRectRef`, resizes the high-DPI `<canvas>`, and repaints synchronously on rotation or split-screen resize.
   - `PuzzleCanvas`, `GameTopBar`, `FloatingActions`, `PaletteDock`, and `ReplayControls` are memoized via `React.memo`.
-  - `drawCompositeFrame` reads refs directly without effect churn; `highlightImageDataRef` reuses its buffer via `fill(0)`; wheel zoom uses `{ passive: false }`; idle hint pulse throttles to `~20fps` (`>= 50ms`); and `App.tsx` maintains an $O(1)$ `regionByIdRef` map.
+  - `drawCompositeFrame` reads refs directly without effect churn; `highlightImageDataRef` reuses its buffer via `fill(0)` while active and releases `highlightCanvasRef` / `highlightImageDataRef` (`0x0` + `null`) when highlights are disabled; `borderCanvasRef` releases when Preview Borders is off; `sourcePixelsRef` extracts source RGBA lazily only in `DETAIL` mode; wheel zoom uses `{ passive: false }`; the `~20fps` hint-pulse loop and replay playback loop cancel `requestAnimationFrame` on `visibilitychange` when hidden and resume cleanly when visible; and `App.tsx` maintains an $O(1)$ `regionByIdRef` map.
 
 ### 6-Mode Touch, Mouse & Gesture Engine
 `PuzzleCanvas` orchestrates **6 distinct** interaction modes:
@@ -240,7 +240,7 @@ flowchart TD
 
 ## 6. Background Engine & Worker Protocol
 
-Image quantization and segmentation execute in [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts) via [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts) (code-split so [`PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts) is imported dynamically only when a main-thread fallback is needed):
+Image quantization and segmentation execute in [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts) via [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts) (code-split so [`PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts) is imported dynamically only when a main-thread fallback is needed). Completed idle workers automatically terminate after a `15s` grace window (`PuzzleWorkerService.idleTerminateMs`) or immediately on `visibilitychange` when hidden, without interrupting in-flight generations:
 
 ```typescript
 // Main -> Worker Requests

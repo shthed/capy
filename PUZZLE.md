@@ -175,7 +175,7 @@ When opening black-and-white line art or hybrid coloring book pages:
 ## 5. Web Worker Execution & 6-Stage Pipeline Telemetry
 
 To guarantee **zero UI frame drops and smooth touch responsiveness**:
-* Puzzle generation (`GENERATE`) and masked Infinite Zoom subdivision (`SUBDIVIDE_MASKED_REGION`, delegating to [`MaskedRegionSubdivider.ts`](./web/src/engine/MaskedRegionSubdivider.ts) and [`UnifiedPuzzleLayers.ts`](./web/src/engine/UnifiedPuzzleLayers.ts)) run inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts).
+* Puzzle generation (`GENERATE`) and masked Infinite Zoom subdivision (`SUBDIVIDE_MASKED_REGION`, delegating to [`MaskedRegionSubdivider.ts`](./web/src/engine/MaskedRegionSubdivider.ts) and [`UnifiedPuzzleLayers.ts`](./web/src/engine/UnifiedPuzzleLayers.ts)) run inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts), which terminates idle workers automatically after a `15s` grace window or immediately when the tab becomes hidden (never cancelling active generations).
 * Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads**:
   * Inbound: `rgbaBuffer`.
   * Outbound: `regionMap`, `borderMap`, and a single contiguous `packedPixelsBuffer` unpacked into zero-copy `Int32Array.subarray` views via `pixelsOffset`/`pixelsLength`.

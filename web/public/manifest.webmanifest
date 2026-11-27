@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Capy Paint",
   "short_name": "Capy Paint",
-  "description": "Vector color-by-number application with adaptive multi-strategy quantization, interior centroid labeling, and pinch/pan canvas.",
+  "description": "Play Capy Paint free online or on Android — a relaxing, ad-free color-by-number game. Paint curated art, turn your photos into puzzles, or color in co-op.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

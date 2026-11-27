@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import {
   createBootedContext,
   getStableBoundingBox,
+  longPressUndoForReplay,
   readTotalRemainingRegions,
   tapCanvasGrid,
   waitForAnimationFrames,
@@ -827,11 +828,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     if (await page.getByTestId('undo-btn').isDisabled()) {
       await page.getByTestId('redo-btn').click();
     }
-    const undoBoxFlow1 = await getStableBoundingBox(page.getByTestId('undo-btn'));
-    await page.mouse.move(undoBoxFlow1.x + undoBoxFlow1.width / 2, undoBoxFlow1.y + undoBoxFlow1.height / 2);
-    await page.mouse.down();
-    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
-    await page.mouse.up();
+    await longPressUndoForReplay(page, { timeout: 5000 });
     await page.locator('[data-testid="paint-mode-btn"]').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(
@@ -890,25 +887,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
 
     // Re-open ReplayControls on 360x800 mobile, verify non-overlapping FloatingActions -> ReplayControls -> PaletteDock stacking, then auto-dismiss via swatch click
-    const mobileUndoLocator = page.getByTestId('undo-btn');
-    await mobileUndoLocator.waitFor({ state: 'visible', timeout: 5000 });
-    await page.waitForFunction(
-      () => {
-        const btn = document.querySelector('[data-testid="undo-btn"]');
-        return Boolean(btn && !btn.hasAttribute('disabled'));
-      },
-      undefined,
-      { timeout: 5000 }
-    );
-    await waitForAnimationFrames(page, 2);
-    const mobileUndoBox = await getStableBoundingBox(mobileUndoLocator);
-    await page.mouse.move(
-      mobileUndoBox.x + mobileUndoBox.width / 2,
-      mobileUndoBox.y + mobileUndoBox.height / 2
-    );
-    await page.mouse.down();
-    await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
-    await page.mouse.up();
+    await longPressUndoForReplay(page, { timeout: 5000 });
     const [zoomOutExp360, windowExp360, paletteExp360] = await Promise.all([
       getStableBoundingBox(page.getByTestId('zoom-out-btn')),
       getStableBoundingBox(mobileReplayWin),
