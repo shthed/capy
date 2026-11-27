@@ -244,49 +244,89 @@ export async function tapCanvasGrid(page, startFrac = 0.32, count = 8, delayMs =
 
 export async function getStableBoundingBox(locator, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs;
-  const hasRunningCssTransition = async () => {
+  const sampleAtomic = async () => {
+    const remaining = Math.max(250, deadline - Date.now());
     try {
-      return await locator.evaluate((el) => {
-        let node = el;
-        while (node && node !== document.body && node !== document.documentElement) {
-          if (typeof node.getAnimations === 'function') {
-            for (const anim of node.getAnimations()) {
-              if (
-                typeof CSSTransition !== 'undefined' &&
-                anim instanceof CSSTransition &&
-                anim.playState === 'running'
-              ) {
-                return true;
+      return await locator.evaluate(
+        (el) => {
+          const r = el.getBoundingClientRect();
+          const rect =
+            r.width > 0 && r.height > 0
+              ? { x: r.x, y: r.y, width: r.width, height: r.height }
+              : null;
+          let transitioning = false;
+          let node = el;
+          while (node && node !== document.body && node !== document.documentElement) {
+            if (typeof node.getAnimations === 'function') {
+              for (const anim of node.getAnimations()) {
+                if (
+                  typeof CSSTransition !== 'undefined' &&
+                  anim instanceof CSSTransition &&
+                  (anim.playState === 'running' || anim.pending)
+                ) {
+                  transitioning = true;
+                  break;
+                }
               }
             }
+            if (transitioning) break;
+            node = node.parentElement;
           }
-          node = node.parentElement;
-        }
-        return false;
-      });
+          return { rect, transitioning };
+        },
+        undefined,
+        { timeout: remaining }
+      );
     } catch {
-      return false;
+      return null;
     }
   };
-  let prev = await locator.boundingBox();
+
+  let prev = await sampleAtomic();
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 60));
-    const cur = await locator.boundingBox();
-    const transitioning = await hasRunningCssTransition();
+    const cur = await sampleAtomic();
     if (
-      !transitioning &&
       prev &&
       cur &&
-      Math.abs(cur.x - prev.x) < 0.5 &&
-      Math.abs(cur.y - prev.y) < 0.5 &&
-      Math.abs(cur.width - prev.width) < 0.5 &&
-      Math.abs(cur.height - prev.height) < 0.5
+      !prev.transitioning &&
+      !cur.transitioning &&
+      prev.rect &&
+      cur.rect &&
+      Math.abs(cur.rect.x - prev.rect.x) < 0.5 &&
+      Math.abs(cur.rect.y - prev.rect.y) < 0.5 &&
+      Math.abs(cur.rect.width - prev.rect.width) < 0.5 &&
+      Math.abs(cur.rect.height - prev.rect.height) < 0.5
     ) {
-      return cur;
+      return cur.rect;
     }
     prev = cur;
   }
-  return prev;
+  const finalSample = await sampleAtomic();
+  return finalSample?.rect ?? (await locator.boundingBox().catch(() => null)) ?? prev?.rect ?? null;
+}
+
+export async function longPressUndoForReplay(page, { timeout = 4000 } = {}) {
+  const undoBtn = page.getByTestId('undo-btn');
+  await undoBtn.waitFor({ state: 'visible', timeout });
+  await page.waitForFunction(
+    () => {
+      const btn = document.querySelector('[data-testid="undo-btn"]');
+      return Boolean(btn && !btn.hasAttribute('disabled'));
+    },
+    undefined,
+    { timeout }
+  );
+  const stableBox = await getStableBoundingBox(undoBtn, Math.min(2500, timeout));
+  assert.ok(stableBox, 'Expected stable boundingBox for undo-btn before long-press Replay');
+  await undoBtn.hover({ timeout });
+  await page.mouse.down();
+  try {
+    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout });
+  } finally {
+    await page.mouse.up();
+  }
+  return stableBox;
 }
 
 export function getSettingsBtn(page) {
@@ -329,7 +369,7 @@ export const assertSpotlightAligned = async (targetPage, expectedVariant) => {
                   if (
                     typeof CSSTransition !== 'undefined' &&
                     a instanceof CSSTransition &&
-                    a.playState === 'running'
+                    (a.playState === 'running' || a.pending)
                   ) {
                     return true;
                   }

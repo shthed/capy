@@ -693,5 +693,56 @@ export async function runCiPagesWorkflowTests({ projectRoot, logUnitStart, logUn
       }
     }
     /* capy-dev-only:end */
-    logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs & upload-pages-artifact dotfiles verified.');
+    {
+      // Verify getStableBoundingBox atomically rejects pending/running CSS transitions and returns settled rect
+      const { getStableBoundingBox } = await import('../e2e/helpers.mjs');
+      const prevCtor = globalThis.CSSTransition;
+      const prevDoc = globalThis.document;
+      class FakeCSSTransition {
+        constructor(playState, pending) {
+          this.playState = playState;
+          this.pending = pending;
+        }
+      }
+      globalThis.CSSTransition = FakeCSSTransition;
+      globalThis.document = { body: {}, documentElement: {} };
+      try {
+        const frames = [
+          { y: 602, anims: [new FakeCSSTransition('idle', true)] },
+          { y: 602, anims: [new FakeCSSTransition('running', false)] },
+          { y: 658, anims: [] },
+          { y: 658, anims: [] },
+        ];
+        let idx = 0;
+        const mockLocator = {
+          evaluate: async (fn) => {
+            const snap = frames[Math.min(idx++, frames.length - 1)];
+            const parent = {
+              getAnimations: () => snap.anims,
+              parentElement: globalThis.document.body,
+            };
+            const el = {
+              getBoundingClientRect: () => ({ x: 1220, y: snap.y, width: 44, height: 44 }),
+              getAnimations: () => [],
+              parentElement: parent,
+            };
+            return fn(el);
+          },
+          boundingBox: async () => ({ x: 1220, y: 658, width: 44, height: 44 }),
+        };
+        const settled = await getStableBoundingBox(mockLocator, 1500);
+        assert.deepEqual(
+          settled,
+          { x: 1220, y: 658, width: 44, height: 44 },
+          'getStableBoundingBox must wait past pending/running CSSTransition instead of returning stale pre-transition y=602'
+        );
+        assert.equal(idx, 4, 'getStableBoundingBox must require two consecutive non-transitioning stable samples');
+      } finally {
+        if (prevCtor === undefined) delete globalThis.CSSTransition;
+        else globalThis.CSSTransition = prevCtor;
+        if (prevDoc === undefined) delete globalThis.document;
+        else globalThis.document = prevDoc;
+      }
+    }
+    logUnitPass('404.html redirect VM, pr-index.html, generate-pr-manifest.mjs, upload-pages-artifact dotfiles & atomic getStableBoundingBox verified.');
 }
