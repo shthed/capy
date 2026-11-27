@@ -1,4 +1,11 @@
-### 3.1.5 - 2026-11-26 (Production, Beta)
+### 3.1.6 - 2026-11-27 (Production, Beta)
+
+- [#679](../../pull/679) Fix Playwright E2E `getStableBoundingBox` CSS-transition and tutorial auto-advance timing races that caused intermittent timeouts during 4-worker parallel CI runs
+- [#686](../../pull/686) Reduce idle memory and background activity by lazily allocating optional puzzle canvas buffers, terminating idle generation workers, and pausing background animation and local co-op heartbeat loops when tabs are hidden
+- [#677](../../pull/677) Replace boxed pixel arrays in puzzle region segmentation with a flat typed-array CSR layout and zero-copy pixel views, reducing peak worker memory on high-resolution custom images while preserving bit-identical puzzle output
+- [#683](../../pull/683) Optimize Capy Paint search visibility with robots.txt, sitemap.xml, plain-English metadata, 1200x630 Open Graph and Twitter preview cards, schema.org JSON-LD structured data, and noindex guards on 404 and PR preview pages
+
+### 3.1.5 - 2026-11-26
 
 - [#672](../../pull/672) Add automated Markdown `#anchor` validation to the sanity gate and prune retired `TODO.md` cleanup logic from the changelog compiler
 
