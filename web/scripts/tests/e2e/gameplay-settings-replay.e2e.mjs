@@ -8,6 +8,7 @@ import {
   createBootedContext,
   getSettingsBtn,
   getStableBoundingBox,
+  longPressUndoForReplay,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
@@ -647,10 +648,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     await page.getByTestId('redo-btn').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Long-press Undo (>=450ms) -> Replay Scrubber (minimised by default) -> Expand -> Scrub to step 2 -> Resume Here
-    await page.mouse.move(undoBox.x + undoBox.width / 2, undoBox.y + undoBox.height / 2);
-    await page.mouse.down();
-    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await page.mouse.up();
+    await longPressUndoForReplay(page);
 
     const replayWin = await page.waitForSelector('[data-testid="replay-controls-window"]');
     assert.equal(await replayWin.isVisible(), true, 'ReplayControls window must be visible');
@@ -798,14 +796,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     );
 
     // Verify ReplayControls non-overlap on desktop AND auto-dismiss when clicking the already-selected active swatch
-    const undoBtnForSwatchTest = page.getByTestId('undo-btn');
-    await undoBtnForSwatchTest.waitFor({ state: 'visible', timeout: 3000 });
-    const uBoxSwatch = await getStableBoundingBox(undoBtnForSwatchTest);
-    assert.ok(uBoxSwatch, 'Expected stable boundingBox for undo-btn before swatch replay test');
-    await page.mouse.move(uBoxSwatch.x + uBoxSwatch.width / 2, uBoxSwatch.y + uBoxSwatch.height / 2);
-    await page.mouse.down();
-    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await page.mouse.up();
+    await longPressUndoForReplay(page);
     const [deskZoomOutExpBox, deskReplayExpBox, deskPaletteExpBox] = await Promise.all([
       getStableBoundingBox(page.getByTestId('zoom-out-btn')),
       getStableBoundingBox(page.getByTestId('replay-controls-window')),
@@ -838,13 +829,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     );
 
     // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
-    const undoBtnAfterLoad = page.getByTestId('undo-btn');
-    await undoBtnAfterLoad.waitFor({ state: 'visible', timeout: 3000 });
-    const uBox2 = await getStableBoundingBox(undoBtnAfterLoad);
-    await page.mouse.move(uBox2.x + uBox2.width / 2, uBox2.y + uBox2.height / 2);
-    await page.mouse.down();
-    await page.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 3000 });
-    await page.mouse.up();
+    await longPressUndoForReplay(page);
 
     // Enable Follow Painting and Auto-Loop, then start playback and verify camera follows offscreen regions and loops
     const followBtn = await page.waitForSelector('[data-testid="replay-follow-btn"]');
