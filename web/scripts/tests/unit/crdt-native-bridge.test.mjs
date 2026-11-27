@@ -471,6 +471,13 @@ export async function runCrdtNativeBridgeTests({ vite, projectRoot, logUnitStart
               true,
               'PLAY_STORE_LISTING.md must have clickable Privacy Policy links and Developer contact email ops note'
             );
+            assert.equal(
+              listingDoc.includes('foldable_1_1_inner.png') &&
+                listingDoc.includes('foldable_4_3_inner.png') &&
+                listingDoc.includes('foldable_10_16_outer.png'),
+              true,
+              'PLAY_STORE_LISTING.md must document all 3 Google Play foldable screenshots (1:1, 4:3, 10:16)'
+            );
           }
           const mainActivityPath = path.resolve(
             projectRoot,
