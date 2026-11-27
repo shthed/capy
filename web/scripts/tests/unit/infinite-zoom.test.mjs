@@ -7698,14 +7698,23 @@ async function testClusterF_UiSsrAndControllerHelpers(
   assert.deepEqual(controlsMod.DEFAULT_EXTEND_SIDES, { top: true, bottom: true, left: true, right: true });
   const webOpts = controlsMod.getAvailableProviderOptions(false);
   const androidOpts = controlsMod.getAvailableProviderOptions(true);
-  assert.equal(webOpts.length, 3);
+  assert.equal(webOpts.length, 6);
   assert.equal(webOpts.some((o) => o.value === 'PUTER'), true);
-  assert.equal(androidOpts.length, 2);
+  assert.equal(webOpts.some((o) => o.value === 'OPENROUTER'), true);
+  assert.equal(webOpts.some((o) => o.value === 'OPENAI_BYOK'), true);
+  assert.equal(webOpts.some((o) => o.value === 'XAI_BYOK'), true);
+  assert.equal(androidOpts.length, 5);
   assert.equal(androidOpts.some((o) => o.value === 'PUTER'), false, 'Android provider options must exclude PUTER');
+  assert.equal(androidOpts.some((o) => o.value === 'OPENROUTER'), true);
+  assert.equal(androidOpts.some((o) => o.value === 'OPENAI_BYOK'), true);
+  assert.equal(androidOpts.some((o) => o.value === 'XAI_BYOK'), true);
 
   assert.equal(controlsMod.resolveVisibleProvider('PUTER', true), 'GUIDED_GEMINI');
   assert.equal(controlsMod.resolveVisibleProvider('PUTER', false), 'PUTER');
   assert.equal(controlsMod.resolveVisibleProvider('GEMINI_BYOK', true), 'GEMINI_BYOK');
+  assert.equal(controlsMod.resolveVisibleProvider('OPENROUTER', true), 'OPENROUTER');
+  assert.equal(controlsMod.resolveVisibleProvider('OPENAI_BYOK', true), 'OPENAI_BYOK');
+  assert.equal(controlsMod.resolveVisibleProvider('XAI_BYOK', true), 'XAI_BYOK');
 
   assert.equal(
     controlsMod.formatActiveProviderModelPill('PUTER', 'gemini-nano-banana-2.1', true),
@@ -7714,6 +7723,18 @@ async function testClusterF_UiSsrAndControllerHelpers(
   assert.equal(
     controlsMod.formatActiveProviderModelPill('PUTER', 'gemini-nano-banana-2.1', false),
     'Nano Banana 2.1 • Puter'
+  );
+  assert.equal(
+    controlsMod.formatActiveProviderModelPill('OPENROUTER', 'openai/gpt-image-2.6-sunburst', false),
+    'GPT Image 2.6 • OpenRouter'
+  );
+  assert.equal(
+    controlsMod.formatActiveProviderModelPill('OPENAI_BYOK', 'gpt-image-2.6-sunburst', false),
+    'GPT Image 2.6 • OpenAI BYOK'
+  );
+  assert.equal(
+    controlsMod.formatActiveProviderModelPill('XAI_BYOK', 'grok-imagine-image-2.0', false),
+    'Grok Imagine 2.0 • xAI Grok BYOK'
   );
 
   // F2: InfiniteZoomCreateCard SSR resolution options & stale persisted value clamping
@@ -17464,6 +17485,9 @@ export async function runInfiniteZoomUnitTests(ctxOrVite) {
     modalMod,
     snapshotLibraryMod,
   });
+
+  const { runMultiProviderAiUnitTests } = await import('./multi-provider-ai.test.mjs');
+  await runMultiProviderAiUnitTests(vite);
 
   logUnitPass?.('Infinite Zoom unit tests passed');
 }

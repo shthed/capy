@@ -101,10 +101,10 @@ export const E2E_SUITES = [
   },
   {
     name: 'infinite-zoom',
-    stages: 4,
+    stages: 5,
     smoke: false,
-    estimatedWeight: 60,
-    description: 'Unified Single-Canvas Infinite Zoom (Nano Banana 2.1/2 providers, >12x nested layers, Zoom Out, .capy v2, mobile)',
+    estimatedWeight: 70,
+    description: 'Unified Single-Canvas Infinite Zoom (Puter, OpenRouter, Gemini, ChatGPT, Grok, Guided Handoff, >12x nested layers, Zoom Out, .capy v2, mobile)',
     run: runInfiniteZoomE2e,
   },
 ];

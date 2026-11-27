@@ -30,12 +30,89 @@ export interface NormalizedRect {
   height: number;
 }
 
-export type InfiniteZoomProviderMode = 'PUTER' | 'GUIDED_GEMINI' | 'GEMINI_BYOK';
+export type InfiniteZoomProviderMode =
+  | 'PUTER'
+  | 'GUIDED_GEMINI'
+  | 'OPENROUTER'
+  | 'GEMINI_BYOK'
+  | 'OPENAI_BYOK'
+  | 'XAI_BYOK';
+
+export type ByokProviderMode = 'GEMINI_BYOK' | 'OPENROUTER' | 'OPENAI_BYOK' | 'XAI_BYOK';
+
 export type NanoBananaModelId =
   | 'gemini-nano-banana-2.1'
   | 'gemini-3.1-flash-lite-image'
   | 'gemini-3.1-flash-image';
+
+export type OpenRouterImageModelId =
+  | 'google/gemini-3.1-flash-image'
+  | 'google/gemini-3.1-flash-lite-image'
+  | 'openai/gpt-image-2.6-sunburst'
+  | 'openai/gpt-image-2.6-flare'
+  | 'x-ai/grok-imagine-image-2.0'
+  | 'bytedance-seed/seedream-4.5'
+  | 'black-forest-labs/flux.2-pro';
+
+export type OpenAiImageModelId =
+  | 'gpt-image-2.6-sunburst'
+  | 'gpt-image-2.6-flare'
+  | 'gpt-image-1.5'
+  | 'gpt-image-1';
+
+export type XaiImageModelId = 'grok-imagine-image-2.0' | 'grok-imagine-image';
+
+export type GuidedAiAppId = 'GEMINI' | 'CHATGPT' | 'GROK';
+
+export type InfiniteZoomModelId =
+  | NanoBananaModelId
+  | OpenRouterImageModelId
+  | OpenAiImageModelId
+  | XaiImageModelId;
+
 export type NanoBananaResolution = '512' | '1K' | '2K';
+
+export const INFINITE_ZOOM_PROVIDER_MODES: readonly InfiniteZoomProviderMode[] = [
+  'PUTER',
+  'GUIDED_GEMINI',
+  'OPENROUTER',
+  'GEMINI_BYOK',
+  'OPENAI_BYOK',
+  'XAI_BYOK',
+];
+
+export const OPENROUTER_IMAGE_MODEL_IDS: readonly OpenRouterImageModelId[] = [
+  'google/gemini-3.1-flash-image',
+  'google/gemini-3.1-flash-lite-image',
+  'openai/gpt-image-2.6-sunburst',
+  'openai/gpt-image-2.6-flare',
+  'x-ai/grok-imagine-image-2.0',
+  'bytedance-seed/seedream-4.5',
+  'black-forest-labs/flux.2-pro',
+];
+
+export const OPENAI_IMAGE_MODEL_IDS: readonly OpenAiImageModelId[] = [
+  'gpt-image-2.6-sunburst',
+  'gpt-image-2.6-flare',
+  'gpt-image-1.5',
+  'gpt-image-1',
+];
+
+export const XAI_IMAGE_MODEL_IDS: readonly XaiImageModelId[] = [
+  'grok-imagine-image-2.0',
+  'grok-imagine-image',
+];
+
+export const GUIDED_AI_APP_IDS: readonly GuidedAiAppId[] = ['GEMINI', 'CHATGPT', 'GROK'];
+
+export const ALL_INFINITE_ZOOM_MODEL_IDS: readonly InfiniteZoomModelId[] = [
+  'gemini-nano-banana-2.1',
+  'gemini-3.1-flash-lite-image',
+  'gemini-3.1-flash-image',
+  ...OPENROUTER_IMAGE_MODEL_IDS,
+  ...OPENAI_IMAGE_MODEL_IDS,
+  ...XAI_IMAGE_MODEL_IDS,
+];
 
 export interface NestedPuzzleLayer {
   layerId: string;
@@ -49,7 +126,7 @@ export interface NestedPuzzleLayer {
   imageBlobKey: string;
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 }
 
 export interface PuzzleData {
@@ -181,6 +258,10 @@ export interface UserSettings {
   infiniteZoomProvider: InfiniteZoomProviderMode;
   nanoBananaModel: NanoBananaModelId;
   nanoBananaResolution: NanoBananaResolution;
+  openRouterModel: OpenRouterImageModelId;
+  openAiImageModel: OpenAiImageModelId;
+  xaiImageModel: XaiImageModelId;
+  guidedAiApp: GuidedAiAppId;
   generatorConfig: GeneratorConfig;
 }
 
@@ -292,7 +373,7 @@ export interface InfiniteZoomNodeMeta {
   promptHint?: string;
   aiTierUsed?: 'chrome-ai' | 'local-wasm' | 'offline-procedural';
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
   inPlaceSubdivisionCount?: number;
 }
 

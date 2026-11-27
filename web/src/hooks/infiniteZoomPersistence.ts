@@ -2,7 +2,7 @@ import {
   BorderExtensionSides,
   InfiniteZoomNodeMeta,
   InfiniteZoomProviderMode,
-  NanoBananaModelId,
+  InfiniteZoomModelId,
   NestedPuzzleLayer,
   PuzzleData,
   SavedSnapshot,
@@ -114,7 +114,7 @@ export interface ZoomInStorageCommitParams {
   selectedCopy: ReadonlySet<number>;
   sanitizedPrompt: string;
   providerUsed: InfiniteZoomProviderMode;
-  modelUsed: NanoBananaModelId;
+  modelUsed: InfiniteZoomModelId;
   removedFilledCount: number;
   previewUrl: string;
   isFree: boolean;
@@ -138,7 +138,7 @@ export interface ZoomOutStorageCommitParams {
   sides: BorderExtensionSides;
   sanitizedPrompt: string;
   providerUsed: InfiniteZoomProviderMode;
-  modelUsed: NanoBananaModelId;
+  modelUsed: InfiniteZoomModelId;
   previewUrl: string;
   isFree: boolean;
   rootImageBlobKey?: string;
@@ -796,7 +796,7 @@ export function buildZoomInZoomTreeMeta(
   selectedCopy: ReadonlySet<number>,
   sanitizedPrompt: string,
   providerUsed: InfiniteZoomProviderMode,
-  modelUsed: NanoBananaModelId
+  modelUsed: InfiniteZoomModelId
 ): InfiniteZoomNodeMeta {
   const prevTree = existingSnap?.zoomTree;
   return {
@@ -815,7 +815,7 @@ export function buildZoomOutZoomTreeMeta(
   sides: BorderExtensionSides,
   sanitizedPrompt: string,
   providerUsed: InfiniteZoomProviderMode,
-  modelUsed: NanoBananaModelId
+  modelUsed: InfiniteZoomModelId
 ): InfiniteZoomNodeMeta {
   return {
     ...(existingSnap?.zoomTree || { depth: 0, direction: 'extend-out' }),

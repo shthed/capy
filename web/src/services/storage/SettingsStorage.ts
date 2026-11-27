@@ -1,8 +1,14 @@
 import {
+  ByokProviderMode,
   DEFAULT_GENERATOR_CONFIG,
   GeneratorConfig,
+  GUIDED_AI_APP_IDS,
+  INFINITE_ZOOM_PROVIDER_MODES,
   InfiniteZoomProviderMode,
+  OPENAI_IMAGE_MODEL_IDS,
+  OPENROUTER_IMAGE_MODEL_IDS,
   UserSettings,
+  XAI_IMAGE_MODEL_IDS,
 } from '../../types';
 import { getNanoBananaModelMeta, resolveSupportedModelResolution } from '../ai/nanoBananaPrompts';
 import { NativeBridge } from '../NativeBridge';
@@ -16,10 +22,13 @@ import {
 import { SafeLocalStore } from './SafeLocalStore';
 import {
   GEMINI_BYOK_KEY_STORAGE_KEY,
+  OPENAI_BYOK_KEY_STORAGE_KEY,
+  OPENROUTER_BYOK_KEY_STORAGE_KEY,
   resolveScopedBackupKey,
   resolveScopedStorageKey,
   SETTINGS_KEY,
   UNDO_DEFAULT_MIGRATED_KEY,
+  XAI_BYOK_KEY_STORAGE_KEY,
 } from './StorageKeys';
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -72,6 +81,10 @@ export const DEFAULT_SETTINGS: UserSettings = {
   infiniteZoomProvider: 'PUTER',
   nanoBananaModel: 'gemini-nano-banana-2.1',
   nanoBananaResolution: '1K',
+  openRouterModel: 'google/gemini-3.1-flash-image',
+  openAiImageModel: 'gpt-image-2.6-sunburst',
+  xaiImageModel: 'grok-imagine-image-2.0',
+  guidedAiApp: 'GEMINI',
   generatorConfig: { ...DEFAULT_GENERATOR_CONFIG },
 };
 
@@ -130,13 +143,17 @@ const SETTINGS_ENUM_VALUES: Record<string, readonly string[]> = {
   highlightStyle: ['CENTROID_GLOW', 'NUMBER_ONLY', 'FULL_REGION', 'BOUNDARY_ONLY'],
   hintFillStyle: ['CHECKER', 'STRIPES', 'SOLID'],
   paletteSort: ['NUMBER', 'REMAINING', 'HUE', 'LIGHTNESS'],
-  infiniteZoomProvider: ['PUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK'],
+  infiniteZoomProvider: INFINITE_ZOOM_PROVIDER_MODES,
   nanoBananaModel: [
     'gemini-nano-banana-2.1',
     'gemini-3.1-flash-lite-image',
     'gemini-3.1-flash-image',
   ],
   nanoBananaResolution: ['512', '1K', '2K'],
+  openRouterModel: OPENROUTER_IMAGE_MODEL_IDS,
+  openAiImageModel: OPENAI_IMAGE_MODEL_IDS,
+  xaiImageModel: XAI_IMAGE_MODEL_IDS,
+  guidedAiApp: GUIDED_AI_APP_IDS,
 };
 
 const GEN_CONFIG_ENUM_VALUES: Record<string, readonly string[]> = {
@@ -396,6 +413,10 @@ function resolveUserSettings(
         ),
       };
     })(),
+    openRouterModel: pickSettingsEnum(parsed, 'openRouterModel'),
+    openAiImageModel: pickSettingsEnum(parsed, 'openAiImageModel'),
+    xaiImageModel: pickSettingsEnum(parsed, 'xaiImageModel'),
+    guidedAiApp: pickSettingsEnum(parsed, 'guidedAiApp'),
     generatorConfig: sanitizeGeneratorConfig(parsed.generatorConfig),
   };
 }
@@ -454,6 +475,7 @@ export function saveSettings(settings: UserSettings): void {
     const prevSavedAt = getMaxPersistedObjectTimestamp(storageKey, backupKey);
     const savedAt = prevSavedAt >= now ? prevSavedAt + 1 : now;
     const normalizedModel = getNanoBananaModelMeta(settings.nanoBananaModel).id;
+    const settingsRecord = settings as unknown as Record<string, unknown>;
     const normalizedSettings: UserSettings = {
       ...settings,
       infiniteZoomProvider: resolvePlatformInfiniteZoomProvider(settings.infiniteZoomProvider),
@@ -462,6 +484,10 @@ export function saveSettings(settings: UserSettings): void {
         normalizedModel,
         settings.nanoBananaResolution
       ),
+      openRouterModel: pickSettingsEnum(settingsRecord, 'openRouterModel'),
+      openAiImageModel: pickSettingsEnum(settingsRecord, 'openAiImageModel'),
+      xaiImageModel: pickSettingsEnum(settingsRecord, 'xaiImageModel'),
+      guidedAiApp: pickSettingsEnum(settingsRecord, 'guidedAiApp'),
     };
     const payload = { ...normalizedSettings, undoDefaultMigrated: true, savedAt };
     const serialized = JSON.stringify(payload);
@@ -472,28 +498,103 @@ export function saveSettings(settings: UserSettings): void {
   }
 }
 
+const BYOK_KEY_BY_PROVIDER: Record<ByokProviderMode, string> = {
+  GEMINI_BYOK: GEMINI_BYOK_KEY_STORAGE_KEY,
+  OPENROUTER: OPENROUTER_BYOK_KEY_STORAGE_KEY,
+  OPENAI_BYOK: OPENAI_BYOK_KEY_STORAGE_KEY,
+  XAI_BYOK: XAI_BYOK_KEY_STORAGE_KEY,
+};
+
+function resolveByokStorageKey(provider: ByokProviderMode): string {
+  return BYOK_KEY_BY_PROVIDER[provider];
+}
+
 /**
- * Device-local Gemini API BYOK helpers.
- * Strictly stored via SafeLocalStore ONLY (never BackupEngine / Google Auto Backup,
+ * Strictly device-local AI API key helpers.
+ * Stored via SafeLocalStore ONLY (never BackupEngine / Google Auto Backup,
  * never UserSettings, never `.capy` exports, and never cloud sync).
  */
-export function loadGeminiByokApiKey(): string {
-  const raw = SafeLocalStore.getScopedItem(GEMINI_BYOK_KEY_STORAGE_KEY);
+export function loadProviderByokApiKey(provider: ByokProviderMode): string {
+  const raw = SafeLocalStore.getScopedItem(resolveByokStorageKey(provider));
   return typeof raw === 'string' ? raw.trim() : '';
 }
 
+export function clearProviderByokApiKey(provider: ByokProviderMode): boolean {
+  return SafeLocalStore.removeScopedItem(resolveByokStorageKey(provider));
+}
+
+export function saveProviderByokApiKey(provider: ByokProviderMode, rawKey: string): boolean {
+  const trimmed = typeof rawKey === 'string' ? rawKey.trim() : '';
+  if (!trimmed) {
+    return clearProviderByokApiKey(provider);
+  }
+  return SafeLocalStore.setScopedItem(resolveByokStorageKey(provider), trimmed);
+}
+
+export function hasProviderByokApiKey(provider: ByokProviderMode): boolean {
+  return loadProviderByokApiKey(provider).length > 0;
+}
+
+export function loadGeminiByokApiKey(): string {
+  return loadProviderByokApiKey('GEMINI_BYOK');
+}
+
 export function clearGeminiByokApiKey(): boolean {
-  return SafeLocalStore.removeScopedItem(GEMINI_BYOK_KEY_STORAGE_KEY);
+  return clearProviderByokApiKey('GEMINI_BYOK');
 }
 
 export function saveGeminiByokApiKey(rawKey: string): boolean {
-  const trimmed = typeof rawKey === 'string' ? rawKey.trim() : '';
-  if (!trimmed) {
-    return clearGeminiByokApiKey();
-  }
-  return SafeLocalStore.setScopedItem(GEMINI_BYOK_KEY_STORAGE_KEY, trimmed);
+  return saveProviderByokApiKey('GEMINI_BYOK', rawKey);
 }
 
 export function hasGeminiByokApiKey(): boolean {
-  return loadGeminiByokApiKey().length > 0;
+  return hasProviderByokApiKey('GEMINI_BYOK');
+}
+
+export function loadOpenRouterByokApiKey(): string {
+  return loadProviderByokApiKey('OPENROUTER');
+}
+
+export function clearOpenRouterByokApiKey(): boolean {
+  return clearProviderByokApiKey('OPENROUTER');
+}
+
+export function saveOpenRouterByokApiKey(rawKey: string): boolean {
+  return saveProviderByokApiKey('OPENROUTER', rawKey);
+}
+
+export function hasOpenRouterByokApiKey(): boolean {
+  return hasProviderByokApiKey('OPENROUTER');
+}
+
+export function loadOpenAiByokApiKey(): string {
+  return loadProviderByokApiKey('OPENAI_BYOK');
+}
+
+export function clearOpenAiByokApiKey(): boolean {
+  return clearProviderByokApiKey('OPENAI_BYOK');
+}
+
+export function saveOpenAiByokApiKey(rawKey: string): boolean {
+  return saveProviderByokApiKey('OPENAI_BYOK', rawKey);
+}
+
+export function hasOpenAiByokApiKey(): boolean {
+  return hasProviderByokApiKey('OPENAI_BYOK');
+}
+
+export function loadXaiByokApiKey(): string {
+  return loadProviderByokApiKey('XAI_BYOK');
+}
+
+export function clearXaiByokApiKey(): boolean {
+  return clearProviderByokApiKey('XAI_BYOK');
+}
+
+export function saveXaiByokApiKey(rawKey: string): boolean {
+  return saveProviderByokApiKey('XAI_BYOK', rawKey);
+}
+
+export function hasXaiByokApiKey(): boolean {
+  return hasProviderByokApiKey('XAI_BYOK');
 }

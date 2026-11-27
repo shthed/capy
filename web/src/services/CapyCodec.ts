@@ -1,10 +1,12 @@
 import {
+  ALL_INFINITE_ZOOM_MODEL_IDS,
   BorderExtensionSides,
+  INFINITE_ZOOM_PROVIDER_MODES,
   InfiniteZoomBounds,
   InfiniteZoomDirection,
+  InfiniteZoomModelId,
   InfiniteZoomNodeMeta,
   InfiniteZoomProviderMode,
-  NanoBananaModelId,
   NestedPuzzleLayer,
   NormalizedRect,
   PaletteColor,
@@ -64,16 +66,8 @@ const ALLOWED_LAYER_IMAGE_MIMES = new Set([
   'image/avif',
   'image/bmp',
 ]);
-const ALLOWED_INFINITE_ZOOM_PROVIDERS = new Set<string>([
-  'PUTER',
-  'GUIDED_GEMINI',
-  'GEMINI_BYOK',
-]);
-const ALLOWED_NANO_BANANA_MODELS = new Set<string>([
-  'gemini-nano-banana-2.1',
-  'gemini-3.1-flash-lite-image',
-  'gemini-3.1-flash-image',
-]);
+const ALLOWED_INFINITE_ZOOM_PROVIDERS = new Set<string>(INFINITE_ZOOM_PROVIDER_MODES);
+const ALLOWED_NANO_BANANA_MODELS = new Set<string>(ALL_INFINITE_ZOOM_MODEL_IDS);
 
 export interface CompactNestedLayerRecordV2 {
   layerId: string;
@@ -88,7 +82,7 @@ export interface CompactNestedLayerRecordV2 {
   imageBlobKey: string;
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 }
 
 export interface SerializedCompactNestedLayerV2 {
@@ -102,7 +96,7 @@ export interface SerializedCompactNestedLayerV2 {
   imageBlobKey: string;
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 }
 
 export interface CompactPuzzleRecordV2 {
@@ -336,12 +330,12 @@ function sanitizeNestedLayerOptionalFields(layer: {
 }): {
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 } {
   const out: {
     promptHint?: string;
     providerUsed?: InfiniteZoomProviderMode;
-    modelUsed?: NanoBananaModelId;
+    modelUsed?: InfiniteZoomModelId;
   } = {};
   if (layer.promptHint !== undefined) {
     if (typeof layer.promptHint !== 'string') {
@@ -365,7 +359,7 @@ function sanitizeNestedLayerOptionalFields(layer: {
     if (typeof layer.modelUsed !== 'string' || !ALLOWED_NANO_BANANA_MODELS.has(layer.modelUsed)) {
       throw new Error('Invalid nested layer modelUsed');
     }
-    out.modelUsed = layer.modelUsed as NanoBananaModelId;
+    out.modelUsed = layer.modelUsed as InfiniteZoomModelId;
   }
   return out;
 }

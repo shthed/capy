@@ -1,8 +1,10 @@
 import {
+  ALL_INFINITE_ZOOM_MODEL_IDS,
   DEFAULT_GENERATOR_CONFIG,
   GeneratorConfig,
+  INFINITE_ZOOM_PROVIDER_MODES,
+  InfiniteZoomModelId,
   InfiniteZoomProviderMode,
-  NanoBananaModelId,
   NestedPuzzleLayer,
   NormalizedRect,
   PaletteColor,
@@ -650,17 +652,9 @@ function recomputeBorderMapInBounds(
 }
 
 
-const VALID_PROVIDER_MODES = new Set<InfiniteZoomProviderMode>([
-  'PUTER',
-  'GUIDED_GEMINI',
-  'GEMINI_BYOK',
-]);
+const VALID_PROVIDER_MODES = new Set<InfiniteZoomProviderMode>(INFINITE_ZOOM_PROVIDER_MODES);
 
-const VALID_MODEL_IDS = new Set<NanoBananaModelId>([
-  'gemini-nano-banana-2.1',
-  'gemini-3.1-flash-lite-image',
-  'gemini-3.1-flash-image',
-]);
+const VALID_MODEL_IDS = new Set<InfiniteZoomModelId>(ALL_INFINITE_ZOOM_MODEL_IDS);
 
 const MAX_LAYER_PROMPT_HINT_LEN = 200;
 
@@ -761,7 +755,7 @@ export interface EmbedNestedDetailLayerParams {
   imageBlobKey: string;
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 }
 
 export interface EmbedNestedDetailLayerResult {
@@ -784,7 +778,7 @@ export interface WrapPuzzleWithOuterBorderParams {
   previousRootLayerId?: string;
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 }
 
 export interface WrapPuzzleWithOuterBorderResult {
@@ -913,16 +907,16 @@ function assertValidSubdivisionResult(subResult: MaskedSubdivisionResult, label:
 function sanitizeOptionalLayerMetadata(
   promptHint?: string,
   providerUsed?: InfiniteZoomProviderMode,
-  modelUsed?: NanoBananaModelId
+  modelUsed?: InfiniteZoomModelId
 ): {
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
 } {
   const meta: {
     promptHint?: string;
     providerUsed?: InfiniteZoomProviderMode;
-    modelUsed?: NanoBananaModelId;
+    modelUsed?: InfiniteZoomModelId;
   } = {};
   if (promptHint !== undefined) {
     if (typeof promptHint !== 'string') {

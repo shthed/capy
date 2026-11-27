@@ -1,8 +1,8 @@
 import {
   BorderExtensionSides,
   GeneratorConfig,
+  InfiniteZoomModelId,
   InfiniteZoomProviderMode,
-  NanoBananaModelId,
   NestedPuzzleLayer,
   NormalizedRect,
   PaletteColor,
@@ -37,6 +37,11 @@ import {
   PuterNanoBananaProvider,
   sanitizeUserPrompt,
 } from '../services/ai/NanoBananaService';
+import {
+  DirectOpenAiImageProvider,
+  DirectXaiGrokImageProvider,
+  OpenRouterImageProvider,
+} from '../services/ai/MultiProviderAiService';
 import {
   addContiguousDragRegions,
   buildRegionByIdMap,
@@ -178,13 +183,13 @@ export type AiProviderExecutionOutcome =
       status: 'decoded';
       decoded: DecodedGeminiImage;
       providerUsed: InfiniteZoomProviderMode;
-      modelUsed: NanoBananaModelId;
+      modelUsed: InfiniteZoomModelId;
     }
   | {
       status: 'guided';
       handoff: GuidedGeminiHandoffPackage;
       fallbackReason: string | null;
-      modelUsed: NanoBananaModelId;
+      modelUsed: InfiniteZoomModelId;
     }
   | { status: 'error'; message: string; code?: string }
   | { status: 'aborted' };
@@ -204,7 +209,7 @@ export interface ZoomInCommitPipelineParams {
   sanitizedPrompt: string;
   decoded: DecodedGeminiImage;
   providerUsed: InfiniteZoomProviderMode;
-  modelUsed: NanoBananaModelId;
+  modelUsed: InfiniteZoomModelId;
   isFree: boolean;
   isAborted: () => boolean;
   readLiveState: () => PipelineLiveStateSnapshot;
@@ -239,7 +244,7 @@ export interface ZoomOutCommitPipelineParams {
   sanitizedPrompt: string;
   decoded: DecodedGeminiImage;
   providerUsed: InfiniteZoomProviderMode;
-  modelUsed: NanoBananaModelId;
+  modelUsed: InfiniteZoomModelId;
   isFree: boolean;
   isAborted: () => boolean;
   readLiveState: () => PipelineLiveStateSnapshot;
@@ -761,19 +766,85 @@ export async function prepareZoomOutOperation(opts: {
   return { ...tpl, sanitizedPrompt, engineeredPrompt };
 }
 
-export async function executeAiProviderGeneration(
+const PROVIDER_PROGRESS_LABELS: Record<InfiniteZoomProviderMode, string> = {
+  PUTER: 'Generating seamless artwork via Puter (Nano Banana)...',
+  OPENROUTER: 'Generating seamless artwork via OpenRouter...',
+  GEMINI_BYOK: 'Generating seamless artwork via Gemini API...',
+  OPENAI_BYOK: 'Generating seamless artwork via ChatGPT / OpenAI API...',
+  XAI_BYOK: 'Generating seamless artwork via Grok / xAI API...',
+  GUIDED_GEMINI: 'Preparing Free Guided AI Handoff...',
+};
+
+function resolveActiveModelForSettings(
+  provider: InfiniteZoomProviderMode,
+  settings: UserSettings
+): InfiniteZoomModelId {
+  switch (provider) {
+    case 'OPENROUTER':
+      return settings.openRouterModel;
+    case 'OPENAI_BYOK':
+      return settings.openAiImageModel;
+    case 'XAI_BYOK':
+      return settings.xaiImageModel;
+    default:
+      return settings.nanoBananaModel;
+  }
+}
+
+async function runAutomatedProviderGeneration(
+  effectiveProvider: InfiniteZoomProviderMode,
   opts: ExecuteAiProviderParams
-): Promise<AiProviderExecutionOutcome> {
-  const {
-    settings,
-    signal,
-    isAborted,
-    direction,
+) {
+  const { settings, signal, prompt, templatePngBlob, templateDataUrl, width, height } = opts;
+  const resolution = settings.nanoBananaResolution;
+  const basePayload = {
     prompt,
     templatePngBlob,
     templateDataUrl,
     width,
     height,
+    resolution,
+    signal,
+  };
+  switch (effectiveProvider) {
+    case 'PUTER':
+      return new PuterNanoBananaProvider().generate({
+        ...basePayload,
+        model: settings.nanoBananaModel,
+      });
+    case 'OPENROUTER':
+      return new OpenRouterImageProvider().generate({
+        ...basePayload,
+        model: settings.openRouterModel,
+      });
+    case 'OPENAI_BYOK':
+      return new DirectOpenAiImageProvider().generate({
+        ...basePayload,
+        model: settings.openAiImageModel,
+      });
+    case 'XAI_BYOK':
+      return new DirectXaiGrokImageProvider().generate({
+        ...basePayload,
+        model: settings.xaiImageModel,
+      });
+    default:
+      return new DirectGeminiByokProvider().generate({
+        ...basePayload,
+        model: settings.nanoBananaModel,
+      });
+  }
+}
+
+export async function executeAiProviderGeneration(
+  opts: ExecuteAiProviderParams
+): Promise<AiProviderExecutionOutcome> {
+  const {
+    settings,
+    isAborted,
+    direction,
+    prompt,
+    templatePngBlob,
+    templateDataUrl,
     onProgress,
   } = opts;
   const isAndroid = NativeBridge.isAndroidNative();
@@ -781,8 +852,7 @@ export async function executeAiProviderGeneration(
     isAndroid && settings.infiniteZoomProvider === 'PUTER'
       ? 'GUIDED_GEMINI'
       : settings.infiniteZoomProvider;
-  const model = settings.nanoBananaModel;
-  const resolution = settings.nanoBananaResolution;
+  const activeModel = resolveActiveModelForSettings(effectiveProvider, settings);
 
   const makeGuidedOutcome = (fallbackReason: string | null): AiProviderExecutionOutcome => ({
     status: 'guided',
@@ -791,9 +861,10 @@ export async function executeAiProviderGeneration(
       templateDataUrl,
       prompt,
       direction,
+      targetApp: settings.guidedAiApp,
     }),
     fallbackReason,
-    modelUsed: model,
+    modelUsed: activeModel,
   });
 
   if (effectiveProvider === 'GUIDED_GEMINI') {
@@ -801,35 +872,9 @@ export async function executeAiProviderGeneration(
   }
 
   try {
-    onProgress?.(
-      0.18,
-      effectiveProvider === 'PUTER'
-        ? 'Generating seamless artwork via Puter (Nano Banana)...'
-        : 'Generating seamless artwork via Gemini API...'
-    );
+    onProgress?.(0.18, PROVIDER_PROGRESS_LABELS[effectiveProvider]);
 
-    const generationResult =
-      effectiveProvider === 'PUTER'
-        ? await new PuterNanoBananaProvider().generate({
-            prompt,
-            templatePngBlob,
-            templateDataUrl,
-            width,
-            height,
-            model,
-            resolution,
-            signal,
-          })
-        : await new DirectGeminiByokProvider().generate({
-            prompt,
-            templatePngBlob,
-            templateDataUrl,
-            width,
-            height,
-            model,
-            resolution,
-            signal,
-          });
+    const generationResult = await runAutomatedProviderGeneration(effectiveProvider, opts);
 
     if (isAborted()) return { status: 'aborted' };
 
@@ -853,7 +898,7 @@ export async function executeAiProviderGeneration(
       }
       if (err.canFallbackToGuided) {
         return makeGuidedOutcome(
-          `${err.message} Switched to Free Gemini App Handoff so you can finish at $0 cost.`
+          `${err.message} Switched to Free Guided AI App Handoff so you can finish at $0 cost.`
         );
       }
       return { status: 'error', message: err.message, code: err.code };
@@ -1523,7 +1568,7 @@ export interface ProviderFlowDispatchParams {
   onComplete: (
     decoded: DecodedGeminiImage,
     providerUsed: InfiniteZoomProviderMode,
-    modelUsed: NanoBananaModelId,
+    modelUsed: InfiniteZoomModelId,
     activeSignal: AbortSignal
   ) => Promise<void>;
 }

@@ -159,6 +159,9 @@ export async function runHardeningCspSecurityTests(vite) {
       'https://www.googleapis.com',
       'https://accounts.google.com',
       'https://generativelanguage.googleapis.com',
+      'https://openrouter.ai',
+      'https://api.openai.com',
+      'https://api.x.ai',
       'https://api.puter.com',
       'https://puter.com',
       'https://*.puter.com',
@@ -253,6 +256,9 @@ export async function runHardeningCspSecurityTests(vite) {
     );
     for (const required of [
       'https://generativelanguage.googleapis.com',
+      'https://openrouter.ai',
+      'https://api.openai.com',
+      'https://api.x.ai',
       'https://api.puter.com',
       'https://puter.com',
       'https://*.puter.com',
@@ -283,7 +289,7 @@ export async function runHardeningCspSecurityTests(vite) {
       );
     }
 
-    // Verify Android WebView CSP allows Direct Gemini BYOK connect-src and strictly forbids Puter.js
+    // Verify Android WebView CSP allows Direct Gemini/OpenRouter/OpenAI/xAI connect-src and strictly forbids Puter.js
     const androidBridgePath = path.join(
       REPO_ROOT,
       'app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt'
@@ -296,13 +302,18 @@ export async function runHardeningCspSecurityTests(vite) {
     assert.ok(androidCspMatch, 'CapyAndroidBridge.kt must define WEBVIEW_CONTENT_SECURITY_POLICY');
     const androidCsp = androidCspMatch[1].replace(/"\s*\+\s*\n?\s*"/g, '').replace(/^[\s"]+|[\s"]+$/g, '');
     const androidDirectives = parseCspDirectives(androidCsp);
-    assert.equal(
-      (androidDirectives.get('connect-src') || []).includes(
-        'https://generativelanguage.googleapis.com'
-      ),
-      true,
-      'Android WEBVIEW_CONTENT_SECURITY_POLICY connect-src must allow https://generativelanguage.googleapis.com'
-    );
+    for (const required of [
+      'https://generativelanguage.googleapis.com',
+      'https://openrouter.ai',
+      'https://api.openai.com',
+      'https://api.x.ai',
+    ]) {
+      assert.equal(
+        (androidDirectives.get('connect-src') || []).includes(required),
+        true,
+        `Android WEBVIEW_CONTENT_SECURITY_POLICY connect-src must allow ${required}`
+      );
+    }
     assert.equal(
       androidCsp.includes('puter.com'),
       false,

@@ -10,6 +10,7 @@ import {
   Info,
   KeyRound,
   Layers,
+  Loader2,
   Sparkles,
   Trash2,
   X,
@@ -17,24 +18,50 @@ import {
 } from 'lucide-react';
 import {
   BorderExtensionSides,
+  ByokProviderMode,
+  GuidedAiAppId,
+  InfiniteZoomModelId,
   InfiniteZoomProviderMode,
   NanoBananaModelId,
   NanoBananaResolution,
+  OpenAiImageModelId,
+  OpenRouterImageModelId,
+  XaiImageModelId,
 } from '../types';
 import { NativeBridge } from '../services/NativeBridge';
 import { useIsomorphicLayoutEffect } from '../hooks/useLatest';
 import {
   DEFAULT_NANO_BANANA_MODEL,
+  getGuidedAiAppMeta,
   getNanoBananaModelMeta,
   GOOGLE_AI_STUDIO_KEY_URL,
+  GUIDED_AI_APPS,
   MAX_USER_PROMPT_LENGTH,
   NANO_BANANA_MODELS,
   resolveSupportedModelResolution,
 } from '../services/ai/NanoBananaService';
 import {
-  clearGeminiByokApiKey,
-  hasGeminiByokApiKey,
-  saveGeminiByokApiKey,
+  DEFAULT_OPENAI_IMAGE_MODEL,
+  DEFAULT_OPENROUTER_MODEL,
+  DEFAULT_XAI_IMAGE_MODEL,
+  getOpenAiImageModelMeta,
+  getOpenRouterModelMeta,
+  getXaiImageModelMeta,
+  OPENAI_API_KEYS_URL,
+  OPENAI_IMAGE_MODELS,
+  OPENROUTER_IMAGE_MODELS,
+  resolveSupportedOpenRouterResolution,
+  XAI_CONSOLE_KEYS_URL,
+  XAI_IMAGE_MODELS,
+} from '../services/ai/MultiProviderAiService';
+import {
+  connectOpenRouterWithPkce,
+  OPENROUTER_KEYS_CONSOLE_URL,
+} from '../services/ai/openRouterAuth';
+import {
+  clearProviderByokApiKey,
+  hasProviderByokApiKey,
+  saveProviderByokApiKey,
 } from '../services/storage/SettingsStorage';
 import { SelectionMetrics } from '../services/ai/RegionSelectionEngine';
 import { canExtendSides, ExtendSidesCheck } from '../services/ai/SeamCompositor';
@@ -70,7 +97,10 @@ const SIDE_OPTIONS: ReadonlyArray<{ key: keyof BorderExtensionSides; label: stri
 const PROVIDER_SHORT_LABELS: Record<InfiniteZoomProviderMode, string> = {
   PUTER: 'Puter',
   GUIDED_GEMINI: 'Guided Gemini',
+  OPENROUTER: 'OpenRouter',
   GEMINI_BYOK: 'Gemini BYOK',
+  OPENAI_BYOK: 'OpenAI BYOK',
+  XAI_BYOK: 'xAI Grok BYOK',
 };
 
 const MODEL_SELECT_LABELS: Record<NanoBananaModelId, string> = {
@@ -87,14 +117,20 @@ export interface ProviderOptionItem {
 export function getAvailableProviderOptions(isAndroid: boolean): readonly ProviderOptionItem[] {
   if (isAndroid) {
     return [
-      { value: 'GUIDED_GEMINI', label: 'Free Gemini App (Guided)' },
+      { value: 'GUIDED_GEMINI', label: 'Free AI App (Guided: Gemini / ChatGPT / Grok)' },
+      { value: 'OPENROUTER', label: 'OpenRouter (1-Click OAuth / Multi-Model)' },
       { value: 'GEMINI_BYOK', label: 'Gemini API Key (BYOK)' },
+      { value: 'OPENAI_BYOK', label: 'ChatGPT / OpenAI API Key (BYOK)' },
+      { value: 'XAI_BYOK', label: 'Grok / xAI API Key (BYOK)' },
     ];
   }
   return [
     { value: 'PUTER', label: 'Puter (Free 1-Click)' },
-    { value: 'GUIDED_GEMINI', label: 'Free Gemini App (Guided)' },
+    { value: 'OPENROUTER', label: 'OpenRouter (1-Click OAuth / Multi-Model)' },
+    { value: 'GUIDED_GEMINI', label: 'Free AI App (Guided: Gemini / ChatGPT / Grok)' },
     { value: 'GEMINI_BYOK', label: 'Gemini API Key (BYOK)' },
+    { value: 'OPENAI_BYOK', label: 'ChatGPT / OpenAI API Key (BYOK)' },
+    { value: 'XAI_BYOK', label: 'Grok / xAI API Key (BYOK)' },
   ];
 }
 
@@ -110,11 +146,28 @@ export function resolveVisibleProvider(
 
 export function formatActiveProviderModelPill(
   provider: InfiniteZoomProviderMode,
-  model: NanoBananaModelId,
-  isAndroid: boolean = NativeBridge.isAndroidNative()
+  model: InfiniteZoomModelId,
+  isAndroid: boolean = NativeBridge.isAndroidNative(),
+  guidedAiApp?: GuidedAiAppId
 ): string {
   const effectiveProvider = resolveVisibleProvider(provider, isAndroid);
+  if (effectiveProvider === 'OPENROUTER') {
+    const meta = getOpenRouterModelMeta(model);
+    return `${meta.shortLabel} • ${PROVIDER_SHORT_LABELS.OPENROUTER}`;
+  }
+  if (effectiveProvider === 'OPENAI_BYOK') {
+    const meta = getOpenAiImageModelMeta(model);
+    return `${meta.shortLabel} • ${PROVIDER_SHORT_LABELS.OPENAI_BYOK}`;
+  }
+  if (effectiveProvider === 'XAI_BYOK') {
+    const meta = getXaiImageModelMeta(model);
+    return `${meta.shortLabel} • ${PROVIDER_SHORT_LABELS.XAI_BYOK}`;
+  }
   const modelMeta = getNanoBananaModelMeta(model);
+  if (effectiveProvider === 'GUIDED_GEMINI' && guidedAiApp && guidedAiApp !== 'GEMINI') {
+    const appMeta = getGuidedAiAppMeta(guidedAiApp);
+    return `Guided ${appMeta.shortLabel} • Free`;
+  }
   return `Nano Banana ${modelMeta.shortLabel} • ${PROVIDER_SHORT_LABELS[effectiveProvider]}`;
 }
 
@@ -197,7 +250,8 @@ export interface InfiniteZoomToolbarButtonProps {
   sourceHeight: number;
   prompt: string;
   provider?: InfiniteZoomProviderMode;
-  model?: NanoBananaModelId;
+  model?: InfiniteZoomModelId;
+  guidedAiApp?: GuidedAiAppId;
   onPromptChange: (next: string) => void;
   onEnterSelectionMode: () => void;
   onConfirmExtendBorders: (sides: BorderExtensionSides, prompt: string) => void;
@@ -212,6 +266,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     prompt,
     provider,
     model = DEFAULT_NANO_BANANA_MODEL,
+    guidedAiApp,
     onPromptChange,
     onEnterSelectionMode,
     onConfirmExtendBorders,
@@ -221,7 +276,12 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
       provider ?? (isAndroid ? 'GUIDED_GEMINI' : 'PUTER'),
       isAndroid
     );
-    const activeProviderPill = formatActiveProviderModelPill(effectiveProvider, model, isAndroid);
+    const activeProviderPill = formatActiveProviderModelPill(
+      effectiveProvider,
+      model,
+      isAndroid,
+      guidedAiApp
+    );
     const [isOpen, setIsOpen] = useState(false);
     const [showExtendConfig, setShowExtendConfig] = useState(false);
     const [prevDisabled, setPrevDisabled] = useState(disabled);
@@ -743,11 +803,22 @@ export interface InfiniteZoomCreateCardProps {
   infiniteZoomProvider: InfiniteZoomProviderMode;
   nanoBananaModel: NanoBananaModelId;
   nanoBananaResolution: NanoBananaResolution;
+  openRouterModel?: OpenRouterImageModelId;
+  openAiImageModel?: OpenAiImageModelId;
+  xaiImageModel?: XaiImageModelId;
+  guidedAiApp?: GuidedAiAppId;
   isInfiniteZoomDisabled?: boolean;
   disabledReason?: string;
   onChangeProvider: (provider: InfiniteZoomProviderMode) => void;
   onChangeModel: (model: NanoBananaModelId, nextResolution?: NanoBananaResolution) => void;
   onChangeResolution: (resolution: NanoBananaResolution) => void;
+  onChangeOpenRouterModel?: (
+    model: OpenRouterImageModelId,
+    nextResolution?: NanoBananaResolution
+  ) => void;
+  onChangeOpenAiImageModel?: (model: OpenAiImageModelId) => void;
+  onChangeXaiImageModel?: (model: XaiImageModelId) => void;
+  onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
   onStartInfiniteZoomIn?: (prompt?: string) => void;
   onStartInfiniteZoomOut?: (sides: BorderExtensionSides, prompt?: string) => void;
   onZoomIntoDetailTile?: () => void;
@@ -756,10 +827,63 @@ export interface InfiniteZoomCreateCardProps {
   renderHintCallout?: (id: string, text: string) => React.ReactNode;
 }
 
-const ByokApiKeySection: React.FC = () => {
+interface ByokProviderCopy {
+  title: string;
+  ariaLabel: string;
+  placeholder: string;
+  consoleUrl: string;
+  consoleLabel: string;
+}
+
+const BYOK_PROVIDER_COPY: Record<ByokProviderMode, ByokProviderCopy> = {
+  OPENROUTER: {
+    title: 'OpenRouter Account / API Key (Device-Local)',
+    ariaLabel: 'OpenRouter API Key',
+    placeholder: 'Paste your OpenRouter key (sk-or-...) or use 1-Click OAuth above...',
+    consoleUrl: OPENROUTER_KEYS_CONSOLE_URL,
+    consoleLabel: 'Manage keys at OpenRouter',
+  },
+  GEMINI_BYOK: {
+    title: 'Gemini API Key (Device-Local)',
+    ariaLabel: 'Gemini API Key',
+    placeholder: 'Paste your Gemini API key...',
+    consoleUrl: GOOGLE_AI_STUDIO_KEY_URL,
+    consoleLabel: 'Get key at Google AI Studio',
+  },
+  OPENAI_BYOK: {
+    title: 'ChatGPT / OpenAI API Key (Device-Local)',
+    ariaLabel: 'OpenAI API Key',
+    placeholder: 'Paste your OpenAI API key (sk-...)...',
+    consoleUrl: OPENAI_API_KEYS_URL,
+    consoleLabel: 'Get key at OpenAI Platform',
+  },
+  XAI_BYOK: {
+    title: 'Grok / xAI API Key (Device-Local)',
+    ariaLabel: 'xAI Grok API Key',
+    placeholder: 'Paste your xAI API key (xai-...)...',
+    consoleUrl: XAI_CONSOLE_KEYS_URL,
+    consoleLabel: 'Get key at xAI Console',
+  },
+};
+
+function isByokProvider(provider: InfiniteZoomProviderMode): provider is ByokProviderMode {
+  return (
+    provider === 'OPENROUTER' ||
+    provider === 'GEMINI_BYOK' ||
+    provider === 'OPENAI_BYOK' ||
+    provider === 'XAI_BYOK'
+  );
+}
+
+const ByokApiKeySection: React.FC<{ provider: ByokProviderMode }> = ({ provider }) => {
+  const copy = BYOK_PROVIDER_COPY[provider];
   const [byokDraft, setByokDraft] = useState<string>('');
-  const [hasStoredByokKey, setHasStoredByokKey] = useState<boolean>(() => hasGeminiByokApiKey());
+  const [hasStoredByokKey, setHasStoredByokKey] = useState<boolean>(() =>
+    hasProviderByokApiKey(provider)
+  );
+  const [isConnectingOAuth, setIsConnectingOAuth] = useState<boolean>(false);
   const [byokFeedback, setByokFeedback] = useState<string | null>(null);
+  const [byokError, setByokError] = useState<string | null>(null);
   const byokFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -772,6 +896,7 @@ const ByokApiKeySection: React.FC = () => {
   }, []);
 
   const flashByokFeedback = (msg: string) => {
+    setByokError(null);
     setByokFeedback(msg);
     if (byokFeedbackTimerRef.current !== null) {
       clearTimeout(byokFeedbackTimerRef.current);
@@ -779,23 +904,44 @@ const ByokApiKeySection: React.FC = () => {
     byokFeedbackTimerRef.current = setTimeout(() => {
       byokFeedbackTimerRef.current = null;
       setByokFeedback(null);
-    }, 2500);
+    }, 3000);
   };
 
   const handleSaveByokKey = () => {
     const trimmed = byokDraft.trim();
     if (!trimmed) return;
-    saveGeminiByokApiKey(trimmed);
-    setHasStoredByokKey(hasGeminiByokApiKey());
+    saveProviderByokApiKey(provider, trimmed);
+    setHasStoredByokKey(hasProviderByokApiKey(provider));
     setByokDraft('');
     flashByokFeedback('Saved on this device only');
   };
 
   const handleClearByokKey = () => {
-    clearGeminiByokApiKey();
-    setHasStoredByokKey(hasGeminiByokApiKey());
+    clearProviderByokApiKey(provider);
+    setHasStoredByokKey(hasProviderByokApiKey(provider));
     setByokDraft('');
     flashByokFeedback('Key removed from this device');
+  };
+
+  const handleConnectOpenRouterOAuth = async () => {
+    if (isConnectingOAuth) return;
+    setIsConnectingOAuth(true);
+    setByokError(null);
+    try {
+      await connectOpenRouterWithPkce();
+      setHasStoredByokKey(hasProviderByokApiKey('OPENROUTER'));
+      flashByokFeedback('Connected with OpenRouter on this device only');
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message.includes('CANCELLED')
+          ? 'OpenRouter sign-in cancelled.'
+          : err instanceof Error && err.message.includes('POPUP_BLOCKED')
+            ? 'Popup blocked. Allow popups or paste an OpenRouter key below.'
+            : 'Could not complete OpenRouter sign-in. Try again or paste an API key below.';
+      setByokError(msg);
+    } finally {
+      setIsConnectingOAuth(false);
+    }
   };
 
   return (
@@ -803,9 +949,7 @@ const ByokApiKeySection: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <KeyRound size={12} className="text-amber-300 flex-shrink-0" />
-          <span className="text-[11px] font-bold text-slate-200 truncate">
-            Gemini API Key (Device-Local)
-          </span>
+          <span className="text-[11px] font-bold text-slate-200 truncate">{copy.title}</span>
         </div>
         <span
           data-testid="iz-byok-status-badge"
@@ -820,16 +964,37 @@ const ByokApiKeySection: React.FC = () => {
         </span>
       </div>
 
+      {provider === 'OPENROUTER' && (
+        <button
+          type="button"
+          data-testid="iz-openrouter-oauth-btn"
+          disabled={isConnectingOAuth}
+          onClick={() => void handleConnectOpenRouterOAuth()}
+          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 min-h-[44px] rounded-lg bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+        >
+          {isConnectingOAuth ? (
+            <Loader2 size={14} className="animate-spin shrink-0" />
+          ) : (
+            <ExternalLink size={14} className="shrink-0" />
+          )}
+          <span className="truncate">
+            {hasStoredByokKey
+              ? 'Reconnect OpenRouter (1-Click OAuth)'
+              : 'Connect with OpenRouter (1-Click OAuth)'}
+          </span>
+        </button>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-1.5 min-w-0">
         <input
           type="password"
           autoComplete="off"
           spellCheck={false}
           data-testid="iz-byok-key-input"
-          aria-label="Gemini API Key"
+          aria-label={copy.ariaLabel}
           value={byokDraft}
           onChange={(e) => setByokDraft(e.target.value)}
-          placeholder={hasStoredByokKey ? 'Enter new key to replace...' : 'Paste your Gemini API key...'}
+          placeholder={hasStoredByokKey ? 'Enter new key to replace...' : copy.placeholder}
           className="flex-1 min-w-0 px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400"
         />
         <div className="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -859,12 +1024,12 @@ const ByokApiKeySection: React.FC = () => {
           Stored only on this device — never included in `.capy` saves or cloud sync.
         </span>
         <a
-          href={GOOGLE_AI_STUDIO_KEY_URL}
+          href={copy.consoleUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-sky-300 hover:text-sky-200 font-semibold underline underline-offset-2 shrink-0"
         >
-          <span>Get key at Google AI Studio</span>
+          <span>{copy.consoleLabel}</span>
           <ExternalLink size={10} />
         </a>
       </div>
@@ -874,35 +1039,199 @@ const ByokApiKeySection: React.FC = () => {
           {byokFeedback}
         </p>
       )}
+      {byokError && (
+        <p role="alert" className="text-[11px] font-semibold text-amber-300">
+          {byokError}
+        </p>
+      )}
     </div>
   );
 };
 
 interface ProviderConfigPanelProps {
   effectiveProvider: InfiniteZoomProviderMode;
+  isAndroid: boolean;
   providerOptions: readonly ProviderOptionItem[];
   nanoBananaModel: NanoBananaModelId;
   nanoBananaResolution: NanoBananaResolution;
+  openRouterModel: OpenRouterImageModelId;
+  openAiImageModel: OpenAiImageModelId;
+  xaiImageModel: XaiImageModelId;
+  guidedAiApp: GuidedAiAppId;
   onChangeProvider: (provider: InfiniteZoomProviderMode) => void;
   onChangeModel: (model: NanoBananaModelId, nextResolution?: NanoBananaResolution) => void;
   onChangeResolution: (resolution: NanoBananaResolution) => void;
+  onChangeOpenRouterModel?: (
+    model: OpenRouterImageModelId,
+    nextResolution?: NanoBananaResolution
+  ) => void;
+  onChangeOpenAiImageModel?: (model: OpenAiImageModelId) => void;
+  onChangeXaiImageModel?: (model: XaiImageModelId) => void;
+  onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
 }
 
-const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
+const ProviderModelAndQualityRow: React.FC<{
+  effectiveProvider: InfiniteZoomProviderMode;
+  isAndroid: boolean;
+  nanoBananaModel: NanoBananaModelId;
+  nanoBananaResolution: NanoBananaResolution;
+  openRouterModel: OpenRouterImageModelId;
+  openAiImageModel: OpenAiImageModelId;
+  xaiImageModel: XaiImageModelId;
+  guidedAiApp: GuidedAiAppId;
+  onChangeModel: (model: NanoBananaModelId, nextResolution?: NanoBananaResolution) => void;
+  onChangeResolution: (resolution: NanoBananaResolution) => void;
+  onChangeOpenRouterModel?: (
+    model: OpenRouterImageModelId,
+    nextResolution?: NanoBananaResolution
+  ) => void;
+  onChangeOpenAiImageModel?: (model: OpenAiImageModelId) => void;
+  onChangeXaiImageModel?: (model: XaiImageModelId) => void;
+  onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
+}> = ({
   effectiveProvider,
-  providerOptions,
+  isAndroid,
   nanoBananaModel,
   nanoBananaResolution,
-  onChangeProvider,
+  openRouterModel,
+  openAiImageModel,
+  xaiImageModel,
+  guidedAiApp,
   onChangeModel,
   onChangeResolution,
+  onChangeOpenRouterModel,
+  onChangeOpenAiImageModel,
+  onChangeXaiImageModel,
+  onChangeGuidedAiApp,
 }) => {
+  if (effectiveProvider === 'OPENROUTER') {
+    const orMeta = getOpenRouterModelMeta(openRouterModel);
+    const resolvedOrRes = resolveSupportedOpenRouterResolution(
+      orMeta.id,
+      nanoBananaResolution
+    );
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
+        <div className="flex flex-col gap-1 min-w-0">
+          <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
+            OpenRouter Model
+          </label>
+          <select
+            id="iz-model-select"
+            data-testid="iz-model-select"
+            value={orMeta.id}
+            onChange={(e) => {
+              const nextModel = e.target.value as OpenRouterImageModelId;
+              const nextRes = resolveSupportedOpenRouterResolution(nextModel, resolvedOrRes);
+              onChangeOpenRouterModel?.(
+                nextModel,
+                nextRes !== nanoBananaResolution ? nextRes : undefined
+              );
+            }}
+            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            {OPENROUTER_IMAGE_MODELS.map((modelItem) => (
+              <option key={modelItem.id} value={modelItem.id}>
+                {modelItem.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 min-w-0">
+          <label htmlFor="iz-resolution-select" className="text-[11px] font-bold text-slate-300">
+            Output Resolution
+          </label>
+          <select
+            id="iz-resolution-select"
+            data-testid="iz-resolution-select"
+            value={resolvedOrRes}
+            onChange={(e) => onChangeResolution(e.target.value as NanoBananaResolution)}
+            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            {orMeta.supportedResolutions.map((resOpt) => (
+              <option key={resOpt} value={resOpt}>
+                {resOpt}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  if (effectiveProvider === 'OPENAI_BYOK') {
+    const oaMeta = getOpenAiImageModelMeta(openAiImageModel);
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
+        <div className="flex flex-col gap-1 min-w-0">
+          <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
+            ChatGPT / OpenAI Model
+          </label>
+          <select
+            id="iz-model-select"
+            data-testid="iz-model-select"
+            value={oaMeta.id}
+            onChange={(e) => onChangeOpenAiImageModel?.(e.target.value as OpenAiImageModelId)}
+            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            {OPENAI_IMAGE_MODELS.map((modelItem) => (
+              <option key={modelItem.id} value={modelItem.id}>
+                {modelItem.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1 min-w-0">
+          <label htmlFor="iz-resolution-select" className="text-[11px] font-bold text-slate-300">
+            Output Quality
+          </label>
+          <select
+            id="iz-resolution-select"
+            data-testid="iz-resolution-select"
+            value={nanoBananaResolution}
+            onChange={(e) => onChangeResolution(e.target.value as NanoBananaResolution)}
+            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            <option value="512">Medium (Faster)</option>
+            <option value="1K">Auto (Balanced)</option>
+            <option value="2K">High (Max Detail)</option>
+          </select>
+        </div>
+      </div>
+    );
+  }
+
+  if (effectiveProvider === 'XAI_BYOK') {
+    const xaiMeta = getXaiImageModelMeta(xaiImageModel);
+    return (
+      <div className="flex flex-col gap-1 min-w-0">
+        <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
+          Grok / xAI Model
+        </label>
+        <select
+          id="iz-model-select"
+          data-testid="iz-model-select"
+          value={xaiMeta.id}
+          onChange={(e) => onChangeXaiImageModel?.(e.target.value as XaiImageModelId)}
+          className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+        >
+          {XAI_IMAGE_MODELS.map((modelItem) => (
+            <option key={modelItem.id} value={modelItem.id}>
+              {modelItem.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
   const selectedModelMeta = getNanoBananaModelMeta(nanoBananaModel);
   const resolvedResolution = resolveSupportedModelResolution(
     nanoBananaModel,
     nanoBananaResolution
   );
-
   const handleModelChange = (nextModel: NanoBananaModelId) => {
     const nextResolved = resolveSupportedModelResolution(nextModel, resolvedResolution);
     const nextResolution = nextResolved !== nanoBananaResolution ? nextResolved : undefined;
@@ -910,29 +1239,7 @@ const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
   };
 
   return (
-    <div className="rounded-xl bg-slate-950/65 border border-slate-800 p-2.5 space-y-2 min-w-0">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 min-w-0">
-        <label
-          htmlFor="iz-provider-select"
-          className="text-[11px] font-bold text-slate-300 flex-shrink-0"
-        >
-          Generation Provider
-        </label>
-        <select
-          id="iz-provider-select"
-          data-testid="iz-provider-select"
-          value={effectiveProvider}
-          onChange={(e) => onChangeProvider(e.target.value as InfiniteZoomProviderMode)}
-          className="w-full sm:w-auto min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
-        >
-          {providerOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
+    <div className="space-y-2 min-w-0">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
         <div className="flex flex-col gap-1 min-w-0">
           <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
@@ -973,21 +1280,136 @@ const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
         </div>
       </div>
 
-      {effectiveProvider === 'GEMINI_BYOK' && <ByokApiKeySection />}
+      {effectiveProvider === 'GUIDED_GEMINI' && !isAndroid && onChangeGuidedAiApp && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 min-w-0">
+          <label
+            htmlFor="iz-guided-app-select"
+            className="text-[11px] font-bold text-slate-300 flex-shrink-0"
+          >
+            Free AI App to Launch
+          </label>
+          <select
+            id="iz-guided-app-select"
+            data-testid="iz-guided-app-select"
+            value={guidedAiApp}
+            onChange={(e) => onChangeGuidedAiApp(e.target.value as GuidedAiAppId)}
+            className="w-full sm:w-auto min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+          >
+            {GUIDED_AI_APPS.map((app) => (
+              <option key={app.id} value={app.id}>
+                {app.label} ({app.appUrl.replace(/^https:\/\/|\/$/g, '')})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 };
+
+const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
+  effectiveProvider,
+  isAndroid,
+  providerOptions,
+  nanoBananaModel,
+  nanoBananaResolution,
+  openRouterModel,
+  openAiImageModel,
+  xaiImageModel,
+  guidedAiApp,
+  onChangeProvider,
+  onChangeModel,
+  onChangeResolution,
+  onChangeOpenRouterModel,
+  onChangeOpenAiImageModel,
+  onChangeXaiImageModel,
+  onChangeGuidedAiApp,
+}) => (
+  <div className="rounded-xl bg-slate-950/65 border border-slate-800 p-2.5 space-y-2 min-w-0">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 min-w-0">
+      <label
+        htmlFor="iz-provider-select"
+        className="text-[11px] font-bold text-slate-300 flex-shrink-0"
+      >
+        Generation Provider
+      </label>
+      <select
+        id="iz-provider-select"
+        data-testid="iz-provider-select"
+        value={effectiveProvider}
+        onChange={(e) => onChangeProvider(e.target.value as InfiniteZoomProviderMode)}
+        className="w-full sm:w-auto min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+      >
+        {providerOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </div>
+
+    <ProviderModelAndQualityRow
+      effectiveProvider={effectiveProvider}
+      isAndroid={isAndroid}
+      nanoBananaModel={nanoBananaModel}
+      nanoBananaResolution={nanoBananaResolution}
+      openRouterModel={openRouterModel}
+      openAiImageModel={openAiImageModel}
+      xaiImageModel={xaiImageModel}
+      guidedAiApp={guidedAiApp}
+      onChangeModel={onChangeModel}
+      onChangeResolution={onChangeResolution}
+      onChangeOpenRouterModel={onChangeOpenRouterModel}
+      onChangeOpenAiImageModel={onChangeOpenAiImageModel}
+      onChangeXaiImageModel={onChangeXaiImageModel}
+      onChangeGuidedAiApp={onChangeGuidedAiApp}
+    />
+
+    {isByokProvider(effectiveProvider) && (
+      <ByokApiKeySection key={effectiveProvider} provider={effectiveProvider} />
+    )}
+  </div>
+);
+
+function resolveActivePillModel(
+  provider: InfiniteZoomProviderMode,
+  models: {
+    nanoBananaModel: NanoBananaModelId;
+    openRouterModel: OpenRouterImageModelId;
+    openAiImageModel: OpenAiImageModelId;
+    xaiImageModel: XaiImageModelId;
+  }
+): InfiniteZoomModelId {
+  switch (provider) {
+    case 'OPENROUTER':
+      return models.openRouterModel;
+    case 'OPENAI_BYOK':
+      return models.openAiImageModel;
+    case 'XAI_BYOK':
+      return models.xaiImageModel;
+    default:
+      return models.nanoBananaModel;
+  }
+}
 
 export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
   sourceImage,
   infiniteZoomProvider,
   nanoBananaModel,
   nanoBananaResolution,
+  openRouterModel = DEFAULT_OPENROUTER_MODEL,
+  openAiImageModel = DEFAULT_OPENAI_IMAGE_MODEL,
+  xaiImageModel = DEFAULT_XAI_IMAGE_MODEL,
+  guidedAiApp = 'GEMINI',
   isInfiniteZoomDisabled = false,
   disabledReason,
   onChangeProvider,
   onChangeModel,
   onChangeResolution,
+  onChangeOpenRouterModel,
+  onChangeOpenAiImageModel,
+  onChangeXaiImageModel,
+  onChangeGuidedAiApp,
   onStartInfiniteZoomIn,
   onStartInfiniteZoomOut,
   onZoomIntoDetailTile,
@@ -1007,7 +1429,18 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
   const extendCheck = useMemo(() => canExtendSides(srcW, srcH, sides), [srcW, srcH, sides]);
   const hasSource = srcW > 0 && srcH > 0;
   const actionsDisabled = isInfiniteZoomDisabled || !hasSource;
-  const activeSummary = formatActiveProviderModelPill(effectiveProvider, nanoBananaModel, isAndroid);
+  const activeModelForPill = resolveActivePillModel(effectiveProvider, {
+    nanoBananaModel,
+    openRouterModel,
+    openAiImageModel,
+    xaiImageModel,
+  });
+  const activeSummary = formatActiveProviderModelPill(
+    effectiveProvider,
+    activeModelForPill,
+    isAndroid,
+    guidedAiApp
+  );
 
   const handleToggleSide = (key: keyof BorderExtensionSides) => {
     setSides((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1131,19 +1564,28 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
 
       <ProviderConfigPanel
         effectiveProvider={effectiveProvider}
+        isAndroid={isAndroid}
         providerOptions={providerOptions}
         nanoBananaModel={nanoBananaModel}
         nanoBananaResolution={nanoBananaResolution}
+        openRouterModel={openRouterModel}
+        openAiImageModel={openAiImageModel}
+        xaiImageModel={xaiImageModel}
+        guidedAiApp={guidedAiApp}
         onChangeProvider={onChangeProvider}
         onChangeModel={onChangeModel}
         onChangeResolution={onChangeResolution}
+        onChangeOpenRouterModel={onChangeOpenRouterModel}
+        onChangeOpenAiImageModel={onChangeOpenAiImageModel}
+        onChangeXaiImageModel={onChangeXaiImageModel}
+        onChangeGuidedAiApp={onChangeGuidedAiApp}
       />
 
       {onZoomIntoDetailTile &&
         sourceImage &&
         renderHintCallout?.(
           'infinite-zoom',
-          'Add seamless detail layers inside selected regions or extend canvas borders outward on the same unified puzzle using Nano Banana 2.1 / 2.'
+          'Add seamless detail layers inside selected regions or extend canvas borders outward on the same unified puzzle using Puter, OpenRouter, Gemini, ChatGPT, or Grok.'
         )}
     </div>
   );

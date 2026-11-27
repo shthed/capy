@@ -1283,7 +1283,11 @@ export class NativeBridgeService {
         return false;
       }
       const host = parsed.hostname.toLowerCase();
-      if (host !== 'accounts.google.com' && host !== 'login.microsoftonline.com') {
+      if (
+        host !== 'accounts.google.com' &&
+        host !== 'login.microsoftonline.com' &&
+        host !== 'openrouter.ai'
+      ) {
         return false;
       }
       if (window.CapyAndroid?.openExternalOAuth) {

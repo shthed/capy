@@ -35,6 +35,9 @@ export const TAB_SESSION_SUFFIX_KEY = 'capy_tab_peer_suffix_v1';
 export const COMMUNITY_IDEAS_STORAGE_KEY = 'capy_community_ideas_v1';
 export const AI_CREDITS_STORAGE_KEY = 'capy_ai_credits_v1';
 export const GEMINI_BYOK_KEY_STORAGE_KEY = 'capy_gemini_byok_key_v1';
+export const OPENROUTER_BYOK_KEY_STORAGE_KEY = 'capy_openrouter_byok_key_v1';
+export const OPENAI_BYOK_KEY_STORAGE_KEY = 'capy_openai_byok_key_v1';
+export const XAI_BYOK_KEY_STORAGE_KEY = 'capy_xai_byok_key_v1';
 
 export const STORAGE_KEYS = {
   SETTINGS: SETTINGS_KEY,
@@ -62,6 +65,9 @@ export const STORAGE_KEYS = {
   COMMUNITY_IDEAS: COMMUNITY_IDEAS_STORAGE_KEY,
   AI_CREDITS: AI_CREDITS_STORAGE_KEY,
   GEMINI_BYOK_KEY: GEMINI_BYOK_KEY_STORAGE_KEY,
+  OPENROUTER_BYOK_KEY: OPENROUTER_BYOK_KEY_STORAGE_KEY,
+  OPENAI_BYOK_KEY: OPENAI_BYOK_KEY_STORAGE_KEY,
+  XAI_BYOK_KEY: XAI_BYOK_KEY_STORAGE_KEY,
 } as const;
 
 export const DB_VERSION = 1;

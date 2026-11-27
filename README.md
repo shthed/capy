@@ -45,7 +45,7 @@
 
 - **Two Ways to Play**: Relax with classic **Color by Number** or choose your own shades in **Free Color** mode.
 - **Turn Any Photo into Art**: Import your favorite photos of pets, trips, or drawings to create instant playable puzzles—or export clean coloring pages to print on paper.
-- **Unified Single-Canvas Infinite Zoom**: Zoom up to `256x` to add seamless nested detail layers inside any section or extend artwork borders outward while keeping `100%` of painted progress in one `.capy` v2 save—powered by optional Google Nano Banana 2.1 / 2 (Web-only Puter.js, Free Guided Gemini App Handoff on Web & Android, or device-local Gemini API BYOK).
+- **Unified Single-Canvas Infinite Zoom**: Zoom up to `256x` to add seamless nested detail layers inside any section or extend artwork borders outward while keeping `100%` of painted progress in one `.capy` v2 save—powered by optional Puter.js (Web), OpenRouter (1-click OAuth PKCE & multi-model routing), Free Guided Handoff (Gemini, ChatGPT, or Grok apps), or device-local Gemini / ChatGPT (OpenAI) / Grok (xAI) API keys.
 - **Share Progress or Paint Together**: Send a quick link to share your puzzle with friends, or opt in to live **Co-op Rooms** to color side by side.
 - **Smooth, Effortless Painting**: Drag with **Paint Mode** to fill matching spaces fast, zoom in cleanly for tiny details, and watch a timelapse replay of your finished artwork.
 - **Daily Puzzle and Built-In Gallery**: Enjoy a fresh **Puzzle of the Day**, browse ready-to-play illustrations by theme, and celebrate milestones in your **Lifetime Stats**.

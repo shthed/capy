@@ -14,9 +14,12 @@ import {
   X,
 } from 'lucide-react';
 import { NativeBridge } from '../services/NativeBridge';
+import type { GuidedAiAppId } from '../types';
 import {
   copyPromptToClipboard,
   copyTemplateImageToClipboard,
+  getGuidedAiAppMeta,
+  GUIDED_AI_APPS,
   GuidedGeminiHandoffPackage,
   launchGeminiHandoff,
 } from '../services/ai/NanoBananaService';
@@ -129,11 +132,13 @@ interface GuidedGeminiStep1CardProps {
   prompt: string;
   templatePreviewUrl: string;
   isAndroid: boolean;
+  selectedApp: GuidedAiAppId;
   isProcessing: boolean;
   isLaunching: boolean;
   copiedOnly: boolean;
   copiedImage: boolean;
   launchStatus: string | null;
+  onSelectApp: (app: GuidedAiAppId) => void;
   onCopyPrompt: () => void;
   onCopyImage: () => void;
   onLaunchGemini: () => void;
@@ -143,107 +148,141 @@ const GuidedGeminiStep1Card: React.FC<GuidedGeminiStep1CardProps> = ({
   prompt,
   templatePreviewUrl,
   isAndroid,
+  selectedApp,
   isProcessing,
   isLaunching,
   copiedOnly,
   copiedImage,
   launchStatus,
+  onSelectApp,
   onCopyPrompt,
   onCopyImage,
   onLaunchGemini,
-}) => (
-  <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">
-    <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
-      <span className="text-xs font-extrabold text-sky-300 min-w-0 break-words">
-        Step 1 — Send Template &amp; Prompt to Gemini
-      </span>
-      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-        {!isAndroid && (
+}) => {
+  const appMeta = getGuidedAiAppMeta(selectedApp);
+  return (
+    <div className="rounded-xl bg-slate-950/75 border border-slate-800 p-3 space-y-2.5 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
+        <span className="text-xs font-extrabold text-sky-300 min-w-0 break-words">
+          Step 1 — Send Template &amp; Prompt to {appMeta.label}
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+          {!isAndroid && (
+            <button
+              type="button"
+              data-testid="guided-gemini-copy-image-btn"
+              disabled={isProcessing}
+              onClick={onCopyImage}
+              className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-h-[44px] max-w-full rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {copiedImage ? (
+                <Check size={13} className="text-emerald-400 shrink-0" />
+              ) : (
+                <ImageIcon size={13} className="text-sky-300 shrink-0" />
+              )}
+              <span className="whitespace-nowrap">
+                {copiedImage ? 'Copied Image' : 'Copy Image'}
+              </span>
+            </button>
+          )}
           <button
             type="button"
-            data-testid="guided-gemini-copy-image-btn"
+            data-testid="guided-gemini-copy-prompt-btn"
             disabled={isProcessing}
-            onClick={onCopyImage}
+            onClick={onCopyPrompt}
             className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-h-[44px] max-w-full rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
           >
-            {copiedImage ? (
+            {copiedOnly ? (
               <Check size={13} className="text-emerald-400 shrink-0" />
             ) : (
-              <ImageIcon size={13} className="text-sky-300 shrink-0" />
+              <Copy size={13} className="shrink-0" />
             )}
-            <span className="whitespace-nowrap">
-              {copiedImage ? 'Copied Image' : 'Copy Image'}
-            </span>
+            <span className="whitespace-nowrap">{copiedOnly ? 'Copied' : 'Copy Prompt'}</span>
           </button>
-        )}
-        <button
-          type="button"
-          data-testid="guided-gemini-copy-prompt-btn"
-          disabled={isProcessing}
-          onClick={onCopyPrompt}
-          className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 min-h-[44px] max-w-full rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition-colors cursor-pointer disabled:opacity-50"
-        >
-          {copiedOnly ? (
-            <Check size={13} className="text-emerald-400 shrink-0" />
-          ) : (
-            <Copy size={13} className="shrink-0" />
-          )}
-          <span className="whitespace-nowrap">{copiedOnly ? 'Copied' : 'Copy Prompt'}</span>
-        </button>
+        </div>
       </div>
-    </div>
 
-    <div className="flex flex-col sm:flex-row gap-2.5 items-start min-w-0">
-      {templatePreviewUrl && (
-        <div className="w-full sm:w-28 shrink-0 rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center p-1">
-          <img
-            src={templatePreviewUrl}
-            alt="Prepared puzzle template preview"
-            className="capy-guided-gemini-preview max-h-32 sm:max-h-24 w-auto object-contain rounded"
-          />
+      {!isAndroid && (
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0" role="group" aria-label="Choose AI app">
+          {GUIDED_AI_APPS.map((app) => {
+            const active = app.id === appMeta.id;
+            return (
+              <button
+                key={app.id}
+                type="button"
+                data-testid={`guided-app-chip-${app.id.toLowerCase()}`}
+                aria-pressed={active}
+                disabled={isProcessing || isLaunching}
+                onClick={() => onSelectApp(app.id)}
+                className={`inline-flex items-center justify-center px-2.5 py-1 min-h-[36px] rounded-full text-[11px] font-bold border transition-colors cursor-pointer disabled:opacity-50 ${
+                  active
+                    ? 'bg-sky-500/25 text-sky-200 border-sky-400/70'
+                    : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                {app.label}
+              </button>
+            );
+          })}
         </div>
       )}
 
-      <div className="w-full min-w-0 flex-1 rounded-lg bg-slate-900/90 border border-slate-800 p-2 max-h-28 overflow-y-auto">
-        <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap break-words select-text">
-          {prompt}
-        </p>
+      <div className="flex flex-col sm:flex-row gap-2.5 items-start min-w-0">
+        {templatePreviewUrl && (
+          <div className="w-full sm:w-28 shrink-0 rounded-lg overflow-hidden border border-slate-700/80 bg-slate-900 flex items-center justify-center p-1">
+            <img
+              src={templatePreviewUrl}
+              alt="Prepared puzzle template preview"
+              className="capy-guided-gemini-preview max-h-32 sm:max-h-24 w-auto object-contain rounded"
+            />
+          </div>
+        )}
+
+        <div className="w-full min-w-0 flex-1 rounded-lg bg-slate-900/90 border border-slate-800 p-2 max-h-28 overflow-y-auto">
+          <p className="text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap break-words select-text">
+            {prompt}
+          </p>
+        </div>
       </div>
-    </div>
 
-    <button
-      type="button"
-      data-testid="guided-gemini-launch-btn"
-      disabled={isProcessing || isLaunching}
-      onClick={onLaunchGemini}
-      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer"
-    >
-      {isLaunching ? (
-        <Loader2 size={15} className="animate-spin shrink-0" />
-      ) : isAndroid ? (
-        <Share2 size={15} className="shrink-0" />
-      ) : (
-        <ExternalLink size={15} className="shrink-0" />
-      )}
-      <span className="break-words text-center">
-        {isAndroid ? 'Copy Prompt & Share to Gemini App' : 'Copy Prompt & Open Gemini'}
-      </span>
-    </button>
-
-    {launchStatus && (
-      <p
-        role="status"
-        className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 leading-snug break-words"
+      <button
+        type="button"
+        data-testid="guided-gemini-launch-btn"
+        disabled={isProcessing || isLaunching}
+        onClick={onLaunchGemini}
+        className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 min-h-[44px] rounded-xl bg-sky-400 hover:bg-sky-300 disabled:bg-slate-800 disabled:text-slate-500 text-slate-950 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer"
       >
-        {launchStatus}
-      </p>
-    )}
-  </div>
-);
+        {isLaunching ? (
+          <Loader2 size={15} className="animate-spin shrink-0" />
+        ) : isAndroid ? (
+          <Share2 size={15} className="shrink-0" />
+        ) : (
+          <ExternalLink size={15} className="shrink-0" />
+        )}
+        <span className="break-words text-center">
+          {isAndroid
+            ? 'Copy Prompt & Share to Gemini App'
+            : `Copy Prompt & Open ${appMeta.label}`}
+        </span>
+      </button>
+
+      {launchStatus && (
+        <p
+          role="status"
+          className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 leading-snug break-words"
+        >
+          {launchStatus}
+        </p>
+      )}
+    </div>
+  );
+};
 
 export interface GuidedGeminiHandoffModalProps {
   isOpen: boolean;
   handoff: GuidedGeminiHandoffPackage | null;
+  guidedAiApp?: GuidedAiAppId;
+  onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
   fallbackReason?: string | null;
   isProcessing?: boolean;
   errorMessage?: string | null;
@@ -255,6 +294,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
   ({
     isOpen,
     handoff,
+    guidedAiApp,
+    onChangeGuidedAiApp,
     fallbackReason = null,
     isProcessing = false,
     errorMessage = null,
@@ -262,6 +303,18 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     onCancel,
   }) => {
     const titleId = useId();
+    const [localApp, setLocalApp] = useState<GuidedAiAppId>(
+      () => guidedAiApp ?? handoff?.targetApp ?? 'GEMINI'
+    );
+    const activeApp: GuidedAiAppId = guidedAiApp ?? localApp;
+    const activeAppMeta = getGuidedAiAppMeta(activeApp);
+    const handleSelectApp = useCallback(
+      (nextApp: GuidedAiAppId) => {
+        setLocalApp(nextApp);
+        onChangeGuidedAiApp?.(nextApp);
+      },
+      [onChangeGuidedAiApp]
+    );
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const copiedImageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -498,7 +551,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
       setLocalError(null);
       setIsLaunching(true);
       try {
-        const res = await launchGeminiHandoff(activeHandoff);
+        const res = await launchGeminiHandoff(activeHandoff, activeApp);
         if (
           !isOpenRef.current ||
           handoffRef.current !== activeHandoff ||
@@ -506,17 +559,18 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
         ) {
           return;
         }
+        const appLabel = activeAppMeta.label;
         if (isAndroid) {
           setLaunchStatus(
             res.copiedPrompt
-              ? 'Prompt copied! Choose Gemini in the share sheet, paste the prompt, then share the result back to Capy.'
-              : 'Template shared! Copy the prompt below, paste it in Gemini, then share the result back to Capy.'
+              ? 'Prompt copied! Choose Gemini, ChatGPT, or Grok in the share sheet, paste the prompt, then share the result back to Capy.'
+              : 'Template shared! Copy the prompt below, paste it in your AI app, then share the result back to Capy.'
           );
         } else {
           setLaunchStatus(
             res.copiedPrompt
-              ? 'Prompt copied & template saved! Attach the template image in Gemini, paste the prompt, then paste or upload the result below.'
-              : 'Template saved & Gemini opened! Copy the prompt below, attach the template image, then return the result below.'
+              ? `Prompt copied & template saved! Attach the template image in ${appLabel}, paste the prompt, then paste or upload the result below.`
+              : `Template saved & ${appLabel} opened! Copy the prompt below, attach the template image, then return the result below.`
           );
         }
       } catch {
@@ -528,7 +582,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
           return;
         }
         setLocalError(
-          'Could not open Gemini automatically. Copy the prompt below and upload the template image in Gemini.'
+          `Could not open ${activeAppMeta.label} automatically. Copy the prompt below and upload the template image in ${activeAppMeta.label}.`
         );
       } finally {
         if (launchSeqRef.current === seq) {
@@ -538,7 +592,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
           }
         }
       }
-    }, [isAndroid]);
+    }, [activeApp, activeAppMeta.label, isAndroid]);
 
     const handleCopyPromptOnly = useCallback(async () => {
       const activeHandoff = handoffRef.current;
@@ -778,11 +832,13 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
               prompt={handoff.prompt}
               templatePreviewUrl={templatePreviewUrl}
               isAndroid={isAndroid}
+              selectedApp={activeApp}
               isProcessing={isProcessing}
               isLaunching={isLaunching}
               copiedOnly={copiedOnly}
               copiedImage={copiedImage}
               launchStatus={launchStatus}
+              onSelectApp={handleSelectApp}
               onCopyPrompt={() => void handleCopyPromptOnly()}
               onCopyImage={() => void handleCopyImage()}
               onLaunchGemini={() => void handleLaunchGemini()}

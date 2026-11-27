@@ -1036,8 +1036,8 @@ async function runStage1(ctx) {
         .evaluateAll((opts) => opts.map((o) => o.value));
       assert.deepEqual(
         providerOptions,
-        ['PUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK'],
-        'Web CreateTab must expose Puter, Guided Gemini, and Gemini BYOK providers'
+        ['PUTER', 'OPENROUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK', 'OPENAI_BYOK', 'XAI_BYOK'],
+        'Web CreateTab must expose Puter, OpenRouter, Guided AI, Gemini BYOK, OpenAI BYOK, and xAI BYOK providers'
       );
       assert.equal(await providerSelect.inputValue(), 'PUTER', 'Default Web provider must be PUTER');
 
@@ -1125,6 +1125,49 @@ async function runStage1(ctx) {
       );
       assert.equal((await byokBadge.innerText()).trim(), 'Not set');
 
+      // Verify OPENROUTER 1-click OAuth button + curated multi-vendor models + device-local key isolation
+      await providerSelect.selectOption('OPENROUTER');
+      await page.getByTestId('iz-openrouter-oauth-btn').waitFor({ state: 'visible', timeout: 3000 });
+      await assertMinTouchTarget(
+        page.getByTestId('iz-openrouter-oauth-btn'),
+        'iz-openrouter-oauth-btn'
+      );
+      const orModelOpts = await modelSelect
+        .locator('option')
+        .evaluateAll((opts) => opts.map((o) => o.value));
+      assert.equal(orModelOpts.includes('openai/gpt-image-2.6-sunburst'), true);
+      assert.equal(orModelOpts.includes('x-ai/grok-imagine-image-2.0'), true);
+      await page.getByTestId('iz-byok-key-input').fill('sk-or-v1-stage1-secret');
+      await page.getByTestId('iz-byok-save-btn').click();
+      await page.waitForFunction(
+        () => localStorage.getItem('capy_openrouter_byok_key_v1') === 'sk-or-v1-stage1-secret',
+        { timeout: 3000 }
+      );
+      const settingsAfterOr = await page.evaluate((k) => localStorage.getItem(k) || '', SETTINGS_KEY);
+      assert.equal(settingsAfterOr.includes('sk-or-v1-stage1-secret'), false);
+      await page.getByTestId('iz-byok-clear-btn').click();
+
+      // Verify OPENAI_BYOK (ChatGPT) & XAI_BYOK (Grok) device-local key isolation
+      await providerSelect.selectOption('OPENAI_BYOK');
+      assert.equal(await modelSelect.inputValue(), 'gpt-image-2.6-sunburst');
+      await page.getByTestId('iz-byok-key-input').fill('sk-proj-stage1-openai');
+      await page.getByTestId('iz-byok-save-btn').click();
+      await page.waitForFunction(
+        () => localStorage.getItem('capy_openai_byok_key_v1') === 'sk-proj-stage1-openai',
+        { timeout: 3000 }
+      );
+      await page.getByTestId('iz-byok-clear-btn').click();
+
+      await providerSelect.selectOption('XAI_BYOK');
+      assert.equal(await modelSelect.inputValue(), 'grok-imagine-image-2.0');
+      await page.getByTestId('iz-byok-key-input').fill('xai-stage1-grok');
+      await page.getByTestId('iz-byok-save-btn').click();
+      await page.waitForFunction(
+        () => localStorage.getItem('capy_xai_byok_key_v1') === 'xai-stage1-grok',
+        { timeout: 3000 }
+      );
+      await page.getByTestId('iz-byok-clear-btn').click();
+
       const puterScripts = await page.locator('script[src*="js.puter.com"]').count();
       assert.equal(puterScripts, 0, 'Web idle boot/settings must not inject js.puter.com');
       assert.equal(puterSpy.getRequests().length, 0, 'Zero js.puter.com requests expected');
@@ -1170,8 +1213,8 @@ async function runStage1(ctx) {
         .evaluateAll((opts) => opts.map((o) => o.value));
       assert.deepEqual(
         androidOptions,
-        ['GUIDED_GEMINI', 'GEMINI_BYOK'],
-        'Android WebView must completely omit PUTER from provider select'
+        ['GUIDED_GEMINI', 'OPENROUTER', 'GEMINI_BYOK', 'OPENAI_BYOK', 'XAI_BYOK'],
+        'Android WebView must completely omit PUTER while offering Guided AI, OpenRouter, Gemini, OpenAI, and xAI'
       );
       assert.equal(
         await providerSelect.inputValue(),
@@ -2769,7 +2812,145 @@ async function runStage4(ctx) {
 }
 
 // ============================================================================
-// Suite Entrypoint (Exact 4-stage runner.mjs Contract)
+// Stage 5: Automated OpenRouter, ChatGPT (OpenAI), and Grok (xAI) E2E
+// ============================================================================
+
+async function runStage5MultiProviderAutomation(ctx) {
+  const label =
+    'Infinite Zoom Stage 5: Automated OpenRouter, ChatGPT (OpenAI), and Grok (xAI) image edits';
+  ctx.logE2eStart(label);
+
+  const cases = [
+    {
+      name: 'OpenRouter',
+      provider: 'OPENROUTER',
+      model: 'openai/gpt-image-2.6-sunburst',
+      keyStorage: 'capy_openrouter_byok_key_v1',
+      apiKey: 'sk-or-v1-e2e-stage5',
+      routeUrl: 'https://openrouter.ai/api/v1/images',
+      expectedAuth: 'Bearer sk-or-v1-e2e-stage5',
+      assertBody: (body) => {
+        assert.equal(body.model, 'openai/gpt-image-2.6-sunburst');
+        assert.equal(body.response_format, 'b64_json');
+        assert.ok(Array.isArray(body.input_references) && body.input_references.length === 1);
+      },
+    },
+    {
+      name: 'ChatGPT / OpenAI',
+      provider: 'OPENAI_BYOK',
+      model: 'gpt-image-2.6-sunburst',
+      keyStorage: 'capy_openai_byok_key_v1',
+      apiKey: 'sk-proj-e2e-stage5',
+      routeUrl: 'https://api.openai.com/v1/images/edits',
+      expectedAuth: 'Bearer sk-proj-e2e-stage5',
+      assertBody: (body) => {
+        assert.equal(body.model, 'gpt-image-2.6-sunburst');
+        assert.ok(Array.isArray(body.images) && body.images.length === 1);
+      },
+    },
+    {
+      name: 'Grok / xAI',
+      provider: 'XAI_BYOK',
+      model: 'grok-imagine-image-2.0',
+      keyStorage: 'capy_xai_byok_key_v1',
+      apiKey: 'xai-e2e-stage5',
+      routeUrl: 'https://api.x.ai/v1/images/edits',
+      expectedAuth: 'Bearer xai-e2e-stage5',
+      assertBody: (body) => {
+        assert.equal(body.model, 'grok-imagine-image-2.0');
+        assert.equal(body.response_format, 'b64_json');
+        assert.equal(body.image?.type, 'image_url');
+      },
+    },
+  ];
+
+  for (const tc of cases) {
+    const { context, page } = await createBootedContext(ctx.browser, ctx.BASE_URL, {
+      label: `infinite-zoom-s5-${tc.provider.toLowerCase()}`,
+      easyNoReplay: true,
+      bootUrl: false,
+      waitForPuzzle: false,
+    });
+    try {
+      const errors = attachStrictErrorListeners(page, `iz-s5-${tc.provider}`, ctx);
+      const puterSpy = await attachPuterNetworkSpy(page);
+      const captured = [];
+
+      await page.route(tc.routeUrl, async (route) => {
+        const req = route.request();
+        captured.push({
+          auth: req.headers().authorization || null,
+          body: req.postDataJSON(),
+        });
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            data: [{ b64_json: MULTI_COLOR_PNG_BASE64 }],
+          }),
+        });
+      });
+
+      await page.goto(`${ctx.BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(page);
+
+      const initialSession = await readActiveSession(page);
+      const snapId = initialSession.activeSnapshotId;
+      const before = await readPuzzleSummary(page, snapId);
+
+      // Select provider + model + save device-local key via real UI
+      await page.getByTestId('topbar-settings-btn').click();
+      await page.getByTestId('settings-tab-create').click();
+      await page.getByTestId('iz-provider-select').selectOption(tc.provider);
+      await page.getByTestId('iz-model-select').selectOption(tc.model);
+      await page.getByTestId('iz-byok-key-input').fill(tc.apiKey);
+      await page.getByTestId('iz-byok-save-btn').click();
+      await page.waitForFunction(
+        ({ k, v }) => localStorage.getItem(k) === v,
+        { k: tc.keyStorage, v: tc.apiKey },
+        { timeout: 3000 }
+      );
+      await page.keyboard.press('Escape');
+
+      // Run automated Zoom In on a touching pair -> verify request & embedded layer
+      const targets = await findUnifiedRegionTargets(page, snapId);
+      assert.ok(targets?.largePair, `Stage 5 (${tc.name}): expected touching pair`);
+      await dismissFeatureOfferIfVisible(page);
+      await page.getByTestId('infinite-zoom-menu-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+      await page.mouse.click(targets.largePair.a.clientX, targets.largePair.a.clientY);
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="region-selection-bar"]')
+            ?.innerText.includes('1 region selected'),
+        { timeout: 3000 }
+      );
+      await page.getByTestId('region-selection-confirm-btn').click();
+      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
+
+      assert.equal(captured.length, 1, `Stage 5 (${tc.name}): expected exactly 1 API request`);
+      assert.equal(captured[0].auth, tc.expectedAuth);
+      tc.assertBody(captured[0].body);
+
+      const after = await readPuzzleSummary(page, snapId);
+      assert.equal(after.nestedLayers.length, 1, `Stage 5 (${tc.name}): expected 1 embedded layer`);
+      assert.equal(after.nestedLayers[0].providerUsed, tc.provider);
+      assert.equal(after.nestedLayers[0].modelUsed, tc.model);
+      assert.ok(after.totalRegionCount > before.totalRegionCount);
+      assert.equal(puterSpy.getRequests().length, 0);
+      errors.assertZeroErrors();
+    } finally {
+      await context.close();
+    }
+  }
+
+  ctx.logE2ePass(label);
+}
+
+// ============================================================================
+// Suite Entrypoint (5-stage runner.mjs Contract)
 // ============================================================================
 
 export async function runInfiniteZoomE2e(ctx) {
@@ -2777,4 +2958,5 @@ export async function runInfiniteZoomE2e(ctx) {
   await runStage2(ctx);
   await runStage3(ctx);
   await runStage4(ctx);
+  await runStage5MultiProviderAutomation(ctx);
 }

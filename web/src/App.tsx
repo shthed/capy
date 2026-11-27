@@ -1135,7 +1135,16 @@ export const App: React.FC = () => {
                 }
                 prompt={infiniteZoomPrompt}
                 provider={settings.infiniteZoomProvider}
-                model={settings.nanoBananaModel}
+                model={
+                  settings.infiniteZoomProvider === 'OPENROUTER'
+                    ? settings.openRouterModel
+                    : settings.infiniteZoomProvider === 'OPENAI_BYOK'
+                      ? settings.openAiImageModel
+                      : settings.infiniteZoomProvider === 'XAI_BYOK'
+                        ? settings.xaiImageModel
+                        : settings.nanoBananaModel
+                }
+                guidedAiApp={settings.guidedAiApp}
                 onPromptChange={setInfiniteZoomPrompt}
                 onEnterSelectionMode={() => handleEnterRegionSelectionMode()}
                 onConfirmExtendBorders={handleConfirmExtendBorders}
@@ -1420,6 +1429,8 @@ export const App: React.FC = () => {
       <GuidedGeminiHandoffModal
         isOpen={Boolean(guidedHandoffSession)}
         handoff={guidedHandoffSession?.handoff ?? null}
+        guidedAiApp={settings.guidedAiApp}
+        onChangeGuidedAiApp={(app) => handleUpdateSettings((prev) => ({ ...prev, guidedAiApp: app }))}
         fallbackReason={guidedHandoffSession?.fallbackReason ?? null}
         isProcessing={Boolean(guidedHandoffSession?.isProcessing)}
         errorMessage={guidedHandoffSession?.errorMessage ?? null}

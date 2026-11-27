@@ -1,6 +1,8 @@
 import {
+  ALL_INFINITE_ZOOM_MODEL_IDS,
+  INFINITE_ZOOM_PROVIDER_MODES,
+  InfiniteZoomModelId,
   InfiniteZoomProviderMode,
-  NanoBananaModelId,
   NestedPuzzleLayer,
   NormalizedRect,
   PaletteColor,
@@ -21,12 +23,8 @@ import {
   uint8ToBase64,
 } from '../CapyCodec';
 
-const ALLOWED_PROVIDERS = new Set<string>(['PUTER', 'GUIDED_GEMINI', 'GEMINI_BYOK']);
-const ALLOWED_MODELS = new Set<string>([
-  'gemini-nano-banana-2.1',
-  'gemini-3.1-flash-lite-image',
-  'gemini-3.1-flash-image',
-]);
+const ALLOWED_PROVIDERS = new Set<string>(INFINITE_ZOOM_PROVIDER_MODES);
+const ALLOWED_MODELS = new Set<string>(ALL_INFINITE_ZOOM_MODEL_IDS);
 
 export interface SerializedRegionMeta {
   id: number;
@@ -55,7 +53,7 @@ export interface SerializedNestedPuzzleLayer {
   imageBlobKey: string;
   promptHint?: string;
   providerUsed?: InfiniteZoomProviderMode;
-  modelUsed?: NanoBananaModelId;
+  modelUsed?: InfiniteZoomModelId;
   regions: SerializedRegionMeta[];
 }
 
@@ -428,12 +426,12 @@ function deserializeNestedLayer(layer: SerializedNestedPuzzleLayer): NestedPuzzl
     }
     providerUsed = layer.providerUsed as InfiniteZoomProviderMode;
   }
-  let modelUsed: NanoBananaModelId | undefined;
+  let modelUsed: InfiniteZoomModelId | undefined;
   if (layer.modelUsed !== undefined) {
     if (typeof layer.modelUsed !== 'string' || !ALLOWED_MODELS.has(layer.modelUsed)) {
       throw new Error('Invalid nested layer modelUsed');
     }
-    modelUsed = layer.modelUsed as NanoBananaModelId;
+    modelUsed = layer.modelUsed as InfiniteZoomModelId;
   }
 
   return {

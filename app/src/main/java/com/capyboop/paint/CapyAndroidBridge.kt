@@ -555,6 +555,7 @@ class CapyAndroidBridge(
                 "connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com " +
                 "https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com " +
                 "https://generativelanguage.googleapis.com " +
+                "https://openrouter.ai https://api.openai.com https://api.x.ai " +
                 "https://graph.microsoft.com https://login.microsoftonline.com " +
                 "wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com; " +
                 "worker-src 'self' blob:; " +
@@ -697,6 +698,7 @@ class CapyAndroidBridge(
         private val ALLOWED_EXTERNAL_OAUTH_HOSTS = setOf(
             "accounts.google.com",
             "login.microsoftonline.com",
+            "openrouter.ai",
         )
 
         private const val MAX_OAUTH_CALLBACK_URL_LENGTH = 4096

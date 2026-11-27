@@ -1050,6 +1050,10 @@ export const CreateTab: React.FC<CreateTabProps> = ({
           infiniteZoomProvider={settings.infiniteZoomProvider}
           nanoBananaModel={settings.nanoBananaModel}
           nanoBananaResolution={settings.nanoBananaResolution}
+          openRouterModel={settings.openRouterModel}
+          openAiImageModel={settings.openAiImageModel}
+          xaiImageModel={settings.xaiImageModel}
+          guidedAiApp={settings.guidedAiApp}
           isInfiniteZoomDisabled={isInfiniteZoomDisabled}
           disabledReason={infiniteZoomDisabledReason}
           onChangeProvider={(provider) => updateSetting('infiniteZoomProvider', provider)}
@@ -1061,6 +1065,16 @@ export const CreateTab: React.FC<CreateTabProps> = ({
             )
           }
           onChangeResolution={(resolution) => updateSetting('nanoBananaResolution', resolution)}
+          onChangeOpenRouterModel={(model, nextResolution) =>
+            updateSettingsPatch(
+              nextResolution
+                ? { openRouterModel: model, nanoBananaResolution: nextResolution }
+                : { openRouterModel: model }
+            )
+          }
+          onChangeOpenAiImageModel={(model) => updateSetting('openAiImageModel', model)}
+          onChangeXaiImageModel={(model) => updateSetting('xaiImageModel', model)}
+          onChangeGuidedAiApp={(app) => updateSetting('guidedAiApp', app)}
           onStartInfiniteZoomIn={onStartInfiniteZoomIn}
           onStartInfiniteZoomOut={onStartInfiniteZoomOut}
           onZoomIntoDetailTile={onZoomIntoDetailTile}

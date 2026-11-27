@@ -1,5 +1,7 @@
 import type {
+  GuidedAiAppId,
   InfiniteZoomDirection,
+  InfiniteZoomModelId,
   InfiniteZoomProviderMode,
   NanoBananaModelId,
   NanoBananaResolution,
@@ -45,10 +47,30 @@ export type {
 export const PUTER_SDK_SCRIPT_URL = 'https://js.puter.com/v2/';
 export const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 export const GEMINI_APP_URL = 'https://gemini.google.com/';
+export const CHATGPT_APP_URL = 'https://chatgpt.com/';
+export const GROK_APP_URL = 'https://grok.com/';
 export const GOOGLE_AI_STUDIO_KEY_URL = 'https://aistudio.google.com/apikey';
 export const MAX_RECEIVED_IMAGE_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_NANO_BANANA_TIMEOUT_MS = 60_000;
 export const DEFAULT_PUTER_LOAD_TIMEOUT_MS = 20_000;
+
+export interface GuidedAiAppMeta {
+  id: GuidedAiAppId;
+  label: string;
+  shortLabel: string;
+  appUrl: string;
+}
+
+export const GUIDED_AI_APPS: readonly GuidedAiAppMeta[] = [
+  { id: 'GEMINI', label: 'Gemini', shortLabel: 'Gemini', appUrl: GEMINI_APP_URL },
+  { id: 'CHATGPT', label: 'ChatGPT', shortLabel: 'ChatGPT', appUrl: CHATGPT_APP_URL },
+  { id: 'GROK', label: 'Grok', shortLabel: 'Grok', appUrl: GROK_APP_URL },
+];
+
+export function getGuidedAiAppMeta(appId?: string | null): GuidedAiAppMeta {
+  const found = GUIDED_AI_APPS.find((item) => item.id === appId);
+  return found ?? GUIDED_AI_APPS[0];
+}
 
 export interface NanoBananaGenerateParams {
   prompt: string;
@@ -69,7 +91,7 @@ export interface NanoBananaGenerationResult {
   dataUrl: string;
   mimeType: string;
   providerUsed: InfiniteZoomProviderMode;
-  modelUsed: NanoBananaModelId;
+  modelUsed: InfiniteZoomModelId;
 }
 
 export interface PuterTxt2ImgOptions {
@@ -107,6 +129,7 @@ export interface GuidedGeminiHandoffInput {
   templateMimeType?: string;
   prompt: string;
   direction: InfiniteZoomDirection;
+  targetApp?: GuidedAiAppId;
 }
 
 export interface GuidedGeminiHandoffPackage {
@@ -116,6 +139,8 @@ export interface GuidedGeminiHandoffPackage {
   templateMimeType?: string;
   direction: InfiniteZoomDirection;
   geminiUrl: string;
+  targetApp?: GuidedAiAppId;
+  appUrl?: string;
 }
 
 export interface DecodedGeminiImage {
@@ -179,7 +204,7 @@ export function detectRasterMimeFromMagicBytes(bytes: Uint8Array): string | null
   return null;
 }
 
-function decodeBase64Strict(
+export function decodeBase64Strict(
   base64: string,
   errorCode: NanoBananaErrorCode,
   canFallbackToGuided: boolean
@@ -373,7 +398,7 @@ async function resolveTemplateFromBlobInput(
   return { base64: uint8ToBase64(bytes), mimeType: detected };
 }
 
-async function resolveTemplatePayload(
+export async function resolveTemplatePayload(
   params: NanoBananaGenerateParams
 ): Promise<{ base64: string; mimeType: string }> {
   if (typeof params.templateMimeType === 'string' && params.templateMimeType.trim().length > 0) {
@@ -393,11 +418,11 @@ async function resolveTemplatePayload(
   throw new NanoBananaError('INVALID_IMAGE', 'A prepared template image is required.', true);
 }
 
-function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
+export function bytesToDataUrl(bytes: Uint8Array, mimeType: string): string {
   return `data:${mimeType};base64,${uint8ToBase64(bytes)}`;
 }
 
-function createAbortRace<T>(
+export function createAbortRace<T>(
   promise: Promise<T>,
   signal?: AbortSignal,
   timeoutMs: number = DEFAULT_NANO_BANANA_TIMEOUT_MS
@@ -1432,6 +1457,7 @@ export function prepareGuidedGeminiHandoff(
     throw new NanoBananaError('INVALID_IMAGE', 'Unsupported template image type.', true);
   }
   const detectedMime = requireDetectedRasterMimeFromBase64(parsed.base64);
+  const appMeta = getGuidedAiAppMeta(input.targetApp);
   return {
     prompt: input.prompt,
     templatePngBlob: input.templatePngBlob,
@@ -1439,6 +1465,8 @@ export function prepareGuidedGeminiHandoff(
     templateMimeType: detectedMime || resolveHandoffTemplateMime(input),
     direction: input.direction,
     geminiUrl: GEMINI_APP_URL,
+    targetApp: appMeta.id,
+    appUrl: appMeta.appUrl,
   };
 }
 
@@ -1653,7 +1681,8 @@ export async function copyTemplateImageToClipboard(blob: Blob, dataUrl?: string)
 }
 
 export async function launchGeminiHandoff(
-  handoff: GuidedGeminiHandoffPackage
+  handoff: GuidedGeminiHandoffPackage,
+  targetAppOverride?: GuidedAiAppId
 ): Promise<{ copiedPrompt: boolean; openedExternal: boolean }> {
   const copiedPrompt = await copyPromptToClipboard(handoff.prompt);
 
@@ -1675,9 +1704,12 @@ export async function launchGeminiHandoff(
     reportSwallowed('NanoBananaService.launchGeminiHandoffDownload', err);
   }
 
+  const targetUrl = targetAppOverride
+    ? getGuidedAiAppMeta(targetAppOverride).appUrl
+    : handoff.appUrl || handoff.geminiUrl;
   let openedExternal = false;
   if (typeof window !== 'undefined' && typeof window.open === 'function') {
-    const opened = window.open(handoff.geminiUrl, '_blank', 'noopener,noreferrer');
+    const opened = window.open(targetUrl, '_blank', 'noopener,noreferrer');
     openedExternal = Boolean(opened);
   }
   return { copiedPrompt, openedExternal };

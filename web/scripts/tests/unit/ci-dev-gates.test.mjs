@@ -167,7 +167,7 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
         'MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API',
         'Claude Opus',
         'codex/',
-        'ChatGPT',
+        'ChatGPT Codex',
         'GitHub Copilot',
         'PR Readiness Score',
         'WHITEBOARD.md',
@@ -249,6 +249,20 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
         'GUIDED_GEMINI',
         'GEMINI_BYOK',
         'capy_gemini_byok_key_v1',
+        'OpenRouter',
+        'openrouter.ai',
+        'OPENROUTER',
+        'capy_openrouter_byok_key_v1',
+        'ChatGPT',
+        'chatgpt.com',
+        'OPENAI_BYOK',
+        'capy_openai_byok_key_v1',
+        'gpt-image-2.6-sunburst',
+        'Grok',
+        'grok.com',
+        'XAI_BYOK',
+        'capy_xai_byok_key_v1',
+        'grok-imagine-image-2.0',
       ]) {
         assert.equal(
           FORBIDDEN_PERSONA_REGEX.test(safeToken),
@@ -1265,7 +1279,7 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
     assert.equal(e2eRunnerMod.E2E_SUITES.length, 11);
     assert.equal(
       e2eRunnerMod.E2E_SUITES.reduce((sum, s) => sum + s.stages, 0),
-      28
+      29
     );
     const smokeSuites = e2eRunnerMod.selectE2eSuites({ smoke: true });
     assert.deepEqual(
