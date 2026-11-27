@@ -1419,5 +1419,201 @@ export async function runHardeningWorkerSwTests(vite) {
         );
       }
     }
+
+    // PuzzleWorkerService idle termination & visibility cleanup (never interrupts active generations)
+    {
+      const workerSvcMod = await vite.ssrLoadModule('/src/services/PuzzleWorkerService.ts');
+      const { PuzzleWorkerService } = workerSvcMod;
+      const prevWorker = globalThis.Worker;
+      const prevDocument = globalThis.document;
+      const prevIdleMs = PuzzleWorkerService.idleTerminateMs;
+
+      const createdWorkers = [];
+      class MockPuzzleWorker {
+        constructor() {
+          this.listeners = new Map();
+          this.terminated = false;
+          this.lastPosted = null;
+          createdWorkers.push(this);
+        }
+        addEventListener(type, fn) {
+          const set = this.listeners.get(type) || new Set();
+          set.add(fn);
+          this.listeners.set(type, set);
+        }
+        removeEventListener(type, fn) {
+          this.listeners.get(type)?.delete(fn);
+        }
+        postMessage(msg) {
+          this.lastPosted = msg;
+        }
+        emitMessage(data) {
+          for (const fn of [...(this.listeners.get('message') || [])]) {
+            fn({ data });
+          }
+        }
+        terminate() {
+          this.terminated = true;
+        }
+      }
+
+      const docListeners = new Map();
+      const mockDoc = {
+        hidden: false,
+        visibilityState: 'visible',
+        addEventListener(type, fn) {
+          const set = docListeners.get(type) || new Set();
+          set.add(fn);
+          docListeners.set(type, set);
+        },
+        removeEventListener(type, fn) {
+          docListeners.get(type)?.delete(fn);
+        },
+        dispatch(type) {
+          for (const fn of [...(docListeners.get(type) || [])]) {
+            fn();
+          }
+        },
+      };
+
+      const makeMockCanvas = () => ({
+        width: 2,
+        height: 2,
+        getContext: () => ({
+          getImageData: () => ({ data: new Uint8ClampedArray(16) }),
+        }),
+      });
+      const makeSuccessPayload = () => ({
+        width: 2,
+        height: 2,
+        palette: [{ id: 1, r: 255, g: 0, b: 0, argb: 0xffff0000, hex: '#ff0000' }],
+        regionMap: new Int32Array([1, 1, 1, 1]).buffer,
+        borderMap: new Uint8Array([0, 0, 0, 0]).buffer,
+        packedPixelsBuffer: new Int32Array([0, 1, 2, 3]).buffer,
+        regions: [
+          {
+            id: 1,
+            colorId: 1,
+            centroidX: 1,
+            centroidY: 1,
+            area: 4,
+            minX: 0,
+            maxX: 1,
+            minY: 0,
+            maxY: 1,
+            maxRadius: 1,
+            pixelsOffset: 0,
+            pixelsLength: 4,
+          },
+        ],
+      });
+
+      globalThis.Worker = MockPuzzleWorker;
+      globalThis.document = mockDoc;
+      PuzzleWorkerService.idleTerminateMs = 30;
+      try {
+        // 1. In-flight generation must NOT be terminated on visibilitychange -> hidden
+        const genPromise = PuzzleWorkerService.generate(makeMockCanvas(), {});
+        assert.equal(createdWorkers.length, 1);
+        const w1 = createdWorkers[0];
+        mockDoc.hidden = true;
+        mockDoc.visibilityState = 'hidden';
+        mockDoc.dispatch('visibilitychange');
+        assert.equal(
+          w1.terminated,
+          false,
+          'In-flight PuzzleWorkerService generation must not be cancelled when tab becomes hidden'
+        );
+        assert.equal(PuzzleWorkerService.terminateIdleWorker(), false);
+
+        // Completing while hidden terminates the idle worker immediately
+        w1.emitMessage({
+          type: 'SUCCESS',
+          id: w1.lastPosted.id,
+          puzzleData: makeSuccessPayload(),
+        });
+        const puzzle1 = await genPromise;
+        assert.equal(puzzle1.regions.length, 1);
+        assert.equal(
+          w1.terminated,
+          true,
+          'Idle puzzle worker completing while tab is hidden must terminate immediately'
+        );
+
+        // 2. Completing while visible terminates automatically after idleTerminateMs
+        mockDoc.hidden = false;
+        mockDoc.visibilityState = 'visible';
+        const genPromise2 = PuzzleWorkerService.generate(makeMockCanvas(), {});
+        assert.equal(createdWorkers.length, 2);
+        const w2 = createdWorkers[1];
+        w2.emitMessage({
+          type: 'SUCCESS',
+          id: w2.lastPosted.id,
+          puzzleData: makeSuccessPayload(),
+        });
+        await genPromise2;
+        assert.equal(w2.terminated, false, 'Worker stays warm during idle grace window');
+        await new Promise((r) => setTimeout(r, 60));
+        assert.equal(
+          w2.terminated,
+          true,
+          'Idle puzzle worker must terminate automatically after idleTerminateMs'
+        );
+        assert.equal(
+          (docListeners.get('visibilitychange')?.size || 0),
+          0,
+          'Visibility listener must detach when idle worker is terminated'
+        );
+      } finally {
+        PuzzleWorkerService.cancelActive();
+        PuzzleWorkerService.idleTerminateMs = prevIdleMs;
+        globalThis.Worker = prevWorker;
+        globalThis.document = prevDocument;
+      }
+    }
+
+    // Static invariants for PuzzleCanvas lazy buffer cleanup & visibility-aware rAF loops
+    {
+      const canvasSrc = fs.readFileSync(
+        path.resolve(WEB_ROOT, 'src/components/PuzzleCanvas.tsx'),
+        'utf8'
+      );
+      assert.equal(
+        /isDetailMode\s*&&\s*sourceImage/.test(canvasSrc),
+        true,
+        'PuzzleCanvas must extract sourcePixelsRef lazily only when DETAIL mode is active'
+      );
+      assert.equal(
+        /highlightCanvasRef\.current\.width\s*=\s*0[\s\S]*?highlightImageDataRef\.current\s*=\s*null/.test(
+          canvasSrc
+        ),
+        true,
+        'PuzzleCanvas must release highlightCanvasRef and highlightImageDataRef when highlights are disabled'
+      );
+      assert.equal(
+        /if\s*\(!puzzle\s*\|\|\s*!showPreviewBorders\)\s*\{[\s\S]*?borderCanvasRef\.current\.width\s*=\s*0/.test(
+          canvasSrc
+        ),
+        true,
+        'PuzzleCanvas must release borderCanvasRef when preview borders are toggled off'
+      );
+      assert.equal(
+        /document\.addEventListener\('visibilitychange',\s*handleVisibilityChange\)/.test(canvasSrc) &&
+          /document\.removeEventListener\('visibilitychange',\s*handleVisibilityChange\)/.test(canvasSrc),
+        true,
+        'PuzzleCanvas hint-pulse loop must cancel and restart rAF via visibilitychange'
+      );
+
+      const replaySrc = fs.readFileSync(
+        path.resolve(WEB_ROOT, 'src/hooks/useReplayController.ts'),
+        'utf8'
+      );
+      assert.equal(
+        /document\.addEventListener\('visibilitychange',\s*handleVisibilityChange\)/.test(replaySrc) &&
+          /document\.removeEventListener\('visibilitychange',\s*handleVisibilityChange\)/.test(replaySrc),
+        true,
+        'useReplayController must suspend and resume replay rAF via visibilitychange'
+      );
+    }
   }
 }
