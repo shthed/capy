@@ -385,7 +385,6 @@ export class HybridCoopRoomClient implements RealtimeRoomProvider {
     );
     if (this.wsEndpoint && typeof WebSocket !== 'undefined') {
       this.wsReconnectAttempt = 0;
-      this.attachLifecycleListeners();
       this.wsPingTimer = setInterval(() => {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           try {
@@ -398,19 +397,38 @@ export class HybridCoopRoomClient implements RealtimeRoomProvider {
       this.openWebSocket();
     }
 
+    this.attachLifecycleListeners();
+    if (typeof document === 'undefined' || !document.hidden) {
+      this.startLocalHeartbeat();
+    }
+  }
+
+  private sendLocalHeartbeat(): void {
+    if (!this.roomCode || !this.selfParticipant) return;
+    this.selfParticipant.lastActiveAt = Date.now();
+    this.participants.set(this.selfParticipant.playerId, this.selfParticipant);
+    this.pruneStaleParticipants();
+    // Keep 5s HEARTBEAT strictly on local BroadcastChannel so Cloudflare DO can hibernate
+    this.sendLocalChannelMessage({
+      type: 'HEARTBEAT',
+      roomCode: this.roomCode,
+      sender: this.selfParticipant,
+      sentAt: Date.now(),
+    });
+  }
+
+  private startLocalHeartbeat(): void {
+    if (this.heartbeatTimer || this.isLeavingRoom || !this.roomCode) return;
     this.heartbeatTimer = setInterval(() => {
-      if (!this.roomCode || !this.selfParticipant) return;
-      this.selfParticipant.lastActiveAt = Date.now();
-      this.participants.set(this.selfParticipant.playerId, this.selfParticipant);
-      this.pruneStaleParticipants();
-      // Keep 5s HEARTBEAT strictly on local BroadcastChannel so Cloudflare DO can hibernate
-      this.sendLocalChannelMessage({
-        type: 'HEARTBEAT',
-        roomCode: this.roomCode,
-        sender: this.selfParticipant,
-        sentAt: Date.now(),
-      });
+      this.sendLocalHeartbeat();
     }, 5000);
+  }
+
+  private stopLocalHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
   }
 
   private attachLifecycleListeners(): void {
@@ -436,8 +454,12 @@ export class HybridCoopRoomClient implements RealtimeRoomProvider {
     }
     if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
       const onVisibility = () => {
-        if (document.visibilityState === 'visible') {
+        if (document.hidden || document.visibilityState === 'hidden') {
+          this.stopLocalHeartbeat();
+        } else if (document.visibilityState === 'visible') {
           recoverIfDisconnected();
+          this.sendLocalHeartbeat();
+          this.startLocalHeartbeat();
         }
       };
       document.addEventListener('visibilitychange', onVisibility);

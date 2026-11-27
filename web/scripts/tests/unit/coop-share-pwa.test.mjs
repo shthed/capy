@@ -251,6 +251,115 @@ export async function runCoopSharePwaTests({ vite, projectRoot, logUnitStart, lo
       }
     }
 
+    // Visibility-aware local BroadcastChannel heartbeat pause/resume on HybridCoopRoomAdapter
+    {
+      const prevWS = globalThis.WebSocket;
+      const prevWin = globalThis.window;
+      const prevDoc = globalThis.document;
+      const prevBC = globalThis.BroadcastChannel;
+      const localMessages = [];
+      const docListeners = new Map();
+
+      class MockRoomSocket {
+        static OPEN = 1;
+        static CLOSED = 3;
+        constructor() {
+          this.readyState = 1;
+        }
+        send() {}
+        close() {
+          this.readyState = 3;
+        }
+      }
+      class MockBroadcastChannel {
+        constructor(name) {
+          this.name = name;
+        }
+        postMessage(msg) {
+          localMessages.push(msg);
+        }
+        close() {}
+      }
+      const mockDoc = {
+        hidden: false,
+        visibilityState: 'visible',
+        addEventListener(type, fn) {
+          const set = docListeners.get(type) || new Set();
+          set.add(fn);
+          docListeners.set(type, set);
+        },
+        removeEventListener(type, fn) {
+          docListeners.get(type)?.delete(fn);
+        },
+        dispatch(type) {
+          for (const fn of [...(docListeners.get(type) || [])]) {
+            fn();
+          }
+        },
+      };
+
+      globalThis.WebSocket = MockRoomSocket;
+      globalThis.BroadcastChannel = MockBroadcastChannel;
+      globalThis.document = mockDoc;
+      globalThis.window = {
+        location: { protocol: 'https:', host: 'capypaint.com', hostname: 'capypaint.com' },
+        addEventListener() {},
+        removeEventListener() {},
+      };
+
+      const adapter = new providerMod.HybridCoopRoomAdapter();
+      try {
+        await adapter.joinRoom(
+          'rmvis1',
+          {
+            playerId: 'self-vis',
+            displayName: 'Vis Capy',
+            avatarColorHex: '#38bdf8',
+            lastActiveAt: Date.now(),
+          },
+          builtShare.token
+        );
+        assert.equal(Boolean(adapter.heartbeatTimer), true, 'Local heartbeat timer starts while visible');
+        assert.equal(Boolean(adapter.wsPingTimer), true, 'WebSocket ping timer starts on join');
+
+        mockDoc.hidden = true;
+        mockDoc.visibilityState = 'hidden';
+        mockDoc.dispatch('visibilitychange');
+        assert.equal(
+          adapter.heartbeatTimer,
+          null,
+          '5s local BroadcastChannel heartbeat must pause while document is hidden'
+        );
+        assert.equal(
+          Boolean(adapter.wsPingTimer),
+          true,
+          '30s WebSocket PING keepalive must remain active while hidden'
+        );
+
+        const countBeforeVisible = localMessages.filter((m) => m?.type === 'HEARTBEAT').length;
+        mockDoc.hidden = false;
+        mockDoc.visibilityState = 'visible';
+        mockDoc.dispatch('visibilitychange');
+        assert.equal(
+          Boolean(adapter.heartbeatTimer),
+          true,
+          '5s local BroadcastChannel heartbeat must resume when document becomes visible'
+        );
+        const countAfterVisible = localMessages.filter((m) => m?.type === 'HEARTBEAT').length;
+        assert.equal(
+          countAfterVisible,
+          countBeforeVisible + 1,
+          'Returning to visible must immediately emit a local HEARTBEAT frame'
+        );
+      } finally {
+        adapter.leaveRoom();
+        globalThis.WebSocket = prevWS;
+        globalThis.window = prevWin;
+        globalThis.document = prevDoc;
+        globalThis.BroadcastChannel = prevBC;
+      }
+    }
+
     assert.equal(relayProtoMod.normalizeRoomCode(' ab-c_123! '), 'ABC123');
     assert.equal(relayProtoMod.normalizeRoomCode('!!!'), null);
     assert.equal(relayProtoMod.isAllowedRelayOrigin(null), false);
