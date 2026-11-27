@@ -54,9 +54,14 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 - **Tablet Screenshots (`1920x1200`, `16:10`)**:
   - [`docs/play-store/screenshots/tablet_1_canvas.png`](./screenshots/tablet_1_canvas.png) — Wide tablet canvas gameplay
   - [`docs/play-store/screenshots/tablet_2_create_gallery.png`](./screenshots/tablet_2_create_gallery.png) — Tablet Create gallery & Puzzle of the Day
+- **Foldable Screenshots (Google Play Adaptive Quality Standard, required April 2027)**:
+  - [`docs/play-store/screenshots/foldable_1_1_inner.png`](./screenshots/foldable_1_1_inner.png) — Unfolded `1:1` inner display (`1920x1920`, e.g., Pixel 11 Pro Fold / Galaxy Z Fold8 Ultra)
+  - [`docs/play-store/screenshots/foldable_4_3_inner.png`](./screenshots/foldable_4_3_inner.png) — Unfolded `4:3` inner display (`1920x1440`, e.g., Galaxy Z Fold8)
+  - [`docs/play-store/screenshots/foldable_10_16_outer.png`](./screenshots/foldable_10_16_outer.png) — Folded `10:16` outer cover display (`1200x1920`, e.g., Galaxy Z Fold8 cover screen)
+  - Refresh deterministically from a built web bundle with `cd web && npm run playstore:capture`.
 
 > [!IMPORTANT]
-> **Target Form Factors (Do Not Opt Into Android TV Yet)**: Upload Phone and Tablet builds/screenshots **only**. Keep the Android TV form factor unchecked in Google Play Console Release > Setup > Form Factors until full `1920x1080` TV D-pad cursor/reticle navigation and living-room Co-op ship in a follow-up post-Play-Store launch release.
+> **Target Form Factors & Adaptive Compliance (Do Not Opt Into Android TV Yet)**: Upload Phone, Tablet, and Foldable screenshots under **Grow > Store presence > Store listings**. The Android launcher already targets Android 17 (`targetSdk = 37`, `compileSdk = 37`) with unrestricted orientation/resizability and live fold/unfold state continuity. Keep the Android TV form factor unchecked in Google Play Console **Release > Setup > Form Factors** until full `1920x1080` TV D-pad cursor/reticle navigation and living-room Co-op ship in a follow-up post-Play-Store launch release.
 
 ---
 
@@ -84,6 +89,6 @@ All ready-to-upload PNG assets live in [`docs/play-store/`](./):
 2. Create and push tag `v<version>` matching [`web/package.json`](../../web/package.json) (currently `v3.1.3`, `versionCode = 30103`) from updated `main` (`git tag -a v3.1.3 -m "v3.1.3" && git push origin v3.1.3`) to build the signed Play Store `capy-v3.1.3.aab` artifact cleanly.
 3. In Google Play Console (`com.capyboop.paint`):
    - Configure **Developer contact email** ([capyboop@gmail.com](mailto:capyboop@gmail.com)) and website ([capypaint.com](https://capypaint.com/) or [paint.capyboop.com](https://paint.capyboop.com/)) under **Store settings -> Store listing contact details**.
-   - Upload `app_icon_512.png`, `feature_graphic.png`, and the `screenshots/` PNGs under **Main store listing** (Phone and Tablet tabs only; skip TV/Wear).
+   - Upload `app_icon_512.png`, `feature_graphic.png`, and the `screenshots/` PNGs under **Main store listing** (Phone, Tablet, and Foldable tabs; skip TV/Wear).
    - Complete **App content** (Privacy Policy URL, Ads = No, App Access = No restrictions, Content Rating = Everyone, Data Safety aligned with [`web/public/privacy-policy.html`](../../web/public/privacy-policy.html) for local-first storage + optional anonymous `Send Feedback`).
    - Create an **Internal testing** (or **Closed testing**) release, upload `capy-v3.1.3.aab` (`versionCode = 30103`), verify zero pre-launch manifest warnings, and roll out to testers / Production.

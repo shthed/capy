@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "com.capyboop.paint"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = capyVersionCode
         versionName = capyVersionName
 

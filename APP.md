@@ -126,7 +126,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
 ## 4. Build & Gradle Lifecycle
 
 - **Toolchain & Dependency Pins ([`gradle/libs.versions.toml`](./gradle/libs.versions.toml), [`gradle/wrapper/gradle-wrapper.properties`](./gradle/wrapper/gradle-wrapper.properties))**:
-  - Android Gradle Plugin `9.5.2`, Gradle Wrapper `9.9.2`, JDK `17`, `compileSdk = 37`, `minSdk = 24`, `targetSdk = 36`.
+  - Android Gradle Plugin `9.5.2`, Gradle Wrapper `9.9.2`, JDK `17`, `compileSdk = 37`, `minSdk = 24`, `targetSdk = 37` (Android 17 adaptive quality baseline with unrestricted orientation/resizability and live foldable state continuity).
   - Explicitly pins `androidx.fragment:fragment-ktx:1.9.1` (overriding the older transitive Fragment pulled by `play-services-games-v2:22.1.0`), `androidx.core:core-ktx:1.19.1`, `androidx.activity:activity-ktx:1.9.3`, and `androidx.webkit:webkit:1.12.1`.
 - **Web Bundle Compilation & Synchronization ([`app/build.gradle.kts`](./app/build.gradle.kts))**:
   - `:app:buildWeb`: Runs `npm run build` in `web/` with Gradle input/output caching across `web/src/`, `web/public/`, `web/package.json`, and Vite/TS configs.
@@ -143,7 +143,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
   ```
   - Release builds enable `isMinifyEnabled = true` and `isShrinkResources = true`.
   - [`.github/workflows/release.yml`](./.github/workflows/release.yml) requires `CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` for tagged release builds and runs `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleRelease app:bundleRelease` (failing loudly rather than substituting unsigned/debug binaries).
-  - Privacy Policy and Data Safety disclosures live at [capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html) ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)). Play Store icon, feature graphic, phone/tablet screenshots, and copy live in [`docs/play-store/`](./docs/play-store/) ([`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md))—upload Phone and Tablet form factors only and keep Android TV unchecked in Play Console until TV D-pad navigation ships post-launch.
+  - Privacy Policy and Data Safety disclosures live at [capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html) ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)). Play Store icon, feature graphic, phone/tablet/foldable screenshots (`1:1`, `4:3`, `10:16`, refreshed via `cd web && npm run playstore:capture`), and copy live in [`docs/play-store/`](./docs/play-store/) ([`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md))—upload Phone, Tablet, and Foldable assets only and keep Android TV unchecked in Play Console until TV D-pad navigation ships post-launch.
 
 ---
 
@@ -176,7 +176,7 @@ cd web && npm ci && npm run build
 1. Open Android Studio and select **Open** (`File > Open...`).
 2. Select the **monorepo root directory** (`/path/to/capy`), **not** the `/app` subdirectory.
    - [`settings.gradle.kts`](./settings.gradle.kts) registers the unified `:app` module.
-3. Gradle Sync configures **JDK 17** and Android SDK **API 37** (`compileSdk = 37`, `minSdk = 24`, `targetSdk = 36`).
+3. Gradle Sync configures **JDK 17** and Android SDK **API 37** (`compileSdk = 37`, `minSdk = 24`, `targetSdk = 37`).
 
 ### Running & Debugging Locally
 1. Select the **`app`** run configuration and a **Pixel 7 (API 34/35/36)** emulator or USB-connected Android device.

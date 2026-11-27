@@ -229,4 +229,81 @@ class AndroidTvManifestAndBridgeTest {
         assertNotNull("MainActivity must define onPageFinished()", onPageFinishedMatch)
         assertTrue(!onPageFinishedMatch!!.value.contains("deliverCachedPlayGamesProfileIfNeeded"))
     }
+
+    @Test
+    fun `AndroidManifest and Gradle meet Google Play adaptive quality standards and foldable screenshot specs`() {
+        val manifestFile = resolveRepoFile("app/src/main/AndroidManifest.xml")
+        val docFactory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+        }
+        val doc = docFactory.newDocumentBuilder().parse(manifestFile)
+        val appEl = directChildElements(doc.documentElement, "application").single()
+        val mainActivity = directChildElements(appEl, "activity").firstOrNull { el ->
+            androidAttr(el, "name") == "com.capyboop.paint.MainActivity"
+        }
+        assertNotNull(mainActivity)
+        val activity = mainActivity!!
+
+        assertEquals(
+            "MainActivity must not lock screenOrientation for large screens and foldables",
+            "",
+            androidAttr(activity, "screenOrientation"),
+        )
+        assertTrue(
+            "MainActivity must not disable resizeableActivity",
+            androidAttr(activity, "resizeableActivity") != "false",
+        )
+        assertEquals("", androidAttr(activity, "minAspectRatio"))
+        assertEquals("", androidAttr(activity, "maxAspectRatio"))
+
+        val configFlags = androidAttr(activity, "configChanges").split("|").toSet()
+        for (requiredFlag in listOf(
+            "density",
+            "smallestScreenSize",
+            "screenLayout",
+            "orientation",
+            "screenSize",
+            "keyboard",
+            "keyboardHidden",
+            "navigation",
+            "uiMode",
+        )) {
+            assertTrue("Expected configChanges to contain $requiredFlag", configFlags.contains(requiredFlag))
+        }
+
+        val buildGradle = resolveRepoFile("app/build.gradle.kts").readText()
+        val compileSdk = Regex("""compileSdk\s*=\s*(\d+)""").find(buildGradle)?.groupValues?.get(1)?.toInt()
+        val targetSdk = Regex("""targetSdk\s*=\s*(\d+)""").find(buildGradle)?.groupValues?.get(1)?.toInt()
+        assertNotNull("Expected compileSdk in app/build.gradle.kts", compileSdk)
+        assertNotNull("Expected targetSdk in app/build.gradle.kts", targetSdk)
+        assertTrue("Expected compileSdk >= 37, got $compileSdk", compileSdk!! >= 37)
+        assertTrue("Expected targetSdk >= 37 for Android 17 adaptive compliance, got $targetSdk", targetSdk!! >= 37)
+        assertTrue(
+            "Release build must keep R8 minification enabled",
+            Regex("""isMinifyEnabled\s*=\s*true""").containsMatchIn(buildGradle),
+        )
+        assertTrue(
+            "Release build must keep resource shrinking enabled",
+            Regex("""isShrinkResources\s*=\s*true""").containsMatchIn(buildGradle),
+        )
+
+        val expectedFoldables = listOf(
+            Triple("docs/play-store/screenshots/foldable_1_1_inner.png", 1, 1),
+            Triple("docs/play-store/screenshots/foldable_4_3_inner.png", 4, 3),
+            Triple("docs/play-store/screenshots/foldable_10_16_outer.png", 10, 16),
+        )
+        for ((relPath, ratioW, ratioH) in expectedFoldables) {
+            val file = resolveRepoFile(relPath)
+            assertTrue("Expected Play Store foldable screenshot $relPath to exist", file.exists())
+            val img = ImageIO.read(file)
+            assertNotNull("ImageIO.read must decode $relPath", img)
+            assertTrue("Expected $relPath width >= 1080, got ${img.width}", img.width >= 1080)
+            assertTrue("Expected $relPath height >= 1080, got ${img.height}", img.height >= 1080)
+            assertEquals(
+                "Expected $relPath to match exact $ratioW:$ratioH aspect ratio (got ${img.width}x${img.height})",
+                img.width * ratioH,
+                img.height * ratioW,
+            )
+        }
+    }
 }
