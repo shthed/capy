@@ -449,6 +449,11 @@ export function useReplayController<TLive extends ReplayLiveState>({
     const shouldFollow = Boolean(settings.replayFollow);
 
     const tick = (now: number) => {
+      animId = 0;
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
       if (replaySequence.length === 0) {
         completePlayback();
         return;
@@ -520,8 +525,38 @@ export function useReplayController<TLive extends ReplayLiveState>({
       animId = requestAnimationFrame(tick);
     };
 
-    animId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(animId);
+    const startLoop = () => {
+      if (animId !== 0) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      lastTime = performance.now();
+      animId = requestAnimationFrame(tick);
+    };
+
+    const stopLoop = () => {
+      if (animId !== 0) {
+        cancelAnimationFrame(animId);
+        animId = 0;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopLoop();
+      } else {
+        startLoop();
+      }
+    };
+
+    startLoop();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    return () => {
+      stopLoop();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
   }, [
     isReplaying,
     isReplayPlaying,

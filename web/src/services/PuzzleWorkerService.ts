@@ -75,8 +75,84 @@ export class GenerationCancelledError extends Error {
 }
 
 export class PuzzleWorkerService {
+  static idleTerminateMs = 15_000;
+
   private static worker: Worker | null = null;
   private static activeReject: ((reason?: unknown) => void) | null = null;
+  private static idleTerminateTimer: ReturnType<typeof setTimeout> | null = null;
+  private static visibilityCleanup: (() => void) | null = null;
+
+  private static clearIdleTerminationTimer(): void {
+    if (this.idleTerminateTimer !== null) {
+      clearTimeout(this.idleTerminateTimer);
+      this.idleTerminateTimer = null;
+    }
+  }
+
+  private static detachVisibilityCleanup(): void {
+    if (this.visibilityCleanup) {
+      this.visibilityCleanup();
+      this.visibilityCleanup = null;
+    }
+  }
+
+  private static attachVisibilityCleanup(): void {
+    if (this.visibilityCleanup) return;
+    if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') {
+      return;
+    }
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        this.terminateIdleWorker();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    this.visibilityCleanup = () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }
+
+  private static disposeWorker(): void {
+    this.clearIdleTerminationTimer();
+    this.detachVisibilityCleanup();
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
+    }
+  }
+
+  /**
+   * Terminates the cached Web Worker only when no generation is in flight.
+   * Returns true if an idle worker was terminated.
+   */
+  static terminateIdleWorker(): boolean {
+    if (this.activeReject || !this.worker) {
+      return false;
+    }
+    this.disposeWorker();
+    return true;
+  }
+
+  private static scheduleIdleTermination(): void {
+    this.clearIdleTerminationTimer();
+    if (this.activeReject || !this.worker) return;
+    if (typeof document !== 'undefined' && document.hidden) {
+      this.terminateIdleWorker();
+      return;
+    }
+    const delayMs = Math.max(0, this.idleTerminateMs);
+    this.idleTerminateTimer = setTimeout(() => {
+      this.idleTerminateTimer = null;
+      this.terminateIdleWorker();
+    }, delayMs);
+    if (
+      typeof this.idleTerminateTimer === 'object' &&
+      this.idleTerminateTimer !== null &&
+      typeof (this.idleTerminateTimer as { unref?: () => void }).unref === 'function'
+    ) {
+      (this.idleTerminateTimer as { unref: () => void }).unref();
+    }
+  }
 
   private static async generateOnMainThreadFallback(
     sourceCanvas: HTMLCanvasElement,
@@ -94,6 +170,7 @@ export class PuzzleWorkerService {
       this.worker = new Worker(new URL('../engine/puzzle.worker.ts', import.meta.url), {
         type: 'module',
       });
+      this.attachVisibilityCleanup();
     }
     return this.worker;
   }
@@ -107,10 +184,7 @@ export class PuzzleWorkerService {
       this.activeReject = null;
       oldReject(new GenerationCancelledError());
     }
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
-    }
+    this.disposeWorker();
   }
 
   /**
@@ -159,6 +233,7 @@ export class PuzzleWorkerService {
             worker.removeEventListener('message', handleMessage);
             worker.removeEventListener('error', handleError);
             this.activeReject = null;
+            this.scheduleIdleTermination();
 
             const puzzleData = unpackPuzzleFromWorker(data.puzzleData as WorkerPuzzlePayload);
             resolve(puzzleData);
@@ -166,6 +241,7 @@ export class PuzzleWorkerService {
             worker.removeEventListener('message', handleMessage);
             worker.removeEventListener('error', handleError);
             this.activeReject = null;
+            this.scheduleIdleTermination();
             reject(new Error(data.error || 'Worker generation failed'));
           }
         };
@@ -175,8 +251,7 @@ export class PuzzleWorkerService {
           worker.removeEventListener('error', handleError);
           this.activeReject = null;
           // Clean up worker
-          worker.terminate();
-          this.worker = null;
+          this.disposeWorker();
           // Fallback to lazy main-thread execution
           console.warn('Worker error encountered, falling back to local thread:', err);
           this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(

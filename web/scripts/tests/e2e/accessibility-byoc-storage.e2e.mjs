@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   createSyntheticPngBuffer,
   getStableBoundingBox,
+  longPressUndoForReplay,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForCondition,
@@ -561,12 +562,7 @@ export async function runAccessibilityByocE2e(ctx) {
       () => Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count') || 0) >= 1,
       { timeout: 5000 }
     );
-    const ltUndoBox = await getStableBoundingBox(ltMobilePage.getByTestId('undo-btn'));
-    assert.ok(ltUndoBox);
-    await ltMobilePage.mouse.move(ltUndoBox.x + ltUndoBox.width / 2, ltUndoBox.y + ltUndoBox.height / 2);
-    await ltMobilePage.mouse.down();
-    await ltMobilePage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
-    await ltMobilePage.mouse.up();
+    await longPressUndoForReplay(ltMobilePage);
     await getStableBoundingBox(ltMobilePage.getByTestId('replay-controls-window'));
 
     const [ltReplayWinBox, ltReplayPlayBox, ltReplayFollowBox, ltReplayLoopBox, ltReplayExitBox, ltReplayScrubBox, ltPaintDuringReplayBox, ltPaletteDuringReplayBox] =
@@ -684,12 +680,7 @@ export async function runAccessibilityByocE2e(ctx) {
     await landPage.evaluate(() => {
       localStorage.removeItem('capy_feature_offers_v1');
     });
-    const landUndoStart = await getStableBoundingBox(landPage.getByTestId('undo-btn'));
-    assert.ok(landUndoStart);
-    await landPage.mouse.move(landUndoStart.x + landUndoStart.width / 2, landUndoStart.y + landUndoStart.height / 2);
-    await landPage.mouse.down();
-    await landPage.getByTestId('replay-controls-window').waitFor({ state: 'visible', timeout: 4000 });
-    await landPage.mouse.up();
+    await longPressUndoForReplay(landPage);
     await landPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 4000 });
     await getStableBoundingBox(landPage.getByTestId('feature-offer-banner'));
 

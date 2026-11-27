@@ -32,6 +32,7 @@ import { runProviderDomainHardeningTests } from './provider-domain-hardening.tes
 import { runSettingsDecompositionTests } from './settings-decomposition.test.mjs';
 import { runWorkerCoopSecurityTests } from './worker-coop-security.test.mjs';
 import { runEngineCanvasPerfTests } from './engine-canvas-perf.test.mjs';
+import { runRegionSegmenterGoldenTests } from './tests/unit/region-segmenter-golden.test.mjs';
 import { runAppHooksQuickwinTests } from './app-hooks-quickwin.test.mjs';
 import { runSessionRestorePipelineTests } from './session-restore-pipeline.test.mjs';
 import { runUndoReplayHooksTests } from './undo-replay-hooks.test.mjs';
@@ -174,6 +175,7 @@ async function runCodecAndEngineTests() {
     await runSettingsDecompositionTests(vite);
     await runWorkerCoopSecurityTests(vite);
     await runEngineCanvasPerfTests(vite);
+    await runRegionSegmenterGoldenTests(vite);
     await runAppHooksQuickwinTests(vite);
     await runSessionRestorePipelineTests(vite);
     await runUndoReplayHooksTests(vite);
@@ -181,7 +183,7 @@ async function runCodecAndEngineTests() {
     await runCloudSyncControllerHookTests(vite);
     await runTutorialSnapshotHooksTests(vite);
     logUnitPass(
-      '.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening, SettingsModal Decomposition, Worker Co-op Security, Engine/Canvas Perf, App Hooks Quick-Win, Session Restore Pipeline, Undo/Redo & Replay Controller Hooks, Co-op Session Hook, Cloud Sync Controller Hook, Tutorial/Viewport/Paint/Snapshot Hooks & M1 release safety hardening verified.'
+      '.changelog fragments, compile-changelog.mjs, StorageNamespace, UserSettings, FeatureOffersService, StorageService, Storage Gateway, Browser Storage Analyzer, Provider Domain Hardening, SettingsModal Decomposition, Worker Co-op Security, Engine/Canvas Perf, RegionSegmenter Golden Bit-Identity, App Hooks Quick-Win, Session Restore Pipeline, Undo/Redo & Replay Controller Hooks, Co-op Session Hook, Cloud Sync Controller Hook, Tutorial/Viewport/Paint/Snapshot Hooks & M1 release safety hardening verified.'
     );
 
     await runByocCloudSyncTests(ctx);

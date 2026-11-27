@@ -174,11 +174,11 @@ When opening black-and-white line art or hybrid coloring book pages:
 ## 5. Web Worker Execution & 6-Stage Pipeline Telemetry
 
 To guarantee **zero UI frame drops and smooth touch responsiveness**:
-* Puzzle generation runs inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts).
+* Puzzle generation runs inside a dedicated **Web Worker** ([`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts)) managed by [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts), which terminates idle workers automatically after a `15s` grace window or immediately when the tab becomes hidden (never cancelling active generations).
 * Pixel arrays and region buffers cross thread boundaries via **zero-copy `Transferable` `ArrayBuffer` payloads**:
   * Inbound: `rgbaBuffer`.
   * Outbound: `regionMap`, `borderMap`, and a single contiguous `packedPixelsBuffer` unpacked into zero-copy `Int32Array.subarray` views via `pixelsOffset`/`pixelsLength`.
-  * Pole-of-inaccessibility label placement in [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) reuses a single `Int32Array(total)` `distGrid` and `bfsQueue` across regions to eliminate per-region `Map` heap spikes.
+  * [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) uses a flat Compressed Sparse Row (`compPixels` + `compOffsets`) typed-array layout, intrusive singly-linked component lists (`rootHead`/`rootTail`/`compNext`), reusable ordered neighbor-touch arrays, and 2-pass counting-sort CSR producing zero-copy `Int32Array.subarray` `region.pixels` views alongside a single reusable `Int32Array(total)` `distGrid` and `bfsQueue` for Pole-of-Inaccessibility label placement, eliminating `number[][]` and per-region `Map` heap spikes.
 * Progress updates stream back via `onProgress(pct, status, payload)` with a **strictly monotonic high-water mark** (`0.00` $\rightarrow$ `1.00`). In default **Simple Progress (Fast Mode)** (`detailedProgress = false`), progress IPC is throttled and diagnostic swatch cloning is skipped; toggling **Detailed Progress** sends `{ type: 'SET_DETAILED_PROGRESS', detailed: true }` live to the running worker.
 
 ### 5.1 Canonical 6-Stage Pipeline (`GENERATION_PIPELINE_STEPS`)

@@ -1176,8 +1176,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
   // 1. Update Offscreen Base Canvas (Incremental Dirty-Rect on region fill!)
   useEffect(() => {
     if (!puzzle) {
-      baseCanvasRef.current = null;
+      if (baseCanvasRef.current) {
+        baseCanvasRef.current.width = 0;
+        baseCanvasRef.current.height = 0;
+        baseCanvasRef.current = null;
+      }
       baseImageDataRef.current = null;
+      sourcePixelsRef.current = null;
       lastBasePuzzleRef.current = null;
       return;
     }
@@ -1203,8 +1208,13 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       for (const p of palette) palMap.set(p.id, p);
       paletteByIdRef.current = palMap;
 
-      // Extract source pixels once if available
-      if (sourceImage && sourceImage.complete && (sourceImage.naturalWidth > 0 || sourceImage.width > 0)) {
+      // Extract source pixels only when DETAIL mode is active (avoids retaining ~4-16 MB in flat mode)
+      if (
+        isDetailMode &&
+        sourceImage &&
+        sourceImage.complete &&
+        (sourceImage.naturalWidth > 0 || sourceImage.width > 0)
+      ) {
         const tmpCanvas = document.createElement('canvas');
         tmpCanvas.width = width;
         tmpCanvas.height = height;
@@ -1352,6 +1362,12 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       (!highlightMatching && hintRegionId === null)
     ) {
       hasHighlightPixelsRef.current = false;
+      if (highlightCanvasRef.current) {
+        highlightCanvasRef.current.width = 0;
+        highlightCanvasRef.current.height = 0;
+        highlightCanvasRef.current = null;
+      }
+      highlightImageDataRef.current = null;
       return;
     }
 
@@ -1444,7 +1460,15 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
 
   // 3. Update Offscreen Preview Border Layer (built lazily once per puzzle)
   useEffect(() => {
-    if (!puzzle || !showPreviewBorders) return;
+    if (!puzzle || !showPreviewBorders) {
+      if (borderCanvasRef.current) {
+        borderCanvasRef.current.width = 0;
+        borderCanvasRef.current.height = 0;
+        borderCanvasRef.current = null;
+      }
+      lastBorderPuzzleRef.current = null;
+      return;
+    }
     if (lastBorderPuzzleRef.current === puzzle && borderCanvasRef.current) return;
 
     const { width, height, borderMap } = puzzle;
@@ -2045,7 +2069,11 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
     let lastPulseDraw = 0;
 
     const loop = (now: number) => {
-      if (!document.hidden && now - lastPulseDraw >= 50) {
+      animId = 0;
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+      if (now - lastPulseDraw >= 50) {
         lastPulseDraw = now;
         const elapsed = now - startTime;
         const t = (Math.sin(elapsed / 250) + 1) / 2;
@@ -2056,8 +2084,38 @@ export const PuzzleCanvas: React.FC<PuzzleCanvasProps> = React.memo(({
       animId = requestAnimationFrame(loop);
     };
 
-    animId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(animId);
+    const startLoop = () => {
+      if (animId !== 0) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      lastPulseDraw = 0;
+      animId = requestAnimationFrame(loop);
+    };
+
+    const stopLoop = () => {
+      if (animId !== 0) {
+        cancelAnimationFrame(animId);
+        animId = 0;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopLoop();
+      } else {
+        startLoop();
+      }
+    };
+
+    startLoop();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+    return () => {
+      stopLoop();
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
   }, [
     animateHint,
     reducedMotion,
