@@ -439,6 +439,44 @@ export async function runMultiProviderAiUnitTests(vite) {
     assert.equal(openRouterCardHtml.includes('data-testid="iz-byok-key-input"'), true);
     assert.equal(openRouterCardHtml.includes('openai/gpt-image-2.6-sunburst'), true);
     assert.equal(openRouterCardHtml.includes('x-ai/grok-imagine-image-2.0'), true);
+
+    const guidedGeminiCardHtml = renderToStaticMarkup(
+      React.createElement(controlsMod.InfiniteZoomCreateCard, {
+        sourceImage: null,
+        infiniteZoomProvider: 'GUIDED_GEMINI',
+        nanoBananaModel: 'gemini-nano-banana-2.1',
+        nanoBananaResolution: '1K',
+        guidedAiApp: 'GEMINI',
+        onChangeProvider: () => {},
+        onChangeModel: () => {},
+        onChangeResolution: () => {},
+        onChangeGuidedAiApp: () => {},
+        onClose: () => {},
+      })
+    );
+    const appIdx = guidedGeminiCardHtml.indexOf('data-testid="iz-guided-app-select"');
+    const modelIdx = guidedGeminiCardHtml.indexOf('data-testid="iz-model-select"');
+    assert.ok(appIdx >= 0 && modelIdx > appIdx, 'Free AI App selector must render above Nano Banana model chooser');
+
+    for (const nonGeminiApp of ['CHATGPT', 'GROK']) {
+      const guidedOtherHtml = renderToStaticMarkup(
+        React.createElement(controlsMod.InfiniteZoomCreateCard, {
+          sourceImage: null,
+          infiniteZoomProvider: 'GUIDED_GEMINI',
+          nanoBananaModel: 'gemini-nano-banana-2.1',
+          nanoBananaResolution: '1K',
+          guidedAiApp: nonGeminiApp,
+          onChangeProvider: () => {},
+          onChangeModel: () => {},
+          onChangeResolution: () => {},
+          onChangeGuidedAiApp: () => {},
+          onClose: () => {},
+        })
+      );
+      assert.equal(guidedOtherHtml.includes('data-testid="iz-guided-app-select"'), true);
+      assert.equal(guidedOtherHtml.includes('data-testid="iz-model-select"'), false);
+      assert.equal(guidedOtherHtml.includes('data-testid="iz-resolution-select"'), false);
+    }
   }
 
   // 8. CapyCodec v2 & PuzzleSerializer round-trip with OPENROUTER, OPENAI_BYOK, XAI_BYOK nested layers

@@ -1112,7 +1112,6 @@ const ByokApiKeySection: React.FC<{ provider: ByokProviderMode }> = ({ provider 
 
 interface ProviderConfigPanelProps {
   effectiveProvider: InfiniteZoomProviderMode;
-  isAndroid: boolean;
   providerOptions: readonly ProviderOptionItem[];
   nanoBananaModel: NanoBananaModelId;
   nanoBananaResolution: NanoBananaResolution;
@@ -1134,7 +1133,6 @@ interface ProviderConfigPanelProps {
 
 const ProviderModelAndQualityRow: React.FC<{
   effectiveProvider: InfiniteZoomProviderMode;
-  isAndroid: boolean;
   nanoBananaModel: NanoBananaModelId;
   nanoBananaResolution: NanoBananaResolution;
   openRouterModel: OpenRouterImageModelId;
@@ -1152,7 +1150,6 @@ const ProviderModelAndQualityRow: React.FC<{
   onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
 }> = ({
   effectiveProvider,
-  isAndroid,
   nanoBananaModel,
   nanoBananaResolution,
   openRouterModel,
@@ -1299,50 +1296,12 @@ const ProviderModelAndQualityRow: React.FC<{
     const nextResolution = nextResolved !== nanoBananaResolution ? nextResolved : undefined;
     onChangeModel(nextModel, nextResolution);
   };
+  const showNanoBananaModelControls =
+    effectiveProvider !== 'GUIDED_GEMINI' || guidedAiApp === 'GEMINI';
 
   return (
     <div className="space-y-2 min-w-0">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
-        <div className="flex flex-col gap-1 min-w-0">
-          <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
-            Nano Banana Model
-          </label>
-          <select
-            id="iz-model-select"
-            data-testid="iz-model-select"
-            value={nanoBananaModel}
-            onChange={(e) => handleModelChange(e.target.value as NanoBananaModelId)}
-            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
-          >
-            {NANO_BANANA_MODELS.map((modelItem) => (
-              <option key={modelItem.id} value={modelItem.id}>
-                {MODEL_SELECT_LABELS[modelItem.id] ?? modelItem.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1 min-w-0">
-          <label htmlFor="iz-resolution-select" className="text-[11px] font-bold text-slate-300">
-            Output Resolution
-          </label>
-          <select
-            id="iz-resolution-select"
-            data-testid="iz-resolution-select"
-            value={resolvedResolution}
-            onChange={(e) => onChangeResolution(e.target.value as NanoBananaResolution)}
-            className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
-          >
-            {selectedModelMeta.supportedResolutions.map((resOpt) => (
-              <option key={resOpt} value={resOpt}>
-                {resOpt}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {effectiveProvider === 'GUIDED_GEMINI' && !isAndroid && onChangeGuidedAiApp && (
+      {effectiveProvider === 'GUIDED_GEMINI' && onChangeGuidedAiApp && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 min-w-0">
           <label
             htmlFor="iz-guided-app-select"
@@ -1365,13 +1324,54 @@ const ProviderModelAndQualityRow: React.FC<{
           </select>
         </div>
       )}
+
+      {showNanoBananaModelControls && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 min-w-0">
+          <div className="flex flex-col gap-1 min-w-0">
+            <label htmlFor="iz-model-select" className="text-[11px] font-bold text-slate-300">
+              Nano Banana Model
+            </label>
+            <select
+              id="iz-model-select"
+              data-testid="iz-model-select"
+              value={nanoBananaModel}
+              onChange={(e) => handleModelChange(e.target.value as NanoBananaModelId)}
+              className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+            >
+              {NANO_BANANA_MODELS.map((modelItem) => (
+                <option key={modelItem.id} value={modelItem.id}>
+                  {MODEL_SELECT_LABELS[modelItem.id] ?? modelItem.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1 min-w-0">
+            <label htmlFor="iz-resolution-select" className="text-[11px] font-bold text-slate-300">
+              Output Resolution
+            </label>
+            <select
+              id="iz-resolution-select"
+              data-testid="iz-resolution-select"
+              value={resolvedResolution}
+              onChange={(e) => onChangeResolution(e.target.value as NanoBananaResolution)}
+              className="w-full min-w-0 max-w-full px-2.5 py-1.5 min-h-[44px] rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-100 focus:outline-none focus:border-sky-400 cursor-pointer"
+            >
+              {selectedModelMeta.supportedResolutions.map((resOpt) => (
+                <option key={resOpt} value={resOpt}>
+                  {resOpt}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
   effectiveProvider,
-  isAndroid,
   providerOptions,
   nanoBananaModel,
   nanoBananaResolution,
@@ -1412,7 +1412,6 @@ const ProviderConfigPanel: React.FC<ProviderConfigPanelProps> = ({
 
     <ProviderModelAndQualityRow
       effectiveProvider={effectiveProvider}
-      isAndroid={isAndroid}
       nanoBananaModel={nanoBananaModel}
       nanoBananaResolution={nanoBananaResolution}
       openRouterModel={openRouterModel}
@@ -1626,7 +1625,6 @@ export const InfiniteZoomCreateCard: React.FC<InfiniteZoomCreateCardProps> = ({
 
       <ProviderConfigPanel
         effectiveProvider={effectiveProvider}
-        isAndroid={isAndroid}
         providerOptions={providerOptions}
         nanoBananaModel={nanoBananaModel}
         nanoBananaResolution={nanoBananaResolution}

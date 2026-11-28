@@ -1303,11 +1303,40 @@ async function runStage1(ctx) {
       await createCard.waitFor({ state: 'visible', timeout: 3000 });
       await assertNoHorizontalOverflow(page, createCard, '360x780 LargeText CreateCard');
       await assertMinTouchTarget(page.getByTestId('iz-provider-select'), '360x780 iz-provider-select');
+      await assertMinTouchTarget(
+        page.getByTestId('iz-guided-app-select'),
+        '360x780 iz-guided-app-select'
+      );
       await assertMinTouchTarget(page.getByTestId('iz-model-select'), '360x780 iz-model-select');
       await assertMinTouchTarget(
         page.getByTestId('iz-resolution-select'),
         '360x780 iz-resolution-select'
       );
+      const guidedAppBox = await page.getByTestId('iz-guided-app-select').boundingBox();
+      const guidedModelBox = await page.getByTestId('iz-model-select').boundingBox();
+      assert.ok(
+        guidedAppBox && guidedModelBox && guidedAppBox.y < guidedModelBox.y,
+        'Free AI App selector must appear above the Nano Banana model chooser'
+      );
+      await page.getByTestId('iz-guided-app-select').selectOption('CHATGPT');
+      assert.equal(
+        await page.getByTestId('iz-model-select').count(),
+        0,
+        'Nano Banana model chooser must be hidden when Guided ChatGPT is selected'
+      );
+      assert.equal(
+        await page.getByTestId('iz-resolution-select').count(),
+        0,
+        'Output resolution selector must be hidden when Guided ChatGPT is selected'
+      );
+      await page.getByTestId('iz-guided-app-select').selectOption('GROK');
+      assert.equal(
+        await page.getByTestId('iz-model-select').count(),
+        0,
+        'Nano Banana model chooser must be hidden when Guided Grok is selected'
+      );
+      await page.getByTestId('iz-guided-app-select').selectOption('GEMINI');
+      await page.getByTestId('iz-model-select').waitFor({ state: 'visible', timeout: 3000 });
       await assertMinTouchTarget(
         page.getByTestId('create-infinite-zoom-in-btn'),
         '360x780 create-infinite-zoom-in-btn'
