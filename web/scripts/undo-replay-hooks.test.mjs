@@ -492,6 +492,21 @@ export async function runUndoReplayHooksTests(vite) {
     /focusClampedScratchRef/,
     'PuzzleCanvas.tsx must reuse focusClampedScratchRef in focus glide loop'
   );
+  assert.doesNotMatch(
+    canvasSrc,
+    /\boffsetRef\.current\s*=/,
+    'PuzzleCanvas.tsx must never replace offsetRef.current with aliased React state objects (mutate .x/.y in place)'
+  );
+  assert.match(
+    canvasSrc,
+    /prev !== o && prev\.x === o\.x && prev\.y === o\.y/,
+    'PuzzleCanvas.tsx commitTransformState must guard against aliased offset state'
+  );
+  assert.match(
+    canvasSrc,
+    /if \(wasActive && commitIfActive\)[\s\S]*commitTransformState\(true\)/,
+    'PuzzleCanvas.tsx stopFocusCamera must flush commitTransformState(true) when cancelling an active glide mid-flight'
+  );
 
   console.log('   PASS: Undo/Redo & Replay Controller hooks unit tests (Issue #585 Sub-Slice 3)');
 }
