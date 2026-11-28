@@ -465,7 +465,7 @@ export async function runServicesGameplayTests({ vite, projectRoot, logUnitStart
         const cw = 1280;
         const ch = 800;
 
-        // Invalid dimensions return safe no-op
+        // Invalid / non-finite dimensions or coordinates return safe no-op
         const invalid = canvasMod.computeRegionFocusViewport({
           region: { centroidX: 100, centroidY: 100, minX: 90, maxX: 110, minY: 90, maxY: 110 },
           puzzleWidth: pw,
@@ -476,6 +476,16 @@ export async function runServicesGameplayTests({ vite, projectRoot, logUnitStart
           currentOffset: { x: 10, y: 20 },
         });
         assert.equal(invalid.shouldMove, false, 'Zero-width container must be a safe no-op');
+        const nanInput = canvasMod.computeRegionFocusViewport({
+          region: { centroidX: 100, centroidY: 100, minX: 90, maxX: 110, minY: 90, maxY: 110 },
+          puzzleWidth: pw,
+          puzzleHeight: ph,
+          containerWidth: Number.NaN,
+          containerHeight: ch,
+          currentScale: 2,
+          currentOffset: { x: Number.POSITIVE_INFINITY, y: 20 },
+        });
+        assert.equal(nanInput.shouldMove, false, 'NaN/Infinity inputs must return a safe no-op');
 
         // Offscreen region while zoomed in -> pans smoothly to center while preserving user zoom
         const offscreenZoomed = canvasMod.computeRegionFocusViewport({
