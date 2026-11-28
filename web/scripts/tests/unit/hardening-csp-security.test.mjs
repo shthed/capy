@@ -166,6 +166,11 @@ export async function runHardeningCspSecurityTests(vite) {
 
     assert.match(
       headersText,
+      /\/privacy-policy\r?\n\s+!\s*Content-Security-Policy\r?\n\s+Content-Security-Policy:[^\n]*script-src 'none'/m,
+      'web/public/_headers must lock down /privacy-policy with script-src none'
+    );
+    assert.match(
+      headersText,
       /\/privacy-policy\.html\r?\n\s+!\s*Content-Security-Policy\r?\n\s+Content-Security-Policy:[^\n]*script-src 'none'/m,
       'web/public/_headers must lock down /privacy-policy.html with script-src none'
     );
@@ -310,9 +315,9 @@ export async function runHardeningCspSecurityTests(vite) {
       'sitemap.xml must include canonical https://capypaint.com/'
     );
     assert.equal(
-      sitemapXml.includes('<loc>https://capypaint.com/privacy-policy.html</loc>'),
+      sitemapXml.includes('<loc>https://capypaint.com/privacy-policy</loc>'),
       true,
-      'sitemap.xml must include canonical https://capypaint.com/privacy-policy.html'
+      'sitemap.xml must include canonical extensionless https://capypaint.com/privacy-policy'
     );
     assert.equal(
       /github\.io|\/alpha\/|\/beta\//i.test(sitemapXml),
@@ -365,8 +370,8 @@ export async function runHardeningCspSecurityTests(vite) {
 
     assert.match(
       privacyHtml,
-      /<link\s+rel="canonical"\s+href="https:\/\/capypaint\.com\/privacy-policy\.html"\s*\/>/i,
-      'privacy-policy.html must declare its canonical URL'
+      /<link\s+rel="canonical"\s+href="https:\/\/capypaint\.com\/privacy-policy"\s*\/>/i,
+      'privacy-policy.html must declare extensionless canonical URL https://capypaint.com/privacy-policy'
     );
     assert.match(
       notFoundHtml,
