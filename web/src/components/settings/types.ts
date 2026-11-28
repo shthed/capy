@@ -83,6 +83,7 @@ export interface SettingsCloudCoopProps {
   onShareProgressLink?: () => Promise<string | null>;
   onCopyCoopInviteLink?: () => Promise<string | null>;
   onExportPrintableSvg?: () => Promise<boolean> | void;
+  onExportArtwork?: () => Promise<boolean | void> | void;
   onSyncCloudProgress?: () => Promise<CloudSyncSummaryPayload | null>;
 }
 

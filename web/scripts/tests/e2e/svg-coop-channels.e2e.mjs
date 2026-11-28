@@ -31,7 +31,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       })
     : { context: ctx.context, page: ctx.page };
   try {
-    logE2eStart('Verifying Printable SVG export, Sub-Tile Parent Breadcrumbs (Infinite Zoom) & 2-peer Co-op UNFILL_EVENT Undo sync...');
+    logE2eStart('Verifying Printable SVG + Save PNG export, Sub-Tile Parent Breadcrumbs (Infinite Zoom) & 2-peer Co-op UNFILL_EVENT Undo sync...');
 
     // 11a. TASK-4.2a: Clicking export-printable-svg-btn triggers a valid .svg download
     await page.getByTestId('topbar-coop-btn').click();
@@ -54,6 +54,39 @@ export async function runSvgCoopChannelsE2e(ctx) {
       true,
       'Downloaded .svg file must contain valid vector <svg> coloring sheet content'
     );
+
+    // 11a-png: Clicking export-artwork-png-btn triggers a valid full-resolution .png download + notice
+    const pngExportBtn = page.getByTestId('export-artwork-png-btn');
+    await pngExportBtn.waitFor({ state: 'visible', timeout: 3000 });
+    const pngDownloadPromise = page.waitForEvent('download', { timeout: 10000 });
+    await pngExportBtn.click();
+    const pngDownload = await pngDownloadPromise;
+    try {
+      assert.equal(
+        pngDownload.suggestedFilename().endsWith('.png'),
+        true,
+        `Expected colored artwork filename to end with .png, got ${pngDownload.suggestedFilename()}`
+      );
+      const pngDownloadPath = await pngDownload.path();
+      assert.ok(pngDownloadPath, 'Expected Playwright download path for colored artwork .png');
+      const downloadedPngBytes = fs.readFileSync(pngDownloadPath);
+      assert.deepEqual(
+        Array.from(downloadedPngBytes.subarray(0, 8)),
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        'Downloaded .png file must start with the 8-byte PNG magic signature'
+      );
+      assert.ok(
+        downloadedPngBytes.length > 1000,
+        `Expected non-trivial PNG artwork payload (> 1000 bytes), got ${downloadedPngBytes.length} bytes`
+      );
+    } finally {
+      await pngDownload.delete().catch(() => {});
+    }
+    const pngNotice = page
+      .getByTestId('cloud-coop-notice')
+      .filter({ hasText: 'Colored artwork (.png) saved!' });
+    await pngNotice.waitFor({ state: 'visible', timeout: 3000 });
+
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
@@ -270,7 +303,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     await page.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
     await page.keyboard.press('Escape');
     await page.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    logE2ePass('Printable SVG download, Sub-Tile Parent Breadcrumbs + parent delete cleanup, and 2-peer Co-op UNFILL_EVENT Undo sync verified.');
+    logE2ePass('Printable SVG + Save PNG download, Sub-Tile Parent Breadcrumbs + parent delete cleanup, and 2-peer Co-op UNFILL_EVENT Undo sync verified.');
 
     // -------------------------------------------------------------------------
 

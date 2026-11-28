@@ -589,6 +589,7 @@ export const App: React.FC = () => {
     handleAfterStorageClear,
     handleRestoreStarterSample,
     handleResetProgress,
+    handleExportArtwork,
     handleExportPrintableSvg,
     handleExportSnapshotSvg,
     handleExportSnapshot,
@@ -775,6 +776,11 @@ export const App: React.FC = () => {
     setSettingsInitialTab(4);
     setShowSettings(true);
   }, [markTutorialActionTried, triggerFeatureOffer]);
+
+  const handleExportArtworkWithTracking = useCallback(() => {
+    markTutorialActionTried('saves_export');
+    return handleExportArtwork();
+  }, [handleExportArtwork, markTutorialActionTried]);
 
   const handleBackToParentPuzzle = useCallback(() => {
     if (!parentSave) return;
@@ -1197,6 +1203,8 @@ export const App: React.FC = () => {
             onShareProgressLink: handleShareProgressLink,
             onCopyCoopInviteLink: handleCopyCoopInviteLink,
             onExportPrintableSvg: puzzle ? handleExportPrintableSvg : undefined,
+            onExportArtwork:
+              puzzle && sourceImage ? handleExportArtworkWithTracking : undefined,
             onSyncCloudProgress: handleSyncCloudProgress,
           }}
         />

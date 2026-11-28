@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Printer, Share2, Users } from 'lucide-react';
+import { Copy, ImageDown, Printer, Share2, Users } from 'lucide-react';
 import { ProviderRegistry } from '../../services/providers/ProviderRegistry';
 import { PlayerIdentity } from '../../services/providers/types';
+import { reportSwallowed } from '../../services/telemetry';
 import { CloudAccountCard } from '../CloudAccountCard';
 import { SettingsCloudCoopProps } from './types';
 
@@ -23,6 +24,7 @@ export const CloudAccountSection: React.FC<CloudAccountSectionProps> = ({ cloudC
     onShareProgressLink,
     onCopyCoopInviteLink,
     onExportPrintableSvg,
+    onExportArtwork,
     onSyncCloudProgress,
   } = cloudCoop ?? {};
 
@@ -85,6 +87,31 @@ export const CloudAccountSection: React.FC<CloudAccountSectionProps> = ({ cloudC
         >
           <Printer size={13} className="text-amber-400" />
           <span>Printable SVG</span>
+        </button>
+      )}
+
+      {onExportArtwork && (
+        <button
+          type="button"
+          data-testid="export-artwork-png-btn"
+          onClick={async () => {
+            try {
+              const ok = await onExportArtwork();
+              if (ok !== false) {
+                setHubNotice('Colored artwork (.png) saved!');
+              } else {
+                setHubNotice('Unable to save colored artwork (.png). Please try again.');
+              }
+            } catch (err) {
+              reportSwallowed('CloudAccountSection.exportArtwork', err);
+              setHubNotice('Unable to save colored artwork (.png). Please try again.');
+            }
+          }}
+          title="Save colored artwork as a PNG image (.png)"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-colors cursor-pointer"
+        >
+          <ImageDown size={13} className="text-amber-400" />
+          <span>Save PNG</span>
         </button>
       )}
     </div>
