@@ -615,6 +615,457 @@ export async function runCoopSharePwaTests({ vite, projectRoot, logUnitStart, lo
       pwaMod.resolvePwaCacheName('https://capypaint.com/', '2.6.0'),
       'capy-cache-v2.6.0:/'
     );
+
+    // PwaService applyUpdate reload race hardening (5s waiting-clear fallback, 250ms post-5s poll, 10s hard cap)
+    {
+      assert.equal(pwaMod.PWA_UPDATE_FALLBACK_MS, 5000);
+      assert.equal(pwaMod.PWA_UPDATE_HARD_CAP_MS, 10000);
+      assert.equal(pwaMod.PWA_UPDATE_WAIT_POLL_MS, 250);
+      assert.equal(typeof pwaMod.applyServiceWorkerUpdate, 'function');
+      assert.equal(typeof pwaMod.PwaServiceClass, 'function');
+
+      const createVirtualClock = () => {
+        let now = 0;
+        let nextId = 1;
+        const timers = new Map();
+        return {
+          get now() {
+            return now;
+          },
+          setTimeoutFn(fn, ms) {
+            const id = nextId++;
+            timers.set(id, { id, fireAt: now + Math.max(0, ms), intervalMs: null, fn });
+            return id;
+          },
+          clearTimeoutFn(id) {
+            timers.delete(id);
+          },
+          setIntervalFn(fn, ms) {
+            const id = nextId++;
+            const step = Math.max(1, ms);
+            timers.set(id, { id, fireAt: now + step, intervalMs: step, fn });
+            return id;
+          },
+          clearIntervalFn(id) {
+            timers.delete(id);
+          },
+          advanceBy(ms) {
+            const target = now + ms;
+            while (true) {
+              let earliest = null;
+              for (const entry of timers.values()) {
+                if (entry.fireAt <= target) {
+                  if (!earliest || entry.fireAt < earliest.fireAt || (entry.fireAt === earliest.fireAt && entry.id < earliest.id)) {
+                    earliest = entry;
+                  }
+                }
+              }
+              if (!earliest) break;
+              now = earliest.fireAt;
+              if (earliest.intervalMs !== null) {
+                earliest.fireAt = now + earliest.intervalMs;
+              } else {
+                timers.delete(earliest.id);
+              }
+              earliest.fn();
+            }
+            now = target;
+          },
+          activeTimerCount() {
+            return timers.size;
+          },
+        };
+      };
+
+      const createMockEventTarget = () => {
+        const listeners = new Map();
+        const target = {
+          addCalls: 0,
+          removeCalls: 0,
+          addEventListener(type, fn, options) {
+            target.addCalls += 1;
+            let bucket = listeners.get(type);
+            if (!bucket) {
+              bucket = new Map();
+              listeners.set(type, bucket);
+            }
+            if (!bucket.has(fn)) {
+              bucket.set(fn, Boolean(options && typeof options === 'object' && options.once));
+            }
+          },
+          removeEventListener(type, fn) {
+            target.removeCalls += 1;
+            const bucket = listeners.get(type);
+            if (bucket) {
+              bucket.delete(fn);
+            }
+          },
+          dispatch(type) {
+            const bucket = listeners.get(type);
+            if (!bucket) return;
+            for (const [fn, once] of Array.from(bucket.entries())) {
+              if (once) bucket.delete(fn);
+              fn();
+            }
+          },
+          listenerCount(type) {
+            return listeners.get(type)?.size ?? 0;
+          },
+        };
+        return target;
+      };
+
+      const createMockWaitingWorker = (postMessageImpl) => {
+        const events = createMockEventTarget();
+        const messages = [];
+        return {
+          ...events,
+          messages,
+          postMessage(msg) {
+            messages.push(msg);
+            if (postMessageImpl) postMessageImpl(msg);
+          },
+        };
+      };
+
+      // 1. controllerchange before 5s: reloads once immediately and cleans up all timers & listeners
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget();
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        const handle = pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        assert.equal(handle.started, true);
+        assert.deepEqual(waitingWorker.messages, [{ type: 'SKIP_WAITING' }]);
+        assert.equal(clock.activeTimerCount(), 2);
+        assert.equal(container.listenerCount('controllerchange'), 1);
+        assert.equal(waitingWorker.listenerCount('statechange'), 1);
+
+        clock.advanceBy(400);
+        assert.equal(reloads, 0);
+        container.dispatch('controllerchange');
+        assert.equal(reloads, 1);
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(15000);
+        assert.equal(reloads, 1);
+      }
+
+      // 2. registration.waiting already cleared by 5s (no controllerchange): waits full 5s, reloads once, cleans 10s cap
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget();
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(1500);
+        assert.equal(reloads, 0, 'Must not reload prematurely at legacy 1500ms timeout');
+
+        clock.advanceBy(500);
+        registration.waiting = null;
+        waitingWorker.dispatch('statechange');
+        assert.equal(reloads, 0, 'statechange before 5s fallback must wait for controllerchange or 5s check');
+
+        clock.advanceBy(2999);
+        assert.equal(clock.now, 4999);
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(1);
+        assert.equal(clock.now, 5000);
+        assert.equal(reloads, 1);
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1);
+      }
+
+      // 3a. registration.waiting still present at 5s, clears at 6500ms via statechange
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget();
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(5000);
+        assert.equal(reloads, 0, 'Must not reload at 5s while registration.waiting is still present');
+        assert.equal(clock.activeTimerCount(), 2, '10s hard-cap timer and 250ms poll interval should be active');
+
+        clock.advanceBy(1499);
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(1);
+        assert.equal(clock.now, 6500);
+        registration.waiting = null;
+        waitingWorker.dispatch('statechange');
+        assert.equal(reloads, 1);
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1);
+      }
+
+      // 3b. registration.waiting still present at 5s, clears at 6400ms without statechange -> reloads on 250ms poll
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget();
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(5000);
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(1400);
+        assert.equal(clock.now, 6400);
+        registration.waiting = null;
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(100);
+        assert.equal(clock.now, 6500);
+        assert.equal(reloads, 1, 'Post-5s 250ms poll must reload promptly when waiting clears without statechange');
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1);
+      }
+
+      // 4. registration.waiting never clears: waits until 10s hard cap, reloads once, cleans up everything
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget();
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(5000);
+        assert.equal(reloads, 0);
+        clock.advanceBy(4999);
+        assert.equal(clock.now, 9999);
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(1);
+        assert.equal(clock.now, 10000);
+        assert.equal(reloads, 1);
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1);
+      }
+
+      // 5 & 6. PwaServiceClass idempotency, null waiting no-op, postMessage throw recovery, and explicit cancel
+      {
+        // Helper no-op when waiting is null + explicit cancel idempotency
+        const clock = createVirtualClock();
+        const container = createMockEventTarget();
+        let reloads = 0;
+        let abortCount = 0;
+
+        const noopHandle = pwaMod.applyServiceWorkerUpdate({
+          registration: { waiting: null },
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+          onAbort: () => {
+            abortCount += 1;
+          },
+        });
+        assert.equal(noopHandle.started, false);
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.addCalls, 0);
+        assert.equal(reloads, 0);
+
+        const cancelWorker = createMockWaitingWorker();
+        const cancelHandle = pwaMod.applyServiceWorkerUpdate({
+          registration: { waiting: cancelWorker },
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+          onAbort: () => {
+            abortCount += 1;
+          },
+        });
+        assert.equal(cancelHandle.started, true);
+        cancelHandle.cancel();
+        cancelHandle.cancel();
+        assert.equal(abortCount, 1);
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(cancelWorker.listenerCount('statechange'), 0);
+        clock.advanceBy(15000);
+        assert.equal(reloads, 0);
+
+        // PwaServiceClass end-to-end idempotency + null waiting no-op + postMessage failure recovery
+        const origWindowDesc = Object.getOwnPropertyDescriptor(globalThis, 'window');
+        const origNavigatorDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+        const origWarn = console.warn;
+        const warnCalls = [];
+
+        try {
+          // Construct while window is absent so constructor skips browser DOM init()
+          if (origWindowDesc) {
+            Object.defineProperty(globalThis, 'window', { value: undefined, configurable: true, writable: true });
+          }
+          const service = new pwaMod.PwaServiceClass();
+          const swContainer = createMockEventTarget();
+          let instanceReloads = 0;
+
+          Object.defineProperty(globalThis, 'window', {
+            value: {
+              location: {
+                reload: () => {
+                  instanceReloads += 1;
+                },
+              },
+            },
+            configurable: true,
+            writable: true,
+          });
+          Object.defineProperty(globalThis, 'navigator', {
+            value: { serviceWorker: swContainer },
+            configurable: true,
+            writable: true,
+          });
+          console.warn = (...args) => {
+            warnCalls.push(args);
+          };
+
+          // No-op when registration.waiting is null
+          service.registration = { waiting: null };
+          service.applyUpdate();
+          assert.equal(swContainer.addCalls, 0);
+          assert.equal(instanceReloads, 0);
+
+          // Recovery when postMessage throws: cleans up listeners/timers and resets applyingUpdate so retry succeeds
+          let shouldThrow = true;
+          const flakyWorker = createMockWaitingWorker(() => {
+            if (shouldThrow) {
+              throw new Error('waiting worker terminated');
+            }
+          });
+          service.registration = { waiting: flakyWorker };
+          service.applyUpdate();
+          assert.equal(warnCalls.length, 1);
+          assert.equal(swContainer.listenerCount('controllerchange'), 0);
+          assert.equal(flakyWorker.listenerCount('statechange'), 0);
+          assert.equal(instanceReloads, 0);
+
+          // Retry now succeeds; duplicate calls remain idempotent before AND after controllerchange reload
+          shouldThrow = false;
+          const addCallsBeforeRetry = swContainer.addCalls;
+          service.applyUpdate();
+          service.applyUpdate();
+          assert.equal(flakyWorker.messages.length, 2, 'Only one new SKIP_WAITING post after recovery');
+          assert.equal(swContainer.addCalls, addCallsBeforeRetry + 1, 'Duplicate applyUpdate must register one listener');
+          assert.equal(swContainer.listenerCount('controllerchange'), 1);
+
+          swContainer.dispatch('controllerchange');
+          assert.equal(instanceReloads, 1);
+          assert.equal(swContainer.listenerCount('controllerchange'), 0);
+          assert.equal(flakyWorker.listenerCount('statechange'), 0);
+
+          // Rapid click after reload was already triggered still does not re-post or double-reload
+          service.applyUpdate();
+          assert.equal(flakyWorker.messages.length, 2);
+          assert.equal(instanceReloads, 1);
+        } finally {
+          console.warn = origWarn;
+          if (origWindowDesc) {
+            Object.defineProperty(globalThis, 'window', origWindowDesc);
+          } else {
+            delete globalThis.window;
+          }
+          if (origNavigatorDesc) {
+            Object.defineProperty(globalThis, 'navigator', origNavigatorDesc);
+          } else {
+            delete globalThis.navigator;
+          }
+        }
+      }
+    }
+
     assert.deepEqual(viteConfigMod.parseAndroidSha256Fingerprints(''), []);
     assert.deepEqual(
       viteConfigMod.parseAndroidSha256Fingerprints('00:'.repeat(31) + '00'),
