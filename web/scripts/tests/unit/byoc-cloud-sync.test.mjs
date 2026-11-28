@@ -454,7 +454,13 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
             previewDataUrl: '',
           });
 
-          const createMockOrchestratorHarness = ({ initialRemoteManifest = null, onReadManifest } = {}) => {
+          const createMockOrchestratorHarness = ({
+            initialRemoteManifest = null,
+            onReadManifest,
+            onReadBinaryBlob,
+            onWriteBinaryBlob,
+            jsonRoundTrip = false,
+          } = {}) => {
             let remoteManifest = initialRemoteManifest;
             let pushedManifest = null;
             const identity = {
@@ -484,17 +490,23 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
                 if (onReadManifest) {
                   await onReadManifest();
                 }
-                return remoteManifest;
+                if (!remoteManifest) return null;
+                return jsonRoundTrip
+                  ? JSON.parse(JSON.stringify(remoteManifest))
+                  : remoteManifest;
               },
               writeManifest: async (m) => {
-                pushedManifest = m;
-                remoteManifest = m;
+                const persisted = jsonRoundTrip ? JSON.parse(JSON.stringify(m)) : m;
+                pushedManifest = persisted;
+                remoteManifest = persisted;
                 return true;
               },
               readSlotEnvelope: async () => null,
               writeSlotEnvelope: async () => true,
-              readBinaryBlob: async () => null,
-              writeBinaryBlob: async () => null,
+              readBinaryBlob: async (ref) =>
+                onReadBinaryBlob ? await onReadBinaryBlob(ref) : null,
+              writeBinaryBlob: async (slotKey, fileName, bytes) =>
+                onWriteBinaryBlob ? await onWriteBinaryBlob(slotKey, fileName, bytes) : null,
             };
 
             const authMgr = new authMod.MultiProviderAuthManager();
@@ -1178,6 +1190,500 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
                 0,
                 'Deleting snapTs === 0 snapshot must emit 0 skew telemetry events'
               );
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (k) Same-device rapid delete after skew-preserved save (online, offline localManifest-only, recordSlotDeletion, mid-sync delete)
+          {
+            const origDateNow = Date.now;
+            try {
+              const runRapidDeleteVariant = async (variant) => {
+                memLocal.clear();
+                memSession.clear();
+                telemetryMod.clearSwallowedErrorLog();
+
+                const T_A = 1_795_858_000_000;
+                const T_B = T_A + 5 * 60 * 1000; // Device B clock +5m fast
+                const expectedLamportFloor = (Math.floor(T_B / 1000) + 1) * 1000;
+                const snapId = `rapid_del_${variant}`;
+                const slotKey = `save_${snapId}`;
+
+                Date.now = () => T_A;
+                const snapA = makeMockSnapshot({ snapId, timestamp: T_A, lastOpened: T_A });
+                storageMod.StorageService.saveSnapshots([snapA]);
+
+                let midSyncTriggered = false;
+                const harness = createMockOrchestratorHarness({
+                  initialRemoteManifest: {
+                    version: 2,
+                    updatedAt: T_B,
+                    devicePlayerId: 'remote_device',
+                    providerId: 'microsoft',
+                    entries: {},
+                    tombstones: { [slotKey]: T_B },
+                  },
+                  jsonRoundTrip: true,
+                  onReadManifest: async () => {
+                    if (variant === 'mid_sync' && midSyncTriggered) {
+                      midSyncTriggered = false;
+                      Date.now = () => T_A + 2_000;
+                      await storageMod.StorageService.deleteSnapshot(snapId);
+                    }
+                  },
+                });
+                const orchestrator = await harness.init();
+
+                // Sync 1: Device A skew-preserves P and pushes Lamport-bumped entry with real inlineBinaryB64
+                await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+                const pushedAfterSync1 = harness.getPushedManifest();
+                assert.equal(
+                  pushedAfterSync1?.entries?.[slotKey]?.lastOpened,
+                  expectedLamportFloor,
+                  `Variant ${variant}: Sync 1 must Lamport-bump cloud entry to ${expectedLamportFloor}`
+                );
+                assert.ok(
+                  typeof pushedAfterSync1?.entries?.[slotKey]?.inlineBinaryB64 === 'string' &&
+                    pushedAfterSync1.entries[slotKey].inlineBinaryB64.length > 0,
+                  `Variant ${variant}: Sync 1 must embed real inlineBinaryB64 so resurrection would be observable`
+                );
+
+                // Sync 2: Rapid delete while Device A clock (T_A + 2s) is still behind expectedLamportFloor
+                Date.now = () => T_A + 2_000;
+                if (variant === 'online') {
+                  await storageMod.StorageService.deleteSnapshot(snapId);
+                } else if (variant === 'offline') {
+                  await storageMod.StorageService.deleteSnapshot(snapId);
+                  harness.setRemoteManifest(null);
+                } else if (variant === 'record_slot_deletion') {
+                  await storageMod.StorageService.deleteSnapshot(snapId);
+                  orchestrator.recordSlotDeletion(slotKey, T_A + 2_000);
+                } else if (variant === 'mid_sync') {
+                  midSyncTriggered = true;
+                }
+
+                Date.now = () => T_A + 3_000;
+                const sync2Summary = await orchestrator.syncFullLibrary(
+                  storageMod.StorageService.loadSnapshots()
+                );
+
+                assert.equal(
+                  sync2Summary.importedSavesFromCloud,
+                  0,
+                  `Variant ${variant}: Rapid delete must NOT re-import deleted snapshot from cloud/localManifest`
+                );
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                  false,
+                  `Variant ${variant}: Rapidly deleted snapshot must NOT resurrect locally`
+                );
+                assert.equal(
+                  harness.getPushedManifest()?.entries?.[slotKey],
+                  undefined,
+                  `Variant ${variant}: Rapidly deleted snapshot must be omitted from cloud manifest`
+                );
+                assert.ok(
+                  (harness.getPushedManifest()?.tombstones?.[slotKey] ?? 0) >= expectedLamportFloor,
+                  `Variant ${variant}: Cloud tombstone must stay >= Lamport floor (${expectedLamportFloor})`
+                );
+                assert.ok(
+                  (slotKeyMod.readLocalSlotTombstones(ACCOUNT_SCOPE)[slotKey] ?? 0) >=
+                    expectedLamportFloor,
+                  `Variant ${variant}: Local tombstone must stay >= Lamport floor (${expectedLamportFloor})`
+                );
+
+                // Sync 3 check to verify steady-state zero resurrection
+                Date.now = () => T_A + 4_000;
+                const sync3Summary = await orchestrator.syncFullLibrary(
+                  storageMod.StorageService.loadSnapshots()
+                );
+                assert.equal(
+                  sync3Summary.importedSavesFromCloud,
+                  0,
+                  `Variant ${variant}: Sync 3 must not resurrect deleted snapshot`
+                );
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                  false,
+                  `Variant ${variant}: Sync 3 must keep local library free of deleted snapshot`
+                );
+              };
+
+              await runRapidDeleteVariant('online');
+              await runRapidDeleteVariant('offline');
+              await runRapidDeleteVariant('record_slot_deletion');
+              await runRapidDeleteVariant('mid_sync');
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (l) Non-finite Infinity and negative -1 snapshot timestamps must never bypass tombstones or corrupt cloud JSON
+          {
+            // (l1) Infinity snapshot against valid remote tombstone must be deleted and preserve tombstone
+            memLocal.clear();
+            memSession.clear();
+            telemetryMod.clearSwallowedErrorLog();
+            const infSnapId = 'inf_tomb_snap';
+            const infSlotKey = `save_${infSnapId}`;
+            const infSnap = makeMockSnapshot({
+              snapId: infSnapId,
+              timestamp: Infinity,
+              lastOpened: Infinity,
+            });
+            const infHarness = createMockOrchestratorHarness({
+              initialRemoteManifest: {
+                version: 2,
+                updatedAt: refDeletedAt,
+                devicePlayerId: 'remote_device',
+                providerId: 'microsoft',
+                entries: {},
+                tombstones: { [infSlotKey]: refDeletedAt },
+              },
+              jsonRoundTrip: true,
+            });
+            const infOrchestrator = await infHarness.init();
+            await infOrchestrator.syncFullLibrary([infSnap]);
+
+            assert.equal(
+              infHarness.getPushedManifest()?.entries?.[infSlotKey],
+              undefined,
+              'Infinity-timestamp snapshot must not bypass remote tombstone or be uploaded to cloud'
+            );
+            assert.equal(
+              infHarness.getPushedManifest()?.tombstones?.[infSlotKey],
+              refDeletedAt,
+              'Valid remote tombstone must remain intact against Infinity-timestamp snapshot'
+            );
+            assert.equal(
+              getSkewTelemetryEvents().length,
+              0,
+              'Infinity-timestamp snapshot must emit 0 skew telemetry events'
+            );
+
+            // (l2) In-memory Infinity and -1 snapshots without tombstones must serialize valid positive finite timestamps
+            memLocal.clear();
+            memSession.clear();
+            telemetryMod.clearSwallowedErrorLog();
+            const negSnap = makeMockSnapshot({
+              snapId: 'neg_ts_snap',
+              timestamp: -1,
+              lastOpened: -1,
+            });
+            const noTombInfSnap = makeMockSnapshot({
+              snapId: 'inf_notomb_snap',
+              timestamp: Infinity,
+              lastOpened: Infinity,
+            });
+            const sanitizeHarness = createMockOrchestratorHarness({ jsonRoundTrip: true });
+            const sanitizeOrch = await sanitizeHarness.init();
+            await sanitizeOrch.syncFullLibrary([negSnap, noTombInfSnap]);
+            const sanitizedManifest = sanitizeHarness.getPushedManifest();
+
+            for (const key of ['save_neg_ts_snap', 'save_inf_notomb_snap']) {
+              const entry = sanitizedManifest?.entries?.[key];
+              assert.ok(entry, `Sanitized entry ${key} must be pushed`);
+              assert.ok(
+                typeof entry.createdAt === 'number' &&
+                  Number.isFinite(entry.createdAt) &&
+                  entry.createdAt > 0,
+                `Sanitized ${key}.createdAt (${entry.createdAt}) must be finite and > 0`
+              );
+              assert.ok(
+                typeof entry.lastOpened === 'number' &&
+                  Number.isFinite(entry.lastOpened) &&
+                  entry.lastOpened > 0,
+                `Sanitized ${key}.lastOpened (${entry.lastOpened}) must be finite and > 0`
+              );
+              const decoded = await codecMod.decodeProgressDeltaToken(entry.deltaToken);
+              assert.ok(
+                decoded.updatedAt > 0,
+                `Sanitized ${key} deltaToken.updatedAt (${decoded.updatedAt}) must be > 0`
+              );
+            }
+          }
+
+          // Helper to produce real inlineBinaryB64 for remote import mid-sync deletion tests (m) & (n)
+          const buildInlineBinaryForSnapshot = async (snap) => {
+            storageMod.StorageService.saveSnapshots([snap]);
+            const bytes = await storageMod.StorageService.exportSnapshotBinary(snap.id);
+            return Buffer.from(bytes).toString('base64');
+          };
+
+          // (m) Case B imported-then-deleted mid-sync with T_del <= T_old (fast-clock & same-ms, writeBinaryBlob & readBinaryBlob)
+          {
+            const origDateNow = Date.now;
+            try {
+              const runCaseBMidSyncDelete = async ({ mode, sameMs }) => {
+                memLocal.clear();
+                memSession.clear();
+                telemetryMod.clearSwallowedErrorLog();
+
+                const T_NOW = 1_795_860_000_000;
+                Date.now = () => T_NOW;
+
+                const pId = `caseb_p_${mode}_${sameMs ? 'samems' : 'fast'}`;
+                const qId = `caseb_q_${mode}_${sameMs ? 'samems' : 'fast'}`;
+                const pSlot = `save_${pId}`;
+                const qSlot = `save_${qId}`;
+
+                const T_old = sameMs ? T_NOW : T_NOW + 5 * 60 * 1000;
+                const T_remote = (Math.floor(T_old / 1000) + 1) * 1000;
+
+                const pTemplate = makeMockSnapshot({ snapId: pId, timestamp: T_NOW - 10_000, lastOpened: T_NOW - 10_000 });
+                const pInlineB64 = await buildInlineBinaryForSnapshot(pTemplate);
+                const pDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [1, 2],
+                  paintedRegionColors: {},
+                  updatedAt: T_remote,
+                  resetEpoch: 0,
+                });
+                const qDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [3],
+                  paintedRegionColors: {},
+                  updatedAt: T_NOW - 5_000,
+                  resetEpoch: 0,
+                });
+
+                // Reset Device B local state: NO local P, pre-existing local tombstone T_old, plus local Q (for writeBinaryBlob mode)
+                memLocal.clear();
+                memSession.clear();
+                const qSnap = makeMockSnapshot({ snapId: qId, timestamp: T_NOW - 5_000, lastOpened: T_NOW - 5_000 });
+                if (mode === 'writeBinaryBlob') {
+                  storageMod.StorageService.saveSnapshots([qSnap]);
+                }
+                slotKeyMod.recordLocalSlotTombstone(pSlot, T_old, ACCOUNT_SCOPE);
+
+                const remoteEntries = {
+                  [pSlot]: {
+                    snapshotId: pId,
+                    slotKey: pSlot,
+                    title: pTemplate.title,
+                    createdAt: T_NOW - 10_000,
+                    lastOpened: T_remote,
+                    filledCount: 2,
+                    totalCount: 10,
+                    resetEpoch: 0,
+                    deltaToken: pDelta,
+                    inlineBinaryB64: pInlineB64,
+                  },
+                };
+                if (mode === 'readBinaryBlob') {
+                  remoteEntries[qSlot] = {
+                    snapshotId: qId,
+                    slotKey: qSlot,
+                    title: qSnap.title,
+                    createdAt: T_NOW - 5_000,
+                    lastOpened: T_NOW - 5_000,
+                    filledCount: 1,
+                    totalCount: 10,
+                    resetEpoch: 0,
+                    deltaToken: qDelta,
+                    cloudBinaryRef: 'blob_q_ref',
+                  };
+                }
+
+                let deletedP = false;
+                const harness = createMockOrchestratorHarness({
+                  initialRemoteManifest: {
+                    version: 2,
+                    updatedAt: T_remote,
+                    devicePlayerId: 'remote_device',
+                    providerId: 'microsoft',
+                    entries: remoteEntries,
+                  },
+                  jsonRoundTrip: true,
+                  onReadBinaryBlob: async (ref) => {
+                    if (mode === 'readBinaryBlob' && ref === 'blob_q_ref' && !deletedP) {
+                      assert.equal(
+                        storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                        true,
+                        'P must already be imported locally before mid-sync deletion during readBinaryBlob'
+                      );
+                      deletedP = true;
+                      await storageMod.StorageService.deleteSnapshot(pId);
+                    }
+                    return null;
+                  },
+                  onWriteBinaryBlob: async (slotKey) => {
+                    if (mode === 'writeBinaryBlob' && slotKey === qSlot && !deletedP) {
+                      assert.equal(
+                        storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                        true,
+                        'P must already be imported locally before mid-sync deletion during writeBinaryBlob'
+                      );
+                      deletedP = true;
+                      await storageMod.StorageService.deleteSnapshot(pId);
+                    }
+                    return `uploaded_${slotKey}`;
+                  },
+                });
+                const orchestrator = await harness.init();
+                await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+                assert.equal(deletedP, true, `Case B (${mode}, sameMs=${sameMs}): mid-sync deletion hook must fire`);
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `Case B (${mode}, sameMs=${sameMs}): P must stay deleted locally after Sync 1`
+                );
+                assert.equal(
+                  harness.getPushedManifest()?.entries?.[pSlot],
+                  undefined,
+                  `Case B (${mode}, sameMs=${sameMs}): P must be pruned from pushed manifest entries`
+                );
+                assert.ok(
+                  (harness.getPushedManifest()?.tombstones?.[pSlot] ?? 0) >= T_remote + 1,
+                  `Case B (${mode}, sameMs=${sameMs}): pushed tombstone must be >= T_remote + 1 (${T_remote + 1})`
+                );
+
+                // Sync 2: verify zero resurrection
+                Date.now = () => T_NOW + 1_000;
+                const sync2 = await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+                assert.equal(
+                  sync2.importedSavesFromCloud,
+                  0,
+                  `Case B (${mode}, sameMs=${sameMs}): Sync 2 must NOT resurrect P`
+                );
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `Case B (${mode}, sameMs=${sameMs}): P must remain deleted after Sync 2`
+                );
+              };
+
+              await runCaseBMidSyncDelete({ mode: 'writeBinaryBlob', sameMs: false });
+              await runCaseBMidSyncDelete({ mode: 'writeBinaryBlob', sameMs: true });
+              await runCaseBMidSyncDelete({ mode: 'readBinaryBlob', sameMs: false });
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (n) Mid-sync deletion during reconcileRemoteManifest (readBinaryBlob) when T_del < T_remote (Case A 2A-3 & Case B 2B-3)
+          {
+            const origDateNow = Date.now;
+            try {
+              const runReadBlobDeleteWithFutureRemote = async (isCaseB) => {
+                memLocal.clear();
+                memSession.clear();
+                telemetryMod.clearSwallowedErrorLog();
+
+                const T_NOW = 1_795_861_000_000;
+                Date.now = () => T_NOW;
+
+                const pId = isCaseB ? 'mid_read_2b3_p' : 'mid_read_2a3_p';
+                const qId = isCaseB ? 'mid_read_2b3_q' : 'mid_read_2a3_q';
+                const pSlot = `save_${pId}`;
+                const qSlot = `save_${qId}`;
+
+                const T_old = T_NOW - 2 * 60 * 1000;
+                const T_remote = T_NOW + 5 * 60 * 1000; // fast-clock peer ahead of T_del = T_NOW
+
+                const pSnap = makeMockSnapshot({ snapId: pId, timestamp: T_NOW - 10_000, lastOpened: T_NOW - 10_000 });
+                const pInlineB64 = await buildInlineBinaryForSnapshot(pSnap);
+                const pDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [1, 2],
+                  paintedRegionColors: {},
+                  updatedAt: T_remote,
+                  resetEpoch: 0,
+                });
+                const qDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [3],
+                  paintedRegionColors: {},
+                  updatedAt: T_NOW - 5_000,
+                  resetEpoch: 0,
+                });
+
+                memLocal.clear();
+                memSession.clear();
+                if (isCaseB) {
+                  slotKeyMod.recordLocalSlotTombstone(pSlot, T_old, ACCOUNT_SCOPE);
+                } else {
+                  storageMod.StorageService.saveSnapshots([pSnap]);
+                }
+
+                let deletedP = false;
+                const harness = createMockOrchestratorHarness({
+                  initialRemoteManifest: {
+                    version: 2,
+                    updatedAt: T_remote,
+                    devicePlayerId: 'remote_device',
+                    providerId: 'microsoft',
+                    entries: {
+                      [pSlot]: {
+                        snapshotId: pId,
+                        slotKey: pSlot,
+                        title: pSnap.title,
+                        createdAt: T_NOW - 10_000,
+                        lastOpened: T_remote,
+                        filledCount: 2,
+                        totalCount: 10,
+                        resetEpoch: 0,
+                        deltaToken: pDelta,
+                        inlineBinaryB64: pInlineB64,
+                      },
+                      [qSlot]: {
+                        snapshotId: qId,
+                        slotKey: qSlot,
+                        title: `Skew ${qId}`,
+                        createdAt: T_NOW - 5_000,
+                        lastOpened: T_NOW - 5_000,
+                        filledCount: 1,
+                        totalCount: 10,
+                        resetEpoch: 0,
+                        deltaToken: qDelta,
+                        cloudBinaryRef: 'blob_q_future_ref',
+                      },
+                    },
+                  },
+                  jsonRoundTrip: true,
+                  onReadBinaryBlob: async (ref) => {
+                    if (ref === 'blob_q_future_ref' && !deletedP) {
+                      assert.equal(
+                        storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                        true,
+                        `${isCaseB ? '2B-3' : '2A-3'}: P must be present locally before mid-sync deletion`
+                      );
+                      deletedP = true;
+                      await storageMod.StorageService.deleteSnapshot(pId);
+                    }
+                    return null;
+                  },
+                });
+                const orchestrator = await harness.init();
+                await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+                assert.equal(deletedP, true, `${isCaseB ? '2B-3' : '2A-3'}: readBinaryBlob deletion hook must fire`);
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `${isCaseB ? '2B-3' : '2A-3'}: P must remain deleted locally`
+                );
+                assert.equal(
+                  harness.getPushedManifest()?.entries?.[pSlot],
+                  undefined,
+                  `${isCaseB ? '2B-3' : '2A-3'}: P must be pruned from pushed nextEntries even when T_del < T_remote`
+                );
+                assert.ok(
+                  (harness.getPushedManifest()?.tombstones?.[pSlot] ?? 0) >= T_remote + 1,
+                  `${isCaseB ? '2B-3' : '2A-3'}: mid-sync tombstone must be Lamport-bumped to >= T_remote + 1 (${T_remote + 1})`
+                );
+
+                // Sync 2: verify zero resurrection
+                Date.now = () => T_NOW + 1_000;
+                const sync2 = await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+                assert.equal(sync2.importedSavesFromCloud, 0);
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `${isCaseB ? '2B-3' : '2A-3'}: P must not resurrect on Sync 2`
+                );
+              };
+
+              await runReadBlobDeleteWithFutureRemote(false); // 2A-3
+              await runReadBlobDeleteWithFutureRemote(true); // 2B-3
             } finally {
               Date.now = origDateNow;
             }

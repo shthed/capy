@@ -1,5 +1,10 @@
 import { SafeLocalStore } from '../storage/SafeLocalStore';
-import { CLOUD_TOMBSTONES_STORAGE_KEY, resolveScopedStorageKey } from '../storage/StorageKeys';
+import {
+  CLOUD_MANIFEST_STORAGE_KEY,
+  CLOUD_TOMBSTONES_STORAGE_KEY,
+  IDENTITY_STORAGE_KEY,
+  resolveScopedStorageKey,
+} from '../storage/StorageKeys';
 import { reportSwallowed } from '../telemetry';
 
 export const CLOUD_TOMBSTONE_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -120,6 +125,99 @@ export function writeLocalSlotTombstones(
   }
 }
 
+function readActivePersistedIdentity(): { scope: string; basePlayerId: string } | null {
+  try {
+    const raw = SafeLocalStore.getScopedItem(IDENTITY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      isAuthenticated?: unknown;
+      provider?: unknown;
+      playerId?: unknown;
+    };
+    if (
+      !parsed ||
+      parsed.isAuthenticated !== true ||
+      typeof parsed.provider !== 'string' ||
+      !parsed.provider ||
+      parsed.provider === 'guest' ||
+      typeof parsed.playerId !== 'string'
+    ) {
+      return null;
+    }
+    const basePlayerId = parsed.playerId.split(':')[0].trim();
+    if (!basePlayerId) return null;
+    return { scope: `${parsed.provider}_${basePlayerId}`, basePlayerId };
+  } catch (err) {
+    reportSwallowed('slotKey.readActivePersistedIdentity', err);
+    return null;
+  }
+}
+
+function readPositiveFiniteTs(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function extractManifestEntryFloor(
+  raw: string,
+  slotKey: string,
+  expectedBasePlayerId: string | null
+): number {
+  const parsed = JSON.parse(raw) as {
+    version?: unknown;
+    devicePlayerId?: unknown;
+    entries?: Record<string, { lastOpened?: unknown; createdAt?: unknown }>;
+  };
+  if (
+    !parsed ||
+    parsed.version !== 2 ||
+    !parsed.entries ||
+    typeof parsed.entries !== 'object' ||
+    Array.isArray(parsed.entries)
+  ) {
+    return 0;
+  }
+  if (
+    expectedBasePlayerId &&
+    typeof parsed.devicePlayerId === 'string' &&
+    parsed.devicePlayerId.split(':')[0].trim() !== expectedBasePlayerId
+  ) {
+    return 0;
+  }
+  if (!Object.prototype.hasOwnProperty.call(parsed.entries, slotKey)) {
+    return 0;
+  }
+  const entry = parsed.entries[slotKey];
+  if (!entry || typeof entry !== 'object') return 0;
+  return Math.max(readPositiveFiniteTs(entry.lastOpened), readPositiveFiniteTs(entry.createdAt));
+}
+
+function readCachedManifestSlotFloor(slotKey: string, accountScope?: string | null): number {
+  const persistedIdentity = readActivePersistedIdentity();
+  const effectiveScope = accountScope || persistedIdentity?.scope || null;
+  const baseKey = resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY);
+  const scopedKey = effectiveScope
+    ? resolveAccountScopedKey(CLOUD_MANIFEST_STORAGE_KEY, effectiveScope)
+    : baseKey;
+  const candidateKeys = scopedKey === baseKey ? [baseKey] : [scopedKey, baseKey];
+  let maxEntryTs = 0;
+
+  for (const key of candidateKeys) {
+    try {
+      const raw = SafeLocalStore.getItem(key);
+      if (!raw) continue;
+      const expectedPlayerId = key === baseKey ? (persistedIdentity?.basePlayerId ?? null) : null;
+      const entryMax = extractManifestEntryFloor(raw, slotKey, expectedPlayerId);
+      if (entryMax > maxEntryTs) {
+        maxEntryTs = entryMax;
+      }
+    } catch (err) {
+      reportSwallowed('slotKey.readCachedManifestSlotFloor', err, { key });
+    }
+  }
+
+  return maxEntryTs > 0 ? Math.ceil(maxEntryTs) : 0;
+}
+
 export function recordLocalSlotTombstone(
   slotKey: string,
   deletedAt: number = Date.now(),
@@ -128,8 +226,10 @@ export function recordLocalSlotTombstone(
   const cleanSlot = slotKey.trim();
   if (!cleanSlot) return;
   const ts = Number.isFinite(deletedAt) && deletedAt > 0 ? Math.floor(deletedAt) : Date.now();
+  const manifestFloor = readCachedManifestSlotFloor(cleanSlot, accountScope);
+  const effectiveTs = Math.max(ts, manifestFloor);
   const existing = readLocalSlotTombstones(accountScope);
-  existing[cleanSlot] = Math.max(existing[cleanSlot] ?? 0, ts);
+  existing[cleanSlot] = Math.max(existing[cleanSlot] ?? 0, effectiveTs);
   writeLocalSlotTombstones(existing, accountScope);
 }
 

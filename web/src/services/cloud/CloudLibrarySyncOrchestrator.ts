@@ -120,6 +120,7 @@ function serializeTombstonesKey(tombstones: Record<string, number>): string {
 interface SnapshotSyncContext {
   initialLocalIds: Set<string>;
   initialLocalSlots: Set<string>;
+  seenLocalSlots: Set<string>;
   minLastOpenedBySlot: Map<string, number>;
   skewTelemetryEmittedSlots: Set<string>;
   clearedTombstoneAt: Map<string, number>;
@@ -188,7 +189,18 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     const cleanSlot = slotKey.trim();
     if (!cleanSlot) return;
     const scope = this.getAccountScope();
-    recordLocalSlotTombstone(cleanSlot, deletedAt, scope);
+    const manifest = this.readLocalManifest();
+    const manifestEntry =
+      manifest?.entries && Object.prototype.hasOwnProperty.call(manifest.entries, cleanSlot)
+        ? manifest.entries[cleanSlot]
+        : undefined;
+    const knownEntryTs = manifestEntry ? this.resolveEntryTimestamp(manifestEntry) : 0;
+    const safeDeletedAt =
+      typeof deletedAt === 'number' && Number.isFinite(deletedAt) && deletedAt > 0
+        ? deletedAt
+        : Date.now();
+    const effectiveDeletedAt = Math.max(safeDeletedAt, Math.ceil(knownEntryTs));
+    recordLocalSlotTombstone(cleanSlot, effectiveDeletedAt, scope);
 
     const vault = this.readLocalVault();
     if (Object.prototype.hasOwnProperty.call(vault, cleanSlot)) {
@@ -196,7 +208,6 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       this.writeLocalVault(vault);
     }
 
-    const manifest = this.readLocalManifest();
     if (manifest) {
       let changed = false;
       if (Object.prototype.hasOwnProperty.call(manifest.entries, cleanSlot)) {
@@ -204,12 +215,12 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         changed = true;
       }
       const nextTombstones = mergeTombstoneMaps(manifest.tombstones, {
-        [cleanSlot]: deletedAt,
+        [cleanSlot]: effectiveDeletedAt,
       });
       if (changed || nextTombstones[cleanSlot] !== manifest.tombstones?.[cleanSlot]) {
         this.writeLocalManifest({
           ...manifest,
-          updatedAt: Math.max(manifest.updatedAt || 0, deletedAt),
+          updatedAt: Math.max(manifest.updatedAt || 0, effectiveDeletedAt),
           tombstones: nextTombstones,
         });
       }
@@ -654,6 +665,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     return {
       initialLocalIds,
       initialLocalSlots,
+      seenLocalSlots: new Set(initialLocalSlots),
       minLastOpenedBySlot: new Map<string, number>(),
       skewTelemetryEmittedSlots: new Set<string>(),
       clearedTombstoneAt: new Map<string, number>(),
@@ -686,7 +698,11 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     if (typeof deletedAt !== 'number' || !Number.isFinite(deletedAt) || deletedAt <= 0) {
       return true;
     }
-    if (snapTs <= 0 || this.isSlotTombstonedForTimestamp(slotKey, snapTs, tombstones)) {
+    if (
+      !Number.isFinite(snapTs) ||
+      snapTs <= 0 ||
+      this.isSlotTombstonedForTimestamp(slotKey, snapTs, tombstones)
+    ) {
       return false;
     }
     if (snapTs <= deletedAt) {
@@ -754,9 +770,10 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       if (!Object.prototype.hasOwnProperty.call(tombstones, slotKey)) continue;
       const deletedAt = tombstones[slotKey];
       if (typeof deletedAt !== 'number' || !Number.isFinite(deletedAt) || deletedAt <= 0) continue;
-      const snapTs = Math.max(snap.lastOpened || 0, snap.timestamp || 0);
+      const snapTs = this.resolveSnapshotTimestamp(snap);
       if (!this.tryClearTombstoneForLocalSnapshot(slotKey, snapTs, tombstones, ctx)) {
         await StorageService.deleteSnapshot(snap.id, { skipTombstone: true });
+        ctx.seenLocalSlots.delete(slotKey);
         tombstones[slotKey] = deletedAt;
       }
     }
@@ -931,7 +948,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       paintedRegionColors: localSnap.paintedRegionColors,
       isFreeColor: localSnap.isFreeColor,
       ...(localEpoch > 0 ? { resetEpoch: localEpoch } : {}),
-      updatedAt: localSnap.lastOpened || localSnap.timestamp || 0,
+      updatedAt:
+        this.resolvePositiveFiniteTs(localSnap.lastOpened) ||
+        this.resolvePositiveFiniteTs(localSnap.timestamp),
     };
     const beforeCount = localDelta.filledRegionIds.length;
     const mergedDelta = mergeProgressDeltas(localDelta, effectiveRemoteDelta);
@@ -979,7 +998,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     }
 
     for (const [slotKey, remoteEntry] of Object.entries(remoteManifest.entries)) {
-      const entryTs = Math.max(remoteEntry.lastOpened || 0, remoteEntry.createdAt || 0);
+      const entryTs = this.resolveEntryTimestamp(remoteEntry);
       if (this.isSlotTombstonedForTimestamp(slotKey, entryTs, tombstones, 0)) {
         continue;
       }
@@ -1000,7 +1019,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         continue;
       }
 
-      if (!localSnap) {
+      if (localSnap) {
+        ctx.seenLocalSlots.add(slotKey);
+      } else {
         const ensured = await this.ensureLocalSnapshotForRemoteEntry(
           slotKey,
           remoteEntry,
@@ -1008,6 +1029,9 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
           ctx
         );
         importedSavesFromCloud += ensured.importedCount;
+        if (ensured.importedCount > 0 || ensured.localSnap) {
+          ctx.seenLocalSlots.add(slotKey);
+        }
         if (ensured.aborted) continue;
         localSnap = ensured.localSnap;
       }
@@ -1016,6 +1040,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
       localBySlot = ctx.buildSlotMap(currentSnapshots);
       localSnap = ctx.findLocalSnap(currentSnapshots, localBySlot, slotKey, remoteEntry.snapshotId);
       if (localSnap) {
+        ctx.seenLocalSlots.add(slotKey);
         mergedRegionsFromCloud += this.applyRemoteDeltaToLocalSnapshot(
           localSnap,
           remoteDelta,
@@ -1080,20 +1105,36 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
   }
 
+  private resolveSnapshotTimestamp(snap: SavedSnapshot): number {
+    return Math.max(
+      this.resolvePositiveFiniteTs(snap.lastOpened),
+      this.resolvePositiveFiniteTs(snap.timestamp)
+    );
+  }
+
+  private resolveEntryTimestamp(entry: CloudSaveEntryV2): number {
+    return Math.max(
+      this.resolvePositiveFiniteTs(entry.lastOpened),
+      this.resolvePositiveFiniteTs(entry.createdAt)
+    );
+  }
+
   private resolveMonotonicEntryTimestamps(
     snap: SavedSnapshot,
     existingRemote?: CloudSaveEntryV2,
     minLastOpened?: number
   ): { createdAt: number; lastOpened: number; deltaUpdatedAt: number } {
     const now = Date.now();
+    const safeTimestamp = this.resolvePositiveFiniteTs(snap.timestamp);
+    const safeLastOpened = this.resolvePositiveFiniteTs(snap.lastOpened);
     const minTs = this.resolvePositiveFiniteTs(minLastOpened);
     const existingTs = this.resolvePositiveFiniteTs(existingRemote?.lastOpened);
     const lamportFloor = Math.max(minTs, existingTs);
-    const deltaFloor = minTs > 0 ? Math.ceil(minTs / 1000) * 1000 : existingTs;
+    const deltaFloor = lamportFloor > 0 ? Math.ceil(lamportFloor / 1000) * 1000 : 0;
     return {
-      createdAt: snap.timestamp || now,
-      lastOpened: Math.max(snap.lastOpened || now, lamportFloor),
-      deltaUpdatedAt: Math.max(snap.lastOpened || snap.timestamp || now, deltaFloor, lamportFloor),
+      createdAt: safeTimestamp || now,
+      lastOpened: Math.max(safeLastOpened || now, lamportFloor),
+      deltaUpdatedAt: Math.max(safeLastOpened || safeTimestamp || now, deltaFloor, lamportFloor),
     };
   }
 
@@ -1197,7 +1238,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
   }> {
     const nextEntries: Record<string, CloudSaveEntryV2> = {};
     for (const [slotKey, entry] of Object.entries(remoteManifest?.entries || {})) {
-      const entryTs = Math.max(entry.lastOpened || 0, entry.createdAt || 0);
+      const entryTs = this.resolveEntryTimestamp(entry);
       if (!this.isSlotTombstonedForTimestamp(slotKey, entryTs, tombstones, 0)) {
         this.clearSupersededTombstoneForEntry(slotKey, entryTs, tombstones, ctx);
         nextEntries[slotKey] = entry;
@@ -1209,7 +1250,8 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
 
     for (const snap of currentSnapshots) {
       const slotKey = computeSlotKeyForSnapshot(snap);
-      const snapTs = Math.max(snap.lastOpened || 0, snap.timestamp || 0);
+      ctx.seenLocalSlots.add(slotKey);
+      const snapTs = this.resolveSnapshotTimestamp(snap);
       if (!this.tryClearTombstoneForLocalSnapshot(slotKey, snapTs, tombstones, ctx)) {
         continue;
       }
@@ -1245,7 +1287,10 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
   }
 
   private mergeMidSyncLocalTombstones(
+    remoteManifest: CloudLibraryManifestV2 | null,
     tombstones: Record<string, number>,
+    nextEntries: Record<string, CloudSaveEntryV2>,
+    pushedFingerprints: Map<string, string>,
     currentLatestSlots: Set<string>,
     ctx: SnapshotSyncContext
   ): void {
@@ -1253,9 +1298,17 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     const filteredLocalTombstones: Record<string, number> = {};
     for (const [slotKey, ts] of Object.entries(freshLocalTombstones)) {
       const deletedMidSync =
-        ctx.initialLocalSlots.has(slotKey) && !currentLatestSlots.has(slotKey);
+        ctx.seenLocalSlots.has(slotKey) && !currentLatestSlots.has(slotKey);
       const clearedAt = ctx.clearedTombstoneAt.get(slotKey) ?? 0;
-      if (deletedMidSync || ts > clearedAt) {
+      if (deletedMidSync) {
+        const existingEntry = nextEntries[slotKey] || remoteManifest?.entries?.[slotKey];
+        const existingEntryTs = existingEntry ? this.resolveEntryTimestamp(existingEntry) : 0;
+        const effectiveTombstoneTs =
+          existingEntryTs > 0 ? Math.max(ts, Math.floor(existingEntryTs) + 1) : ts;
+        filteredLocalTombstones[slotKey] = effectiveTombstoneTs;
+        delete nextEntries[slotKey];
+        pushedFingerprints.delete(slotKey);
+      } else if (ts > clearedAt) {
         filteredLocalTombstones[slotKey] = ts;
       }
     }
@@ -1274,11 +1327,18 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     const currentLatestSlots = new Set<string>(
       latestSnapshots.map((snap) => computeSlotKeyForSnapshot(snap))
     );
-    this.mergeMidSyncLocalTombstones(tombstones, currentLatestSlots, ctx);
+    this.mergeMidSyncLocalTombstones(
+      remoteManifest,
+      tombstones,
+      nextEntries,
+      pushedFingerprints,
+      currentLatestSlots,
+      ctx
+    );
 
     for (const latestSnap of latestSnapshots) {
       const slotKey = computeSlotKeyForSnapshot(latestSnap);
-      const snapTs = Math.max(latestSnap.lastOpened || 0, latestSnap.timestamp || 0);
+      const snapTs = this.resolveSnapshotTimestamp(latestSnap);
       if (!this.tryClearTombstoneForLocalSnapshot(slotKey, snapTs, tombstones, ctx)) {
         continue;
       }
@@ -1324,7 +1384,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
   ): void {
     for (const slotKey of Object.keys(nextEntries)) {
       const entry = nextEntries[slotKey];
-      const entryTs = Math.max(entry.lastOpened || 0, entry.createdAt || 0);
+      const entryTs = this.resolveEntryTimestamp(entry);
       if (this.isSlotTombstonedForTimestamp(slotKey, entryTs, tombstones, 0)) {
         delete nextEntries[slotKey];
         pushedFingerprints.delete(slotKey);
