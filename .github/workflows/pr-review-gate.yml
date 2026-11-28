@@ -808,6 +808,20 @@ jobs:
             const hasForbiddenCrossRef =
               FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.title || '')) ||
               FORBIDDEN_PUBLIC_CROSS_REF_RE.test(String(pr.body || ''));
+            const FORBIDDEN_PR_TITLE_PREFIX_RE =
+              /^(?:(?:feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(?:\([^)]*\))?!?:|(?:EPIC|US)-\d+\b)/i;
+            const trimmedTitle = String(pr.title || '').trim();
+            const isReleaseOrChangelogPr =
+              activeLabels.has('release') || /\bchangelog\b/i.test(trimmedTitle);
+            const hasForbiddenTitlePrefix =
+              !isDependabotPr && FORBIDDEN_PR_TITLE_PREFIX_RE.test(trimmedTitle);
+            const hasForbiddenBetaVersion =
+              !isDependabotPr &&
+              isBetaTarget &&
+              !isVerifiedMainSync &&
+              !isReleaseOrChangelogPr &&
+              /\bv\d+\.\d+\.\d+\b/i.test(trimmedTitle);
+            const hasInvalidTitle = hasForbiddenTitlePrefix || hasForbiddenBetaVersion;
 
             const isMainTarget = baseRef === 'main';
             // Blocking CI evidence on the exact head SHA:
@@ -896,7 +910,12 @@ jobs:
             const ownerApprovalRequired = activeLabels.has('review:owner-required');
             const ownerApprovedHead =
               effectiveOwnerApprovals.length > 0 || activeLabels.has('review:owner-approved');
-            const strictAiReady = !isDraft && !changesRequested && !hasForbiddenCrossRef && aiOrSyncReady;
+            const strictAiReady =
+              !isDraft &&
+              !changesRequested &&
+              !hasForbiddenCrossRef &&
+              !hasInvalidTitle &&
+              aiOrSyncReady;
             const mainReleaseChecksReady =
               !isMainTarget || !strictAiReady ? true : await headChecksGreen();
             const gatePassed =
@@ -928,6 +947,7 @@ jobs:
             // 4. Post Commit Status capy/review-gate on headSha (<= 140 chars) & upsert gate status comment
             const blockers = [];
             if (hasForbiddenCrossRef) blockers.push('Forbidden capyboop/paint cross-ref');
+            if (hasInvalidTitle) blockers.push('PR title naming convention');
             if (changesRequested) blockers.push('Changes requested / hold');
             if (isDraft) {
               blockers.push('Draft PR');
@@ -959,7 +979,7 @@ jobs:
 
             let state = 'pending';
             let description = `${targetScope}: Blocked by ${blockers.join(', ') || 'Pending checks'}`;
-            if (changesRequested || hasForbiddenCrossRef) {
+            if (changesRequested || hasForbiddenCrossRef || hasInvalidTitle) {
               state = 'failure';
             } else if (gatePassed) {
               state = 'success';
@@ -1066,6 +1086,11 @@ jobs:
               ...(isDraft && !isDraftChecklistExempt
                 ? [
                     `- [${hasDraftOutstandingChecklist ? 'x' : ' '}] **Draft Outstanding Work Checklist** (required \`- [ ]\` checklist before marking Ready)`,
+                  ]
+                : []),
+              ...(hasInvalidTitle
+                ? [
+                    '- [ ] **Clean PR Title** (remove conventional/tracker prefixes like `feat():`/`fix():`/`EPIC-N` and keep regular `beta` titles version-agnostic)',
                   ]
                 : []),
             ];
