@@ -490,12 +490,17 @@ export async function runProviderDomainHardeningTests(vite) {
       await cloudInst.syncFullLibrary([snap1]);
       assert.ok(remoteManifestStore.entries.save_snap_del_1, 'Initial sync should upload snap_del_1');
 
-      // Delete locally -> records tombstone
+      // Delete locally -> records tombstone under active account scope (not unscoped)
       await storageMod.StorageService.deleteSnapshot('snap_del_1');
-      const localTombstonesAfterDelete = slotKeyMod.readLocalSlotTombstones();
+      const localTombstonesAfterDelete = slotKeyMod.readLocalSlotTombstones('google_google_user_A');
       assert.ok(
         localTombstonesAfterDelete.save_snap_del_1 > 0,
-        'deleteSnapshot must record local slot tombstone'
+        'deleteSnapshot must record local slot tombstone under active account scope'
+      );
+      assert.equal(
+        slotKeyMod.readLocalSlotTombstones().save_snap_del_1,
+        undefined,
+        'signed-in deleteSnapshot must not leak tombstone into unscoped base key'
       );
 
       // Simulate remote still having old entry (without tombstone yet)
@@ -694,8 +699,13 @@ export async function runProviderDomainHardeningTests(vite) {
       storageMod.StorageService.saveSnapshots([sampleSnapA]);
       await storageMod.StorageService.deleteSnapshot('sample_capy_a');
       assert.ok(
-        slotKeyMod.readLocalSlotTombstones()[sharedSampleSlotKey] > 0,
-        'User A deleteSnapshot must record local tombstone prior to 401'
+        slotKeyMod.readLocalSlotTombstones('google_google_user_A_401')[sharedSampleSlotKey] > 0,
+        'User A deleteSnapshot must record local tombstone under User A account scope prior to 401'
+      );
+      assert.equal(
+        slotKeyMod.readLocalSlotTombstones()[sharedSampleSlotKey],
+        undefined,
+        'User A deleteSnapshot must not pollute unscoped tombstones prior to 401'
       );
 
       const prevFetchFor401 = globalThis.fetch;
@@ -725,8 +735,8 @@ export async function runProviderDomainHardeningTests(vite) {
         id: 'sample_capy_b',
         sampleAssetPath: './samples/capy_shared.png',
         title: 'Shared Sample B',
-        timestamp: Date.now() - 20_000,
-        lastOpened: Date.now() - 20_000,
+        timestamp: Date.now() - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 20_000,
+        lastOpened: Date.now() - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 20_000,
         filledCount: 2,
         totalCount: 5,
         filledRegionIds: [1, 2],
@@ -829,8 +839,8 @@ export async function runProviderDomainHardeningTests(vite) {
         id: 'sample_capy_sync401_b',
         sampleAssetPath: './samples/capy_sync401.png',
         title: 'Sync401 Sample B',
-        timestamp: Date.now() - 20_000,
-        lastOpened: Date.now() - 20_000,
+        timestamp: Date.now() - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 20_000,
+        lastOpened: Date.now() - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 20_000,
         filledCount: 2,
         totalCount: 5,
         filledRegionIds: [1, 2],

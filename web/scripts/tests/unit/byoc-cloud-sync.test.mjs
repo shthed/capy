@@ -454,7 +454,13 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
             previewDataUrl: '',
           });
 
-          const createMockOrchestratorHarness = ({ initialRemoteManifest = null, onReadManifest } = {}) => {
+          const createMockOrchestratorHarness = ({
+            initialRemoteManifest = null,
+            onReadManifest,
+            onReadBinaryBlob,
+            onWriteBinaryBlob,
+            jsonRoundTrip = false,
+          } = {}) => {
             let remoteManifest = initialRemoteManifest;
             let pushedManifest = null;
             const identity = {
@@ -484,17 +490,23 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
                 if (onReadManifest) {
                   await onReadManifest();
                 }
-                return remoteManifest;
+                if (!remoteManifest) return null;
+                return jsonRoundTrip
+                  ? JSON.parse(JSON.stringify(remoteManifest))
+                  : remoteManifest;
               },
               writeManifest: async (m) => {
-                pushedManifest = m;
-                remoteManifest = m;
+                const persisted = jsonRoundTrip ? JSON.parse(JSON.stringify(m)) : m;
+                pushedManifest = persisted;
+                remoteManifest = persisted;
                 return true;
               },
               readSlotEnvelope: async () => null,
               writeSlotEnvelope: async () => true,
-              readBinaryBlob: async () => null,
-              writeBinaryBlob: async () => null,
+              readBinaryBlob: async (ref) =>
+                onReadBinaryBlob ? await onReadBinaryBlob(ref) : null,
+              writeBinaryBlob: async (slotKey, fileName, bytes) =>
+                onWriteBinaryBlob ? await onWriteBinaryBlob(slotKey, fileName, bytes) : null,
             };
 
             const authMgr = new authMod.MultiProviderAuthManager();
@@ -929,6 +941,1423 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
               'Pre-existing unscoped local tombstone must be cleared from capy_cloud_tombstones_v1'
             );
             assert.equal(remergeRes.telemetryEvents.length, 1);
+          }
+
+          // (i) Two-device clock-skew convergence: Lamport deletedAt + 1 bump prevents ping-pong and cloud erasure
+          {
+            let sharedCloudManifest = null;
+            const deviceAStorage = { local: new Map(), session: new Map() };
+            const deviceBStorage = { local: new Map(), session: new Map() };
+
+            const withDeviceStorage = async (deviceStore, fn) => {
+              memLocal.clear();
+              memSession.clear();
+              for (const [k, v] of deviceStore.local.entries()) memLocal.set(k, v);
+              for (const [k, v] of deviceStore.session.entries()) memSession.set(k, v);
+              try {
+                return await fn();
+              } finally {
+                deviceStore.local = new Map(memLocal.entries());
+                deviceStore.session = new Map(memSession.entries());
+              }
+            };
+
+            const createSharedCloudOrchestrator = async () => {
+              const identity = {
+                playerId: 'local_user_1',
+                displayName: 'Local User',
+                email: 'local.user@example.com',
+                avatarColorHex: '#3b82f6',
+                provider: 'microsoft',
+                isAuthenticated: true,
+              };
+              const sharedDriver = {
+                id: 'microsoft',
+                getDescriptor: () => ({
+                  id: 'microsoft',
+                  displayName: 'Microsoft OneDrive',
+                  storageName: 'Microsoft OneDrive (Shared Mock)',
+                  isSupported: true,
+                  isConfigured: true,
+                }),
+                hasActiveSession: () => true,
+                restoreSession: () => identity,
+                attemptAutoSignIn: async () => identity,
+                getCachedIdentity: () => identity,
+                signIn: async () => identity,
+                signOut: async () => {},
+                readManifest: async () => (sharedCloudManifest ? structuredClone(sharedCloudManifest) : null),
+                writeManifest: async (m) => {
+                  sharedCloudManifest = structuredClone(m);
+                  return true;
+                },
+                readSlotEnvelope: async () => null,
+                writeSlotEnvelope: async () => true,
+                readBinaryBlob: async () => null,
+                writeBinaryBlob: async () => null,
+              };
+              const authMgr = new authMod.MultiProviderAuthManager();
+              authMgr.registerDriver(sharedDriver);
+              await authMgr.signInWithProvider('microsoft');
+              return new syncMod.CloudLibrarySyncOrchestrator(authMgr);
+            };
+
+            const snapId = 'two_device_conv';
+            const slotKey = `save_${snapId}`;
+
+            // Step 1: Device B deletes P at deletedAt = T and syncs -> cloud holds tombstone T, Device B persists local tombstone T
+            const deletedAtT = await withDeviceStorage(deviceBStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const initialTs = Math.floor(Date.now() - 20_000);
+              const snapB = makeMockSnapshot({ snapId, timestamp: initialTs, lastOpened: initialTs });
+              storageMod.StorageService.saveSnapshots([snapB]);
+              const orchB = await createSharedCloudOrchestrator();
+              await orchB.syncFullLibrary([snapB]);
+              await storageMod.StorageService.deleteSnapshot(snapId);
+              await orchB.syncFullLibrary([]);
+
+              const tCloud = sharedCloudManifest?.tombstones?.[slotKey];
+              assert.ok(tCloud > 0, 'Step 1: Device B sync must push deletion tombstone T to cloud');
+              assert.equal(sharedCloudManifest?.entries?.[slotKey], undefined, 'Step 1: Cloud must have no entry for deleted slot');
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones(ACCOUNT_SCOPE)[slotKey],
+                tCloud,
+                'Step 1: Device B must persist local tombstone T'
+              );
+              return tCloud;
+            });
+
+            // Step 2: Device A holds snapA at T - 5 min (< 10 min) and syncs -> survives, telemetry once, cloud bumped >= T + 1
+            const snapATs = deletedAtT - 5 * 60 * 1000;
+            const snapA = makeMockSnapshot({ snapId, timestamp: snapATs, lastOpened: snapATs });
+            await withDeviceStorage(deviceAStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              storageMod.StorageService.saveSnapshots([snapA]);
+              const orchA = await createSharedCloudOrchestrator();
+              await orchA.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+              assert.equal(
+                storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                true,
+                'Step 2: Device A snapshot within 10-min tolerance must survive locally'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                1,
+                'Step 2: Device A skew preservation must emit telemetry exactly once'
+              );
+              const cloudEntry = sharedCloudManifest?.entries?.[slotKey];
+              assert.ok(cloudEntry, 'Step 2: Device A must re-upload preserved entry to cloud');
+              assert.ok(
+                cloudEntry.lastOpened >= deletedAtT + 1,
+                `Step 2: Re-uploaded entry lastOpened (${cloudEntry.lastOpened}) must be >= deletedAt + 1 (${deletedAtT + 1})`
+              );
+              const decodedDelta = await codecMod.decodeProgressDeltaToken(cloudEntry.deltaToken);
+              assert.ok(
+                decodedDelta.updatedAt >= deletedAtT + 1,
+                `Step 2: Re-uploaded delta updatedAt (${decodedDelta.updatedAt}) must be >= deletedAt + 1 (${deletedAtT + 1})`
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 2: Cloud tombstone must be cleared after Device A re-upload'
+              );
+            });
+
+            // Step 3: Device A runs a SECOND sync BEFORE Device B syncs -> lastOpened must NOT regress, 0 new skew telemetry
+            await withDeviceStorage(deviceAStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const orchA2 = await createSharedCloudOrchestrator();
+              await orchA2.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+              const cloudEntryAfterSecondA = sharedCloudManifest?.entries?.[slotKey];
+              assert.ok(cloudEntryAfterSecondA, 'Step 3: Cloud entry must remain present after second Device A sync');
+              assert.ok(
+                cloudEntryAfterSecondA.lastOpened >= deletedAtT + 1,
+                `Step 3: Second Device A sync must NOT regress lastOpened (${cloudEntryAfterSecondA.lastOpened}) below deletedAt + 1 (${deletedAtT + 1})`
+              );
+              const decodedDelta2 = await codecMod.decodeProgressDeltaToken(cloudEntryAfterSecondA.deltaToken);
+              assert.ok(
+                decodedDelta2.updatedAt >= deletedAtT + 1,
+                `Step 3: Second Device A sync must NOT regress delta updatedAt (${decodedDelta2.updatedAt}) below deletedAt + 1 (${deletedAtT + 1})`
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 3: Cloud must still have no tombstone'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                0,
+                'Step 3: Second Device A sync must emit 0 additional skew telemetry events'
+              );
+            });
+
+            // Step 4: Device B syncs -> accepts P in cloud, clears superseded local tombstone, does NOT erase P or re-push tombstone
+            await withDeviceStorage(deviceBStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const orchB2 = await createSharedCloudOrchestrator();
+              await orchB2.syncFullLibrary([]);
+
+              const cloudEntryAfterB = sharedCloudManifest?.entries?.[slotKey];
+              assert.ok(
+                cloudEntryAfterB,
+                'Step 4: Device B sync must NOT erase Device A re-uploaded entry from cloud'
+              );
+              assert.ok(
+                cloudEntryAfterB.lastOpened >= deletedAtT + 1,
+                'Step 4: Cloud entry must retain lastOpened >= deletedAt + 1 after Device B sync'
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 4: Device B must NOT re-push superseded tombstone to cloud'
+              );
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones(ACCOUNT_SCOPE)[slotKey],
+                undefined,
+                'Step 4: Device B must clear superseded scoped local tombstone'
+              );
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones()[slotKey],
+                undefined,
+                'Step 4: Device B must clear superseded unscoped local tombstone'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                0,
+                'Step 4: Device B convergence sync must emit 0 skew telemetry events'
+              );
+            });
+
+            // Step 5: Device A syncs again -> steady-state convergence, 0 skew telemetry, P in cloud, 0 tombstones
+            await withDeviceStorage(deviceAStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const orchA3 = await createSharedCloudOrchestrator();
+              await orchA3.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+              assert.equal(
+                storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                true,
+                'Step 5: Device A snapshot must remain intact in steady state'
+              );
+              assert.ok(
+                sharedCloudManifest?.entries?.[slotKey]?.lastOpened >= deletedAtT + 1,
+                'Step 5: Cloud entry must remain converged with lastOpened >= deletedAt + 1'
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 5: Cloud must hold 0 tombstones in steady state'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                0,
+                'Step 5: Steady-state Device A sync must emit 0 additional skew telemetry events'
+              );
+            });
+          }
+
+          // (j) snapTs === 0 must be deleted even against a small synthetic tombstone (0 < deletedAt < TOMBSTONE_SKEW_TOLERANCE_MS)
+          {
+            const origDateNow = Date.now;
+            Date.now = () => 100_000;
+            try {
+              const tinyDeletedAt = 50_000; // 0 < tinyDeletedAt < 600_000 (TOMBSTONE_SKEW_TOLERANCE_MS)
+              const zeroTsRes = await runTombstoneSyncScenario({
+                snapId: 'skew_zero_ts_tiny_tomb',
+                timestamp: 0,
+                lastOpened: 0,
+                deletedAt: tinyDeletedAt,
+              });
+              assert.equal(
+                zeroTsRes.surviving.some((s) => s.id === 'skew_zero_ts_tiny_tomb'),
+                false,
+                'Snapshot with snapTs === 0 must be deleted even against a small synthetic tombstone < TOMBSTONE_SKEW_TOLERANCE_MS'
+              );
+              assert.equal(
+                zeroTsRes.pushedManifest?.entries?.[zeroTsRes.slotKey],
+                undefined,
+                'Deleted snapTs === 0 snapshot must not be uploaded to cloud manifest'
+              );
+              assert.equal(
+                zeroTsRes.pushedManifest?.tombstones?.[zeroTsRes.slotKey],
+                tinyDeletedAt,
+                'Small synthetic tombstone must be preserved when deleting snapTs === 0 snapshot'
+              );
+              assert.equal(
+                zeroTsRes.telemetryEvents.length,
+                0,
+                'Deleting snapTs === 0 snapshot must emit 0 skew telemetry events'
+              );
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (k) Same-device rapid delete after skew-preserved save (online, offline localManifest-only, recordSlotDeletion, mid-sync delete)
+          {
+            const origDateNow = Date.now;
+            try {
+              const runRapidDeleteVariant = async (variant) => {
+                memLocal.clear();
+                memSession.clear();
+                telemetryMod.clearSwallowedErrorLog();
+
+                const T_A = 1_795_858_000_000;
+                const T_B = T_A + 5 * 60 * 1000; // Device B clock +5m fast
+                const expectedLamportFloor = (Math.floor(T_B / 1000) + 1) * 1000;
+                const snapId = `rapid_del_${variant}`;
+                const slotKey = `save_${snapId}`;
+
+                Date.now = () => T_A;
+                const snapA = makeMockSnapshot({ snapId, timestamp: T_A, lastOpened: T_A });
+                storageMod.StorageService.saveSnapshots([snapA]);
+
+                let midSyncTriggered = false;
+                const harness = createMockOrchestratorHarness({
+                  initialRemoteManifest: {
+                    version: 2,
+                    updatedAt: T_B,
+                    devicePlayerId: 'remote_device',
+                    providerId: 'microsoft',
+                    entries: {},
+                    tombstones: { [slotKey]: T_B },
+                  },
+                  jsonRoundTrip: true,
+                  onReadManifest: async () => {
+                    if (variant === 'mid_sync' && midSyncTriggered) {
+                      midSyncTriggered = false;
+                      Date.now = () => T_A + 2_000;
+                      await storageMod.StorageService.deleteSnapshot(snapId);
+                    }
+                  },
+                });
+                const orchestrator = await harness.init();
+
+                // Sync 1: Device A skew-preserves P and pushes Lamport-bumped entry with real inlineBinaryB64
+                await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+                const pushedAfterSync1 = harness.getPushedManifest();
+                assert.equal(
+                  pushedAfterSync1?.entries?.[slotKey]?.lastOpened,
+                  expectedLamportFloor,
+                  `Variant ${variant}: Sync 1 must Lamport-bump cloud entry to ${expectedLamportFloor}`
+                );
+                assert.ok(
+                  typeof pushedAfterSync1?.entries?.[slotKey]?.inlineBinaryB64 === 'string' &&
+                    pushedAfterSync1.entries[slotKey].inlineBinaryB64.length > 0,
+                  `Variant ${variant}: Sync 1 must embed real inlineBinaryB64 so resurrection would be observable`
+                );
+
+                // Sync 2: Rapid delete while Device A clock (T_A + 2s) is still behind expectedLamportFloor
+                Date.now = () => T_A + 2_000;
+                if (variant === 'online') {
+                  await storageMod.StorageService.deleteSnapshot(snapId);
+                } else if (variant === 'offline') {
+                  await storageMod.StorageService.deleteSnapshot(snapId);
+                  harness.setRemoteManifest(null);
+                } else if (variant === 'record_slot_deletion') {
+                  await storageMod.StorageService.deleteSnapshot(snapId);
+                  orchestrator.recordSlotDeletion(slotKey, T_A + 2_000);
+                } else if (variant === 'mid_sync') {
+                  midSyncTriggered = true;
+                }
+
+                Date.now = () => T_A + 3_000;
+                const sync2Summary = await orchestrator.syncFullLibrary(
+                  storageMod.StorageService.loadSnapshots()
+                );
+
+                assert.equal(
+                  sync2Summary.importedSavesFromCloud,
+                  0,
+                  `Variant ${variant}: Rapid delete must NOT re-import deleted snapshot from cloud/localManifest`
+                );
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                  false,
+                  `Variant ${variant}: Rapidly deleted snapshot must NOT resurrect locally`
+                );
+                assert.equal(
+                  harness.getPushedManifest()?.entries?.[slotKey],
+                  undefined,
+                  `Variant ${variant}: Rapidly deleted snapshot must be omitted from cloud manifest`
+                );
+                assert.ok(
+                  (harness.getPushedManifest()?.tombstones?.[slotKey] ?? 0) >= expectedLamportFloor,
+                  `Variant ${variant}: Cloud tombstone must stay >= Lamport floor (${expectedLamportFloor})`
+                );
+                assert.ok(
+                  (slotKeyMod.readLocalSlotTombstones(ACCOUNT_SCOPE)[slotKey] ?? 0) >=
+                    expectedLamportFloor,
+                  `Variant ${variant}: Local tombstone must stay >= Lamport floor (${expectedLamportFloor})`
+                );
+
+                // Sync 3 check to verify steady-state zero resurrection
+                Date.now = () => T_A + 4_000;
+                const sync3Summary = await orchestrator.syncFullLibrary(
+                  storageMod.StorageService.loadSnapshots()
+                );
+                assert.equal(
+                  sync3Summary.importedSavesFromCloud,
+                  0,
+                  `Variant ${variant}: Sync 3 must not resurrect deleted snapshot`
+                );
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                  false,
+                  `Variant ${variant}: Sync 3 must keep local library free of deleted snapshot`
+                );
+              };
+
+              await runRapidDeleteVariant('online');
+              await runRapidDeleteVariant('offline');
+              await runRapidDeleteVariant('record_slot_deletion');
+              await runRapidDeleteVariant('mid_sync');
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (l) Non-finite Infinity and negative -1 snapshot timestamps must never bypass tombstones or corrupt cloud JSON
+          {
+            // (l1) Infinity snapshot against valid remote tombstone must be deleted and preserve tombstone
+            memLocal.clear();
+            memSession.clear();
+            telemetryMod.clearSwallowedErrorLog();
+            const infSnapId = 'inf_tomb_snap';
+            const infSlotKey = `save_${infSnapId}`;
+            const infSnap = makeMockSnapshot({
+              snapId: infSnapId,
+              timestamp: Infinity,
+              lastOpened: Infinity,
+            });
+            const infHarness = createMockOrchestratorHarness({
+              initialRemoteManifest: {
+                version: 2,
+                updatedAt: refDeletedAt,
+                devicePlayerId: 'remote_device',
+                providerId: 'microsoft',
+                entries: {},
+                tombstones: { [infSlotKey]: refDeletedAt },
+              },
+              jsonRoundTrip: true,
+            });
+            const infOrchestrator = await infHarness.init();
+            await infOrchestrator.syncFullLibrary([infSnap]);
+
+            assert.equal(
+              infHarness.getPushedManifest()?.entries?.[infSlotKey],
+              undefined,
+              'Infinity-timestamp snapshot must not bypass remote tombstone or be uploaded to cloud'
+            );
+            assert.equal(
+              infHarness.getPushedManifest()?.tombstones?.[infSlotKey],
+              refDeletedAt,
+              'Valid remote tombstone must remain intact against Infinity-timestamp snapshot'
+            );
+            assert.equal(
+              getSkewTelemetryEvents().length,
+              0,
+              'Infinity-timestamp snapshot must emit 0 skew telemetry events'
+            );
+
+            // (l2) In-memory Infinity and -1 snapshots without tombstones must serialize valid positive finite timestamps
+            memLocal.clear();
+            memSession.clear();
+            telemetryMod.clearSwallowedErrorLog();
+            const negSnap = makeMockSnapshot({
+              snapId: 'neg_ts_snap',
+              timestamp: -1,
+              lastOpened: -1,
+            });
+            const noTombInfSnap = makeMockSnapshot({
+              snapId: 'inf_notomb_snap',
+              timestamp: Infinity,
+              lastOpened: Infinity,
+            });
+            const sanitizeHarness = createMockOrchestratorHarness({ jsonRoundTrip: true });
+            const sanitizeOrch = await sanitizeHarness.init();
+            await sanitizeOrch.syncFullLibrary([negSnap, noTombInfSnap]);
+            const sanitizedManifest = sanitizeHarness.getPushedManifest();
+
+            for (const key of ['save_neg_ts_snap', 'save_inf_notomb_snap']) {
+              const entry = sanitizedManifest?.entries?.[key];
+              assert.ok(entry, `Sanitized entry ${key} must be pushed`);
+              assert.ok(
+                typeof entry.createdAt === 'number' &&
+                  Number.isFinite(entry.createdAt) &&
+                  entry.createdAt > 0,
+                `Sanitized ${key}.createdAt (${entry.createdAt}) must be finite and > 0`
+              );
+              assert.ok(
+                typeof entry.lastOpened === 'number' &&
+                  Number.isFinite(entry.lastOpened) &&
+                  entry.lastOpened > 0,
+                `Sanitized ${key}.lastOpened (${entry.lastOpened}) must be finite and > 0`
+              );
+              const decoded = await codecMod.decodeProgressDeltaToken(entry.deltaToken);
+              assert.ok(
+                decoded.updatedAt > 0,
+                `Sanitized ${key} deltaToken.updatedAt (${decoded.updatedAt}) must be > 0`
+              );
+            }
+          }
+
+          // Helper to produce real inlineBinaryB64 for remote import mid-sync deletion tests (m) & (n)
+          const buildInlineBinaryForSnapshot = async (snap) => {
+            storageMod.StorageService.saveSnapshots([snap]);
+            const bytes = await storageMod.StorageService.exportSnapshotBinary(snap.id);
+            return Buffer.from(bytes).toString('base64');
+          };
+
+          // (m) Case B imported-then-deleted mid-sync with T_del <= T_old (fast-clock & same-ms, writeBinaryBlob & readBinaryBlob)
+          {
+            const origDateNow = Date.now;
+            try {
+              const runCaseBMidSyncDelete = async ({ mode, sameMs }) => {
+                memLocal.clear();
+                memSession.clear();
+                telemetryMod.clearSwallowedErrorLog();
+
+                const T_NOW = 1_795_860_000_000;
+                Date.now = () => T_NOW;
+
+                const pId = `caseb_p_${mode}_${sameMs ? 'samems' : 'fast'}`;
+                const qId = `caseb_q_${mode}_${sameMs ? 'samems' : 'fast'}`;
+                const pSlot = `save_${pId}`;
+                const qSlot = `save_${qId}`;
+
+                const T_old = sameMs ? T_NOW : T_NOW + 5 * 60 * 1000;
+                const T_remote = (Math.floor(T_old / 1000) + 1) * 1000;
+
+                const pTemplate = makeMockSnapshot({ snapId: pId, timestamp: T_NOW - 10_000, lastOpened: T_NOW - 10_000 });
+                const pInlineB64 = await buildInlineBinaryForSnapshot(pTemplate);
+                const pDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [1, 2],
+                  paintedRegionColors: {},
+                  updatedAt: T_remote,
+                  resetEpoch: 0,
+                });
+                const qDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [3],
+                  paintedRegionColors: {},
+                  updatedAt: T_NOW - 5_000,
+                  resetEpoch: 0,
+                });
+
+                // Reset Device B local state: NO local P, pre-existing local tombstone T_old, plus local Q (for writeBinaryBlob mode)
+                memLocal.clear();
+                memSession.clear();
+                const qSnap = makeMockSnapshot({ snapId: qId, timestamp: T_NOW - 5_000, lastOpened: T_NOW - 5_000 });
+                if (mode === 'writeBinaryBlob') {
+                  storageMod.StorageService.saveSnapshots([qSnap]);
+                }
+                slotKeyMod.recordLocalSlotTombstone(pSlot, T_old, ACCOUNT_SCOPE);
+
+                const remoteEntries = {
+                  [pSlot]: {
+                    snapshotId: pId,
+                    slotKey: pSlot,
+                    title: pTemplate.title,
+                    createdAt: T_NOW - 10_000,
+                    lastOpened: T_remote,
+                    filledCount: 2,
+                    totalCount: 10,
+                    resetEpoch: 0,
+                    deltaToken: pDelta,
+                    inlineBinaryB64: pInlineB64,
+                  },
+                };
+                if (mode === 'readBinaryBlob') {
+                  remoteEntries[qSlot] = {
+                    snapshotId: qId,
+                    slotKey: qSlot,
+                    title: qSnap.title,
+                    createdAt: T_NOW - 5_000,
+                    lastOpened: T_NOW - 5_000,
+                    filledCount: 1,
+                    totalCount: 10,
+                    resetEpoch: 0,
+                    deltaToken: qDelta,
+                    cloudBinaryRef: 'blob_q_ref',
+                  };
+                }
+
+                let deletedP = false;
+                const harness = createMockOrchestratorHarness({
+                  initialRemoteManifest: {
+                    version: 2,
+                    updatedAt: T_remote,
+                    devicePlayerId: 'remote_device',
+                    providerId: 'microsoft',
+                    entries: remoteEntries,
+                  },
+                  jsonRoundTrip: true,
+                  onReadBinaryBlob: async (ref) => {
+                    if (mode === 'readBinaryBlob' && ref === 'blob_q_ref' && !deletedP) {
+                      assert.equal(
+                        storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                        true,
+                        'P must already be imported locally before mid-sync deletion during readBinaryBlob'
+                      );
+                      deletedP = true;
+                      await storageMod.StorageService.deleteSnapshot(pId);
+                    }
+                    return null;
+                  },
+                  onWriteBinaryBlob: async (slotKey) => {
+                    if (mode === 'writeBinaryBlob' && slotKey === qSlot && !deletedP) {
+                      assert.equal(
+                        storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                        true,
+                        'P must already be imported locally before mid-sync deletion during writeBinaryBlob'
+                      );
+                      deletedP = true;
+                      await storageMod.StorageService.deleteSnapshot(pId);
+                    }
+                    return `uploaded_${slotKey}`;
+                  },
+                });
+                const orchestrator = await harness.init();
+                await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+                assert.equal(deletedP, true, `Case B (${mode}, sameMs=${sameMs}): mid-sync deletion hook must fire`);
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `Case B (${mode}, sameMs=${sameMs}): P must stay deleted locally after Sync 1`
+                );
+                assert.equal(
+                  harness.getPushedManifest()?.entries?.[pSlot],
+                  undefined,
+                  `Case B (${mode}, sameMs=${sameMs}): P must be pruned from pushed manifest entries`
+                );
+                assert.ok(
+                  (harness.getPushedManifest()?.tombstones?.[pSlot] ?? 0) >= T_remote + 1,
+                  `Case B (${mode}, sameMs=${sameMs}): pushed tombstone must be >= T_remote + 1 (${T_remote + 1})`
+                );
+
+                // Sync 2: verify zero resurrection
+                Date.now = () => T_NOW + 1_000;
+                const sync2 = await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+                assert.equal(
+                  sync2.importedSavesFromCloud,
+                  0,
+                  `Case B (${mode}, sameMs=${sameMs}): Sync 2 must NOT resurrect P`
+                );
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `Case B (${mode}, sameMs=${sameMs}): P must remain deleted after Sync 2`
+                );
+              };
+
+              await runCaseBMidSyncDelete({ mode: 'writeBinaryBlob', sameMs: false });
+              await runCaseBMidSyncDelete({ mode: 'writeBinaryBlob', sameMs: true });
+              await runCaseBMidSyncDelete({ mode: 'readBinaryBlob', sameMs: false });
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (n) Mid-sync deletion during reconcileRemoteManifest (readBinaryBlob) when T_del < T_remote (Case A 2A-3 & Case B 2B-3)
+          {
+            const origDateNow = Date.now;
+            try {
+              const runReadBlobDeleteWithFutureRemote = async (isCaseB) => {
+                memLocal.clear();
+                memSession.clear();
+                telemetryMod.clearSwallowedErrorLog();
+
+                const T_NOW = 1_795_861_000_000;
+                Date.now = () => T_NOW;
+
+                const pId = isCaseB ? 'mid_read_2b3_p' : 'mid_read_2a3_p';
+                const qId = isCaseB ? 'mid_read_2b3_q' : 'mid_read_2a3_q';
+                const pSlot = `save_${pId}`;
+                const qSlot = `save_${qId}`;
+
+                const T_old = T_NOW - 2 * 60 * 1000;
+                const T_remote = T_NOW + 5 * 60 * 1000; // fast-clock peer ahead of T_del = T_NOW
+
+                const pSnap = makeMockSnapshot({ snapId: pId, timestamp: T_NOW - 10_000, lastOpened: T_NOW - 10_000 });
+                const pInlineB64 = await buildInlineBinaryForSnapshot(pSnap);
+                const pDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [1, 2],
+                  paintedRegionColors: {},
+                  updatedAt: T_remote,
+                  resetEpoch: 0,
+                });
+                const qDelta = await codecMod.encodeProgressDeltaToken({
+                  filledRegionIds: [3],
+                  paintedRegionColors: {},
+                  updatedAt: T_NOW - 5_000,
+                  resetEpoch: 0,
+                });
+
+                memLocal.clear();
+                memSession.clear();
+                if (isCaseB) {
+                  slotKeyMod.recordLocalSlotTombstone(pSlot, T_old, ACCOUNT_SCOPE);
+                } else {
+                  storageMod.StorageService.saveSnapshots([pSnap]);
+                }
+
+                let deletedP = false;
+                const harness = createMockOrchestratorHarness({
+                  initialRemoteManifest: {
+                    version: 2,
+                    updatedAt: T_remote,
+                    devicePlayerId: 'remote_device',
+                    providerId: 'microsoft',
+                    entries: {
+                      [pSlot]: {
+                        snapshotId: pId,
+                        slotKey: pSlot,
+                        title: pSnap.title,
+                        createdAt: T_NOW - 10_000,
+                        lastOpened: T_remote,
+                        filledCount: 2,
+                        totalCount: 10,
+                        resetEpoch: 0,
+                        deltaToken: pDelta,
+                        inlineBinaryB64: pInlineB64,
+                      },
+                      [qSlot]: {
+                        snapshotId: qId,
+                        slotKey: qSlot,
+                        title: `Skew ${qId}`,
+                        createdAt: T_NOW - 5_000,
+                        lastOpened: T_NOW - 5_000,
+                        filledCount: 1,
+                        totalCount: 10,
+                        resetEpoch: 0,
+                        deltaToken: qDelta,
+                        cloudBinaryRef: 'blob_q_future_ref',
+                      },
+                    },
+                  },
+                  jsonRoundTrip: true,
+                  onReadBinaryBlob: async (ref) => {
+                    if (ref === 'blob_q_future_ref' && !deletedP) {
+                      assert.equal(
+                        storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                        true,
+                        `${isCaseB ? '2B-3' : '2A-3'}: P must be present locally before mid-sync deletion`
+                      );
+                      deletedP = true;
+                      await storageMod.StorageService.deleteSnapshot(pId);
+                    }
+                    return null;
+                  },
+                });
+                const orchestrator = await harness.init();
+                await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+                assert.equal(deletedP, true, `${isCaseB ? '2B-3' : '2A-3'}: readBinaryBlob deletion hook must fire`);
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `${isCaseB ? '2B-3' : '2A-3'}: P must remain deleted locally`
+                );
+                assert.equal(
+                  harness.getPushedManifest()?.entries?.[pSlot],
+                  undefined,
+                  `${isCaseB ? '2B-3' : '2A-3'}: P must be pruned from pushed nextEntries even when T_del < T_remote`
+                );
+                assert.ok(
+                  (harness.getPushedManifest()?.tombstones?.[pSlot] ?? 0) >= T_remote + 1,
+                  `${isCaseB ? '2B-3' : '2A-3'}: mid-sync tombstone must be Lamport-bumped to >= T_remote + 1 (${T_remote + 1})`
+                );
+
+                // Sync 2: verify zero resurrection
+                Date.now = () => T_NOW + 1_000;
+                const sync2 = await orchestrator.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+                assert.equal(sync2.importedSavesFromCloud, 0);
+                assert.equal(
+                  storageMod.StorageService.loadSnapshots().some((s) => s.id === pId),
+                  false,
+                  `${isCaseB ? '2B-3' : '2A-3'}: P must not resurrect on Sync 2`
+                );
+              };
+
+              await runReadBlobDeleteWithFutureRemote(false); // 2A-3
+              await runReadBlobDeleteWithFutureRemote(true); // 2B-3
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (o) Cross-account manifest floor isolation (CA3a-CA3e & PROBE_A1-A4), fractional deleteSnapshot & inverted createdAt > lastOpened (3S-4a)
+          {
+            const origDateNow = Date.now;
+            try {
+              const T = 1_795_860_000_000;
+              Date.now = () => T;
+              const baseManifestKey = keysMod.resolveScopedStorageKey(keysMod.CLOUD_MANIFEST_STORAGE_KEY);
+              const writeIdentity = (id) =>
+                safeStoreMod.SafeLocalStore.setScopedItem(keysMod.IDENTITY_STORAGE_KEY, JSON.stringify(id));
+
+              // PROBE_A3: explicit accountScope = null (guest) must NEVER read persisted authenticated user's scoped manifest
+              memLocal.clear();
+              memSession.clear();
+              writeIdentity({
+                playerId: 'google_userA',
+                displayName: 'User A',
+                avatarColorHex: '#3b82f6',
+                provider: 'google',
+                isAuthenticated: true,
+              });
+              const userAScopedManifestKey = slotKeyMod.resolveAccountScopedKey(
+                keysMod.CLOUD_MANIFEST_STORAGE_KEY,
+                'google_google_userA'
+              );
+              safeStoreMod.SafeLocalStore.setItem(
+                userAScopedManifestKey,
+                JSON.stringify({
+                  version: 2,
+                  updatedAt: T + 300_000,
+                  devicePlayerId: 'google_userA',
+                  providerId: 'google',
+                  entries: { save_p: { lastOpened: T + 300_000, createdAt: T + 300_000 } },
+                })
+              );
+              slotKeyMod.recordLocalSlotTombstone('save_p', T, null);
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones(null).save_p,
+                T,
+                'PROBE_A3: explicit accountScope=null must not read authenticated user scoped manifest floor'
+              );
+
+              // CA3a / PROBE_A2: explicit User B scope with guest or absent IDENTITY_STORAGE_KEY must reject User A baseKey manifest
+              for (const identityMode of ['absent', 'guest']) {
+                memLocal.clear();
+                memSession.clear();
+                if (identityMode === 'guest') {
+                  writeIdentity({
+                    playerId: 'capy_guest_tmp',
+                    displayName: 'Guest',
+                    avatarColorHex: '#3b82f6',
+                    provider: 'guest',
+                    isAuthenticated: false,
+                  });
+                }
+                safeStoreMod.SafeLocalStore.setItem(
+                  baseManifestKey,
+                  JSON.stringify({
+                    version: 2,
+                    updatedAt: T + 500_000,
+                    devicePlayerId: 'google_userA',
+                    providerId: 'google',
+                    entries: { save_p: { lastOpened: T + 500_000, createdAt: T + 500_000 } },
+                  })
+                );
+                slotKeyMod.recordLocalSlotTombstone('save_p', T, 'google_google_userB');
+                assert.equal(
+                  slotKeyMod.readLocalSlotTombstones('google_google_userB').save_p,
+                  T,
+                  `CA3a (${identityMode}): explicit User B scope must reject User A baseKey manifest`
+                );
+              }
+
+              // CA3b / PROBE_A1: explicit User B scope with stale User A persisted identity must reject User A baseKey manifest
+              memLocal.clear();
+              memSession.clear();
+              writeIdentity({
+                playerId: 'google_userA',
+                displayName: 'User A',
+                avatarColorHex: '#3b82f6',
+                provider: 'google',
+                isAuthenticated: true,
+              });
+              safeStoreMod.SafeLocalStore.setItem(
+                baseManifestKey,
+                JSON.stringify({
+                  version: 2,
+                  updatedAt: T + 500_000,
+                  devicePlayerId: 'google_userA',
+                  providerId: 'google',
+                  entries: { save_p: { lastOpened: T + 500_000, createdAt: T + 500_000 } },
+                })
+              );
+              slotKeyMod.recordLocalSlotTombstone('save_p', T, 'google_google_userB');
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones('google_google_userB').save_p,
+                T,
+                'CA3b / PROBE_A1: explicit User B scope must ignore stale User A persisted identity when checking baseKey'
+              );
+
+              // CA3c: cross-provider same basePlayerId (Google uid_42 in baseKey vs Microsoft uid_42 caller)
+              for (const withOwnScopedManifest of [true, false]) {
+                memLocal.clear();
+                memSession.clear();
+                writeIdentity({
+                  playerId: 'uid_42',
+                  displayName: 'MS User B',
+                  avatarColorHex: '#3b82f6',
+                  provider: 'microsoft',
+                  isAuthenticated: true,
+                });
+                safeStoreMod.SafeLocalStore.setItem(
+                  baseManifestKey,
+                  JSON.stringify({
+                    version: 2,
+                    updatedAt: T + 500_000,
+                    devicePlayerId: 'uid_42',
+                    providerId: 'google',
+                    entries: { save_p: { lastOpened: T + 500_000, createdAt: T + 500_000 } },
+                  })
+                );
+                if (withOwnScopedManifest) {
+                  safeStoreMod.SafeLocalStore.setItem(
+                    slotKeyMod.resolveAccountScopedKey(keysMod.CLOUD_MANIFEST_STORAGE_KEY, 'microsoft_uid_42'),
+                    JSON.stringify({
+                      version: 2,
+                      updatedAt: T - 1_000,
+                      devicePlayerId: 'uid_42',
+                      providerId: 'microsoft',
+                      entries: {},
+                    })
+                  );
+                }
+                slotKeyMod.recordLocalSlotTombstone('save_p', T);
+                assert.equal(
+                  slotKeyMod.readLocalSlotTombstones('microsoft_uid_42').save_p,
+                  T,
+                  `CA3c (scoped=${withOwnScopedManifest}): Google baseKey manifest must not leak into Microsoft uid_42`
+                );
+              }
+
+              // CA3d / PROBE_A4: guest must reject signed-in User A baseKey manifest (prefixed, provider-tagged, or mismatched playerId)
+              for (const baseManifestPayload of [
+                { version: 2, updatedAt: T + 500_000, devicePlayerId: 'google_userA', providerId: 'google', entries: { save_p: { lastOpened: T + 500_000 } } },
+                { version: 2, updatedAt: T + 500_000, devicePlayerId: 'google_userA', entries: { save_p: { lastOpened: T + 500_000 } } },
+                { version: 2, updatedAt: T + 500_000, devicePlayerId: 'userA', entries: { save_p: { lastOpened: T + 500_000 } } },
+              ]) {
+                memLocal.clear();
+                memSession.clear();
+                writeIdentity({
+                  playerId: 'capy_guestB',
+                  displayName: 'Guest B',
+                  avatarColorHex: '#3b82f6',
+                  provider: 'guest',
+                  isAuthenticated: false,
+                });
+                safeStoreMod.SafeLocalStore.setItem(baseManifestKey, JSON.stringify(baseManifestPayload));
+                storageMod.StorageService.saveSnapshots([makeMockSnapshot({ snapId: 'p', timestamp: T - 1_000, lastOpened: T - 1_000 })]);
+                await storageMod.StorageService.deleteSnapshot('p');
+                assert.equal(
+                  slotKeyMod.readLocalSlotTombstones(null).save_p,
+                  T,
+                  `CA3d / PROBE_A4: guest deleteSnapshot must reject foreign baseKey manifest (${JSON.stringify(baseManifestPayload.devicePlayerId)})`
+                );
+              }
+
+              // CA3e: own scoped manifest stops before baseKey, and missing devicePlayerId on baseKey is rejected
+              for (const withScoped of [true, false]) {
+                memLocal.clear();
+                memSession.clear();
+                writeIdentity({
+                  playerId: 'google_userB',
+                  displayName: 'User B',
+                  avatarColorHex: '#3b82f6',
+                  provider: 'google',
+                  isAuthenticated: true,
+                });
+                if (withScoped) {
+                  safeStoreMod.SafeLocalStore.setItem(
+                    slotKeyMod.resolveAccountScopedKey(keysMod.CLOUD_MANIFEST_STORAGE_KEY, 'google_google_userB'),
+                    JSON.stringify({
+                      version: 2,
+                      updatedAt: T - 5_000,
+                      devicePlayerId: 'google_userB',
+                      providerId: 'google',
+                      entries: { save_p: { lastOpened: T - 5_000, createdAt: T - 5_000 } },
+                    })
+                  );
+                }
+                safeStoreMod.SafeLocalStore.setItem(
+                  baseManifestKey,
+                  JSON.stringify({
+                    version: 2,
+                    updatedAt: T + 500_000,
+                    entries: { save_p: { lastOpened: T + 500_000, createdAt: T + 500_000 } },
+                  })
+                );
+                slotKeyMod.recordLocalSlotTombstone('save_p', T);
+                assert.equal(
+                  slotKeyMod.readLocalSlotTombstones('google_google_userB').save_p,
+                  T,
+                  `CA3e (withScoped=${withScoped}): stale baseKey missing devicePlayerId must never leak into User B`
+                );
+              }
+
+              // Multi-underscore provider (play_games_v2) legacy baseKey match + legitimate guest baseKey match
+              memLocal.clear();
+              memSession.clear();
+              safeStoreMod.SafeLocalStore.setItem(
+                baseManifestKey,
+                JSON.stringify({
+                  version: 2,
+                  updatedAt: T + 120_000,
+                  devicePlayerId: 'pgs_999',
+                  providerId: 'play_games_v2',
+                  entries: { save_pgs: { lastOpened: T + 120_000 } },
+                })
+              );
+              slotKeyMod.recordLocalSlotTombstone('save_pgs', T, 'play_games_v2_pgs_999');
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones('play_games_v2_pgs_999').save_pgs,
+                T + 120_000,
+                'play_games_v2 scope must parse providerId with underscores and clamp against matching legacy baseKey manifest'
+              );
+
+              memLocal.clear();
+              memSession.clear();
+              writeIdentity({
+                playerId: 'capy_guest_valid',
+                displayName: 'Valid Guest',
+                avatarColorHex: '#3b82f6',
+                provider: 'guest',
+                isAuthenticated: false,
+              });
+              safeStoreMod.SafeLocalStore.setItem(
+                baseManifestKey,
+                JSON.stringify({
+                  version: 2,
+                  updatedAt: T + 120_000,
+                  devicePlayerId: 'capy_guest_valid:tab1',
+                  entries: { save_g: { lastOpened: T + 120_000 } },
+                })
+              );
+              slotKeyMod.recordLocalSlotTombstone('save_g', T);
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones(null).save_g,
+                T + 120_000,
+                'Legitimate guest with matching devicePlayerId must still clamp against guest baseKey manifest'
+              );
+
+              // PROBE_C2: fractional target.lastOpened in StorageService.deleteSnapshot must ceiling-align
+              memLocal.clear();
+              memSession.clear();
+              const fracTs = T + 500.7;
+              storageMod.StorageService.saveSnapshots([
+                makeMockSnapshot({ snapId: 'frac_snap', timestamp: T, lastOpened: fracTs }),
+              ]);
+              await storageMod.StorageService.deleteSnapshot('frac_snap');
+              const fracTombstones = slotKeyMod.readLocalSlotTombstones(null);
+              assert.equal(
+                fracTombstones.save_frac_snap,
+                Math.ceil(fracTs),
+                'deleteSnapshot must ceiling-align fractional target timestamps'
+              );
+              assert.equal(
+                syncMod.isSlotTombstonedForTimestamp('save_frac_snap', fracTs, fracTombstones, 0),
+                true,
+                'Ceiling-aligned tombstone must strictly beat original fractional timestamp'
+              );
+
+              // 3S-4a / PROBE_D2: mid-sync delete must beat inverted remote createdAt > lastOpened
+              memLocal.clear();
+              memSession.clear();
+              const invId = 'inv_created_gt_opened';
+              const invSlot = `save_${invId}`;
+              const invRemoteCreatedAt = T + 6 * 60 * 1000;
+              const invRemoteLastOpened = T + 60 * 1000;
+              const invSnap = makeMockSnapshot({ snapId: invId, timestamp: T - 5_000, lastOpened: T - 5_000 });
+              const invDelta = await codecMod.encodeProgressDeltaToken({
+                filledRegionIds: [1, 2],
+                paintedRegionColors: {},
+                updatedAt: invRemoteLastOpened,
+                resetEpoch: 0,
+              });
+              storageMod.StorageService.saveSnapshots([invSnap]);
+              let deletedInv = false;
+              const invHarness = createMockOrchestratorHarness({
+                initialRemoteManifest: {
+                  version: 2,
+                  updatedAt: invRemoteCreatedAt,
+                  devicePlayerId: 'remote_device',
+                  providerId: 'microsoft',
+                  entries: {
+                    [invSlot]: {
+                      snapshotId: invId,
+                      slotKey: invSlot,
+                      title: invSnap.title,
+                      createdAt: invRemoteCreatedAt,
+                      lastOpened: invRemoteLastOpened,
+                      filledCount: 2,
+                      totalCount: 10,
+                      resetEpoch: 0,
+                      deltaToken: invDelta,
+                    },
+                  },
+                },
+                jsonRoundTrip: true,
+                onWriteBinaryBlob: async (slotKey) => {
+                  if (slotKey === invSlot && !deletedInv) {
+                    deletedInv = true;
+                    await storageMod.StorageService.deleteSnapshot(invId);
+                  }
+                  return 'blob_inv_ref';
+                },
+              });
+              const invOrch = await invHarness.init();
+              await invOrch.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+              assert.equal(deletedInv, true, '3S-4a: mid-sync delete hook must fire');
+              assert.equal(
+                invHarness.getPushedManifest()?.entries?.[invSlot],
+                undefined,
+                '3S-4a: deleted slot must be pruned from pushed entries'
+              );
+              assert.ok(
+                (invHarness.getPushedManifest()?.tombstones?.[invSlot] ?? 0) >= invRemoteCreatedAt + 1,
+                `3S-4a: mid-sync tombstone must beat inverted remote createdAt (${invRemoteCreatedAt + 1})`
+              );
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (p) Signed-in StorageService.deleteSnapshot scopes tombstone to active account (no cross-account wipe after reload)
+          {
+            const origDateNow = Date.now;
+            try {
+              memLocal.clear();
+              memSession.clear();
+              telemetryMod.clearSwallowedErrorLog();
+
+              const T = 1_795_858_000_000;
+              const T_SKEW = T + 5 * 60 * 1000;
+              const expectedLamportFloor = (Math.floor(T_SKEW / 1000) + 1) * 1000;
+              Date.now = () => T;
+
+              const sampleSnapA = {
+                ...makeMockSnapshot({ snapId: 'sample_cat_a', timestamp: T, lastOpened: T }),
+                sampleAssetPath: './samples/cat.json',
+                sourceRef: { kind: 'sample', uri: './samples/cat.json' },
+              };
+              const sampleSlotKey = slotKeyMod.computeSlotKeyForSnapshot(sampleSnapA);
+              assert.equal(sampleSlotKey, 'sample_samples_cat_json');
+
+              let remoteManifestUserA = {
+                version: 2,
+                updatedAt: T_SKEW,
+                devicePlayerId: 'google_userA_other',
+                providerId: 'google',
+                entries: {},
+                tombstones: { [sampleSlotKey]: T_SKEW },
+              };
+              const createSimpleGoogleDriver = (playerId, displayName, getRemote, setRemote) => {
+                let active = false;
+                return {
+                  id: 'google',
+                  getDescriptor: () => ({
+                    id: 'google',
+                    displayName: 'Google Drive',
+                    storageName: 'Google Drive',
+                    isSupported: true,
+                    isConfigured: true,
+                  }),
+                  hasActiveSession: () => active,
+                  restoreSession: () => (active ? { playerId, displayName, provider: 'google', isAuthenticated: true } : null),
+                  attemptAutoSignIn: async () => null,
+                  signIn: async () => {
+                    active = true;
+                    return { playerId, displayName, provider: 'google', isAuthenticated: true };
+                  },
+                  signOut: async () => {
+                    active = false;
+                  },
+                  readManifest: async () => (getRemote() ? JSON.parse(JSON.stringify(getRemote())) : null),
+                  writeManifest: async (m) => {
+                    setRemote(JSON.parse(JSON.stringify(m)));
+                    return true;
+                  },
+                  readSlotEnvelope: async () => null,
+                  writeSlotEnvelope: async () => true,
+                  readBinaryBlob: async () => null,
+                  writeBinaryBlob: async () => null,
+                };
+              };
+
+              // User A signs in, skew-preserves sample_samples_cat_json, and deletes via StorageService.deleteSnapshot
+              const authA = new authMod.MultiProviderAuthManager();
+              const orchA = new syncMod.CloudLibrarySyncOrchestrator(authA);
+              authA.onSignOut((prev) => orchA.clearLocalCloudCache(prev));
+              authA.registerDriver(
+                createSimpleGoogleDriver(
+                  'google_userA',
+                  'User A',
+                  () => remoteManifestUserA,
+                  (m) => {
+                    remoteManifestUserA = m;
+                  }
+                )
+              );
+              await authA.signInWithProvider('google');
+              storageMod.StorageService.saveSnapshots([sampleSnapA]);
+              await orchA.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+              assert.equal(
+                remoteManifestUserA.entries[sampleSlotKey]?.lastOpened,
+                expectedLamportFloor,
+                'User A Sync 1 must skew-preserve sample_samples_cat_json at Lamport floor'
+              );
+
+              Date.now = () => T + 2_000;
+              await storageMod.StorageService.deleteSnapshot('sample_cat_a');
+
+              const baseTombKey = keysMod.resolveScopedStorageKey(keysMod.CLOUD_TOMBSTONES_STORAGE_KEY);
+              const scopedTombKeyA = slotKeyMod.resolveAccountScopedKey(
+                keysMod.CLOUD_TOMBSTONES_STORAGE_KEY,
+                'google_google_userA'
+              );
+              assert.equal(
+                safeStoreMod.SafeLocalStore.getItem(baseTombKey),
+                null,
+                'Signed-in User A deleteSnapshot must leave unscoped capy_cloud_tombstones_v1 as null'
+              );
+              const parsedScopedA = JSON.parse(safeStoreMod.SafeLocalStore.getItem(scopedTombKeyA) || '{}');
+              assert.equal(
+                parsedScopedA[sampleSlotKey],
+                expectedLamportFloor,
+                'Signed-in User A deleteSnapshot must store clamped tombstone under User A account scope'
+              );
+
+              // Simulate reload after OAuth session expiry -> AuthManager downgrades User A to guest without onSignOut
+              memSession.clear();
+              const googleClientMod = await vite.ssrLoadModule('/src/services/providers/GoogleCloudSyncClient.ts');
+              googleClientMod.clearCachedGoogleSession();
+              const authB = new authMod.MultiProviderAuthManager();
+              const orchB = new syncMod.CloudLibrarySyncOrchestrator(authB);
+              let signOutFiredForB = false;
+              authB.onSignOut((prev) => {
+                signOutFiredForB = true;
+                orchB.clearLocalCloudCache(prev);
+              });
+              assert.equal(authB.getCurrentIdentity().isAuthenticated, false, 'Reload with expired session must downgrade to guest');
+              assert.equal(authB.getCurrentIdentity().provider, 'guest');
+
+              // User B signs in with their own cloud save for sample_samples_cat_json and syncs
+              const userBSampleDelta = await codecMod.encodeProgressDeltaToken({
+                filledRegionIds: [1, 2, 3],
+                paintedRegionColors: {},
+                updatedAt: T + 15_000,
+                resetEpoch: 0,
+              });
+              let remoteManifestUserB = {
+                version: 2,
+                updatedAt: T + 15_000,
+                devicePlayerId: 'google_userB',
+                providerId: 'google',
+                entries: {
+                  [sampleSlotKey]: {
+                    snapshotId: 'sample_cat_b',
+                    slotKey: sampleSlotKey,
+                    title: 'User B Cat',
+                    createdAt: T + 15_000,
+                    lastOpened: T + 15_000,
+                    filledCount: 3,
+                    totalCount: 10,
+                    resetEpoch: 0,
+                    deltaToken: userBSampleDelta,
+                    sampleAssetPath: './samples/cat.json',
+                    sourceRef: { kind: 'sample', uri: './samples/cat.json' },
+                  },
+                },
+              };
+              authB.registerDriver(
+                createSimpleGoogleDriver(
+                  'google_userB',
+                  'User B',
+                  () => remoteManifestUserB,
+                  (m) => {
+                    remoteManifestUserB = m;
+                  }
+                )
+              );
+              await authB.signInWithProvider('google');
+              assert.equal(signOutFiredForB, false, 'Guest-to-User-B sign-in does not fire onSignOut');
+
+              Date.now = () => T + 20_000;
+              await orchB.syncFullLibrary([]);
+              assert.ok(
+                remoteManifestUserB.entries?.[sampleSlotKey],
+                'User B sample_samples_cat_json cloud save must remain intact after User A signed-in delete + reload'
+              );
+              assert.equal(
+                remoteManifestUserB.tombstones?.[sampleSlotKey],
+                undefined,
+                'User A scoped tombstone must NEVER propagate into User B cloud manifest'
+              );
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
+
+          // (q) Real AuthManager restored driver session persists IDENTITY_STORAGE_KEY (DEEP_PROBE_1_REAL_AUTH_RESTORE)
+          {
+            const origDateNow = Date.now;
+            try {
+              memLocal.clear();
+              memSession.clear();
+              telemetryMod.clearSwallowedErrorLog();
+
+              const T = 1_795_858_000_000;
+              const T_SKEW = T + 5 * 60 * 1000;
+              const expectedLamportFloor = (Math.floor(T_SKEW / 1000) + 1) * 1000;
+              Date.now = () => T;
+
+              const googleClientMod = await vite.ssrLoadModule('/src/services/providers/GoogleCloudSyncClient.ts');
+              googleClientMod.clearCachedGoogleSession();
+              googleClientMod.setExplicitlySignedOut(false);
+
+              // Seed guest in IDENTITY_STORAGE_KEY + valid cached Google OAuth session in sessionStorage
+              safeStoreMod.SafeLocalStore.setScopedItem(
+                keysMod.IDENTITY_STORAGE_KEY,
+                JSON.stringify({
+                  playerId: 'capy_prior_guest',
+                  displayName: 'Prior Guest',
+                  avatarColorHex: '#3b82f6',
+                  provider: 'guest',
+                  isAuthenticated: false,
+                })
+              );
+              googleClientMod.saveCachedGoogleSession({
+                accessToken: 'valid-restored-google-token',
+                expiresAt: T + 3_600_000,
+                sub: 'sub123',
+                displayName: 'Restored Google User',
+                email: 'restored@example.com',
+              });
+
+              const authMgr = new authMod.MultiProviderAuthManager();
+              assert.equal(authMgr.getCurrentIdentity().isAuthenticated, true);
+              assert.equal(authMgr.getCurrentIdentity().provider, 'google');
+              assert.equal(authMgr.getCurrentIdentity().playerId, 'google_sub123');
+
+              const persistedAfterRestore = JSON.parse(
+                safeStoreMod.SafeLocalStore.getScopedItem(keysMod.IDENTITY_STORAGE_KEY) || '{}'
+              );
+              assert.equal(
+                persistedAfterRestore.isAuthenticated,
+                true,
+                'AuthManager must persist restored authenticated identity into IDENTITY_STORAGE_KEY'
+              );
+              assert.equal(persistedAfterRestore.provider, 'google');
+              assert.equal(persistedAfterRestore.playerId, 'google_sub123');
+
+              // Sync 1 skew-preserves cat_1, caches scoped localManifest, and fails remote writeManifest (so markSynced is NOT called)
+              const catSnap = makeMockSnapshot({ snapId: 'cat_1', timestamp: T, lastOpened: T });
+              const catSlot = slotKeyMod.computeSlotKeyForSnapshot(catSnap);
+              const catInlineB64 = await buildInlineBinaryForSnapshot(catSnap);
+              const catDelta = await codecMod.encodeProgressDeltaToken({
+                filledRegionIds: [1, 2],
+                paintedRegionColors: {},
+                updatedAt: expectedLamportFloor,
+                resetEpoch: 0,
+              });
+              let failNextPush = true;
+              let remoteManifest = {
+                version: 2,
+                updatedAt: T_SKEW,
+                devicePlayerId: 'google_sub123_other',
+                providerId: 'google',
+                entries: {},
+                tombstones: { [catSlot]: T_SKEW },
+              };
+              const mockRestoredGoogleDriver = {
+                id: 'google',
+                getDescriptor: () => ({
+                  id: 'google',
+                  displayName: 'Google Drive',
+                  storageName: 'Google Drive',
+                  isSupported: true,
+                  isConfigured: true,
+                }),
+                hasActiveSession: () => true,
+                restoreSession: () => ({
+                  playerId: 'google_sub123',
+                  displayName: 'Restored Google User',
+                  provider: 'google',
+                  isAuthenticated: true,
+                }),
+                attemptAutoSignIn: async () => null,
+                signIn: async () => ({
+                  playerId: 'google_sub123',
+                  displayName: 'Restored Google User',
+                  provider: 'google',
+                  isAuthenticated: true,
+                }),
+                signOut: async () => {},
+                readManifest: async () => (remoteManifest ? JSON.parse(JSON.stringify(remoteManifest)) : null),
+                writeManifest: async (m) => {
+                  if (failNextPush) {
+                    failNextPush = false;
+                    return false;
+                  }
+                  remoteManifest = JSON.parse(JSON.stringify(m));
+                  return true;
+                },
+                readSlotEnvelope: async () => null,
+                writeSlotEnvelope: async () => true,
+                readBinaryBlob: async () => null,
+                writeBinaryBlob: async () => null,
+              };
+              authMgr.registerDriver(mockRestoredGoogleDriver);
+
+              storageMod.StorageService.saveSnapshots([catSnap]);
+              const orch = new syncMod.CloudLibrarySyncOrchestrator(authMgr);
+              const sync1 = await orch.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+              assert.equal(sync1.pushedToCloud, false, 'Sync 1 push intentionally fails so markSynced does not run');
+
+              // Rapid delete via StorageService.deleteSnapshot while clock is still behind Lamport floor
+              Date.now = () => T + 2_000;
+              await storageMod.StorageService.deleteSnapshot('cat_1');
+              const tombAfterDel = slotKeyMod.readLocalSlotTombstones('google_google_sub123')[catSlot] ?? 0;
+              assert.ok(
+                tombAfterDel >= expectedLamportFloor,
+                `Restored session deleteSnapshot must clamp tombstone (${tombAfterDel}) >= Lamport floor (${expectedLamportFloor})`
+              );
+
+              // Simulate remote having the Lamport-bumped entry with real inlineBinaryB64; Sync 2 must NOT resurrect cat_1
+              remoteManifest = {
+                version: 2,
+                updatedAt: expectedLamportFloor,
+                devicePlayerId: 'google_sub123',
+                providerId: 'google',
+                entries: {
+                  [catSlot]: {
+                    snapshotId: 'cat_1',
+                    slotKey: catSlot,
+                    title: catSnap.title,
+                    createdAt: T,
+                    lastOpened: expectedLamportFloor,
+                    filledCount: 2,
+                    totalCount: 10,
+                    resetEpoch: 0,
+                    deltaToken: catDelta,
+                    inlineBinaryB64: catInlineB64,
+                  },
+                },
+              };
+              Date.now = () => T + 3_000;
+              const sync2 = await orch.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+              assert.equal(sync2.importedSavesFromCloud, 0, 'Sync 2 must NOT resurrect cat_1 after restored-session delete');
+              assert.equal(
+                storageMod.StorageService.loadSnapshots().some((s) => s.id === 'cat_1'),
+                false,
+                'cat_1 must remain deleted locally after Sync 2'
+              );
+              assert.equal(
+                remoteManifest.entries?.[catSlot],
+                undefined,
+                'cat_1 must be pruned from cloud manifest on Sync 2'
+              );
+            } finally {
+              Date.now = origDateNow;
+            }
           }
         } finally {
           telemetryMod.clearSwallowedErrorLog();

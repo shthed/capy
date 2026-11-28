@@ -449,12 +449,25 @@ export async function deleteSnapshot(
   const target = list.find((s) => s.id === id);
   const updated = list.filter((s) => s.id !== id);
   if (target && !options?.skipTombstone) {
-    const deletedAt =
+    const baseDeletedAt =
       typeof options?.tombstoneAt === 'number' &&
       Number.isFinite(options.tombstoneAt) &&
       options.tombstoneAt > 0
         ? options.tombstoneAt
         : Date.now();
+    const targetLastOpened =
+      typeof target.lastOpened === 'number' &&
+      Number.isFinite(target.lastOpened) &&
+      target.lastOpened > 0
+        ? Math.ceil(target.lastOpened)
+        : 0;
+    const targetTimestamp =
+      typeof target.timestamp === 'number' &&
+      Number.isFinite(target.timestamp) &&
+      target.timestamp > 0
+        ? Math.ceil(target.timestamp)
+        : 0;
+    const deletedAt = Math.max(baseDeletedAt, targetLastOpened, targetTimestamp);
     recordLocalSlotTombstone(computeSlotKeyForSnapshot(target), deletedAt);
   }
   if (updated.length < list.length) {
