@@ -930,6 +930,258 @@ export async function runByocCloudSyncTests({ vite, projectRoot, logUnitStart, l
             );
             assert.equal(remergeRes.telemetryEvents.length, 1);
           }
+
+          // (i) Two-device clock-skew convergence: Lamport deletedAt + 1 bump prevents ping-pong and cloud erasure
+          {
+            let sharedCloudManifest = null;
+            const deviceAStorage = { local: new Map(), session: new Map() };
+            const deviceBStorage = { local: new Map(), session: new Map() };
+
+            const withDeviceStorage = async (deviceStore, fn) => {
+              memLocal.clear();
+              memSession.clear();
+              for (const [k, v] of deviceStore.local.entries()) memLocal.set(k, v);
+              for (const [k, v] of deviceStore.session.entries()) memSession.set(k, v);
+              try {
+                return await fn();
+              } finally {
+                deviceStore.local = new Map(memLocal.entries());
+                deviceStore.session = new Map(memSession.entries());
+              }
+            };
+
+            const createSharedCloudOrchestrator = async () => {
+              const identity = {
+                playerId: 'local_user_1',
+                displayName: 'Local User',
+                email: 'local.user@example.com',
+                avatarColorHex: '#3b82f6',
+                provider: 'microsoft',
+                isAuthenticated: true,
+              };
+              const sharedDriver = {
+                id: 'microsoft',
+                getDescriptor: () => ({
+                  id: 'microsoft',
+                  displayName: 'Microsoft OneDrive',
+                  storageName: 'Microsoft OneDrive (Shared Mock)',
+                  isSupported: true,
+                  isConfigured: true,
+                }),
+                hasActiveSession: () => true,
+                restoreSession: () => identity,
+                attemptAutoSignIn: async () => identity,
+                getCachedIdentity: () => identity,
+                signIn: async () => identity,
+                signOut: async () => {},
+                readManifest: async () => (sharedCloudManifest ? structuredClone(sharedCloudManifest) : null),
+                writeManifest: async (m) => {
+                  sharedCloudManifest = structuredClone(m);
+                  return true;
+                },
+                readSlotEnvelope: async () => null,
+                writeSlotEnvelope: async () => true,
+                readBinaryBlob: async () => null,
+                writeBinaryBlob: async () => null,
+              };
+              const authMgr = new authMod.MultiProviderAuthManager();
+              authMgr.registerDriver(sharedDriver);
+              await authMgr.signInWithProvider('microsoft');
+              return new syncMod.CloudLibrarySyncOrchestrator(authMgr);
+            };
+
+            const snapId = 'two_device_conv';
+            const slotKey = `save_${snapId}`;
+
+            // Step 1: Device B deletes P at deletedAt = T and syncs -> cloud holds tombstone T, Device B persists local tombstone T
+            const deletedAtT = await withDeviceStorage(deviceBStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const initialTs = Math.floor(Date.now() - 20_000);
+              const snapB = makeMockSnapshot({ snapId, timestamp: initialTs, lastOpened: initialTs });
+              storageMod.StorageService.saveSnapshots([snapB]);
+              const orchB = await createSharedCloudOrchestrator();
+              await orchB.syncFullLibrary([snapB]);
+              await storageMod.StorageService.deleteSnapshot(snapId);
+              await orchB.syncFullLibrary([]);
+
+              const tCloud = sharedCloudManifest?.tombstones?.[slotKey];
+              assert.ok(tCloud > 0, 'Step 1: Device B sync must push deletion tombstone T to cloud');
+              assert.equal(sharedCloudManifest?.entries?.[slotKey], undefined, 'Step 1: Cloud must have no entry for deleted slot');
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones(ACCOUNT_SCOPE)[slotKey],
+                tCloud,
+                'Step 1: Device B must persist local tombstone T'
+              );
+              return tCloud;
+            });
+
+            // Step 2: Device A holds snapA at T - 5 min (< 10 min) and syncs -> survives, telemetry once, cloud bumped >= T + 1
+            const snapATs = deletedAtT - 5 * 60 * 1000;
+            const snapA = makeMockSnapshot({ snapId, timestamp: snapATs, lastOpened: snapATs });
+            await withDeviceStorage(deviceAStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              storageMod.StorageService.saveSnapshots([snapA]);
+              const orchA = await createSharedCloudOrchestrator();
+              await orchA.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+              assert.equal(
+                storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                true,
+                'Step 2: Device A snapshot within 10-min tolerance must survive locally'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                1,
+                'Step 2: Device A skew preservation must emit telemetry exactly once'
+              );
+              const cloudEntry = sharedCloudManifest?.entries?.[slotKey];
+              assert.ok(cloudEntry, 'Step 2: Device A must re-upload preserved entry to cloud');
+              assert.ok(
+                cloudEntry.lastOpened >= deletedAtT + 1,
+                `Step 2: Re-uploaded entry lastOpened (${cloudEntry.lastOpened}) must be >= deletedAt + 1 (${deletedAtT + 1})`
+              );
+              const decodedDelta = await codecMod.decodeProgressDeltaToken(cloudEntry.deltaToken);
+              assert.ok(
+                decodedDelta.updatedAt >= deletedAtT + 1,
+                `Step 2: Re-uploaded delta updatedAt (${decodedDelta.updatedAt}) must be >= deletedAt + 1 (${deletedAtT + 1})`
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 2: Cloud tombstone must be cleared after Device A re-upload'
+              );
+            });
+
+            // Step 3: Device A runs a SECOND sync BEFORE Device B syncs -> lastOpened must NOT regress, 0 new skew telemetry
+            await withDeviceStorage(deviceAStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const orchA2 = await createSharedCloudOrchestrator();
+              await orchA2.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+              const cloudEntryAfterSecondA = sharedCloudManifest?.entries?.[slotKey];
+              assert.ok(cloudEntryAfterSecondA, 'Step 3: Cloud entry must remain present after second Device A sync');
+              assert.ok(
+                cloudEntryAfterSecondA.lastOpened >= deletedAtT + 1,
+                `Step 3: Second Device A sync must NOT regress lastOpened (${cloudEntryAfterSecondA.lastOpened}) below deletedAt + 1 (${deletedAtT + 1})`
+              );
+              const decodedDelta2 = await codecMod.decodeProgressDeltaToken(cloudEntryAfterSecondA.deltaToken);
+              assert.ok(
+                decodedDelta2.updatedAt >= deletedAtT + 1,
+                `Step 3: Second Device A sync must NOT regress delta updatedAt (${decodedDelta2.updatedAt}) below deletedAt + 1 (${deletedAtT + 1})`
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 3: Cloud must still have no tombstone'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                0,
+                'Step 3: Second Device A sync must emit 0 additional skew telemetry events'
+              );
+            });
+
+            // Step 4: Device B syncs -> accepts P in cloud, clears superseded local tombstone, does NOT erase P or re-push tombstone
+            await withDeviceStorage(deviceBStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const orchB2 = await createSharedCloudOrchestrator();
+              await orchB2.syncFullLibrary([]);
+
+              const cloudEntryAfterB = sharedCloudManifest?.entries?.[slotKey];
+              assert.ok(
+                cloudEntryAfterB,
+                'Step 4: Device B sync must NOT erase Device A re-uploaded entry from cloud'
+              );
+              assert.ok(
+                cloudEntryAfterB.lastOpened >= deletedAtT + 1,
+                'Step 4: Cloud entry must retain lastOpened >= deletedAt + 1 after Device B sync'
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 4: Device B must NOT re-push superseded tombstone to cloud'
+              );
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones(ACCOUNT_SCOPE)[slotKey],
+                undefined,
+                'Step 4: Device B must clear superseded scoped local tombstone'
+              );
+              assert.equal(
+                slotKeyMod.readLocalSlotTombstones()[slotKey],
+                undefined,
+                'Step 4: Device B must clear superseded unscoped local tombstone'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                0,
+                'Step 4: Device B convergence sync must emit 0 skew telemetry events'
+              );
+            });
+
+            // Step 5: Device A syncs again -> steady-state convergence, 0 skew telemetry, P in cloud, 0 tombstones
+            await withDeviceStorage(deviceAStorage, async () => {
+              telemetryMod.clearSwallowedErrorLog();
+              const orchA3 = await createSharedCloudOrchestrator();
+              await orchA3.syncFullLibrary(storageMod.StorageService.loadSnapshots());
+
+              assert.equal(
+                storageMod.StorageService.loadSnapshots().some((s) => s.id === snapId),
+                true,
+                'Step 5: Device A snapshot must remain intact in steady state'
+              );
+              assert.ok(
+                sharedCloudManifest?.entries?.[slotKey]?.lastOpened >= deletedAtT + 1,
+                'Step 5: Cloud entry must remain converged with lastOpened >= deletedAt + 1'
+              );
+              assert.equal(
+                sharedCloudManifest?.tombstones?.[slotKey],
+                undefined,
+                'Step 5: Cloud must hold 0 tombstones in steady state'
+              );
+              assert.equal(
+                getSkewTelemetryEvents().length,
+                0,
+                'Step 5: Steady-state Device A sync must emit 0 additional skew telemetry events'
+              );
+            });
+          }
+
+          // (j) snapTs === 0 must be deleted even against a small synthetic tombstone (0 < deletedAt < TOMBSTONE_SKEW_TOLERANCE_MS)
+          {
+            const origDateNow = Date.now;
+            Date.now = () => 100_000;
+            try {
+              const tinyDeletedAt = 50_000; // 0 < tinyDeletedAt < 600_000 (TOMBSTONE_SKEW_TOLERANCE_MS)
+              const zeroTsRes = await runTombstoneSyncScenario({
+                snapId: 'skew_zero_ts_tiny_tomb',
+                timestamp: 0,
+                lastOpened: 0,
+                deletedAt: tinyDeletedAt,
+              });
+              assert.equal(
+                zeroTsRes.surviving.some((s) => s.id === 'skew_zero_ts_tiny_tomb'),
+                false,
+                'Snapshot with snapTs === 0 must be deleted even against a small synthetic tombstone < TOMBSTONE_SKEW_TOLERANCE_MS'
+              );
+              assert.equal(
+                zeroTsRes.pushedManifest?.entries?.[zeroTsRes.slotKey],
+                undefined,
+                'Deleted snapTs === 0 snapshot must not be uploaded to cloud manifest'
+              );
+              assert.equal(
+                zeroTsRes.pushedManifest?.tombstones?.[zeroTsRes.slotKey],
+                tinyDeletedAt,
+                'Small synthetic tombstone must be preserved when deleting snapTs === 0 snapshot'
+              );
+              assert.equal(
+                zeroTsRes.telemetryEvents.length,
+                0,
+                'Deleting snapTs === 0 snapshot must emit 0 skew telemetry events'
+              );
+            } finally {
+              Date.now = origDateNow;
+            }
+          }
         } finally {
           telemetryMod.clearSwallowedErrorLog();
         }
