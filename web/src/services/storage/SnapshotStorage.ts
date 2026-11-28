@@ -459,13 +459,13 @@ export async function deleteSnapshot(
       typeof target.lastOpened === 'number' &&
       Number.isFinite(target.lastOpened) &&
       target.lastOpened > 0
-        ? target.lastOpened
+        ? Math.ceil(target.lastOpened)
         : 0;
     const targetTimestamp =
       typeof target.timestamp === 'number' &&
       Number.isFinite(target.timestamp) &&
       target.timestamp > 0
-        ? target.timestamp
+        ? Math.ceil(target.timestamp)
         : 0;
     const deletedAt = Math.max(baseDeletedAt, targetLastOpened, targetTimestamp);
     recordLocalSlotTombstone(computeSlotKeyForSnapshot(target), deletedAt);

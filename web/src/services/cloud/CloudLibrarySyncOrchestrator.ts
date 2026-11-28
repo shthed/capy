@@ -1128,7 +1128,7 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
     const safeTimestamp = this.resolvePositiveFiniteTs(snap.timestamp);
     const safeLastOpened = this.resolvePositiveFiniteTs(snap.lastOpened);
     const minTs = this.resolvePositiveFiniteTs(minLastOpened);
-    const existingTs = this.resolvePositiveFiniteTs(existingRemote?.lastOpened);
+    const existingTs = existingRemote ? this.resolveEntryTimestamp(existingRemote) : 0;
     const lamportFloor = Math.max(minTs, existingTs);
     const deltaFloor = lamportFloor > 0 ? Math.ceil(lamportFloor / 1000) * 1000 : 0;
     return {
@@ -1301,8 +1301,12 @@ export class CloudLibrarySyncOrchestrator implements CloudSaveProvider {
         ctx.seenLocalSlots.has(slotKey) && !currentLatestSlots.has(slotKey);
       const clearedAt = ctx.clearedTombstoneAt.get(slotKey) ?? 0;
       if (deletedMidSync) {
-        const existingEntry = nextEntries[slotKey] || remoteManifest?.entries?.[slotKey];
-        const existingEntryTs = existingEntry ? this.resolveEntryTimestamp(existingEntry) : 0;
+        const existingEntryTs = Math.max(
+          nextEntries[slotKey] ? this.resolveEntryTimestamp(nextEntries[slotKey]) : 0,
+          remoteManifest?.entries?.[slotKey]
+            ? this.resolveEntryTimestamp(remoteManifest.entries[slotKey])
+            : 0
+        );
         const effectiveTombstoneTs =
           existingEntryTs > 0 ? Math.max(ts, Math.floor(existingEntryTs) + 1) : ts;
         filteredLocalTombstones[slotKey] = effectiveTombstoneTs;

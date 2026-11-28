@@ -208,11 +208,13 @@ export class MultiProviderAuthManager implements AuthProvider {
         const parsed = JSON.parse(raw) as PlayerIdentity;
         if (parsed && parsed.playerId && parsed.displayName) {
           if (restoredDriverSession) {
-            return {
+            const restored: PlayerIdentity = {
               ...parsed,
               ...restoredDriverSession,
               isAuthenticated: true,
-            } as PlayerIdentity;
+            };
+            this.persistBaseIdentity(restored);
+            return restored;
           }
           const hasValidNativePlayGames =
             NativeBridge.isAndroid &&

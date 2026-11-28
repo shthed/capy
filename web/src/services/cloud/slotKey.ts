@@ -125,7 +125,33 @@ export function writeLocalSlotTombstones(
   }
 }
 
-function readActivePersistedIdentity(): { scope: string; basePlayerId: string } | null {
+const KNOWN_AUTH_PROVIDER_IDS = [
+  'play_games_v2',
+  'microsoft',
+  'google',
+  'steam',
+  'apple',
+  'oidc',
+] as const;
+
+const AUTH_PLAYER_ID_PREFIX_RE =
+  /^(?:google_|ms_|microsoft_|pgs_|play_games_v2_|apple_|steam_|oidc_)/i;
+
+interface PersistedIdentityInfo {
+  isAuthenticated: boolean;
+  provider: string;
+  basePlayerId: string;
+  scope: string | null;
+}
+
+interface ParsedManifestV2 {
+  version: 2;
+  devicePlayerId?: unknown;
+  providerId?: unknown;
+  entries: Record<string, { lastOpened?: unknown; createdAt?: unknown }>;
+}
+
+function readPersistedIdentity(): PersistedIdentityInfo | null {
   try {
     const raw = SafeLocalStore.getScopedItem(IDENTITY_STORAGE_KEY);
     if (!raw) return null;
@@ -134,38 +160,73 @@ function readActivePersistedIdentity(): { scope: string; basePlayerId: string } 
       provider?: unknown;
       playerId?: unknown;
     };
-    if (
-      !parsed ||
-      parsed.isAuthenticated !== true ||
-      typeof parsed.provider !== 'string' ||
-      !parsed.provider ||
-      parsed.provider === 'guest' ||
-      typeof parsed.playerId !== 'string'
-    ) {
+    if (!parsed || typeof parsed.playerId !== 'string') {
       return null;
     }
     const basePlayerId = parsed.playerId.split(':')[0].trim();
     if (!basePlayerId) return null;
-    return { scope: `${parsed.provider}_${basePlayerId}`, basePlayerId };
+    const provider = typeof parsed.provider === 'string' ? parsed.provider.trim() : '';
+    const isAuthenticated =
+      parsed.isAuthenticated === true && Boolean(provider) && provider !== 'guest';
+    return {
+      isAuthenticated,
+      provider: provider || 'guest',
+      basePlayerId,
+      scope: isAuthenticated ? `${provider}_${basePlayerId}` : null,
+    };
   } catch (err) {
-    reportSwallowed('slotKey.readActivePersistedIdentity', err);
+    reportSwallowed('slotKey.readPersistedIdentity', err);
     return null;
   }
+}
+
+function resolveEffectiveAccountScope(
+  accountScope: string | null | undefined,
+  persistedIdentity: PersistedIdentityInfo | null
+): string | null {
+  if (accountScope === null) {
+    return null;
+  }
+  if (typeof accountScope === 'string') {
+    const trimmed = accountScope.trim();
+    return trimmed || null;
+  }
+  return persistedIdentity?.scope ?? null;
+}
+
+function parseAccountScope(
+  accountScope: string
+): { providerId: string; basePlayerId: string } | null {
+  const trimmed = accountScope.trim();
+  if (!trimmed) return null;
+  for (const providerId of KNOWN_AUTH_PROVIDER_IDS) {
+    const prefix = `${providerId}_`;
+    if (trimmed.startsWith(prefix)) {
+      const basePlayerId = trimmed.slice(prefix.length).split(':')[0].trim();
+      return basePlayerId ? { providerId, basePlayerId } : null;
+    }
+  }
+  const firstUnderscore = trimmed.indexOf('_');
+  if (firstUnderscore > 0 && firstUnderscore < trimmed.length - 1) {
+    const providerId = trimmed.slice(0, firstUnderscore).trim();
+    const basePlayerId = trimmed.slice(firstUnderscore + 1).split(':')[0].trim();
+    if (providerId && basePlayerId) {
+      return { providerId, basePlayerId };
+    }
+  }
+  return null;
 }
 
 function readPositiveFiniteTs(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-function extractManifestEntryFloor(
-  raw: string,
-  slotKey: string,
-  expectedBasePlayerId: string | null
-): number {
+function parseCachedManifestV2(raw: string): ParsedManifestV2 | null {
   const parsed = JSON.parse(raw) as {
     version?: unknown;
     devicePlayerId?: unknown;
-    entries?: Record<string, { lastOpened?: unknown; createdAt?: unknown }>;
+    providerId?: unknown;
+    entries?: unknown;
   };
   if (
     !parsed ||
@@ -174,48 +235,140 @@ function extractManifestEntryFloor(
     typeof parsed.entries !== 'object' ||
     Array.isArray(parsed.entries)
   ) {
-    return 0;
+    return null;
   }
-  if (
-    expectedBasePlayerId &&
-    typeof parsed.devicePlayerId === 'string' &&
-    parsed.devicePlayerId.split(':')[0].trim() !== expectedBasePlayerId
-  ) {
-    return 0;
-  }
-  if (!Object.prototype.hasOwnProperty.call(parsed.entries, slotKey)) {
-    return 0;
-  }
-  const entry = parsed.entries[slotKey];
-  if (!entry || typeof entry !== 'object') return 0;
-  return Math.max(readPositiveFiniteTs(entry.lastOpened), readPositiveFiniteTs(entry.createdAt));
+  return parsed as ParsedManifestV2;
 }
 
-function readCachedManifestSlotFloor(slotKey: string, accountScope?: string | null): number {
-  const persistedIdentity = readActivePersistedIdentity();
-  const effectiveScope = accountScope || persistedIdentity?.scope || null;
-  const baseKey = resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY);
-  const scopedKey = effectiveScope
-    ? resolveAccountScopedKey(CLOUD_MANIFEST_STORAGE_KEY, effectiveScope)
-    : baseKey;
-  const candidateKeys = scopedKey === baseKey ? [baseKey] : [scopedKey, baseKey];
-  let maxEntryTs = 0;
+function extractEntryFloorFromManifest(manifest: ParsedManifestV2, slotKey: string): number {
+  if (!Object.prototype.hasOwnProperty.call(manifest.entries, slotKey)) {
+    return 0;
+  }
+  const entry = manifest.entries[slotKey];
+  if (!entry || typeof entry !== 'object') return 0;
+  const maxTs = Math.max(
+    readPositiveFiniteTs(entry.lastOpened),
+    readPositiveFiniteTs(entry.createdAt)
+  );
+  return maxTs > 0 ? Math.ceil(maxTs) : 0;
+}
 
-  for (const key of candidateKeys) {
-    try {
-      const raw = SafeLocalStore.getItem(key);
-      if (!raw) continue;
-      const expectedPlayerId = key === baseKey ? (persistedIdentity?.basePlayerId ?? null) : null;
-      const entryMax = extractManifestEntryFloor(raw, slotKey, expectedPlayerId);
-      if (entryMax > maxEntryTs) {
-        maxEntryTs = entryMax;
+function baseManifestMatchesAccount(
+  manifest: ParsedManifestV2,
+  expectedProviderId: string,
+  expectedBasePlayerId: string
+): boolean {
+  const manifestBasePlayerId =
+    typeof manifest.devicePlayerId === 'string'
+      ? manifest.devicePlayerId.split(':')[0].trim()
+      : '';
+  if (!manifestBasePlayerId || manifestBasePlayerId !== expectedBasePlayerId) {
+    return false;
+  }
+  if (manifest.providerId !== undefined) {
+    if (typeof manifest.providerId !== 'string') {
+      return false;
+    }
+    const manifestProviderId = manifest.providerId.trim();
+    if (manifestProviderId && manifestProviderId !== expectedProviderId) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function baseManifestMatchesGuest(
+  manifest: ParsedManifestV2,
+  persistedIdentity: PersistedIdentityInfo | null
+): boolean {
+  if (manifest.providerId !== undefined) {
+    if (typeof manifest.providerId !== 'string') {
+      return false;
+    }
+    const manifestProviderId = manifest.providerId.trim();
+    if (manifestProviderId && manifestProviderId !== 'guest') {
+      return false;
+    }
+  }
+  const manifestBasePlayerId =
+    typeof manifest.devicePlayerId === 'string'
+      ? manifest.devicePlayerId.split(':')[0].trim()
+      : '';
+  if (AUTH_PLAYER_ID_PREFIX_RE.test(manifestBasePlayerId)) {
+    return false;
+  }
+  const guestBasePlayerId =
+    persistedIdentity && !persistedIdentity.isAuthenticated
+      ? persistedIdentity.basePlayerId
+      : null;
+  if (guestBasePlayerId) {
+    return Boolean(manifestBasePlayerId) && manifestBasePlayerId === guestBasePlayerId;
+  }
+  if (
+    persistedIdentity?.isAuthenticated &&
+    manifestBasePlayerId &&
+    manifestBasePlayerId === persistedIdentity.basePlayerId
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function readCachedManifestSlotFloor(
+  slotKey: string,
+  effectiveScope: string | null,
+  persistedIdentity: PersistedIdentityInfo | null
+): number {
+  const baseKey = resolveScopedStorageKey(CLOUD_MANIFEST_STORAGE_KEY);
+
+  if (effectiveScope) {
+    const scopedKey = resolveAccountScopedKey(CLOUD_MANIFEST_STORAGE_KEY, effectiveScope);
+    if (scopedKey !== baseKey) {
+      try {
+        const rawScoped = SafeLocalStore.getItem(scopedKey);
+        if (rawScoped) {
+          const parsedScoped = parseCachedManifestV2(rawScoped);
+          if (parsedScoped) {
+            return extractEntryFloorFromManifest(parsedScoped, slotKey);
+          }
+        }
+      } catch (err) {
+        reportSwallowed('slotKey.readCachedManifestSlotFloor', err, { key: scopedKey });
       }
+    }
+
+    const expected = parseAccountScope(effectiveScope);
+    if (!expected) return 0;
+
+    try {
+      const rawBase = SafeLocalStore.getItem(baseKey);
+      if (!rawBase) return 0;
+      const parsedBase = parseCachedManifestV2(rawBase);
+      if (
+        !parsedBase ||
+        !baseManifestMatchesAccount(parsedBase, expected.providerId, expected.basePlayerId)
+      ) {
+        return 0;
+      }
+      return extractEntryFloorFromManifest(parsedBase, slotKey);
     } catch (err) {
-      reportSwallowed('slotKey.readCachedManifestSlotFloor', err, { key });
+      reportSwallowed('slotKey.readCachedManifestSlotFloor', err, { key: baseKey });
+      return 0;
     }
   }
 
-  return maxEntryTs > 0 ? Math.ceil(maxEntryTs) : 0;
+  try {
+    const rawBase = SafeLocalStore.getItem(baseKey);
+    if (!rawBase) return 0;
+    const parsedBase = parseCachedManifestV2(rawBase);
+    if (!parsedBase || !baseManifestMatchesGuest(parsedBase, persistedIdentity)) {
+      return 0;
+    }
+    return extractEntryFloorFromManifest(parsedBase, slotKey);
+  } catch (err) {
+    reportSwallowed('slotKey.readCachedManifestSlotFloor', err, { key: baseKey });
+    return 0;
+  }
 }
 
 export function recordLocalSlotTombstone(
@@ -225,12 +378,14 @@ export function recordLocalSlotTombstone(
 ): void {
   const cleanSlot = slotKey.trim();
   if (!cleanSlot) return;
+  const persistedIdentity = readPersistedIdentity();
+  const effectiveScope = resolveEffectiveAccountScope(accountScope, persistedIdentity);
   const ts = Number.isFinite(deletedAt) && deletedAt > 0 ? Math.floor(deletedAt) : Date.now();
-  const manifestFloor = readCachedManifestSlotFloor(cleanSlot, accountScope);
+  const manifestFloor = readCachedManifestSlotFloor(cleanSlot, effectiveScope, persistedIdentity);
   const effectiveTs = Math.max(ts, manifestFloor);
-  const existing = readLocalSlotTombstones(accountScope);
+  const existing = readLocalSlotTombstones(effectiveScope);
   existing[cleanSlot] = Math.max(existing[cleanSlot] ?? 0, effectiveTs);
-  writeLocalSlotTombstones(existing, accountScope);
+  writeLocalSlotTombstones(existing, effectiveScope);
 }
 
 export function clearLocalSlotTombstones(accountScope?: string | null): void {
