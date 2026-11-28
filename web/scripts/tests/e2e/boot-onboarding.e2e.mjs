@@ -924,6 +924,7 @@ export async function runOffersE2e(ctx) {
       assert.equal(await dosSharePage.getByTestId('cloud-providers-bar').count(), 0, 'cloud-providers-bar must stay hidden by default');
       assert.equal(await dosSharePage.getByTestId('share-progress-link-btn').isVisible(), true);
       assert.equal(await dosSharePage.getByTestId('export-printable-svg-btn').isVisible(), true);
+      assert.equal(await dosSharePage.getByTestId('export-artwork-png-btn').isVisible(), true);
       await dosSharePage.keyboard.press('Escape');
       await dosSharePage.getByTestId('saves-share-print-bar').waitFor({ state: 'hidden', timeout: 3000 });
     });

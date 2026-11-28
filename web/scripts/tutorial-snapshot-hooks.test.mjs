@@ -41,6 +41,7 @@ export async function runTutorialSnapshotHooksTests(vite) {
   const storageMod = await vite.ssrLoadModule('/src/services/StorageService.ts');
   const telemetryMod = await vite.ssrLoadModule('/src/services/telemetry.ts');
   const nativeBridgeMod = await vite.ssrLoadModule('/src/services/NativeBridge.ts');
+  const cloudSectionMod = await vite.ssrLoadModule('/src/components/settings/CloudAccountSection.tsx');
 
   // 1. artworkExporter.ts pure helpers & hardening
   assert.equal(exporter.buildArtworkPngFileName('Cozy Capybara! #1'), 'cozy-capybara-1.png');
@@ -70,6 +71,7 @@ export async function runTutorialSnapshotHooksTests(vite) {
   });
 
   const puzzle = createSamplePuzzle();
+  puzzle.regionMap.set([10, 10, 11, 11, 12, 12]);
   // SSR safety when document is undefined
   assert.equal(exporter.generatePreviewDataUrl(puzzle, {}, new Set()), '');
   assert.doesNotThrow(() =>
@@ -82,6 +84,336 @@ export async function runTutorialSnapshotHooksTests(vite) {
       hapticsEnabled: false,
     })
   );
+
+  function createMockCanvasDocument(blobToEmit) {
+    const createdCanvases = [];
+    const doc = {
+      createElement: (tag) => {
+        assert.equal(tag, 'canvas', `Expected canvas element creation, got ${tag}`);
+        const drawCalls = [];
+        const putImageDataCalls = [];
+        const toBlobMimeTypes = [];
+        const ctx = {
+          globalCompositeOperation: 'source-over',
+          createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+          putImageData: (imgData, x, y) => {
+            putImageDataCalls.push({ data: new Uint8ClampedArray(imgData.data), x, y });
+          },
+          drawImage: (...args) => {
+            drawCalls.push({
+              arg0: args[0],
+              args,
+              compositeOp: ctx.globalCompositeOperation,
+            });
+          },
+        };
+        const canvas = {
+          width: 0,
+          height: 0,
+          getContext: (kind) => (kind === '2d' ? ctx : null),
+          toBlob: (cb, mimeType) => {
+            toBlobMimeTypes.push(mimeType);
+            cb(blobToEmit);
+          },
+        };
+        createdCanvases.push({
+          canvas,
+          ctx,
+          drawCalls,
+          putImageDataCalls,
+          toBlobMimeTypes,
+        });
+        return canvas;
+      },
+    };
+    return { doc, createdCanvases };
+  }
+
+  // Happy-path 100%-completed puzzle: skips mask canvas, passes PNG filename/MIME/Blob & fires haptic
+  {
+    const prevDoc = globalThis.document;
+    const origShare = nativeBridgeMod.NativeBridge.exportOrShareFile;
+    const origHaptic = nativeBridgeMod.NativeBridge.haptic;
+    const shareCalls = [];
+    const hapticCalls = [];
+    const fakePngBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+    const fakeSourceImage = { id: 'source-img-complete' };
+    try {
+      const { doc, createdCanvases } = createMockCanvasDocument(fakePngBlob);
+      globalThis.document = doc;
+      nativeBridgeMod.NativeBridge.exportOrShareFile = async (opts) => {
+        shareCalls.push(opts);
+      };
+      nativeBridgeMod.NativeBridge.haptic = (type, enabled) => {
+        hapticCalls.push({ type, enabled });
+      };
+
+      exporter.exportColoredArtworkPng({
+        puzzle,
+        sourceImage: fakeSourceImage,
+        filledRegionIds: new Set([10, 11, 12]),
+        paintedRegionColors: new Map(),
+        title: 'Cozy Capybara! #1',
+        hapticsEnabled: true,
+      });
+
+      assert.equal(createdCanvases.length, 1, '100%-completed puzzle must skip mask canvas creation');
+      assert.equal(createdCanvases[0].canvas.width, puzzle.width);
+      assert.equal(createdCanvases[0].canvas.height, puzzle.height);
+      assert.equal(createdCanvases[0].drawCalls.length, 1);
+      assert.equal(createdCanvases[0].drawCalls[0].arg0, fakeSourceImage);
+      assert.deepEqual(createdCanvases[0].toBlobMimeTypes, ['image/png']);
+      assert.equal(shareCalls.length, 1);
+      assert.equal(shareCalls[0].title, 'Cozy Capybara! #1');
+      assert.equal(shareCalls[0].fileName, 'cozy-capybara-1.png');
+      assert.equal(shareCalls[0].mimeType, 'image/png');
+      assert.equal(shareCalls[0].data, fakePngBlob);
+      assert.deepEqual(hapticCalls, [{ type: 'tick', enabled: true }]);
+    } finally {
+      globalThis.document = prevDoc;
+      nativeBridgeMod.NativeBridge.exportOrShareFile = origShare;
+      nativeBridgeMod.NativeBridge.haptic = origHaptic;
+    }
+  }
+
+  // Partial-fill Color-by-Number: overlays translucent light-slate mask over unfilled pixels only
+  {
+    const prevDoc = globalThis.document;
+    const origShare = nativeBridgeMod.NativeBridge.exportOrShareFile;
+    const origHaptic = nativeBridgeMod.NativeBridge.haptic;
+    const fakePngBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+    const fakeSourceImage = { id: 'source-img-partial' };
+    try {
+      const { doc, createdCanvases } = createMockCanvasDocument(fakePngBlob);
+      globalThis.document = doc;
+      nativeBridgeMod.NativeBridge.exportOrShareFile = async () => {};
+      nativeBridgeMod.NativeBridge.haptic = () => {};
+
+      exporter.exportColoredArtworkPng({
+        puzzle,
+        sourceImage: fakeSourceImage,
+        filledRegionIds: new Set([10]),
+        paintedRegionColors: new Map(),
+        title: 'Partial Capy',
+        hapticsEnabled: false,
+      });
+
+      assert.equal(createdCanvases.length, 2, 'Partial-fill puzzle must allocate a mask canvas');
+      const [mainRecord, maskRecord] = createdCanvases;
+      assert.equal(maskRecord.putImageDataCalls.length, 1);
+      const maskData = maskRecord.putImageDataCalls[0].data;
+      // Pixels 0 & 1 belong to filled region 10 -> remain transparent [0, 0, 0, 0]
+      assert.deepEqual(Array.from(maskData.slice(0, 4)), [0, 0, 0, 0]);
+      assert.deepEqual(Array.from(maskData.slice(4, 8)), [0, 0, 0, 0]);
+      // Pixel 2 (unfilled region 11), pixel 4 (unfilled region 12), pixel 6 (region 0) -> light-slate mask
+      assert.deepEqual(Array.from(maskData.slice(8, 12)), [248, 250, 252, 230]);
+      assert.deepEqual(Array.from(maskData.slice(16, 20)), [248, 250, 252, 230]);
+      assert.deepEqual(Array.from(maskData.slice(24, 28)), [248, 250, 252, 230]);
+      // Main canvas draws sourceImage first, then composites maskCanvas on top
+      assert.equal(mainRecord.drawCalls.length, 2);
+      assert.equal(mainRecord.drawCalls[0].arg0, fakeSourceImage);
+      assert.equal(mainRecord.drawCalls[1].arg0, maskRecord.canvas);
+    } finally {
+      globalThis.document = prevDoc;
+      nativeBridgeMod.NativeBridge.exportOrShareFile = origShare;
+      nativeBridgeMod.NativeBridge.haptic = origHaptic;
+    }
+  }
+
+  // Free-color (isFreeColor: true and paintedRegionColors.size > 0) multiply compositing path
+  {
+    const prevDoc = globalThis.document;
+    const origShare = nativeBridgeMod.NativeBridge.exportOrShareFile;
+    const origHaptic = nativeBridgeMod.NativeBridge.haptic;
+    const fakePngBlob = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+    const fakeSourceImage = { id: 'source-img-free-color' };
+    try {
+      nativeBridgeMod.NativeBridge.exportOrShareFile = async () => {};
+      nativeBridgeMod.NativeBridge.haptic = () => {};
+
+      // Case A: puzzle.isFreeColor === true
+      const freeColorPuzzle = { ...createSamplePuzzle(), isFreeColor: true };
+      const harnessA = createMockCanvasDocument(fakePngBlob);
+      globalThis.document = harnessA.doc;
+      exporter.exportColoredArtworkPng({
+        puzzle: freeColorPuzzle,
+        sourceImage: fakeSourceImage,
+        filledRegionIds: new Set([10, 12]),
+        paintedRegionColors: new Map(),
+        title: 'Free Color Mode',
+        hapticsEnabled: false,
+      });
+      assert.equal(harnessA.createdCanvases.length, 1, 'Free-color path must not create mask canvas');
+      assert.equal(harnessA.createdCanvases[0].putImageDataCalls.length, 1);
+      const freeDataA = harnessA.createdCanvases[0].putImageDataCalls[0].data;
+      assert.deepEqual(Array.from(freeDataA.slice(0, 4)), [255, 0, 0, 255]);
+      assert.deepEqual(Array.from(freeDataA.slice(8, 12)), [255, 255, 255, 255]);
+      assert.deepEqual(Array.from(freeDataA.slice(16, 20)), [0, 255, 0, 255]);
+      assert.equal(harnessA.createdCanvases[0].drawCalls.length, 1);
+      assert.equal(harnessA.createdCanvases[0].drawCalls[0].arg0, fakeSourceImage);
+      assert.equal(harnessA.createdCanvases[0].drawCalls[0].compositeOp, 'multiply');
+      assert.equal(harnessA.createdCanvases[0].ctx.globalCompositeOperation, 'source-over');
+
+      // Case B: standard puzzle with custom paintedRegionColors override
+      const harnessB = createMockCanvasDocument(fakePngBlob);
+      globalThis.document = harnessB.doc;
+      exporter.exportColoredArtworkPng({
+        puzzle,
+        sourceImage: fakeSourceImage,
+        filledRegionIds: new Set([10]),
+        paintedRegionColors: new Map([[10, 2]]),
+        title: 'Custom Painted Override',
+        hapticsEnabled: false,
+      });
+      assert.equal(harnessB.createdCanvases.length, 1);
+      const freeDataB = harnessB.createdCanvases[0].putImageDataCalls[0].data;
+      assert.deepEqual(Array.from(freeDataB.slice(0, 4)), [0, 255, 0, 255]);
+      assert.equal(harnessB.createdCanvases[0].drawCalls.length, 1);
+      assert.equal(harnessB.createdCanvases[0].drawCalls[0].compositeOp, 'multiply');
+      assert.equal(harnessB.createdCanvases[0].ctx.globalCompositeOperation, 'source-over');
+    } finally {
+      globalThis.document = prevDoc;
+      nativeBridgeMod.NativeBridge.exportOrShareFile = origShare;
+      nativeBridgeMod.NativeBridge.haptic = origHaptic;
+    }
+  }
+
+  // Android native bridge dispatch: real NativeBridge.exportOrShareFile -> window.CapyAndroid.shareFile
+  {
+    const prevDoc = globalThis.document;
+    const prevWin = globalThis.window;
+    const origHaptic = nativeBridgeMod.NativeBridge.haptic;
+    const pngSigBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
+    const androidPngBlob = new Blob([pngSigBytes], { type: 'image/png' });
+    let resolveAndroidShare;
+    const androidSharePromise = new Promise((resolve) => {
+      resolveAndroidShare = resolve;
+    });
+    let timeoutId;
+    try {
+      const { doc } = createMockCanvasDocument(androidPngBlob);
+      globalThis.document = doc;
+      globalThis.window = {
+        CapyAndroid: {
+          shareFile: (title, fileName, mimeType, base64Data) => {
+            resolveAndroidShare({ title, fileName, mimeType, base64Data });
+          },
+        },
+      };
+      nativeBridgeMod.NativeBridge.haptic = () => {};
+
+      exporter.exportColoredArtworkPng({
+        puzzle,
+        sourceImage: {},
+        filledRegionIds: new Set([10, 11, 12]),
+        paintedRegionColors: new Map(),
+        title: 'Android Capy!',
+        hapticsEnabled: false,
+      });
+
+      const androidCall = await Promise.race([
+        androidSharePromise,
+        new Promise((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error('Timed out waiting for CapyAndroid.shareFile')),
+            2000
+          );
+        }),
+      ]);
+      assert.equal(androidCall.title, 'Android Capy!');
+      assert.equal(androidCall.fileName, 'android-capy.png');
+      assert.equal(androidCall.mimeType, 'image/png');
+      assert.deepEqual(
+        Array.from(Buffer.from(androidCall.base64Data, 'base64')),
+        Array.from(pngSigBytes),
+        'Android shareFile must receive exact base64-encoded PNG bytes'
+      );
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+      globalThis.document = prevDoc;
+      if (prevWin === undefined) {
+        delete globalThis.window;
+      } else {
+        globalThis.window = prevWin;
+      }
+      nativeBridgeMod.NativeBridge.haptic = origHaptic;
+    }
+  }
+
+  // CloudAccountSection SSR markup: renders export-artwork-png-btn in both showCloudCoopUi modes when wired, omits when undefined
+  {
+    const { CloudAccountSection } = cloudSectionMod;
+    const cloudHubWithPng = renderToStaticMarkup(
+      React.createElement(CloudAccountSection, {
+        cloudCoop: {
+          showCloudCoopUi: true,
+          onExportPrintableSvg: () => {},
+          onExportArtwork: () => {},
+        },
+      })
+    );
+    assert.ok(cloudHubWithPng.includes('data-testid="cloud-coop-hub"'));
+    assert.ok(cloudHubWithPng.includes('data-testid="export-artwork-png-btn"'));
+    assert.ok(cloudHubWithPng.includes('Save PNG'));
+    assert.ok(cloudHubWithPng.includes('title="Save colored artwork as a PNG image (.png)"'));
+
+    const playStoreBarWithPng = renderToStaticMarkup(
+      React.createElement(CloudAccountSection, {
+        cloudCoop: {
+          showCloudCoopUi: false,
+          onExportPrintableSvg: () => {},
+          onExportArtwork: () => {},
+        },
+      })
+    );
+    assert.ok(playStoreBarWithPng.includes('data-testid="saves-share-print-bar"'));
+    assert.ok(playStoreBarWithPng.includes('data-testid="export-artwork-png-btn"'));
+    assert.ok(playStoreBarWithPng.includes('Save PNG'));
+
+    const cloudHubWithoutPng = renderToStaticMarkup(
+      React.createElement(CloudAccountSection, {
+        cloudCoop: {
+          showCloudCoopUi: true,
+          onExportPrintableSvg: () => {},
+        },
+      })
+    );
+    assert.equal(
+      cloudHubWithoutPng.includes('data-testid="export-artwork-png-btn"'),
+      false,
+      'CloudAccountSection (cloud-coop-hub) must omit export-artwork-png-btn when onExportArtwork is undefined'
+    );
+
+    const playStoreBarWithoutPng = renderToStaticMarkup(
+      React.createElement(CloudAccountSection, {
+        cloudCoop: {
+          showCloudCoopUi: false,
+          onExportPrintableSvg: () => {},
+        },
+      })
+    );
+    assert.equal(
+      playStoreBarWithoutPng.includes('data-testid="export-artwork-png-btn"'),
+      false,
+      'CloudAccountSection (saves-share-print-bar) must omit export-artwork-png-btn when onExportArtwork is undefined'
+    );
+
+    const cloudSectionSrc = fs.readFileSync(
+      path.join(webRoot, 'src/components/settings/CloudAccountSection.tsx'),
+      'utf8'
+    );
+    const pngBtnSectionIdx = cloudSectionSrc.indexOf('data-testid="export-artwork-png-btn"');
+    assert.ok(pngBtnSectionIdx !== -1, 'CloudAccountSection.tsx must define export-artwork-png-btn');
+    const pngBtnSnippet = cloudSectionSrc.slice(pngBtnSectionIdx, pngBtnSectionIdx + 650);
+    assert.ok(
+      /try\s*\{[\s\S]*?await onExportArtwork\(\)[\s\S]*?ok !== false[\s\S]*?Colored artwork \(\.png\) saved![\s\S]*?Unable to save colored artwork \(\.png\)\. Please try again\.[\s\S]*?catch\s*\(\w+\)\s*\{[\s\S]*?reportSwallowed\('CloudAccountSection\.exportArtwork'[\s\S]*?Unable to save colored artwork \(\.png\)\. Please try again\./.test(
+        pngBtnSnippet
+      ),
+      'CloudAccountSection.tsx must guard await onExportArtwork() with try/catch, reportSwallowed telemetry, and error notice fallback on both false return and caught errors'
+    );
+  }
 
   // Share rejection inside canvas.toBlob must be caught and reported via reportSwallowed
   telemetryMod.clearSwallowedErrorLog();
