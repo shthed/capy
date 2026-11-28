@@ -114,60 +114,150 @@ export async function createBootedContext(
     acceptDownloads,
     ...(permissions.length > 0 ? { permissions } : {}),
   });
-  await context.addInitScript(() => {
-    try {
-      window.localStorage.setItem('capy_dev_debug', '1');
-    } catch {
-      // Ignore on opaque origins
-    }
-  });
-  const page = await context.newPage();
-  if (typeof attachErrorListeners === 'function') {
-    attachErrorListeners(page, label);
-  }
-  if (skipTutorial || easyNoReplay || enableCoopUi || extraSettings) {
-    await page.addInitScript(
-      ({ doSkipTutorial, doEasyNoReplay, doEnableCoopUi, seedExtraSettings }) => {
-        try {
-          if (window.localStorage.getItem('__capy_e2e_boot_seeded') === '1') return;
-          window.localStorage.setItem('__capy_e2e_boot_seeded', '1');
-          if (doSkipTutorial) {
-            window.localStorage.setItem('capy_tutorial_completed_v1', '1');
-          }
-          if (doEnableCoopUi) {
-            window.localStorage.setItem('capy_dev_cloud_coop_ui', '1');
-          }
-          if (doEasyNoReplay || seedExtraSettings) {
-            const s = JSON.parse(window.localStorage.getItem('capy_user_settings_v8') || '{}');
-            if (doEasyNoReplay) {
-              s.autoReplayOnLoad = false;
-              s.difficulty = 'EASY';
-            }
-            if (seedExtraSettings && typeof seedExtraSettings === 'object') {
-              Object.assign(s, seedExtraSettings);
-            }
-            window.localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
-          }
-        } catch {
-          // Ignore on opaque origins
-        }
-      },
-      {
-        doSkipTutorial: skipTutorial,
-        doEasyNoReplay: easyNoReplay,
-        doEnableCoopUi: enableCoopUi,
-        seedExtraSettings: extraSettings,
+  try {
+    await context.addInitScript(() => {
+      try {
+        window.localStorage.setItem('capy_dev_debug', '1');
+      } catch {
+        // Ignore on opaque origins
       }
-    );
-  }
-  if (bootUrl !== false) {
-    const targetUrl = bootUrl || (skipTutorial ? `${BASE_URL}/?skipTutorial=1` : BASE_URL);
-    await page.goto(targetUrl, { waitUntil });
-    if (waitForPuzzle) {
-      await waitForPuzzleLoaded(page);
+    });
+    const page = await context.newPage();
+    if (typeof attachErrorListeners === 'function') {
+      attachErrorListeners(page, label);
     }
+    if (skipTutorial || easyNoReplay || enableCoopUi || extraSettings) {
+      await page.addInitScript(
+        ({ doSkipTutorial, doEasyNoReplay, doEnableCoopUi, seedExtraSettings }) => {
+          try {
+            if (window.localStorage.getItem('__capy_e2e_boot_seeded') === '1') return;
+            window.localStorage.setItem('__capy_e2e_boot_seeded', '1');
+            if (doSkipTutorial) {
+              window.localStorage.setItem('capy_tutorial_completed_v1', '1');
+            }
+            if (doEnableCoopUi) {
+              window.localStorage.setItem('capy_dev_cloud_coop_ui', '1');
+            }
+            if (doEasyNoReplay || seedExtraSettings) {
+              const s = JSON.parse(window.localStorage.getItem('capy_user_settings_v8') || '{}');
+              if (doEasyNoReplay) {
+                s.autoReplayOnLoad = false;
+                s.difficulty = 'EASY';
+              }
+              if (seedExtraSettings && typeof seedExtraSettings === 'object') {
+                Object.assign(s, seedExtraSettings);
+              }
+              window.localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
+            }
+          } catch {
+            // Ignore on opaque origins
+          }
+        },
+        {
+          doSkipTutorial: skipTutorial,
+          doEasyNoReplay: easyNoReplay,
+          doEnableCoopUi: enableCoopUi,
+          seedExtraSettings: extraSettings,
+        }
+      );
+    }
+    if (bootUrl !== false) {
+      const targetUrl = bootUrl || (skipTutorial ? `${BASE_URL}/?skipTutorial=1` : BASE_URL);
+      await page.goto(targetUrl, { waitUntil });
+      if (waitForPuzzle) {
+        await waitForPuzzleLoaded(page);
+      }
+    }
+    return { context, page };
+  } catch (err) {
+    await context.close().catch(() => {});
+    throw err;
   }
-  return { context, page };
+}
+
+/**
+ * Allocates a BrowserContext, runs `fn(context)`, and guarantees closure in `finally`.
+ */
+export async function withContext(browser, options, fn) {
+  const context = await browser.newContext(options);
+  try {
+    return await fn(context);
+  } finally {
+    await context.close().catch(() => {});
+  }
+}
+
+/**
+ * Executes a mouse drag from (startX, startY) to (endX, endY) and guarantees `mouse.up()` in `finally`.
+ */
+export async function withMouseDrag(
+  page,
+  startX,
+  startY,
+  endX,
+  endY,
+  { steps = 1, beforeUp = null } = {}
+) {
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(endX, endY, steps > 1 ? { steps } : undefined);
+    if (typeof beforeUp === 'function') {
+      await beforeUp();
+    }
+  } finally {
+    await page.mouse.up().catch(() => {});
+  }
+}
+
+/**
+ * Hosts a BroadcastChannel Co-op room on `hostPage`, closes the modal, and returns the 6-char room code.
+ */
+export async function hostCoopRoom(hostPage, { openCoopMenu = true } = {}) {
+  if (openCoopMenu) {
+    await hostPage.getByTestId('topbar-coop-btn').click();
+  }
+  await hostPage.getByTestId('host-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
+  await hostPage.getByTestId('host-coop-room-btn').click();
+  await hostPage.getByTestId('active-coop-room-code').waitFor({ state: 'visible', timeout: 5000 });
+  const roomBadgeText = await hostPage.getByTestId('active-coop-room-code').innerText();
+  const match = roomBadgeText.match(/Room\s+([A-Z0-9]{6})/);
+  assert.ok(match, `Expected 6-char Co-op room code in badge (got "${roomBadgeText}")`);
+  await hostPage.keyboard.press('Escape');
+  await hostPage.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+  return match[1];
+}
+
+/**
+ * Joins an existing Co-op room on `peerPage`, waits for 2 peers online (and optional filled count), and closes the modal.
+ */
+export async function joinCoopRoom(peerPage, roomCode, { waitForFilledCount = null } = {}) {
+  await peerPage.getByTestId('topbar-coop-btn').click();
+  await peerPage.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
+  await peerPage.getByTestId('join-coop-room-input').fill(roomCode);
+  await peerPage.getByTestId('join-coop-room-btn').click();
+  await peerPage.waitForFunction(
+    (expectedCount) => {
+      const online = Boolean(
+        document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online')
+      );
+      if (!online) return false;
+      if (expectedCount === null) return true;
+      return (
+        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) ===
+        expectedCount
+      );
+    },
+    waitForFilledCount,
+    { timeout: 5000 }
+  );
+  assert.equal(
+    (await peerPage.getByTestId('active-coop-room-code').innerText()).includes('2 online'),
+    true,
+    `Co-op peer must join room ${roomCode} with 2 peers online`
+  );
+  await peerPage.keyboard.press('Escape');
+  await peerPage.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
 }
 
 export async function isServerListening(url) {
@@ -259,11 +349,16 @@ export async function getStableBoundingBox(locator, timeoutMs = 2000) {
           while (node && node !== document.body && node !== document.documentElement) {
             if (typeof node.getAnimations === 'function') {
               for (const anim of node.getAnimations()) {
-                if (
-                  typeof CSSTransition !== 'undefined' &&
-                  anim instanceof CSSTransition &&
-                  (anim.playState === 'running' || anim.pending)
-                ) {
+                const isActive = anim.playState === 'running' || anim.pending;
+                if (!isActive) continue;
+                const isRunningTransition =
+                  typeof CSSTransition !== 'undefined' && anim instanceof CSSTransition;
+                const iterations = anim.effect?.getComputedTiming?.().iterations;
+                const isFiniteAnimation =
+                  typeof CSSAnimation !== 'undefined' &&
+                  anim instanceof CSSAnimation &&
+                  Number.isFinite(iterations);
+                if (isRunningTransition || isFiniteAnimation) {
                   transitioning = true;
                   break;
                 }
@@ -330,7 +425,7 @@ export async function longPressUndoForReplay(page, { timeout = 4000 } = {}) {
 }
 
 export function getSettingsBtn(page) {
-  return page.locator('button[title="Settings and Menu"]');
+  return page.getByTestId('topbar-settings-btn');
 }
 
 const v3012ScreenshotDir = (process.env.CAPY_V3012_SCREENSHOT_DIR || '').trim();
@@ -457,7 +552,6 @@ export const assertSpotlightAligned = async (targetPage, expectedVariant) => {
           }
           return inView;
         });
-        const pointerBox = pointer ? pointer.getBoundingClientRect() : null;
         const pathBox = path ? path.getBoundingClientRect() : null;
         return {
           pointerEvents: overlay ? getComputedStyle(overlay).pointerEvents : '',
@@ -467,7 +561,7 @@ export const assertSpotlightAligned = async (targetPage, expectedVariant) => {
           overlapsTarget,
           hasPath: Boolean(path?.getAttribute('d')),
           hasArrow: Boolean(poly?.getAttribute('points')),
-          pointerSpan: Math.max(pathBox?.width || 0, pathBox?.height || 0, pointerBox ? 0 : 0),
+          pointerSpan: Math.max(pathBox?.width || 0, pathBox?.height || 0),
           ringAnim: rings[0] ? getComputedStyle(rings[0]).animationName : '',
           ringTransitionDur: rings[0] ? getComputedStyle(rings[0]).transitionDuration : '',
         };

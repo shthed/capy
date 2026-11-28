@@ -6,12 +6,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   createBootedContext,
-  getSettingsBtn,
   getStableBoundingBox,
   longPressUndoForReplay,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
+  withMouseDrag,
 } from './helpers.mjs';
 
 export async function runGameplaySettingsReplayE2e(ctx) {
@@ -152,7 +152,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     assert.ok(await page.$('[data-testid="undo-btn"]'), 'Undo visible by default for standard puzzles');
 
     // Open Settings -> verify default first-time tab is Tab 1 (Settings), ARIA roles, aria-labelledby, focus restoration, accessible slider labels, all 5 distinct tabs, zero duplicates, and tab 4 persistence across reload
-    const settingsBtn = page.locator('button[title="Settings and Menu"]');
+    const settingsBtn = page.getByTestId('topbar-settings-btn');
     await settingsBtn.focus();
     await settingsBtn.click();
     await page.getByTestId('settings-modal-tabs').waitFor({ state: 'visible', timeout: 3000 });
@@ -458,7 +458,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     assert.equal(await page.getByTestId('release-channel-card').count(), 0, 'Settings tab must not duplicate release-channel-card');
     assert.equal(await page.getByText('Highlight Style').count(), 0, 'Settings tab must not leak Hints content');
 
-    await page.locator('button[title="Charcoal"]').first().click();
+    await page.locator('button[aria-label="Canvas background: Charcoal"]').first().click();
     for (const switchTestId of ['setting-show-zoom-buttons', 'setting-show-reset-view-button']) {
       const sw = page.getByTestId(switchTestId);
       assert.equal(await sw.getAttribute('role'), 'switch', `${switchTestId} must expose role="switch"`);
@@ -624,11 +624,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     const updatedSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'));
     assert.equal(updatedSettings.canvasBgColor, 'CHARCOAL');
     assert.equal(updatedSettings.canvasBgArgb >>> 0, 0xff18181b);
-    assert.equal(localStorage_tab(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '2');
-
-    function localStorage_tab(v) {
-      return String(v);
-    }
+    assert.equal(String(await page.evaluate(() => localStorage.getItem('capy_last_settings_tab'))), '2');
     logE2ePass('5-tab SettingsModal isolation, Enable Undo opt-out toggle & capy_last_settings_tab reload persistence verified.');
 
     // -------------------------------------------------------------------------
@@ -664,19 +660,39 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     await undoBtn.click();
 
     const redoBtn = await page.waitForSelector('[data-testid="redo-btn"]');
-    const [redoBox, undoBox] = await Promise.all([redoBtn.boundingBox(), undoBtn.boundingBox()]);
+    const [redoBox, undoBox] = await Promise.all([
+      getStableBoundingBox(page.getByTestId('redo-btn')),
+      getStableBoundingBox(page.getByTestId('undo-btn')),
+    ]);
+    assert.ok(redoBox && undoBox, 'Expected stable bounding boxes for redo-btn and undo-btn');
     assert.equal(redoBox.y < undoBox.y, true, 'Redo button must stack above Undo button');
 
+    await page.evaluate(() => {
+      window.__capyFocusSettle = { lastX: NaN, lastY: NaN, stableSince: 0 };
+    });
     await page.waitForFunction(
       (prev) => {
         const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-        const dist = Math.hypot((s.panOffsetX || 0) - prev.x, (s.panOffsetY || 0) - prev.y);
-        return dist > 25 || Math.abs((s.zoomScale || 1) - prev.zoom) > 0.1;
+        const x = s.panOffsetX || 0;
+        const y = s.panOffsetY || 0;
+        const dist = Math.hypot(x - prev.x, y - prev.y);
+        const moved = dist > 25 || Math.abs((s.zoomScale || 1) - prev.zoom) > 0.1;
+        if (!moved) return false;
+        const st = window.__capyFocusSettle;
+        const now = performance.now();
+        if (Math.abs(x - st.lastX) < 1 && Math.abs(y - st.lastY) < 1) {
+          return now - st.stableSince >= 450;
+        }
+        st.lastX = x;
+        st.lastY = y;
+        st.stableSince = now;
+        return false;
       },
       viewBeforeUndo,
-      { timeout: 4000 }
+      { timeout: 6000 }
     );
     const viewAfterUndo = await page.evaluate(() => {
+      delete window.__capyFocusSettle;
       const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
       return { zoom: s.zoomScale || 1, x: s.panOffsetX || 0, y: s.panOffsetY || 0 };
     });
@@ -692,7 +708,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
         return Math.hypot((s.panOffsetX || 0) - prev.x, (s.panOffsetY || 0) - prev.y) > 120;
       },
       viewAfterUndo,
-      { timeout: 4000 }
+      { timeout: 6000 }
     );
     const viewBeforeRedo = await page.evaluate(() => {
       const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
@@ -710,7 +726,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
         return movedFromBefore > 25 && distToTarget < 25;
       },
       { before: viewBeforeRedo, target: viewAfterUndo },
-      { timeout: 4000 }
+      { timeout: 6000 }
     );
 
     if (await page.$('[data-testid="reset-view-btn"]')) {
@@ -718,7 +734,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
       await page.getByTestId('reset-view-btn').waitFor({ state: 'hidden', timeout: 3000 });
     }
 
-    // Long-press Undo (>=450ms) -> Replay Scrubber (minimised by default) -> Expand -> Scrub to step 2 -> Resume Here
+    // Long-press Undo (>=450ms) -> Replay Scrubber -> Drag scrub -> Skip to End -> Exit Replay
     await longPressUndoForReplay(page);
 
     const replayWin = await page.waitForSelector('[data-testid="replay-controls-window"]');
@@ -737,10 +753,14 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     );
     // Drag along the YouTube-style scrubber track in compact mode and verify instant seek response
     const totalSteps = Number(await page.locator('[data-testid="replay-scrubber"]').getAttribute('max'));
-    await page.mouse.move(trackBox.x + trackBox.width * 0.85, trackBox.y + trackBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(trackBox.x + trackBox.width * 0.25, trackBox.y + trackBox.height / 2, { steps: 3 });
-    await page.mouse.up();
+    await withMouseDrag(
+      page,
+      trackBox.x + trackBox.width * 0.85,
+      trackBox.y + trackBox.height / 2,
+      trackBox.x + trackBox.width * 0.25,
+      trackBox.y + trackBox.height / 2,
+      { steps: 3 }
+    );
     const valAfterDrag = Number(await page.locator('[data-testid="replay-scrubber"]').inputValue());
     assert.equal(
       valAfterDrag >= 0 && valAfterDrag < totalSteps && valAfterDrag <= Math.ceil(totalSteps * 0.35),
@@ -803,7 +823,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     // Immediately check that Fit-to-Screen button is visible (meaning previous zoom extent was restored BEFORE replay)
     await page.waitForSelector('[data-testid="reset-view-btn"]', { timeout: 5000 });
     // Because the painted center regions are offscreen at the restored top-left zoom extent, offscreen steps fast-forward automatically
-    await page.waitForSelector('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]', { timeout: 5000 });
+    await page.waitForSelector('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]', { timeout: 15000 });
     // PaletteDock and ReplayControls must be co-visible on load without programmatic sync self-dismissing replay
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 4000 });
     // INTENTIONAL_TIMING_WINDOW: negative-absence guard verifying ReplayControls is not self-dismissed alongside PaletteDock
@@ -814,9 +834,9 @@ export async function runGameplaySettingsReplayE2e(ctx) {
       'ReplayControls must remain visible alongside PaletteDock after load'
     );
     const [deskZoomOutBox, deskReplayMinBox, deskPaletteBeforeBox] = await Promise.all([
-      page.getByTestId('zoom-out-btn').boundingBox(),
-      page.getByTestId('replay-controls-window').boundingBox(),
-      page.locator('[aria-label="Palette dock"]').boundingBox(),
+      getStableBoundingBox(page.getByTestId('zoom-out-btn')),
+      getStableBoundingBox(page.getByTestId('replay-controls-window')),
+      getStableBoundingBox(page.locator('[aria-label="Palette dock"]')),
     ]);
     assert.ok(deskZoomOutBox && deskReplayMinBox && deskPaletteBeforeBox);
     assert.equal(
@@ -838,7 +858,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     await page.keyboard.press('Control+z');
     await page.locator('[data-testid="replay-controls-window"]').waitFor({ state: 'hidden', timeout: 3000 });
     await page.waitForSelector('[aria-label="Palette dock"]', { timeout: 4000 });
-    const deskPaletteAfterCtrlZBox = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    const deskPaletteAfterCtrlZBox = await getStableBoundingBox(page.locator('[aria-label="Palette dock"]'));
     assert.ok(deskPaletteAfterCtrlZBox);
     assert.equal(
       Math.abs(deskPaletteAfterCtrlZBox.y - deskPaletteBeforeBox.y) < 1.5,
@@ -891,7 +911,7 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     await activeSwatchDuringReplay.click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 3000 });
-    const deskPaletteAfterSwatchBox = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    const deskPaletteAfterSwatchBox = await getStableBoundingBox(page.locator('[aria-label="Palette dock"]'));
     assert.ok(deskPaletteAfterSwatchBox);
     assert.equal(
       Math.abs(deskPaletteAfterSwatchBox.y - deskPaletteExpBox.y) < 1.5,
@@ -902,42 +922,119 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     // Trigger replay via long-press Undo, start playback from 0, and verify live zoom/pan during playback
     await longPressUndoForReplay(page);
 
-    // Enable Follow Painting and Auto-Loop, then start playback and verify camera follows offscreen regions and loops
+    // Enable Follow Painting and Auto-Loop, then verify real Auto-Loop wrap-around and unconfounded Follow Painting pan
     const followBtn = await page.waitForSelector('[data-testid="replay-follow-btn"]');
     const loopBtn = await page.waitForSelector('[data-testid="replay-loop-btn"]');
     assert.equal(await followBtn.getAttribute('aria-pressed'), 'false', 'Follow button initially off');
     assert.equal(await loopBtn.getAttribute('aria-pressed'), 'false', 'Loop button initially off');
+
+    // Capture panBeforeFollow BEFORE clicking loopBtn (which auto-starts playback + SmoothDamp Follow from step 0)
+    const panBeforeFollow = await page.evaluate(() => {
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return {
+        x: active.panOffsetX || 0,
+        y: active.panOffsetY || 0,
+        zoom: active.zoomScale || 1,
+      };
+    });
 
     await followBtn.click();
     await loopBtn.click();
     await page.waitForFunction(
       () =>
         document.querySelector('[data-testid="replay-follow-btn"]')?.getAttribute('aria-pressed') === 'true' &&
-        document.querySelector('[data-testid="replay-loop-btn"]')?.getAttribute('aria-pressed') === 'true',
+        document.querySelector('[data-testid="replay-loop-btn"]')?.getAttribute('aria-pressed') === 'true' &&
+        document.querySelector('[data-testid="replay-play-pause-btn"]')?.getAttribute('aria-label') === 'Pause Replay',
       undefined,
       { timeout: 3000 }
     );
     assert.equal(await followBtn.getAttribute('aria-pressed'), 'true', 'Follow button toggled on');
     assert.equal(await loopBtn.getAttribute('aria-pressed'), 'true', 'Loop button toggled on');
+    assert.equal(
+      await page.getByTestId('replay-play-pause-btn').getAttribute('aria-label'),
+      'Pause Replay',
+      'Enabling Auto-Loop at replay end must auto-start active playback (aria-label="Pause Replay")'
+    );
 
-    const panBeforeFollow = await page.evaluate(() => {
+    // Deterministically observe real Auto-Loop wrap-around (scrubber advances to max and wraps back to a lower step while staying playing)
+    await page.evaluate(() => {
+      window.__capyLoopProbe = { maxObserved: -1, sawEnd: false, wrapped: false };
+    });
+    await page.waitForFunction(
+      () => {
+        const scrubber = document.querySelector('[data-testid="replay-scrubber"]');
+        const playBtn = document.querySelector('[data-testid="replay-play-pause-btn"]');
+        const probe = window.__capyLoopProbe;
+        if (!scrubber || !playBtn || !probe) return false;
+        const val = Number(scrubber.value);
+        const max = Number(scrubber.max);
+        if (!Number.isFinite(val) || !Number.isFinite(max) || max <= 0) return false;
+        if (val > probe.maxObserved) probe.maxObserved = val;
+        if (val >= max) probe.sawEnd = true;
+        if (probe.sawEnd && val < probe.maxObserved) {
+          probe.wrapped = true;
+        }
+        return probe.wrapped && playBtn.getAttribute('aria-label') === 'Pause Replay';
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+    const loopProbeResult = await page.evaluate(() => {
+      const res = {
+        ...(window.__capyLoopProbe || {}),
+        playAriaLabel: document.querySelector('[data-testid="replay-play-pause-btn"]')?.getAttribute('aria-label') || '',
+        settings: JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}'),
+      };
+      delete window.__capyLoopProbe;
+      return res;
+    });
+    assert.equal(
+      loopProbeResult.wrapped,
+      true,
+      `Expected Auto-Loop scrubber to advance to end and wrap back (${JSON.stringify(loopProbeResult)})`
+    );
+    assert.equal(
+      loopProbeResult.playAriaLabel,
+      'Pause Replay',
+      'Auto-Loop must remain actively playing after wrap-around'
+    );
+    assert.equal(
+      Boolean(loopProbeResult.settings.replayLoop && loopProbeResult.settings.replayFollow),
+      true,
+      'Expected replayLoop and replayFollow settings persisted as true'
+    );
+
+    // Deterministically verify Follow Painting panned viewport > 40px BEFORE clicking zoom-in-btn or manual pan drag
+    await page.waitForFunction(
+      (before) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Math.hypot((active.panOffsetX || 0) - before.x, (active.panOffsetY || 0) - before.y) > 40;
+      },
+      panBeforeFollow,
+      { timeout: 6000 }
+    );
+    const afterFollowOnly = await page.evaluate(() => {
       const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-      return { x: active.panOffsetX || 0, y: active.panOffsetY || 0 };
+      return {
+        zoom: active.zoomScale || 1,
+        panX: active.panOffsetX || 0,
+        panY: active.panOffsetY || 0,
+      };
     });
-
-    // Start replay from step 0 with Follow + Loop active; camera must smoothly pan toward painted center regions and loop continuously
-    await page.locator('[data-testid="replay-play-pause-btn"]').click();
-    // INTENTIONAL_TIMING_WINDOW: real-time Replay playback window allowing Follow + Loop animation to advance and pan camera
-    await page.waitForTimeout(950);
-
-    // Verify scrubber is actively looping/playing and did not stop at the end
-    // INTENTIONAL_TIMING_WINDOW: real-time Replay loop continuation window verifying playback stays active rather than stopping at end
-    await page.waitForTimeout(450);
-    const isStillLooping = await page.evaluate(() => {
-      const s = JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
-      return Boolean(s.replayLoop && s.replayFollow);
-    });
-    assert.equal(isStillLooping, true, 'Expected replayLoop and replayFollow settings persisted as true');
+    const followPanDist = Math.hypot(
+      afterFollowOnly.panX - panBeforeFollow.x,
+      afterFollowOnly.panY - panBeforeFollow.y
+    );
+    assert.equal(
+      followPanDist > 40,
+      true,
+      `Expected Follow Painting mode alone to smoothly pan viewport > 40px toward painted regions (moved ${followPanDist.toFixed(1)}px)`
+    );
+    assert.equal(
+      Math.abs(afterFollowOnly.zoom - panBeforeFollow.zoom) < 0.01,
+      true,
+      `Follow Painting pan check must remain unconfounded by zoom changes (${panBeforeFollow.zoom} -> ${afterFollowOnly.zoom})`
+    );
 
     // Also test live zoom-in during playback
     await page.waitForSelector('[data-testid="zoom-in-btn"]');
@@ -946,17 +1043,14 @@ export async function runGameplaySettingsReplayE2e(ctx) {
 
     // Manually pan-drag the canvas slightly during replay and verify Follow Painting automatically disengages
     const canvasBoxAfterLoad = await page.locator('canvas').boundingBox();
-    await page.mouse.move(
+    await withMouseDrag(
+      page,
       canvasBoxAfterLoad.x + canvasBoxAfterLoad.width / 2,
-      canvasBoxAfterLoad.y + canvasBoxAfterLoad.height / 2
-    );
-    await page.mouse.down();
-    await page.mouse.move(
+      canvasBoxAfterLoad.y + canvasBoxAfterLoad.height / 2,
       canvasBoxAfterLoad.x + canvasBoxAfterLoad.width / 2 + 14,
       canvasBoxAfterLoad.y + canvasBoxAfterLoad.height / 2 + 10,
       { steps: 3 }
     );
-    await page.mouse.up();
     await page.waitForFunction(
       () => document.querySelector('[data-testid="replay-follow-btn"]')?.getAttribute('aria-pressed') === 'false',
       { timeout: 3000 }
@@ -994,15 +1088,6 @@ export async function runGameplaySettingsReplayE2e(ctx) {
         panY: active.panOffsetY || 0,
       };
     });
-    const followPanDist = Math.hypot(
-      afterFollowAndZoom.panX - panBeforeFollow.x,
-      afterFollowAndZoom.panY - panBeforeFollow.y
-    );
-    assert.equal(
-      followPanDist > 40,
-      true,
-      `Expected Follow Painting mode to smoothly pan viewport toward painted regions (moved ${followPanDist.toFixed(1)}px)`
-    );
     assert.equal(
       afterFollowAndZoom.zoom > savedZoomBeforeLoad,
       true,

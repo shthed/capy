@@ -13,12 +13,13 @@ import {
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
+  withContext,
 } from './helpers.mjs';
 
 export async function runMobileLayoutE2e(ctx) {
   const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     logE2eStart('Verifying 360x780 mobile GameTopBar lanes (ALPHA #520), OnboardingTutorial, SettingsModal tabs, Saves grid & FeatureOfferBanner...');
-    const mobileTopbarContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await withContext(browser, { viewport: { width: 360, height: 780 }, hasTouch: true }, async (mobileTopbarContext) => {
     await mobileTopbarContext.addInitScript(() => {
       localStorage.setItem('capy_dev_debug', '1');
     });
@@ -43,7 +44,7 @@ export async function runMobileLayoutE2e(ctx) {
     const rightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
     const savesBox = await mobileTopbarPage.getByTestId('topbar-saves-btn').boundingBox();
     const channelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
-    const settingsBox = await mobileTopbarPage.locator('button[title="Settings and Menu"]').boundingBox();
+    const settingsBox = await mobileTopbarPage.getByTestId('topbar-settings-btn').boundingBox();
     const leftLaneScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
@@ -92,7 +93,7 @@ export async function runMobileLayoutE2e(ctx) {
       true,
       `Normal mode at 360x780 with OnboardingTutorial must have zero horizontal document overflow (got ${normalDocOverflow.docOverflow})`
     );
-    const mobileTutorialBox = await mobileTopbarPage.getByTestId('onboarding-tutorial').boundingBox();
+    const mobileTutorialBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('onboarding-tutorial'));
     assert.ok(mobileTutorialBox, 'Expected onboarding-tutorial boundingBox at 360x780');
     assert.equal(
       mobileTutorialBox.x >= 0 && mobileTutorialBox.x + mobileTutorialBox.width <= 360,
@@ -105,7 +106,7 @@ export async function runMobileLayoutE2e(ctx) {
       `Step 1 compact OnboardingTutorial card height (${mobileTutorialBox.height}px) must stay slim <= 210px on 360x780`
     );
     // Verify Next button stays at exact same (x, y, width, height) <= 1px across basic-feature Steps 1-7 on 360x780 mobile
-    const mobileNextRefBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+    const mobileNextRefBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('tutorial-next-btn'));
     assert.ok(mobileNextRefBox, 'Expected Step 1 tutorial-next-btn boundingBox on 360x780 mobile');
     for (let stepNum = 2; stepNum <= 7; stepNum++) {
       await mobileTopbarPage.getByTestId('tutorial-next-btn').click();
@@ -116,7 +117,7 @@ export async function runMobileLayoutE2e(ctx) {
         stepNum,
         { timeout: 3000 }
       );
-      const nextBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+      const nextBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('tutorial-next-btn'));
       assert.ok(nextBox, `Expected Step ${stepNum} tutorial-next-btn boundingBox on 360x780 mobile`);
       assert.equal(
         Math.abs(nextBox.x - mobileNextRefBox.x) <= 1 &&
@@ -138,7 +139,7 @@ export async function runMobileLayoutE2e(ctx) {
         undefined,
         { timeout: 3000 }
       );
-      const refBox = await mobileTopbarPage.getByTestId('tutorial-next-btn').boundingBox();
+      const refBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('tutorial-next-btn'));
       assert.ok(refBox, `Expected Step 1 tutorial-next-btn boundingBox (${label})`);
       for (let stepNum = 1; stepNum <= 7; stepNum++) {
         if (stepNum > 1) {
@@ -204,7 +205,7 @@ export async function runMobileLayoutE2e(ctx) {
     );
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    const normalTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
+    const normalTopicsBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('tutorial-topics-drawer'));
     assert.ok(normalTopicsBox, 'Expected normal tutorial-topics-drawer boundingBox at 360x780');
     assert.equal(
       normalTopicsBox.x >= 0 && normalTopicsBox.x + normalTopicsBox.width <= 360,
@@ -227,7 +228,7 @@ export async function runMobileLayoutE2e(ctx) {
     await captureV3012Screenshot(mobileTopbarPage, 'mobile_360x780_step7_spotlight.png');
 
     // Open SettingsModal on 360x780 mobile and verify all header tabs fit without horizontal clipping
-    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('topbar-settings-btn').click();
     const tabsContainer = mobileTopbarPage.getByTestId('settings-modal-tabs');
     const closeBtn = mobileTopbarPage.getByTestId('settings-modal-close');
     await tabsContainer.waitFor({ state: 'visible', timeout: 5000 });
@@ -282,9 +283,11 @@ export async function runMobileLayoutE2e(ctx) {
     );
     await closeBtn.click();
     await closeBtn.waitFor({ state: 'hidden', timeout: 3000 });
-    const largeLeftLaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
-    const largeRightLaneBox = await mobileTopbarPage.getByTestId('topbar-right-lane').boundingBox();
-    const largeChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    const [largeLeftLaneBox, largeRightLaneBox, largeChannelBox] = await Promise.all([
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-left-lane')),
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-right-lane')),
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-channel-badge')),
+    ]);
     const largeLeftScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
@@ -312,7 +315,7 @@ export async function runMobileLayoutE2e(ctx) {
       true,
       `Large Text mode at 360x780 must have zero horizontal document overflow (got ${largeDocOverflow.docOverflow})`
     );
-    const largeTutorialBox = await mobileTopbarPage.getByTestId('onboarding-tutorial').boundingBox();
+    const largeTutorialBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('onboarding-tutorial'));
     assert.ok(largeTutorialBox, 'Expected Large Text onboarding-tutorial boundingBox at 360x780');
     assert.equal(
       largeTutorialBox.x >= 0 && largeTutorialBox.x + largeTutorialBox.width <= 360,
@@ -321,7 +324,7 @@ export async function runMobileLayoutE2e(ctx) {
     );
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'visible', timeout: 3000 });
-    const largeTopicsBox = await mobileTopbarPage.getByTestId('tutorial-topics-drawer').boundingBox();
+    const largeTopicsBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('tutorial-topics-drawer'));
     assert.ok(largeTopicsBox, 'Expected Large Text tutorial-topics-drawer boundingBox at 360x780');
     assert.equal(
       largeTopicsBox.x >= 0 && largeTopicsBox.x + largeTopicsBox.width <= 360,
@@ -335,7 +338,7 @@ export async function runMobileLayoutE2e(ctx) {
     await mobileTopbarPage.getByTestId('tutorial-topics-btn').click();
     await mobileTopbarPage.getByTestId('tutorial-topics-drawer').waitFor({ state: 'hidden', timeout: 3000 });
     // Re-open SettingsModal, turn off Large Text, and continue Saves tab verification
-    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('topbar-settings-btn').click();
     await mobileTopbarPage.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
     await mobileTopbarPage.getByTestId('settings-tab-settings').click();
     await mobileTopbarPage.getByTestId('setting-large-text').waitFor({ state: 'visible', timeout: 3000 });
@@ -408,7 +411,7 @@ export async function runMobileLayoutE2e(ctx) {
       `selected-save-action-bar must not be sticky (${JSON.stringify(actionBarPosition)})`
     );
     await mobileTopbarPage.getByTestId('saves-share-print-bar').scrollIntoViewIfNeeded();
-    await mobileTopbarPage.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await waitForAnimationFrames(mobileTopbarPage, 2);
     const [mActionAfterScroll, mShareAfterScroll] = await Promise.all([
       mobileTopbarPage.getByTestId('selected-save-action-bar').boundingBox(),
       mobileTopbarPage.getByTestId('saves-share-print-bar').boundingBox(),
@@ -427,7 +430,7 @@ export async function runMobileLayoutE2e(ctx) {
     await mobileTopbarPage.locator('[data-testid="paint-mode-btn"]').click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
     await assertSpotlightAligned(mobileTopbarPage, 'offer');
-    const mobileOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
+    const mobileOfferBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('feature-offer-banner'));
     assert.ok(mobileOfferBox, 'Expected feature-offer-banner boundingBox at 360x780');
     assert.equal(
       mobileOfferBox.x >= 0 && mobileOfferBox.x + mobileOfferBox.width <= 360,
@@ -442,14 +445,14 @@ export async function runMobileLayoutE2e(ctx) {
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'hidden', timeout: 3000 });
 
     // Enable Large Text and trigger create_gallery offer to verify FeatureOfferBanner bounds & overflow in Large Text mode at 360x780
-    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('topbar-settings-btn').click();
     await mobileTopbarPage.getByTestId('settings-tab-settings').click();
     await mobileTopbarPage.getByTestId('setting-large-text').click();
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     await closeBtn.click();
     await mobileTopbarPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 3000 });
     await assertSpotlightAligned(mobileTopbarPage, 'offer');
-    const largeOfferBox = await mobileTopbarPage.getByTestId('feature-offer-banner').boundingBox();
+    const largeOfferBox = await getStableBoundingBox(mobileTopbarPage.getByTestId('feature-offer-banner'));
     assert.ok(largeOfferBox, 'Expected Large Text feature-offer-banner boundingBox at 360x780');
     assert.equal(
       largeOfferBox.x >= 0 && largeOfferBox.x + largeOfferBox.width <= 360,
@@ -501,12 +504,15 @@ export async function runMobileLayoutE2e(ctx) {
       true,
       'Expected topbar-saves-btn to display 100% after completing puzzle'
     );
+    const [large100LaneBox, large100ChannelBox] = await Promise.all([
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-left-lane')),
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-channel-badge')),
+    ]);
     const large100ScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
     }));
-    const large100LaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
-    const large100ChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.ok(large100LaneBox && large100ChannelBox);
     assert.equal(
       large100ScrollCheck.scrollWidth <= large100ScrollCheck.clientWidth &&
         large100ChannelBox.x + large100ChannelBox.width <= large100LaneBox.x + large100LaneBox.width + 1,
@@ -514,18 +520,21 @@ export async function runMobileLayoutE2e(ctx) {
       `Large Text ALPHA #520 + 100% must fit inside topbar-left-lane at 360x780 (${JSON.stringify({ large100ScrollCheck, large100ChannelBox, large100LaneBox })})`
     );
     // Toggle Large Text back OFF and verify Normal 100% + ALPHA #520
-    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('topbar-settings-btn').click();
     await mobileTopbarPage.getByTestId('settings-tab-settings').click();
     await mobileTopbarPage.getByTestId('setting-large-text').click();
     await mobileTopbarPage.getByTestId('settings-modal-close').click();
     await mobileTopbarPage.waitForFunction(() => document.documentElement.dataset.largeText !== 'true', { timeout: 3000 });
     await mobileTopbarPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+    const [normal100LaneBox, normal100ChannelBox] = await Promise.all([
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-left-lane')),
+      getStableBoundingBox(mobileTopbarPage.getByTestId('topbar-channel-badge')),
+    ]);
     const normal100ScrollCheck = await mobileTopbarPage.getByTestId('topbar-left-lane').evaluate((el) => ({
       scrollWidth: el.scrollWidth,
       clientWidth: el.clientWidth,
     }));
-    const normal100LaneBox = await mobileTopbarPage.getByTestId('topbar-left-lane').boundingBox();
-    const normal100ChannelBox = await mobileTopbarPage.getByTestId('topbar-channel-badge').boundingBox();
+    assert.ok(normal100LaneBox && normal100ChannelBox);
     assert.equal(
       normal100ScrollCheck.scrollWidth <= normal100ScrollCheck.clientWidth &&
         normal100ChannelBox.x + normal100ChannelBox.width <= normal100LaneBox.x + normal100LaneBox.width + 1,
@@ -534,7 +543,7 @@ export async function runMobileLayoutE2e(ctx) {
     );
 
     // Verify Create tab above-the-fold style/hint bar, Style Guide reorder, and (i) hint tooltips at 360x780
-    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('topbar-settings-btn').click();
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     const mobileHintBar = mobileTopbarPage.getByTestId('create-style-hint-bar');
     await mobileHintBar.waitFor({ state: 'visible', timeout: 3000 });
@@ -621,7 +630,7 @@ export async function runMobileLayoutE2e(ctx) {
     await mobileTopbarPage.getByTestId('settings-modal-close').click();
 
     // Closing SettingsModal without saving/regenerating must discard unsaved slider edits on next open
-    await mobileTopbarPage.locator('button[title="Settings and Menu"]').click();
+    await mobileTopbarPage.getByTestId('topbar-settings-btn').click();
     await mobileTopbarPage.getByTestId('settings-tab-create').click();
     const reopenedHintBarText = await mobileTopbarPage.getByTestId('create-style-hint-bar').innerText();
     assert.equal(
@@ -631,15 +640,14 @@ export async function runMobileLayoutE2e(ctx) {
     );
     await mobileTopbarPage.getByTestId('settings-modal-close').click();
 
-    await mobileTopbarPage.close();
-    await mobileTopbarContext.close();
+    });
     logE2ePass('360x780 mobile GameTopBar two-lane non-overlap, ALPHA #520 fit, OnboardingTutorial, SettingsModal tabs, 2-col Saves layout & FeatureOfferBanner bounds verified.');
 
     // -------------------------------------------------------------------------
     // 17. Viewport-Save Flush Races, Anti-Resurrection, Blob URL Revocation & Tap-Burst Non-Starvation
     // -------------------------------------------------------------------------
     logE2eStart('Verifying 360x780 viewport-save races, clearActiveState/deleteSnapshot safety, blob URL revocation, error recovery & tap-burst non-starvation...');
-    const viewportRaceContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await withContext(browser, { viewport: { width: 360, height: 780 }, hasTouch: true }, async (viewportRaceContext) => {
     await viewportRaceContext.addInitScript(() => {
       localStorage.setItem('capy_dev_debug', '1');
     });
@@ -656,18 +664,20 @@ export async function runMobileLayoutE2e(ctx) {
     await viewportRacePage.mouse.wheel(0, -240);
     const partialRaceState = await viewportRacePage.evaluate(async () => {
       const snaps = window.capyStorage.loadSnapshots();
-      const active = window.capyStorage.loadActiveState();
-      const targetId = active?.activeSnapshotId || snaps[0]?.id;
+      const initialActive = window.capyStorage.loadActiveState();
+      const targetId = initialActive?.activeSnapshotId || snaps[0]?.id;
       const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
       if (!targetId || !puz || puz.regions.length < 2) return null;
-      const partialIds = puz.regions.slice(0, 2).map((r) => r.id);
+      const allIds = puz.regions.map((r) => r.id);
+      const partialIds = allIds.slice(0, 2);
+      const freshActive = window.capyStorage.loadActiveState();
       window.capyStorage.updateSnapshotProgress(targetId, partialIds.length, puz.regions.length, partialIds);
       window.capyStorage.saveActiveState({
-        ...(active || {}),
+        ...(freshActive || {}),
         activeSnapshotId: targetId,
         filledRegionIds: partialIds,
       });
-      return { targetId, partialCount: partialIds.length, totalCount: puz.regions.length };
+      return { targetId, partialCount: partialIds.length, totalCount: puz.regions.length, allIds };
     });
     assert.ok(partialRaceState && partialRaceState.partialCount === 2, 'Expected partial race state setup');
     // INTENTIONAL_TIMING_WINDOW: negative-absence guard past 350ms viewport-save debounce (stale timer must not overwrite partial state)
@@ -684,27 +694,19 @@ export async function runMobileLayoutE2e(ctx) {
       `Debounced viewportSaveTimer must persist zoomed scale (got ${afterTimerState?.zoomScale})`
     );
 
-    // Trigger second zoom, wait for React useEffect to arm the 350ms viewportSaveTimer, write 100% completion, and reload immediately so beforeunload flush fires while timer is pending
+    // Trigger second zoom, wait for React useEffect to arm the 350ms viewportSaveTimer, synchronously write 100% completion (zero async IDB gap), and reload immediately so beforeunload flush fires while timer is pending
+    const prevZoomBeforeSecondWheel = afterTimerState?.zoomScale ?? 1;
     await viewportRacePage.mouse.wheel(0, -240);
-    await viewportRacePage.evaluate(
-      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
-    );
-    const fullRaceState = await viewportRacePage.evaluate(async () => {
-      const snaps = window.capyStorage.loadSnapshots();
-      const active = window.capyStorage.loadActiveState();
-      const targetId = active?.activeSnapshotId || snaps[0]?.id;
-      const puz = targetId ? await window.capyStorage.loadPuzzleData(targetId) : null;
-      if (!targetId || !puz || puz.regions.length === 0) return null;
-      const allIds = puz.regions.map((r) => r.id);
+    await waitForAnimationFrames(viewportRacePage, 2);
+    await viewportRacePage.evaluate(({ targetId, allIds }) => {
+      const freshActive = window.capyStorage.loadActiveState();
       window.capyStorage.updateSnapshotProgress(targetId, allIds.length, allIds.length, allIds);
       window.capyStorage.saveActiveState({
-        ...(active || {}),
+        ...(freshActive || {}),
         activeSnapshotId: targetId,
         filledRegionIds: allIds,
       });
-      return { targetId, totalCount: allIds.length, prevZoom: active?.zoomScale ?? 1 };
-    });
-    assert.ok(fullRaceState && fullRaceState.totalCount > 0, 'Expected full race state setup');
+    }, partialRaceState);
     await viewportRacePage.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(viewportRacePage);
     if (await viewportRacePage.getByTestId('replay-exit-btn').isVisible()) {
@@ -713,13 +715,13 @@ export async function runMobileLayoutE2e(ctx) {
     const afterReloadState = await viewportRacePage.evaluate(() => window.capyStorage.loadActiveState());
     assert.equal(
       afterReloadState?.filledRegionIds?.length,
-      fullRaceState.totalCount,
+      partialRaceState.totalCount,
       'beforeunload flushPendingViewportSave must preserve 100% filledRegionIds'
     );
     assert.equal(
-      (afterReloadState?.zoomScale ?? 1) > fullRaceState.prevZoom,
+      (afterReloadState?.zoomScale ?? 1) > prevZoomBeforeSecondWheel,
       true,
-      `beforeunload flushPendingViewportSave must persist latest zoomScale (got ${afterReloadState?.zoomScale} vs prev ${fullRaceState.prevZoom})`
+      `beforeunload flushPendingViewportSave must persist latest zoomScale (got ${afterReloadState?.zoomScale} vs prev ${prevZoomBeforeSecondWheel})`
     );
     await viewportRacePage.waitForFunction(
       () => document.querySelector('[data-testid="topbar-saves-btn"]')?.textContent?.includes('100%'),
@@ -1072,123 +1074,123 @@ export async function runMobileLayoutE2e(ctx) {
       `Expected snapshotTransitioningRef unlocked after deleteSnapshot rejection so zoom persists (${zoomAfterDeleteRecovery} vs ${zoomAfterLoadRecovery})`
     );
 
-    await viewportRacePage.close();
-    await viewportRaceContext.close();
+    });
 
     // Probe 2g regression: wheel zoom followed by continuous canvas taps (4 taps at 250ms intervals, >1000ms total) must NOT starve viewportSaveTimerRef persistence into capy_active_session_v8
-    const tapStarveContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
-    const tapStarvePage = await tapStarveContext.newPage();
-    attachErrorListeners(tapStarvePage, 'tapStarvePage');
-    await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
-    await waitForPuzzleLoaded(tapStarvePage);
-    await tapStarvePage.evaluate(() => {
-      const raw = localStorage.getItem('capy_user_settings_v8');
-      const parsed = raw ? JSON.parse(raw) : {};
-      parsed.fatFingerAssist = false;
-      localStorage.setItem('capy_user_settings_v8', JSON.stringify(parsed));
-    });
-    await tapStarvePage.reload({ waitUntil: 'domcontentloaded' });
-    await waitForPuzzleLoaded(tapStarvePage);
-    const tapStarveBox = await tapStarvePage.getByTestId('puzzle-canvas').boundingBox();
-    assert.ok(tapStarveBox, 'Expected puzzle-canvas boundingBox for tap-starvation regression');
-    const tapX = tapStarveBox.x + tapStarveBox.width / 2;
-    const tapY = tapStarveBox.y + tapStarveBox.height / 2;
-    // Pre-tap center once at zoom=1 so subsequent taps at the same coordinate only trigger tapDot/ResizeObserver without invoking saveActiveState via attemptFillRegion
-    await tapStarvePage.mouse.click(tapX, tapY);
-    // INTENTIONAL_TIMING_WINDOW: debounce settle past 350ms viewport-save timer after baseline pre-tap before Probe 2g tap-burst starvation test
-    await tapStarvePage.waitForTimeout(450);
-    const tapStarveBaseline = await tapStarvePage.evaluate(() => {
-      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-      return {
-        zoomScale: active.zoomScale ?? 1,
-        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
-      };
-    });
-    assert.equal(tapStarveBaseline.zoomScale, 1, 'Expected baseline capy_active_session_v8 zoomScale === 1');
-
-    const tapBurstStartMs = Date.now();
-    await tapStarvePage.mouse.move(tapX, tapY);
-    await tapStarvePage.mouse.wheel(0, -240);
-    for (let i = 0; i < 4; i++) {
+    await withContext(browser, { viewport: { width: 360, height: 780 }, hasTouch: true }, async (tapStarveContext) => {
+      const tapStarvePage = await tapStarveContext.newPage();
+      attachErrorListeners(tapStarvePage, 'tapStarvePage');
+      await tapStarvePage.goto(`${BASE_URL}/?skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(tapStarvePage);
+      await tapStarvePage.evaluate(() => {
+        const raw = localStorage.getItem('capy_user_settings_v8');
+        const parsed = raw ? JSON.parse(raw) : {};
+        parsed.fatFingerAssist = false;
+        localStorage.setItem('capy_user_settings_v8', JSON.stringify(parsed));
+      });
+      await tapStarvePage.reload({ waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(tapStarvePage);
+      const tapStarveBox = await tapStarvePage.getByTestId('puzzle-canvas').boundingBox();
+      assert.ok(tapStarveBox, 'Expected puzzle-canvas boundingBox for tap-starvation regression');
+      const tapX = tapStarveBox.x + tapStarveBox.width / 2;
+      const tapY = tapStarveBox.y + tapStarveBox.height / 2;
+      // Pre-tap center once at zoom=1 so subsequent taps at the same coordinate only trigger tapDot/ResizeObserver without invoking saveActiveState via attemptFillRegion
       await tapStarvePage.mouse.click(tapX, tapY);
-      // INTENTIONAL_TIMING_WINDOW: intentional 4 x 250ms >= 1000ms tap-burst cadence proving 350ms debounce timer is not starved
-      await tapStarvePage.waitForTimeout(250);
-    }
-    const tapBurstElapsedMs = Date.now() - tapBurstStartMs;
-    assert.ok(tapBurstElapsedMs >= 1000, `Expected 4x250ms tap burst >= 1000ms, got ${tapBurstElapsedMs}ms`);
-    const afterTapStarve = await tapStarvePage.evaluate(() => {
-      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-      return {
-        zoomScale: active.zoomScale ?? 1,
-        filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
-      };
+      // INTENTIONAL_TIMING_WINDOW: debounce settle past 350ms viewport-save timer after baseline pre-tap before Probe 2g tap-burst starvation test
+      await tapStarvePage.waitForTimeout(450);
+      const tapStarveBaseline = await tapStarvePage.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return {
+          zoomScale: active.zoomScale ?? 1,
+          filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+        };
+      });
+      assert.equal(tapStarveBaseline.zoomScale, 1, 'Expected baseline capy_active_session_v8 zoomScale === 1');
+
+      const tapBurstStartMs = Date.now();
+      await tapStarvePage.mouse.move(tapX, tapY);
+      await tapStarvePage.mouse.wheel(0, -240);
+      for (let i = 0; i < 4; i++) {
+        await tapStarvePage.mouse.click(tapX, tapY);
+        // INTENTIONAL_TIMING_WINDOW: intentional 4 x 250ms >= 1000ms tap-burst cadence proving 350ms debounce timer is not starved
+        await tapStarvePage.waitForTimeout(250);
+      }
+      const tapBurstElapsedMs = Date.now() - tapBurstStartMs;
+      assert.ok(tapBurstElapsedMs >= 1000, `Expected 4x250ms tap burst >= 1000ms, got ${tapBurstElapsedMs}ms`);
+      const afterTapStarve = await tapStarvePage.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return {
+          zoomScale: active.zoomScale ?? 1,
+          filledCount: Array.isArray(active.filledRegionIds) ? active.filledRegionIds.length : 0,
+        };
+      });
+      assert.equal(
+        afterTapStarve.filledCount,
+        tapStarveBaseline.filledCount,
+        'Repeated taps at already-processed coordinate must not write via attemptFillRegion'
+      );
+      assert.ok(
+        afterTapStarve.zoomScale > 1.0,
+        `Wheel zoom followed by 4x250ms canvas taps (>1000ms) must persist zoomScale > 1.0 into capy_active_session_v8 without timer starvation (got ${afterTapStarve.zoomScale})`
+      );
     });
-    assert.equal(
-      afterTapStarve.filledCount,
-      tapStarveBaseline.filledCount,
-      'Repeated taps at already-processed coordinate must not write via attemptFillRegion'
-    );
-    assert.ok(
-      afterTapStarve.zoomScale > 1.0,
-      `Wheel zoom followed by 4x250ms canvas taps (>1000ms) must persist zoomScale > 1.0 into capy_active_session_v8 without timer starvation (got ${afterTapStarve.zoomScale})`
-    );
-    await tapStarvePage.close();
-    await tapStarveContext.close();
     logE2ePass('Viewport-save flush races, clearActiveState/deleteSnapshot safety, blob URL revocation, async recovery & tap-burst non-starvation verified.');
 
     // -------------------------------------------------------------------------
     // 18. Mobile (360x780) BETA Pill Containment in Normal & Large Text Modes
     // -------------------------------------------------------------------------
     logE2eStart('Verifying 360x780 ?capy_channel=beta BETA pill containment in Normal & Large Text modes...');
-    const mobileBetaContext = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
-    const mobileBetaPage = await mobileBetaContext.newPage();
-    attachErrorListeners(mobileBetaPage, 'mobileBetaPage');
-    await mobileBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
-    await waitForPuzzleLoaded(mobileBetaPage);
-    await mobileBetaPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(
-      (await mobileBetaPage.getByTestId('topbar-channel-badge').innerText()).trim().toUpperCase(),
-      'BETA',
-      'Expected ?capy_channel=beta to render BETA badge'
-    );
-    const betaNormalScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
-      scrollWidth: el.scrollWidth,
-      clientWidth: el.clientWidth,
-    }));
-    const betaNormalLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
-    const betaNormalChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
-    assert.equal(
-      betaNormalScrollCheck.scrollWidth <= betaNormalScrollCheck.clientWidth &&
-        betaNormalChannelBox.x + betaNormalChannelBox.width <= betaNormalLaneBox.x + betaNormalLaneBox.width + 1,
-      true,
-      `Normal BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaNormalScrollCheck, betaNormalChannelBox, betaNormalLaneBox })})`
-    );
-    await mobileBetaPage.locator('button[title="Settings and Menu"]').click();
-    await mobileBetaPage.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
-    await mobileBetaPage.getByTestId('settings-tab-settings').click();
-    await mobileBetaPage.getByTestId('setting-large-text').waitFor({ state: 'visible', timeout: 3000 });
-    await mobileBetaPage.getByTestId('setting-large-text').click();
-    await mobileBetaPage.waitForFunction(
-      () => document.documentElement.dataset.largeText === 'true',
-      undefined,
-      { timeout: 3000 }
-    );
-    await mobileBetaPage.getByTestId('settings-modal-close').click();
-    await mobileBetaPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
-    const betaLargeScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
-      scrollWidth: el.scrollWidth,
-      clientWidth: el.clientWidth,
-    }));
-    const betaLargeLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
-    const betaLargeChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
-    assert.equal(
-      betaLargeScrollCheck.scrollWidth <= betaLargeScrollCheck.clientWidth &&
-        betaLargeChannelBox.x + betaLargeChannelBox.width <= betaLargeLaneBox.x + betaLargeLaneBox.width + 1,
-      true,
-      `Large Text BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaLargeScrollCheck, betaLargeChannelBox, betaLargeLaneBox })})`
-    );
-    await mobileBetaPage.close();
-    await mobileBetaContext.close();
+    await withContext(browser, { viewport: { width: 360, height: 780 }, hasTouch: true }, async (mobileBetaContext) => {
+      const mobileBetaPage = await mobileBetaContext.newPage();
+      attachErrorListeners(mobileBetaPage, 'mobileBetaPage');
+      await mobileBetaPage.goto(`${BASE_URL}/?capy_channel=beta&skipTutorial=1`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(mobileBetaPage);
+      await mobileBetaPage.getByTestId('topbar-channel-badge').waitFor({ state: 'visible', timeout: 5000 });
+      assert.equal(
+        (await mobileBetaPage.getByTestId('topbar-channel-badge').innerText()).trim().toUpperCase(),
+        'BETA',
+        'Expected ?capy_channel=beta to render BETA badge'
+      );
+      const betaNormalScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+      const betaNormalLaneBox = await mobileBetaPage.getByTestId('topbar-left-lane').boundingBox();
+      const betaNormalChannelBox = await mobileBetaPage.getByTestId('topbar-channel-badge').boundingBox();
+      assert.equal(
+        betaNormalScrollCheck.scrollWidth <= betaNormalScrollCheck.clientWidth &&
+          betaNormalChannelBox.x + betaNormalChannelBox.width <= betaNormalLaneBox.x + betaNormalLaneBox.width + 1,
+        true,
+        `Normal BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaNormalScrollCheck, betaNormalChannelBox, betaNormalLaneBox })})`
+      );
+      await mobileBetaPage.getByTestId('topbar-settings-btn').click();
+      await mobileBetaPage.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
+      await mobileBetaPage.getByTestId('settings-tab-settings').click();
+      await mobileBetaPage.getByTestId('setting-large-text').waitFor({ state: 'visible', timeout: 3000 });
+      await mobileBetaPage.getByTestId('setting-large-text').click();
+      await mobileBetaPage.waitForFunction(
+        () => document.documentElement.dataset.largeText === 'true',
+        undefined,
+        { timeout: 3000 }
+      );
+      await mobileBetaPage.getByTestId('settings-modal-close').click();
+      await mobileBetaPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+      const [betaLargeLaneBox, betaLargeChannelBox] = await Promise.all([
+        getStableBoundingBox(mobileBetaPage.getByTestId('topbar-left-lane')),
+        getStableBoundingBox(mobileBetaPage.getByTestId('topbar-channel-badge')),
+      ]);
+      const betaLargeScrollCheck = await mobileBetaPage.getByTestId('topbar-left-lane').evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+      assert.ok(betaLargeLaneBox && betaLargeChannelBox);
+      assert.equal(
+        betaLargeScrollCheck.scrollWidth <= betaLargeScrollCheck.clientWidth &&
+          betaLargeChannelBox.x + betaLargeChannelBox.width <= betaLargeLaneBox.x + betaLargeLaneBox.width + 1,
+        true,
+        `Large Text BETA badge must fit cleanly inside topbar-left-lane at 360x780 (${JSON.stringify({ betaLargeScrollCheck, betaLargeChannelBox, betaLargeLaneBox })})`
+      );
+    });
 
     // Tier 3 Foldable & Multi-Window Live-Resize Continuity (10:16 <-> 1:1 <-> 4:3 <-> 360x540 split-screen)
     const foldableContext = await createBootedContext(browser, BASE_URL, {
@@ -1199,6 +1201,7 @@ export async function runMobileLayoutE2e(ctx) {
       skipTutorial: true,
       easyNoReplay: true,
     });
+    try {
     const foldablePage = foldableContext.page;
     await foldablePage.evaluate(() => {
       window.__capyFoldContinuityMarker = 'alive-across-fold';
@@ -1328,8 +1331,9 @@ export async function runMobileLayoutE2e(ctx) {
       'Folding back and entering multi-window split-screen must preserve painted progress'
     );
 
-    await foldablePage.close();
-    await foldableContext.context.close();
+    } finally {
+      await foldableContext.context.close().catch(() => {});
+    }
     logE2ePass('360x780 BETA channel pill containment & Tier 3 foldable/multi-window live-resize continuity verified.');
 }
 
@@ -1706,7 +1710,7 @@ export async function runResilienceIsolationE2e(ctx) {
     await page.keyboard.press('Escape');
     await page.getByTestId('saves-list-section').waitFor({ state: 'hidden', timeout: 3000 });
 
-    const syncRaceContext = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    await withContext(browser, { viewport: { width: 1280, height: 860 } }, async (syncRaceContext) => {
     const syncRacePage = await syncRaceContext.newPage();
     attachErrorListeners(syncRacePage, 'syncRacePage');
     let holdDriveRead = false;
@@ -1832,8 +1836,7 @@ export async function runResilienceIsolationE2e(ctx) {
       midFlightCount,
       'Async cloud sync completion must preserve mid-flight filledRegionIds in capy_active_session_v8'
     );
-    await syncRacePage.close();
-    await syncRaceContext.close();
+    });
     logE2ePass('IndexedDB preview offload, storage quota toast & async cloud sync stroke preservation verified.');
   } finally {
     if (ownBoot) await context.close();
