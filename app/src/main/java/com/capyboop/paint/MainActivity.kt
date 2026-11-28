@@ -7,14 +7,18 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -23,12 +27,17 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.core.graphics.scale
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -51,10 +60,17 @@ import java.util.concurrent.RejectedExecutionException
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var rootContainer: FrameLayout
+    private lateinit var assetLoader: WebViewAssetLoader
+    @Volatile
     private var webView: WebView? = null
+    private var fallbackView: LinearLayout? = null
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
     private lateinit var bridge: CapyAndroidBridge
+    private val rendererCrashGuard = RendererCrashGuard()
     private var isPageLoaded: Boolean = false
+    private var isActivityPaused: Boolean = false
+    private var pendingRendererRecovery: Boolean = false
     @Volatile
     private var isTrustedPageLoaded: Boolean = false
     private val lastKnownRemotePayloads = ConcurrentHashMap<String, String>()
@@ -94,6 +110,16 @@ class MainActivity : ComponentActivity() {
 
     private fun updateBackCallbackState() {
         backPressedCallback.isEnabled = bridge.isModalOpen || (webView?.canGoBack() == true)
+    }
+
+    private fun cancelFileUploadCallback() {
+        val callback = fileUploadCallback
+        fileUploadCallback = null
+        try {
+            callback?.onReceiveValue(null)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to cancel pending file upload callback", e)
+        }
     }
 
     /**
@@ -192,24 +218,26 @@ class MainActivity : ComponentActivity() {
 
         bridge = CapyAndroidBridge(
             context = applicationContext,
-            rootViewProvider = { webView },
+            rootViewProvider = {
+                if (::rootContainer.isInitialized) rootContainer else webView
+            },
             onModalStateChanged = { _ ->
-                runOnUiThread {
+                runOnActiveUiThread {
                     updateBackCallbackState()
                 }
             },
             onRequestPlayGamesSignIn = {
-                runOnUiThread {
+                runOnActiveUiThread {
                     requestPlayGamesSignIn()
                 }
             },
             onSaveCloudSnapshot = { slotKey, payloadJson ->
-                runOnUiThread {
+                runOnActiveUiThread {
                     pushSnapshotToPlayGames(slotKey, payloadJson)
                 }
             },
             onRequestCloudSnapshotPull = { slotKey ->
-                runOnUiThread {
+                runOnActiveUiThread {
                     pullSnapshotFromPlayGames(slotKey)
                 }
             },
@@ -218,12 +246,51 @@ class MainActivity : ComponentActivity() {
 
         initializePlayGamesIfConfigured()
 
-        val assetLoader = WebViewAssetLoader.Builder()
+        assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
-        val wv = WebView(this).apply {
+        rootContainer = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            setBackgroundColor(Color.BLACK)
+        }
+
+        val density = resources.displayMetrics.density
+        val defaultTop = (getStatusBarHeight() / density).toInt()
+        val defaultBottom = (getNavigationBarHeight() / density).toInt()
+        bridge.updateSafeAreaInsets(defaultTop, defaultBottom, 0, 0)
+
+        ViewCompat.setOnApplyWindowInsetsListener(rootContainer) { _, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.ime(),
+            )
+            val d = resources.displayMetrics.density
+            val topCss = (insets.top / d).toInt()
+            val bottomCss = (insets.bottom / d).toInt()
+            val leftCss = (insets.left / d).toInt()
+            val rightCss = (insets.right / d).toInt()
+
+            bridge.updateSafeAreaInsets(topCss, bottomCss, leftCss, rightCss)
+            applySafeAreaInsetsToWebView()
+            fallbackView?.let { applyFallbackSafeAreaPadding(it) }
+            windowInsets
+        }
+
+        setContentView(rootContainer)
+
+        handleIncomingIntent(intent)
+        mountWebView(savedInstanceState)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createWebView(): WebView {
+        return WebView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
@@ -281,6 +348,13 @@ class MainActivity : ComponentActivity() {
                     request: WebResourceRequest,
                 ): WebResourceResponse? {
                     val reqUrl = request.url ?: return null
+                    if (
+                        BuildConfig.DEBUG &&
+                        request.isForMainFrame &&
+                        isDebugCrashTestUrl(reqUrl.toString())
+                    ) {
+                        return null
+                    }
                     val scheme = reqUrl.scheme?.lowercase()
                     val secFetchDest = request.requestHeaders?.get("Sec-Fetch-Dest")
                         ?: request.requestHeaders?.get("sec-fetch-dest")
@@ -323,7 +397,15 @@ class MainActivity : ComponentActivity() {
                     view: WebView,
                     request: WebResourceRequest,
                 ): Boolean {
+                    if (view !== webView) return true
                     val targetUrl = request.url?.toString()
+                    if (
+                        BuildConfig.DEBUG &&
+                        request.isForMainFrame &&
+                        isDebugCrashTestUrl(targetUrl)
+                    ) {
+                        return false
+                    }
                     return when (CapyAndroidBridge.classifyWebViewNavigation(targetUrl)) {
                         CapyAndroidBridge.WebViewNavigationAction.ALLOW_INTERNAL -> false
                         CapyAndroidBridge.WebViewNavigationAction.OPEN_EXTERNAL -> {
@@ -341,6 +423,7 @@ class MainActivity : ComponentActivity() {
 
                 override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
+                    if (view !== webView) return
                     isPageLoaded = false
                     bridge.setModalOpen(false)
                     isTrustedPageLoaded = CapyAndroidBridge.isTrustedPageUrl(url)
@@ -348,11 +431,13 @@ class MainActivity : ComponentActivity() {
 
                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                     super.doUpdateVisitedHistory(view, url, isReload)
+                    if (view !== webView) return
                     updateBackCallbackState()
                 }
 
                 override fun onPageFinished(view: WebView, url: String?) {
                     super.onPageFinished(view, url)
+                    if (view !== webView) return
                     val trusted = CapyAndroidBridge.isTrustedPageUrl(url)
                     isTrustedPageLoaded = trusted
                     isPageLoaded = trusted
@@ -372,6 +457,18 @@ class MainActivity : ComponentActivity() {
                 ) {
                     super.onReceivedError(view, request, error)
                     Log.e(TAG, "WebView error loading ${request.url}: ${error.description} (code: ${error.errorCode})")
+                }
+
+                @RequiresApi(Build.VERSION_CODES.O)
+                override fun onRenderProcessGone(
+                    view: WebView,
+                    detail: RenderProcessGoneDetail,
+                ): Boolean {
+                    return handleRenderProcessGone(
+                        view = view,
+                        didCrash = detail.didCrash(),
+                        rendererPriorityAtExit = detail.rendererPriorityAtExit(),
+                    )
                 }
             }
 
@@ -394,7 +491,15 @@ class MainActivity : ComponentActivity() {
                     filePathCallback: ValueCallback<Array<Uri>>?,
                     fileChooserParams: FileChooserParams?,
                 ): Boolean {
-                    fileUploadCallback?.onReceiveValue(null)
+                    if (webView !== this@MainActivity.webView) {
+                        try {
+                            filePathCallback?.onReceiveValue(null)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to cancel stale WebView file chooser callback", e)
+                        }
+                        return true
+                    }
+                    cancelFileUploadCallback()
                     fileUploadCallback = filePathCallback
                     return try {
                         if (CapyAndroidBridge.shouldUsePhotoPicker(fileChooserParams?.acceptTypes)) {
@@ -413,50 +518,216 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
 
-        val density = resources.displayMetrics.density
-        val defaultTop = (getStatusBarHeight() / density).toInt()
-        val defaultBottom = (getNavigationBarHeight() / density).toInt()
-        bridge.updateSafeAreaInsets(defaultTop, defaultBottom, 0, 0)
-
-        ViewCompat.setOnApplyWindowInsetsListener(wv) { _, windowInsets ->
-            val insets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or
-                    WindowInsetsCompat.Type.displayCutout() or
-                    WindowInsetsCompat.Type.ime(),
-            )
-            val d = resources.displayMetrics.density
-            val topCss = (insets.top / d).toInt()
-            val bottomCss = (insets.bottom / d).toInt()
-            val leftCss = (insets.left / d).toInt()
-            val rightCss = (insets.right / d).toInt()
-
-            bridge.updateSafeAreaInsets(topCss, bottomCss, leftCss, rightCss)
-            applySafeAreaInsetsToWebView()
-            windowInsets
+    private fun mountWebView(savedInstanceState: Bundle? = null) {
+        if (isDestroyed || isFinishing) return
+        pendingRendererRecovery = false
+        isPageLoaded = false
+        fallbackView = null
+        val previous = webView
+        webView = null
+        if (previous != null) {
+            (previous.parent as? ViewGroup)?.removeView(previous)
+            destroyWebViewSafely(previous)
         }
+        rootContainer.removeAllViews()
 
-        webView = wv
-        setContentView(wv)
+        var created: WebView? = null
+        try {
+            val wv = createWebView()
+            created = wv
+            webView = wv
+            rootContainer.addView(wv)
+            ViewCompat.requestApplyInsets(rootContainer)
 
-        handleIncomingIntent(intent)
-        val restored = if (savedInstanceState != null) wv.restoreState(savedInstanceState) else null
-        if (restored == null) {
-            isTrustedPageLoaded = true
-            wv.loadUrl(START_URL)
-        } else {
-            val restoredOk = CapyAndroidBridge.isTrustedPageUrl(wv.url)
-            isTrustedPageLoaded = restoredOk
-            if (!restoredOk) {
+            val restored = if (savedInstanceState != null) wv.restoreState(savedInstanceState) else null
+            if (restored == null) {
                 isTrustedPageLoaded = true
                 wv.loadUrl(START_URL)
+            } else {
+                val restoredOk = CapyAndroidBridge.isTrustedPageUrl(wv.url)
+                isTrustedPageLoaded = restoredOk
+                if (!restoredOk) {
+                    isTrustedPageLoaded = true
+                    wv.loadUrl(START_URL)
+                }
+            }
+            if (isActivityPaused) {
+                wv.onPause()
+            }
+            updateBackCallbackState()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create or mount WebView", e)
+            isPageLoaded = false
+            isTrustedPageLoaded = false
+            webView = null
+            if (created != null) {
+                (created.parent as? ViewGroup)?.removeView(created)
+                destroyWebViewSafely(created)
+            }
+            updateBackCallbackState()
+            showRendererCrashFallback()
+        }
+    }
+
+    private fun handleRenderProcessGone(
+        view: WebView,
+        didCrash: Boolean,
+        rendererPriorityAtExit: Int,
+    ): Boolean {
+        if (view !== webView) {
+            Log.w(
+                TAG,
+                "Stale WebView renderer terminated (didCrash=$didCrash, priority=$rendererPriorityAtExit); destroying detached instance",
+            )
+            (view.parent as? ViewGroup)?.removeView(view)
+            destroyWebViewSafely(view)
+            return true
+        }
+
+        isPageLoaded = false
+        isTrustedPageLoaded = false
+        webView = null
+        bridge.resetModalState()
+        cancelFileUploadCallback()
+        updateBackCallbackState()
+
+        (view.parent as? ViewGroup)?.removeView(view)
+        destroyWebViewSafely(view)
+
+        if (isDestroyed || isFinishing) {
+            Log.w(
+                TAG,
+                "WebView renderer terminated during activity teardown (didCrash=$didCrash, priority=$rendererPriorityAtExit)",
+            )
+            return true
+        }
+
+        if (isActivityPaused) {
+            pendingRendererRecovery = true
+            val deferredTelemetry = "WebView renderer terminated while paused " +
+                "(didCrash=$didCrash, priority=$rendererPriorityAtExit, " +
+                "recentRecoveries=${rendererCrashGuard.recentRecoveryCount()}, " +
+                "totalExits=${rendererCrashGuard.totalExitCount()}, action=DEFER_UNTIL_RESUME)"
+            if (didCrash) {
+                Log.e(TAG, deferredTelemetry)
+            } else {
+                Log.w(TAG, deferredTelemetry)
+            }
+            return true
+        }
+
+        val record = rendererCrashGuard.recordExit()
+        val telemetry = "WebView renderer terminated (didCrash=$didCrash, priority=$rendererPriorityAtExit, " +
+            "recentRecoveries=${record.recentRecoveryCount}, totalExits=${record.totalExitCount}, action=${record.decision})"
+        if (didCrash) {
+            Log.e(TAG, telemetry)
+        } else {
+            Log.w(TAG, telemetry)
+        }
+
+        when (record.decision) {
+            RendererCrashGuard.Decision.RECOVER -> mountWebView(savedInstanceState = null)
+            RendererCrashGuard.Decision.SHOW_FALLBACK -> showRendererCrashFallback()
+        }
+        return true
+    }
+
+    private fun destroyWebViewSafely(view: WebView) {
+        try {
+            view.destroy()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error destroying terminated WebView", e)
+        }
+    }
+
+    private fun applyFallbackSafeAreaPadding(layout: LinearLayout) {
+        val density = resources.displayMetrics.density
+        val safeLeft = bridge.safeAreaLeftCss.coerceIn(0, MAX_FALLBACK_INSET_CSS)
+        val safeRight = bridge.safeAreaRightCss.coerceIn(0, MAX_FALLBACK_INSET_CSS)
+        val safeTop = bridge.safeAreaTopCss.coerceIn(0, MAX_FALLBACK_INSET_CSS)
+        val safeBottom = bridge.safeAreaBottomCss.coerceIn(0, MAX_FALLBACK_INSET_CSS)
+        val padLeft = ((safeLeft + 24) * density).toInt()
+        val padRight = ((safeRight + 24) * density).toInt()
+        val padTop = ((safeTop + 24) * density).toInt()
+        val padBottom = ((safeBottom + 24) * density).toInt()
+        layout.setPadding(padLeft, padTop, padRight, padBottom)
+    }
+
+    private fun showRendererCrashFallback() {
+        if (isDestroyed || isFinishing) return
+        pendingRendererRecovery = false
+        rootContainer.removeAllViews()
+
+        val density = resources.displayMetrics.density
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.BLACK)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
+        applyFallbackSafeAreaPadding(layout)
+
+        val titleView = TextView(this).apply {
+            text = "Capy Paint paused"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+
+        val messageView = TextView(this).apply {
+            text = "The display engine stopped unexpectedly. Your saved progress is safe on this device."
+            setTextColor(Color.parseColor("#D1D5DB"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                topMargin = (12 * density).toInt()
+                bottomMargin = (24 * density).toInt()
             }
         }
+
+        val reloadButton = Button(this).apply {
+            text = "Tap to reload"
+            contentDescription = "Tap to reload Capy Paint"
+            isAllCaps = false
+            setTextColor(Color.parseColor("#111827"))
+            setBackgroundColor(Color.parseColor("#F59E0B"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTypeface(typeface, Typeface.BOLD)
+            minHeight = (48 * density).toInt()
+            setPadding(
+                (28 * density).toInt(),
+                (12 * density).toInt(),
+                (28 * density).toInt(),
+                (12 * density).toInt(),
+            )
+            setOnClickListener { button ->
+                button.isEnabled = false
+                rendererCrashGuard.reset()
+                mountWebView(savedInstanceState = null)
+            }
+        }
+
+        layout.addView(titleView)
+        layout.addView(messageView)
+        layout.addView(reloadButton)
+        fallbackView = layout
+        rootContainer.addView(layout)
+        reloadButton.requestFocus()
     }
 
     private fun evaluateOnTrustedPage(script: String) {
         val wv = webView ?: return
         wv.post {
+            if (isDestroyed || isFinishing || (wv !== webView)) return@post
             if (!CapyAndroidBridge.isTrustedPageUrl(wv.url)) {
                 Log.w(TAG, "Blocked JS evaluation on untrusted WebView URL: ${wv.url}")
                 return@post
@@ -1145,20 +1416,51 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        isActivityPaused = true
         webView?.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        isActivityPaused = false
+        if (pendingRendererRecovery) {
+            pendingRendererRecovery = false
+            if (!isDestroyed && !isFinishing) {
+                val record = rendererCrashGuard.recordExit()
+                Log.w(
+                    TAG,
+                    "Completing deferred WebView renderer recovery on resume " +
+                        "(recentRecoveries=${record.recentRecoveryCount}, " +
+                        "totalExits=${record.totalExitCount}, action=${record.decision})",
+                )
+                when (record.decision) {
+                    RendererCrashGuard.Decision.RECOVER -> mountWebView(savedInstanceState = null)
+                    RendererCrashGuard.Decision.SHOW_FALLBACK -> showRendererCrashFallback()
+                }
+            }
+            return
+        }
         webView?.onResume()
     }
 
     override fun onDestroy() {
+        isPageLoaded = false
+        isTrustedPageLoaded = false
+        pendingRendererRecovery = false
+        fallbackView = null
         shareDecodeExecutor.shutdownNow()
         playGamesIoExecutor.shutdownNow()
-        webView?.destroy()
+        cancelFileUploadCallback()
+        val wv = webView
         webView = null
+        if (wv != null) {
+            (wv.parent as? ViewGroup)?.removeView(wv)
+            destroyWebViewSafely(wv)
+        }
+        if (::rootContainer.isInitialized) {
+            rootContainer.removeAllViews()
+        }
         super.onDestroy()
     }
 
@@ -1166,5 +1468,12 @@ class MainActivity : ComponentActivity() {
         const val TAG = "CapyApp"
         const val START_URL = "https://appassets.androidplatform.net/assets/www/index.html"
         const val CLOUD_MANIFEST_SLOT_KEY = "capy_cloud_manifest_v2"
+        private const val MAX_FALLBACK_INSET_CSS = 128
+
+        internal fun isDebugCrashTestUrl(url: String?): Boolean {
+            val candidate = url ?: return false
+            return candidate.equals("chrome://crash", ignoreCase = true) ||
+                candidate.equals("chrome://crash/", ignoreCase = true)
+        }
     }
 }
