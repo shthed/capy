@@ -685,13 +685,20 @@ class CapyAndroidBridgeTest {
                 "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=abc&response_type=code&code_challenge=xyz&code_challenge_method=S256"
             )
         )
+        assertTrue(
+            CapyAndroidBridge.isAllowedExternalOAuthUrl(
+                "https://openrouter.ai/auth?callback_url=capypaint%3A%2F%2Foauth%2Fcallback&code_challenge=xyz&code_challenge_method=S256&state=abc"
+            )
+        )
 
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl(null))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl(""))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("http://accounts.google.com/o/oauth2/v2/auth"))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("http://login.microsoftonline.com/consumers/oauth2/v2.0/authorize"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("http://openrouter.ai/auth"))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://evil.example.com/oauth"))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://accounts.google.com.evil.example/oauth"))
+        assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://openrouter.ai.evil.example/auth"))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://user:pass@accounts.google.com/oauth"))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("https://accounts.google.com:8443/oauth"))
         assertFalse(CapyAndroidBridge.isAllowedExternalOAuthUrl("javascript:alert(1)"))
@@ -736,11 +743,17 @@ class CapyAndroidBridgeTest {
         val indexCsp = indexHeaders["Content-Security-Policy"] ?: ""
         assertTrue(indexCsp.contains("script-src 'self'"))
         assertTrue(indexCsp.contains("https://accounts.google.com/gsi/client"))
+        assertTrue(indexCsp.contains("https://generativelanguage.googleapis.com"))
+        assertTrue(indexCsp.contains("https://openrouter.ai"))
+        assertTrue(indexCsp.contains("https://api.openai.com"))
+        assertTrue(indexCsp.contains("https://api.x.ai"))
         assertTrue(indexCsp.contains("script-src-attr 'none'"))
         assertTrue(indexCsp.contains("https://capypaint.com"))
         assertTrue(indexCsp.contains("object-src 'none'"))
         assertFalse(indexCsp.contains("script-src 'unsafe-inline'"))
         assertFalse(indexCsp.contains("'unsafe-eval'"))
+        assertFalse(indexCsp.contains("js.puter.com"))
+        assertFalse(indexCsp.contains("puter.com"))
 
         val privacyHeaders = CapyAndroidBridge.buildWebViewAssetResponseHeaders(
             mimeType = "text/html",

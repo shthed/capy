@@ -393,6 +393,7 @@ export function computeOrphanedKeys(params: {
   rawActiveStateJson: string | null;
   extraSnapshotsCandidates?: string[];
   extraActiveStateCandidates?: string[];
+  liveLayerImageKeysByPuzzle?: Map<string, string[]> | Record<string, string[]>;
 }): {
   skipped: boolean;
   orphanedPuzzleKeys: string[];
@@ -416,6 +417,21 @@ export function computeOrphanedKeys(params: {
   )) {
     if (!collectLiveActiveStateRef(rawActive, liveIds)) {
       return { skipped: true, orphanedPuzzleKeys: [], orphanedImageKeys: [] };
+    }
+  }
+
+  if (params.liveLayerImageKeysByPuzzle) {
+    const entries =
+      params.liveLayerImageKeysByPuzzle instanceof Map
+        ? params.liveLayerImageKeysByPuzzle.entries()
+        : Object.entries(params.liveLayerImageKeysByPuzzle);
+    for (const [puzzleId, layerKeys] of entries) {
+      if (!liveIds.has(puzzleId) || !Array.isArray(layerKeys)) continue;
+      for (const layerKey of layerKeys) {
+        if (typeof layerKey === 'string' && layerKey.length > 0) {
+          liveBlobUris.add(layerKey);
+        }
+      }
     }
   }
 
@@ -741,69 +757,151 @@ async function openExistingIdbReadonly(
   });
 }
 
+function extractNestedLayerImageKeys(puzzleValue: unknown): string[] | undefined {
+  if (!puzzleValue || typeof puzzleValue !== 'object' || Array.isArray(puzzleValue)) {
+    return undefined;
+  }
+  const nested = (puzzleValue as { nestedLayers?: unknown }).nestedLayers;
+  if (!Array.isArray(nested) || nested.length === 0) {
+    return undefined;
+  }
+  const keys: string[] = [];
+  for (const layer of nested) {
+    if (!layer || typeof layer !== 'object') continue;
+    const blobKey = (layer as { imageBlobKey?: unknown }).imageBlobKey;
+    if (typeof blobKey === 'string' && blobKey.length > 0) {
+      keys.push(blobKey);
+    }
+  }
+  return keys.length > 0 ? keys : undefined;
+}
+
+interface StoreEntryRead {
+  key: string;
+  bytes: number;
+  layerImageKeys?: string[];
+}
+
+interface ReadStoreEntriesResult {
+  entries: StoreEntryRead[];
+  ok: boolean;
+}
+
+function readStoreEntriesWithCursor(
+  store: IDBObjectStore,
+  collectLayerKeys: boolean,
+  entries: StoreEntryRead[],
+  finish: (ok: boolean) => void
+): void {
+  const req = store.openCursor();
+  req.onsuccess = () => {
+    const cursor = req.result;
+    if (!cursor) {
+      finish(true);
+      return;
+    }
+    const keyStr = String(cursor.key);
+    const bytes = keyStr.length * 2 + estimateStructuredCloneBytes(cursor.value);
+    const layerImageKeys = collectLayerKeys
+      ? extractNestedLayerImageKeys(cursor.value)
+      : undefined;
+    entries.push({
+      key: keyStr,
+      bytes,
+      ...(layerImageKeys ? { layerImageKeys } : {}),
+    });
+    cursor.continue();
+  };
+  req.onerror = () => finish(false);
+}
+
+function readStoreEntriesWithGetAllKeys(
+  store: IDBObjectStore,
+  collectLayerKeys: boolean,
+  entries: StoreEntryRead[],
+  finish: (ok: boolean) => void
+): void {
+  const keysReq = store.getAllKeys();
+  keysReq.onsuccess = () => {
+    const keys = Array.isArray(keysReq.result) ? keysReq.result : [];
+    if (keys.length === 0) {
+      finish(true);
+      return;
+    }
+    let pending = keys.length;
+    let hadError = false;
+    for (const rawKey of keys) {
+      const getReq = store.get(rawKey);
+      getReq.onsuccess = () => {
+        const keyStr = String(rawKey);
+        const bytes = keyStr.length * 2 + estimateStructuredCloneBytes(getReq.result);
+        const layerImageKeys = collectLayerKeys
+          ? extractNestedLayerImageKeys(getReq.result)
+          : undefined;
+        entries.push({
+          key: keyStr,
+          bytes,
+          ...(layerImageKeys ? { layerImageKeys } : {}),
+        });
+        pending -= 1;
+        if (pending === 0) finish(!hadError);
+      };
+      getReq.onerror = () => {
+        hadError = true;
+        pending -= 1;
+        if (pending === 0) finish(false);
+      };
+    }
+  };
+  keysReq.onerror = () => finish(false);
+}
+
 async function readStoreEntries(
   db: IDBDatabase,
   storeName: string
-): Promise<Array<{ key: string; bytes: number }>> {
+): Promise<ReadStoreEntriesResult> {
   if (!db.objectStoreNames || !db.objectStoreNames.contains(storeName)) {
-    return [];
+    return { entries: [], ok: true };
   }
-  return await new Promise<Array<{ key: string; bytes: number }>>((resolve) => {
-    const entries: Array<{ key: string; bytes: number }> = [];
+  const collectLayerKeys = storeName === STORE_PUZZLES;
+  return await new Promise<ReadStoreEntriesResult>((resolve) => {
+    const entries: StoreEntryRead[] = [];
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve({ entries, ok });
+    };
+
     let tx: IDBTransaction;
     try {
       tx = db.transaction(storeName, 'readonly');
     } catch (err) {
       reportSwallowed('StorageAnalyzer.readStoreEntriesTx', err, { storeName });
-      resolve([]);
+      finish(false);
       return;
     }
-    const store = tx.objectStore(storeName);
+    tx.onerror = () => finish(false);
+    tx.onabort = () => finish(false);
+
+    let store: IDBObjectStore;
+    try {
+      store = tx.objectStore(storeName);
+    } catch (err) {
+      reportSwallowed('StorageAnalyzer.readStoreEntriesStore', err, { storeName });
+      finish(false);
+      return;
+    }
+
     if (typeof store.openCursor === 'function') {
-      const req = store.openCursor();
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (!cursor) {
-          resolve(entries);
-          return;
-        }
-        const keyStr = String(cursor.key);
-        const bytes = keyStr.length * 2 + estimateStructuredCloneBytes(cursor.value);
-        entries.push({ key: keyStr, bytes });
-        cursor.continue();
-      };
-      req.onerror = () => resolve(entries);
-      tx.onabort = () => resolve(entries);
+      readStoreEntriesWithCursor(store, collectLayerKeys, entries, finish);
       return;
     }
     if (typeof store.getAllKeys === 'function') {
-      const keysReq = store.getAllKeys();
-      keysReq.onsuccess = () => {
-        const keys = Array.isArray(keysReq.result) ? keysReq.result : [];
-        if (keys.length === 0) {
-          resolve([]);
-          return;
-        }
-        let pending = keys.length;
-        for (const rawKey of keys) {
-          const getReq = store.get(rawKey);
-          getReq.onsuccess = () => {
-            const keyStr = String(rawKey);
-            const bytes = keyStr.length * 2 + estimateStructuredCloneBytes(getReq.result);
-            entries.push({ key: keyStr, bytes });
-            pending -= 1;
-            if (pending === 0) resolve(entries);
-          };
-          getReq.onerror = () => {
-            pending -= 1;
-            if (pending === 0) resolve(entries);
-          };
-        }
-      };
-      keysReq.onerror = () => resolve([]);
+      readStoreEntriesWithGetAllKeys(store, collectLayerKeys, entries, finish);
       return;
     }
-    resolve([]);
+    finish(false);
   });
 }
 
@@ -889,8 +987,10 @@ async function inspectSingleIdbDatabase(
   });
   if (!db) return null;
   try {
-    const puzzleEntries = await readStoreEntries(db, STORE_PUZZLES);
-    const imageEntries = await readStoreEntries(db, STORE_IMAGES);
+    const puzzleRead = await readStoreEntries(db, STORE_PUZZLES);
+    const imageRead = await readStoreEntries(db, STORE_IMAGES);
+    const puzzleEntries = puzzleRead.entries;
+    const imageEntries = imageRead.entries;
     const meta = resolveChannelMetaForDbName(dbName);
     const snapshotsKey = `${SNAPSHOTS_KEY}${meta.sandboxSuffix}`;
     const activeStateKey = `${ACTIVE_STATE_KEY}${meta.sandboxSuffix}`;
@@ -900,16 +1000,24 @@ async function inspectSingleIdbDatabase(
       snapshotsKey,
       activeStateKey
     );
-    const orphanRes = metaRead.ok
-      ? computeOrphanedKeys({
-          puzzleKeys: puzzleEntries.map((e) => e.key),
-          imageKeys: imageEntries.map((e) => e.key),
-          rawSnapshotsJson: metaRead.rawSnapshotsJson,
-          rawActiveStateJson: metaRead.rawActiveStateJson,
-          extraSnapshotsCandidates: metaRead.extraSnapshotsCandidates,
-          extraActiveStateCandidates: metaRead.extraActiveStateCandidates,
-        })
-      : { skipped: true, orphanedPuzzleKeys: [] as string[], orphanedImageKeys: [] as string[] };
+    const liveLayerImageKeysByPuzzle = new Map<string, string[]>();
+    for (const entry of puzzleEntries) {
+      if (entry.layerImageKeys && entry.layerImageKeys.length > 0) {
+        liveLayerImageKeysByPuzzle.set(entry.key, entry.layerImageKeys);
+      }
+    }
+    const orphanRes =
+      metaRead.ok && puzzleRead.ok && imageRead.ok
+        ? computeOrphanedKeys({
+            puzzleKeys: puzzleEntries.map((e) => e.key),
+            imageKeys: imageEntries.map((e) => e.key),
+            rawSnapshotsJson: metaRead.rawSnapshotsJson,
+            rawActiveStateJson: metaRead.rawActiveStateJson,
+            extraSnapshotsCandidates: metaRead.extraSnapshotsCandidates,
+            extraActiveStateCandidates: metaRead.extraActiveStateCandidates,
+            liveLayerImageKeysByPuzzle,
+          })
+        : { skipped: true, orphanedPuzzleKeys: [] as string[], orphanedImageKeys: [] as string[] };
     const orphanPuzzleSet = new Set(orphanRes.orphanedPuzzleKeys);
     const orphanImageSet = new Set(orphanRes.orphanedImageKeys);
 

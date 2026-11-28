@@ -15,6 +15,7 @@ import { PlayerLifetimeStats, PlayerStatsService } from './services/PlayerStatsS
 import { PuzzleWorkerService } from './services/PuzzleWorkerService';
 import { useCloudSyncController } from './hooks/useCloudSyncController';
 import { CoopLoadSampleFn, useCoopSession } from './hooks/useCoopSession';
+import { useInfiniteZoomController } from './hooks/useInfiniteZoomController';
 import { useIsomorphicLayoutEffect, useLatest } from './hooks/useLatest';
 import { usePaintController } from './hooks/usePaintController';
 import { useReplayController } from './hooks/useReplayController';
@@ -29,12 +30,22 @@ import { FocusRegionRequest, PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
+import { buildUnifiedRegionIndex } from './engine/UnifiedPuzzleLayers';
+import {
+  InfiniteZoomToolbarButton,
+  RegionSelectionBar,
+  resolveActiveInfiniteZoomDisplay,
+} from './components/InfiniteZoomControls';
+import { GuidedGeminiHandoffModal } from './components/GuidedGeminiHandoffModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { ReplayControls } from './components/ReplayControls';
 import { OnboardingTutorial, TUTORIAL_STEPS } from './components/OnboardingTutorial';
 import { FeatureOfferBanner } from './components/FeatureOfferBanner';
 import { TargetSpotlightOverlay } from './components/TargetSpotlightOverlay';
 import { resolveReleaseChannel } from './version';
+
+const EMPTY_REGIONS: Region[] = [];
+const EMPTY_REGION_MAP: Map<number, Region> = new Map();
 
 const SettingsModal = React.lazy(() =>
   import('./components/SettingsModal').then((m) => ({ default: m.SettingsModal }))
@@ -65,6 +76,7 @@ interface AppViewPropsInput {
   showTutorial: boolean;
   showSettings: boolean;
   showPaletteOptions: boolean;
+  isGuidedGeminiOpen: boolean;
   loadingStepIndex: number | undefined;
 }
 
@@ -122,6 +134,7 @@ function deriveHudViewProps(input: AppViewPropsInput) {
     showTutorial,
     showSettings,
     showPaletteOptions,
+    isGuidedGeminiOpen,
   } = input;
   return {
     showActiveHud: Boolean(puzzle && !isLoading),
@@ -132,9 +145,9 @@ function deriveHudViewProps(input: AppViewPropsInput) {
       isFreeColorMode || puzzle?.isFreeColor || settings.enableCustomColorForAllPuzzles
     ),
     activePaletteColor: puzzle?.palette.find((c) => c.id === activeColorId) || null,
-    hasDockedTutorial: showTutorial && showSettings && !showPaletteOptions,
-    isModalOpen: showSettings || showPaletteOptions,
-    isSettingsOnlyOpen: showSettings && !showPaletteOptions,
+    hasDockedTutorial: showTutorial && showSettings && !showPaletteOptions && !isGuidedGeminiOpen,
+    isModalOpen: showSettings || showPaletteOptions || isGuidedGeminiOpen,
+    isSettingsOnlyOpen: showSettings && !showPaletteOptions && !isGuidedGeminiOpen,
   };
 }
 
@@ -192,6 +205,14 @@ export const App: React.FC = () => {
   const activeBlobUrlRef = useRef<string | null>(null);
   const flushPendingViewportSaveRef = useRef<() => void>(() => {});
   const exitTutorialReplayRef = useRef<() => void>(() => {});
+  const clearUndoSubdivisionRef = useRef<() => void>(() => {});
+  const beforeSnapshotResetOrSwitchRef = useRef<() => void>(() => {});
+  const handleClearUndoSubdivisionBridge = useCallback(() => {
+    clearUndoSubdivisionRef.current();
+  }, []);
+  const handleBeforeSnapshotResetOrSwitchBridge = useCallback(() => {
+    beforeSnapshotResetOrSwitchRef.current();
+  }, []);
 
   useEffect(() => {
     StorageService.requestPersistentStorageOnce();
@@ -215,6 +236,7 @@ export const App: React.FC = () => {
   const [activeSettingsTab, setActiveSettingsTab] = useState<number>(1);
   const activeSettingsTabRef = useLatest(activeSettingsTab);
   const [showPaletteOptions, setShowPaletteOptions] = useState<boolean>(false);
+  const [isGuidedGeminiOpen, setIsGuidedGeminiOpen] = useState<boolean>(false);
 
   const settingsRef = useLatest(settings);
   const sourceImageRef = useLatest(sourceImage);
@@ -250,17 +272,13 @@ export const App: React.FC = () => {
     }
   });
 
-  // O(1) region lookup map whenever puzzle changes
-  const regionByIdMap = useMemo(() => {
-    const map = new Map<number, Region>();
-    if (puzzle) {
-      for (let i = 0; i < puzzle.regions.length; i++) {
-        const r = puzzle.regions[i];
-        map.set(r.id, r);
-      }
-    }
-    return map;
-  }, [puzzle]);
+  // Unified O(1) region index across root + all nested layers whenever puzzle changes
+  const unifiedRegionIndex = useMemo(
+    () => (puzzle ? buildUnifiedRegionIndex(puzzle) : null),
+    [puzzle]
+  );
+  const allPuzzleRegions = unifiedRegionIndex?.allRegions ?? EMPTY_REGIONS;
+  const regionByIdMap = unifiedRegionIndex?.byId ?? EMPTY_REGION_MAP;
   const regionByIdRef = useLatest(regionByIdMap);
 
   const handleUpdateSettings = useCallback(
@@ -454,6 +472,7 @@ export const App: React.FC = () => {
     undoStack,
     redoStack,
     undoStackRef,
+    redoStackRef,
     syncUndoStack,
     syncRedoStack,
     isUndoEnabled,
@@ -477,6 +496,7 @@ export const App: React.FC = () => {
     markTutorialActionTried,
     triggerFeatureOffer,
     onFocusRegion: handleFocusUndoRedoRegion,
+    onTransitionCommitted: handleClearUndoSubdivisionBridge,
   });
 
   const handleLongPressUndo = useCallback(() => {
@@ -485,26 +505,12 @@ export const App: React.FC = () => {
 
   // 5. Viewport, Fullscreen & Keyboard Shortcuts Controller
   const {
-    visibleColorIds,
-    visibleColorIdsRef,
-    visibleRegionIdsRef,
-    isFullscreen,
-    zoomInTrigger,
-    zoomOutTrigger,
-    resetViewTrigger,
-    restoreViewTrigger,
-    panStepRequest,
-    isCanvasTransformed,
-    initialViewport,
-    applyViewport,
-    clearPendingViewportSave,
-    handleVisibleColorsChanged,
-    handleVisibleRegionsChanged,
-    handleToggleFullscreen,
-    handleViewExtentChanged,
-    handleViewportGesture,
-    handleZoomIn,
-    handleZoomOut,
+    visibleColorIds, visibleColorIdsRef, visibleRegionIdsRef, visibleNestedColorIds, isFullscreen,
+    zoomInTrigger, zoomOutTrigger, resetViewTrigger, restoreViewTrigger,
+    panStepRequest, focusBoundsRequest, isCanvasTransformed, initialViewport,
+    applyViewport, focusViewportOnBounds, clearPendingViewportSave,
+    handleVisibleColorsChanged, handleVisibleRegionsChanged, handleVisibleNestedColorsChanged, handleToggleFullscreen,
+    handleViewExtentChanged, handleViewportGesture, handleZoomIn, handleZoomOut,
     handleResetView,
   } = useViewportAndShortcuts({
     puzzle,
@@ -512,7 +518,7 @@ export const App: React.FC = () => {
     isLoadingRef,
     isReplaying,
     showSettings,
-    showPaletteOptions,
+    showPaletteOptions: showPaletteOptions || isGuidedGeminiOpen,
     isUndoEnabled,
     viewportRef,
     canvasContainerSizeRef,
@@ -543,7 +549,7 @@ export const App: React.FC = () => {
     isLoading,
     isReplaying,
     showSettings,
-    showPaletteOptions,
+    showPaletteOptions: showPaletteOptions || isGuidedGeminiOpen,
     filledRegionCount: filledRegionIds.size,
     initialSnapshots: snapshots,
     liveCoopRef,
@@ -568,6 +574,7 @@ export const App: React.FC = () => {
     setSnapshots,
     setLifetimeStats,
     markTutorialActionTried,
+    onPaintCommitted: handleClearUndoSubdivisionBridge,
   });
 
   // 7. Snapshot Library, Sample Loader, Detail Tile & Export/Import Controller
@@ -638,7 +645,60 @@ export const App: React.FC = () => {
     setLifetimeStats,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onBeforeSnapshotResetOrSwitch: handleBeforeSnapshotResetOrSwitchBridge,
   });
+
+  // 7b. Unified Single-Canvas Infinite Zoom Controller (Nano Banana 2.1 / 2)
+  const {
+    isRegionSelectionMode,
+    selectedRegionIds,
+    selectionLayerId,
+    selectionMetrics,
+    pendingSwitchRegionId,
+    selectionNotice,
+    infiniteZoomPrompt,
+    setInfiniteZoomPrompt,
+    isInfiniteZoomRunning,
+    isInfiniteZoomDisabled,
+    infiniteZoomDisabledReason,
+    undoSubdivisionState,
+    liveLayerImages,
+    guidedHandoffSession,
+    infiniteZoomError,
+    clearInfiniteZoomError,
+    childSave,
+    handleJumpToChildPuzzle,
+    handleEnterRegionSelectionMode,
+    exitRegionSelectionMode,
+    handleRegionSelectTap,
+    handleRegionSelectDragAdd,
+    handleSwitchSelectionToPending,
+    handleClearSelection,
+    handleConfirmRegionSubdivision,
+    handleConfirmExtendBorders,
+    handleCompleteGuidedGeminiHandoff,
+    handleRetryGuidedWithCurrentProvider,
+    handleCancelGuidedGeminiHandoff,
+    handleUndoSubdivision,
+    clearUndoSubdivision,
+    cancelActiveInfiniteZoom,
+    handleBeforeSnapshotResetOrSwitch,
+  } = useInfiniteZoomController({
+    puzzle, sourceImage, snapshots, activeSnapshotId, activeSave, activeTitle, activeColorId,
+    filledRegionIds, paintedRegionColors, isFreeColorMode, isLoading, isReplaying, isReplayPlaying,
+    exitReplay, applyViewport, focusViewportOnBounds, coopRoomCode, settings,
+    visibleColorIdsRef, regionByIdRef, liveCoopRef, viewportRef, activeBlobUrlRef,
+    undoStackRef, redoStackRef, handleLoadSnapshotRef, syncUndoStack, syncRedoStack,
+    setSnapshots, setPuzzle, setSourceImage, setFilledRegionIds, setPaintedRegionColors,
+    setActiveColorId, setHintRegionId, setIsLoading, setLoadingProgress, setLoadingStatus,
+    setLoadingPayload, markTutorialActionTried, triggerFeatureOffer,
+    onGuidedHandoffOpenChange: setIsGuidedGeminiOpen,
+  });
+
+  useIsomorphicLayoutEffect(() => {
+    clearUndoSubdivisionRef.current = clearUndoSubdivision;
+    beforeSnapshotResetOrSwitchRef.current = handleBeforeSnapshotResetOrSwitch;
+  }, [clearUndoSubdivision, handleBeforeSnapshotResetOrSwitch]);
 
   // 8. Session Restore Pipeline on Launch
   useSessionRestore({
@@ -700,16 +760,20 @@ export const App: React.FC = () => {
     syncRedoStack,
   });
 
-  // Derived Display Numbers & Progress
+  // Derived Display Numbers & Progress (unified across root + all nested layers)
   const displayNumberMap = useMemo(() => {
     if (!puzzle) return new Map<number, string>();
-    return getDisplayNumberMap(puzzle.palette, puzzle.regions, settings.paletteSort);
-  }, [puzzle, settings.paletteSort]);
+    return getDisplayNumberMap(puzzle.palette, allPuzzleRegions, settings.paletteSort);
+  }, [puzzle, allPuzzleRegions, settings.paletteSort]);
 
-  const totalCount = puzzle?.regions.length || 0;
+  const totalCount = unifiedRegionIndex?.totalCount ?? 0;
   const filledCount = filledRegionIds.size;
   const progressPercentage = computeProgressPercentage(filledCount, totalCount);
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
+  const {
+    activeModel: activeInfiniteZoomModel,
+    automatedProviderLabel: activeAutomatedProviderLabel,
+  } = resolveActiveInfiniteZoomDisplay(settings);
   const viewProps = deriveAppViewProps({
     puzzle,
     settings,
@@ -730,6 +794,7 @@ export const App: React.FC = () => {
     showTutorial,
     showSettings,
     showPaletteOptions,
+    isGuidedGeminiOpen: (isGuidedGeminiOpen || Boolean(guidedHandoffSession)) && !showSettings,
     loadingStepIndex: loadingPayload?.stepIndex,
   });
 
@@ -785,6 +850,27 @@ export const App: React.FC = () => {
   const handleOpenReleaseChannel = useCallback(() => {
     setSettingsInitialTab(0);
     setShowSettings(true);
+  }, []);
+
+  const handleOpenInfiniteZoomProviderSettings = useCallback(() => {
+    setSettingsInitialTab(3);
+    setShowSettings(true);
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      let attempts = 0;
+      const scrollToProvider = () => {
+        const el = document.getElementById('iz-provider-select');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus({ preventScroll: true });
+          return;
+        }
+        attempts += 1;
+        if (attempts < 15) {
+          window.setTimeout(scrollToProvider, 80);
+        }
+      };
+      window.setTimeout(scrollToProvider, 60);
+    }
   }, []);
 
   const handleCloseSettings = useCallback(() => {
@@ -959,6 +1045,8 @@ export const App: React.FC = () => {
         coopRoomCode={coopRoomCode}
         coopParticipants={coopParticipants}
         parentPuzzleTitle={parentSave?.title ?? null}
+        parentPuzzleDirection={parentSave?.zoomTree?.direction ?? null}
+        childPuzzleTitle={childSave?.title ?? null}
         releaseChannelBadge={releaseChannelInfo.badgeLabel}
         onPickImage={handlePickImage}
         onTogglePreview={handleTopBarTogglePreview}
@@ -967,6 +1055,7 @@ export const App: React.FC = () => {
         onOpenSaves={handleOpenSaves}
         onOpenCoop={showCloudCoopUi ? handleOpenCoop : undefined}
         onBackToParentPuzzle={parentSave ? handleBackToParentPuzzle : undefined}
+        onJumpToChildPuzzle={childSave ? handleJumpToChildPuzzle : undefined}
         onOpenReleaseChannel={handleOpenReleaseChannel}
       />
 
@@ -1016,6 +1105,7 @@ export const App: React.FC = () => {
         resetViewTrigger={resetViewTrigger}
         restoreViewTrigger={restoreViewTrigger}
         panStepRequest={panStepRequest}
+        focusBoundsRequest={focusBoundsRequest}
         replayFollowRegionId={viewProps.replayFollowRegionId}
         replayFollowSequence={viewProps.replayFollowSequence}
         replayFollowStep={replayStep}
@@ -1033,10 +1123,18 @@ export const App: React.FC = () => {
         onBatchRegionsClicked={attemptBatchFillRegions}
         onVisibleColorsChanged={handleVisibleColorsChanged}
         onVisibleRegionsChanged={handleVisibleRegionsChanged}
+        onVisibleNestedColorsChanged={handleVisibleNestedColorsChanged}
         onTogglePreview={handleCanvasTogglePreview}
+        activeSnapshotId={activeSnapshotId}
+        isRegionSelectionMode={isRegionSelectionMode}
+        selectedRegionIds={selectedRegionIds}
+        selectionLayerId={selectionLayerId}
+        layerImages={liveLayerImages}
+        onRegionSelectTap={handleRegionSelectTap}
+        onRegionSelectDragAdd={handleRegionSelectDragAdd}
       />
 
-      {/* Floating Action Controls (Undo, Redo, Replay, Zoom, Paint Mode) */}
+      {/* Floating Action Controls (Undo, Redo, Infinite Zoom, Replay, Zoom, Paint Mode) */}
       {viewProps.showActiveHud && (
         <FloatingActions
           isPaintMode={settings.isPaintMode}
@@ -1049,6 +1147,7 @@ export const App: React.FC = () => {
           showUndo={isUndoEnabled}
           isCompleted={isCompleted}
           isReplaying={isReplaying}
+          isReplayPlaying={isReplayPlaying}
           onUndo={handleFloatingUndo}
           onRedo={handleFloatingRedo}
           onLongPressUndo={handleLongPressUndo}
@@ -1057,6 +1156,51 @@ export const App: React.FC = () => {
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onResetView={handleResetView}
+          infiniteZoomSlot={
+            !isRegionSelectionMode ? (
+              <InfiniteZoomToolbarButton
+                disabled={isInfiniteZoomDisabled}
+                disabledReason={infiniteZoomDisabledReason}
+                sourceWidth={
+                  puzzle?.width ?? (sourceImage ? sourceImage.naturalWidth || sourceImage.width : 0)
+                }
+                sourceHeight={
+                  puzzle?.height ??
+                  (sourceImage ? sourceImage.naturalHeight || sourceImage.height : 0)
+                }
+                prompt={infiniteZoomPrompt}
+                provider={settings.infiniteZoomProvider}
+                model={activeInfiniteZoomModel}
+                guidedAiApp={settings.guidedAiApp}
+                onPromptChange={setInfiniteZoomPrompt}
+                onEnterSelectionMode={() => handleEnterRegionSelectionMode()}
+                onConfirmExtendBorders={handleConfirmExtendBorders}
+                onOpenProviderSettings={handleOpenInfiniteZoomProviderSettings}
+                isSettingsOpen={showSettings}
+              />
+            ) : null
+          }
+        />
+      )}
+
+      {/* Region Selection Bar (Infinite Zoom In) */}
+      {viewProps.showActiveHud && isRegionSelectionMode && (
+        <RegionSelectionBar
+          isOpen={isRegionSelectionMode}
+          raiseDock={settings.raisePaletteDock}
+          isCompleted={isCompleted}
+          metrics={selectionMetrics}
+          pendingSwitchRegionId={pendingSwitchRegionId}
+          notice={selectionNotice}
+          prompt={infiniteZoomPrompt}
+          isBusy={isInfiniteZoomRunning}
+          isDisabled={isInfiniteZoomDisabled}
+          isOverlayModalOpen={viewProps.isModalOpen}
+          onPromptChange={setInfiniteZoomPrompt}
+          onConfirm={handleConfirmRegionSubdivision}
+          onSwitchSelection={handleSwitchSelectionToPending}
+          onClear={handleClearSelection}
+          onCancel={exitRegionSelectionMode}
         />
       )}
 
@@ -1088,13 +1232,14 @@ export const App: React.FC = () => {
       {viewProps.showPaletteDock && puzzle && (
         <PaletteDock
           palette={puzzle.palette}
-          regions={puzzle.regions}
+          regions={allPuzzleRegions}
           activeColorId={activeColorId}
           filledRegionIds={filledRegionIds}
           paintedRegionColors={paintedRegionColors}
           sortOrder={settings.paletteSort}
           prioritizeOnScreen={settings.prioritizeOnScreen}
           visibleColorIds={visibleColorIds}
+          prioritizedColorIds={visibleNestedColorIds}
           raiseDock={settings.raisePaletteDock}
           isReplaying={isReplaying}
           reducedMotion={Boolean(settings.reducedMotion)}
@@ -1134,6 +1279,7 @@ export const App: React.FC = () => {
         payload={loadingPayload}
         detailedProgress={Boolean(settings.detailedLoadingProgress)}
         onToggleDetailedProgress={handleToggleDetailedProgress}
+        onCancel={isInfiniteZoomRunning ? cancelActiveInfiniteZoom : undefined}
       />
 
       {/* Settings Modal Sheet */}
@@ -1166,6 +1312,10 @@ export const App: React.FC = () => {
             onSelectSample: handleSelectSample,
             onUploadImage: handlePickImage,
             onZoomIntoDetailTile: handleZoomIntoDetailTile,
+            isInfiniteZoomDisabled,
+            infiniteZoomDisabledReason,
+            onStartInfiniteZoomIn: handleEnterRegionSelectionMode,
+            onStartInfiniteZoomOut: handleConfirmExtendBorders,
           }}
           saves={{
             snapshots,
@@ -1239,6 +1389,85 @@ export const App: React.FC = () => {
         isModalSpotlight={spotlightState.isModalSpotlight}
         activeSettingsTab={activeSettingsTab}
         zIndexClass={spotlightState.zIndexClass}
+      />
+
+      {undoSubdivisionState && !isRegionSelectionMode && (
+        <div
+          role="status"
+          data-testid="undo-subdivision-toast"
+          className="fixed left-1/2 -translate-x-1/2 z-[55] max-w-sm w-[calc(100%-1.5rem)] bg-slate-900/95 border border-sky-400/60 text-slate-100 px-3.5 py-2.5 rounded-xl shadow-2xl flex items-center justify-between gap-3 text-xs backdrop-blur-md"
+          style={{
+            bottom: `calc(${
+              settings.raisePaletteDock
+                ? 'var(--capy-replay-bottom-raised, 6.25rem)'
+                : 'var(--capy-replay-bottom, 4.625rem)'
+            } + var(--sab, 0px))`,
+          }}
+        >
+          <span className="font-semibold text-sky-200 truncate">
+            {undoSubdivisionState.operationKind === 'zoom-out'
+              ? `Extended borders (+${undoSubdivisionState.addedRegionCount} regions)`
+              : `Added ${undoSubdivisionState.addedRegionCount} detail regions`}
+          </span>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              data-testid="undo-subdivision-btn"
+              onClick={() => void handleUndoSubdivision()}
+              className="px-2.5 py-1 rounded-lg bg-sky-400 hover:bg-sky-300 text-slate-950 text-xs font-extrabold cursor-pointer"
+            >
+              {undoSubdivisionState.operationKind === 'zoom-out' ? 'Undo Extend' : 'Undo Split'}
+            </button>
+            <button
+              type="button"
+              aria-label="Dismiss Infinite Zoom notice"
+              onClick={clearUndoSubdivision}
+              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {infiniteZoomError && !guidedHandoffSession && (
+        <div
+          role="alert"
+          data-testid="infinite-zoom-error-toast"
+          className="fixed left-1/2 -translate-x-1/2 z-[56] max-w-md w-[calc(100%-1.5rem)] bg-red-950/95 border border-red-500/60 text-red-100 px-3.5 py-2.5 rounded-xl shadow-2xl flex items-start justify-between gap-3 text-xs backdrop-blur-md"
+          style={{
+            bottom: `calc(${
+              settings.raisePaletteDock
+                ? 'var(--capy-replay-bottom-raised, 6.25rem)'
+                : 'var(--capy-replay-bottom, 4.625rem)'
+            } + var(--sab, 0px))`,
+          }}
+        >
+          <span className="leading-snug break-words">{infiniteZoomError.message}</span>
+          <button
+            type="button"
+            data-testid="infinite-zoom-error-dismiss"
+            onClick={clearInfiniteZoomError}
+            className="shrink-0 px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-100 text-xs font-semibold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <GuidedGeminiHandoffModal
+        isOpen={Boolean(guidedHandoffSession) && !showSettings}
+        handoff={guidedHandoffSession?.handoff ?? null}
+        guidedAiApp={settings.guidedAiApp}
+        onChangeGuidedAiApp={(app) => handleUpdateSettings((prev) => ({ ...prev, guidedAiApp: app }))}
+        onOpenProviderSettings={handleOpenInfiniteZoomProviderSettings}
+        activeProviderLabel={activeAutomatedProviderLabel}
+        onRetryWithActiveProvider={handleRetryGuidedWithCurrentProvider}
+        fallbackReason={guidedHandoffSession?.fallbackReason ?? null}
+        isProcessing={Boolean(guidedHandoffSession?.isProcessing)}
+        errorMessage={guidedHandoffSession?.errorMessage ?? null}
+        onImageReceived={handleCompleteGuidedGeminiHandoff}
+        onCancel={handleCancelGuidedGeminiHandoff}
       />
 
       {storageQuotaWarning && (

@@ -42,7 +42,8 @@ export class RegionSegmenter {
     maxPerimeterToAreaRatio: number,
     maxRegions: number,
     onProgress?: (progress: number, status: string) => void,
-    cellPartitionMap?: Int32Array
+    cellPartitionMap?: Int32Array,
+    activeMask?: Uint8Array
   ): Int32Array {
     onProgress?.(0.68, 'Tracing connected components...');
 
@@ -61,6 +62,7 @@ export class RegionSegmenter {
       for (let x = 0; x < width; x++) {
         const startIdx = yRow + x;
         if (regionMap[startIdx] !== -1) continue;
+        if (activeMask && activeMask[startIdx] !== 1) continue;
 
         const targetCluster = pixelClusters[startIdx];
         const targetCell = cellPartitionMap ? cellPartitionMap[startIdx] : 0;
@@ -94,6 +96,7 @@ export class RegionSegmenter {
             const n = curr - 1;
             if (
               regionMap[n] === -1 &&
+              (!activeMask || activeMask[n] === 1) &&
               pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
@@ -105,6 +108,7 @@ export class RegionSegmenter {
             const n = curr + 1;
             if (
               regionMap[n] === -1 &&
+              (!activeMask || activeMask[n] === 1) &&
               pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
@@ -116,6 +120,7 @@ export class RegionSegmenter {
             const n = curr - width;
             if (
               regionMap[n] === -1 &&
+              (!activeMask || activeMask[n] === 1) &&
               pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
@@ -127,6 +132,7 @@ export class RegionSegmenter {
             const n = curr + width;
             if (
               regionMap[n] === -1 &&
+              (!activeMask || activeMask[n] === 1) &&
               pixelClusters[n] === targetCluster &&
               (!cellPartitionMap || cellPartitionMap[n] === targetCell)
             ) {
@@ -192,10 +198,15 @@ export class RegionSegmenter {
           const py = (idx - px) / width;
 
           if (px > 0) {
-            const nRoot = findRoot(regionMap[idx - 1]);
-            if (nRoot !== targetRoot) {
-              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
-              touchCounts[nRoot]++;
+            const nId = regionMap[idx - 1];
+            if (nId >= 0) {
+              const nRoot = findRoot(nId);
+              if (nRoot !== targetRoot) {
+                if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+                touchCounts[nRoot]++;
+                perimeter++;
+              }
+            } else {
               perimeter++;
             }
           } else {
@@ -203,10 +214,15 @@ export class RegionSegmenter {
           }
 
           if (px < width - 1) {
-            const nRoot = findRoot(regionMap[idx + 1]);
-            if (nRoot !== targetRoot) {
-              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
-              touchCounts[nRoot]++;
+            const nId = regionMap[idx + 1];
+            if (nId >= 0) {
+              const nRoot = findRoot(nId);
+              if (nRoot !== targetRoot) {
+                if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+                touchCounts[nRoot]++;
+                perimeter++;
+              }
+            } else {
               perimeter++;
             }
           } else {
@@ -214,10 +230,15 @@ export class RegionSegmenter {
           }
 
           if (py > 0) {
-            const nRoot = findRoot(regionMap[idx - width]);
-            if (nRoot !== targetRoot) {
-              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
-              touchCounts[nRoot]++;
+            const nId = regionMap[idx - width];
+            if (nId >= 0) {
+              const nRoot = findRoot(nId);
+              if (nRoot !== targetRoot) {
+                if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+                touchCounts[nRoot]++;
+                perimeter++;
+              }
+            } else {
               perimeter++;
             }
           } else {
@@ -225,10 +246,15 @@ export class RegionSegmenter {
           }
 
           if (py < height - 1) {
-            const nRoot = findRoot(regionMap[idx + width]);
-            if (nRoot !== targetRoot) {
-              if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
-              touchCounts[nRoot]++;
+            const nId = regionMap[idx + width];
+            if (nId >= 0) {
+              const nRoot = findRoot(nId);
+              if (nRoot !== targetRoot) {
+                if (touchCounts[nRoot] === 0) touchedRoots[touchLen++] = nRoot;
+                touchCounts[nRoot]++;
+                perimeter++;
+              }
+            } else {
               perimeter++;
             }
           } else {
@@ -288,7 +314,7 @@ export class RegionSegmenter {
 
     // Phase 1: Dissolve all regions strictly smaller than minRegionArea
     onProgress?.(0.72, 'Enforcing minimum region area...');
-    const targetMin = Math.max(12, minRegionArea);
+    const targetMin = activeMask ? Math.max(1, minRegionArea) : Math.max(12, minRegionArea);
 
     for (let pass = 0; pass < maxMergePasses; pass++) {
       let mergedThisPass = 0;
@@ -331,7 +357,8 @@ export class RegionSegmenter {
 
     // Phase 2: Enforce maxRegions cap (never allow thousands or 10,000+ regions!)
     onProgress?.(0.82, 'Balancing puzzle region count...');
-    const effectiveMaxRegions = Math.max(20, Math.min(2000, maxRegions || 200));
+    const clampedMax = Math.min(2000, maxRegions || 200);
+    const effectiveMaxRegions = activeMask ? Math.max(1, clampedMax) : Math.max(20, clampedMax);
 
     // Collect active unique roots deterministically and seed an O(R log R) binary min-heap
     const seenRoots = new Uint8Array(regionCounter);
@@ -403,9 +430,9 @@ export class RegionSegmenter {
       }
 
       const isolatedRoots = new Uint8Array(regionCounter);
-      let mergeableCount = activeRootCount;
+      let remainingActiveCount = activeRootCount;
 
-      while (mergeableCount > effectiveMaxRegions && heapSize > 0) {
+      while (remainingActiveCount > effectiveMaxRegions && heapSize > 0) {
         const topArea = heapAreas[0];
         const smallestRoot = heapRoots[0];
         heapPop();
@@ -423,17 +450,15 @@ export class RegionSegmenter {
         collectNeighborTouches(smallestRoot);
         if (touchLen === 0) {
           isolatedRoots[smallestRoot] = 1;
-          mergeableCount--;
           continue;
         }
 
         const bestNeighbor = pickBestMergeNeighbor(smallestRoot);
         if (bestNeighbor >= 0) {
           mergeRootInto(smallestRoot, bestNeighbor);
-          mergeableCount--;
+          remainingActiveCount--;
         } else {
           isolatedRoots[smallestRoot] = 1;
-          mergeableCount--;
         }
       }
     }
@@ -475,9 +500,36 @@ export class RegionSegmenter {
     sourceRgba?: Uint8ClampedArray | Uint8Array,
     maxRegions: number = 200,
     onProgress?: (progress: number, status: string) => void,
-    cellPartitionMap?: Int32Array
+    cellPartitionMap?: Int32Array,
+    activeMask?: Uint8Array
   ): SegmentationResult {
     const total = width * height;
+    if (total <= 0) {
+      return {
+        regions: [],
+        regionMap: new Int32Array(0),
+        borderMap: new Uint8Array(0),
+      };
+    }
+
+    if (activeMask) {
+      let hasActive = false;
+      const limit = Math.min(total, activeMask.length);
+      for (let i = 0; i < limit; i++) {
+        if (activeMask[i] === 1) {
+          hasActive = true;
+          break;
+        }
+      }
+      if (!hasActive) {
+        return {
+          regions: [],
+          regionMap: new Int32Array(total),
+          borderMap: new Uint8Array(total),
+        };
+      }
+    }
+
     const finalRegionMap = new Int32Array(total);
     const compPixels = new Int32Array(total);
 
@@ -494,17 +546,30 @@ export class RegionSegmenter {
       maxPerimeterToAreaRatio,
       maxRegions,
       onProgress,
-      cellPartitionMap
+      cellPartitionMap,
+      activeMask
     );
+
+    if (finalClusterIds.length === 0) {
+      return {
+        regions: [],
+        regionMap: new Int32Array(total),
+        borderMap: new Uint8Array(total),
+      };
+    }
 
     // 4. Symmetrical Line Alignment
     if (lineMask && lineHandling === 'ABSORB_LINES') {
       onProgress?.(0.88, 'Aligning puzzle boundaries with artwork lines...');
-      LineArtExtractor.alignBoundariesToLines(finalRegionMap, lineMask, width, height);
+      LineArtExtractor.alignBoundariesToLines(finalRegionMap, lineMask, width, height, activeMask);
     }
 
-    // Zero-gap guarantee
+    // Zero-gap guarantee inside active mask; inactive exterior stays strictly 0
     for (let idx = 0; idx < total; idx++) {
+      if (activeMask && activeMask[idx] !== 1) {
+        finalRegionMap[idx] = 0;
+        continue;
+      }
       if (finalRegionMap[idx] <= 0) {
         const px = idx % width;
         const py = (idx - px) / width;
@@ -610,9 +675,9 @@ export class RegionSegmenter {
       let sumX = 0;
       let sumY = 0;
       let minX = Number.MAX_VALUE;
-      let maxX = Number.MIN_VALUE;
+      let maxX = -1;
       let minY = Number.MAX_VALUE;
-      let maxY = Number.MIN_VALUE;
+      let maxY = -1;
 
       for (let i = 0; i < count; i++) {
         const idx = pixelData[i];

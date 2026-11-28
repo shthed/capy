@@ -601,6 +601,185 @@ export async function runServicesGameplayTests({ vite, projectRoot, logUnitStart
           true,
           'Region tucked behind bottom PaletteDock at 1x must pan into unobstructed safe viewport'
         );
+
+        // Nested Infinite Zoom exclusive world bounds (sub-pixel root widths at 32x-256x)
+        {
+          const nestedPw = 512;
+          const nestedPh = 512;
+          const subPixel05 = {
+            centroidX: 207.05,
+            centroidY: 207.05,
+            minX: 206.8,
+            maxX: 207.3,
+            minY: 206.8,
+            maxY: 207.3,
+          };
+
+          // Accurate centering (< 1.5 px error) at 32x, 64x, 128x on 1000x800 desktop
+          const deskW = 1000;
+          const deskH = 800;
+          const deskBaseScale = Math.min(deskW / nestedPw, deskH / nestedPh) * 0.92;
+          const deskBaseOffsetX = (deskW - nestedPw * deskBaseScale) / 2;
+          const deskBaseOffsetY = (deskH - nestedPh * deskBaseScale) / 2;
+          for (const testScale of [32, 64, 128]) {
+            const res = canvasMod.computeRegionFocusViewport({
+              region: subPixel05,
+              puzzleWidth: nestedPw,
+              puzzleHeight: nestedPh,
+              containerWidth: deskW,
+              containerHeight: deskH,
+              currentScale: testScale,
+              currentOffset: { x: 0, y: 0 },
+              maxZoomScale: 256,
+              boundsAreExclusive: true,
+            });
+            assert.equal(res.shouldMove, true, `Offscreen nested region at ${testScale}x must pan`);
+            assert.equal(
+              Math.abs(res.scale - testScale) < 1e-6,
+              true,
+              `Nested 0.5-px region at ${testScale}x must keep ${testScale}x zoom (got ${res.scale})`
+            );
+            const eff = res.scale * deskBaseScale;
+            const screenX = res.offset.x + deskBaseOffsetX + 207.05 * eff;
+            const screenY = res.offset.y + deskBaseOffsetY + 207.05 * eff;
+            assert.equal(
+              Math.hypot(screenX - res.safeCenterX, screenY - res.safeCenterY) < 1.5,
+              true,
+              `Nested exclusive region at ${testScale}x must center within 1.5px (got dx=${(screenX - res.safeCenterX).toFixed(2)}, dy=${(screenY - res.safeCenterY).toFixed(2)})`
+            );
+          }
+
+          // Already dead-center nested region at 128x must NOT falsely jerk the camera
+          const centered128 = canvasMod.computeRegionFocusViewport({
+            region: subPixel05,
+            puzzleWidth: nestedPw,
+            puzzleHeight: nestedPh,
+            containerWidth: deskW,
+            containerHeight: deskH,
+            currentScale: 128,
+            currentOffset: { x: 0, y: 0 },
+            maxZoomScale: 256,
+            boundsAreExclusive: true,
+          });
+          const alreadyCentered128 = canvasMod.computeRegionFocusViewport({
+            region: subPixel05,
+            puzzleWidth: nestedPw,
+            puzzleHeight: nestedPh,
+            containerWidth: deskW,
+            containerHeight: deskH,
+            currentScale: 128,
+            currentOffset: centered128.offset,
+            maxZoomScale: 256,
+            boundsAreExclusive: true,
+          });
+          assert.equal(
+            alreadyCentered128.shouldMove,
+            false,
+            'Already-centered exclusive nested region at 128x must return shouldMove=false'
+          );
+
+          // 0.2-px, 0.5-px, and 0.6-px sub-pixel nested regions at 256x on mobile (390x844) & desktop (1920x1080):
+          // accurate < 1.5 px centering and ZERO spurious zoom-out
+          const subPixelCases = [
+            { label: '0.2px mobile 390x844', w: 390, h: 844, min: 207.0, max: 207.2 },
+            { label: '0.5px mobile 390x844', w: 390, h: 844, min: 206.8, max: 207.3 },
+            { label: '0.6px mobile 390x844', w: 390, h: 844, min: 206.7, max: 207.3 },
+            { label: '0.2px desktop 1920x1080', w: 1920, h: 1080, min: 207.0, max: 207.2 },
+            { label: '0.6px desktop 1920x1080', w: 1920, h: 1080, min: 206.7, max: 207.3 },
+          ];
+          for (const tc of subPixelCases) {
+            const center = (tc.min + tc.max) * 0.5;
+            const res = canvasMod.computeRegionFocusViewport({
+              region: {
+                centroidX: center,
+                centroidY: center,
+                minX: tc.min,
+                maxX: tc.max,
+                minY: tc.min,
+                maxY: tc.max,
+              },
+              puzzleWidth: nestedPw,
+              puzzleHeight: nestedPh,
+              containerWidth: tc.w,
+              containerHeight: tc.h,
+              currentScale: 256,
+              currentOffset: { x: 0, y: 0 },
+              maxZoomScale: 256,
+              boundsAreExclusive: true,
+            });
+            assert.equal(
+              Math.abs(res.scale - 256) < 1e-6,
+              true,
+              `${tc.label} at 256x must not spuriously zoom out (got ${res.scale})`
+            );
+            const bScale = Math.min(tc.w / nestedPw, tc.h / nestedPh) * 0.92;
+            const bOffX = (tc.w - nestedPw * bScale) / 2;
+            const bOffY = (tc.h - nestedPh * bScale) / 2;
+            const eff = res.scale * bScale;
+            const sx = res.offset.x + bOffX + center * eff;
+            const sy = res.offset.y + bOffY + center * eff;
+            assert.equal(
+              Math.hypot(sx - res.safeCenterX, sy - res.safeCenterY) < 1.5,
+              true,
+              `${tc.label} at 256x must land within 1.5px of safeCenter (got dx=${(sx - res.safeCenterX).toFixed(2)}, dy=${(sy - res.safeCenterY).toFixed(2)})`
+            );
+          }
+
+          // Hostile maxZoomScale inputs (undefined, NaN, -5, 5, Infinity) safely clamp >= 12.0 and stay finite
+          const hostileMaxZooms = [
+            undefined,
+            Number.NaN,
+            -5,
+            5,
+            Number.POSITIVE_INFINITY,
+            Number.NEGATIVE_INFINITY,
+          ];
+          for (const badMax of hostileMaxZooms) {
+            const at10x = canvasMod.computeRegionFocusViewport({
+              region: { centroidX: 256, centroidY: 256, minX: 255.8, maxX: 256.2, minY: 255.8, maxY: 256.2 },
+              puzzleWidth: nestedPw,
+              puzzleHeight: nestedPh,
+              containerWidth: deskW,
+              containerHeight: deskH,
+              currentScale: 10,
+              currentOffset: { x: 0, y: 0 },
+              maxZoomScale: badMax,
+              boundsAreExclusive: true,
+            });
+            assert.equal(
+              Number.isFinite(at10x.scale) && Math.abs(at10x.scale - 10) < 1e-6,
+              true,
+              `Hostile maxZoomScale=${String(badMax)} at 10x must keep floor >= 12x and preserve 10x (got ${at10x.scale})`
+            );
+            assert.equal(
+              Number.isFinite(at10x.offset.x) && Number.isFinite(at10x.offset.y),
+              true,
+              `Hostile maxZoomScale=${String(badMax)} at 10x must return finite offsets`
+            );
+
+            const at32x = canvasMod.computeRegionFocusViewport({
+              region: { centroidX: 256, centroidY: 256, minX: 255.8, maxX: 256.2, minY: 255.8, maxY: 256.2 },
+              puzzleWidth: nestedPw,
+              puzzleHeight: nestedPh,
+              containerWidth: deskW,
+              containerHeight: deskH,
+              currentScale: 32,
+              currentOffset: { x: 0, y: 0 },
+              maxZoomScale: badMax,
+              boundsAreExclusive: true,
+            });
+            assert.equal(
+              Number.isFinite(at32x.scale) && Math.abs(at32x.scale - 12) < 1e-6,
+              true,
+              `Hostile maxZoomScale=${String(badMax)} at 32x must clamp cleanly to 12x (got ${at32x.scale})`
+            );
+            assert.equal(
+              Number.isFinite(at32x.offset.x) && Number.isFinite(at32x.offset.y),
+              true,
+              `Hostile maxZoomScale=${String(badMax)} at 32x must return finite offsets`
+            );
+          }
+        }
       }
     }
 

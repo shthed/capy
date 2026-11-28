@@ -1,12 +1,61 @@
-import { PaletteColor, PuzzleData, Region } from '../../types';
 import {
+  ALL_INFINITE_ZOOM_MODEL_IDS,
+  INFINITE_ZOOM_PROVIDER_MODES,
+  InfiniteZoomModelId,
+  InfiniteZoomProviderMode,
+  NestedPuzzleLayer,
+  NormalizedRect,
+  PaletteColor,
+  PuzzleData,
+  Region,
+} from '../../types';
+import {
+  assertSafeLayerImageKey,
+  assertSafeLayerKey,
   assertValidPalette,
+  assertValidWorldBounds,
   base64ToUint8,
   buildBorderMapFromRegionMap,
   MAX_DELTA_REGION_ENTRIES,
+  MAX_NESTED_LAYERS,
   MAX_PUZZLE_PIXELS,
+  MAX_ZOOM_DEPTH,
   uint8ToBase64,
 } from '../CapyCodec';
+
+const ALLOWED_PROVIDERS = new Set<string>(INFINITE_ZOOM_PROVIDER_MODES);
+const ALLOWED_MODELS = new Set<string>(ALL_INFINITE_ZOOM_MODEL_IDS);
+
+export interface SerializedRegionMeta {
+  id: number;
+  colorId: number;
+  centroidX: number;
+  centroidY: number;
+  area: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  maxRadius: number;
+  /** Legacy v1 per-region pixel index array (derived deterministically from regionMap in v2) */
+  pixelsB64?: string;
+}
+
+export interface SerializedNestedPuzzleLayer {
+  layerId: string;
+  depth: number;
+  worldBounds: NormalizedRect;
+  width: number;
+  height: number;
+  regionMapRleB64?: string;
+  regionMapB64?: string;
+  borderMapB64?: string;
+  imageBlobKey: string;
+  promptHint?: string;
+  providerUsed?: InfiniteZoomProviderMode;
+  modelUsed?: InfiniteZoomModelId;
+  regions: SerializedRegionMeta[];
+}
 
 export interface SerializedPuzzleData {
   encodingVersion?: number;
@@ -20,20 +69,9 @@ export interface SerializedPuzzleData {
   /** Legacy v1 raw Uint8Array borderMap (derived deterministically from regionMap in v2) */
   borderMapB64?: string;
   isFreeColor?: boolean;
-  regions: Array<{
-    id: number;
-    colorId: number;
-    centroidX: number;
-    centroidY: number;
-    area: number;
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
-    maxRadius: number;
-    /** Legacy v1 per-region pixel index array (derived deterministically from regionMap in v2) */
-    pixelsB64?: string;
-  }>;
+  regions: SerializedRegionMeta[];
+  nestedLayers?: SerializedNestedPuzzleLayer[];
+  maxZoomDepth?: number;
 }
 
 function bufferToBase64(buffer: ArrayBufferView): string {
@@ -282,15 +320,146 @@ function decodeBorderMapFromSerialized(
   return borderMap;
 }
 
-export function serializePuzzle(p: PuzzleData): SerializedPuzzleData {
-  let canUseRle16 = true;
-  for (let i = 0; i < p.regionMap.length; i++) {
-    const rid = p.regionMap[i];
+function canEncodeRle16(regionMap: Int32Array): boolean {
+  for (let i = 0; i < regionMap.length; i++) {
+    const rid = regionMap[i];
     if (rid < 0 || rid > 65535) {
-      canUseRle16 = false;
-      break;
+      return false;
     }
   }
+  return true;
+}
+
+function serializeNestedLayer(layer: NestedPuzzleLayer): SerializedNestedPuzzleLayer {
+  const useRle16 = canEncodeRle16(layer.regionMap);
+  return {
+    layerId: layer.layerId,
+    depth: layer.depth,
+    worldBounds: { ...layer.worldBounds },
+    width: layer.width,
+    height: layer.height,
+    ...(useRle16
+      ? { regionMapRleB64: bufferToBase64(encodeRegionMapRle16(layer.regionMap)) }
+      : {
+          regionMapB64: bufferToBase64(layer.regionMap),
+          borderMapB64: bufferToBase64(layer.borderMap),
+        }),
+    imageBlobKey: layer.imageBlobKey,
+    ...(layer.promptHint !== undefined ? { promptHint: layer.promptHint } : {}),
+    ...(layer.providerUsed !== undefined ? { providerUsed: layer.providerUsed } : {}),
+    ...(layer.modelUsed !== undefined ? { modelUsed: layer.modelUsed } : {}),
+    regions: layer.regions.map((r) => ({
+      id: r.id,
+      colorId: r.colorId,
+      centroidX: r.centroidX,
+      centroidY: r.centroidY,
+      area: r.area,
+      minX: r.minX,
+      maxX: r.maxX,
+      minY: r.minY,
+      maxY: r.maxY,
+      maxRadius: r.maxRadius,
+      ...(!useRle16 ? { pixelsB64: bufferToBase64(r.pixels) } : {}),
+    })),
+  };
+}
+
+function assertValidSerializedNestedLayerHeader(layer: SerializedNestedPuzzleLayer): number {
+  if (!layer || typeof layer !== 'object' || !Array.isArray(layer.regions)) {
+    throw new Error('Invalid nested layer payload structure');
+  }
+  assertSafeLayerKey(layer.layerId, 'layerId');
+  assertSafeLayerImageKey(layer.imageBlobKey, 'imageBlobKey');
+  const depthOk = Number.isInteger(layer.depth) && layer.depth >= 1 && layer.depth <= MAX_ZOOM_DEPTH;
+  const dimsOk =
+    Number.isInteger(layer.width) &&
+    Number.isInteger(layer.height) &&
+    layer.width > 0 &&
+    layer.height > 0;
+  if (!depthOk || !dimsOk) {
+    throw new Error('Invalid nested layer payload structure');
+  }
+  assertValidWorldBounds(layer.worldBounds, 'nested layer worldBounds');
+  const total = layer.width * layer.height;
+  if (!Number.isSafeInteger(total) || total <= 0 || total > MAX_PUZZLE_PIXELS) {
+    throw new Error('Invalid nested layer dimensions');
+  }
+  return total;
+}
+
+function deserializeNestedLayer(layer: SerializedNestedPuzzleLayer): NestedPuzzleLayer {
+  const total = assertValidSerializedNestedLayerHeader(layer);
+  const regionMap = decodeRegionMapFromSerialized(
+    layer as unknown as SerializedPuzzleData,
+    total
+  );
+  const borderMap = decodeBorderMapFromSerialized(
+    layer as unknown as SerializedPuzzleData,
+    regionMap,
+    total
+  );
+  const maxAllowedRegionId = Math.max(total, MAX_DELTA_REGION_ENTRIES);
+  if (layer.regions.length > maxAllowedRegionId) {
+    throw new Error('Nested layer region count exceeds safety limit');
+  }
+  const maxRegionId = validateRegionMetadata(layer.regions, maxAllowedRegionId);
+  const hasLegacyPixels =
+    layer.regions.length > 0 && layer.regions.every((r) => typeof r.pixelsB64 === 'string');
+  const regions = hasLegacyPixels
+    ? decodeLegacyRegions(layer.regions, total)
+    : rebuildRegionsFromMap(layer.regions, regionMap, maxRegionId, total);
+
+  let promptHint: string | undefined;
+  if (layer.promptHint !== undefined) {
+    if (typeof layer.promptHint !== 'string') {
+      throw new Error('Invalid nested layer promptHint');
+    }
+    const trimmed = layer.promptHint.trim().slice(0, 200);
+    if (trimmed.length > 0) {
+      promptHint = trimmed;
+    }
+  }
+  let providerUsed: InfiniteZoomProviderMode | undefined;
+  if (layer.providerUsed !== undefined) {
+    if (typeof layer.providerUsed !== 'string' || !ALLOWED_PROVIDERS.has(layer.providerUsed)) {
+      throw new Error('Invalid nested layer providerUsed');
+    }
+    providerUsed = layer.providerUsed as InfiniteZoomProviderMode;
+  }
+  let modelUsed: InfiniteZoomModelId | undefined;
+  if (layer.modelUsed !== undefined) {
+    if (typeof layer.modelUsed !== 'string' || !ALLOWED_MODELS.has(layer.modelUsed)) {
+      throw new Error('Invalid nested layer modelUsed');
+    }
+    modelUsed = layer.modelUsed as InfiniteZoomModelId;
+  }
+
+  return {
+    layerId: layer.layerId,
+    depth: layer.depth,
+    worldBounds: { ...layer.worldBounds },
+    width: layer.width,
+    height: layer.height,
+    regions,
+    regionMap,
+    borderMap,
+    imageBlobKey: layer.imageBlobKey,
+    ...(promptHint !== undefined ? { promptHint } : {}),
+    ...(providerUsed !== undefined ? { providerUsed } : {}),
+    ...(modelUsed !== undefined ? { modelUsed } : {}),
+  };
+}
+
+export function serializePuzzle(p: PuzzleData): SerializedPuzzleData {
+  const canUseRle16 = canEncodeRle16(p.regionMap);
+  const serializedNested =
+    Array.isArray(p.nestedLayers) && p.nestedLayers.length > 0
+      ? p.nestedLayers.map(serializeNestedLayer)
+      : undefined;
+  const extraLayerFields = {
+    ...(serializedNested ? { nestedLayers: serializedNested } : {}),
+    ...(p.maxZoomDepth !== undefined ? { maxZoomDepth: p.maxZoomDepth } : {}),
+  };
 
   if (canUseRle16) {
     return {
@@ -312,6 +481,7 @@ export function serializePuzzle(p: PuzzleData): SerializedPuzzleData {
         maxY: r.maxY,
         maxRadius: r.maxRadius,
       })),
+      ...extraLayerFields,
     };
   }
 
@@ -336,7 +506,40 @@ export function serializePuzzle(p: PuzzleData): SerializedPuzzleData {
       maxRadius: r.maxRadius,
       pixelsB64: bufferToBase64(r.pixels),
     })),
+    ...extraLayerFields,
   };
+}
+
+function deserializeNestedLayersList(
+  rawNestedLayers: unknown
+): NestedPuzzleLayer[] | undefined {
+  if (rawNestedLayers === undefined) return undefined;
+  if (!Array.isArray(rawNestedLayers) || rawNestedLayers.length > MAX_NESTED_LAYERS) {
+    throw new Error('Invalid nestedLayers list in puzzle payload');
+  }
+  if (rawNestedLayers.length === 0) return undefined;
+  const seenLayerIds = new Set<string>();
+  return rawNestedLayers.map((rawLayer) => {
+    const layer = deserializeNestedLayer(rawLayer as SerializedNestedPuzzleLayer);
+    if (seenLayerIds.has(layer.layerId)) {
+      throw new Error(`Duplicate nested layerId "${layer.layerId}"`);
+    }
+    seenLayerIds.add(layer.layerId);
+    return layer;
+  });
+}
+
+function parseSerializedMaxZoomDepth(rawDepth: unknown): number | undefined {
+  if (rawDepth === undefined) return undefined;
+  if (
+    typeof rawDepth !== 'number' ||
+    !Number.isInteger(rawDepth) ||
+    rawDepth < 0 ||
+    rawDepth > MAX_ZOOM_DEPTH
+  ) {
+    throw new Error('Invalid maxZoomDepth in puzzle payload');
+  }
+  return rawDepth;
 }
 
 export function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
@@ -375,6 +578,9 @@ export function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
     ? decodeLegacyRegions(s.regions, total)
     : rebuildRegionsFromMap(s.regions, regionMap, maxRegionId, total);
 
+  const nestedLayers = deserializeNestedLayersList(s.nestedLayers);
+  const maxZoomDepth = parseSerializedMaxZoomDepth(s.maxZoomDepth);
+
   return {
     width: s.width,
     height: s.height,
@@ -383,5 +589,7 @@ export function deserializePuzzle(s: SerializedPuzzleData): PuzzleData {
     borderMap,
     isFreeColor: s.isFreeColor,
     regions,
+    ...(nestedLayers ? { nestedLayers } : {}),
+    ...(maxZoomDepth !== undefined ? { maxZoomDepth } : {}),
   };
 }

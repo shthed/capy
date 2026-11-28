@@ -1,4 +1,4 @@
-import { PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
+import { InfiniteZoomNodeMeta, PaletteColor, PuzzleData, SavedSnapshot, UserSettings } from '../types';
 import { CompactPuzzleRecordV2 } from './CapyCodec';
 import {
   DEV_DEBUG_STORAGE_KEY,
@@ -34,7 +34,31 @@ import {
   QuotaWarning,
   requestPersistentStorageOnce,
 } from './storage/SafeLocalStore';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './storage/SettingsStorage';
+import {
+  clearGeminiByokApiKey,
+  clearOpenAiByokApiKey,
+  clearOpenRouterByokApiKey,
+  clearProviderByokApiKey,
+  clearXaiByokApiKey,
+  DEFAULT_SETTINGS,
+  hasGeminiByokApiKey,
+  hasOpenAiByokApiKey,
+  hasOpenRouterByokApiKey,
+  hasProviderByokApiKey,
+  hasXaiByokApiKey,
+  loadGeminiByokApiKey,
+  loadOpenAiByokApiKey,
+  loadOpenRouterByokApiKey,
+  loadProviderByokApiKey,
+  loadSettings,
+  loadXaiByokApiKey,
+  saveGeminiByokApiKey,
+  saveOpenAiByokApiKey,
+  saveOpenRouterByokApiKey,
+  saveProviderByokApiKey,
+  saveSettings,
+  saveXaiByokApiKey,
+} from './storage/SettingsStorage';
 import {
   exportAllSnapshots,
   exportAllSnapshotsBinary,
@@ -50,20 +74,51 @@ import {
   deleteSnapshot,
   estimatePuzzleSaveBytes,
   hydrateSnapshotPreviews,
+  linkZoomTreeSnapshots,
   loadSnapshots,
   normalizeSnapshotTitle,
   renameSnapshot,
   saveSnapshots,
   togglePinSnapshot,
+  updateSnapshotMetadata,
   updateSnapshotProgress,
   updateSnapshotViewport,
 } from './storage/SnapshotStorage';
 
+import {
+  buildCanonicalLayerImageKey,
+  isLayerImageKey,
+  LAYER_IMAGE_KEY_PREFIX,
+} from './storage/StorageKeys';
+
 export {
+  buildCanonicalLayerImageKey,
+  clearGeminiByokApiKey,
+  clearOpenAiByokApiKey,
+  clearOpenRouterByokApiKey,
+  clearProviderByokApiKey,
+  clearXaiByokApiKey,
   DEFAULT_SETTINGS,
   deserializePuzzle,
   DEV_DEBUG_STORAGE_KEY,
+  hasGeminiByokApiKey,
+  hasOpenAiByokApiKey,
+  hasOpenRouterByokApiKey,
+  hasProviderByokApiKey,
+  hasXaiByokApiKey,
   isDebugStorageExposed,
+  isLayerImageKey,
+  LAYER_IMAGE_KEY_PREFIX,
+  loadGeminiByokApiKey,
+  loadOpenAiByokApiKey,
+  loadOpenRouterByokApiKey,
+  loadProviderByokApiKey,
+  loadXaiByokApiKey,
+  saveGeminiByokApiKey,
+  saveOpenAiByokApiKey,
+  saveOpenRouterByokApiKey,
+  saveProviderByokApiKey,
+  saveXaiByokApiKey,
   serializePuzzle,
 };
 export type { QuotaWarning, SerializedPuzzleData };
@@ -96,6 +151,70 @@ export class StorageService {
 
   static saveSettings(settings: UserSettings): void {
     saveSettings(settings);
+  }
+
+  static loadGeminiByokApiKey(): string {
+    return loadGeminiByokApiKey();
+  }
+
+  static saveGeminiByokApiKey(rawKey: string): boolean {
+    return saveGeminiByokApiKey(rawKey);
+  }
+
+  static clearGeminiByokApiKey(): boolean {
+    return clearGeminiByokApiKey();
+  }
+
+  static hasGeminiByokApiKey(): boolean {
+    return hasGeminiByokApiKey();
+  }
+
+  static loadOpenRouterByokApiKey(): string {
+    return loadOpenRouterByokApiKey();
+  }
+
+  static saveOpenRouterByokApiKey(rawKey: string): boolean {
+    return saveOpenRouterByokApiKey(rawKey);
+  }
+
+  static clearOpenRouterByokApiKey(): boolean {
+    return clearOpenRouterByokApiKey();
+  }
+
+  static hasOpenRouterByokApiKey(): boolean {
+    return hasOpenRouterByokApiKey();
+  }
+
+  static loadOpenAiByokApiKey(): string {
+    return loadOpenAiByokApiKey();
+  }
+
+  static saveOpenAiByokApiKey(rawKey: string): boolean {
+    return saveOpenAiByokApiKey(rawKey);
+  }
+
+  static clearOpenAiByokApiKey(): boolean {
+    return clearOpenAiByokApiKey();
+  }
+
+  static hasOpenAiByokApiKey(): boolean {
+    return hasOpenAiByokApiKey();
+  }
+
+  static loadXaiByokApiKey(): string {
+    return loadXaiByokApiKey();
+  }
+
+  static saveXaiByokApiKey(rawKey: string): boolean {
+    return saveXaiByokApiKey(rawKey);
+  }
+
+  static clearXaiByokApiKey(): boolean {
+    return clearXaiByokApiKey();
+  }
+
+  static hasXaiByokApiKey(): boolean {
+    return hasXaiByokApiKey();
   }
 
   static savePreviewDataUrl(id: string, previewDataUrl: string): Promise<void> {
@@ -182,6 +301,19 @@ export class StorageService {
 
   static togglePinSnapshot(id: string): SavedSnapshot[] {
     return togglePinSnapshot(id);
+  }
+
+  static linkZoomTreeSnapshots(
+    parentId: string,
+    childId: string,
+    parentPatch?: Partial<InfiniteZoomNodeMeta>,
+    childPatch?: Partial<InfiniteZoomNodeMeta>
+  ): SavedSnapshot[] {
+    return linkZoomTreeSnapshots(parentId, childId, parentPatch, childPatch);
+  }
+
+  static updateSnapshotMetadata(id: string, patch: Partial<SavedSnapshot>): SavedSnapshot[] {
+    return updateSnapshotMetadata(id, patch);
   }
 
   static deleteSnapshot(

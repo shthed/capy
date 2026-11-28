@@ -6,7 +6,6 @@ import {
   Play,
   Search,
   Sparkles,
-  ZoomIn,
 } from 'lucide-react';
 import {
   GALLERY_FILTER_TAGS,
@@ -16,6 +15,7 @@ import {
 import { getDailyFeaturedPuzzle } from '../../services/DailyPuzzleService';
 import { ProviderRegistry } from '../../services/providers/ProviderRegistry';
 import {
+  BorderExtensionSides,
   DEFAULT_GENERATOR_CONFIG,
   GeneratorAlgorithm,
   GeneratorConfig,
@@ -27,6 +27,7 @@ import {
   SampleArtwork,
   UserSettings,
 } from '../../types';
+import { InfiniteZoomCreateCard } from '../InfiniteZoomControls';
 import { SettingSliderRow } from './SettingSliderRow';
 import { SettingToggleRow } from './SettingToggleRow';
 
@@ -44,6 +45,10 @@ export interface CreateTabProps {
   ) => void;
   onUploadImage: () => void;
   onZoomIntoDetailTile?: () => void;
+  isInfiniteZoomDisabled?: boolean;
+  infiniteZoomDisabledReason?: string;
+  onStartInfiniteZoomIn?: (initialPrompt?: string) => void;
+  onStartInfiniteZoomOut?: (sides: BorderExtensionSides, prompt?: string) => void;
   onExplorePresetGallery?: () => void;
   onClose: () => void;
 }
@@ -833,6 +838,10 @@ export const CreateTab: React.FC<CreateTabProps> = ({
   onSelectSample,
   onUploadImage,
   onZoomIntoDetailTile,
+  isInfiniteZoomDisabled,
+  infiniteZoomDisabledReason,
+  onStartInfiniteZoomIn,
+  onStartInfiniteZoomOut,
   onExplorePresetGallery,
   onClose,
 }) => {
@@ -844,6 +853,10 @@ export const CreateTab: React.FC<CreateTabProps> = ({
 
   const updateSetting = <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
     onUpdateSettings({ ...settings, [key]: value });
+  };
+
+  const updateSettingsPatch = (patch: Partial<UserSettings>) => {
+    onUpdateSettings({ ...settings, ...patch });
   };
 
   const renderHintButton = (id: string, title: string) => {
@@ -1010,54 +1023,65 @@ export const CreateTab: React.FC<CreateTabProps> = ({
         onClose={onClose}
       />
 
-      {/* Action Row: Upload Photo & Infinite Zoom Detail Sub-Puzzle */}
-      <div className="space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <button
-              type="button"
-              data-testid="create-upload-photo-btn"
-              onClick={() => {
-                onUploadImage();
-                onClose();
-              }}
-              className="flex-1 min-w-0 flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-            >
-              <ImageIcon size={16} className="flex-shrink-0" />
-              <span className="truncate">Choose Photo from Device</span>
-            </button>
-            {renderHintButton('upload-photo', 'Choose Photo from Device')}
-          </div>
-
-          {onZoomIntoDetailTile && sourceImage && (
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                data-testid="infinite-zoom-subtile-btn"
-                onClick={() => {
-                  onZoomIntoDetailTile();
-                  onClose();
-                }}
-                title="Generate a higher-detail 2x zoomed sub-puzzle from the center of your current view"
-                className="flex-1 min-w-0 flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-sky-400/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
-              >
-                <ZoomIn size={16} className="flex-shrink-0" />
-                <span className="truncate">Infinite Zoom 2x Detail Tile</span>
-              </button>
-              {renderHintButton('infinite-zoom', 'Infinite Zoom 2x Detail Tile')}
-            </div>
-          )}
+      {/* Action Row: Upload Photo & Local Infinite Zoom Controls */}
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <button
+            type="button"
+            data-testid="create-upload-photo-btn"
+            onClick={() => {
+              onUploadImage();
+              onClose();
+            }}
+            className="flex-1 min-w-0 flex items-center justify-center gap-2 p-2.5 sm:p-3 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+          >
+            <ImageIcon size={16} className="flex-shrink-0" />
+            <span className="truncate">Choose Photo from Device</span>
+          </button>
+          {renderHintButton('upload-photo', 'Choose Photo from Device')}
         </div>
         {renderHintCallout(
           'upload-photo',
           'Pick any JPG, PNG, or WebP artwork or photo from your device and segment it locally using your chosen algorithm, colors, piece count, and resolution below.'
         )}
-        {onZoomIntoDetailTile &&
-          sourceImage &&
-          renderHintCallout(
-            'infinite-zoom',
-            'Crops a 2x zoomed region around the center of your current canvas view and generates a fresh, higher-detail sub-puzzle from it.'
-          )}
+
+        <InfiniteZoomCreateCard
+          sourceImage={sourceImage}
+          infiniteZoomProvider={settings.infiniteZoomProvider}
+          nanoBananaModel={settings.nanoBananaModel}
+          nanoBananaResolution={settings.nanoBananaResolution}
+          openRouterModel={settings.openRouterModel}
+          openAiImageModel={settings.openAiImageModel}
+          xaiImageModel={settings.xaiImageModel}
+          guidedAiApp={settings.guidedAiApp}
+          isInfiniteZoomDisabled={isInfiniteZoomDisabled}
+          disabledReason={infiniteZoomDisabledReason}
+          onChangeProvider={(provider) => updateSetting('infiniteZoomProvider', provider)}
+          onChangeModel={(model, nextResolution) =>
+            updateSettingsPatch(
+              nextResolution
+                ? { nanoBananaModel: model, nanoBananaResolution: nextResolution }
+                : { nanoBananaModel: model }
+            )
+          }
+          onChangeResolution={(resolution) => updateSetting('nanoBananaResolution', resolution)}
+          onChangeOpenRouterModel={(model, nextResolution) =>
+            updateSettingsPatch(
+              nextResolution
+                ? { openRouterModel: model, nanoBananaResolution: nextResolution }
+                : { openRouterModel: model }
+            )
+          }
+          onChangeOpenAiImageModel={(model) => updateSetting('openAiImageModel', model)}
+          onChangeXaiImageModel={(model) => updateSetting('xaiImageModel', model)}
+          onChangeGuidedAiApp={(app) => updateSetting('guidedAiApp', app)}
+          onStartInfiniteZoomIn={onStartInfiniteZoomIn}
+          onStartInfiniteZoomOut={onStartInfiniteZoomOut}
+          onZoomIntoDetailTile={onZoomIntoDetailTile}
+          onClose={onClose}
+          renderHintButton={renderHintButton}
+          renderHintCallout={renderHintCallout}
+        />
       </div>
 
       {/* Preset Style Gallery & Visual Guide */}

@@ -72,9 +72,9 @@ export const FEATURE_OFFERS: Record<FeatureOfferId, FeatureOfferDef> = {
   },
   infinite_zoom: {
     id: 'infinite_zoom',
-    title: 'Detail View Created',
+    title: 'Infinite Zoom Ready',
     message:
-      'Tap the Parent button in the top-left corner anytime to go back to your full picture.',
+      'Pinch or scroll to explore nested details seamlessly on one canvas, or tap the right-side Infinite Zoom button anytime to add detail or extend borders.',
     tutorialStepIndex: 8,
   },
   saves_export: {

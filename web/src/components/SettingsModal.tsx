@@ -195,6 +195,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onSelectSample={create.onSelectSample}
                 onUploadImage={create.onUploadImage}
                 onZoomIntoDetailTile={create.onZoomIntoDetailTile}
+                isInfiniteZoomDisabled={create.isInfiniteZoomDisabled}
+                infiniteZoomDisabledReason={create.infiniteZoomDisabledReason}
+                onStartInfiniteZoomIn={create.onStartInfiniteZoomIn}
+                onStartInfiniteZoomOut={create.onStartInfiniteZoomOut}
                 onExplorePresetGallery={onExplorePresetGallery}
                 onClose={onClose}
               />

@@ -92,7 +92,7 @@ const TEXT_FILENAMES = new Set([
 ]);
 
 export const FORBIDDEN_PERSONA_REGEX =
-  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|CLAUDE\.md|GEMINI\.md|capy\.prompt\.yml|copilot-instructions\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\b|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|ai[- ]?dev\b|ai\s+reviews?\b|ai\s+approvals?\b|ai\s+marker\b|ai\s+auto[- ]?merge\b|dual\s+ai\b|ai\s+studio\b|ai\s+github\s+actions\b|(?<!user-)\b(?:sub)?agents?\b|docs\(agents\)|update-agents|invoke_subagent|ci\(mirror\)|chore\(mirror\)|public\s+mirror|mirror\s+sync|mirror\s+retargeting|full\s+replay|open\s+bot\s+issue|free\s+bot|1-click\s+bot|bot\s+prs?\b|review[- ]gate|gate\s+readiness|\bpersonas?\b|issue\s*#607\b|capyboop\/capy/i;
+  /shthed|hairy[\s_-]*dog[\s_-]*trumpet|381055\+|CAPYBOOP_SYNC_TOKEN|rebrand-persona|publish-capyboop|pr-review-gate|open-pr\.yml|open-issue\.yml|persona:capyboop|capy-dev-only|sync-beta-from-main|sync-agile-tracker|regenerate-puzzles|dependabot\.ya?ml|AGENTS\.md|CAPYBOOP\.md|CLAUDE\.md|GEMINI\.md|capy\.prompt\.yml|copilot-instructions\.md|docs\/ai(?:\/|$|\b)|\.agents\b|antigravity|conversation:\/\/|\bgemini\s+(?:3\.8|4(?:\s+(?:argon|carbon))?|2\.5(?:\s+(?:flash-lite|flash|pro))?)\b|GEMINI_API_KEY|MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API|\bclaude\b|\bcodex\b|\bchatgpt\s+(?:codex|code\s+review|agent|cli)\b|\bcopilot\b|pr[_ -]?readiness|clean[- ]room|\bWHITEBOARD\b|\/(?:grill-me|teamwork|goal|plan)\b|automation\/|ai\s+contributors?|bot[- ]authored|owner\s+directive|review:ai-approved|ai[- ]approved|ai[- ]agent|coding[- ]agent|ai[- ]?dev\b|ai\s+reviews?\b|ai\s+approvals?\b|ai\s+marker\b|ai\s+auto[- ]?merge\b|dual\s+ai\b|ai\s+studio\s+dev\b|ai\s+github\s+actions\b|(?<!user-)\b(?:sub)?agents?\b|docs\(agents\)|update-agents|invoke_subagent|ci\(mirror\)|chore\(mirror\)|public\s+mirror|mirror\s+sync|mirror\s+retargeting|full\s+replay|open\s+bot\s+issue|free\s+bot|1-click\s+bot|bot\s+prs?\b|review[- ]gate|gate\s+readiness|\bpersonas?\b|issue\s*#607\b|capyboop\/capy/i;
 
 export const FORBIDDEN_COMMIT_LOG_REGEX =
   /github-actions\[bot\]|#612\b|#607\b|during\s+replay|replay\s+full\b|readiness\s+checklist\b|ci\(gate\)|scrub\s+dev\s+tokens\s+in\s+historical\s+commit\s+messages/i;
@@ -158,7 +158,10 @@ function applyForbiddenTextReplacements(text) {
     .replace(/conversation:\/\/[^\s)]*/gi, 'session link')
     .replace(/MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API/gi, 'legacy capability')
     .replace(/GEMINI_API_KEY/gi, 'CI_API_KEY')
-    .replace(/\bgemini(?:\s+[\d.]+\s*(?:carbon|argon|flash-lite|flash|pro)?)?\b/gi, 'CI')
+    .replace(
+      /\bgemini\s+(?:3\.8|4(?:\s+(?:argon|carbon))?|2\.5(?:\s+(?:flash-lite|flash|pro))?)\b/gi,
+      'CI'
+    )
     .replace(/\bclaude(?:\s+(?:opus|sonnet|haiku)(?:\s+[\d.]+)?)?\b/gi, 'automation')
     .replace(/\bcodex\//gi, 'feature/')
     .replace(/\bcodex\b/gi, 'feature')
@@ -182,7 +185,7 @@ function applyForbiddenTextReplacements(text) {
     .replace(/ai\s+marker\b/gi, 'CI marker')
     .replace(/ai\s+auto[- ]?merge\b/gi, 'CI auto-merge')
     .replace(/dual\s+ai\b/gi, 'automated')
-    .replace(/ai\s+studio\b/gi, 'studio')
+    .replace(/ai\s+studio\s+dev\b/gi, 'studio')
     .replace(/docs\(agents\)/gi, 'docs')
     .replace(/update-agents/gi, 'update-docs')
     .replace(/invoke_subagent/gi, 'background task')

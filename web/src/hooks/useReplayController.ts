@@ -15,6 +15,7 @@ import { clampCanvasOffset } from '../components/PuzzleCanvas';
 import { TUTORIAL_STEPS } from '../components/OnboardingTutorial';
 import { useLatest } from './useLatest';
 import { UndoHistoryEntry } from './useUndoRedo';
+import { buildUnifiedRegionIndex, UnifiedRegionRef } from '../engine/UnifiedPuzzleLayers';
 
 export interface ReplayViewport {
   zoomScale: number;
@@ -37,6 +38,14 @@ export interface ReplayLiveState {
   filledRegionIds: Set<number>;
   settings: UserSettings;
 }
+
+export type ReplayRegionBounds =
+  | Pick<Region, 'minX' | 'maxX' | 'minY' | 'maxY'>
+  | Pick<UnifiedRegionRef, 'worldMinX' | 'worldMaxX' | 'worldMinY' | 'worldMaxY'>;
+
+export type ReplayRegionCentroid =
+  | Pick<Region, 'centroidX' | 'centroidY'>
+  | Pick<UnifiedRegionRef, 'worldCentroidX' | 'worldCentroidY'>;
 
 export function clampReplayStep(step: number, sequenceLength: number): number {
   if (sequenceLength <= 0 || !Number.isFinite(step)) return 0;
@@ -111,7 +120,7 @@ export function advanceReplayCursor(
 // Zero-allocation bounding-box frustum check against the current canvas viewport
 export function checkRegionVisibleInViewport(
   puzzle: Pick<PuzzleData, 'width' | 'height'> | null,
-  region: Pick<Region, 'minX' | 'maxX' | 'minY' | 'maxY'> | undefined,
+  region: ReplayRegionBounds | undefined,
   viewport: ReplayViewport,
   containerWidth: number,
   containerHeight: number
@@ -135,18 +144,23 @@ export function checkRegionVisibleInViewport(
   const visRight = visLeft + w / effScale;
   const visBottom = visTop + h / effScale;
 
+  const minX = 'worldMinX' in region ? region.worldMinX : region.minX;
+  const maxX = 'worldMaxX' in region ? region.worldMaxX : region.maxX;
+  const minY = 'worldMinY' in region ? region.worldMinY : region.minY;
+  const maxY = 'worldMaxY' in region ? region.worldMaxY : region.maxY;
+
   return (
-    region.maxX >= visLeft &&
-    region.minX <= visRight &&
-    region.maxY >= visTop &&
-    region.minY <= visBottom
+    maxX >= visLeft &&
+    minX <= visRight &&
+    maxY >= visTop &&
+    minY <= visBottom
   );
 }
 
 // Zero-allocation check for whether the viewport has panned to bring the target region onscreen during replayFollow
 export function checkViewportCaughtUpToRegion(
   puzzle: Pick<PuzzleData, 'width' | 'height'> | null,
-  region: Pick<Region, 'centroidX' | 'centroidY'> | undefined,
+  region: ReplayRegionCentroid | undefined,
   viewport: ReplayViewport,
   containerWidth: number,
   containerHeight: number,
@@ -166,9 +180,12 @@ export function checkViewportCaughtUpToRegion(
   const effScale = zoomScale * baseScale;
   if (effScale <= 0) return true;
 
+  const centroidX = 'worldCentroidX' in region ? region.worldCentroidX : region.centroidX;
+  const centroidY = 'worldCentroidY' in region ? region.worldCentroidY : region.centroidY;
+
   // Check if viewport is already within 24px of its clamped target offset for this region
-  rawScratch.x = w / 2 - (baseOffsetX + region.centroidX * effScale);
-  rawScratch.y = h / 2 - (baseOffsetY + region.centroidY * effScale);
+  rawScratch.x = w / 2 - (baseOffsetX + centroidX * effScale);
+  rawScratch.y = h / 2 - (baseOffsetY + centroidY * effScale);
   const clampedTarget = clampCanvasOffset(
     rawScratch,
     zoomScale,
@@ -193,10 +210,10 @@ export function checkViewportCaughtUpToRegion(
   const padX = visW * 0.08;
   const padY = visH * 0.08;
   return (
-    region.centroidX >= visLeft + padX &&
-    region.centroidX <= visRight - padX &&
-    region.centroidY >= visTop + padY &&
-    region.centroidY <= visBottom - padY
+    centroidX >= visLeft + padX &&
+    centroidX <= visRight - padX &&
+    centroidY >= visTop + padY &&
+    centroidY <= visBottom - padY
   );
 }
 
@@ -285,6 +302,11 @@ export function useReplayController<TLive extends ReplayLiveState>({
   // Pre-allocated scratch vectors for zero-allocation camera-follow frustum checks
   const followRawScratchRef = useRef<ReplayScratchPoint>({ x: 0, y: 0 });
   const followClampedScratchRef = useRef<ReplayScratchPoint>({ x: 0, y: 0 });
+  const unifiedWorldById = useMemo<Map<number, UnifiedRegionRef> | null>(() => {
+    if (!puzzle?.nestedLayers?.length) return null;
+    return buildUnifiedRegionIndex(puzzle).worldById;
+  }, [puzzle]);
+  const unifiedWorldByIdRef = useLatest(unifiedWorldById);
 
   const cancelAutoResume = useCallback(() => {
     autoResumeReplayRef.current = false;
@@ -341,13 +363,13 @@ export function useReplayController<TLive extends ReplayLiveState>({
         768;
       return checkRegionVisibleInViewport(
         puzzle,
-        regionByIdRef.current.get(regionId),
+        unifiedWorldByIdRef.current?.get(regionId) ?? regionByIdRef.current.get(regionId),
         viewportRef.current,
         w,
         h
       );
     },
-    [canvasContainerSizeRef, puzzle, regionByIdRef, viewportRef]
+    [canvasContainerSizeRef, puzzle, regionByIdRef, unifiedWorldByIdRef, viewportRef]
   );
 
   const isViewportCaughtUpToRegion = useCallback(
@@ -362,7 +384,7 @@ export function useReplayController<TLive extends ReplayLiveState>({
         768;
       return checkViewportCaughtUpToRegion(
         puzzle,
-        regionByIdRef.current.get(regionId),
+        unifiedWorldByIdRef.current?.get(regionId) ?? regionByIdRef.current.get(regionId),
         viewportRef.current,
         w,
         h,
@@ -370,7 +392,7 @@ export function useReplayController<TLive extends ReplayLiveState>({
         followClampedScratchRef.current
       );
     },
-    [canvasContainerSizeRef, puzzle, regionByIdRef, viewportRef]
+    [canvasContainerSizeRef, puzzle, regionByIdRef, unifiedWorldByIdRef, viewportRef]
   );
 
   // Start animated region-by-region replay from the user's current viewport without zooming out or moving the camera

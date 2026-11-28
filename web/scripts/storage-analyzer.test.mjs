@@ -574,6 +574,16 @@ async function runStorageAnalyzerCoreTests(vite) {
     'Microsoft OAuth token key must be classified as Capy Paint storage'
   );
   assert.equal(
+    analyzerMod.isCapyPaintLocalKey('capy_gemini_byok_key_v1'),
+    true,
+    'Device-local Gemini BYOK key must be classified as Capy Paint storage'
+  );
+  assert.equal(
+    analyzerMod.isCapyPaintLocalKey('capy_gemini_byok_key_v1__sandbox_alpha'),
+    true,
+    'Channel-scoped Gemini BYOK key must be classified as Capy Paint storage'
+  );
+  assert.equal(
     analyzerMod.isCapyPaintLocalKey('capy_game_save_v3'),
     false,
     'CapyGame save key must NEVER be classified as Capy Paint storage'
@@ -2119,6 +2129,579 @@ async function runStorageAnalyzerCoreTests(vite) {
       `Expected deletedIdbDatabases=2 even when sibling alpha pre-measure timed out (got ${d5Res.deletedIdbDatabases})`
     );
     assert.equal(d5BaseIdb._hasDb('capy_game_storage_v8_alpha'), false);
+
+    // 22. computeOrphanedKeys: liveLayerImageKeysByPuzzle exemption & orphaned layer_* detection (Record & Map)
+    const sec22SnapshotsJson = JSON.stringify([
+      { id: 'snap-live', title: 'Live', sourceRef: { kind: 'blob', uri: 'snap-live' } },
+    ]);
+    const sec22ActiveJson = JSON.stringify({ activeSnapshotId: 'snap-active' });
+    const sec22PuzzleKeys = ['snap-live', 'snap-active', 'snap-orphan'];
+    const sec22ImageKeys = [
+      'snap-live',
+      'layer_snap-live_detail1',
+      'layer_snap-live_border1',
+      'layer_snap-active_detail1',
+      'layer_shared_detail',
+      'layer_snap-live_stale',
+      'layer_snap-orphan_detail1',
+      'preview_snap-live',
+      'preview_snap-orphan',
+    ];
+    const sec22RecordMap = {
+      'snap-live': ['layer_snap-live_detail1', 'layer_snap-live_border1', 'layer_shared_detail', ''],
+      'snap-active': ['layer_snap-active_detail1'],
+      'snap-orphan': ['layer_snap-orphan_detail1', 'layer_shared_detail'],
+    };
+    const sec22FromRecord = analyzerMod.computeOrphanedKeys({
+      rawSnapshotsJson: sec22SnapshotsJson,
+      rawActiveStateJson: sec22ActiveJson,
+      puzzleKeys: sec22PuzzleKeys,
+      imageKeys: sec22ImageKeys,
+      liveLayerImageKeysByPuzzle: sec22RecordMap,
+    });
+    assert.equal(sec22FromRecord.skipped, false);
+    assert.deepEqual(sec22FromRecord.orphanedPuzzleKeys, ['snap-orphan']);
+    assert.deepEqual(
+      [...sec22FromRecord.orphanedImageKeys].sort(),
+      ['layer_snap-live_stale', 'layer_snap-orphan_detail1', 'preview_snap-orphan']
+    );
+
+    const sec22FromMap = analyzerMod.computeOrphanedKeys({
+      rawSnapshotsJson: sec22SnapshotsJson,
+      rawActiveStateJson: sec22ActiveJson,
+      puzzleKeys: sec22PuzzleKeys,
+      imageKeys: sec22ImageKeys,
+      liveLayerImageKeysByPuzzle: new Map(Object.entries(sec22RecordMap)),
+    });
+    assert.equal(sec22FromMap.skipped, false);
+    assert.deepEqual(sec22FromMap.orphanedPuzzleKeys, sec22FromRecord.orphanedPuzzleKeys);
+    assert.deepEqual(
+      [...sec22FromMap.orphanedImageKeys].sort(),
+      [...sec22FromRecord.orphanedImageKeys].sort()
+    );
+
+    // 23. End-to-end analyzeBrowserStorage + cleanOrphanedSaveData + clearAllCapyStorage with nestedLayers & BYOK key
+    await resetCachedHandles();
+    const sec23Ls = createMockLocalStorage({
+      capy_snapshots_v8: JSON.stringify([
+        { id: 'live-zoom-1', title: 'Live Zoom', sourceRef: { kind: 'blob', uri: 'live-zoom-1' } },
+      ]),
+      capy_gemini_byok_key_v1: 'AIza-local-test-key',
+    });
+    const sec23Idb = createMockIndexedDb({
+      initialDbs: {
+        capy_game_storage_v8: {
+          puzzles: {
+            'live-zoom-1': {
+              __capyCompactV2: 2,
+              rleRegionMap: new Uint8Array(600),
+              nestedLayers: [
+                { layerId: 'd1', imageBlobKey: 'layer_live-zoom-1_d1' },
+                { layerId: 'shared', imageBlobKey: 'layer_shared_1' },
+              ],
+            },
+            'orphan-zoom-2': {
+              __capyCompactV2: 2,
+              rleRegionMap: new Uint8Array(400),
+              nestedLayers: [
+                { layerId: 'd2', imageBlobKey: 'layer_orphan-zoom-2_d2' },
+                { layerId: 'shared', imageBlobKey: 'layer_shared_1' },
+              ],
+            },
+          },
+          images: {
+            'live-zoom-1': new Blob([new Uint8Array(1000)], { type: 'image/png' }),
+            'preview_live-zoom-1': 'data:image/webp;base64,AAAA',
+            'layer_live-zoom-1_d1': new Blob([new Uint8Array(2000)], { type: 'image/png' }),
+            'layer_shared_1': new Blob([new Uint8Array(1500)], { type: 'image/png' }),
+            'layer_live-zoom-1_stale': new Blob([new Uint8Array(1200)], { type: 'image/png' }),
+            'layer_orphan-zoom-2_d2': new Blob([new Uint8Array(1800)], { type: 'image/png' }),
+          },
+        },
+      },
+      exposeDatabasesApi: true,
+    });
+    globalThis.localStorage = sec23Ls;
+    globalThis.indexedDB = sec23Idb;
+    globalThis.caches = createMockCacheStorage({});
+    globalThis.window = {
+      location: { pathname: '/capy/', origin: 'https://example.github.io', search: '' },
+    };
+
+    const sec23Report = await analyzerMod.analyzeBrowserStorage(opts);
+    const sec23Db = sec23Report.indexedDb.activeDb;
+    assert.ok(sec23Db, 'Expected active DB report in Section 23');
+    assert.equal(sec23Db.orphanDetectionSkipped, false);
+    assert.equal(sec23Db.previewsCount, 1);
+    assert.equal(sec23Db.imagesCount, 5, 'layer_* blobs must count under imagesCount, not previewsCount');
+    assert.deepEqual(sec23Db.orphanedPuzzleKeys, ['orphan-zoom-2']);
+    assert.deepEqual(
+      [...sec23Db.orphanedImageKeys].sort(),
+      ['layer_live-zoom-1_stale', 'layer_orphan-zoom-2_d2']
+    );
+    assert.equal(sec23Db.orphanedCount, 3);
+    assert.ok(
+      sec23Db.orphanedBytes >= 400 + 1200 + 1800,
+      `Expected orphanedBytes >= 3400, got ${sec23Db.orphanedBytes}`
+    );
+
+    const sec23Clean = await analyzerMod.cleanOrphanedSaveData(opts);
+    assert.equal(sec23Clean.deletedIdbRecords, 3);
+    assert.deepEqual(sec23Idb._getStoreKeys('capy_game_storage_v8', 'puzzles'), ['live-zoom-1']);
+    assert.deepEqual(
+      sec23Idb._getStoreKeys('capy_game_storage_v8', 'images').sort(),
+      ['layer_live-zoom-1_d1', 'layer_shared_1', 'live-zoom-1', 'preview_live-zoom-1']
+    );
+    assert.equal(
+      sec23Ls.getItem('capy_gemini_byok_key_v1'),
+      'AIza-local-test-key',
+      'Orphan cleanup must preserve device-local BYOK API key'
+    );
+
+    await analyzerMod.clearAllCapyStorage(opts);
+    assert.equal(
+      sec23Ls.getItem('capy_gemini_byok_key_v1'),
+      null,
+      'clearAllCapyStorage must wipe device-local BYOK API key'
+    );
+
+    // 24. Fail-closed orphanDetectionSkipped: true on IDB cursor, transaction & getAllKeys() fallback errors
+    const makeSec24Fixture = () => {
+      const ls = createMockLocalStorage({
+        capy_snapshots_v8: JSON.stringify([
+          { id: 'live-1', title: 'Live', sourceRef: { kind: 'blob', uri: 'live-1' } },
+        ]),
+      });
+      const baseIdb = createMockIndexedDb({
+        initialDbs: {
+          capy_game_storage_v8: {
+            puzzles: {
+              'live-1': {
+                __capyCompactV2: 2,
+                rleRegionMap: new Uint8Array(200),
+                nestedLayers: [{ layerId: 'd1', imageBlobKey: 'layer_live-1_d1' }],
+              },
+              'orphan-p1': { __capyCompactV2: 2, rleRegionMap: new Uint8Array(200) },
+            },
+            images: {
+              'live-1': new Blob([new Uint8Array(300)], { type: 'image/png' }),
+              'layer_live-1_d1': new Blob([new Uint8Array(400)], { type: 'image/png' }),
+              'layer_live-1_stale': new Blob([new Uint8Array(500)], { type: 'image/png' }),
+            },
+          },
+        },
+        exposeDatabasesApi: true,
+      });
+      return { ls, baseIdb };
+    };
+
+    // Helper that cleanly intercepts db.transaction on opened mock handles
+    const createWrappedIdb = (baseIdb, wrapTxFactory) => ({
+      ...baseIdb,
+      open(dbName, version) {
+        const innerReq = baseIdb.open(dbName, version);
+        const outerReq = {
+          result: null,
+          error: null,
+          transaction: null,
+          onupgradeneeded: null,
+          onsuccess: null,
+          onerror: null,
+          onblocked: null,
+        };
+        innerReq.onupgradeneeded = (ev) => {
+          outerReq.result = innerReq.result;
+          outerReq.transaction = innerReq.transaction;
+          if (outerReq.onupgradeneeded) outerReq.onupgradeneeded(ev);
+        };
+        innerReq.onsuccess = () => {
+          const rawDb = innerReq.result;
+          const wrappedDb = {
+            ...rawDb,
+            objectStoreNames: rawDb.objectStoreNames,
+            close: () => rawDb.close(),
+            createObjectStore: (...a) => rawDb.createObjectStore(...a),
+            transaction(storeNames, mode) {
+              return wrapTxFactory(rawDb, storeNames, mode);
+            },
+          };
+          outerReq.result = wrappedDb;
+          if (outerReq.onsuccess) outerReq.onsuccess({ target: outerReq });
+        };
+        innerReq.onerror = (ev) => {
+          outerReq.error = innerReq.error;
+          if (outerReq.onerror) outerReq.onerror(ev);
+        };
+        innerReq.onblocked = (ev) => {
+          if (outerReq.onblocked) outerReq.onblocked(ev);
+        };
+        return outerReq;
+      },
+    });
+
+    // 24a: STORE_PUZZLES openCursor fires onerror -> fail-closed
+    {
+      await resetCachedHandles();
+      const { ls, baseIdb } = makeSec24Fixture();
+      globalThis.localStorage = ls;
+      globalThis.indexedDB = createWrappedIdb(baseIdb, (rawDb, storeNames, mode) => {
+        const tx = rawDb.transaction(storeNames, mode);
+        const origObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (storeName) => {
+          const st = origObjectStore(storeName);
+          if (storeName === 'puzzles' && mode === 'readonly') {
+            return {
+              ...st,
+              openCursor() {
+                const req = { result: null, error: new Error('cursor-puzzles-fail'), onsuccess: null, onerror: null };
+                queueMicrotask(() => {
+                  if (req.onerror) req.onerror({ target: req });
+                });
+                return req;
+              },
+            };
+          }
+          return st;
+        };
+        return tx;
+      });
+      const r24a = await analyzerMod.analyzeBrowserStorage(opts);
+      const db24a = r24a.indexedDb.activeDb;
+      assert.equal(db24a.orphanDetectionSkipped, true);
+      assert.equal(db24a.orphanedCount, 0);
+      assert.equal(db24a.orphanedBytes, 0);
+      assert.deepEqual(db24a.orphanedImageKeys, []);
+      const c24a = await analyzerMod.cleanOrphanedSaveData(opts);
+      assert.equal(c24a.deletedIdbRecords, 0);
+      assert.equal(
+        c24a.warnings.some((w) => w.includes('Skipped IDB orphan cleanup')),
+        true
+      );
+      assert.deepEqual(baseIdb._getStoreKeys('capy_game_storage_v8', 'puzzles').sort(), ['live-1', 'orphan-p1']);
+      assert.deepEqual(
+        baseIdb._getStoreKeys('capy_game_storage_v8', 'images').sort(),
+        ['layer_live-1_d1', 'layer_live-1_stale', 'live-1']
+      );
+    }
+
+    // 24b: STORE_IMAGES openCursor fires onerror -> fail-closed
+    {
+      await resetCachedHandles();
+      const { ls, baseIdb } = makeSec24Fixture();
+      globalThis.localStorage = ls;
+      globalThis.indexedDB = createWrappedIdb(baseIdb, (rawDb, storeNames, mode) => {
+        const tx = rawDb.transaction(storeNames, mode);
+        const origObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (storeName) => {
+          const st = origObjectStore(storeName);
+          if (storeName === 'images' && mode === 'readonly') {
+            return {
+              ...st,
+              openCursor() {
+                const req = { result: null, error: new Error('cursor-images-fail'), onsuccess: null, onerror: null };
+                queueMicrotask(() => {
+                  if (req.onerror) req.onerror({ target: req });
+                });
+                return req;
+              },
+            };
+          }
+          return st;
+        };
+        return tx;
+      });
+      const r24b = await analyzerMod.analyzeBrowserStorage(opts);
+      const db24b = r24b.indexedDb.activeDb;
+      assert.equal(db24b.orphanDetectionSkipped, true);
+      assert.equal(db24b.orphanedCount, 0);
+      const c24b = await analyzerMod.cleanOrphanedSaveData(opts);
+      assert.equal(c24b.deletedIdbRecords, 0);
+      assert.deepEqual(
+        baseIdb._getStoreKeys('capy_game_storage_v8', 'images').sort(),
+        ['layer_live-1_d1', 'layer_live-1_stale', 'live-1']
+      );
+    }
+
+    // 24c: STORE_PUZZLES transaction() throws -> fail-closed
+    {
+      await resetCachedHandles();
+      const { ls, baseIdb } = makeSec24Fixture();
+      globalThis.localStorage = ls;
+      globalThis.indexedDB = createWrappedIdb(baseIdb, (rawDb, storeNames, mode) => {
+        if (storeNames === 'puzzles' && mode === 'readonly') {
+          throw new Error('tx-puzzles-throw');
+        }
+        return rawDb.transaction(storeNames, mode);
+      });
+      const r24c = await analyzerMod.analyzeBrowserStorage(opts);
+      const db24c = r24c.indexedDb.activeDb;
+      assert.equal(db24c.orphanDetectionSkipped, true);
+      assert.equal(db24c.orphanedCount, 0);
+      const c24c = await analyzerMod.cleanOrphanedSaveData(opts);
+      assert.equal(c24c.deletedIdbRecords, 0);
+    }
+
+    // 24d: getAllKeys() fallback path (no openCursor) — happy path & getReq.onerror fail-closed
+    {
+      await resetCachedHandles();
+      const { ls, baseIdb } = makeSec24Fixture();
+      let failPuzzleKey = null;
+      globalThis.localStorage = ls;
+      globalThis.indexedDB = createWrappedIdb(baseIdb, (rawDb, storeNames, mode) => {
+        const tx = rawDb.transaction(storeNames, mode);
+        const origObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (storeName) => {
+          const st = origObjectStore(storeName);
+          if (mode !== 'readonly') return st;
+          const keys = baseIdb._getStoreKeys('capy_game_storage_v8', storeName);
+          return {
+            get(key) {
+              if (storeName === 'puzzles' && failPuzzleKey && key === failPuzzleKey) {
+                const req = { result: undefined, error: new Error('get-fail'), onsuccess: null, onerror: null };
+                queueMicrotask(() => {
+                  if (req.onerror) req.onerror({ target: req });
+                });
+                return req;
+              }
+              return st.get(key);
+            },
+            getAllKeys() {
+              const req = { result: [...keys], error: null, onsuccess: null, onerror: null };
+              queueMicrotask(() => {
+                if (req.onsuccess) req.onsuccess({ target: req });
+              });
+              return req;
+            },
+          };
+        };
+        return tx;
+      });
+
+      const r24dOk = await analyzerMod.analyzeBrowserStorage(opts);
+      const db24dOk = r24dOk.indexedDb.activeDb;
+      assert.equal(db24dOk.orphanDetectionSkipped, false);
+      assert.deepEqual(db24dOk.orphanedPuzzleKeys, ['orphan-p1']);
+      assert.deepEqual(
+        db24dOk.orphanedImageKeys,
+        ['layer_live-1_stale'],
+        'getAllKeys() fallback must exempt live layer_live-1_d1 while flagging layer_live-1_stale'
+      );
+
+      failPuzzleKey = 'live-1';
+      const r24dErr = await analyzerMod.analyzeBrowserStorage(opts);
+      const db24dErr = r24dErr.indexedDb.activeDb;
+      assert.equal(db24dErr.orphanDetectionSkipped, true);
+      assert.equal(db24dErr.orphanedCount, 0);
+      const c24dErr = await analyzerMod.cleanOrphanedSaveData(opts);
+      assert.equal(c24dErr.deletedIdbRecords, 0);
+    }
+
+    // 25. IndexedDbStore (collectReferencedLayerImageKeysStrict, deleteSnapshotEntries) & SnapshotStorage.deleteSnapshot
+    // 25a: collectReferencedLayerImageKeysStrict happy path, dedup, empty, & fail-closed error
+    {
+      await resetCachedHandles();
+      const emptyRes = await idbMod.collectReferencedLayerImageKeysStrict([]);
+      assert.equal(emptyRes.ok, true);
+      assert.equal(emptyRes.keys.size, 0);
+      assert.equal(emptyRes.targetKeys.size, 0);
+
+      const idb25a = createMockIndexedDb({
+        initialDbs: {
+          capy_game_storage_v8: {
+            puzzles: {
+              s1: {
+                nestedLayers: [
+                  { layerId: 'a', imageBlobKey: 'layer_s1_a' },
+                  { layerId: 'b', imageBlobKey: 'layer_s1_b' },
+                ],
+              },
+              s2: { rleRegionMap: new Uint8Array(8) },
+            },
+            images: {},
+          },
+        },
+      });
+      globalThis.indexedDB = idb25a;
+      const read25a = await idbMod.collectReferencedLayerImageKeysStrict(['s1', 's1', 's2', '']);
+      assert.equal(read25a.ok, true);
+      assert.deepEqual([...read25a.keys].sort(), ['layer_s1_a', 'layer_s1_b']);
+      assert.deepEqual(read25a.targetKeys.get('s1'), ['layer_s1_a', 'layer_s1_b']);
+      assert.equal(read25a.targetKeys.has('s2'), false);
+
+      await resetCachedHandles();
+      globalThis.indexedDB = createWrappedIdb(idb25a, (rawDb, storeNames, mode) => {
+        const tx = rawDb.transaction(storeNames, mode);
+        const origObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (storeName) => {
+          const st = origObjectStore(storeName);
+          return {
+            ...st,
+            get() {
+              const req = { result: undefined, error: new Error('read-err'), onsuccess: null, onerror: null };
+              queueMicrotask(() => {
+                if (req.onerror) req.onerror({ target: req });
+              });
+              return req;
+            },
+          };
+        };
+        return tx;
+      });
+      const fail25a = await idbMod.collectReferencedLayerImageKeysStrict(['s1']);
+      assert.equal(fail25a.ok, false);
+      assert.equal(fail25a.keys.size, 0);
+      assert.equal(fail25a.targetKeys.size, 0);
+    }
+
+    // 25b: deleteSnapshotEntries preserveRootImageKey & preservePreviewKey flags
+    {
+      await resetCachedHandles();
+      const idb25b = createMockIndexedDb({
+        initialDbs: {
+          capy_game_storage_v8: {
+            puzzles: { s1: { rleRegionMap: new Uint8Array(8) } },
+            images: {
+              s1: new Blob([new Uint8Array(10)]),
+              preview_s1: 'data:image/webp;base64,AA==',
+              layer_s1_a: new Blob([new Uint8Array(20)]),
+            },
+          },
+        },
+      });
+      globalThis.indexedDB = idb25b;
+      await idbMod.deleteSnapshotEntries('s1', ['s1', 'preview_s1', 'layer_s1_a'], {
+        preserveRootImageKey: true,
+        preservePreviewKey: true,
+      });
+      assert.deepEqual(idb25b._getStoreKeys('capy_game_storage_v8', 'puzzles'), []);
+      assert.deepEqual(
+        idb25b._getStoreKeys('capy_game_storage_v8', 'images').sort(),
+        ['preview_s1', 's1']
+      );
+    }
+
+    // 25c: SnapshotStorage.deleteSnapshot happy path + non-layer_ smuggling guard + shared layer preservation
+    {
+      await resetCachedHandles();
+      const ls25c = createMockLocalStorage({
+        capy_snapshots_v8: JSON.stringify([
+          { id: 'target', title: 'Target', sourceRef: { kind: 'blob', uri: 'target' }, createdAt: 1, updatedAt: 1 },
+          { id: 'survivor', title: 'Survivor', sourceRef: { kind: 'blob', uri: 'survivor' }, createdAt: 1, updatedAt: 1 },
+        ]),
+      });
+      const idb25c = createMockIndexedDb({
+        initialDbs: {
+          capy_game_storage_v8: {
+            puzzles: {
+              target: {
+                nestedLayers: [
+                  { layerId: 'only', imageBlobKey: 'layer_target_only' },
+                  { layerId: 'shared', imageBlobKey: 'layer_shared' },
+                  { layerId: 'smug1', imageBlobKey: 'survivor' },
+                  { layerId: 'smug2', imageBlobKey: 'preview_survivor' },
+                  { layerId: 'smug3', imageBlobKey: 'custom_non_layer_key' },
+                ],
+              },
+              survivor: {
+                nestedLayers: [{ layerId: 'shared', imageBlobKey: 'layer_shared' }],
+              },
+            },
+            images: {
+              target: new Blob([new Uint8Array(10)]),
+              preview_target: 'data:image/webp;base64,AA==',
+              layer_target_only: new Blob([new Uint8Array(10)]),
+              layer_shared: new Blob([new Uint8Array(10)]),
+              survivor: new Blob([new Uint8Array(10)]),
+              preview_survivor: 'data:image/webp;base64,BB==',
+              custom_non_layer_key: new Blob([new Uint8Array(10)]),
+            },
+          },
+        },
+      });
+      globalThis.localStorage = ls25c;
+      globalThis.indexedDB = idb25c;
+      await snapshotMod.deleteSnapshot('target', { skipTombstone: true });
+      assert.deepEqual(idb25c._getStoreKeys('capy_game_storage_v8', 'puzzles'), ['survivor']);
+      assert.deepEqual(
+        idb25c._getStoreKeys('capy_game_storage_v8', 'images').sort(),
+        ['custom_non_layer_key', 'layer_shared', 'preview_survivor', 'survivor'],
+        'deleteSnapshot must delete target layer_target_only while preserving shared layer_shared and all non-layer_ keys'
+      );
+    }
+
+    // 25d: SnapshotStorage.deleteSnapshot fail-closed when survivingRead.ok === false
+    {
+      await resetCachedHandles();
+      const ls25d = createMockLocalStorage({
+        capy_snapshots_v8: JSON.stringify([
+          { id: 'target-fc', title: 'Target FC', sourceRef: { kind: 'blob', uri: 'target-fc' }, createdAt: 1, updatedAt: 1 },
+          { id: 'survivor-fc', title: 'Survivor FC', sourceRef: { kind: 'blob', uri: 'survivor-fc' }, createdAt: 1, updatedAt: 1 },
+        ]),
+      });
+      const idb25d = createMockIndexedDb({
+        initialDbs: {
+          capy_game_storage_v8: {
+            puzzles: {
+              'target-fc': {
+                nestedLayers: [
+                  { layerId: 'd1', imageBlobKey: 'layer_target-fc_d1' },
+                  { layerId: 'sh', imageBlobKey: 'layer_shared-fc' },
+                ],
+              },
+              'survivor-fc': {
+                nestedLayers: [{ layerId: 'sh', imageBlobKey: 'layer_shared-fc' }],
+              },
+            },
+            images: {
+              'target-fc': new Blob([new Uint8Array(10)]),
+              'preview_target-fc': 'data:image/webp;base64,AA==',
+              'layer_target-fc_d1': new Blob([new Uint8Array(10)]),
+              'layer_shared-fc': new Blob([new Uint8Array(10)]),
+              'survivor-fc': new Blob([new Uint8Array(10)]),
+            },
+          },
+        },
+      });
+      globalThis.localStorage = ls25d;
+      globalThis.indexedDB = createWrappedIdb(idb25d, (rawDb, storeNames, mode) => {
+        const tx = rawDb.transaction(storeNames, mode);
+        const origObjectStore = tx.objectStore.bind(tx);
+        tx.objectStore = (storeName) => {
+          const st = origObjectStore(storeName);
+          if (storeName === 'puzzles' && mode === 'readonly') {
+            return {
+              ...st,
+              get(key) {
+                if (key === 'survivor-fc') {
+                  const req = { result: undefined, error: new Error('survivor-read-fail'), onsuccess: null, onerror: null };
+                  queueMicrotask(() => {
+                    if (req.onerror) req.onerror({ target: req });
+                  });
+                  return req;
+                }
+                return st.get(key);
+              },
+            };
+          }
+          return st;
+        };
+        return tx;
+      });
+      await snapshotMod.deleteSnapshot('target-fc', { skipTombstone: true });
+      assert.deepEqual(idb25d._getStoreKeys('capy_game_storage_v8', 'puzzles'), ['survivor-fc']);
+      const remaining25dImages = idb25d._getStoreKeys('capy_game_storage_v8', 'images');
+      assert.equal(
+        remaining25dImages.includes('layer_target-fc_d1'),
+        true,
+        'Fail-closed survivingRead.ok === false must NOT delete layer_target-fc_d1'
+      );
+      assert.equal(
+        remaining25dImages.includes('layer_shared-fc'),
+        true,
+        'Fail-closed survivingRead.ok === false must NOT delete layer_shared-fc'
+      );
+      assert.equal(remaining25dImages.includes('survivor-fc'), true);
+    }
   } finally {
     await resetCachedHandles();
     globalThis.localStorage = prevLs;

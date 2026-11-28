@@ -1,9 +1,11 @@
 import { Dispatch, MutableRefObject, SetStateAction, useCallback, useEffect, useRef, useState } from 'react';
-import { PuzzleData, SavedSnapshot } from '../types';
+import { NormalizedRect, PaletteSortOrder, PuzzleData, SavedSnapshot } from '../types';
 import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
-import { getVisiblePalette } from '../components/PaletteDock';
+import { getVisiblePalette, partitionDockPaletteByPriority } from '../components/PaletteDock';
+import { createFocusBoundsRequest, type FocusBoundsRequest } from '../components/puzzleCanvasHelpers';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import type { CoopLiveState, CoopViewport } from './useCoopSession';
 import { useIsomorphicLayoutEffect, useLatest } from './useLatest';
 
@@ -126,6 +128,37 @@ export function mergeNumberSetIfChanged(prev: Set<number>, next: Set<number>): S
   return next;
 }
 
+const EMPTY_NESTED_COLOR_IDS = new Set<number>();
+
+/**
+ * Pure helper resolving which colorId keyboard digit shortcuts `1`..`9` select,
+ * aligned with PaletteDock's `partitionDockPaletteByPriority` visual order.
+ */
+export function resolveDigitShortcutColorId(
+  key: string,
+  puzzle: PuzzleData,
+  filledRegionIds: Set<number>,
+  sortOrder: PaletteSortOrder,
+  isFreeColorMode: boolean,
+  prioritizedColorIds?: ReadonlySet<number>,
+  activeColorId?: number,
+  paintedRegionColors?: ReadonlyMap<number, number>
+): number | null {
+  const index = Number(key) - 1;
+  if (!Number.isInteger(index) || index < 0 || index > 8) return null;
+  const basePalette = getVisiblePalette(
+    puzzle.palette,
+    getAllPuzzleRegions(puzzle),
+    filledRegionIds,
+    sortOrder,
+    isFreeColorMode,
+    activeColorId,
+    paintedRegionColors
+  );
+  const { dockPalette } = partitionDockPaletteByPriority(basePalette, prioritizedColorIds);
+  return index < dockPalette.length ? dockPalette[index].id : null;
+}
+
 function getDocumentFullscreenActive(): boolean {
   if (typeof document === 'undefined') return false;
   return Boolean(
@@ -159,8 +192,19 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
 
   const [visibleColorIds, setVisibleColorIds] = useState<Set<number>>(new Set());
   const [visibleRegionIds, setVisibleRegionIds] = useState<Set<number>>(new Set());
+  const [nestedColorsState, setNestedColorsState] = useState<{
+    puzzle: PuzzleData | null;
+    colorIds: Set<number>;
+  }>({ puzzle: null, colorIds: EMPTY_NESTED_COLOR_IDS });
+  const hasNestedLayers = Boolean(puzzle?.nestedLayers && puzzle.nestedLayers.length > 0);
+  const visibleNestedColorIds =
+    hasNestedLayers && nestedColorsState.puzzle === puzzle
+      ? nestedColorsState.colorIds
+      : EMPTY_NESTED_COLOR_IDS;
+  const puzzleRef = useLatest(puzzle);
   const visibleColorIdsRef = useLatest(visibleColorIds);
   const visibleRegionIdsRef = useLatest(visibleRegionIds);
+  const visibleNestedColorIdsRef = useLatest(visibleNestedColorIds);
 
   const [zoomInTrigger, setZoomInTrigger] = useState<number>(0);
   const [zoomOutTrigger, setZoomOutTrigger] = useState<number>(0);
@@ -171,6 +215,8 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
     dx: 0,
     dy: 0,
   });
+  const [focusBoundsRequest, setFocusBoundsRequest] = useState<FocusBoundsRequest | null>(null);
+  const focusSeqRef = useRef<number>(0);
   const [isCanvasTransformed, setIsCanvasTransformed] = useState<boolean>(false);
   const [initialViewport, setInitialViewport] = useState<CoopViewport>({
     zoomScale: 1,
@@ -191,6 +237,12 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
     },
     [viewportRef]
   );
+
+  const focusViewportOnBounds = useCallback((bounds: NormalizedRect) => {
+    const next = createFocusBoundsRequest(focusSeqRef.current, bounds);
+    focusSeqRef.current = next.seq;
+    setFocusBoundsRequest(next);
+  }, []);
 
   const clearPendingViewportSave = useCallback(() => {
     if (viewportSaveTimerRef.current !== null) {
@@ -298,6 +350,31 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
   const handleVisibleRegionsChanged = useCallback((next: Set<number>) => {
     setVisibleRegionIds((prev) => mergeNumberSetIfChanged(prev, next));
   }, []);
+
+  const handleVisibleNestedColorsChanged = useCallback(
+    (next: Set<number>) => {
+      const curPuzzle = puzzleRef.current;
+      const curHasNested = Boolean(curPuzzle?.nestedLayers && curPuzzle.nestedLayers.length > 0);
+      setNestedColorsState((prev) => {
+        if (!curHasNested || !curPuzzle) {
+          return prev.colorIds.size === 0 && prev.puzzle === curPuzzle
+            ? prev
+            : { puzzle: curPuzzle, colorIds: EMPTY_NESTED_COLOR_IDS };
+        }
+        const merged =
+          prev.puzzle === curPuzzle
+            ? mergeNumberSetIfChanged(prev.colorIds, next)
+            : next.size === 0
+              ? EMPTY_NESTED_COLOR_IDS
+              : next;
+        if (prev.puzzle === curPuzzle && prev.colorIds === merged) {
+          return prev;
+        }
+        return { puzzle: curPuzzle, colorIds: merged };
+      });
+    },
+    [puzzleRef]
+  );
 
   const handleToggleFullscreen = useCallback(async () => {
     markTutorialActionTried('peek_fullscreen');
@@ -460,18 +537,19 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
       const cur = liveCoopRef.current;
       const curPuzzle = cur.puzzle ?? activePuzzle;
       const curFilled = cur.filledRegionIds;
-      if ((isReplaying && !wasAwaiting) || curFilled.size >= curPuzzle.regions.length) return;
-      const selectablePalette = getVisiblePalette(
-        curPuzzle.palette,
-        curPuzzle.regions,
+      if ((isReplaying && !wasAwaiting) || curFilled.size >= getTotalRegionCount(curPuzzle)) return;
+      const chosenColId = resolveDigitShortcutColorId(
+        e.key,
+        curPuzzle,
         curFilled,
         cur.settings.paletteSort,
-        cur.isFreeColorMode
+        cur.isFreeColorMode,
+        visibleNestedColorIdsRef.current,
+        cur.activeColorId,
+        cur.paintedRegionColors
       );
-      const index = Number(e.key) - 1;
-      if (index < 0 || index >= selectablePalette.length) return;
+      if (chosenColId === null) return;
       e.preventDefault();
-      const chosenColId = selectablePalette[index].id;
       NativeBridge.haptic('tick', cur.settings.hapticsEnabled);
       liveCoopRef.current = { ...cur, activeColorId: chosenColId };
       setActiveColorId(chosenColId);
@@ -485,6 +563,7 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
       markTutorialActionTried,
       setActiveColorId,
       setHintRegionId,
+      visibleNestedColorIdsRef,
     ]
   );
 
@@ -528,21 +607,26 @@ export function useViewportAndShortcuts(params: UseViewportAndShortcutsParams) {
   return {
     visibleColorIds,
     visibleRegionIds,
+    visibleNestedColorIds,
     visibleColorIdsRef,
     visibleRegionIdsRef,
+    visibleNestedColorIdsRef,
     isFullscreen,
     zoomInTrigger,
     zoomOutTrigger,
     resetViewTrigger,
     restoreViewTrigger,
     panStepRequest,
+    focusBoundsRequest,
     isCanvasTransformed,
     initialViewport,
     applyViewport,
+    focusViewportOnBounds,
     clearPendingViewportSave,
     flushPendingViewportSave,
     handleVisibleColorsChanged,
     handleVisibleRegionsChanged,
+    handleVisibleNestedColorsChanged,
     handleToggleFullscreen,
     handleViewExtentChanged,
     handleViewportGesture,

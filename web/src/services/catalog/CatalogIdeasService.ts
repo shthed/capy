@@ -13,7 +13,7 @@ import {
   PlayerIdentity,
 } from '../providers/types';
 
-const BLOCKED_PROMPT_PATTERNS = [
+export const BLOCKED_PROMPT_PATTERNS = [
   /\b(nsfw|nude|nudity|explicit|gore|blood|violence|weapon|hate|slur)\b/i,
 ];
 
@@ -172,6 +172,45 @@ export class DefaultAiArtworkAdapter implements AiArtworkProvider {
     ]
       .filter(Boolean)
       .join(', ');
+  }
+}
+
+function formatExtendedSidesLabel(sides?: InfiniteZoomTileSpec['extendedSides']): string {
+  if (!sides) return 'selected borders';
+  const active = (['top', 'bottom', 'left', 'right'] as const).filter((side) => sides[side]);
+  return active.length > 0 ? active.join(', ') : 'selected borders';
+}
+
+export class LocalBrowserAiArtworkAdapter implements AiArtworkProvider {
+  readonly isConfigured = true;
+
+  estimateCreditCost(_resolution: number, _isInfiniteZoomInfill: boolean): number {
+    return 0;
+  }
+
+  buildSeamLockedInfillPrompt(spec: InfiniteZoomTileSpec): string {
+    const direction = spec.direction ?? 'child-in';
+    let modeLead: string;
+    if (direction === 'in-place') {
+      const regionCount = spec.selectedRegionIds?.length ?? 0;
+      const regionClause = regionCount > 0 ? `, ${regionCount} selected regions` : '';
+      modeLead = `Seamless in-place region detail subdivision (depth ${spec.depth}${regionClause})`;
+    } else if (direction === 'extend-out') {
+      const sidesLabel = formatExtendedSidesLabel(spec.extendedSides);
+      modeLead = `Seamless outward border extension (depth ${spec.depth}, sides: ${sidesLabel})`;
+    } else {
+      modeLead = `Seamless zoom-in detail sub-tile (depth ${spec.depth}, quadrant ${spec.quadrant + 1})`;
+    }
+
+    const hint =
+      spec.promptHint.trim().slice(0, 200) ||
+      'clean color-by-number cel illustration with clear bounded regions';
+    const paletteList = spec.lockedBoundaryPaletteHex.slice(0, 8).join(', ');
+    const seamClause = paletteList
+      ? `locking seam boundary colors to [${paletteList}] for seamless continuity`
+      : '';
+
+    return [modeLead, hint, seamClause].filter(Boolean).join(', ');
   }
 }
 

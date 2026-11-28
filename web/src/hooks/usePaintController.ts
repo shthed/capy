@@ -14,8 +14,10 @@ import { NativeBridge } from '../services/NativeBridge';
 import { finishPaintStroke } from '../services/paintStrokeHelper';
 import { generatePreviewDataUrl } from '../services/artworkExporter';
 import { reportSwallowed } from '../services/telemetry';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import { TutorialTriedActions } from '../components/OnboardingTutorial';
 import type { CoopLiveState, CoopViewport } from './useCoopSession';
+import { hydrateLayerImagesForPuzzle } from './useSnapshotLibrary';
 import type { UndoHistoryEntry } from './useUndoRedo';
 
 export interface ParsedPaletteFields {
@@ -65,6 +67,7 @@ export interface UsePaintControllerParams {
   setSnapshots: Dispatch<SetStateAction<SavedSnapshot[]>>;
   setLifetimeStats: Dispatch<SetStateAction<PlayerLifetimeStats>>;
   markTutorialActionTried: (action: keyof TutorialTriedActions) => void;
+  onPaintCommitted?: () => void;
 }
 
 const HEX_COLOR_RE = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -139,15 +142,35 @@ export function buildCompletedSnapshotIdSet(snapshots: SavedSnapshot[]): Set<str
   );
 }
 
+function findRegionAcrossLayers(puzzle: PuzzleData, regionId: number): Region | undefined {
+  for (let i = 0; i < puzzle.regions.length; i++) {
+    if (puzzle.regions[i].id === regionId) return puzzle.regions[i];
+  }
+  const layers = puzzle.nestedLayers;
+  if (Array.isArray(layers)) {
+    for (let i = 0; i < layers.length; i++) {
+      const layerRegions = layers[i]?.regions;
+      if (!Array.isArray(layerRegions)) continue;
+      for (let j = 0; j < layerRegions.length; j++) {
+        if (layerRegions[j].id === regionId) return layerRegions[j];
+      }
+    }
+  }
+  return undefined;
+}
+
 function lookupRegion(
   curPuzzle: PuzzleData,
   renderPuzzle: PuzzleData | null,
   regionById: Map<number, Region>,
   regionId: number
 ): Region | undefined {
-  return curPuzzle === renderPuzzle
-    ? regionById.get(regionId)
-    : curPuzzle.regions.find((r) => r.id === regionId);
+  if (curPuzzle === renderPuzzle) {
+    const cached = regionById.get(regionId);
+    if (cached) return cached;
+    if (!curPuzzle.nestedLayers?.length) return undefined;
+  }
+  return findRegionAcrossLayers(curPuzzle, regionId);
 }
 
 export function usePaintController(params: UsePaintControllerParams) {
@@ -181,6 +204,7 @@ export function usePaintController(params: UsePaintControllerParams) {
     setSnapshots,
     setLifetimeStats,
     markTutorialActionTried,
+    onPaintCommitted,
   } = params;
 
   const hintsUsedInSessionRef = useRef<number>(0);
@@ -223,7 +247,7 @@ export function usePaintController(params: UsePaintControllerParams) {
         !isReplaying &&
         !showSettings &&
         !showPaletteOptions &&
-        filledRegionCount < (puzzle?.regions.length || 0) &&
+        filledRegionCount < getTotalRegionCount(puzzle) &&
         (typeof document === 'undefined' || !document.hidden);
 
       if (isActivelyColoring) {
@@ -346,7 +370,7 @@ export function usePaintController(params: UsePaintControllerParams) {
   const canInteractDuringReplay = useCallback(
     (curPuzzle: PuzzleData, curFilledCount: number): boolean => {
       if (!isReplayingRef.current) return true;
-      if (isPostLoadReplayRef.current && curFilledCount < curPuzzle.regions.length) {
+      if (isPostLoadReplayRef.current && curFilledCount < getTotalRegionCount(curPuzzle)) {
         exitReplay();
         return true;
       }
@@ -377,6 +401,7 @@ export function usePaintController(params: UsePaintControllerParams) {
         },
       ]);
       syncRedoStack([]);
+      onPaintCommitted?.();
 
       const nextPainted = new Map(cur.paintedRegionColors);
       nextPainted.set(region.id, cur.activeColorId);
@@ -411,6 +436,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       setFilledRegionIds,
       setHintRegionId,
       setLifetimeStats,
@@ -429,7 +455,7 @@ export function usePaintController(params: UsePaintControllerParams) {
 
       const region = lookupRegion(curPuzzle, puzzle, regionByIdRef.current, regionId);
       if (!region) return;
-      const wasPuzzleIncomplete = cur.filledRegionIds.size < curPuzzle.regions.length;
+      const wasPuzzleIncomplete = cur.filledRegionIds.size < getTotalRegionCount(curPuzzle);
 
       if (cur.isFreeColorMode) {
         fillFreeColorSingleRegion(cur, curPuzzle, region, wasPuzzleIncomplete);
@@ -454,6 +480,7 @@ export function usePaintController(params: UsePaintControllerParams) {
         },
       ]);
       syncRedoStack([]);
+      onPaintCommitted?.();
 
       const nextFilled = new Set(cur.filledRegionIds);
       nextFilled.add(regionId);
@@ -488,6 +515,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       puzzle,
       regionByIdRef,
       setActiveColorId,
@@ -535,6 +563,7 @@ export function usePaintController(params: UsePaintControllerParams) {
 
       syncUndoStack((prev) => [...prev, ...newUndoEntries]);
       syncRedoStack([]);
+      onPaintCommitted?.();
       liveCoopRef.current = {
         ...cur,
         filledRegionIds: nextFilled,
@@ -570,6 +599,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       puzzle,
       regionByIdRef,
       setFilledRegionIds,
@@ -588,7 +618,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       if (!curPuzzle || regionIds.size === 0) return;
       if (!canInteractDuringReplay(curPuzzle, cur.filledRegionIds.size)) return;
 
-      const wasPuzzleIncomplete = cur.filledRegionIds.size < curPuzzle.regions.length;
+      const wasPuzzleIncomplete = cur.filledRegionIds.size < getTotalRegionCount(curPuzzle);
       if (cur.isFreeColorMode) {
         batchFillFreeColorRegions(cur, curPuzzle, regionIds, wasPuzzleIncomplete);
         return;
@@ -622,6 +652,7 @@ export function usePaintController(params: UsePaintControllerParams) {
 
       syncUndoStack((prev) => [...prev, ...newUndoEntries]);
       syncRedoStack([]);
+      onPaintCommitted?.();
       liveCoopRef.current = {
         ...cur,
         filledRegionIds: nextFilled,
@@ -659,6 +690,7 @@ export function usePaintController(params: UsePaintControllerParams) {
       isCoopSessionActive,
       liveCoopRef,
       markTutorialActionTried,
+      onPaintCommitted,
       puzzle,
       regionByIdRef,
       setActiveColorId,
@@ -692,10 +724,11 @@ export function usePaintController(params: UsePaintControllerParams) {
               cur.paintedRegionColors
             )
           : undefined;
+      const totalRegionCount = getTotalRegionCount(updatedPuzzle);
       const updated = StorageService.updateSnapshotProgress(
         curSnapshotId,
         cur.filledRegionIds.size,
-        updatedPuzzle.regions.length,
+        totalRegionCount,
         Array.from(cur.filledRegionIds),
         undefined,
         undefined,
@@ -706,8 +739,57 @@ export function usePaintController(params: UsePaintControllerParams) {
         updatedPuzzle.isFreeColor
       );
       setSnapshots(updated);
+
+      if (
+        regeneratePreview &&
+        curSourceImage &&
+        updatedPuzzle.nestedLayers &&
+        updatedPuzzle.nestedLayers.length > 0
+      ) {
+        void (async () => {
+          const hydratedLayers = await hydrateLayerImagesForPuzzle(
+            updatedPuzzle,
+            'usePaintController.persistPaletteMutation'
+          );
+          try {
+            const live = liveCoopRef.current;
+            if (
+              !hydratedLayers.layerImages ||
+              live.activeSnapshotId !== curSnapshotId ||
+              live.puzzle !== updatedPuzzle
+            ) {
+              return;
+            }
+            const hydratedPreviewUrl = generatePreviewDataUrl(
+              updatedPuzzle,
+              curSourceImage,
+              live.filledRegionIds,
+              live.paintedRegionColors,
+              hydratedLayers.layerImages
+            );
+            const refreshed = StorageService.updateSnapshotProgress(
+              curSnapshotId,
+              live.filledRegionIds.size,
+              getTotalRegionCount(updatedPuzzle),
+              Array.from(live.filledRegionIds),
+              undefined,
+              undefined,
+              undefined,
+              hydratedPreviewUrl,
+              Object.fromEntries(live.paintedRegionColors),
+              updatedPalette,
+              updatedPuzzle.isFreeColor
+            );
+            setSnapshots(refreshed);
+          } finally {
+            hydratedLayers.dispose();
+          }
+        })().catch((err) => {
+          reportSwallowed('usePaintController.hydratePalettePreview', err, { id: curSnapshotId });
+        });
+      }
     },
-    [setSnapshots, sourceImageRef]
+    [liveCoopRef, setSnapshots, sourceImageRef]
   );
 
   const handleAddCustomColor = useCallback(
@@ -801,7 +883,7 @@ export function usePaintController(params: UsePaintControllerParams) {
 
       const targetColor = colorId ?? cur.activeColorId;
       const target = selectHintTargetRegion(
-        curPuzzle.regions,
+        getAllPuzzleRegions(curPuzzle),
         targetColor,
         cur.filledRegionIds,
         visibleRegionIdsRef.current

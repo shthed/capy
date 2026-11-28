@@ -1,4 +1,4 @@
-import { uint8ToBase64 } from '../utils/base64';
+import { base64ToUint8, uint8ToBase64 } from '../utils/base64';
 
 export type HapticType = 'tick' | 'success' | 'warning' | 'error';
 
@@ -109,6 +109,142 @@ export function isAllowedSharedImageDataUrl(rawUrl: string): boolean {
   );
 }
 
+const ALLOWED_SHARED_IMAGE_MIMES = new Set<string>([
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+  'image/gif',
+  'image/bmp',
+  'image/avif',
+  'image/heic',
+  'image/heif',
+]);
+
+function isAllowedSharedImageMime(rawMime: string | undefined | null): boolean {
+  if (typeof rawMime !== 'string') return false;
+  const normalized = rawMime.split(';')[0].trim().toLowerCase();
+  return ALLOWED_SHARED_IMAGE_MIMES.has(normalized);
+}
+
+const SHARED_PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
+const SHARED_JPEG_MAGIC = [0xff, 0xd8, 0xff] as const;
+const SHARED_RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46] as const;
+const SHARED_WEBP_MAGIC = [0x57, 0x45, 0x42, 0x50] as const;
+const SHARED_GIF87_MAGIC = [0x47, 0x49, 0x46, 0x38, 0x37, 0x61] as const;
+const SHARED_GIF89_MAGIC = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61] as const;
+const SHARED_BMP_MAGIC = [0x42, 0x4d] as const;
+const SHARED_FTYP_MAGIC = [0x66, 0x74, 0x79, 0x70] as const;
+
+function matchesByteSignature(
+  bytes: Uint8Array,
+  sig: readonly number[],
+  offset: number = 0
+): boolean {
+  if (bytes.byteLength < offset + sig.length) return false;
+  for (let i = 0; i < sig.length; i++) {
+    if (bytes[offset + i] !== sig[i]) return false;
+  }
+  return true;
+}
+
+const ALLOWED_SHARED_FTYP_IMAGE_BRANDS = new Set<string>([
+  'avif',
+  'avis',
+  'heic',
+  'heix',
+  'hevc',
+  'hevx',
+  'mif1',
+  'msf1',
+]);
+
+function isValidIsoBmffRasterHeader(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 12) return false;
+  if (!matchesByteSignature(bytes, SHARED_FTYP_MAGIC, 4)) return false;
+  const boxSize = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+  if (bytes[0] !== 0 || bytes[1] !== 0 || boxSize < 12) return false;
+  const majorBrand = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+  return ALLOWED_SHARED_FTYP_IMAGE_BRANDS.has(majorBrand);
+}
+
+function hasValidSharedRasterMagicBytes(bytes: Uint8Array): boolean {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < 3) return false;
+  if (matchesByteSignature(bytes, SHARED_PNG_MAGIC)) return true;
+  if (matchesByteSignature(bytes, SHARED_JPEG_MAGIC)) return true;
+  if (
+    matchesByteSignature(bytes, SHARED_RIFF_MAGIC) &&
+    matchesByteSignature(bytes, SHARED_WEBP_MAGIC, 8)
+  ) {
+    return true;
+  }
+  if (
+    matchesByteSignature(bytes, SHARED_GIF87_MAGIC) ||
+    matchesByteSignature(bytes, SHARED_GIF89_MAGIC)
+  ) {
+    return true;
+  }
+  if (bytes.byteLength >= 14 && matchesByteSignature(bytes, SHARED_BMP_MAGIC)) return true;
+  return isValidIsoBmffRasterHeader(bytes);
+}
+
+function isValidRasterSharedDataUrl(trimmedUrl: string): boolean {
+  const commaIdx = trimmedUrl.indexOf(',');
+  if (commaIdx < 0) return false;
+  const base64 = trimmedUrl.slice(commaIdx + 1);
+  if (
+    base64.length === 0 ||
+    base64.length % 4 === 1 ||
+    !/^[A-Za-z0-9+/]+={0,2}$/.test(base64) ||
+    (base64.includes('=') && base64.length % 4 !== 0)
+  ) {
+    return false;
+  }
+  const prefix = base64.length <= 24 ? base64 : base64.slice(0, 24);
+  try {
+    return hasValidSharedRasterMagicBytes(base64ToUint8(prefix));
+  } catch {
+    return false;
+  }
+}
+
+async function isValidRasterSharedBlob(blob: Blob): Promise<boolean> {
+  if (!blob || blob.size < 3 || typeof blob.slice !== 'function') return false;
+  try {
+    const header = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+    return hasValidSharedRasterMagicBytes(header);
+  } catch {
+    return false;
+  }
+}
+
+function resolveSharedImageMimeAndExt(
+  dataUrl: string,
+  blobType?: string
+): { mimeType: string; ext: string } {
+  const dataMatch = /^data:(image\/[a-z0-9.+-]+);base64,/i.exec(dataUrl.trim());
+  const rawMime = (dataMatch?.[1] || blobType || '').split(';')[0].trim().toLowerCase();
+  switch (rawMime) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return { mimeType: 'image/jpeg', ext: 'jpg' };
+    case 'image/webp':
+      return { mimeType: 'image/webp', ext: 'webp' };
+    case 'image/gif':
+      return { mimeType: 'image/gif', ext: 'gif' };
+    case 'image/bmp':
+      return { mimeType: 'image/bmp', ext: 'bmp' };
+    case 'image/avif':
+      return { mimeType: 'image/avif', ext: 'avif' };
+    case 'image/heic':
+      return { mimeType: 'image/heic', ext: 'heic' };
+    case 'image/heif':
+      return { mimeType: 'image/heif', ext: 'heif' };
+    default:
+      return { mimeType: 'image/png', ext: 'png' };
+  }
+}
+
 export interface BridgeListenOptions {
   once?: boolean;
 }
@@ -122,6 +258,8 @@ export class NativeBridgeService {
   private primaryModalCloseHandler: (() => void) | null = null;
   private overlayBackStack: Array<() => void> = [];
   private sharedImageHandler: ((title: string, dataUrl: string) => void) | null = null;
+  private sharedImageInterceptors: Array<{ handler: (title: string, dataUrl: string) => void }> =
+    [];
   private deepLinkHandler: ((url: string) => void) | null = null;
   private playGamesProfileHandlers = new Set<
     (profile: { playerId: string; displayName: string }) => boolean | void
@@ -208,7 +346,11 @@ export class NativeBridgeService {
           typeof title === 'string' && title.trim().length > 0
             ? title.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, 80) || 'Shared Photo'
             : 'Shared Photo';
-        if (this.sharedImageHandler) {
+        if (this.sharedImageInterceptors.length > 0) {
+          const topInterceptor =
+            this.sharedImageInterceptors[this.sharedImageInterceptors.length - 1];
+          topInterceptor.handler(resolvedTitle, dataUrl);
+        } else if (this.sharedImageHandler) {
           this.sharedImageHandler(resolvedTitle, dataUrl);
         } else {
           NativeBridgeService.pushBounded(this.pendingSharedImages, {
@@ -356,6 +498,10 @@ export class NativeBridgeService {
 
   get isAndroid(): boolean {
     return this.platform === 'android';
+  }
+
+  isAndroidNative(): boolean {
+    return this.isAndroid;
   }
 
   getSafeAreaInsets(): { top: number; bottom: number; left: number; right: number } {
@@ -514,40 +660,77 @@ export class NativeBridgeService {
     };
   }
 
-  async shareImage(title: string, dataUrl: string): Promise<void> {
-    if (typeof dataUrl !== 'string') return;
+  /**
+   * Pushes a transient shared-image interceptor onto a LIFO stack above the base
+   * `onSharedImage` subscriber (e.g. Guided Gemini Handoff modal) without draining
+   * unrelated cold-start shared photos or clobbering the base handler on unmount.
+   */
+  pushSharedImageInterceptor(handler: (title: string, dataUrl: string) => void): () => void {
+    const entry = { handler };
+    this.sharedImageInterceptors.push(entry);
+    let removed = false;
+    return () => {
+      if (removed) return;
+      removed = true;
+      const idx = this.sharedImageInterceptors.indexOf(entry);
+      if (idx >= 0) {
+        this.sharedImageInterceptors.splice(idx, 1);
+      }
+    };
+  }
+
+  async shareImage(title: string, dataUrl: string): Promise<boolean> {
+    if (typeof dataUrl !== 'string') return false;
     const trimmedUrl = dataUrl.trim();
-    if (!isAllowedSharedImageDataUrl(trimmedUrl) && !/^blob:/i.test(trimmedUrl)) {
-      return;
+    const isBlobUrl = /^blob:/i.test(trimmedUrl);
+    if (!isAllowedSharedImageDataUrl(trimmedUrl) && !isBlobUrl) {
+      return false;
+    }
+    if (!isBlobUrl && !isValidRasterSharedDataUrl(trimmedUrl)) {
+      return false;
     }
     try {
-      if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage) {
+      if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage && !isBlobUrl) {
         window.CapyAndroid.shareImage(title, trimmedUrl);
-        return;
+        return true;
       }
+      const res = await fetch(trimmedUrl);
+      const blob = await res.blob();
+      if (
+        isBlobUrl &&
+        typeof blob.type === 'string' &&
+        blob.type.trim().length > 0 &&
+        !isAllowedSharedImageMime(blob.type)
+      ) {
+        return false;
+      }
+      if (!(await isValidRasterSharedBlob(blob))) {
+        return false;
+      }
+      const { mimeType, ext } = resolveSharedImageMimeAndExt(trimmedUrl, blob.type);
+      const safeBase = title.trim().replace(/\s+/g, '_').toLowerCase() || 'capy_image';
+      const fileName = `${safeBase}.${ext}`;
       if (typeof navigator !== 'undefined' && navigator.share) {
-        const res = await fetch(trimmedUrl);
-        const blob = await res.blob();
-        const file = new File([blob], `${title.replace(/\s+/g, '_').toLowerCase()}.png`, {
-          type: 'image/png',
+        const file = new File([blob], fileName, {
+          type: mimeType,
         });
         await navigator.share({
           title,
           files: [file],
         });
-        return;
+        return true;
       }
       // Fallback on desktop web without Web Share API: trigger download
-      const res = await fetch(trimmedUrl);
-      const blob = await res.blob();
       await this.exportOrShareFile({
         title,
-        fileName: `${title.replace(/\s+/g, '_').toLowerCase()}.png`,
-        mimeType: 'image/png',
+        fileName,
+        mimeType,
         data: blob,
       });
+      return true;
     } catch {
       // Ignore user cancellation
+      return false;
     }
   }
 
@@ -577,9 +760,13 @@ export class NativeBridgeService {
       return;
     }
 
-    if (typeof window !== 'undefined' && window.CapyAndroid?.shareImage && mimeType === 'image/png') {
+    if (
+      typeof window !== 'undefined' &&
+      window.CapyAndroid?.shareImage &&
+      (mimeType === 'image/png' || mimeType === 'image/jpeg' || mimeType === 'image/webp')
+    ) {
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      window.CapyAndroid.shareImage(title, `data:image/png;base64,${uint8ToBase64(bytes)}`);
+      window.CapyAndroid.shareImage(title, `data:${mimeType};base64,${uint8ToBase64(bytes)}`);
       return;
     }
 
@@ -1096,7 +1283,11 @@ export class NativeBridgeService {
         return false;
       }
       const host = parsed.hostname.toLowerCase();
-      if (host !== 'accounts.google.com' && host !== 'login.microsoftonline.com') {
+      if (
+        host !== 'accounts.google.com' &&
+        host !== 'login.microsoftonline.com' &&
+        host !== 'openrouter.ai'
+      ) {
         return false;
       }
       if (window.CapyAndroid?.openExternalOAuth) {

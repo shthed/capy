@@ -3,7 +3,7 @@
  *
  * Usage:
  *   npm run test:unit   -> node scripts/test.mjs --unit   (Part 1: headless Vite SSR unit suite)
- *   npm test            -> node scripts/test.mjs          (Part 1 + Part 2: 24 sequential Chromium E2E stages)
+ *   npm test            -> node scripts/test.mjs          (Part 1 + Part 2: 28 sequential Chromium E2E stages)
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,6 +24,7 @@ import { runCiReviewGateTests } from './tests/unit/ci-review-gate.test.mjs';
 import { runAndroidManifestTests } from './tests/unit/android-manifest.test.mjs';
 import { runStorageDurabilityTests } from './tests/unit/storage-durability.test.mjs';
 import { runByocCloudSyncTests } from './tests/unit/byoc-cloud-sync.test.mjs';
+import { runInfiniteZoomUnitTests } from './tests/unit/infinite-zoom.test.mjs';
 
 import { runReleaseSafetyHardeningTests } from './release-safety-hardening.test.mjs';
 import { runStorageGatewayTests } from './storage-gateway.test.mjs';
@@ -117,7 +118,7 @@ function parseCliArgs(argv) {
 
 async function runCodecAndEngineTests() {
   console.log('=== PART 1: Unified Engine, Codec, Relay, Security & Workflow Unit Suite ===');
-  const unitPublicTotal = 11;
+  const unitPublicTotal = 12;
   let unitDevTotal = 0;
   /* capy-dev-only:start */
   unitDevTotal = 5;
@@ -187,6 +188,7 @@ async function runCodecAndEngineTests() {
     );
 
     await runByocCloudSyncTests(ctx);
+    await runInfiniteZoomUnitTests(ctx);
 
     assert.equal(
       unitStep,

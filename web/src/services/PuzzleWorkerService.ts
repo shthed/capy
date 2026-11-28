@@ -1,4 +1,10 @@
-import { GenerationProgressPayload, GeneratorConfig, PuzzleData } from '../types';
+import { GenerationProgressPayload, GeneratorConfig, PaletteColor, PuzzleData } from '../types';
+import {
+  DEFAULT_ZOOM_IN_TARGET_REGIONS,
+  MAX_SUBDIVIDE_TARGET_REGIONS,
+  type MaskedSubdivisionResult,
+  type SubdivideMaskedRegionParams,
+} from '../engine/MaskedRegionSubdivider';
 
 export interface WorkerPuzzlePayload {
   width: number;
@@ -67,6 +73,55 @@ export function unpackPuzzleFromWorker(pd: WorkerPuzzlePayload): PuzzleData {
   };
 }
 
+export interface WorkerSubdivisionPayload {
+  width: number;
+  height: number;
+  localRegionMap: ArrayBuffer;
+  packedPixelsBuffer?: ArrayBuffer;
+  regions: WorkerPuzzlePayload['regions'];
+  palette: PaletteColor[];
+  addedSwatches: PaletteColor[];
+}
+
+export function unpackSubdivisionFromWorker(
+  pd: WorkerSubdivisionPayload
+): MaskedSubdivisionResult {
+  const packedPixels = pd.packedPixelsBuffer ? new Int32Array(pd.packedPixelsBuffer) : null;
+  const regions = pd.regions.map((r) => {
+    let pixels: Int32Array;
+    if (packedPixels && typeof r.pixelsOffset === 'number' && typeof r.pixelsLength === 'number') {
+      pixels = packedPixels.subarray(r.pixelsOffset, r.pixelsOffset + r.pixelsLength);
+    } else if (r.pixelsBuffer) {
+      pixels = new Int32Array(r.pixelsBuffer);
+    } else {
+      pixels = new Int32Array(0);
+    }
+
+    return {
+      id: r.id,
+      colorId: r.colorId,
+      centroidX: r.centroidX,
+      centroidY: r.centroidY,
+      area: r.area,
+      minX: r.minX,
+      maxX: r.maxX,
+      minY: r.minY,
+      maxY: r.maxY,
+      maxRadius: r.maxRadius,
+      pixels,
+    };
+  });
+
+  return {
+    width: pd.width,
+    height: pd.height,
+    localRegionMap: new Int32Array(pd.localRegionMap),
+    regions,
+    palette: pd.palette,
+    addedSwatches: pd.addedSwatches,
+  };
+}
+
 export class GenerationCancelledError extends Error {
   constructor(message = 'Generation cancelled by newer request') {
     super(message);
@@ -79,6 +134,7 @@ export class PuzzleWorkerService {
 
   private static worker: Worker | null = null;
   private static activeReject: ((reason?: unknown) => void) | null = null;
+  private static activeCancelCleanup: (() => void) | null = null;
   private static idleTerminateTimer: ReturnType<typeof setTimeout> | null = null;
   private static visibilityCleanup: (() => void) | null = null;
 
@@ -158,11 +214,39 @@ export class PuzzleWorkerService {
     sourceCanvas: HTMLCanvasElement,
     config: GeneratorConfig,
     onProgress?: (progress: number, status: string, payload?: GenerationProgressPayload) => void,
-    detailedProgress: boolean = false
+    detailedProgress: boolean = false,
+    isCancelled?: () => boolean
   ): Promise<PuzzleData> {
     const { AutoPuzzleGenerator } = await import('../engine/PuzzleGenerator');
+    if (isCancelled?.()) {
+      throw new GenerationCancelledError();
+    }
     const generator = new AutoPuzzleGenerator();
     return generator.generate(sourceCanvas, config, onProgress, detailedProgress);
+  }
+
+  private static normalizeTargetSubRegions(targetSubRegions?: number): number | undefined {
+    if (targetSubRegions === undefined) return undefined;
+    const finite = Number.isFinite(targetSubRegions)
+      ? targetSubRegions
+      : DEFAULT_ZOOM_IN_TARGET_REGIONS;
+    return Math.max(1, Math.min(MAX_SUBDIVIDE_TARGET_REGIONS, Math.floor(finite)));
+  }
+
+  private static async subdivideOnMainThreadFallback(
+    params: SubdivideMaskedRegionParams,
+    onProgress?: (progress: number, status: string) => void,
+    isCancelled?: () => boolean
+  ): Promise<MaskedSubdivisionResult> {
+    const { subdivideMaskedRegion } = await import('../engine/MaskedRegionSubdivider');
+    if (isCancelled?.()) {
+      throw new GenerationCancelledError();
+    }
+    return subdivideMaskedRegion({
+      ...params,
+      targetSubRegions: this.normalizeTargetSubRegions(params.targetSubRegions),
+      onProgress: onProgress ?? params.onProgress,
+    });
   }
 
   private static getWorker(): Worker {
@@ -179,6 +263,11 @@ export class PuzzleWorkerService {
    * Cancels any active worker generation and cleans up resources.
    */
   static cancelActive(): void {
+    const cleanup = this.activeCancelCleanup;
+    this.activeCancelCleanup = null;
+    if (cleanup) {
+      cleanup();
+    }
     if (this.activeReject) {
       const oldReject = this.activeReject;
       this.activeReject = null;
@@ -198,12 +287,60 @@ export class PuzzleWorkerService {
     detailedProgress: boolean = false
   ): Promise<PuzzleData> {
     return new Promise((resolve, reject) => {
-      // If Web Worker is not supported, fallback to lazy main-thread execution
-      if (typeof Worker === 'undefined') {
-        this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
-          resolve,
-          reject
+      let cancelled = false;
+      let activeWorker: Worker | null = null;
+      let onMsg: ((e: MessageEvent) => void) | null = null;
+      let onErr: ((err: ErrorEvent) => void) | null = null;
+      const cleanupListeners = () => {
+        if (activeWorker && onMsg) activeWorker.removeEventListener('message', onMsg);
+        if (activeWorker && onErr) activeWorker.removeEventListener('error', onErr);
+      };
+      const markCancelled = () => {
+        cancelled = true;
+        cleanupListeners();
+      };
+      const clearActiveHooks = () => {
+        if (this.activeCancelCleanup === markCancelled) {
+          this.activeCancelCleanup = null;
+        }
+        if (this.activeReject === reject) {
+          this.activeReject = null;
+        }
+      };
+      const runFallback = () => {
+        this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
+        const guardedProgress = onProgress
+          ? (p: number, s: string, payload?: GenerationProgressPayload) => {
+              if (!cancelled) onProgress(p, s, payload);
+            }
+          : undefined;
+        this.generateOnMainThreadFallback(
+          sourceCanvas,
+          config,
+          guardedProgress,
+          detailedProgress,
+          () => cancelled
+        ).then(
+          (result) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            resolve(result);
+          },
+          (fallbackErr) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            reject(fallbackErr);
+          }
         );
+      };
+
+      // Cancel previous pending task immediately (before canvas reads or fallback dispatch)
+      this.cancelActive();
+
+      // If Web Worker is not supported, fallback to lazy main-thread execution with cancellation hooks
+      if (typeof Worker === 'undefined') {
+        runFallback();
         return;
       }
 
@@ -216,50 +353,46 @@ export class PuzzleWorkerService {
         const imgData = ctx.getImageData(0, 0, width, height);
         const rgbaBuffer = imgData.data.buffer;
 
-        // Cancel previous pending task if any and terminate busy worker to free CPU immediately
-        this.cancelActive();
-
         const worker = this.getWorker();
+        activeWorker = worker;
         const requestId = `gen_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
 
         const handleMessage = (e: MessageEvent) => {
+          if (cancelled) return;
           const data = e.data;
           if (!data || data.id !== requestId) return;
 
           if (data.type === 'PROGRESS') {
             onProgress?.(data.progress, data.status, data.payload);
           } else if (data.type === 'SUCCESS') {
-            worker.removeEventListener('message', handleMessage);
-            worker.removeEventListener('error', handleError);
-            this.activeReject = null;
+            cleanupListeners();
+            clearActiveHooks();
             this.scheduleIdleTermination();
 
             const puzzleData = unpackPuzzleFromWorker(data.puzzleData as WorkerPuzzlePayload);
             resolve(puzzleData);
           } else if (data.type === 'ERROR') {
-            worker.removeEventListener('message', handleMessage);
-            worker.removeEventListener('error', handleError);
-            this.activeReject = null;
+            cleanupListeners();
+            clearActiveHooks();
             this.scheduleIdleTermination();
             reject(new Error(data.error || 'Worker generation failed'));
           }
         };
 
         const handleError = (err: ErrorEvent) => {
-          worker.removeEventListener('message', handleMessage);
-          worker.removeEventListener('error', handleError);
-          this.activeReject = null;
+          if (cancelled) return;
+          cleanupListeners();
           // Clean up worker
           this.disposeWorker();
-          // Fallback to lazy main-thread execution
+          // Fallback to lazy main-thread execution while retaining cancellation hooks
           console.warn('Worker error encountered, falling back to local thread:', err);
-          this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
-            resolve,
-            reject
-          );
+          runFallback();
         };
 
+        onMsg = handleMessage;
+        onErr = handleError;
         worker.addEventListener('message', handleMessage);
         worker.addEventListener('error', handleError);
 
@@ -277,11 +410,147 @@ export class PuzzleWorkerService {
           [rgbaBuffer]
         );
       } catch (err) {
+        cleanupListeners();
+        if (cancelled) {
+          clearActiveHooks();
+          return;
+        }
         console.warn('Failed to dispatch worker task, falling back to local:', err);
-        this.generateOnMainThreadFallback(sourceCanvas, config, onProgress, detailedProgress).then(
-          resolve,
-          reject
+        runFallback();
+      }
+    });
+  }
+
+  /**
+   * Subdivides a masked region off-thread using the puzzle Web Worker, copying caller
+   * TypedArrays prior to transfer so main-thread fallback remains intact on worker error.
+   */
+  static subdivideMaskedRegion(
+    params: Omit<SubdivideMaskedRegionParams, 'onProgress'> & {
+      onProgress?: (progress: number, status: string) => void;
+    },
+    onProgress?: (progress: number, status: string) => void
+  ): Promise<MaskedSubdivisionResult> {
+    const effectiveOnProgress = onProgress ?? params.onProgress;
+    return new Promise((resolve, reject) => {
+      let cancelled = false;
+      let activeWorker: Worker | null = null;
+      let onMsg: ((e: MessageEvent) => void) | null = null;
+      let onErr: ((err: ErrorEvent) => void) | null = null;
+      const cleanupListeners = () => {
+        if (activeWorker && onMsg) activeWorker.removeEventListener('message', onMsg);
+        if (activeWorker && onErr) activeWorker.removeEventListener('error', onErr);
+      };
+      const markCancelled = () => {
+        cancelled = true;
+        cleanupListeners();
+      };
+      const clearActiveHooks = () => {
+        if (this.activeCancelCleanup === markCancelled) {
+          this.activeCancelCleanup = null;
+        }
+        if (this.activeReject === reject) {
+          this.activeReject = null;
+        }
+      };
+      const runFallback = () => {
+        this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
+        const guardedProgress = effectiveOnProgress
+          ? (p: number, s: string) => {
+              if (!cancelled) effectiveOnProgress(p, s);
+            }
+          : undefined;
+        this.subdivideOnMainThreadFallback(params, guardedProgress, () => cancelled).then(
+          (result) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            resolve(result);
+          },
+          (fallbackErr) => {
+            clearActiveHooks();
+            if (cancelled) return;
+            reject(fallbackErr);
+          }
         );
+      };
+
+      this.cancelActive();
+
+      if (typeof Worker === 'undefined') {
+        runFallback();
+        return;
+      }
+
+      try {
+        const worker = this.getWorker();
+        activeWorker = worker;
+        const requestId = `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        this.activeReject = reject;
+        this.activeCancelCleanup = markCancelled;
+
+        const handleMessage = (e: MessageEvent) => {
+          if (cancelled) return;
+          const data = e.data;
+          if (!data || data.id !== requestId) return;
+
+          if (data.type === 'PROGRESS') {
+            effectiveOnProgress?.(data.progress, data.status);
+          } else if (data.type === 'SUBDIVIDE_SUCCESS') {
+            cleanupListeners();
+            clearActiveHooks();
+            this.scheduleIdleTermination();
+            resolve(unpackSubdivisionFromWorker(data.result as WorkerSubdivisionPayload));
+          } else if (data.type === 'ERROR') {
+            cleanupListeners();
+            clearActiveHooks();
+            this.scheduleIdleTermination();
+            reject(new Error(data.error || 'Worker masked subdivision failed'));
+          }
+        };
+
+        const handleError = (err: ErrorEvent) => {
+          if (cancelled) return;
+          cleanupListeners();
+          this.disposeWorker();
+          console.warn('Worker error during masked subdivision, falling back to local thread:', err);
+          runFallback();
+        };
+
+        onMsg = handleMessage;
+        onErr = handleError;
+        worker.addEventListener('message', handleMessage);
+        worker.addEventListener('error', handleError);
+
+        const rgbaCopy = params.rgbaData.slice();
+        const maskCopy = params.cropMask.slice();
+
+        worker.postMessage(
+          {
+            type: 'SUBDIVIDE_MASKED_REGION',
+            id: requestId,
+            cropWidth: params.cropWidth,
+            cropHeight: params.cropHeight,
+            rgbaBuffer: rgbaCopy.buffer,
+            cropMaskBuffer: maskCopy.buffer,
+            existingPalette: params.existingPalette,
+            isFreeColor: params.isFreeColor,
+            targetSubRegions: this.normalizeTargetSubRegions(params.targetSubRegions),
+            minRegionArea: params.minRegionArea,
+            maxNewSwatches: params.maxNewSwatches,
+            reuseDeltaE: params.reuseDeltaE,
+            generatorConfig: params.generatorConfig,
+          },
+          [rgbaCopy.buffer, maskCopy.buffer]
+        );
+      } catch (err) {
+        cleanupListeners();
+        if (cancelled) {
+          clearActiveHooks();
+          return;
+        }
+        console.warn('Failed to dispatch masked subdivision task, falling back to local:', err);
+        runFallback();
       }
     });
   }

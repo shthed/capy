@@ -27,6 +27,7 @@ import {
 import { ProviderRegistry } from './providers/ProviderRegistry';
 import type { CoopParticipant } from './providers/types';
 import { getVisiblePalette } from '../components/PaletteDock';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import { reportSwallowed } from './telemetry';
 
 export interface SessionViewport {
@@ -387,7 +388,9 @@ function applyPrebakedShareRestore(
 ): void {
   const delta = parsedLink.delta!;
   deps.clearShareHashFromWindowUrl(deps.realtimeRoom.activeRoomCode || parsedLink.roomCode);
-  const validIds = new Set(cachedPuzzle.regions.map((r) => r.id));
+  const allRegions = getAllPuzzleRegions(cachedPuzzle);
+  const totalRegionCount = getTotalRegionCount(cachedPuzzle);
+  const validIds = new Set(allRegions.map((r) => r.id));
   const mergedDelta = mergeProgressDeltas(
     {
       version: 2,
@@ -426,7 +429,7 @@ function applyPrebakedShareRestore(
   const settings = callbacks.getSettings();
   const availableColors = getVisiblePalette(
     cachedPuzzle.palette,
-    cachedPuzzle.regions,
+    allRegions,
     filledSet,
     settings.paletteSort
   );
@@ -435,7 +438,7 @@ function applyPrebakedShareRestore(
   const updatedList = deps.storage.updateSnapshotProgress(
     prebakedSnap.id,
     filledSet.size,
-    cachedPuzzle.regions.length,
+    totalRegionCount,
     orderedIds,
     1.0,
     0,
@@ -650,9 +653,11 @@ function applyCachedSnapshotRestore(
     cachedPuzzle.palette = mergeCustomPalette(cachedPuzzle.palette, candidateSnap.customPalette);
   }
   const settings = callbacks.getSettings();
+  const allRegions = getAllPuzzleRegions(cachedPuzzle);
+  const totalRegionCount = getTotalRegionCount(cachedPuzzle);
   const availableColors = getVisiblePalette(
     cachedPuzzle.palette,
-    cachedPuzzle.regions,
+    allRegions,
     progress.filledSet,
     settings.paletteSort
   );
@@ -690,7 +695,7 @@ function applyCachedSnapshotRestore(
   callbacks.onSyncRedoStack([]);
   callbacks.onResetActivePuzzleSessionStats(
     candidateSnap.id,
-    cachedPuzzle.regions.length > 0 && progress.filledSet.size >= cachedPuzzle.regions.length
+    totalRegionCount > 0 && progress.filledSet.size >= totalRegionCount
   );
   callbacks.onSetIsLoading(false);
   if (settings.autoReplayOnLoad !== false && progress.orderedIds.length > 0) {
@@ -835,9 +840,11 @@ function applyStarterBundleRestore(
   if (firstSnap.customPalette && firstSnap.customPalette.length > 0) {
     firstPuzzle.palette = firstSnap.customPalette;
   }
+  const allRegions = getAllPuzzleRegions(firstPuzzle);
+  const totalRegionCount = getTotalRegionCount(firstPuzzle);
   const availableColors = getVisiblePalette(
     firstPuzzle.palette,
-    firstPuzzle.regions,
+    allRegions,
     filledSet,
     callbacks.getSettings().paletteSort
   );
@@ -869,7 +876,7 @@ function applyStarterBundleRestore(
   callbacks.onSetHintRegionId(null);
   callbacks.onResetActivePuzzleSessionStats(
     firstSnap.id,
-    firstPuzzle.regions.length > 0 && filledSet.size >= firstPuzzle.regions.length
+    totalRegionCount > 0 && filledSet.size >= totalRegionCount
   );
   deps.storage.saveActiveState({
     activeSnapshotId: firstSnap.id,

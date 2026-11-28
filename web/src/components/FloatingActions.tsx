@@ -12,6 +12,7 @@ interface FloatingActionsProps {
   showUndo?: boolean;
   isCompleted?: boolean;
   isReplaying?: boolean;
+  isReplayPlaying?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   onLongPressUndo?: () => void;
@@ -20,6 +21,7 @@ interface FloatingActionsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onResetView?: () => void;
+  infiniteZoomSlot?: React.ReactNode;
 }
 
 export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
@@ -33,6 +35,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
   showUndo = true,
   isCompleted = false,
   isReplaying = false,
+  isReplayPlaying = false,
   onUndo,
   onRedo,
   onLongPressUndo,
@@ -41,6 +44,7 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
   onZoomIn,
   onZoomOut,
   onResetView,
+  infiniteZoomSlot,
 }) => {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressActiveRef = useRef<boolean>(false);
@@ -150,6 +154,9 @@ export const FloatingActions: React.FC<FloatingActionsProps> = React.memo(({
           <Play size={18} />
         </button>
       )}
+
+      {/* Manual Infinite Zoom Trigger (hidden only while Replay is actively playing) */}
+      {!(isReplaying && isReplayPlaying) && infiniteZoomSlot}
 
       {/* Undo & Redo History Action Buttons (Redo stacked above Undo, hidden when disabled or hidden via setting) */}
       {showUndo && (

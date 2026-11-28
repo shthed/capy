@@ -163,10 +163,11 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
         'Antigravity',
         'conversation://abc',
         'Gemini 4 Argon',
+        'GEMINI_API_KEY',
         'MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API',
         'Claude Opus',
         'codex/',
-        'ChatGPT',
+        'ChatGPT Codex',
         'GitHub Copilot',
         'PR Readiness Score',
         'WHITEBOARD.md',
@@ -191,7 +192,7 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
         'AI review',
         'AI reviews',
         'AI approval',
-        'AI Studio',
+        'AI Studio dev',
         'AI GitHub actions',
         'agent',
         'agents',
@@ -238,6 +239,30 @@ export async function runRebrandPersonaTests({ projectRoot, logUnitStart, logUni
         'personal',
         'personalized',
         'during replay',
+        'Nano Banana',
+        'gemini-nano-banana-2.1',
+        'gemini-3.1-flash-lite-image',
+        'gemini-3.1-flash-image',
+        'Google AI Studio',
+        'aistudio.google.com',
+        'gemini.google.com',
+        'GUIDED_GEMINI',
+        'GEMINI_BYOK',
+        'capy_gemini_byok_key_v1',
+        'OpenRouter',
+        'openrouter.ai',
+        'OPENROUTER',
+        'capy_openrouter_byok_key_v1',
+        'ChatGPT',
+        'chatgpt.com',
+        'OPENAI_BYOK',
+        'capy_openai_byok_key_v1',
+        'gpt-image-2.6-sunburst',
+        'Grok',
+        'grok.com',
+        'XAI_BYOK',
+        'capy_xai_byok_key_v1',
+        'grok-imagine-image-2.0',
       ]) {
         assert.equal(
           FORBIDDEN_PERSONA_REGEX.test(safeToken),
@@ -1251,10 +1276,10 @@ export async function runCiDevWorkflowTests({ projectRoot, logUnitStart, logUnit
 
     // Verify modular parallel E2E suite registry, smoke selection & lossless sharding
     const e2eRunnerMod = await import('../e2e/runner.mjs');
-    assert.equal(e2eRunnerMod.E2E_SUITES.length, 10);
+    assert.equal(e2eRunnerMod.E2E_SUITES.length, 11);
     assert.equal(
       e2eRunnerMod.E2E_SUITES.reduce((sum, s) => sum + s.stages, 0),
-      24
+      29
     );
     const smokeSuites = e2eRunnerMod.selectE2eSuites({ smoke: true });
     assert.deepEqual(

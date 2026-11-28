@@ -1,4 +1,11 @@
-import { GeneratorConfig, PuzzleSourceRef, SampleArtwork, SavedSnapshot } from '../../types';
+import {
+  BorderExtensionSides,
+  GeneratorConfig,
+  InfiniteZoomDirection,
+  PuzzleSourceRef,
+  SampleArtwork,
+  SavedSnapshot,
+} from '../../types';
 import { ProgressDeltaV2 } from '../CapyCodec';
 
 export type CloudProviderId =
@@ -270,6 +277,9 @@ export interface InfiniteZoomTileSpec {
   lockedBoundaryPaletteHex: string[];
   promptHint: string;
   generatorConfig: GeneratorConfig;
+  direction?: InfiniteZoomDirection;
+  extendedSides?: BorderExtensionSides;
+  selectedRegionIds?: number[];
 }
 
 export interface AiArtworkProvider {

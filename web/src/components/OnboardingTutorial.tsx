@@ -158,7 +158,7 @@ export const TUTORIAL_STEPS: TutorialStepDef[] = [
     key: 'create_gallery',
     title: 'Daily Puzzle, Gallery & Photos',
     description:
-      'Tap Photo above for your own pictures, or open Menu > Create for the Daily Puzzle, Gallery, Styles, and Detail Tiles.',
+      'Tap Photo above for your own pictures, or open Menu > Create for the Daily Puzzle, Gallery, Styles, and Local Infinite Zoom (zoom in or extend borders).',
     tryPrompt: 'Try it: Tap Photo above or open Menu > Create',
     icon: Compass,
     modalTab: 3,

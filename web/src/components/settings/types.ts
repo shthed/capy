@@ -1,7 +1,13 @@
 import { CloudSyncLiveStatus } from '../CloudAccountCard';
 import { CoopParticipant } from '../../services/providers/types';
 import { PlayerLifetimeStats } from '../../services/PlayerStatsService';
-import { GeneratorConfig, SampleArtwork, SavedSnapshot, UserSettings } from '../../types';
+import {
+  BorderExtensionSides,
+  GeneratorConfig,
+  SampleArtwork,
+  SavedSnapshot,
+  UserSettings,
+} from '../../types';
 
 export type SettingsTabId = 0 | 1 | 2 | 3 | 4;
 
@@ -45,6 +51,10 @@ export interface SettingsCreateProps {
   ) => void;
   onUploadImage: () => void;
   onZoomIntoDetailTile?: () => void;
+  isInfiniteZoomDisabled?: boolean;
+  infiniteZoomDisabledReason?: string;
+  onStartInfiniteZoomIn?: (initialPrompt?: string) => void;
+  onStartInfiniteZoomOut?: (sides: BorderExtensionSides, prompt?: string) => void;
 }
 
 export interface SettingsSavesProps {

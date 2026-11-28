@@ -1,5 +1,6 @@
 import { PaletteColor, PuzzleData, UserSettings } from '../types';
 import { getDockPalette, getVisiblePalette } from '../components/PaletteDock';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 
 export interface PaintStrokeViewport {
   zoomScale: number;
@@ -114,15 +115,17 @@ export function finishPaintStroke<TSnapshot = unknown>(
     filledRegionColorId,
   } = params;
 
+  const allRegions = getAllPuzzleRegions(puzzle);
+  const totalRegionCount = getTotalRegionCount(puzzle);
   const orderedFilledRegionIds = Array.from(nextFilled);
-  const isComplete = puzzle.regions.length > 0 && nextFilled.size >= puzzle.regions.length;
+  const isComplete = totalRegionCount > 0 && nextFilled.size >= totalRegionCount;
 
   const isFilledColorComplete =
-    puzzle.regions.length > 0 &&
+    totalRegionCount > 0 &&
     !isFreeColorMode &&
     !isComplete &&
     filledRegionColorId !== undefined &&
-    isColorCompletedInPuzzle(puzzle.regions, nextFilled, filledRegionColorId);
+    isColorCompletedInPuzzle(allRegions, nextFilled, filledRegionColorId);
 
   const hapticType: 'tick' | 'success' =
     isComplete || isFilledColorComplete ? 'success' : 'tick';
@@ -138,14 +141,14 @@ export function finishPaintStroke<TSnapshot = unknown>(
   let nextActiveColorId = activeColorId;
   let didAutoAdvance = false;
 
-  if (puzzle.regions.length > 0 && !isFreeColorMode && settings.autoAdvance && !isComplete) {
-    const hasRemainingForCurrent = puzzle.regions.some(
+  if (totalRegionCount > 0 && !isFreeColorMode && settings.autoAdvance && !isComplete) {
+    const hasRemainingForCurrent = allRegions.some(
       (r) => r.colorId === nextActiveColorId && !nextFilled.has(r.id)
     );
     if (!hasRemainingForCurrent) {
       const basePalette = getVisiblePalette(
         puzzle.palette,
-        puzzle.regions,
+        allRegions,
         nextFilled,
         settings.paletteSort
       );
@@ -173,7 +176,7 @@ export function finishPaintStroke<TSnapshot = unknown>(
     const updated = effects.onUpdateSnapshotProgress(
       snapshotId,
       nextFilled.size,
-      puzzle.regions.length,
+      totalRegionCount,
       orderedFilledRegionIds,
       zoomScale,
       panOffsetX,

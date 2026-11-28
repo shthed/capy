@@ -71,9 +71,9 @@ flowchart TB
 ### Entry, Build & Public Assets
 - **[`web/index.html`](./web/index.html)**: Host HTML with synchronous pre-React `www.capypaint.com -> https://capypaint.com` redirect, metadata, and safe-area viewport tags.
 - **[`web/package.json`](./web/package.json)** & **[`web/tsconfig.json`](./web/tsconfig.json)**: Single source of truth for `"version"`, dependencies (`react ^19.0.0`, `vite ^8.3.8`, `typescript ^7.0.2`, `tailwindcss ^4.3.5`, `oxlint 1.94.0`), strict TS settings, and CLI scripts.
-- **[`web/vite.config.ts`](./web/vite.config.ts)**: Enforces `base: './'`, lazy modal splitting, build-only SHA-256 `<meta http-equiv="Content-Security-Policy">` injection, `dist/sw.js` version + `SW_ASSETS_DIGEST` stamping, and `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` injection into `dist/.well-known/assetlinks.json`.
+- **[`web/vite.config.ts`](./web/vite.config.ts)**: Enforces `base: './'`, lazy modal splitting, build-only SHA-256 `<meta http-equiv="Content-Security-Policy">` injection (including Web-only Puter.js plus Direct Gemini, OpenRouter, OpenAI, and xAI API `connect-src` allowlists), `dist/sw.js` version + `SW_ASSETS_DIGEST` stamping, and `CAPY_ANDROID_SHA256_CERT_FINGERPRINTS` injection into `dist/.well-known/assetlinks.json`.
 - **[`web/public/sw.js`](./web/public/sw.js)** & **[`web/public/manifest.webmanifest`](./web/public/manifest.webmanifest)**: Scope-isolated offline Service Worker and standalone PWA manifest (detailed in [Section 10](#10-progressive-web-app-pwa--offline-caching)).
-- **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Static Assets security headers (SHA-256 CSP, HSTS, COOP, `X-Frame-Options`, `Permissions-Policy`, immutable `/assets/*` caching with unhashed overrides) and `/capy.apk` `302` redirect.
+- **[`web/public/_headers`](./web/public/_headers)** & **[`web/public/_redirects`](./web/public/_redirects)**: Cloudflare Static Assets security headers (SHA-256 CSP including Web-only Puter.js plus `generativelanguage.googleapis.com`, `openrouter.ai`, `api.openai.com`, and `api.x.ai` allowlists, HSTS, COOP, `X-Frame-Options`, `Permissions-Policy`, immutable `/assets/*` caching with unhashed overrides) and `/capy.apk` `302` redirect.
 - **[`web/public/.well-known/assetlinks.json`](./web/public/.well-known/assetlinks.json)**, **[`web/public/privacy-policy.html`](./web/public/privacy-policy.html)** & **[`web/public/404.html`](./web/public/404.html)**: Android Digital Asset Links manifest, script-less Privacy Policy, and GitHub Pages expired-preview redirect page.
 - **[`web/public/assets/sample_saves.capy`](./web/public/assets/sample_saves.capy)** & **[`web/public/assets/daily_saves.capy`](./web/public/assets/daily_saves.capy)**: Pre-baked Max-Detail `.capy` v2 archives for all 4 built-in gallery samples and all 20 UTC Daily Puzzle combinations.
 
@@ -82,7 +82,7 @@ flowchart TB
 - **[`web/src/version.ts`](./web/src/version.ts)**: Exports `APP_VERSION`, `APP_VERSION_CODE`, `parseSemVer`, and `resolveReleaseChannel` (`stable | beta | alpha | dev`).
 - **[`web/src/App.tsx`](./web/src/App.tsx)**: Lean composition shell wiring core state, release channel metadata, and feature hooks under `web/src/hooks/`.
 - **[`web/src/context/ProviderContext.tsx`](./web/src/context/ProviderContext.tsx)**: React context injecting the auth, cloud-save, Co-op room, and catalog adapters into hooks and modals.
-- **[`web/src/types/index.ts`](./web/src/types/index.ts)** & **[`web/src/index.css`](./web/src/index.css)**: Central TypeScript domain types (`PuzzleData`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `DEFAULT_GENERATOR_CONFIG`, `SAMPLE_GALLERY`), Tailwind CSS 4 imports, and safe-area utilities.
+- **[`web/src/types/index.ts`](./web/src/types/index.ts)** & **[`web/src/index.css`](./web/src/index.css)**: Central TypeScript domain types (`PuzzleData`, `NestedPuzzleLayer`, `NormalizedRect`, `UserSettings`, `SavedSnapshot`, `GeneratorConfig`, `DEFAULT_GENERATOR_CONFIG`, `InfiniteZoomProviderMode`, `InfiniteZoomModelId`, `NanoBananaModelId`, `OpenRouterImageModelId`, `OpenAiImageModelId`, `XaiImageModelId`, `GuidedAiAppId`, `NanoBananaResolution`, `BorderExtensionSides`, `SAMPLE_GALLERY`), Tailwind CSS 4 imports, and safe-area utilities.
 
 ### Feature Hooks (`web/src/hooks/`)
 - **[`useLatest.ts`](./web/src/hooks/useLatest.ts)**: SSR-safe `useIsomorphicLayoutEffect` and `useLatest<T>` ref mirror helper.
@@ -92,18 +92,26 @@ flowchart TB
 - **[`useCoopSession.ts`](./web/src/hooks/useCoopSession.ts)**: Co-op room hosting/joining, `#s=` share links, and `CoopRippleBuffer` peer event emission.
 - **[`useCloudSyncController.ts`](./web/src/hooks/useCloudSyncController.ts)**: Coalesced cloud library sync orchestration atop [`cloudSyncCoordinator.ts`](./web/src/services/cloudSyncCoordinator.ts) and [`ProviderContext.tsx`](./web/src/context/ProviderContext.tsx).
 - **[`useTutorialAndOffers.ts`](./web/src/hooks/useTutorialAndOffers.ts)**: 12-step tutorial progression, FIFO 9-offer banner queue, backup persistence, and `TargetSpotlightOverlay` state derivation.
-- **[`useViewportAndShortcuts.ts`](./web/src/hooks/useViewportAndShortcuts.ts)**: Visible region/color culling sets, fullscreen state, `350ms` debounced viewport persistence with unload flush, and desktop keyboard shortcuts.
+- **[`useViewportAndShortcuts.ts`](./web/src/hooks/useViewportAndShortcuts.ts)**: Visible region/color/nested-layer culling sets (`visibleNestedColorIds`), smooth `focusViewportOnBounds` auto-camera focus after Zoom In, fullscreen state, `350ms` debounced viewport persistence with unload flush, and desktop keyboard shortcuts (`1`--`9` aligned with `partitionDockPaletteByPriority`).
 - **[`usePaintController.ts`](./web/src/hooks/usePaintController.ts)**: Single/batch region painting (using [`paintStrokeHelper.ts`](./web/src/services/paintStrokeHelper.ts)), custom palette CRUD/presets, smart on-screen hint selection, and active session stats.
 - **[`useSnapshotLibrary.ts`](./web/src/hooks/useSnapshotLibrary.ts)**: Worker puzzle generation (`generationSeqRef`), snapshot transitions, safe `blob:`-only URL revocation, prebaked sample loading, 2x detail-tile extraction, monotonic `resetEpoch` reset, and export/import callbacks.
+- **[`useInfiniteZoomController.ts`](./web/src/hooks/useInfiniteZoomController.ts)**, **[`infiniteZoomPipeline.ts`](./web/src/hooks/infiniteZoomPipeline.ts)** & **[`infiniteZoomPersistence.ts`](./web/src/hooks/infiniteZoomPersistence.ts)**: 3-module decomposition pairing a lean `< 900`-LOC React hook with zero-React pipeline orchestration (`infiniteZoomPipeline.ts`: compact `<= 900 KB` / `>= 512px` infill & outpaint templates, 6-provider dispatch/fallback, async Zoom In/Out commits) and zero-React persistence (`infiniteZoomPersistence.ts`: world-context template rendering, fail-closed IDB writes with rollback, symmetric Undo viewport/state restoration).
 
 ### UI Components (`web/src/components/`)
-- **Canvas & HUD**: [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx), [`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx), [`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx), [`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx), [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx).
-- **Modals & Overlays**: [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) + modular tabs/controls in [`web/src/components/settings/`](./web/src/components/settings/types.ts) (`SettingsTabBar`, `SettingToggleRow`, `SettingSliderRow`, `SnapshotCard`, `AboutTab`, `FeedbackSection`, `SettingsTab`, `HintsTab`, `CreateTab`, `SavesTab`, `CloudAccountSection`), [`SettingsControls.tsx`](./web/src/components/SettingsControls.tsx), [`BrowserStorageModal.tsx`](./web/src/components/BrowserStorageModal.tsx), [`CloudAccountCard.tsx`](./web/src/components/CloudAccountCard.tsx), [`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx), [`OnboardingTutorial.tsx`](./web/src/components/OnboardingTutorial.tsx), [`FeatureOfferBanner.tsx`](./web/src/components/FeatureOfferBanner.tsx), [`TargetSpotlightOverlay.tsx`](./web/src/components/TargetSpotlightOverlay.tsx), [`ErrorBoundary.tsx`](./web/src/components/ErrorBoundary.tsx).
+- **Canvas & HUD**: [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) + [`puzzleCanvasHelpers.ts`](./web/src/components/puzzleCanvasHelpers.ts) (multi-layer rendering, dynamic `12x`--`256x` zoom, opaque edge bleed, painted-seam hairline omission, deepest-first hit-testing), [`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx), [`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx) (96-color nested swatch floating), [`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx), [`InfiniteZoomControls.tsx`](./web/src/components/InfiniteZoomControls.tsx), [`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx).
+- **Modals & Overlays**: [`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) + modular tabs/controls in [`web/src/components/settings/`](./web/src/components/settings/types.ts) (`SettingsTabBar`, `SettingToggleRow`, `SettingSliderRow`, `SnapshotCard`, `AboutTab`, `FeedbackSection`, `SettingsTab`, `HintsTab`, `CreateTab`, `SavesTab`, `CloudAccountSection`), [`GuidedGeminiHandoffModal.tsx`](./web/src/components/GuidedGeminiHandoffModal.tsx), [`SettingsControls.tsx`](./web/src/components/SettingsControls.tsx), [`BrowserStorageModal.tsx`](./web/src/components/BrowserStorageModal.tsx), [`CloudAccountCard.tsx`](./web/src/components/CloudAccountCard.tsx), [`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx), [`OnboardingTutorial.tsx`](./web/src/components/OnboardingTutorial.tsx), [`FeatureOfferBanner.tsx`](./web/src/components/FeatureOfferBanner.tsx), [`TargetSpotlightOverlay.tsx`](./web/src/components/TargetSpotlightOverlay.tsx), [`ErrorBoundary.tsx`](./web/src/components/ErrorBoundary.tsx).
 
 ### Services, Utilities & Engine (`web/src/services/`, `web/src/utils/`, `web/src/engine/`)
 - **Storage & Codec**:
-  - [`StorageService.ts`](./web/src/services/StorageService.ts) (thin static facade over 11 acyclic modules in [`web/src/services/storage/`](./web/src/services/storage/StorageKeys.ts): `StorageKeys`, `SafeLocalStore`, `IndexedDbStore`, `BackupEngine`, `SettingsStorage`, `ActiveSessionStorage`, `SnapshotStorage`, `SnapshotArchiveCodec`, `PuzzleSerializer`, `StorageAnalyzer`, `ImageCompression`) + [`StorageNamespace.ts`](./web/src/services/StorageNamespace.ts).
-  - [`CapyCodec.ts`](./web/src/services/CapyCodec.ts) (RLE + LEB128 `.capy` v2 archives & CRDT `ProgressDeltaV2` tokens).
+  - [`StorageService.ts`](./web/src/services/StorageService.ts) (thin static facade over 11 acyclic modules in [`web/src/services/storage/`](./web/src/services/storage/StorageKeys.ts): `StorageKeys`, `SafeLocalStore`, `IndexedDbStore`, `BackupEngine`, `SettingsStorage` with strictly device-local `capy_gemini_byok_key_v1`, `capy_openrouter_byok_key_v1`, `capy_openai_byok_key_v1`, and `capy_xai_byok_key_v1` helpers, `ActiveSessionStorage`, `SnapshotStorage`, `SnapshotArchiveCodec`, `PuzzleSerializer`, `StorageAnalyzer`, `ImageCompression`) + [`StorageNamespace.ts`](./web/src/services/StorageNamespace.ts).
+  - [`CapyCodec.ts`](./web/src/services/CapyCodec.ts) (RLE + LEB128 `.capy` v2 archives with `nestedLayers`/`layerImages` & CRDT `ProgressDeltaV2` tokens).
+- **Multi-Provider Image AI & Unified Infinite Zoom (`web/src/services/ai/`)**:
+  - [`nanoBananaPrompts.ts`](./web/src/services/ai/nanoBananaPrompts.ts): Pure zero-DOM model metadata (`NANO_BANANA_MODELS`), resolution/aspect helpers, linear-time `sanitizeUserPrompt`, and infill/outpaint prompt builders.
+  - [`NanoBananaService.ts`](./web/src/services/ai/NanoBananaService.ts): Hybrid free-first Nano Banana 2.1 / 2 suite (Web-only lazy Puter.js loader, Multi-App Free Guided Handoff for Gemini/ChatGPT/Grok with PNG clipboard copy, and device-local Direct Gemini API BYOK).
+  - [`openRouterAuth.ts`](./web/src/services/ai/openRouterAuth.ts): 1-click OpenRouter OAuth PKCE (`S256`) flow supporting Web popups and Android external browser callbacks (`capypaint://oauth/callback`) with zero client secrets.
+  - [`MultiProviderAiService.ts`](./web/src/services/ai/MultiProviderAiService.ts): Automated client-direct image-to-image providers for OpenRouter Unified Images API (`POST https://openrouter.ai/api/v1/images`), OpenAI ChatGPT GPT Image Edits (`POST https://api.openai.com/v1/images/edits`), and xAI Grok Imagine Edits (`POST https://api.x.ai/v1/images/edits`).
+  - [`RegionSelectionEngine.ts`](./web/src/services/ai/RegionSelectionEngine.ts): Layer-scoped 4-connected contiguous region selection & tight mask extraction.
+  - [`SeamCompositor.ts`](./web/src/services/ai/SeamCompositor.ts): Context-padded infill & directional outpaint template builders, compact `<= 900 KB` (`512px`--`1536px`) template encoder, 9-slice Zoom Out auto-alignment, and bit-exact pixel-locked compositors.
 - **Cloud, Auth, Co-op & Catalog**:
   - [`providers/ProviderRegistry.ts`](./web/src/services/providers/ProviderRegistry.ts) (thin backward-compatible facade re-exporting domain services below).
   - [`auth/AuthManager.ts`](./web/src/services/auth/AuthManager.ts): Multi-provider identity, `attemptAutoSignIn`, `401` invalidation, and `signOut` cache clearing.
@@ -118,7 +126,7 @@ flowchart TB
   - [`NativeBridge.ts`](./web/src/services/NativeBridge.ts), [`PwaService.ts`](./web/src/services/PwaService.ts), [`PuzzleWorkerService.ts`](./web/src/services/PuzzleWorkerService.ts), [`telemetry.ts`](./web/src/services/telemetry.ts) (bounded 50-entry non-PII `reportSwallowed` ring buffer).
   - [`web/src/utils/`](./web/src/utils/base64.ts): `base64.ts`, `debugEnvironment.ts`, `snapshotPaths.ts`; [`web/src/data/presetGallery.ts`](./web/src/data/presetGallery.ts).
 - **Engine (`web/src/engine/`)**:
-  - [`CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts) (zero-GC typed-array collaborator paint ripples), plus [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts), [`PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts), [`ImageAnalyzer.ts`](./web/src/engine/ImageAnalyzer.ts), [`LineArtExtractor.ts`](./web/src/engine/LineArtExtractor.ts), [`ColorQuantizer.ts`](./web/src/engine/ColorQuantizer.ts), and [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) (detailed in [`PUZZLE.md`](./PUZZLE.md)).
+  - [`CoopRippleBuffer.ts`](./web/src/engine/CoopRippleBuffer.ts) (zero-GC typed-array collaborator paint ripples), [`UnifiedPuzzleLayers.ts`](./web/src/engine/UnifiedPuzzleLayers.ts), [`MaskedRegionSubdivider.ts`](./web/src/engine/MaskedRegionSubdivider.ts), plus [`puzzle.worker.ts`](./web/src/engine/puzzle.worker.ts), [`PuzzleGenerator.ts`](./web/src/engine/PuzzleGenerator.ts), [`ImageAnalyzer.ts`](./web/src/engine/ImageAnalyzer.ts), [`LineArtExtractor.ts`](./web/src/engine/LineArtExtractor.ts), [`ColorQuantizer.ts`](./web/src/engine/ColorQuantizer.ts), and [`RegionSegmenter.ts`](./web/src/engine/RegionSegmenter.ts) (detailed in [`PUZZLE.md`](./PUZZLE.md)).
 
 ---
 
@@ -128,31 +136,33 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 
 - **`z-0` (`PuzzleCanvas`)**: Full-bleed interactive pan/zoom 2D canvas.
 - **`z-20` (`FloatingActions`, `PaletteDock`)**: Bottom-right tool stack and bottom horizontal swatch dock.
-- **`z-30` (`GameTopBar`, `ReplayControls`)**: Top safe-area status bar and floating bottom YouTube-style replay scrubber HUD.
+- **`z-30` (`GameTopBar`, `ReplayControls`, `RegionSelectionBar`)**: Top safe-area status bar, floating bottom YouTube-style replay scrubber HUD, and Infinite Zoom region selection bar.
 - **`z-[38]` (`TargetSpotlightOverlay`)**: Non-blocking spotlight highlight ring(s) and curved pointer arrow behind tutorial/offer cards.
 - **`z-[39]` (`FeatureOfferBanner`)**: Contextual non-blocking quick-tip banner.
-- **`z-40` (`LoadingOverlay`, `OnboardingTutorial`)**: Bottom generation HUD and top-anchored 12-step tutorial card.
+- **`z-40` (`LoadingOverlay`, `OnboardingTutorial`, `InfiniteZoomToolbarButton` popover)**: Bottom generation HUD, top-anchored 12-step tutorial card, and horizontal-left Infinite Zoom action popover.
 - **`z-50` (`SettingsModal`, `ColorPickerPopover`)**: Modal configuration sheet and nested custom color popover.
+- **`z-[55]` (`undo-subdivision-toast`) & `z-[56]` (`infinite-zoom-error-toast`)**: 1-tap `Undo Split` / `Undo Extend` revert toast and dismissible Infinite Zoom error toast.
+- **`z-[58]` (`GuidedGeminiHandoffModal` & modal-docked `TargetSpotlightOverlay`)**: Free Guided Gemini App Handoff sheet and modal-aware spotlight rings.
 - **`z-[60]` (`storage-quota-toast`, modal-docked `OnboardingTutorial`)**: Dismissible `QuotaExceededError` alert above modals and modal-docked tutorial guide bar across Settings Steps 8--12.
 - **`z-[65]` (`BrowserStorageModal`)**: Standalone Browser Storage Analyzer & Cleaner modal rendered outside `SettingsModal`'s stacking context.
 
 ### Component Responsibilities & Key Interactions
 
-- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: Renders the puzzle via 3-tier offscreen canvas caching, hit-tests taps via `regionMap`, renders Co-op ripples and Undo/Redo focus pulses, smoothly glides/frames Undo/Redo target regions via `computeRegionFocusViewport` (`focusRegionRequest`, instant snap under `reducedMotion`), and centers `sourceImage` previews while `puzzle.worker.ts` runs.
+- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: Renders root + nested layers via offscreen canvas caches, hit-tests taps deepest-first, renders Co-op ripples and Undo/Redo focus pulses, smoothly glides/frames Undo/Redo target regions via `computeRegionFocusViewport` (`focusRegionRequest`, instant snap under `reducedMotion`) and Infinite Zoom target bounds via `computeFocusViewportForBounds` (`focusBoundsRequest`), and centers `sourceImage` previews while `puzzle.worker.ts` runs.
 - **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**:
   - Uses a two-lane flex layout (`topbar-left-lane` scrollable pill strip + `topbar-right-lane` fixed-shrink actions) so narrow `360px` mobile screens never clip or overlap in Normal or Large Text modes.
-  - Displays puzzle title, `computeProgressPercentage` badge (capped at `99%` until `100%` complete), non-production `BETA` / `ALPHA #<num>` pill, sub-tile parent breadcrumb pill (`topbar-parent-puzzle-btn`), opt-in Co-op button/presence pill (`isCloudCoopUiEnabled()`), preview eye toggle, web-only fullscreen toggle (hidden on `NativeBridge.isAndroid`), upload shortcut, and Settings button—all `>= 38px` mobile touch targets with `aria-label`s.
+  - Displays puzzle title, `computeProgressPercentage` badge (capped at `99%` until `100%` complete), non-production `BETA` / `ALPHA #<num>` pill, legacy sub-tile breadcrumb pills, opt-in Co-op button/presence pill (`isCloudCoopUiEnabled()`), preview eye toggle, web-only fullscreen toggle (hidden on `NativeBridge.isAndroid`), upload shortcut, and Settings button—all `>= 38px` mobile touch targets with `aria-label`s.
 - **[`PaletteDock.tsx`](./web/src/components/PaletteDock.tsx)**:
-  - Always visible on incomplete puzzles (including during replay). Tapping any swatch during replay immediately dismisses `ReplayControls` and selects that color without triggering a hint; tapping an already-active swatch outside Step 1 requests a directional region hint.
-  - Strictly preserves sorted swatch order (`NUMBER | REMAINING | HUE | LIGHTNESS`), centers active swatches at `50%` on scrollable docks (preserving short-dock `mx-auto` centering), and exposes `+` for `ColorPickerPopover`.
+  - Always visible on incomplete puzzles (including during replay, supporting up to `96` swatches with `0px` horizontal overflow). Tapping any swatch during replay immediately dismisses `ReplayControls` and selects that color without triggering a hint; tapping an already-active swatch outside Step 1 requests a directional region hint.
+  - Preserves sorted swatch order (`NUMBER | REMAINING | HUE | LIGHTNESS`) on standard puzzles, floats prominent visible nested-layer swatches to the front (`partitionDockPaletteByPriority`) when zoomed into Infinite Zoom detail areas, centers active swatches at `50%` on scrollable docks, and exposes `+` for `ColorPickerPopover`.
 - **[`FloatingActions.tsx`](./web/src/components/FloatingActions.tsx) & Global Keyboard Shortcuts**:
-  - Hosts Undo (`Ctrl+Z`, enabled by default; long-press `>= 450ms` opens `ReplayControls`), conditional Redo (`Ctrl+Y` / `Ctrl+Shift+Z`), Watch Puzzle Replay, Paint Mode brush toggle, optional zoom `+/-`, and fit-to-screen reset (`>= 44px` touch targets).
-  - Desktop shortcuts (ignored when modals are open or focus is in text inputs): `1`--`9` select swatches, `+/-` zoom, `0` resets view, Arrow/WASD pan `64px` clamped via `clampCanvasOffset`, and `Escape` pops the topmost overlay (`BrowserStorageModal` / inline rename -> `ColorPickerPopover` -> `SettingsModal` -> `ReplayControls`).
+  - Hosts Undo (`Ctrl+Z`, enabled by default; long-press `>= 450ms` opens `ReplayControls`), conditional Redo (`Ctrl+Y` / `Ctrl+Shift+Z`), Watch Puzzle Replay, manual `InfiniteZoomToolbarButton` (`infinite-zoom-menu-btn`, visible on `100%` completed puzzles unless Replay is actively playing), Paint Mode brush toggle, optional zoom `+/-`, and fit-to-screen reset (`>= 44px` touch targets).
+  - Desktop shortcuts (ignored when modals are open or focus is in text inputs): `1`--`9` select swatches (aligned with floated nested swatches), `+/-` zoom, `0` resets view, Arrow/WASD pan `64px` clamped via `clampCanvasOffset`, and `Escape` pops the topmost overlay (`BrowserStorageModal` / inline rename -> `ColorPickerPopover` -> `SettingsModal` -> `ReplayControls` / `RegionSelectionBar`).
 - **[`SettingsModal.tsx`](./web/src/components/SettingsModal.tsx) (`<= 8` grouped prop contracts, `role="dialog"`, restores `capy_last_settings_tab`, defaults first-time opens to Tab 1)**:
   - **Tab 0 -- About**: App overview, primary **Send Feedback** CTA (inline anonymous form), **Replay Interactive Tutorial**, **Privacy Policy** (external browser on Android), collapsible **Open Source Licenses**, footer **Report Bug / Ideas**, 2-column **Lifetime Stats**, version badge, PWA install / APK download, and web-only **Release Channel** switcher (`Co-op` copy gated behind `showCloudCoopUi`).
   - **Tab 1 -- Settings**: 6 grouped cards (*Accessibility* first with `Large Text & Buttons`, independent `Text Size` `85%`--`150%` and `UI Size` `85%`--`140%` sliders, `Fat-Finger Tap Assist` + `Finger Reach Radius`, and `Reduced Motion`; *UI*; *Gameplay*; *Controls & On-Screen Buttons*; *Navigation & Zoom*; *Sound & Haptics*) plus 2 collapsed sections (*Replay* and *Number Label Sizing*).
   - **Tab 2 -- Hints**: *Hint Appearance* (`highlightStyle`, `hintFillStyle`, `hintColorArgb` defaulting to Amber `#f59e0b`, `hintIntensity`), *Assistance & Animation* (`highlightMatching`, `animateHint`, `showNextRegionHint`), and *Coloring Mode & Difficulty* (`difficulty`, `regionColorMode`).
-  - **Tab 3 -- Create**: Resyncs `localConfig` on open; shows UTC **Puzzle of the Day** hero card (prebaked `daily_saves.capy`), Style & Hint quick-jump bar, gallery search & category chips, **Choose Photo from Device**, **Infinite Zoom 2x Detail Tile**, collapsible Preset Style Gallery, `GeneratorConfig` controls with `(i)` tooltips and **Detailed Generation Progress**, and the local **Puzzle Idea Notebook**.
+  - **Tab 3 -- Create**: Resyncs `localConfig` on open; shows UTC **Puzzle of the Day** hero card (prebaked `daily_saves.capy`), Style & Hint quick-jump bar, gallery search & category chips, **Choose Photo from Device**, **Unified Infinite Zoom (Google Nano Banana 2.1 / 2)** (`InfiniteZoomCreateCard` with provider/model/resolution controls & device-local BYOK key storage), collapsible Preset Style Gallery, `GeneratorConfig` controls with `(i)` tooltips and **Detailed Generation Progress**, and the local **Puzzle Idea Notebook**.
   - **Tab 4 -- Saves**: Saved puzzles grid (`Thumbnails` default / `Detail` toggle), sort/pin/load/replay/rename/export `.svg`/`.capy`/import/`Reset Progress` controls, **Browser Storage** button opening `BrowserStorageModal`, and a clean local share/print bar by default (expanding the **Cloud Sync & Simultaneous Co-op Hub** when `showCloudCoopUi` is enabled).
 - **[`OnboardingTutorial.tsx`](./web/src/components/OnboardingTutorial.tsx), [`FeatureOfferBanner.tsx`](./web/src/components/FeatureOfferBanner.tsx) & [`TargetSpotlightOverlay.tsx`](./web/src/components/TargetSpotlightOverlay.tsx)**:
   - **Tutorial**: 12 interactive US-English steps (`Pick a Color` through `Customize Hints`) with `[All Topics]` jump drawer, live-try auto-advance (`750ms`, paused while modals/loading/topics are open), header `Large Text` toggle, and bottom-docked modal-aware bar (`z-[60]`) across Settings/Hints Steps 8--12.
@@ -161,7 +171,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **[`ReplayControls.tsx`](./web/src/components/ReplayControls.tsx), [`ColorPickerPopover.tsx`](./web/src/components/ColorPickerPopover.tsx), [`LoadingOverlay.tsx`](./web/src/components/LoadingOverlay.tsx) & [`ErrorBoundary.tsx`](./web/src/components/ErrorBoundary.tsx)**:
   - `ReplayControls`: Compact mobile-safe YouTube-style scrubber (`0.5x`--`20x`, Follow Painting, Auto-Loop, Skip-to-End, Exit) stacked above `PaletteDock` on incomplete puzzles.
   - `ColorPickerPopover`: 5 curated Free Color theme palettes and live HSL/Hex swatch editor.
-  - `LoadingOverlay`: Fast Simple Progress default with live toggle to Detailed 6-Stage Inspector.
+  - `LoadingOverlay`: Fast Simple Progress default with live toggle to Detailed 6-Stage Inspector and optional Cancel button (`loading-cancel-btn`) for in-flight Infinite Zoom jobs.
   - `ErrorBoundary`: Non-destructive emergency `.capy`/`.json` backup download, redacted error display, and retry recovery.
 
 ---
@@ -169,7 +179,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 ## 4. State Management & Lifecycle (`App.tsx`)
 
 ### 1. Active Session, Undo & Redo State
-- `puzzle: PuzzleData | null`: Active dimensions, `PaletteColor[]`, `Region[]`, `regionMap: Int32Array`, and `borderMap: Uint8Array`.
+- `puzzle: PuzzleData | null`: Active dimensions, `PaletteColor[]`, `Region[]`, `regionMap: Int32Array`, `borderMap: Uint8Array`, and optional unified multi-layer state (`nestedLayers?: NestedPuzzleLayer[]`, `maxZoomDepth?: number`).
 - `sourceImage: HTMLImageElement | null`: Decoded source image displayed cleanly on canvas while `puzzle.worker.ts` runs and used for `DETAIL` / B&W `multiply` compositing.
 - `activeColorId: number`: Selected 1-based palette color ID.
 - `filledRegionIds: Set<number>`: Colored region IDs preserving exact first-fill chronological insertion order across saves, reloads, and Free Color repaints (repainting updates `paintedRegionColors` without moving the region ID to the tail).
@@ -184,7 +194,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - **Strict Viewport Invariance**: Starting or ending a replay never resets or teleports the camera; loading a *different* saved puzzle restores its persisted `zoomScale`, `panOffsetX`, and `panOffsetY` before replay begins.
 
 ### 3. Viewport Culling & Generation Sequence Safety
-- **Spatial Culling**: `PuzzleCanvas` emits `visibleColorIds` and `visibleRegionIds` on pan/zoom/resize changes to power on-screen Smart Hint region targeting while `PaletteDock` strictly preserves sorted order.
+- **Spatial Culling**: `PuzzleCanvas` emits 80ms-debounced `visibleColorIds`, `visibleRegionIds`, and `visibleNestedColorIds` on pan/zoom/resize changes to power on-screen Smart Hint targeting and `PaletteDock` nested-layer swatch floating (`partitionDockPaletteByPriority` when zoomed into nested detail layers, while keeping standard 0-nested-layer puzzles strictly in sorted order).
 - **Sequence Cancellation (`generationSeqRef`)**: Every worker generation increments `generationSeqRef.current`, cancels any in-flight worker, and discards stale responses.
 
 ---
@@ -201,12 +211,13 @@ flowchart TD
 
 ### Dynamic Active Color, Hints & Inscribed-Circle Labels
 - **Borderless Completed Regions (`writeBaseCanvasPixels` / `writeRegionPixelsToImageData`)**: Completed regions render seamlessly with their Detail source pixels or Flat/Free Color palette fill and omit region boundary lines, while unpainted regions retain 1px slate (`rgb(51, 65, 85)`) boundaries in standard mode.
+- **Transparent Organic Cutouts & Seam Smoothing (`puzzleCanvasHelpers.ts`)**: Exterior pixels (`rId <= 0`) stay transparent (`alpha = 0`), `bleedOpaqueEdgeIntoCoveredHoles` prevents white backdrop halos when parent layers are magnified with `imageSmoothingEnabled = true`, painted-to-painted nested seams omit dark staircase hairlines (keeping hairlines only on unpainted pockets), and Zoom Out demoted center frames (`isZoomOutDemotedCenterLayer`) never draw rectangular borders.
 - **Active Color Highlighting**: When `highlightStyle` is `FULL_REGION` (default) or `BOUNDARY_ONLY`, unfilled regions matching `activeColorId` highlight using the selected `PaletteColor` (`{ id, r, g, b, argb, hex }`, 1-based `id`).
 - **Hint Highlighting (`hintColorArgb`) & `NUMBER_ONLY`**: Hints render `SOLID`, `CHECKER`, or `STRIPES` overlays in `settings.hintColorArgb` (`#F59E0B` default). `NUMBER_ONLY` tints label text with a crisp white stroke halo rather than drawing centroid circles (reserved for `CENTROID_GLOW`).
 - **Inscribed-Circle Label Fitting**: Labels render at each region's Pole of Inaccessibility (`centroidX`, `centroidY`), sized from `region.maxRadius / sqrt((0.3 * charCount)^2 + 0.1444)` with a 10% margin and clamped to `[minLabelSize, maxLabelSize]`.
 
 ### Viewport Clamping (`clampCanvasOffset`), Magnetic Detents & Zero-Alloc Rendering
-- **Zoom Range, Sensitivity & Magnetic Detents**: Clamped between **`0.5x`** and **`12.0x`**. Wheel, pinch (`Math.pow(rawRatio, zoomSensitivity)`), and double-tap drag deltas scale smoothly in log-space by `zoomSensitivity` (`0.5`--`2.0`). When `snapZoomLevels` is enabled, `applyZoomSnapDetent` snaps within `+-4%` onto stops `[1, 2, 4, 8, 12]` around the active focal point.
+- **Zoom Range, Sensitivity, Auto-Camera Focus & Magnetic Detents**: Clamped between **`0.5x`** and dynamic `resolvePuzzleMaxZoomScale` (`12x` base, up to **`256x`** when nested Infinite Zoom layers exist). Wheel, pinch (`Math.pow(rawRatio, zoomSensitivity)`), and double-tap drag deltas scale smoothly in log-space by `zoomSensitivity` (`0.5`--`2.0`). When `snapZoomLevels` is enabled, `applyZoomSnapDetent` snaps within `+-4%` onto stops `[1, 2, 4, 8, 12, 24, 48, 96, 192, 256]` around the active focal point. Confirming Zoom In triggers a cancellable auto-camera focus glide (`computeFocusViewportForBounds`, instant under `reducedMotion`, restored on 1-tap `Undo Split`).
 - **Dynamic Corner Margins**: Scales pan bounds with `containerWidth * 0.72` and `containerHeight * 0.72` when zoomed in so all four corners pan past screen center cleanly.
 - **Resize Clamping & Zero-Alloc Hot Paths**:
   - `ResizeObserver` on `containerRef` (with `window` `resize` fallback) immediately re-clamps `offsetRef.current`, refreshes `canvasRectRef`, resizes the high-DPI `<canvas>`, and repaints synchronously on rotation or split-screen resize.
@@ -215,15 +226,15 @@ flowchart TD
 
 ### 6-Mode Touch, Mouse & Gesture Engine
 `PuzzleCanvas` orchestrates **6 distinct** interaction modes:
-1. **Tap Hit-Testing (`resolveNearTapRegionId`)**:
-   - Direct hits resolve in $O(1)$ via `regionMap[y * width + x]`.
-   - When `fatFingerAssist` is `true`, near-miss taps scan integer offsets within `Math.min(64, touchReachRadiusPx / totalScreenScale)` with zero heap allocations: Normal mode snaps strictly to unfilled `activeColorId`; Easy or Free Color mode prefers `activeColorId` first, then the closest unfilled micro-region.
+1. **Deepest-First Unified Tap Hit-Testing (`sampleUnifiedRegionAtWorldPoint` / `resolveUnifiedNearTapRegion`)**:
+   - Samples `nestedLayers` in descending `depth` order before falling back to root (`depth 0`), transparently falling through organic `regionMap === 0` holes.
+   - When `fatFingerAssist` is `true`, near-miss taps scan integer offsets within `Math.min(64, touchReachRadiusPx / totalScreenScale)` with zero heap allocations (deeper layers win exact distance ties): Normal mode snaps strictly to unfilled `activeColorId`; Easy or Free Color mode prefers `activeColorId` first, then the closest unfilled micro-region.
    - Easy mode auto-selects and fills tapped unpainted regions; Normal mode requires matching `activeColorId`; Free Color mode fills or repaints with `activeColorId`.
 2. **One-Finger Double-Tap-and-Drag Zoom & Horizontal Pan**: Second tap-and-hold within `350ms` and `40px` zooms focal-point-invariantly on vertical drag (`Math.exp(((dir * dy) / 220) * zoomSensitivity)`), while horizontal drag (`|dx| >= |dy|`) pans cleanly even in Paint Mode.
 3. **Background Margin Drag Panning**: Touching outside artwork bounds always pans the viewport even when Paint Mode is active.
 4. **Smooth Pan Momentum (Inertial Gliding)**: Samples pointer velocity over `100ms` via a pre-allocated 16-slot circular `pointerRingRef` buffer; flicks $\ge 0.18\text{ px/ms}$ glide with $0.92^{\Delta t / 16}$ exponential friction decay and cancel instantly on the next `pointerdown`.
-5. **Multi-Touch Pinch-to-Zoom**: Two-finger midpoint focal tracking (`0.5x`--`12.0x`) scaled by `Math.pow(rawRatio, zoomSensitivity)`, re-anchoring single-finger pan when one finger lifts.
-6. **Drag-to-Color (Continuous Paint Mode)**: Interpolates stroke segments across pointer moves inside the artwork and batch-fills matching regions via `onBatchRegionsClicked` (disabled automatically during replay).
+5. **Multi-Touch Pinch-to-Zoom**: Two-finger midpoint focal tracking (`0.5x`--`256x`) scaled by `Math.pow(rawRatio, zoomSensitivity)`, re-anchoring single-finger pan when one finger lifts.
+6. **Drag-to-Color (Continuous Paint Mode) & Region Selection Overlay**: Interpolates stroke segments via `collectUnifiedLineRegionIds` and batch-fills matching regions via `onBatchRegionsClicked` (disabled during replay). During Infinite Zoom Region Selection Mode, tapping or dragging selects 4-connected regions scoped to the active layer without interfering with pan or zoom.
 
 ---
 
@@ -246,6 +257,21 @@ type WorkerRequest =
   | {
       type: 'SET_DETAILED_PROGRESS';
       detailed: boolean; // Live HUD toggle without restarting worker
+    }
+  | {
+      type: 'SUBDIVIDE_MASKED_REGION';
+      id: string;
+      cropWidth: number;
+      cropHeight: number;
+      rgbaBuffer: ArrayBuffer; // Transferred zero-copy
+      cropMaskBuffer: ArrayBuffer; // Transferred zero-copy (1 = inside selected regions)
+      existingPalette: PaletteColor[];
+      isFreeColor?: boolean;
+      targetSubRegions?: number;
+      minRegionArea?: number;
+      maxNewSwatches?: number;
+      reuseDeltaE?: number;
+      generatorConfig?: Partial<GeneratorConfig>;
     };
 
 // Worker -> Main Responses
@@ -272,6 +298,19 @@ type WorkerResponse =
       };
     }
   | {
+      type: 'SUBDIVIDE_SUCCESS';
+      id: string;
+      result: {
+        width: number;
+        height: number;
+        localRegionMap: ArrayBuffer; // Reconstructed to Int32Array on main thread
+        packedPixelsBuffer: ArrayBuffer; // Single contiguous Int32Array sliced via subarray on main thread
+        regions: Array<Omit<Region, 'pixels'> & { pixelsOffset: number; pixelsLength: number }>;
+        palette: PaletteColor[];
+        addedSwatches: PaletteColor[];
+      }; // Embedded into active PuzzleData via embedNestedDetailLayerIntoPuzzle (Zoom In) or wrapped via wrapPuzzleWithOuterBorderLayer (Zoom Out)
+    }
+  | {
       type: 'ERROR';
       id: string;
       error: string;
@@ -286,7 +325,7 @@ type WorkerResponse =
 
 - **UI & Hardware**: `haptic(type)` (falls back to `navigator.vibrate`), `applySafeAreaInsets()` (mirrors `--safe-area-*` CSS variables), `pushBackHandler` / `setBackModalOpen` (LIFO modal stack synced with Android's `OnBackPressedCallback`), and `getAppVersion()`.
 - **Storage & Cloud Sync**: `saveBackup` / `loadBackup` (`filesDir/capy_saves/`), `isPlayGamesConfigured` / `signInPlayGames` / `onPlayGamesProfile`, `saveCloudSnapshot` / `loadCloudSnapshot` / `saveCloudBinaryChunk` / `loadCloudBinaryChunk` / `requestCloudSnapshotPull` / `onCloudSnapshot` / `onCloudSnapshotError` (web fallback uses `capy_cloud_vault_v1`), and `openExternalOAuth(authUrl)` (external-browser PKCE handoff via `window.__capyReceiveOAuthCallback`).
-- **Sharing & Incoming Intents**: `onSharedImage` and `onDeepLink` (consuming cold-start queues plus live callbacks), and `shareTextLink` / `shareImage` / `exportOrShareFile` (falling back to `navigator.share`, clipboard copy, or deferred-revoke `<a download>` on web).
+- **Sharing & Incoming Intents**: `isAndroid` / `isAndroidNative()`, `onSharedImage` / `pushSharedImageInterceptor` (LIFO interception for Free Guided Gemini App Handoff) and `onDeepLink` (consuming cold-start queues plus live callbacks), and `shareTextLink` / `shareImage` / `exportOrShareFile` (falling back to `navigator.share`, clipboard copy, or deferred-revoke `<a download>` on web).
 
 ---
 
@@ -295,11 +334,11 @@ type WorkerResponse =
 ### Hybrid Storage Architecture
 1. **IndexedDB (`capy_game_storage_v8` in [`IndexedDbStore.ts`](./web/src/services/storage/IndexedDbStore.ts) via [`StorageService.ts`](./web/src/services/StorageService.ts))**:
    - Awaits full `IDBTransaction` completion with `onblocked`, `onversionchange`, and `onclose` recovery, evicts and retries once on reclaimed `InvalidStateError` handles across reads and writes, fails closed on quota errors (firing `onQuotaWarning` before `localStorage` commits), calls `navigator.storage.persist()` once, and debounces Android `NativeBridge.saveBackup` disk flushes.
-   - **`puzzles` store (`STORE_PUZZLES`)**: Stores `CompactPuzzleRecordV2` (scanline RLE + LEB128 varints, `~20--45 KB` vs. `~9.4 MB` raw `Int32Array`, reconstructing in `< 3ms`). If storage pressure evicts `puzzles` while `localStorage` survives, `App.tsx` regenerates from `sourceRef` and reapplies `snapshot.customPalette` and `snapshot.isFreeColor` via `mergeCustomPalette`.
-   - **`images` store (`STORE_IMAGES`)**: Stores custom uploaded/shared photo `Blob`s (`sourceRef = { kind: 'blob', uri: snapId }`) and offloaded save thumbnails (`preview_${id}`, attached from a bounded `128`-entry LRU `previewCache`). Built-in samples reference `{ kind: 'sample', uri: 'assets/capy_forest.webp' }` (and `assets/capybara.webp`, `assets/mushrooms.webp`, `assets/snail_guitar.webp`) with zero blob duplication. Oversized custom photos (`> 350 KB` or `> 2048px`) are downscaled to `<= 2048px` and encoded to WebP (`quality: 0.85`, with `#ffffff`-matted JPEG fallback) via [`ImageCompression.ts`](./web/src/services/storage/ImageCompression.ts), keeping the original blob if compression is not smaller.
-   - **Browser Storage Analyzer & Safe Cleanup ([`StorageAnalyzer.ts`](./web/src/services/storage/StorageAnalyzer.ts) & [`BrowserStorageModal.tsx`](./web/src/components/BrowserStorageModal.tsx))**: Opened from `Settings -> Saves -> Browser Storage`, reports `navigator.storage.estimate()` totals, `CacheStorage`, `IndexedDB` (`puzzles`, `images`, `preview_*`, **Orphaned Records**, sibling channel DBs), and `SafeLocalStore` keys. All 4 cleanup actions strictly scope deletions to Capy Paint keys/caches/DBs so sibling apps on shared origins remain untouched.
+   - **`puzzles` store (`STORE_PUZZLES`)**: Stores `CompactPuzzleRecordV2` (scanline RLE + LEB128 varints, `~20--45 KB` vs. `~9.4 MB` raw `Int32Array`, reconstructing in `< 3ms`, plus optional `nestedLayers` and `maxZoomDepth`). If storage pressure evicts `puzzles` while `localStorage` survives, `App.tsx` regenerates from `sourceRef` and reapplies `snapshot.customPalette` and `snapshot.isFreeColor` via `mergeCustomPalette`.
+   - **`images` store (`STORE_IMAGES`)**: Stores custom uploaded/shared photo `Blob`s (`sourceRef = { kind: 'blob', uri: snapId }`), offloaded save thumbnails (`preview_${id}`, attached from a bounded `128`-entry LRU `previewCache`), and Infinite Zoom nested-layer blobs (`layer_${snapshotId}_${layerId}` cleaned atomically on `SnapshotStorage.deleteSnapshot` with surviving-snapshot protection). Built-in samples reference `{ kind: 'sample', uri: 'assets/capy_forest.webp' }` (and `assets/capybara.webp`, `assets/mushrooms.webp`, `assets/snail_guitar.webp`) with zero blob duplication. Oversized custom photos (`> 350 KB` or `> 2048px`) are downscaled to `<= 2048px` and encoded to WebP (`quality: 0.85`, with `#ffffff`-matted JPEG fallback) via [`ImageCompression.ts`](./web/src/services/storage/ImageCompression.ts), keeping the original blob if compression is not smaller.
+   - **Browser Storage Analyzer & Safe Cleanup ([`StorageAnalyzer.ts`](./web/src/services/storage/StorageAnalyzer.ts) & [`BrowserStorageModal.tsx`](./web/src/components/BrowserStorageModal.tsx))**: Opened from `Settings -> Saves -> Browser Storage`, reports `navigator.storage.estimate()` totals, `CacheStorage`, `IndexedDB` (`puzzles`, `images` including `layer_*` and `preview_*`, **Orphaned Records** with live nested-layer exemption, sibling channel DBs), and `SafeLocalStore` keys (including `capy_gemini_byok_key_v1`). All 4 cleanup actions strictly scope deletions to Capy Paint keys/caches/DBs so sibling apps on shared origins remain untouched.
 2. **Binary `.capy` v2 Archives & CRDT Progress Deltas ([`CapyCodec.ts`](./web/src/services/CapyCodec.ts))**:
-   - `StorageService.exportSnapshotBinary` / `exportAllSnapshotsBinary` emit `CAPY\x02<flags>` Gzip archives embedding `SavedSnapshot` metadata, `CompactPuzzleRecordV2` geometry, and custom blobs (`16 MiB` single-save ceiling; `256 MiB` multi-save archive ceiling gated on `FLAG_ARCHIVE`).
+   - `StorageService.exportSnapshotBinary` / `exportAllSnapshotsBinary` emit `CAPY\x02<flags>` Gzip archives embedding `SavedSnapshot` metadata, `CompactPuzzleRecordV2` geometry (including `nestedLayers` and `maxZoomDepth`), custom root blobs, and `layerImages` nested-layer blobs (`16 MiB` single-save ceiling; `256 MiB` multi-save archive ceiling gated on `FLAG_ARCHIVE`).
    - `CapyCodec.encodeProgressDeltaToken` / `mergeProgressDeltas` encode `< 2 KB` `#s=<token>` URL fragments with epoch-scoped CRDT Set-Union (`filledRegionIds`) + Last-Writer-Wins (`paintedRegionColors`) merging.
 3. **Instant First-Launch Sample & Daily Archives (`./assets/sample_saves.capy`, `./assets/daily_saves.capy`) & Atomic `.capy` Imports**:
    - On cold start with zero saves, `restoreSession` imports all 4 pre-baked Max-Detail `SAMPLE_GALLERY` puzzles (`2048p`, `2000` max regions, `64` colors or `20` colors in Free Color mode, `24 px²` min region area) from `./assets/sample_saves.capy` with zero worker spawn (`Capy Forest` default index `0`).
@@ -321,6 +360,7 @@ Centralized in [`web/src/services/storage/StorageKeys.ts`](./web/src/services/st
   - `capy_player_stats_v1` (backed up): `PlayerLifetimeStats` counters.
   - `capy_community_ideas_v1`: Local moderated `CommunityPuzzleIdea` notebook entries.
   - `capy_ai_credits_v1`: `AiCreditLedger` (`adFreePlatform: true`, `personalizedAdsConsent: false`).
+  - `capy_gemini_byok_key_v1` (device-local only; never backed up, exported in `.capy`, or synced): Optional user-supplied Google AI Studio API key.
 - **Identity, Cloud Sync & BYOC Auth (`localStorage` & `sessionStorage`)**:
   - `capy_player_identity_v1` (`localStorage`): Local or authenticated `PlayerIdentity`.
   - `capy_cloud_vault_v1` (`localStorage`): Local fallback key-value vault for `CloudSaveEnvelope` slots.
@@ -368,7 +408,7 @@ Interface defined in [`web/src/types/index.ts`](./web/src/types/index.ts); canon
 - **`showZoomButtons`**: `boolean` (default `false`) -- Shows onscreen `+` / `-` zoom buttons in `FloatingActions`.
 - **`showResetViewButton`**: `boolean` (default `false`) -- Shows onscreen fit-to-screen reset button in `FloatingActions`.
 - **`paletteSort`**: `'NUMBER' | 'REMAINING' | 'HUE' | 'LIGHTNESS'` (default `'HUE'`) -- Swatch ordering in `PaletteDock`.
-- **`prioritizeOnScreen`**: `boolean` (default `false`) -- Legacy compatibility flag; `PaletteDock` strictly preserves sorted order and centers active swatches at `50%` on scrollable docks.
+- **`prioritizeOnScreen`**: `boolean` (default `false`) -- Legacy compatibility flag; `PaletteDock` strictly preserves sorted order on standard 0-nested-layer puzzles, floats prominently visible nested-layer swatches to the front via `partitionDockPaletteByPriority` when zoomed into Infinite Zoom detail areas, and centers active swatches at `50%` on scrollable docks.
 - **`hapticsEnabled`**: `boolean` (default `true`) -- Enables native Android / `navigator.vibrate` tactile feedback.
 - **`panMomentum`**: `boolean` (default `true`) -- Enables smooth inertial gliding on canvas pan flicks (skipped when `reducedMotion` is `true`).
 - **`enableCustomColorForAllPuzzles`**: `boolean` (default `false`) -- Unlocks custom swatch editing in standard Color-by-Number puzzles as well as Free Color puzzles.
@@ -379,7 +419,7 @@ Interface defined in [`web/src/types/index.ts`](./web/src/types/index.ts); canon
 - **`autoReplayOnLoad`**: `boolean` (default `false`) -- Replays completed regions chronologically upon loading a saved puzzle before resuming live gameplay in place.
 - **`reverseDoubleTapZoom`**: `boolean` (default `false`) -- Inverts one-finger double-tap drag zoom direction (`false`: down = zoom in; `true`: up = zoom in).
 - **`zoomSensitivity`**: `number` (default `1.0`, range `0.5`--`2.0`) -- Log-space multiplier scaling wheel, pinch, double-tap drag, and `+/-` zoom speed.
-- **`snapZoomLevels`**: `boolean` (default `false`) -- Snaps relative zoom onto magnetic stops (`1x`, `2x`, `4x`, `8x`, `12x`) within `+-4%`.
+- **`snapZoomLevels`**: `boolean` (default `false`) -- Snaps relative zoom onto dynamic magnetic stops (`1x`, `2x`, `4x`, `8x`, `12x`, plus `24x`--`256x` when unlocked by nested Infinite Zoom layers) within `+-4%`.
 - **`soundEnabled`**: `boolean` (default `true`) -- Enables zero-asset procedural Web Audio tap synthesis (`SoundService.ts`).
 - **`soundVolume`**: `number` (default `0.7`, range `0.0`--`1.0`) -- Master gain scalar for Web Audio effects.
 - **`reducedMotion`**: `boolean` (seeded from `prefers-reduced-motion: reduce`, fallback `false`) -- Skips camera glides, pan momentum, and hint-pulse oscillations.
@@ -387,6 +427,13 @@ Interface defined in [`web/src/types/index.ts`](./web/src/types/index.ts); canon
 - **`textScale`**: `number` (default `1.0`, range `0.85`--`1.50`, step `0.05`) -- Independent typography scale multiplier (`--capy-text-scale`) boosting UI text and `PuzzleCanvas` `maxLabelSize`.
 - **`uiScale`**: `number` (default `1.0`, range `0.85`--`1.40`, step `0.05`) -- Independent control scale multiplier (`--capy-ui-scale`) scaling HUD pills, buttons, switches, sliders, swatches, and applying a non-destructive `>= 34px` reach boost when `> 1.0`.
 - **`detailedLoadingProgress`**: `boolean` (default `false`) -- Switches `LoadingOverlay` between Simple Fast Mode (`false`) and Detailed 6-Stage Inspector Mode (`true`).
+- **`infiniteZoomProvider`**: `'PUTER' | 'GUIDED_GEMINI' | 'OPENROUTER' | 'GEMINI_BYOK' | 'OPENAI_BYOK' | 'XAI_BYOK'` (default `'PUTER'` on Web, coerced to `'GUIDED_GEMINI'` on Android `NativeBridge.isAndroidNative()`) -- Selects the Infinite Zoom AI provider.
+- **`nanoBananaModel`**: `'gemini-nano-banana-2.1' | 'gemini-3.1-flash-lite-image' | 'gemini-3.1-flash-image'` (default `'gemini-nano-banana-2.1'`) -- Selects the Nano Banana model tier for Puter and Direct Gemini BYOK.
+- **`nanoBananaResolution`**: `'512' | '1K' | '2K'` (default `'1K'`) -- Selects the output resolution/quality tier clamped per model via `resolveSupportedModelResolution` / `resolveSupportedOpenRouterResolution` (mapped to `medium` / `auto` / `high` for OpenAI ChatGPT edits).
+- **`openRouterModel`**: `OpenRouterImageModelId` (default `'google/gemini-3.1-flash-image'`) -- Selects the curated multi-vendor OpenRouter image model (Nano Banana 2/2 Lite, ChatGPT GPT Image 2.6 Sunburst/Flare, Grok Imagine 2.0, Seedream 4.5, Flux 2 Pro).
+- **`openAiImageModel`**: `OpenAiImageModelId` (default `'gpt-image-2.6-sunburst'`) -- Selects the Direct OpenAI ChatGPT image editing model.
+- **`xaiImageModel`**: `XaiImageModelId` (default `'grok-imagine-image-2.0'`) -- Selects the Direct xAI Grok Imagine editing model.
+- **`guidedAiApp`**: `'GEMINI' | 'CHATGPT' | 'GROK'` (default `'GEMINI'`) -- Selects which consumer AI web app opens from Free Guided AI Handoff on Web.
 - **`generatorConfig`**: `GeneratorConfig` (default `DEFAULT_GENERATOR_CONFIG` in [`web/src/types/index.ts`](./web/src/types/index.ts)) -- Persisted puzzle segmentation parameters (documented in [`PUZZLE.md`](./PUZZLE.md)).
 
 ---

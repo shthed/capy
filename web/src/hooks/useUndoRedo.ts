@@ -3,6 +3,7 @@ import { PuzzleData, Region, SavedSnapshot, UserSettings } from '../types';
 import { StorageService } from '../services/StorageService';
 import { NativeBridge } from '../services/NativeBridge';
 import { FeatureOfferId } from '../services/FeatureOffersService';
+import { getAllPuzzleRegions, getTotalRegionCount } from '../engine/UnifiedPuzzleLayers';
 import { useLatest } from './useLatest';
 
 export interface UndoHistoryEntry {
@@ -80,9 +81,15 @@ export function resolveUndoRedoRegion(
   regionById?: Map<number, Region>
 ): Region | undefined {
   if (currentPuzzle && puzzle === currentPuzzle && regionById) {
-    return regionById.get(regionId);
+    const cached = regionById.get(regionId);
+    if (cached) return cached;
+    if (!puzzle.nestedLayers?.length) return undefined;
   }
-  return puzzle.regions.find((r) => r.id === regionId);
+  const allRegions = getAllPuzzleRegions(puzzle);
+  for (let i = 0; i < allRegions.length; i++) {
+    if (allRegions[i].id === regionId) return allRegions[i];
+  }
+  return undefined;
 }
 
 export function applyUndoTransition(
@@ -265,6 +272,7 @@ export interface UseUndoRedoOptions<TLive extends UndoRedoLiveState> {
   markTutorialActionTried: (action: 'undo_redo') => void;
   triggerFeatureOffer: (offerId: FeatureOfferId) => void;
   onFocusRegion?: (regionId: number, kind: UndoRedoKind) => void;
+  onTransitionCommitted?: () => void;
 }
 
 export interface UseUndoRedoResult {
@@ -301,6 +309,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
   markTutorialActionTried,
   triggerFeatureOffer,
   onFocusRegion,
+  onTransitionCommitted,
 }: UseUndoRedoOptions<TLive>): UseUndoRedoResult {
   const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
   const [redoStack, setRedoStack] = useState<UndoHistoryEntry[]>([]);
@@ -334,6 +343,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
     (cur: TLive, transition: UndoRedoTransitionResult, kind: UndoRedoKind) => {
       syncUndoStack(transition.nextUndoStack);
       syncRedoStack(transition.nextRedoStack);
+      onTransitionCommitted?.();
 
       if (transition.coopEmission) {
         if (transition.coopEmission.kind === 'FILL') {
@@ -377,7 +387,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
         const updated = StorageService.updateSnapshotProgress(
           curSnapshotId,
           transition.nextFilledRegionIds.size,
-          curPuzzle.regions.length,
+          getTotalRegionCount(curPuzzle),
           filledList,
           zoomScale,
           panOffsetX,
@@ -406,6 +416,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
       liveCoopRef,
       markTutorialActionTried,
       onFocusRegion,
+      onTransitionCommitted,
       setActiveColorId,
       setFilledRegionIds,
       setHintRegionId,
