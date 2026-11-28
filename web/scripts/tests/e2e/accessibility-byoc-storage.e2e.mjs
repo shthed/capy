@@ -1013,6 +1013,20 @@ export async function runAccessibilityByocE2e(ctx) {
     await regPage.getByTestId('settings-modal-close').click();
     await regPage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
 
+    // Undo moves/zooms the viewport to focus on the undone region; reset to 1x before clicking 1x-computed adjacentTarget coords
+    await regPage.keyboard.press('0');
+    await regPage.waitForFunction(
+      () => {
+        const active = window.capyStorage.loadActiveState();
+        const zoom = active?.zoomScale ?? 1;
+        const panX = active?.panOffsetX ?? 0;
+        const panY = active?.panOffsetY ?? 0;
+        return !document.querySelector('[data-testid="reset-view-btn"]') && Math.abs(zoom - 1) < 0.02 && Math.hypot(panX, panY) < 2;
+      },
+      undefined,
+      { timeout: 3000 }
+    );
+
     await regPage.getByTestId('palette-swatch-1').click();
     await regPage.mouse.click(adjacentTarget.clientX, adjacentTarget.clientY);
     await regPage.waitForFunction(
