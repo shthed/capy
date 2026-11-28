@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-Aq5koStiHs7iOXZ0FstBiuWUfXvNHn4fqzL7j4yX+0Y=' https://accounts.google.com/gsi/client; script-src-attr 'none'; style-src 'self' 'unsafe-inline' https://accounts.google.com; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' data: blob: https://capypaint.com https://paint.capyboop.com https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com https://graph.microsoft.com https://login.microsoftonline.com wss://capypaint.com wss://*.capypaint.com wss://paint.capyboop.com; worker-src 'self' blob:; frame-src https://accounts.google.com; manifest-src 'self'; media-src 'none'; form-action 'self'; object-src 'none'; base-uri 'self';" />
+    <script>
+      if (window.location.hostname.toLowerCase() === 'www.capypaint.com') {
+        window.location.replace(
+          'https://capypaint.com' +
+            window.location.pathname +
+            window.location.search +
+            window.location.hash
+        );
+      }
+    </script>
+    <link rel="icon" type="image/webp" href="assets/capybara.webp" />
+    <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Capy Paint" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Capy Paint — Free Color by Number Game &amp; Custom Photo Puzzles</title>
+    <link rel="canonical" href="https://capypaint.com/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta
+      name="description"
+      content="Play Capy Paint free online or on Android — a relaxing, ad-free color-by-number game. Paint curated art, turn your photos into puzzles, or color in co-op."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Capy Paint" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="Capy Paint — Free Color by Number Game &amp; Custom Photo Puzzles" />
+    <meta
+      property="og:description"
+      content="Play Capy Paint free online or on Android — a relaxing, ad-free color-by-number game. Paint curated art, turn your photos into puzzles, or color in co-op."
+    />
+    <meta property="og:url" content="https://capypaint.com/" />
+    <meta property="og:image" content="https://capypaint.com/assets/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Capy Paint color-by-number puzzle canvas featuring cozy capybara forest artwork and numbered color palette" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Capy Paint — Free Color by Number Game &amp; Custom Photo Puzzles" />
+    <meta
+      name="twitter:description"
+      content="Play Capy Paint free online or on Android — a relaxing, ad-free color-by-number game. Paint curated art, turn your photos into puzzles, or color in co-op."
+    />
+    <meta name="twitter:image" content="https://capypaint.com/assets/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Capy Paint color-by-number puzzle canvas featuring cozy capybara forest artwork and numbered color palette" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://capyboop.com/#organization",
+            "name": "CapyBoop Games",
+            "url": "https://capyboop.com/",
+            "sameAs": [
+              "https://capypaint.com/",
+              "https://capyboop.com/",
+              "https://github.com/capyboop/paint",
+              "https://github.com/capyboop/capygame"
+            ]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://capypaint.com/#website",
+            "name": "Capy Paint",
+            "alternateName": "CapyPaint",
+            "url": "https://capypaint.com/",
+            "inLanguage": "en",
+            "publisher": {
+              "@id": "https://capyboop.com/#organization"
+            }
+          },
+          {
+            "@type": ["VideoGame", "WebApplication"],
+            "@id": "https://capypaint.com/#app",
+            "name": "Capy Paint",
+            "url": "https://capypaint.com/",
+            "description": "Play Capy Paint free online or on Android — a relaxing, ad-free color-by-number game. Paint curated art, turn your photos into puzzles, or color in co-op.",
+            "image": "https://capypaint.com/assets/og-image.jpg",
+            "applicationCategory": "GameApplication",
+            "applicationSubCategory": "Color by Number Puzzle",
+            "genre": ["Puzzle", "Casual", "Coloring"],
+            "operatingSystem": "Web, Android",
+            "browserRequirements": "Requires JavaScript and HTML5 Canvas",
+            "inLanguage": "en",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "publisher": {
+              "@id": "https://capyboop.com/#organization"
+            }
+          }
+        ]
+      }
+    </script>
+    <script type="module" crossorigin src="./assets/index-C28Lm6Pw.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-WkwZ5CU-.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-DctBZRDK.js">
+    <link rel="modulepreload" crossorigin href="./assets/base64-RaP0JZyq.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-ui-Bs1mt7mI.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-D7MpndRi.css">
+  </head>
+  <body class="bg-black text-slate-100 overflow-hidden select-none">
+    <div id="root"></div>
+    <noscript>
+      <main style="max-width:680px;margin:0 auto;padding:2rem 1.25rem;font-family:system-ui,-apple-system,sans-serif;line-height:1.6;color:#e2e8f0;background:#020617;">
+        <h1 style="color:#fbbf24;margin-top:0;">Capy Paint — Free Color by Number Game</h1>
+        <p>
+          Capy Paint is a relaxing, 100% ad-free color-by-number and free-coloring puzzle game for Web and Android.
+          Enable JavaScript to paint curated capybara artworks, turn your own photos into color-by-number puzzles
+          privately on your device, play offline, or paint together in co-op rooms.
+        </p>
+        <p>
+          <a href="./privacy-policy.html" style="color:#38bdf8;">Privacy Policy</a>
+          &bull;
+          <a href="https://capyboop.com/" style="color:#38bdf8;">Explore CapyGame on CapyBoop</a>
+        </p>
+      </main>
+    </noscript>
+  </body>
+</html>
