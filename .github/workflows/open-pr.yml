@@ -160,6 +160,29 @@ jobs:
                   .filter(Boolean)
               ),
             ];
+            const FORBIDDEN_PR_TITLE_PREFIX_RE =
+              /^(?:(?:feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(?:\([^)]*\))?!?:|(?:EPIC|US)-\d+\b)/i;
+            const forbiddenPrefixMatch = title.match(FORBIDDEN_PR_TITLE_PREFIX_RE);
+            if (forbiddenPrefixMatch) {
+              core.setFailed(
+                `Forbidden PR title prefix "${forbiddenPrefixMatch[0]}" in "${title}". Use a clean, prefix-free action-oriented title (GitHub labels carry feature/fix/web/android taxonomy).`
+              );
+              return;
+            }
+            const isReleaseOrSyncBetaPr =
+              headBranch.startsWith('sync/') ||
+              labels.some((l) => l.toLowerCase() === 'release') ||
+              /\bchangelog\b/i.test(title);
+            const betaVersionMatch =
+              base === 'beta' && !isReleaseOrSyncBetaPr
+                ? title.match(/\bv\d+\.\d+\.\d+\b/i)
+                : null;
+            if (betaVersionMatch) {
+              core.setFailed(
+                `Version tag "${betaVersionMatch[0]}" is not allowed in regular beta PR titles ("${title}"). Keep beta PR titles version-agnostic (reserve vX.Y.Z for changelog:compile or beta -> main Release Promotion PRs).`
+              );
+              return;
+            }
 
             const milestoneInput = String(process.env.INPUT_MILESTONE ?? '').trim();
             let milestoneNumber = null;

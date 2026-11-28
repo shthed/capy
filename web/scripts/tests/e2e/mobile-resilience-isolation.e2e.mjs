@@ -1189,7 +1189,148 @@ export async function runMobileLayoutE2e(ctx) {
     );
     await mobileBetaPage.close();
     await mobileBetaContext.close();
-    logE2ePass('360x780 BETA channel pill containment in Normal & Large Text modes verified.');
+
+    // Tier 3 Foldable & Multi-Window Live-Resize Continuity (10:16 <-> 1:1 <-> 4:3 <-> 360x540 split-screen)
+    const foldableContext = await createBootedContext(browser, BASE_URL, {
+      label: 'foldablePage',
+      attachErrorListeners,
+      viewport: { width: 400, height: 640 },
+      hasTouch: true,
+      skipTutorial: true,
+      easyNoReplay: true,
+    });
+    const foldablePage = foldableContext.page;
+    await foldablePage.evaluate(() => {
+      window.__capyFoldContinuityMarker = 'alive-across-fold';
+    });
+
+    const readTotalRemainingRegions = async (pg) =>
+      pg.evaluate(() => {
+        const swatches = Array.from(document.querySelectorAll('[data-testid^="palette-swatch-"]'));
+        return swatches.reduce((sum, el) => {
+          const badge = el.querySelector('span:last-child');
+          const n = Number.parseInt(badge?.textContent?.trim() || '0', 10);
+          return sum + (Number.isFinite(n) ? n : 0);
+        }, 0);
+      });
+
+    const assertAdaptiveViewportHealthy = async (pg, label, expectedW, expectedH) => {
+      await waitForAnimationFrames(pg, 3);
+      const marker = await pg.evaluate(() => window.__capyFoldContinuityMarker);
+      assert.equal(marker, 'alive-across-fold', `${label}: page must not reload during fold/resize`);
+
+      const metrics = await pg.evaluate(() => {
+        const left = document.querySelector('[data-testid="topbar-left-lane"]')?.getBoundingClientRect();
+        const right = document.querySelector('[data-testid="topbar-right-lane"]')?.getBoundingClientRect();
+        const dock = document.querySelector('[data-testid="palette-dock"]')?.getBoundingClientRect();
+        const canvas = document.querySelector('canvas')?.getBoundingClientRect();
+        return {
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+          left: left ? { x: left.x, right: left.right, bottom: left.bottom } : null,
+          right: right ? { x: right.x, right: right.right, bottom: right.bottom } : null,
+          dock: dock ? { x: dock.x, right: dock.right, top: dock.top, bottom: dock.bottom } : null,
+          canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
+        };
+      });
+      assert.equal(metrics.innerWidth, expectedW, `${label}: expected viewport width ${expectedW}`);
+      assert.equal(metrics.innerHeight, expectedH, `${label}: expected viewport height ${expectedH}`);
+      assert.equal(
+        metrics.docOverflow <= 0,
+        true,
+        `${label}: expected zero horizontal document overflow (got ${metrics.docOverflow})`
+      );
+      assert.ok(metrics.left && metrics.right && metrics.dock && metrics.canvas, `${label}: HUD & canvas must remain visible`);
+      assert.equal(
+        metrics.left.right <= metrics.right.x + 1 && metrics.right.right <= expectedW + 1,
+        true,
+        `${label}: GameTopBar lanes must not overlap or clip (${JSON.stringify(metrics)})`
+      );
+      assert.equal(
+        metrics.dock.x >= -1 && metrics.dock.right <= expectedW + 1 && metrics.dock.bottom <= expectedH + 1,
+        true,
+        `${label}: PaletteDock must remain unobstructed inside viewport (${JSON.stringify(metrics)})`
+      );
+      assert.equal(
+        metrics.canvas.width >= expectedW - 2 && metrics.canvas.height >= expectedH - 2,
+        true,
+        `${label}: Canvas must fill full display area without letterboxing (${JSON.stringify(metrics.canvas)})`
+      );
+    };
+
+    await assertAdaptiveViewportHealthy(foldablePage, '10:16 folded outer (400x640)', 400, 640);
+    const initialRemaining = await readTotalRemainingRegions(foldablePage);
+    assert.ok(initialRemaining > 0, 'Expected unpainted regions at foldable boot');
+    await tapCanvasGrid(foldablePage, 0.28, 12, 25);
+    const afterOuterPaint = await readTotalRemainingRegions(foldablePage);
+    assert.equal(
+      afterOuterPaint < initialRemaining,
+      true,
+      `Expected tapping canvas on 10:16 outer screen to color regions (${afterOuterPaint} < ${initialRemaining})`
+    );
+
+    // Unfold to 1:1 inner display (768x768)
+    await foldablePage.setViewportSize({ width: 768, height: 768 });
+    await assertAdaptiveViewportHealthy(foldablePage, '1:1 unfolded inner (768x768)', 768, 768);
+    assert.equal(
+      await readTotalRemainingRegions(foldablePage),
+      afterOuterPaint,
+      'Unfolding to 1:1 inner display must preserve painted progress exactly'
+    );
+    await tapCanvasGrid(foldablePage, 0.36, 12, 25);
+    const afterSquarePaint = await readTotalRemainingRegions(foldablePage);
+    assert.equal(
+      afterSquarePaint < afterOuterPaint,
+      true,
+      `Expected live canvas tap alignment after unfolding to 1:1 (${afterSquarePaint} < ${afterOuterPaint})`
+    );
+
+    // Resize to 4:3 unfolded inner display (960x720) & verify modal fit
+    await foldablePage.setViewportSize({ width: 960, height: 720 });
+    await assertAdaptiveViewportHealthy(foldablePage, '4:3 unfolded inner (960x720)', 960, 720);
+    assert.equal(
+      await readTotalRemainingRegions(foldablePage),
+      afterSquarePaint,
+      'Resizing to 4:3 inner display must preserve painted progress exactly'
+    );
+    await foldablePage.getByTestId('topbar-settings-btn').click();
+    await foldablePage.getByTestId('settings-modal-close').waitFor({ state: 'visible', timeout: 3000 });
+    const modalFit43 = await foldablePage.evaluate(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      if (!dialog) return null;
+      const r = dialog.getBoundingClientRect();
+      return {
+        x: r.x,
+        right: r.right,
+        y: r.y,
+        bottom: r.bottom,
+        docOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+    assert.ok(modalFit43, 'Expected Settings dialog on 4:3 unfolded inner display');
+    assert.equal(
+      modalFit43.x >= 0 && modalFit43.right <= 961 && modalFit43.bottom <= 721 && modalFit43.docOverflow <= 0,
+      true,
+      `Settings modal must fit cleanly inside 4:3 unfolded display (${JSON.stringify(modalFit43)})`
+    );
+    await foldablePage.getByTestId('settings-modal-close').click();
+    await foldablePage.getByTestId('settings-modal-close').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Fold back to 10:16 outer (400x640) and narrow split-screen multi-window (360x540)
+    await foldablePage.setViewportSize({ width: 400, height: 640 });
+    await assertAdaptiveViewportHealthy(foldablePage, '10:16 refolded outer (400x640)', 400, 640);
+    await foldablePage.setViewportSize({ width: 360, height: 540 });
+    await assertAdaptiveViewportHealthy(foldablePage, 'Multi-window split-screen (360x540)', 360, 540);
+    assert.equal(
+      await readTotalRemainingRegions(foldablePage),
+      afterSquarePaint,
+      'Folding back and entering multi-window split-screen must preserve painted progress'
+    );
+
+    await foldablePage.close();
+    await foldableContext.context.close();
+    logE2ePass('360x780 BETA channel pill containment & Tier 3 foldable/multi-window live-resize continuity verified.');
 }
 
 export async function runResilienceIsolationE2e(ctx) {

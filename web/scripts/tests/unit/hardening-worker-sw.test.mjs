@@ -1136,6 +1136,135 @@ export async function runHardeningWorkerSwTests(vite) {
           Date.now = origNow;
         }
       }
+
+      // /api/feedback streaming body size cap (missing/spoofed Content-Length & split UTF-8 chunks)
+      {
+        const feedbackCtx = makeDoEnv({ DoClass: workerMod.CoopRoomDurableObject, rateLimitQuota: 20 });
+        const makeTrackedStream = (chunks) => {
+          let index = 0;
+          let pulls = 0;
+          let cancelled = false;
+          const stream = new ReadableStream(
+            {
+              pull(controller) {
+                pulls++;
+                if (index < chunks.length) {
+                  controller.enqueue(chunks[index++]);
+                } else {
+                  controller.close();
+                }
+              },
+              cancel() {
+                cancelled = true;
+              },
+            },
+            { highWaterMark: 0 }
+          );
+          return {
+            stream,
+            getPulls: () => pulls,
+            wasCancelled: () => cancelled,
+          };
+        };
+
+        // 1. Streaming body > 8192 bytes with NO Content-Length -> 413 + CORS + security headers + early cancel
+        const noClChunks = [
+          new Uint8Array(2048).fill(0x61),
+          new Uint8Array(2048).fill(0x61),
+          new Uint8Array(2048).fill(0x61),
+          new Uint8Array(2048).fill(0x61),
+          new Uint8Array([0x62]), // byte 8193 exceeds cap
+          new Uint8Array(2048).fill(0x63),
+          new Uint8Array(2048).fill(0x63),
+          new Uint8Array(2048).fill(0x63),
+        ];
+        const noClStream = makeTrackedStream(noClChunks);
+        const noClReq = new Request('https://capypaint.com/api/feedback', {
+          method: 'POST',
+          headers: {
+            Origin: 'https://capypaint.com',
+            'Content-Type': 'application/json',
+            'CF-Connecting-IP': '198.51.100.71',
+          },
+          body: noClStream.stream,
+          duplex: 'half',
+        });
+        assert.equal(noClReq.headers.get('Content-Length'), null);
+        const noClRes = await workerMod.default.fetch(noClReq, feedbackCtx.env);
+        assert.equal(noClRes.status, 413, 'Chunked /api/feedback body > 8192 bytes without Content-Length must return 413');
+        assert.equal(noClRes.headers.get('Access-Control-Allow-Origin'), 'https://capypaint.com');
+        assertApiSecurityHeaders(noClRes, '413 /api/feedback missing Content-Length');
+        assert.equal(noClStream.wasCancelled(), true, 'Oversized /api/feedback stream must be cancelled');
+        assert.equal(
+          noClStream.getPulls() <= 5,
+          true,
+          `Oversized /api/feedback stream must stop pulling trailing chunks (got ${noClStream.getPulls()} pulls)`
+        );
+
+        // 2. Spoofed small Content-Length: 16 with > 8192-byte stream -> still 413 + early cancel
+        const spoofedStream = makeTrackedStream(noClChunks);
+        const spoofedReq = new Request('https://capypaint.com/api/feedback', {
+          method: 'POST',
+          headers: {
+            Origin: 'https://capypaint.com',
+            'Content-Type': 'application/json',
+            'Content-Length': '16',
+            'CF-Connecting-IP': '198.51.100.72',
+          },
+          body: spoofedStream.stream,
+          duplex: 'half',
+        });
+        const spoofedRes = await workerMod.default.fetch(spoofedReq, feedbackCtx.env);
+        assert.equal(spoofedRes.status, 413, 'Spoofed Content-Length: 16 with oversized stream must return 413');
+        assert.equal(spoofedRes.headers.get('Access-Control-Allow-Origin'), 'https://capypaint.com');
+        assertApiSecurityHeaders(spoofedRes, '413 /api/feedback spoofed Content-Length');
+        assert.equal(spoofedStream.wasCancelled(), true, 'Spoofed oversized /api/feedback stream must be cancelled');
+        assert.equal(
+          spoofedStream.getPulls() <= 5,
+          true,
+          `Spoofed oversized /api/feedback stream must stop pulling early (got ${spoofedStream.getPulls()} pulls)`
+        );
+
+        // 3. Valid chunked multi-byte UTF-8 JSON body without Content-Length reaches validateFeedbackPayload (honeypot -> 202)
+        const utf8HoneypotBytes = new TextEncoder().encode(
+          JSON.stringify({
+            category: 'bug',
+            title: 'Emoji \u{1F600} & CJK \u6F22 test',
+            details: 'Chunked UTF-8 feedback payload with \u{1F600} and \u6F22 split across chunk edges.',
+            website: 'bot',
+          })
+        );
+        // Split right through the middle of the 4-byte emoji and 3-byte CJK sequences
+        const emojiOffset = utf8HoneypotBytes.findIndex(
+          (b, i) => b === 0xf0 && utf8HoneypotBytes[i + 1] === 0x9f
+        );
+        const cjkOffset = utf8HoneypotBytes.findIndex(
+          (b, i) => b === 0xe6 && utf8HoneypotBytes[i + 1] === 0xbc
+        );
+        assert.equal(emojiOffset > 0 && cjkOffset > emojiOffset, true);
+        const validUtf8Stream = makeTrackedStream([
+          utf8HoneypotBytes.subarray(0, emojiOffset + 2),
+          utf8HoneypotBytes.subarray(emojiOffset + 2, cjkOffset + 1),
+          utf8HoneypotBytes.subarray(cjkOffset + 1),
+        ]);
+        const validUtf8Req = new Request('https://capypaint.com/api/feedback', {
+          method: 'POST',
+          headers: {
+            Origin: 'https://capypaint.com',
+            'Content-Type': 'application/json',
+            'CF-Connecting-IP': '198.51.100.73',
+          },
+          body: validUtf8Stream.stream,
+          duplex: 'half',
+        });
+        assert.equal(validUtf8Req.headers.get('Content-Length'), null);
+        const validUtf8Res = await workerMod.default.fetch(validUtf8Req, feedbackCtx.env);
+        assert.equal(validUtf8Res.status, 202, 'Chunked multi-byte UTF-8 honeypot payload must reach validateFeedbackPayload and return 202');
+        assert.equal(validUtf8Res.headers.get('Access-Control-Allow-Origin'), 'https://capypaint.com');
+        assertApiSecurityHeaders(validUtf8Res, '202 /api/feedback chunked UTF-8 honeypot');
+        const validUtf8Body = await validUtf8Res.json();
+        assert.deepEqual(validUtf8Body, { ok: true, accepted: true });
+      }
     } finally {
       for (const db of dbs) {
         try {

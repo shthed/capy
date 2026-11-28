@@ -30,6 +30,10 @@ export type FeedbackValidationResult =
   | { ok: false; honeypot: true }
   | { ok: false; honeypot?: false; status?: 400 | 413; error: string };
 
+export type ReadBodyTextResult =
+  | { ok: true; text: string }
+  | { ok: false; status: 413; error: string };
+
 export interface GitHubIssuePayload {
   title: string;
   body: string;
@@ -128,6 +132,61 @@ function sanitizeMetaField(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const cleaned = sanitizeFeedbackText(value, false).slice(0, MAX_META_CHARS).trim();
   return cleaned.length > 0 ? cleaned : undefined;
+}
+
+export async function readBodyTextWithLimit(
+  request: Pick<Request, 'body'>,
+  maxBytes: number = MAX_FEEDBACK_BODY_BYTES
+): Promise<ReadBodyTextResult> {
+  const limit = Number.isFinite(maxBytes)
+    ? Math.max(0, Math.floor(maxBytes))
+    : MAX_FEEDBACK_BODY_BYTES;
+
+  if (!request.body) {
+    return { ok: true, text: '' };
+  }
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  const parts: string[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > limit) {
+        try {
+          await reader.cancel('Feedback payload exceeds byte limit');
+        } catch {
+          // Ignore cancellation errors after aborting an oversized stream
+        }
+        return {
+          ok: false,
+          status: 413,
+          error: `Feedback payload exceeds the ${limit}-byte limit.`,
+        };
+      }
+
+      parts.push(decoder.decode(value, { stream: true }));
+    }
+
+    const tail = decoder.decode();
+    if (tail) {
+      parts.push(tail);
+    }
+
+    return { ok: true, text: parts.join('') };
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Ignore if reader lock is already released
+    }
+  }
 }
 
 export function validateFeedbackPayload(rawBody: string): FeedbackValidationResult {

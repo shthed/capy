@@ -394,6 +394,7 @@ export async function runUndoReplayHooksTests(vite) {
       triggerFeatureOffer: () => {},
     });
 
+    const focusEvents = [];
     const undoRedo = useUndoRedo({
       puzzle,
       settings: liveCoopRef.current.settings,
@@ -411,10 +412,13 @@ export async function runUndoReplayHooksTests(vite) {
       setSnapshots: () => {},
       markTutorialActionTried: () => {},
       triggerFeatureOffer: () => {},
+      onFocusRegion: (regionId, kind) => {
+        focusEvents.push({ regionId, kind });
+      },
     });
 
     capturedReplayApi = replay;
-    capturedUndoApi = undoRedo;
+    capturedUndoApi = { ...undoRedo, focusEvents };
     return React.createElement('div', null, `${undoRedo.isUndoEnabled}:${replay.isReplaying}`);
   }
 
@@ -424,6 +428,26 @@ export async function runUndoReplayHooksTests(vite) {
   assert.equal(typeof capturedUndoApi.syncRedoStack, 'function');
   assert.equal(typeof capturedUndoApi.handleUndo, 'function');
   assert.equal(typeof capturedUndoApi.handleRedo, 'function');
+  // Empty-stack undo/redo no-ops must not fire onFocusRegion
+  capturedUndoApi.handleUndo();
+  capturedUndoApi.handleRedo();
+  assert.deepEqual(
+    capturedUndoApi.focusEvents,
+    [],
+    'Empty-stack undo/redo no-ops must not invoke onFocusRegion'
+  );
+  // Seed undo stack synchronously and verify undo -> redo fire onFocusRegion with exact (regionId, kind)
+  capturedUndoApi.syncUndoStack([{ regionId: 1, wasPreviouslyFilled: false }]);
+  capturedUndoApi.handleUndo();
+  capturedUndoApi.handleRedo();
+  assert.deepEqual(
+    capturedUndoApi.focusEvents,
+    [
+      { regionId: 1, kind: 'undo' },
+      { regionId: 1, kind: 'redo' },
+    ],
+    'useUndoRedo must invoke onFocusRegion(regionId, kind) on valid undo and redo transitions'
+  );
   assert.equal(typeof capturedReplayApi.cancelAutoResume, 'function');
   assert.equal(typeof capturedReplayApi.resetReplayState, 'function');
   assert.equal(typeof capturedReplayApi.exitReplay, 'function');
@@ -438,6 +462,10 @@ export async function runUndoReplayHooksTests(vite) {
     path.join(projectRoot, 'src/hooks/useReplayController.ts'),
     'utf8'
   );
+  const canvasSrc = fs.readFileSync(
+    path.join(projectRoot, 'src/components/PuzzleCanvas.tsx'),
+    'utf8'
+  );
   assert.doesNotMatch(undoSrc, /\blocalStorage\./, 'useUndoRedo.ts must not access localStorage directly');
   assert.doesNotMatch(replaySrc, /\blocalStorage\./, 'useReplayController.ts must not access localStorage directly');
   assert.doesNotMatch(
@@ -449,6 +477,36 @@ export async function runUndoReplayHooksTests(vite) {
   assert.match(replaySrc, /clearTimeout\(autoResumeTimerRef\.current\)/, 'useReplayController.ts must clear autoResume timer');
   assert.match(replaySrc, /followRawScratchRef/, 'useReplayController.ts must reuse followRawScratchRef');
   assert.match(replaySrc, /followClampedScratchRef/, 'useReplayController.ts must reuse followClampedScratchRef');
+  assert.match(
+    canvasSrc,
+    /cancelAnimationFrame\(focusAnimIdRef\.current\)/,
+    'PuzzleCanvas.tsx must cancel focusAnimIdRef on cleanup/stop'
+  );
+  assert.match(
+    canvasSrc,
+    /focusRawScratchRef/,
+    'PuzzleCanvas.tsx must reuse focusRawScratchRef in focus glide loop'
+  );
+  assert.match(
+    canvasSrc,
+    /focusClampedScratchRef/,
+    'PuzzleCanvas.tsx must reuse focusClampedScratchRef in focus glide loop'
+  );
+  assert.doesNotMatch(
+    canvasSrc,
+    /\boffsetRef\.current\s*=/,
+    'PuzzleCanvas.tsx must never replace offsetRef.current with aliased React state objects (mutate .x/.y in place)'
+  );
+  assert.match(
+    canvasSrc,
+    /prev !== o && prev\.x === o\.x && prev\.y === o\.y/,
+    'PuzzleCanvas.tsx commitTransformState must guard against aliased offset state'
+  );
+  assert.match(
+    canvasSrc,
+    /if \(wasActive && commitIfActive\)[\s\S]*commitTransformState\(true\)/,
+    'PuzzleCanvas.tsx stopFocusCamera must flush commitTransformState(true) when cancelling an active glide mid-flight'
+  );
 
   console.log('   PASS: Undo/Redo & Replay Controller hooks unit tests (Issue #585 Sub-Slice 3)');
 }

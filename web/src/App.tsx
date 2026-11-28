@@ -26,7 +26,7 @@ import { useUndoRedo } from './hooks/useUndoRedo';
 import { useViewportAndShortcuts } from './hooks/useViewportAndShortcuts';
 import { mergeCustomPalette } from './services/sessionRestorePipeline';
 import { getDisplayNumberMap } from './components/PaletteDock';
-import { PuzzleCanvas } from './components/PuzzleCanvas';
+import { FocusRegionRequest, PuzzleCanvas } from './components/PuzzleCanvas';
 import { GameTopBar } from './components/GameTopBar';
 import { PaletteDock } from './components/PaletteDock';
 import { FloatingActions } from './components/FloatingActions';
@@ -180,6 +180,12 @@ export const App: React.FC = () => {
   const [filledRegionIds, setFilledRegionIds] = useState<Set<number>>(new Set());
   const [paintedRegionColors, setPaintedRegionColors] = useState<Map<number, number>>(new Map());
   const [hintRegionId, setHintRegionId] = useState<number | null>(null);
+  const [focusRegionRequest, setFocusRegionRequest] = useState<FocusRegionRequest | null>(null);
+  const focusRegionSeqRef = useRef<number>(0);
+  const handleFocusUndoRedoRegion = useCallback((regionId: number, kind: 'undo' | 'redo') => {
+    focusRegionSeqRef.current += 1;
+    setFocusRegionRequest({ seq: focusRegionSeqRef.current, regionId, kind });
+  }, []);
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
   const isPreviewModeRef = useLatest(isPreviewMode);
   const [storageQuotaWarning, setStorageQuotaWarning] = useState<QuotaWarning | null>(null);
@@ -488,6 +494,7 @@ export const App: React.FC = () => {
     setSnapshots,
     markTutorialActionTried,
     triggerFeatureOffer,
+    onFocusRegion: handleFocusUndoRedoRegion,
     onTransitionCommitted: handleClearUndoSubdivisionBridge,
   });
 
@@ -1054,6 +1061,7 @@ export const App: React.FC = () => {
         filledRegionIds={displayedFilledRegionIds}
         paintedRegionColors={paintedRegionColors}
         hintRegionId={viewProps.canvasHintRegionId}
+        focusRegionRequest={focusRegionRequest}
         isPreviewMode={isPreviewMode}
         isFreeColorMode={isFreeColorMode}
         difficulty={settings.difficulty}

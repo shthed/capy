@@ -274,6 +274,20 @@ export async function runCoopCloudOfflineE2e(ctx) {
       'BF-1: Undoing a Free Colour repaint on Page A must broadcast restored color to Co-op peer Page B'
     );
 
+    // Undo moves/zooms the viewport to focus on the undone region; reset back to 1x before the 1x quadrant burst
+    await page.keyboard.press('0');
+    await page.waitForFunction(
+      () => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        const zoom = active.zoomScale ?? 1;
+        const panX = active.panOffsetX ?? 0;
+        const panY = active.panOffsetY ?? 0;
+        return !document.querySelector('[data-testid="reset-view-btn"]') && Math.abs(zoom - 1) < 0.02 && Math.hypot(panX, panY) < 2;
+      },
+      undefined,
+      { timeout: 3000 }
+    );
+
     // C8-1 regression (Free Colour Mode): rapid synchronous same-frame clicks must not drop strokes or desync Co-op peer
     if (swatchCount > 0) {
       const firstSwatch = swatchButtons.nth(0);

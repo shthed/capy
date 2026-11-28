@@ -244,5 +244,60 @@ export async function runAndroidManifestTests({ projectRoot, logUnitStart, logUn
     badBannerBuf.writeUInt32BE(512, 20);
     const badBannerHeader = parseTvBannerPng(badBannerBuf);
     assert.equal(badBannerHeader.width === 320 && badBannerHeader.height === 180, false);
-    logUnitPass('Android TV Leanback AndroidManifest.xml & 320x180 tv_banner.png verified.');
+
+    // Google Play adaptive quality standards (Android 17 targetSdk=37, foldable manifest continuity & 3 foldable screenshots)
+    assert.equal(
+      mainAct.attrs['android:screenOrientation'] ?? null,
+      null,
+      'MainActivity must not declare android:screenOrientation lock for foldables/large screens'
+    );
+    assert.notEqual(
+      mainAct.attrs['android:resizeableActivity'] ?? null,
+      'false',
+      'MainActivity must remain resizeable for foldables and multi-window mode'
+    );
+    assert.equal(mainAct.attrs['android:minAspectRatio'] ?? null, null);
+    assert.equal(mainAct.attrs['android:maxAspectRatio'] ?? null, null);
+    for (const foldCfgFlag of ['density', 'smallestScreenSize', 'screenLayout', 'orientation']) {
+      assert.equal(
+        String(tvManifestInfo.configChanges || '').split('|').includes(foldCfgFlag),
+        true,
+        `AndroidManifest configChanges must include ${foldCfgFlag} for foldable state continuity`
+      );
+    }
+    const compileSdkMatch = androidBuildGradle.match(/compileSdk\s*=\s*(\d+)/);
+    const targetSdkMatch = androidBuildGradle.match(/targetSdk\s*=\s*(\d+)/);
+    assert.ok(compileSdkMatch && Number(compileSdkMatch[1]) >= 37, 'app/build.gradle.kts compileSdk must be >= 37');
+    assert.ok(targetSdkMatch && Number(targetSdkMatch[1]) >= 37, 'app/build.gradle.kts targetSdk must be >= 37');
+    assert.equal(
+      /isMinifyEnabled\s*=\s*true/.test(androidBuildGradle) &&
+        /isShrinkResources\s*=\s*true/.test(androidBuildGradle),
+      true,
+      'app/build.gradle.kts release build must keep R8 minification and resource shrinking enabled'
+    );
+
+    const foldableShots = [
+      { file: 'foldable_1_1_inner.png', ratioW: 1, ratioH: 1 },
+      { file: 'foldable_4_3_inner.png', ratioW: 4, ratioH: 3 },
+      { file: 'foldable_10_16_outer.png', ratioW: 10, ratioH: 16 },
+    ];
+    for (const { file, ratioW, ratioH } of foldableShots) {
+      const shotPath = path.resolve(projectRoot, '../docs/play-store/screenshots', file);
+      assert.equal(fs.existsSync(shotPath), true, `Missing required Play Store foldable screenshot: ${file}`);
+      const shotBuf = fs.readFileSync(shotPath);
+      const shotHeader = parseTvBannerPng(shotBuf);
+      assert.ok(shotHeader, `${file} must have valid PNG magic and IHDR chunk`);
+      assert.equal(
+        shotHeader.width >= 1080 && shotHeader.height >= 1080,
+        true,
+        `${file} must be >= 1080px per side (got ${shotHeader.width}x${shotHeader.height})`
+      );
+      assert.equal(
+        shotHeader.width * ratioH,
+        shotHeader.height * ratioW,
+        `${file} must have exact ${ratioW}:${ratioH} aspect ratio (got ${shotHeader.width}x${shotHeader.height})`
+      );
+    }
+
+    logUnitPass('Android TV Leanback, Android 17 adaptive manifest & Play Store foldable screenshots verified.');
 }

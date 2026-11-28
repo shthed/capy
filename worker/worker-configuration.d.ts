@@ -79,21 +79,33 @@ declare class Headers {
   entries(): IterableIterator<[string, string]>;
 }
 
+type ReadableStreamReadResult<R> =
+  | { done: false; value: R }
+  | { done: true; value?: undefined };
+
+interface ReadableStreamDefaultReader<R = unknown> {
+  read(): Promise<ReadableStreamReadResult<R>>;
+  cancel(reason?: unknown): Promise<void>;
+  releaseLock(): void;
+}
+
 interface ReadableStream<R = unknown> {
   readonly locked: boolean;
+  getReader(): ReadableStreamDefaultReader<R>;
   cancel(reason?: unknown): Promise<void>;
 }
 
 interface RequestInit {
   method?: string;
   headers?: Record<string, string> | Headers;
-  body?: string | ArrayBuffer | Uint8Array | null;
+  body?: ReadableStream<Uint8Array> | string | ArrayBuffer | Uint8Array | null;
 }
 
 declare class Request {
   readonly url: string;
   readonly method: string;
   readonly headers: Headers;
+  readonly body: ReadableStream<Uint8Array> | null;
   constructor(input: string | Request, init?: RequestInit);
   text(): Promise<string>;
   json<T = unknown>(): Promise<T>;
@@ -153,7 +165,8 @@ declare class TextEncoder {
 }
 
 declare class TextDecoder {
-  decode(input?: ArrayBuffer | ArrayBufferView): string;
+  constructor(label?: string, options?: { fatal?: boolean; ignoreBOM?: boolean });
+  decode(input?: ArrayBuffer | ArrayBufferView, options?: { stream?: boolean }): string;
 }
 
 declare const console: {

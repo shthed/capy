@@ -248,6 +248,8 @@ export function applyRedoTransition(
   };
 }
 
+export type UndoRedoKind = 'undo' | 'redo';
+
 export interface UseUndoRedoOptions<TLive extends UndoRedoLiveState> {
   puzzle: PuzzleData | null;
   settings: UserSettings;
@@ -269,6 +271,7 @@ export interface UseUndoRedoOptions<TLive extends UndoRedoLiveState> {
   setSnapshots: Dispatch<SetStateAction<SavedSnapshot[]>>;
   markTutorialActionTried: (action: 'undo_redo') => void;
   triggerFeatureOffer: (offerId: FeatureOfferId) => void;
+  onFocusRegion?: (regionId: number, kind: UndoRedoKind) => void;
   onTransitionCommitted?: () => void;
 }
 
@@ -305,6 +308,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
   setSnapshots,
   markTutorialActionTried,
   triggerFeatureOffer,
+  onFocusRegion,
   onTransitionCommitted,
 }: UseUndoRedoOptions<TLive>): UseUndoRedoResult {
   const [undoStack, setUndoStack] = useState<UndoHistoryEntry[]>([]);
@@ -336,11 +340,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
   const isUndoEnabled = computeIsUndoEnabled(settings, isFreeColorMode, puzzle);
 
   const commitTransition = useCallback(
-    (
-      cur: TLive,
-      transition: UndoRedoTransitionResult,
-      shouldTriggerUndoReplayOffer: boolean
-    ) => {
+    (cur: TLive, transition: UndoRedoTransitionResult, kind: UndoRedoKind) => {
       syncUndoStack(transition.nextUndoStack);
       syncRedoStack(transition.nextRedoStack);
       onTransitionCommitted?.();
@@ -368,13 +368,15 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
       setHintRegionId(null);
       NativeBridge.haptic('tick', cur.settings.hapticsEnabled);
       markTutorialActionTried('undo_redo');
-      if (shouldTriggerUndoReplayOffer) {
+      if (kind === 'undo') {
         triggerFeatureOffer('undo_replay');
       }
 
       if (transition.shouldUpdateActiveColor) {
         setActiveColorId(transition.nextActiveColorId);
       }
+
+      onFocusRegion?.(transition.entry.regionId, kind);
 
       const curSnapshotId = cur.activeSnapshotId;
       const curPuzzle = cur.puzzle;
@@ -413,6 +415,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
       emitCoopUnfill,
       liveCoopRef,
       markTutorialActionTried,
+      onFocusRegion,
       onTransitionCommitted,
       setActiveColorId,
       setFilledRegionIds,
@@ -444,7 +447,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
         redoStack: redoStackRef.current,
       });
       if (!transition) return;
-      commitTransition(cur, transition, true);
+      commitTransition(cur, transition, 'undo');
     },
     [
       commitTransition,
@@ -475,7 +478,7 @@ export function useUndoRedo<TLive extends UndoRedoLiveState>({
         redoStack: redoStackRef.current,
       });
       if (!transition) return;
-      commitTransition(cur, transition, false);
+      commitTransition(cur, transition, 'redo');
     },
     [
       commitTransition,

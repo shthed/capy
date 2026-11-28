@@ -53,7 +53,9 @@ Extends `androidx.activity.ComponentActivity` using `enableEdgeToEdge(statusBarS
     - All snapshot disk and fsync I/O runs off the UI thread on a dedicated single-thread `playGamesIoExecutor` (shut down cleanly in `onDestroy()` with `!isDestroyed && !isFinishing` guards before `runOnUiThread` dispatch).
     - Non-blob JSON slots use `RESOLUTION_POLICY_MANUAL` with read-before-write CRDT checks (`decideSnapshotPushAction`); immutable `pgblob_*` binary chunks use `RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED`. See [`CLOUD.md`](./CLOUD.md) for the full cross-device CRDT sync protocol.
     - Android WebView stays strictly on Play Games v2 for Google auth (never falling back to web GIS popups) and hides browser APK cards, `release-channel-card`, and web-only Fullscreen buttons via `!NativeBridge.isAndroid`.
-- **Foreground / Background WebView Lifecycle Guard (`onPause` / `onResume` / `onDestroy`)**: `MainActivity` overrides `onPause()` (`webView?.onPause()`) and `onResume()` (`webView?.onResume()`) alongside `onDestroy()` (`shareDecodeExecutor.shutdownNow()`, `playGamesIoExecutor.shutdownNow()`, `webView?.destroy()`) so WebView rendering, `requestAnimationFrame` loops, and Web Audio suspend cleanly when backgrounded.
+- **Foreground / Background WebView Lifecycle Guard (`onPause` / `onResume` / `onDestroy`) & Renderer Crash Recovery (`onRenderProcessGone`)**:
+  - `MainActivity` overrides `onPause()` (`webView?.onPause()`) and `onResume()` (`webView?.onResume()`) alongside `onDestroy()` (`shareDecodeExecutor.shutdownNow()`, `playGamesIoExecutor.shutdownNow()`, cancelling `fileUploadCallback`, and detaching/destroying `webView`) so WebView rendering, `requestAnimationFrame` loops, and Web Audio suspend cleanly when backgrounded.
+  - On Android API 26+, `MainActivity` overrides `WebViewClient.onRenderProcessGone(...)` and returns `true` so renderer crashes or OS low-memory kills never terminate the host app. It logs structured telemetry (`didCrash`, `rendererPriorityAtExit`, recent recovery count, total exits), removes and destroys the dead `WebView`, resets transient modal/file-picker state, defers recreation until `onResume()` when terminated while paused/backgrounded, and consults [`RendererCrashGuard.kt`](./app/src/main/java/com/capyboop/paint/RendererCrashGuard.kt) (at most `2` automatic `createWebView()` recreations per `60` seconds with `CapyAndroidBridge` re-attached, then a static **Tap to reload** fallback screen that resets the guard on tap).
 
 ### [`CapyAndroidBridge.kt`](./app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt) & Internal Delegates
 Registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")` with `originGuard = { isTrustedPageLoaded }`. `WebViewAssetLoader` responses attach strict `Content-Security-Policy` (`WEBVIEW_CONTENT_SECURITY_POLICY` permits `https://generativelanguage.googleapis.com`, `https://openrouter.ai`, `https://api.openai.com`, and `https://api.x.ai` in `connect-src` for optional client-direct AI BYOK/OpenRouter requests while strictly excluding `https://js.puter.com/v2/` and `*.puter.com` across `script-src`, `img-src`, `connect-src`, and `frame-src` to uphold Google Play's zero-remote-JS policy), `X-Content-Type-Options: nosniff`, `Referrer-Policy`, and `X-Frame-Options` headers, and bridge callbacks pass escaped JSON literals through `JSON.parse`. Strict `19`-method `@JavascriptInterface` <-> `CapyAndroidInterface` parity is enforced by `npm run test:sanity` (with `showRewardedAd` permanently removed).
@@ -126,7 +128,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
 ## 4. Build & Gradle Lifecycle
 
 - **Toolchain & Dependency Pins ([`gradle/libs.versions.toml`](./gradle/libs.versions.toml), [`gradle/wrapper/gradle-wrapper.properties`](./gradle/wrapper/gradle-wrapper.properties))**:
-  - Android Gradle Plugin `9.5.2`, Gradle Wrapper `9.9.2`, JDK `17`, `compileSdk = 37`, `minSdk = 24`, `targetSdk = 36`.
+  - Android Gradle Plugin `9.5.2`, Gradle Wrapper `9.9.2`, JDK `17`, `compileSdk = 37`, `minSdk = 24`, `targetSdk = 37` (Android 17 adaptive quality baseline with unrestricted orientation/resizability and live foldable state continuity).
   - Explicitly pins `androidx.fragment:fragment-ktx:1.9.1` (overriding the older transitive Fragment pulled by `play-services-games-v2:22.1.0`), `androidx.core:core-ktx:1.19.1`, `androidx.activity:activity-ktx:1.9.3`, and `androidx.webkit:webkit:1.12.1`.
 - **Web Bundle Compilation & Synchronization ([`app/build.gradle.kts`](./app/build.gradle.kts))**:
   - `:app:buildWeb`: Runs `npm run build` in `web/` with Gradle input/output caching across `web/src/`, `web/public/`, `web/package.json`, and Vite/TS configs.
@@ -143,7 +145,7 @@ On modern edge-to-edge Android devices (Pixel 7, Galaxy S23/S24, punch-hole cuto
   ```
   - Release builds enable `isMinifyEnabled = true` and `isShrinkResources = true`.
   - [`.github/workflows/release.yml`](./.github/workflows/release.yml) requires `CAPY_KEYSTORE_BASE64`, `CAPY_KEYSTORE_PASSWORD`, `CAPY_KEY_ALIAS`, and `CAPY_KEY_PASSWORD` for tagged release builds and runs `./gradlew app:testDebugUnitTest app:lintVitalRelease app:assembleRelease app:bundleRelease` (failing loudly rather than substituting unsigned/debug binaries).
-  - Privacy Policy and Data Safety disclosures live at [capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html) ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)). Play Store icon, feature graphic, phone/tablet screenshots, and copy live in [`docs/play-store/`](./docs/play-store/) ([`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md))—upload Phone and Tablet form factors only and keep Android TV unchecked in Play Console until TV D-pad navigation ships post-launch.
+  - Privacy Policy and Data Safety disclosures live at [capypaint.com/privacy-policy.html](https://capypaint.com/privacy-policy.html) ([`web/public/privacy-policy.html`](./web/public/privacy-policy.html)). Play Store icon, feature graphic, phone/tablet/foldable screenshots (`1:1`, `4:3`, `10:16`, refreshed via `cd web && npm run playstore:capture`), and copy live in [`docs/play-store/`](./docs/play-store/) ([`PLAY_STORE_LISTING.md`](./docs/play-store/PLAY_STORE_LISTING.md))—upload Phone, Tablet, and Foldable assets only and keep Android TV unchecked in Play Console until TV D-pad navigation ships post-launch.
 
 ---
 
@@ -155,7 +157,7 @@ cd web && npm ci && npm run build
 # OR directly via Gradle:
 ./gradlew app:buildWeb
 
-# Run JUnit4 unit tests for the Android launcher (`CapyAndroidBridgeTest.kt` + `AndroidTvManifestAndBridgeTest.kt`)
+# Run JUnit4 unit tests for the Android launcher (`CapyAndroidBridgeTest.kt`, `AndroidTvManifestAndBridgeTest.kt`, `RendererCrashGuardTest.kt`)
 ./gradlew app:testDebugUnitTest
 
 # Build Debug APK (outputs to app/build/outputs/apk/debug/app-debug.apk)
@@ -176,7 +178,7 @@ cd web && npm ci && npm run build
 1. Open Android Studio and select **Open** (`File > Open...`).
 2. Select the **monorepo root directory** (`/path/to/capy`), **not** the `/app` subdirectory.
    - [`settings.gradle.kts`](./settings.gradle.kts) registers the unified `:app` module.
-3. Gradle Sync configures **JDK 17** and Android SDK **API 37** (`compileSdk = 37`, `minSdk = 24`, `targetSdk = 36`).
+3. Gradle Sync configures **JDK 17** and Android SDK **API 37** (`compileSdk = 37`, `minSdk = 24`, `targetSdk = 37`).
 
 ### Running & Debugging Locally
 1. Select the **`app`** run configuration and a **Pixel 7 (API 34/35/36)** emulator or USB-connected Android device.

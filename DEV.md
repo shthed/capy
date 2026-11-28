@@ -157,6 +157,7 @@ npm run test:e2e          # Parallel Playwright E2E only (--suite=<csv>, --worke
 npm test                  # Unified engine, codec, version/changelog & parallel Playwright E2E suite
 npm run changelog:compile # Batch .changelog/*.md fragments into CHANGELOG.md & sync package*.json (--promote for Production)
 npm run gallery:capture   # Refresh docs/gallery/*.png + puzzle_completion.webp (self-hosts Vite preview from dist/)
+npm run playstore:capture # Refresh docs/play-store/screenshots/foldable_*.png (1:1, 4:3, 10:16) from dist/
 npm run generate:samples  # Rebuild web/public/assets/sample_saves.capy & daily_saves.capy
 ```
 

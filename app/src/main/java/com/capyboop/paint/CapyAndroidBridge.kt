@@ -110,6 +110,11 @@ class CapyAndroidBridge(
         onModalStateChanged(isOpen)
     }
 
+    internal fun resetModalState() {
+        isModalOpen = false
+        onModalStateChanged(false)
+    }
+
     @JavascriptInterface
     fun saveBackup(key: String, data: String): Boolean {
         if (!originGuard()) return false
