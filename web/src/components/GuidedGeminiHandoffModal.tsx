@@ -284,6 +284,8 @@ export interface GuidedGeminiHandoffModalProps {
   guidedAiApp?: GuidedAiAppId;
   onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
   onOpenProviderSettings?: () => void;
+  activeProviderLabel?: string | null;
+  onRetryWithActiveProvider?: () => void;
   fallbackReason?: string | null;
   isProcessing?: boolean;
   errorMessage?: string | null;
@@ -298,6 +300,8 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     guidedAiApp,
     onChangeGuidedAiApp,
     onOpenProviderSettings,
+    activeProviderLabel = null,
+    onRetryWithActiveProvider,
     fallbackReason = null,
     isProcessing = false,
     errorMessage = null,
@@ -818,6 +822,29 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
               paddingRight: 'max(0.875rem, var(--sar, 0px))',
             }}
           >
+            {activeProviderLabel && onRetryWithActiveProvider && (
+              <div
+                data-testid="guided-retry-provider-card"
+                className="flex flex-col gap-2 px-3 py-2.5 rounded-xl bg-sky-500/15 border border-sky-400/50 text-xs text-sky-100 min-w-0"
+              >
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="font-bold text-sky-200 truncate">
+                    Active AI: {activeProviderLabel}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  data-testid="guided-retry-provider-btn"
+                  disabled={isProcessing}
+                  onClick={onRetryWithActiveProvider}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl bg-sky-400 hover:bg-sky-300 text-slate-950 text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles size={14} className="shrink-0" />
+                  <span className="truncate">Generate Now with {activeProviderLabel}</span>
+                </button>
+              </div>
+            )}
+
             {fallbackReason && (
               <div
                 role="status"
@@ -833,10 +860,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
                     type="button"
                     data-testid="guided-fallback-switch-provider-btn"
                     disabled={isProcessing}
-                    onClick={() => {
-                      onCancel();
-                      onOpenProviderSettings();
-                    }}
+                    onClick={onOpenProviderSettings}
                     className="self-start inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <span>Switch AI Provider (OpenRouter / ChatGPT / Grok)</span>
@@ -964,10 +988,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
                 type="button"
                 data-testid="guided-switch-provider-btn"
                 disabled={isProcessing}
-                onClick={() => {
-                  onCancel();
-                  onOpenProviderSettings();
-                }}
+                onClick={onOpenProviderSettings}
                 className="inline-flex items-center justify-center px-3 py-2 min-h-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-sky-400/45 text-xs font-bold text-sky-300 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Switch AI Provider

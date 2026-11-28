@@ -1169,6 +1169,31 @@ async function runStage1(ctx) {
       );
       await page.getByTestId('iz-byok-clear-btn').click();
 
+      // Closing Settings after clicking Switch AI must automatically reopen the Infinite Zoom popover with the new provider pill
+      await page.keyboard.press('Escape');
+      const izPopover = page.locator('[role="dialog"][aria-label="Infinite Zoom Controls"]');
+      await izPopover.waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await page.getByTestId('iz-active-provider-pill').innerText()).trim(),
+        'Grok Imagine 2.0 • xAI Grok BYOK',
+        'Reopened Infinite Zoom popover must immediately show the newly selected provider & model'
+      );
+
+      // Opening Extend Borders then clicking Switch AI -> changing provider -> closing Settings must preserve the Extend panel too
+      await page.getByTestId('toolbar-infinite-zoom-out-btn').click();
+      await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('iz-change-provider-btn').click();
+      await providerSelect.waitFor({ state: 'visible', timeout: 5000 });
+      await providerSelect.selectOption('OPENROUTER');
+      await page.keyboard.press('Escape');
+      await izPopover.waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('toolbar-infinite-zoom-out-confirm-btn').waitFor({ state: 'visible', timeout: 3000 });
+      assert.equal(
+        (await page.getByTestId('iz-active-provider-pill').innerText()).trim(),
+        'Nano Banana 2 • OpenRouter',
+        'Reopened Infinite Zoom popover must preserve Extend Borders view and refresh provider pill'
+      );
+
       const puterScripts = await page.locator('script[src*="js.puter.com"]').count();
       assert.equal(puterScripts, 0, 'Web idle boot/settings must not inject js.puter.com');
       assert.equal(puterSpy.getRequests().length, 0, 'Zero js.puter.com requests expected');
@@ -2899,37 +2924,89 @@ async function runStage5MultiProviderAutomation(ctx) {
       const snapId = initialSession.activeSnapshotId;
       const before = await readPuzzleSummary(page, snapId);
 
-      // Select provider + model + save device-local key via real UI
-      await page.getByTestId('topbar-settings-btn').click();
-      await page.getByTestId('settings-tab-create').click();
-      await page.getByTestId('iz-provider-select').selectOption(tc.provider);
-      await page.getByTestId('iz-model-select').selectOption(tc.model);
-      await page.getByTestId('iz-byok-key-input').fill(tc.apiKey);
-      await page.getByTestId('iz-byok-save-btn').click();
-      await page.waitForFunction(
-        ({ k, v }) => localStorage.getItem(k) === v,
-        { k: tc.keyStorage, v: tc.apiKey },
-        { timeout: 3000 }
-      );
-      await page.keyboard.press('Escape');
+      if (tc.provider === 'OPENROUTER') {
+        // Start in Free Guided AI App mode -> open Guided Handoff -> click Switch AI Provider -> switch to OpenRouter -> close Settings -> modal stays open with 1-tap retry!
+        await page.getByTestId('topbar-settings-btn').click();
+        await page.getByTestId('settings-tab-create').click();
+        await page.getByTestId('iz-provider-select').selectOption('GUIDED_GEMINI');
+        await page.keyboard.press('Escape');
 
-      // Run automated Zoom In on a touching pair -> verify request & embedded layer
-      const targets = await findUnifiedRegionTargets(page, snapId);
-      assert.ok(targets?.largePair, `Stage 5 (${tc.name}): expected touching pair`);
-      await dismissFeatureOfferIfVisible(page);
-      await page.getByTestId('infinite-zoom-menu-btn').click();
-      await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
-      await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
-      await page.mouse.click(targets.largePair.a.clientX, targets.largePair.a.clientY);
-      await page.waitForFunction(
-        () =>
-          document
-            .querySelector('[data-testid="region-selection-bar"]')
-            ?.innerText.includes('1 region selected'),
-        { timeout: 3000 }
-      );
-      await page.getByTestId('region-selection-confirm-btn').click();
-      await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
+        const targets = await findUnifiedRegionTargets(page, snapId);
+        assert.ok(targets?.largePair, `Stage 5 (${tc.name}): expected touching pair`);
+        await dismissFeatureOfferIfVisible(page);
+        await page.getByTestId('infinite-zoom-menu-btn').click();
+        await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+        await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+        await page.mouse.click(targets.largePair.a.clientX, targets.largePair.a.clientY);
+        await page.waitForFunction(
+          () =>
+            document
+              .querySelector('[data-testid="region-selection-bar"]')
+              ?.innerText.includes('1 region selected'),
+          { timeout: 3000 }
+        );
+        await page.getByTestId('region-selection-confirm-btn').click();
+
+        const guidedModal = page.getByTestId('guided-gemini-modal');
+        await guidedModal.waitFor({ state: 'visible', timeout: 10000 });
+        await page.getByTestId('guided-switch-provider-btn').click();
+
+        await page.getByTestId('iz-provider-select').waitFor({ state: 'visible', timeout: 5000 });
+        await page.getByTestId('iz-provider-select').selectOption(tc.provider);
+        await page.getByTestId('iz-model-select').selectOption(tc.model);
+        await page.getByTestId('iz-byok-key-input').fill(tc.apiKey);
+        await page.getByTestId('iz-byok-save-btn').click();
+        await page.waitForFunction(
+          ({ k, v }) => localStorage.getItem(k) === v,
+          { k: tc.keyStorage, v: tc.apiKey },
+          { timeout: 3000 }
+        );
+        await page.keyboard.press('Escape');
+
+        // Closing Settings must keep the Free AI App Handoff modal open with the 1-tap retry CTA for the new provider
+        await guidedModal.waitFor({ state: 'visible', timeout: 5000 });
+        const retryBtn = page.getByTestId('guided-retry-provider-btn');
+        await retryBtn.waitFor({ state: 'visible', timeout: 3000 });
+        assert.equal(
+          (await retryBtn.innerText()).trim(),
+          'Generate Now with GPT Image 2.6 • OpenRouter',
+          'Reopened handoff modal must display 1-tap retry for the newly selected OpenRouter model'
+        );
+        await retryBtn.click();
+        await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
+      } else {
+        // Select provider + model + save device-local key via real UI
+        await page.getByTestId('topbar-settings-btn').click();
+        await page.getByTestId('settings-tab-create').click();
+        await page.getByTestId('iz-provider-select').selectOption(tc.provider);
+        await page.getByTestId('iz-model-select').selectOption(tc.model);
+        await page.getByTestId('iz-byok-key-input').fill(tc.apiKey);
+        await page.getByTestId('iz-byok-save-btn').click();
+        await page.waitForFunction(
+          ({ k, v }) => localStorage.getItem(k) === v,
+          { k: tc.keyStorage, v: tc.apiKey },
+          { timeout: 3000 }
+        );
+        await page.keyboard.press('Escape');
+
+        // Run automated Zoom In on a touching pair -> verify request & embedded layer
+        const targets = await findUnifiedRegionTargets(page, snapId);
+        assert.ok(targets?.largePair, `Stage 5 (${tc.name}): expected touching pair`);
+        await dismissFeatureOfferIfVisible(page);
+        await page.getByTestId('infinite-zoom-menu-btn').click();
+        await page.getByTestId('toolbar-infinite-zoom-in-btn').click();
+        await page.getByTestId('region-selection-bar').waitFor({ state: 'visible', timeout: 3000 });
+        await page.mouse.click(targets.largePair.a.clientX, targets.largePair.a.clientY);
+        await page.waitForFunction(
+          () =>
+            document
+              .querySelector('[data-testid="region-selection-bar"]')
+              ?.innerText.includes('1 region selected'),
+          { timeout: 3000 }
+        );
+        await page.getByTestId('region-selection-confirm-btn').click();
+        await page.getByTestId('undo-subdivision-toast').waitFor({ state: 'visible', timeout: 25000 });
+      }
 
       assert.equal(captured.length, 1, `Stage 5 (${tc.name}): expected exactly 1 API request`);
       assert.equal(captured[0].auth, tc.expectedAuth);

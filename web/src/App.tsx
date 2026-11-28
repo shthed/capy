@@ -34,6 +34,7 @@ import { buildUnifiedRegionIndex } from './engine/UnifiedPuzzleLayers';
 import {
   InfiniteZoomToolbarButton,
   RegionSelectionBar,
+  resolveActiveInfiniteZoomDisplay,
 } from './components/InfiniteZoomControls';
 import { GuidedGeminiHandoffModal } from './components/GuidedGeminiHandoffModal';
 import { LoadingOverlay } from './components/LoadingOverlay';
@@ -676,6 +677,7 @@ export const App: React.FC = () => {
     handleConfirmRegionSubdivision,
     handleConfirmExtendBorders,
     handleCompleteGuidedGeminiHandoff,
+    handleRetryGuidedWithCurrentProvider,
     handleCancelGuidedGeminiHandoff,
     handleUndoSubdivision,
     clearUndoSubdivision,
@@ -768,6 +770,10 @@ export const App: React.FC = () => {
   const filledCount = filledRegionIds.size;
   const progressPercentage = computeProgressPercentage(filledCount, totalCount);
   const isCompleted = totalCount > 0 && filledCount >= totalCount;
+  const {
+    activeModel: activeInfiniteZoomModel,
+    automatedProviderLabel: activeAutomatedProviderLabel,
+  } = resolveActiveInfiniteZoomDisplay(settings);
   const viewProps = deriveAppViewProps({
     puzzle,
     settings,
@@ -788,7 +794,7 @@ export const App: React.FC = () => {
     showTutorial,
     showSettings,
     showPaletteOptions,
-    isGuidedGeminiOpen: isGuidedGeminiOpen || Boolean(guidedHandoffSession),
+    isGuidedGeminiOpen: (isGuidedGeminiOpen || Boolean(guidedHandoffSession)) && !showSettings,
     loadingStepIndex: loadingPayload?.stepIndex,
   });
 
@@ -1164,20 +1170,13 @@ export const App: React.FC = () => {
                 }
                 prompt={infiniteZoomPrompt}
                 provider={settings.infiniteZoomProvider}
-                model={
-                  settings.infiniteZoomProvider === 'OPENROUTER'
-                    ? settings.openRouterModel
-                    : settings.infiniteZoomProvider === 'OPENAI_BYOK'
-                      ? settings.openAiImageModel
-                      : settings.infiniteZoomProvider === 'XAI_BYOK'
-                        ? settings.xaiImageModel
-                        : settings.nanoBananaModel
-                }
+                model={activeInfiniteZoomModel}
                 guidedAiApp={settings.guidedAiApp}
                 onPromptChange={setInfiniteZoomPrompt}
                 onEnterSelectionMode={() => handleEnterRegionSelectionMode()}
                 onConfirmExtendBorders={handleConfirmExtendBorders}
                 onOpenProviderSettings={handleOpenInfiniteZoomProviderSettings}
+                isSettingsOpen={showSettings}
               />
             ) : null
           }
@@ -1457,11 +1456,13 @@ export const App: React.FC = () => {
       )}
 
       <GuidedGeminiHandoffModal
-        isOpen={Boolean(guidedHandoffSession)}
+        isOpen={Boolean(guidedHandoffSession) && !showSettings}
         handoff={guidedHandoffSession?.handoff ?? null}
         guidedAiApp={settings.guidedAiApp}
         onChangeGuidedAiApp={(app) => handleUpdateSettings((prev) => ({ ...prev, guidedAiApp: app }))}
         onOpenProviderSettings={handleOpenInfiniteZoomProviderSettings}
+        activeProviderLabel={activeAutomatedProviderLabel}
+        onRetryWithActiveProvider={handleRetryGuidedWithCurrentProvider}
         fallbackReason={guidedHandoffSession?.fallbackReason ?? null}
         isProcessing={Boolean(guidedHandoffSession?.isProcessing)}
         errorMessage={guidedHandoffSession?.errorMessage ?? null}

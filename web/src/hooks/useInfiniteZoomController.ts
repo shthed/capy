@@ -152,6 +152,7 @@ interface PendingGuidedContinuation {
   seq: number;
   isDecoding?: boolean;
   complete: (decoded: DecodedGeminiImage, signal: AbortSignal) => Promise<void>;
+  retryReq?: ProviderFlowDispatchParams;
   cleanup?: () => void;
 }
 
@@ -515,6 +516,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       if (outcome.status === 'guided') {
         pendingGuidedRef.current = {
           seq,
+          retryReq: req,
           complete: async (decoded, activeSignal) => {
             await req.onComplete(decoded, 'GUIDED_GEMINI', outcome.modelUsed, activeSignal);
           },
@@ -547,26 +549,34 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
       initialStatus: string,
       errorScope: string,
       fallbackErrorMessage: string,
-      task: (seq: number, signal: AbortSignal) => Promise<ProviderFlowStatus>
+      task: (seq: number, signal: AbortSignal) => Promise<ProviderFlowStatus>,
+      continuation?: { seq: number; initialProgress: number; cleanup?: () => void }
     ) => {
-      if (isUndoInFlightForActiveSnapshot()) return;
-      exitRegionSelectionMode();
-      clearUndoSubdivision();
-      clearGuidedSession();
-      clearInfiniteZoomError();
-
-      const seq = ++infiniteZoomOpSeqRef.current;
+      let seq: number;
+      if (continuation) {
+        seq = continuation.seq;
+      } else {
+        if (isUndoInFlightForActiveSnapshot()) return;
+        exitRegionSelectionMode();
+        clearUndoSubdivision();
+        clearGuidedSession();
+        clearInfiniteZoomError();
+        seq = ++infiniteZoomOpSeqRef.current;
+      }
       const controller = new AbortController();
       abortControllerRef.current = controller;
       setIsInfiniteZoomRunning(true);
       setIsLoading(true);
-      setLoadingProgress(0.05);
+      setLoadingProgress(continuation?.initialProgress ?? 0.05);
       setLoadingStatus(initialStatus);
       setLoadingPayload(null);
 
       let awaitingGuided = false;
       try {
         awaitingGuided = (await task(seq, controller.signal)) === 'awaiting-guided';
+        if (awaitingGuided && pendingGuidedRef.current && continuation?.cleanup) {
+          pendingGuidedRef.current.cleanup = continuation.cleanup;
+        }
       } catch (err) {
         if (!isAbortLikeError(err)) {
           reportSwallowed(errorScope, err);
@@ -574,6 +584,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
           showInfiniteZoomError(msg, err instanceof NanoBananaError ? err.code : undefined);
         }
       } finally {
+        if (!awaitingGuided) continuation?.cleanup?.();
         if (abortControllerRef.current === controller) abortControllerRef.current = null;
         if (seq === infiniteZoomOpSeqRef.current && !awaitingGuided) stopLoadingIndicator();
       }
@@ -743,36 +754,41 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
         return;
       }
 
-      const { seq, complete: completeFn, cleanup: cleanupFn } = pending;
+      const { seq, complete: completeFn, cleanup } = pending;
       pendingGuidedRef.current = null;
       setGuidedHandoffSession(null);
       onGuidedHandoffOpenChangeRef.current?.(false);
 
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      setIsInfiniteZoomRunning(true);
-      setIsLoading(true);
-      setLoadingProgress(0.45);
-      setLoadingStatus('Compositing generated artwork...');
-      setLoadingPayload(null);
-
-      try {
-        await completeFn(decodeRes.decoded, controller.signal);
-      } catch (err) {
-        if (!isAbortLikeError(err)) {
-          reportSwallowed('InfiniteZoom.guidedComplete', err);
-          const msg =
-            err instanceof Error && err.message ? err.message : 'Failed to apply generated image.';
-          showInfiniteZoomError(msg);
-        }
-      } finally {
-        cleanupFn?.();
-        if (abortControllerRef.current === controller) abortControllerRef.current = null;
-        if (seq === infiniteZoomOpSeqRef.current) stopLoadingIndicator();
-      }
+      await runAsyncZoomLifecycle(
+        'Compositing generated artwork...',
+        'InfiniteZoom.guidedComplete',
+        'Failed to apply generated image.',
+        async (_s, signal) => {
+          await completeFn(decodeRes.decoded, signal);
+          return 'completed';
+        },
+        { seq, initialProgress: 0.45, cleanup }
+      );
     },
-    [clearGuidedSession, onGuidedHandoffOpenChangeRef, setIsLoading, setLoadingPayload, setLoadingProgress, setLoadingStatus, showInfiniteZoomError, stopLoadingIndicator]
+    [clearGuidedSession, onGuidedHandoffOpenChangeRef, runAsyncZoomLifecycle]
   );
+
+  const handleRetryGuidedWithCurrentProvider = useCallback(() => {
+    const pending = pendingGuidedRef.current;
+    if (!pending || pending.isDecoding || !pending.retryReq || pending.seq !== infiniteZoomOpSeqRef.current) return;
+    const { seq, retryReq, cleanup } = pending;
+    pendingGuidedRef.current = null;
+    setGuidedHandoffSession(null);
+    onGuidedHandoffOpenChangeRef.current?.(false);
+    clearInfiniteZoomError();
+    void runAsyncZoomLifecycle(
+      'Generating with selected AI provider...',
+      'InfiniteZoom.guidedRetry',
+      'Failed to run Infinite Zoom with the selected provider.',
+      (activeSeq, signal) => dispatchProviderOrGuided(activeSeq, signal, retryReq),
+      { seq, initialProgress: 0.15, cleanup }
+    );
+  }, [clearInfiniteZoomError, dispatchProviderOrGuided, onGuidedHandoffOpenChangeRef, runAsyncZoomLifecycle]);
 
   const handleCancelGuidedGeminiHandoff = useCallback(() => {
     infiniteZoomOpSeqRef.current += 1;
@@ -872,7 +888,7 @@ export function useInfiniteZoomController(params: UseInfiniteZoomControllerParam
     handleRegionSelectTap, handleRegionSelectDragAdd, handleSwitchSelectionToPending,
     handleClearSelection: resetSelectionDraft,
     handleConfirmRegionSubdivision, handleConfirmExtendBorders,
-    handleCompleteGuidedGeminiHandoff, handleCancelGuidedGeminiHandoff,
+    handleCompleteGuidedGeminiHandoff, handleRetryGuidedWithCurrentProvider, handleCancelGuidedGeminiHandoff,
     handleUndoSubdivision, clearUndoSubdivision, cancelActiveInfiniteZoom,
     handleBeforeSnapshotResetOrSwitch,
   };

@@ -171,6 +171,33 @@ export function formatActiveProviderModelPill(
   return `Nano Banana ${modelMeta.shortLabel} • ${PROVIDER_SHORT_LABELS[effectiveProvider]}`;
 }
 
+export function resolveActiveInfiniteZoomDisplay(settings: {
+  infiniteZoomProvider: InfiniteZoomProviderMode;
+  nanoBananaModel: NanoBananaModelId;
+  openRouterModel: OpenRouterImageModelId;
+  openAiImageModel: OpenAiImageModelId;
+  xaiImageModel: XaiImageModelId;
+  guidedAiApp?: GuidedAiAppId;
+}): { activeModel: InfiniteZoomModelId; automatedProviderLabel: string | null } {
+  const isAndroid = NativeBridge.isAndroidNative();
+  const effectiveProvider = resolveVisibleProvider(settings.infiniteZoomProvider, isAndroid);
+  const activeModel: InfiniteZoomModelId =
+    effectiveProvider === 'OPENROUTER'
+      ? settings.openRouterModel
+      : effectiveProvider === 'OPENAI_BYOK'
+        ? settings.openAiImageModel
+        : effectiveProvider === 'XAI_BYOK'
+          ? settings.xaiImageModel
+          : settings.nanoBananaModel;
+  return {
+    activeModel,
+    automatedProviderLabel:
+      effectiveProvider !== 'GUIDED_GEMINI'
+        ? formatActiveProviderModelPill(effectiveProvider, activeModel, isAndroid, settings.guidedAiApp)
+        : null,
+  };
+}
+
 interface SideToggleRowProps {
   sides: BorderExtensionSides;
   testIdPrefix: string;
@@ -256,6 +283,7 @@ export interface InfiniteZoomToolbarButtonProps {
   onEnterSelectionMode: () => void;
   onConfirmExtendBorders: (sides: BorderExtensionSides, prompt: string) => void;
   onOpenProviderSettings?: () => void;
+  isSettingsOpen?: boolean;
 }
 
 export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps> = React.memo(
@@ -272,6 +300,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     onEnterSelectionMode,
     onConfirmExtendBorders,
     onOpenProviderSettings,
+    isSettingsOpen = false,
   }) => {
     const isAndroid = NativeBridge.isAndroidNative();
     const effectiveProvider: InfiniteZoomProviderMode = resolveVisibleProvider(
@@ -287,6 +316,8 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     const [isOpen, setIsOpen] = useState(false);
     const [showExtendConfig, setShowExtendConfig] = useState(false);
     const [prevDisabled, setPrevDisabled] = useState(disabled);
+    const [reopenAfterSettings, setReopenAfterSettings] = useState(false);
+    const [prevSettingsOpen, setPrevSettingsOpen] = useState(isSettingsOpen);
     const [sides, setSides] = useState<BorderExtensionSides>(DEFAULT_EXTEND_SIDES);
     const [popoverStyle, setPopoverStyle] = useState<{
       right: number;
@@ -302,12 +333,22 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
       if (disabled) {
         if (isOpen) setIsOpen(false);
         if (showExtendConfig) setShowExtendConfig(false);
+        if (reopenAfterSettings) setReopenAfterSettings(false);
+      }
+    }
+
+    if (isSettingsOpen !== prevSettingsOpen) {
+      setPrevSettingsOpen(isSettingsOpen);
+      if (prevSettingsOpen && !isSettingsOpen && reopenAfterSettings) {
+        setReopenAfterSettings(false);
+        if (!disabled) setIsOpen(true);
       }
     }
 
     const closePopover = useCallback(() => {
       setIsOpen(false);
       setShowExtendConfig(false);
+      setReopenAfterSettings(false);
     }, []);
 
     useEffect(() => {
@@ -402,9 +443,10 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     }, [closePopover, disabled, extendCheck.allowed, onConfirmExtendBorders, prompt, sides]);
 
     const handleOpenProviderSettings = useCallback(() => {
-      closePopover();
+      setReopenAfterSettings(true);
+      setIsOpen(false);
       onOpenProviderSettings?.();
-    }, [closePopover, onOpenProviderSettings]);
+    }, [onOpenProviderSettings]);
 
     const popoverNode =
       isOpen && !disabled ? (
@@ -577,6 +619,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
           title={disabled && disabledReason ? disabledReason : 'Infinite Zoom: Add Detail or Extend Borders'}
           onClick={() => {
             if (disabled) return;
+            setReopenAfterSettings(false);
             setIsOpen((prev) => !prev);
           }}
           className={`capy-fab-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2.5 rounded-full shadow-xl backdrop-blur-md border transition-all ${

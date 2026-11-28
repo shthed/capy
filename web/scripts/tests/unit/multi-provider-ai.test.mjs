@@ -403,6 +403,8 @@ export async function runMultiProviderAiUnitTests(vite) {
         isOpen: true,
         handoff: handoffChatGpt,
         guidedAiApp: 'GROK',
+        activeProviderLabel: 'GPT Image 2.6 • OpenRouter',
+        onRetryWithActiveProvider: () => {},
         fallbackReason: 'Puter balance exhausted.',
         onOpenProviderSettings: () => {},
         onImageReceived: () => {},
@@ -411,6 +413,8 @@ export async function runMultiProviderAiUnitTests(vite) {
     );
     assert.equal(modalHtml.includes('Free AI App Handoff'), true);
     assert.equal(modalHtml.includes('100% Free with Grok'), true);
+    assert.equal(modalHtml.includes('data-testid="guided-retry-provider-btn"'), true);
+    assert.equal(modalHtml.includes('Generate Now with GPT Image 2.6 • OpenRouter'), true);
     assert.equal(modalHtml.includes('data-testid="guided-app-chip-gemini"'), true);
     assert.equal(modalHtml.includes('data-testid="guided-app-chip-chatgpt"'), true);
     assert.equal(modalHtml.includes('data-testid="guided-app-chip-grok"'), true);
