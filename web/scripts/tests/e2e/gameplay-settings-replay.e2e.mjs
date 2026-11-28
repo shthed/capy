@@ -636,16 +636,87 @@ export async function runGameplaySettingsReplayE2e(ctx) {
     // -------------------------------------------------------------------------
     logE2eStart('Verifying Undo, Redo, long-press Replay scrubber, Follow Painting, Auto-Loop, swatch auto-dismiss & Free Colour auto-undo...');
 
-    // Single-step Undo & Redo
+    // Single-step Undo & Redo + automatic camera focus on the undone/redone region
     const undoBtn = await page.waitForSelector('[data-testid="undo-btn"]');
     assert.equal(await page.$('[data-testid="redo-btn"]'), null, 'Redo hidden before Undo');
+
+    // Zoom in and pan away so the last-painted region is off-center/offscreen before clicking Undo
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('=');
+    }
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowDown');
+    }
+    await page.waitForFunction(
+      () => {
+        const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return (s.zoomScale ?? 1) > 1.8 && Math.hypot(s.panOffsetX || 0, s.panOffsetY || 0) > 120;
+      },
+      undefined,
+      { timeout: 4000 }
+    );
+    const viewBeforeUndo = await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return { zoom: s.zoomScale || 1, x: s.panOffsetX || 0, y: s.panOffsetY || 0 };
+    });
+
     await undoBtn.click();
 
     const redoBtn = await page.waitForSelector('[data-testid="redo-btn"]');
     const [redoBox, undoBox] = await Promise.all([redoBtn.boundingBox(), undoBtn.boundingBox()]);
     assert.equal(redoBox.y < undoBox.y, true, 'Redo button must stack above Undo button');
+
+    await page.waitForFunction(
+      (prev) => {
+        const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        const dist = Math.hypot((s.panOffsetX || 0) - prev.x, (s.panOffsetY || 0) - prev.y);
+        return dist > 25 || Math.abs((s.zoomScale || 1) - prev.zoom) > 0.1;
+      },
+      viewBeforeUndo,
+      { timeout: 4000 }
+    );
+    const viewAfterUndo = await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return { zoom: s.zoomScale || 1, x: s.panOffsetX || 0, y: s.panOffsetY || 0 };
+    });
+
+    // Pan away again before Redo, then verify Redo returns camera focus to the redone region
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('ArrowLeft');
+      await page.keyboard.press('ArrowUp');
+    }
+    await page.waitForFunction(
+      (prev) => {
+        const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Math.hypot((s.panOffsetX || 0) - prev.x, (s.panOffsetY || 0) - prev.y) > 120;
+      },
+      viewAfterUndo,
+      { timeout: 4000 }
+    );
+    const viewBeforeRedo = await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      return { zoom: s.zoomScale || 1, x: s.panOffsetX || 0, y: s.panOffsetY || 0 };
+    });
+
     await redoBtn.click();
     await page.getByTestId('redo-btn').waitFor({ state: 'hidden', timeout: 3000 });
+
+    await page.waitForFunction(
+      ({ before, target }) => {
+        const s = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        const movedFromBefore = Math.hypot((s.panOffsetX || 0) - before.x, (s.panOffsetY || 0) - before.y);
+        const distToTarget = Math.hypot((s.panOffsetX || 0) - target.x, (s.panOffsetY || 0) - target.y);
+        return movedFromBefore > 25 && distToTarget < 25;
+      },
+      { before: viewBeforeRedo, target: viewAfterUndo },
+      { timeout: 4000 }
+    );
+
+    if (await page.$('[data-testid="reset-view-btn"]')) {
+      await page.locator('[data-testid="reset-view-btn"]').click();
+      await page.getByTestId('reset-view-btn').waitFor({ state: 'hidden', timeout: 3000 });
+    }
 
     // Long-press Undo (>=450ms) -> Replay Scrubber (minimised by default) -> Expand -> Scrub to step 2 -> Resume Here
     await longPressUndoForReplay(page);

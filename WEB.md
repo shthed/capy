@@ -87,7 +87,7 @@ flowchart TB
 ### Feature Hooks (`web/src/hooks/`)
 - **[`useLatest.ts`](./web/src/hooks/useLatest.ts)**: SSR-safe `useIsomorphicLayoutEffect` and `useLatest<T>` ref mirror helper.
 - **[`useSessionRestore.ts`](./web/src/hooks/useSessionRestore.ts)**: Launch session restoration running [`sessionRestorePipeline.ts`](./web/src/services/sessionRestorePipeline.ts) for `#s=<token>`, `?room=`, active saves, and starter sample bootstrap with cancellation guards.
-- **[`useUndoRedo.ts`](./web/src/hooks/useUndoRedo.ts)**: Synchronous ref-backed undo/redo history stacks with Co-op `PAINT_EVENT`/`UNFILL_EVENT` sync.
+- **[`useUndoRedo.ts`](./web/src/hooks/useUndoRedo.ts)**: Synchronous ref-backed undo/redo history stacks with Co-op `PAINT_EVENT`/`UNFILL_EVENT` sync and `onFocusRegion` viewport focus dispatch.
 - **[`useReplayController.ts`](./web/src/hooks/useReplayController.ts)**: Chronological replay playback, timeline scrubbing, offscreen fast-forward, and Follow Painting coordination.
 - **[`useCoopSession.ts`](./web/src/hooks/useCoopSession.ts)**: Co-op room hosting/joining, `#s=` share links, and `CoopRippleBuffer` peer event emission.
 - **[`useCloudSyncController.ts`](./web/src/hooks/useCloudSyncController.ts)**: Coalesced cloud library sync orchestration atop [`cloudSyncCoordinator.ts`](./web/src/services/cloudSyncCoordinator.ts) and [`ProviderContext.tsx`](./web/src/context/ProviderContext.tsx).
@@ -138,7 +138,7 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 
 ### Component Responsibilities & Key Interactions
 
-- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: Renders the puzzle via 3-tier offscreen canvas caching, hit-tests taps via `regionMap`, renders Co-op ripples, and centers `sourceImage` previews while `puzzle.worker.ts` runs.
+- **[`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx)**: Renders the puzzle via 3-tier offscreen canvas caching, hit-tests taps via `regionMap`, renders Co-op ripples and Undo/Redo focus pulses, smoothly glides/frames Undo/Redo target regions via `computeRegionFocusViewport` (`focusRegionRequest`, instant snap under `reducedMotion`), and centers `sourceImage` previews while `puzzle.worker.ts` runs.
 - **[`GameTopBar.tsx`](./web/src/components/GameTopBar.tsx)**:
   - Uses a two-lane flex layout (`topbar-left-lane` scrollable pill strip + `topbar-right-lane` fixed-shrink actions) so narrow `360px` mobile screens never clip or overlap in Normal or Large Text modes.
   - Displays puzzle title, `computeProgressPercentage` badge (capped at `99%` until `100%` complete), non-production `BETA` / `ALPHA #<num>` pill, sub-tile parent breadcrumb pill (`topbar-parent-puzzle-btn`), opt-in Co-op button/presence pill (`isCloudCoopUiEnabled()`), preview eye toggle, web-only fullscreen toggle (hidden on `NativeBridge.isAndroid`), upload shortcut, and Settings button—all `>= 38px` mobile touch targets with `aria-label`s.
@@ -174,8 +174,8 @@ Pointer events pass through empty overlay containers (`pointer-events-none`) dir
 - `activeColorId: number`: Selected 1-based palette color ID.
 - `filledRegionIds: Set<number>`: Colored region IDs preserving exact first-fill chronological insertion order across saves, reloads, and Free Color repaints (repainting updates `paintedRegionColors` without moving the region ID to the tail).
 - `paintedRegionColors: Map<number, number>`: Region ID $\rightarrow$ 1-based palette Color ID overrides in Free Color mode.
-- `undoStack: UndoHistoryEntry[]` & `redoStack: UndoHistoryEntry[]`: Synchronous ref-backed stacks recording `{ regionId, wasPreviouslyFilled, previousPaintedColorId, paintedColorId }`, broadcasting `'PAINT_EVENT'` for Free Color repaints or `'UNFILL_EVENT'` when undoing a first-time fill across Co-op peers.
-- `hintRegionId: number | null` & `isPreviewMode: boolean`: Active hint target and unmasked source-artwork preview state.
+- `undoStack: UndoHistoryEntry[]` & `redoStack: UndoHistoryEntry[]`: Synchronous ref-backed stacks recording `{ regionId, wasPreviouslyFilled, previousPaintedColorId, paintedColorId }`, broadcasting `'PAINT_EVENT'` for Free Color repaints or `'UNFILL_EVENT'` when undoing a first-time fill across Co-op peers, and dispatching `focusRegionRequest` so [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) smoothly frames and highlights the affected region.
+- `hintRegionId: number | null`, `focusRegionRequest: FocusRegionRequest | null` & `isPreviewMode: boolean`: Active hint target, Undo/Redo focus request, and unmasked source-artwork preview state.
 
 ### 2. Chronological Replay & Historical Resumption State
 - **Zero-Allocation Incremental Scrubbing**: During playback and pointer scrubbing, [`PuzzleCanvas.tsx`](./web/src/components/PuzzleCanvas.tsx) mutates `paintedCacheRef.current` and `prevColorsRef.current` in place and repaints only the dirty bounding box via `putImageData`.
