@@ -53,7 +53,9 @@ Extends `androidx.activity.ComponentActivity` using `enableEdgeToEdge(statusBarS
     - All snapshot disk and fsync I/O runs off the UI thread on a dedicated single-thread `playGamesIoExecutor` (shut down cleanly in `onDestroy()` with `!isDestroyed && !isFinishing` guards before `runOnUiThread` dispatch).
     - Non-blob JSON slots use `RESOLUTION_POLICY_MANUAL` with read-before-write CRDT checks (`decideSnapshotPushAction`); immutable `pgblob_*` binary chunks use `RESOLUTION_POLICY_MOST_RECENTLY_MODIFIED`. See [`CLOUD.md`](./CLOUD.md) for the full cross-device CRDT sync protocol.
     - Android WebView stays strictly on Play Games v2 for Google auth (never falling back to web GIS popups) and hides browser APK cards, `release-channel-card`, and web-only Fullscreen buttons via `!NativeBridge.isAndroid`.
-- **Foreground / Background WebView Lifecycle Guard (`onPause` / `onResume` / `onDestroy`)**: `MainActivity` overrides `onPause()` (`webView?.onPause()`) and `onResume()` (`webView?.onResume()`) alongside `onDestroy()` (`shareDecodeExecutor.shutdownNow()`, `playGamesIoExecutor.shutdownNow()`, `webView?.destroy()`) so WebView rendering, `requestAnimationFrame` loops, and Web Audio suspend cleanly when backgrounded.
+- **Foreground / Background WebView Lifecycle Guard (`onPause` / `onResume` / `onDestroy`) & Renderer Crash Recovery (`onRenderProcessGone`)**:
+  - `MainActivity` overrides `onPause()` (`webView?.onPause()`) and `onResume()` (`webView?.onResume()`) alongside `onDestroy()` (`shareDecodeExecutor.shutdownNow()`, `playGamesIoExecutor.shutdownNow()`, cancelling `fileUploadCallback`, and detaching/destroying `webView`) so WebView rendering, `requestAnimationFrame` loops, and Web Audio suspend cleanly when backgrounded.
+  - On Android API 26+, `MainActivity` overrides `WebViewClient.onRenderProcessGone(...)` and returns `true` so renderer crashes or OS low-memory kills never terminate the host app. It logs structured telemetry (`didCrash`, `rendererPriorityAtExit`, recent recovery count, total exits), removes and destroys the dead `WebView`, resets transient modal/file-picker state, defers recreation until `onResume()` when terminated while paused/backgrounded, and consults [`RendererCrashGuard.kt`](./app/src/main/java/com/capyboop/paint/RendererCrashGuard.kt) (at most `2` automatic `createWebView()` recreations per `60` seconds with `CapyAndroidBridge` re-attached, then a static **Tap to reload** fallback screen that resets the guard on tap).
 
 ### [`CapyAndroidBridge.kt`](./app/src/main/java/com/capyboop/paint/CapyAndroidBridge.kt) & Internal Delegates
 Registered via `webView.addJavascriptInterface(bridge, "CapyAndroid")` with `originGuard = { isTrustedPageLoaded }`. `WebViewAssetLoader` responses attach strict `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, and `X-Frame-Options` headers, and bridge callbacks pass escaped JSON literals through `JSON.parse`. Strict `19`-method `@JavascriptInterface` <-> `CapyAndroidInterface` parity is enforced by `npm run test:sanity` (with `showRewardedAd` permanently removed).
@@ -155,7 +157,7 @@ cd web && npm ci && npm run build
 # OR directly via Gradle:
 ./gradlew app:buildWeb
 
-# Run JUnit4 unit tests for the Android launcher (`CapyAndroidBridgeTest.kt` + `AndroidTvManifestAndBridgeTest.kt`)
+# Run JUnit4 unit tests for the Android launcher (`CapyAndroidBridgeTest.kt`, `AndroidTvManifestAndBridgeTest.kt`, `RendererCrashGuardTest.kt`)
 ./gradlew app:testDebugUnitTest
 
 # Build Debug APK (outputs to app/build/outputs/apk/debug/app-debug.apk)
