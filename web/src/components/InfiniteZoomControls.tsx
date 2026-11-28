@@ -255,6 +255,7 @@ export interface InfiniteZoomToolbarButtonProps {
   onPromptChange: (next: string) => void;
   onEnterSelectionMode: () => void;
   onConfirmExtendBorders: (sides: BorderExtensionSides, prompt: string) => void;
+  onOpenProviderSettings?: () => void;
 }
 
 export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps> = React.memo(
@@ -270,6 +271,7 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
     onPromptChange,
     onEnterSelectionMode,
     onConfirmExtendBorders,
+    onOpenProviderSettings,
   }) => {
     const isAndroid = NativeBridge.isAndroidNative();
     const effectiveProvider: InfiniteZoomProviderMode = resolveVisibleProvider(
@@ -399,6 +401,11 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
       onConfirmExtendBorders(sides, prompt);
     }, [closePopover, disabled, extendCheck.allowed, onConfirmExtendBorders, prompt, sides]);
 
+    const handleOpenProviderSettings = useCallback(() => {
+      closePopover();
+      onOpenProviderSettings?.();
+    }, [closePopover, onOpenProviderSettings]);
+
     const popoverNode =
       isOpen && !disabled ? (
         <div
@@ -439,12 +446,24 @@ export const InfiniteZoomToolbarButton: React.FC<InfiniteZoomToolbarButtonProps>
                 <X size={16} />
               </button>
             </div>
-            <div
-              data-testid="iz-active-provider-pill"
-              className="inline-flex items-center gap-1 max-w-full rounded-full bg-slate-950/85 border border-slate-700/80 px-2 py-0.5 text-[10px] font-semibold text-sky-300"
-            >
-              <Cpu size={10} className="flex-shrink-0" />
-              <span className="truncate">{activeProviderPill}</span>
+            <div className="flex items-center justify-between gap-1.5 min-w-0">
+              <div
+                data-testid="iz-active-provider-pill"
+                className="inline-flex items-center gap-1 min-w-0 rounded-full bg-slate-950/85 border border-slate-700/80 px-2 py-0.5 text-[10px] font-semibold text-sky-300"
+              >
+                <Cpu size={10} className="flex-shrink-0" />
+                <span className="truncate">{activeProviderPill}</span>
+              </div>
+              {onOpenProviderSettings && (
+                <button
+                  type="button"
+                  data-testid="iz-change-provider-btn"
+                  onClick={handleOpenProviderSettings}
+                  className="inline-flex items-center justify-center px-2.5 py-1 min-h-[32px] rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-600/80 text-[10px] font-bold text-slate-100 transition-colors shrink-0 cursor-pointer"
+                >
+                  Switch AI
+                </button>
+              )}
             </div>
           </div>
 

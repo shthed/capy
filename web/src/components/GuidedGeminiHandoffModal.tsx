@@ -283,6 +283,7 @@ export interface GuidedGeminiHandoffModalProps {
   handoff: GuidedGeminiHandoffPackage | null;
   guidedAiApp?: GuidedAiAppId;
   onChangeGuidedAiApp?: (app: GuidedAiAppId) => void;
+  onOpenProviderSettings?: () => void;
   fallbackReason?: string | null;
   isProcessing?: boolean;
   errorMessage?: string | null;
@@ -296,6 +297,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
     handoff,
     guidedAiApp,
     onChangeGuidedAiApp,
+    onOpenProviderSettings,
     fallbackReason = null,
     isProcessing = false,
     errorMessage = null,
@@ -789,10 +791,10 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
                   id={titleId}
                   className="text-sm font-extrabold text-slate-100 truncate"
                 >
-                  Free Gemini App Handoff
+                  Free AI App Handoff
                 </h2>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {modeLabel} • 100% Free with Gemini
+                  {modeLabel} • 100% Free with {activeAppMeta.label}
                 </p>
               </div>
             </div>
@@ -800,7 +802,7 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
             <button
               type="button"
               disabled={isProcessing}
-              aria-label="Close Guided Gemini Handoff"
+              aria-label="Close Guided AI Handoff"
               onClick={onCancel}
               className="capy-icon-btn inline-flex items-center justify-center min-w-[44px] min-h-[44px] p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
             >
@@ -820,10 +822,26 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
               <div
                 role="status"
                 data-testid="guided-gemini-fallback-notice"
-                className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/45 text-xs text-amber-200 min-w-0"
+                className="flex flex-col gap-2 px-3 py-2 rounded-xl bg-amber-500/15 border border-amber-400/45 text-xs text-amber-200 min-w-0"
               >
-                <AlertTriangle size={14} className="text-amber-300 shrink-0 mt-0.5" />
-                <span className="min-w-0 break-words leading-snug">{fallbackReason}</span>
+                <div className="flex items-start gap-2 min-w-0">
+                  <AlertTriangle size={14} className="text-amber-300 shrink-0 mt-0.5" />
+                  <span className="min-w-0 break-words leading-snug">{fallbackReason}</span>
+                </div>
+                {onOpenProviderSettings && (
+                  <button
+                    type="button"
+                    data-testid="guided-fallback-switch-provider-btn"
+                    disabled={isProcessing}
+                    onClick={() => {
+                      onCancel();
+                      onOpenProviderSettings();
+                    }}
+                    className="self-start inline-flex items-center justify-center gap-1.5 px-3 py-1.5 min-h-[36px] rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-extrabold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <span>Switch AI Provider (OpenRouter / ChatGPT / Grok)</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -934,13 +952,29 @@ export const GuidedGeminiHandoffModal: React.FC<GuidedGeminiHandoffModalProps> =
 
           {/* Sticky Footer */}
           <div
-            className="capy-guided-gemini-footer flex items-center justify-end gap-2 px-4 py-2.5 border-t border-slate-800 bg-slate-950/80 shrink-0"
+            className="capy-guided-gemini-footer flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-slate-800 bg-slate-950/80 shrink-0"
             style={{
               paddingBottom: 'max(0.75rem, calc(var(--sab, 0px) + 0.5rem))',
               paddingLeft: 'max(1rem, var(--sal, 0px))',
               paddingRight: 'max(1rem, var(--sar, 0px))',
             }}
           >
+            {onOpenProviderSettings ? (
+              <button
+                type="button"
+                data-testid="guided-switch-provider-btn"
+                disabled={isProcessing}
+                onClick={() => {
+                  onCancel();
+                  onOpenProviderSettings();
+                }}
+                className="inline-flex items-center justify-center px-3 py-2 min-h-[44px] rounded-xl bg-slate-900 hover:bg-slate-800 border border-sky-400/45 text-xs font-bold text-sky-300 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Switch AI Provider
+              </button>
+            ) : (
+              <span />
+            )}
             <button
               type="button"
               data-testid="guided-gemini-cancel-btn"

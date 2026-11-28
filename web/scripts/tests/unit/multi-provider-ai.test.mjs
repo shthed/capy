@@ -403,13 +403,19 @@ export async function runMultiProviderAiUnitTests(vite) {
         isOpen: true,
         handoff: handoffChatGpt,
         guidedAiApp: 'GROK',
+        fallbackReason: 'Puter balance exhausted.',
+        onOpenProviderSettings: () => {},
         onImageReceived: () => {},
         onCancel: () => {},
       })
     );
+    assert.equal(modalHtml.includes('Free AI App Handoff'), true);
+    assert.equal(modalHtml.includes('100% Free with Grok'), true);
     assert.equal(modalHtml.includes('data-testid="guided-app-chip-gemini"'), true);
     assert.equal(modalHtml.includes('data-testid="guided-app-chip-chatgpt"'), true);
     assert.equal(modalHtml.includes('data-testid="guided-app-chip-grok"'), true);
+    assert.equal(modalHtml.includes('data-testid="guided-fallback-switch-provider-btn"'), true);
+    assert.equal(modalHtml.includes('data-testid="guided-switch-provider-btn"'), true);
     assert.equal(modalHtml.includes('Copy Prompt &amp; Open Grok'), true);
 
     const openRouterCardHtml = renderToStaticMarkup(

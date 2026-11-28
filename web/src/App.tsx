@@ -839,6 +839,27 @@ export const App: React.FC = () => {
     setShowSettings(true);
   }, []);
 
+  const handleOpenInfiniteZoomProviderSettings = useCallback(() => {
+    setSettingsInitialTab(3);
+    setShowSettings(true);
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      let attempts = 0;
+      const scrollToProvider = () => {
+        const el = document.getElementById('iz-provider-select');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus({ preventScroll: true });
+          return;
+        }
+        attempts += 1;
+        if (attempts < 15) {
+          window.setTimeout(scrollToProvider, 80);
+        }
+      };
+      window.setTimeout(scrollToProvider, 60);
+    }
+  }, []);
+
   const handleCloseSettings = useCallback(() => {
     setShowSettings(false);
   }, []);
@@ -1148,6 +1169,7 @@ export const App: React.FC = () => {
                 onPromptChange={setInfiniteZoomPrompt}
                 onEnterSelectionMode={() => handleEnterRegionSelectionMode()}
                 onConfirmExtendBorders={handleConfirmExtendBorders}
+                onOpenProviderSettings={handleOpenInfiniteZoomProviderSettings}
               />
             ) : null
           }
@@ -1431,6 +1453,7 @@ export const App: React.FC = () => {
         handoff={guidedHandoffSession?.handoff ?? null}
         guidedAiApp={settings.guidedAiApp}
         onChangeGuidedAiApp={(app) => handleUpdateSettings((prev) => ({ ...prev, guidedAiApp: app }))}
+        onOpenProviderSettings={handleOpenInfiniteZoomProviderSettings}
         fallbackReason={guidedHandoffSession?.fallbackReason ?? null}
         isProcessing={Boolean(guidedHandoffSession?.isProcessing)}
         errorMessage={guidedHandoffSession?.errorMessage ?? null}

@@ -1022,14 +1022,15 @@ async function runStage1(ctx) {
       await replayBtn.waitFor({ state: 'visible', timeout: 3000 });
       await sparklesBtn.waitFor({ state: 'visible', timeout: 3000 });
 
-      // Menu > Create: verify provider/model/resolution controls & device-local BYOK isolation
-      await page.getByTestId('topbar-settings-btn').click();
-      await page.getByTestId('settings-tab-create').click();
+      // Sparkles > Switch AI shortcut jumps directly to Menu > Create > Generation Provider
+      await sparklesBtn.click();
+      await page.getByTestId('iz-change-provider-btn').waitFor({ state: 'visible', timeout: 3000 });
+      await page.getByTestId('iz-change-provider-btn').click();
 
       const providerSelect = page.getByTestId('iz-provider-select');
       const modelSelect = page.getByTestId('iz-model-select');
       const resSelect = page.getByTestId('iz-resolution-select');
-      await providerSelect.waitFor({ state: 'visible', timeout: 3000 });
+      await providerSelect.waitFor({ state: 'visible', timeout: 5000 });
 
       const providerOptions = await providerSelect
         .locator('option')

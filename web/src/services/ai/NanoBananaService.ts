@@ -789,7 +789,7 @@ function classifyPuterError(err: unknown): NanoBananaError {
   ) {
     return new NanoBananaError(
       'PUTER_BALANCE_EXHAUSTED',
-      'Your Puter usage balance is exhausted. Switch to Free Guided Gemini Handoff or Direct Gemini API (BYOK).',
+      'Your Puter usage balance is exhausted. Use Free Guided AI Handoff below, or switch to OpenRouter, Gemini, ChatGPT, or Grok API.',
       true,
       err
     );
