@@ -1,16 +1,19 @@
 /**
- * [E2E 13-15] Printable SVG + Sub-Tile Breadcrumbs + Co-op UNFILL_EVENT, Release Channels & Co-op WELCOME_STATE/Replay rewind/Reset Epoch.
+ * [E2E 13-15] Printable SVG + Sub-Tile Breadcrumbs + Co-op UNFILL_EVENT, Release Channels & Co-op WELCOME_STATE/non-destructive Replay/Reset Epoch.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   createBootedContext,
   getStableBoundingBox,
+  hostCoopRoom,
+  joinCoopRoom,
   longPressUndoForReplay,
   readTotalRemainingRegions,
   tapCanvasGrid,
   waitForAnimationFrames,
   waitForPuzzleLoaded,
+  withMouseDrag,
 } from './helpers.mjs';
 
 export async function runSvgCoopChannelsE2e(ctx) {
@@ -61,7 +64,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     });
     assert.ok(parentSnapId, 'Parent puzzle must have an activeSnapshotId');
 
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-create').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('settings-tab-create').click();
     await page.getByTestId('infinite-zoom-subtile-btn').waitFor({ state: 'visible', timeout: 3000 });
@@ -173,13 +176,12 @@ export async function runSvgCoopChannelsE2e(ctx) {
     }
 
     // Ensure Enable Undo Action is ON and Free Colour Mode is OFF on Peer A
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('settings-tab-settings').click();
     const currentSettings11c = await page.evaluate(() => {
       return JSON.parse(localStorage.getItem('capy_user_settings_v8') || '{}');
     });
-    await page.locator('button:has(span:text-is("Settings"))').click();
     if (currentSettings11c.isFreeColorMode) {
       await page.getByTestId('setting-free-color-mode').click();
     }
@@ -191,14 +193,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     await page.getByTestId('undo-btn').waitFor({ state: 'visible', timeout: 5000 });
 
     // Host Co-op room on Peer A and join on Peer B
-    await page.getByTestId('topbar-coop-btn').click();
-    await page.getByTestId('host-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByTestId('host-coop-room-btn').click();
-    await page.getByTestId('active-coop-room-code').waitFor({ state: 'visible', timeout: 5000 });
-    const undoRoomBadge = await page.getByTestId('active-coop-room-code').innerText();
-    const undoRoomCode = undoRoomBadge.match(/Room\s+([A-Z0-9]{6})/)[1];
-    await page.keyboard.press('Escape');
-    await page.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    const undoRoomCode = await hostCoopRoom(page);
 
     const peerB = await context.newPage();
     attachErrorListeners(peerB, 'peerB-unfill');
@@ -208,22 +203,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       await peerB.locator('[data-testid="replay-exit-btn"]').click();
       await peerB.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
     }
-    await peerB.getByTestId('topbar-coop-btn').click();
-    await peerB.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
-    await peerB.getByTestId('join-coop-room-input').fill(undoRoomCode);
-    await peerB.getByTestId('join-coop-room-btn').click();
-    await peerB.waitForFunction(
-      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
-      undefined,
-      { timeout: 5000 }
-    );
-    assert.equal(
-      (await peerB.getByTestId('active-coop-room-code').innerText()).includes('2 online'),
-      true,
-      'Peer B must join Peer A Co-op room with 2 peers online'
-    );
-    await peerB.keyboard.press('Escape');
-    await peerB.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    await joinCoopRoom(peerB, undoRoomCode);
 
     const remainingBeforeA = await readTotalRemainingRegions(page);
     const remainingBeforeB = await readTotalRemainingRegions(peerB);
@@ -300,7 +280,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       0,
       'Default Stable/Dev root view must not display topbar-channel-badge clutter'
     );
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-about').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('settings-tab-about').click();
     const channelCard = page.getByTestId('release-channel-card');
@@ -349,11 +329,11 @@ export async function runSvgCoopChannelsE2e(ctx) {
     logE2ePass('Release Channel switcher card, Beta APK link, and BETA HUD pill verified.');
 
     // -------------------------------------------------------------------------
-    // 15. Co-op Welcome Persistence, Replay Rewind UNFILL, Reset Epoch & Mobile Replay Controls
+    // 15. Co-op Welcome Persistence, Non-Destructive Replay Scrubbing, Reset Epoch & Mobile Replay Controls
     // -------------------------------------------------------------------------
-    logE2eStart('Verifying Co-op WELCOME_STATE reload persistence, Replay Scrubber rewind UNFILL, Reset Epoch & Mobile Replay Controls...');
+    logE2eStart('Verifying Co-op WELCOME_STATE reload persistence, non-destructive Replay scrubbing, Reset Epoch & Mobile Replay Controls...');
 
-    // 12a. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, Replay Resume Here UNFILL & Reset Progress resetEpoch
+    // 12a. F7 & F8 (BUG-1, M-08, F-01): 2-peer BroadcastChannel WELCOME_STATE reload persistence, non-destructive Replay scrubbing & Reset Progress resetEpoch
     // Reset active puzzle cleanly first so both Peer A and localStorage start at 0 filled regions
     await page.getByTestId('topbar-coop-btn').click();
     await page.getByTestId('reset-progress-btn').waitFor({ state: 'visible', timeout: 3000 });
@@ -400,19 +380,12 @@ export async function runSvgCoopChannelsE2e(ctx) {
     });
     assert.ok(
       peerAStateBeforeRoom.activeSnapshotId && peerAStateBeforeRoom.filledCount >= 3,
-      `Expected >= 3 filled regions on Peer A before Co-op welcome/rewind test, got ${peerAStateBeforeRoom.filledCount}`
+      `Expected >= 3 filled regions on Peer A before Co-op welcome/replay test, got ${peerAStateBeforeRoom.filledCount}`
     );
     const remainingPeerABeforeJoin = await readTotalRemainingRegions(page);
 
     // Host Co-op room on Peer A (live React state + room seedToken carry the >= 3 filled regions)
-    await page.getByTestId('topbar-coop-btn').click();
-    await page.getByTestId('host-coop-room-btn').waitFor({ state: 'visible', timeout: 3000 });
-    await page.getByTestId('host-coop-room-btn').click();
-    await page.getByTestId('active-coop-room-code').waitFor({ state: 'visible', timeout: 5000 });
-    const s2RoomText = await page.getByTestId('active-coop-room-code').innerText();
-    const s2RoomCode = s2RoomText.match(/Room\s+([A-Z0-9]{6})/)[1];
-    await page.keyboard.press('Escape');
-    await page.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    const s2RoomCode = await hostCoopRoom(page);
     // INTENTIONAL_TIMING_WINDOW: debounce settle past 350ms viewport-save timer before clearing capy_active_session_v8 for WELCOME_STATE test
     await page.waitForTimeout(450);
 
@@ -428,20 +401,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
     }, peerAStateBeforeRoom.activeSnapshotId);
 
-    await peerS2.getByTestId('topbar-coop-btn').click();
-    await peerS2.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
-    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
-    await peerS2.getByTestId('join-coop-room-btn').click();
-    await peerS2.waitForFunction(
-      (expectedCount) =>
-        Boolean(document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online')) &&
-        Number(document.querySelector('[data-testid="topbar-saves-btn"]')?.getAttribute('data-filled-count')) ===
-          expectedCount,
-      peerAStateBeforeRoom.filledCount,
-      { timeout: 5000 }
-    );
-    await peerS2.keyboard.press('Escape');
-    await peerS2.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    await joinCoopRoom(peerS2, s2RoomCode, { waitForFilledCount: peerAStateBeforeRoom.filledCount });
 
     assert.equal(
       Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
@@ -476,20 +436,10 @@ export async function runSvgCoopChannelsE2e(ctx) {
       'BUG-1: Reloading joining peer immediately after WELCOME_STATE must retain all welcomed regions'
     );
 
-    // Rejoin s2RoomCode on Peer B so both peers are live for Replay Rewind & Reset Progress sync
-    await peerS2.getByTestId('topbar-coop-btn').click();
-    await peerS2.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
-    await peerS2.getByTestId('join-coop-room-input').fill(s2RoomCode);
-    await peerS2.getByTestId('join-coop-room-btn').click();
-    await peerS2.waitForFunction(
-      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
-      undefined,
-      { timeout: 5000 }
-    );
-    await peerS2.keyboard.press('Escape');
-    await peerS2.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    // Rejoin s2RoomCode on Peer B so both peers are live for non-destructive Replay & Reset Progress sync
+    await joinCoopRoom(peerS2, s2RoomCode);
 
-    // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and click Resume Here
+    // Launch Replay on Peer A via Saves -> Replay, scrub backward to step 1, and exit non-destructively
     await page.getByTestId('topbar-coop-btn').click();
     await page.getByTestId(`save-card-${peerAStateBeforeRoom.activeSnapshotId}`).waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId(`save-card-${peerAStateBeforeRoom.activeSnapshotId}`).click();
@@ -511,6 +461,28 @@ export async function runSvgCoopChannelsE2e(ctx) {
     );
     await page.getByTestId('replay-exit-btn').click();
     await page.getByTestId('replay-controls-window').waitFor({ state: 'hidden', timeout: 3000 });
+
+    // Exiting Replay after scrubbing backward must be non-destructive on both Peer A and Peer B
+    assert.equal(
+      Number(await page.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      peerAStateBeforeRoom.filledCount,
+      'Non-destructive Replay exit must preserve Peer A data-filled-count'
+    );
+    assert.equal(
+      await readTotalRemainingRegions(page),
+      remainingPeerABeforeJoin,
+      'Non-destructive Replay exit must preserve Peer A remaining region count'
+    );
+    assert.equal(
+      Number(await peerS2.getByTestId('topbar-saves-btn').getAttribute('data-filled-count')),
+      peerAStateBeforeRoom.filledCount,
+      'Non-destructive Replay exit must preserve Peer B data-filled-count'
+    );
+    assert.equal(
+      await readTotalRemainingRegions(peerS2),
+      remainingPeerABeforeJoin,
+      'Non-destructive Replay exit must preserve Peer B remaining region count'
+    );
 
     // Trigger Reset Progress on Peer A and verify Peer B clears to 0 filled regions + resetEpoch increments
     await page.getByTestId('topbar-coop-btn').click();
@@ -610,7 +582,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
     await waitForPuzzleLoaded(page);
 
     // Enable Auto-Loop Replay (true), 0.5x speed, and Replay on Load (true) in Tab 1 collapsible Replay section
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-settings').waitFor({ state: 'visible', timeout: 3000 });
     await page.getByTestId('settings-tab-settings').click();
     const replaySectionToggle = page.getByTestId('settings-section-replay-toggle');
@@ -679,7 +651,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       'replay-exit-btn',
     ]) {
       const rBtn = page.getByTestId(replayBtnId);
-      const rBox = await rBtn.boundingBox();
+      const rBox = await getStableBoundingBox(rBtn);
       assert.ok(
         rBox && rBox.width >= 38 && rBox.height >= 38,
         `Mobile 360px ${replayBtnId} must be >=38x38px (got ${JSON.stringify(rBox)})`
@@ -690,13 +662,23 @@ export async function runSvgCoopChannelsE2e(ctx) {
       );
     }
 
-    const windowBox360 = await mobileReplayWin.boundingBox();
-    const exitBox360 = await page.getByTestId('replay-exit-btn').boundingBox();
-    const headerBox360 = await page.locator('header').first().boundingBox();
-    const zoomOutMin360 = await page.getByTestId('zoom-out-btn').boundingBox();
-    const undoMin360 = await page.getByTestId('undo-btn').boundingBox();
-    const paintMin360 = await page.locator('[data-testid="paint-mode-btn"]').boundingBox();
-    const paletteMin360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    const [
+      windowBox360,
+      exitBox360,
+      headerBox360,
+      zoomOutMin360,
+      undoMin360,
+      paintMin360,
+      paletteMin360,
+    ] = await Promise.all([
+      getStableBoundingBox(mobileReplayWin),
+      getStableBoundingBox(page.getByTestId('replay-exit-btn')),
+      getStableBoundingBox(page.locator('header').first()),
+      getStableBoundingBox(page.getByTestId('zoom-out-btn')),
+      getStableBoundingBox(page.getByTestId('undo-btn')),
+      getStableBoundingBox(page.locator('[data-testid="paint-mode-btn"]')),
+      getStableBoundingBox(page.locator('[aria-label="Palette dock"]')),
+    ]);
     assert.ok(
       windowBox360 && exitBox360 && headerBox360 && zoomOutMin360 && undoMin360 && paintMin360 && paletteMin360,
       'Expected visible bounding boxes for mobile replay HUD, FloatingActions (including Undo & Paint Mode), TopBar, and PaletteDock at 360x800'
@@ -809,7 +791,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       );
     }
     await page.locator('[aria-label="Palette dock"]').waitFor({ state: 'visible', timeout: 5000 });
-    const paletteAfterDismiss360 = await page.locator('[aria-label="Palette dock"]').boundingBox();
+    const paletteAfterDismiss360 = await getStableBoundingBox(page.locator('[aria-label="Palette dock"]'));
     assert.ok(paletteAfterDismiss360);
     assert.equal(
       Math.abs(paletteAfterDismiss360.y - paletteMin360.y) < 1.5,
@@ -838,11 +820,15 @@ export async function runSvgCoopChannelsE2e(ctx) {
     );
     const canvasBoxFlow1 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow1 && canvasBoxFlow1.width > 50 && canvasBoxFlow1.height > 50, 'PuzzleCanvas must be visible');
-    await page.mouse.move(canvasBoxFlow1.x + canvasBoxFlow1.width * 0.35, canvasBoxFlow1.y + canvasBoxFlow1.height * 0.45);
-    await page.mouse.down();
-    await page.mouse.move(canvasBoxFlow1.x + canvasBoxFlow1.width * 0.65, canvasBoxFlow1.y + canvasBoxFlow1.height * 0.55, { steps: 10 });
-    await page.mouse.up();
-    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await withMouseDrag(
+      page,
+      canvasBoxFlow1.x + canvasBoxFlow1.width * 0.35,
+      canvasBoxFlow1.y + canvasBoxFlow1.height * 0.45,
+      canvasBoxFlow1.x + canvasBoxFlow1.width * 0.65,
+      canvasBoxFlow1.y + canvasBoxFlow1.height * 0.55,
+      { steps: 10 }
+    );
+    await waitForAnimationFrames(page, 2);
 
     // Flow 2: Post-load replay with Paint Mode ALREADY ON -> 100% -> first canvas drag paints & dismisses ReplayControls
     await page.evaluate(() => {
@@ -855,10 +841,14 @@ export async function runSvgCoopChannelsE2e(ctx) {
     await page.locator('[data-testid="replay-play-pause-btn"][aria-label="Replay Again"]').waitFor({ state: 'visible', timeout: 15000 });
     const canvasBoxFlow2 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow2);
-    await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.3, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.4);
-    await page.mouse.down();
-    await page.mouse.move(canvasBoxFlow2.x + canvasBoxFlow2.width * 0.7, canvasBoxFlow2.y + canvasBoxFlow2.height * 0.6, { steps: 10 });
-    await page.mouse.up();
+    await withMouseDrag(
+      page,
+      canvasBoxFlow2.x + canvasBoxFlow2.width * 0.3,
+      canvasBoxFlow2.y + canvasBoxFlow2.height * 0.4,
+      canvasBoxFlow2.x + canvasBoxFlow2.width * 0.7,
+      canvasBoxFlow2.y + canvasBoxFlow2.height * 0.6,
+      { steps: 10 }
+    );
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await mobileReplayWin.isVisible(), false, 'First drag in Paint Mode after post-load replay must dismiss ReplayControls');
 
@@ -878,10 +868,14 @@ export async function runSvgCoopChannelsE2e(ctx) {
     await mobileReplayWin.waitFor({ state: 'visible', timeout: 5000 });
     const canvasBoxFlow4 = await page.locator('canvas').first().boundingBox();
     assert.ok(canvasBoxFlow4);
-    await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5);
-    await page.mouse.down();
-    await page.mouse.move(canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5 + 18, canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5 + 12, { steps: 4 });
-    await page.mouse.up();
+    await withMouseDrag(
+      page,
+      canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5,
+      canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5,
+      canvasBoxFlow4.x + canvasBoxFlow4.width * 0.5 + 18,
+      canvasBoxFlow4.y + canvasBoxFlow4.height * 0.5 + 12,
+      { steps: 4 }
+    );
     await page.locator('[data-testid="paint-mode-btn"]').click();
     await mobileReplayWin.waitFor({ state: 'hidden', timeout: 3000 });
     assert.equal(await mobileReplayWin.isVisible(), false, 'Toggle Paint Mode after minor pan during post-load replay must dismiss ReplayControls');
@@ -938,7 +932,7 @@ export async function runSvgCoopChannelsE2e(ctx) {
       localStorage.setItem('capy_user_settings_v8', JSON.stringify(s));
     });
     await page.waitForFunction(() => window.innerWidth === 1280, undefined, { timeout: 3000 });
-    logE2ePass('360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, Replay Scrubber rewind UNFILL, and CRDT resetEpoch verified.');
+    logE2ePass('360px mobile ReplayControls fit, save-load replayLoop reset & auto-resume, Co-op WELCOME_STATE persistence, non-destructive Replay exit preservation, and CRDT resetEpoch verified.');
   } finally {
     if (ownBoot) await context.close();
   }

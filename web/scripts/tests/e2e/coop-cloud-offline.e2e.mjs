@@ -1,5 +1,5 @@
 /**
- * [E2E 08-12] Share links/Co-op/Drive CRDT/Saves export, custom photo upload & offline PWA, BF-2/BF-6 recovery, Controls & Daily Puzzle/Stats.
+ * [E2E 08-12] Share links/BroadcastChannel Co-op CRDT/Saves export, custom photo upload & offline PWA, BF-2/BF-6 recovery, Controls & Daily Puzzle/Stats.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,10 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   createBootedContext,
+  createSyntheticPngBuffer,
   getSettingsBtn,
+  hostCoopRoom,
+  joinCoopRoom,
   tapCanvasGrid,
-  waitForAnimationFrames,
   waitForPuzzleLoaded,
+  withContext,
 } from './helpers.mjs';
 
 export async function runCoopCloudOfflineE2e(ctx) {
@@ -29,12 +32,12 @@ export async function runCoopCloudOfflineE2e(ctx) {
     : { context: ctx.context, page: ctx.page };
   const settingsBtn = getSettingsBtn(page);
   try {
-    logE2eStart('Verifying < 2 KB Share Link (#s=), 2-peer BroadcastChannel Co-op, Google Drive CRDT sync, Saves views & .capy v2 export...');
+    logE2eStart('Verifying < 2 KB Share Link (#s=), 2-peer BroadcastChannel Co-op CRDT sync, Saves views & .capy v2 export...');
     await page.evaluate(() => localStorage.setItem('capy_dev_cloud_coop_ui', '1'));
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(page);
     {
-      await page.locator('button[title="Settings and Menu"]').click();
+      await page.getByTestId('topbar-settings-btn').click();
       await page.getByTestId('settings-tab-about').click();
       await page.getByTestId('stat-coop-regions').waitFor({ state: 'visible', timeout: 3000 });
       assert.equal(
@@ -93,48 +96,32 @@ export async function runCoopCloudOfflineE2e(ctx) {
     assert.equal(sharedUrl.length < 2048, true);
 
     // Verify isolated browser context restores #s=<token> progress
-    const ctxIsolated = await browser.newContext({ viewport: { width: 1280, height: 860 } });
-    const pageRecipient = await ctxIsolated.newPage();
-    attachErrorListeners(pageRecipient, 'recipient');
-    await pageRecipient.goto(sharedUrl, { waitUntil: 'domcontentloaded' });
-    await waitForPuzzleLoaded(pageRecipient);
-    await pageRecipient.waitForFunction(
-      (expectedLen) =>
-        (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || []).length === expectedLen,
-      paintedIdsOnA.length,
-      { timeout: 5000 }
-    );
-    const recipientIds = await pageRecipient.evaluate(() => {
-      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-      return active.filledRegionIds || [];
+    await withContext(browser, { viewport: { width: 1280, height: 860 } }, async (ctxIsolated) => {
+      const pageRecipient = await ctxIsolated.newPage();
+      attachErrorListeners(pageRecipient, 'recipient');
+      await pageRecipient.goto(sharedUrl, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(pageRecipient);
+      await pageRecipient.waitForFunction(
+        (expectedLen) =>
+          (JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').filledRegionIds || []).length === expectedLen,
+        paintedIdsOnA.length,
+        { timeout: 5000 }
+      );
+      const recipientIds = await pageRecipient.evaluate(() => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return active.filledRegionIds || [];
+      });
+      assert.deepEqual([...recipientIds].sort((a, b) => a - b), [...paintedIdsOnA].sort((a, b) => a - b));
     });
-    assert.deepEqual([...recipientIds].sort((a, b) => a - b), [...paintedIdsOnA].sort((a, b) => a - b));
-    await ctxIsolated.close();
 
     // Host Co-op room on Page A and join from Page B in same context
-    await page.getByTestId('host-coop-room-btn').click();
-    await page.getByTestId('active-coop-room-code').waitFor({ state: 'visible', timeout: 5000 });
-    const roomBadgeText = await page.getByTestId('active-coop-room-code').innerText();
-    const roomCode = roomBadgeText.match(/Room\s+([A-Z0-9]{6})/)[1];
-    await page.keyboard.press('Escape');
-    await page.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    const roomCode = await hostCoopRoom(page, { openCoopMenu: false });
 
     const pageB = await context.newPage();
     attachErrorListeners(pageB, 'pageB');
     await pageB.goto(`${BASE_URL}/?coop=1`, { waitUntil: 'domcontentloaded' });
     await waitForPuzzleLoaded(pageB);
-    await pageB.getByTestId('topbar-coop-btn').click();
-    await pageB.getByTestId('join-coop-room-input').waitFor({ state: 'visible', timeout: 3000 });
-    await pageB.getByTestId('join-coop-room-input').fill(roomCode);
-    await pageB.getByTestId('join-coop-room-btn').click();
-    await pageB.waitForFunction(
-      () => document.querySelector('[data-testid="active-coop-room-code"]')?.textContent?.includes('2 online'),
-      undefined,
-      { timeout: 5000 }
-    );
-    assert.equal((await pageB.getByTestId('active-coop-room-code').innerText()).includes('2 online'), true);
-    await pageB.keyboard.press('Escape');
-    await pageB.getByTestId('active-coop-room-code').waitFor({ state: 'hidden', timeout: 3000 });
+    await joinCoopRoom(pageB, roomCode);
 
     await tapCanvasGrid(page, 0.56, 8, 40);
     const filledAfterTapA = Number(
@@ -537,38 +524,24 @@ export async function runCoopCloudOfflineE2e(ctx) {
     // 9. Custom Photo Upload (STORE_IMAGES), 100% Offline PWA Reload & Completed Replay
     // -------------------------------------------------------------------------
     logE2eStart('Verifying custom photo STORE_IMAGES upload, 100% offline PWA reload & post-completion Replay viewport invariance...');
-    const pngBytes = await page.evaluate(async () => {
-      const c = document.createElement('canvas');
-      c.width = 480;
-      c.height = 360;
-      const ctx = c.getContext('2d');
-      const cols = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b'];
-      for (let i = 0; i < 4; i++) {
-        ctx.fillStyle = cols[i];
-        ctx.fillRect((i % 2) * 240, Math.floor(i / 2) * 180, 240, 180);
-      }
-      const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
-      return Array.from(new Uint8Array(await blob.arrayBuffer()));
-    });
-    const tmpUploadPath = path.join(os.tmpdir(), `capy_test_upload_${process.pid}.png`);
-    fs.writeFileSync(tmpUploadPath, Buffer.from(pngBytes));
+    const pngBuffer = createSyntheticPngBuffer(480, 360, { compressionLevel: 6 });
     const snapIdBeforeUpload = await page.evaluate(
       () => JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}').activeSnapshotId || null
     );
-    try {
-      await page.locator('input[type="file"][accept="image/*"]').setInputFiles(tmpUploadPath);
-      await page.waitForFunction(
-        (prevId) => {
-          const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
-          return Boolean(active.activeSnapshotId && active.activeSnapshotId !== prevId);
-        },
-        snapIdBeforeUpload,
-        { timeout: 15000 }
-      );
-      await waitForPuzzleLoaded(page);
-    } finally {
-      fs.rmSync(tmpUploadPath, { force: true });
-    }
+    await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
+      name: 'capy_test_upload.png',
+      mimeType: 'image/png',
+      buffer: pngBuffer,
+    });
+    await page.waitForFunction(
+      (prevId) => {
+        const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+        return Boolean(active.activeSnapshotId && active.activeSnapshotId !== prevId);
+      },
+      snapIdBeforeUpload,
+      { timeout: 15000 }
+    );
+    await waitForPuzzleLoaded(page);
 
     const uploadCheck = await page.evaluate(async () => {
       const snaps = JSON.parse(localStorage.getItem('capy_snapshots_v8') || '[]');
@@ -719,7 +692,15 @@ export async function runCoopCloudOfflineE2e(ctx) {
           { id: 99, hex: '#00ffff', isLight: true, argb: 0xff00ffff, r: 0, g: 255, b: 255 },
         ];
         snap.isFreeColor = true;
+        // Stage 9 completed all 4 regions; keep partial progress (2/4) so regenerating the preserved blob renders PaletteDock
+        snap.filledRegionIds = [1, 2];
+        snap.filledCount = 2;
         localStorage.setItem('capy_snapshots_v8', JSON.stringify(snaps));
+      }
+      const active = JSON.parse(localStorage.getItem('capy_active_session_v8') || '{}');
+      if (active.activeSnapshotId === snapId) {
+        active.filledRegionIds = [1, 2];
+        localStorage.setItem('capy_active_session_v8', JSON.stringify(active));
       }
       // Evict only the puzzle data entry in IndexedDB (keeping the image blob in the 'images' store)
       return await new Promise((resolve) => {
@@ -782,7 +763,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     // 11. Controls Settings (Zoom Sensitivity, Magnetic Zoom Stops, Sound) & topbar-zoom-badge Removal
     // ------------------------------------------------------------------
     logE2eStart('Verifying Controls settings persistence (zoom sensitivity, magnetic stops, sound) & topbar-zoom-badge removal...');
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-settings').click();
 
     const zoomSensSlider = page.getByTestId('setting-zoom-sensitivity');
@@ -846,7 +827,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     await page.reload({ waitUntil: 'load' });
     await waitForPuzzleLoaded(page);
 
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-create').click();
     const snailCard = page.getByTestId('gallery-card-snail_guitar');
     await snailCard.waitFor({ state: 'visible', timeout: 5000 });
@@ -891,7 +872,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     await page.getByTestId('reset-view-btn').waitFor({ state: 'visible', timeout: 3000 });
 
     // 10a. Daily Featured Puzzle hero card at top of Create tab + one-tap Play Daily launch
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-create').click();
 
     const dailyCard = page.getByTestId('daily-puzzle-card');
@@ -957,7 +938,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     );
 
     // 10b. Reduced Motion toggle persistence in capy_user_settings_v8
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-settings').click();
     const reducedMotionToggle = page.getByTestId('setting-reduced-motion');
     await reducedMotionToggle.waitFor({ state: 'visible', timeout: 5000 });
@@ -988,7 +969,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
     );
 
     // Verify typing '2' inside Gallery search <input> does NOT change selected swatch
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-create').click();
     const gallerySearchInput = page.getByTestId('gallery-search-input');
     await gallerySearchInput.waitFor({ state: 'visible', timeout: 5000 });
@@ -1111,7 +1092,7 @@ export async function runCoopCloudOfflineE2e(ctx) {
       `Expected coloring regions to increment totalRegionsColored in capy_player_stats_v1 (${prevTotalColored} -> ${nextTotalColored})`
     );
 
-    await page.locator('button[title="Settings and Menu"]').click();
+    await page.getByTestId('topbar-settings-btn').click();
     await page.getByTestId('settings-tab-about').click();
     const statsCard = page.getByTestId('lifetime-stats-card');
     await statsCard.waitFor({ state: 'visible', timeout: 5000 });

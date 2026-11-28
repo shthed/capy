@@ -10,6 +10,8 @@ import {
   waitForAnimationFrames,
   waitForCondition,
   waitForPuzzleLoaded,
+  withContext,
+  withMouseDrag,
 } from './helpers.mjs';
 
 export async function runAccessibilityByocE2e(ctx) {
@@ -17,7 +19,7 @@ export async function runAccessibilityByocE2e(ctx) {
     logE2eStart('Verifying Large Text full UI button scaling (360x780, 412x915, 1280x720), Fat-Finger coupling & Paint/Free-Colour fixes...');
 
     // 22a. 360x780 Mobile: Normal vs Large Text button dimensions, 5-button Co-op containment, Replay wrap/stacking, Palette centering, Settings & ColorPicker
-    const ltMobileCtx = await browser.newContext({ viewport: { width: 360, height: 780 }, hasTouch: true });
+    await withContext(browser, { viewport: { width: 360, height: 780 }, hasTouch: true }, async (ltMobileCtx) => {
     await ltMobileCtx.addInitScript(() => {
       localStorage.setItem('capy_dev_debug', '1');
     });
@@ -220,7 +222,7 @@ export async function runAccessibilityByocE2e(ctx) {
       .locator('[data-testid="settings-section-accessibility"] .text-xs')
       .first()
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-    const baselineSwitchW = (await ltSwitch.boundingBox()).width;
+    const baselineSwitchW = (await getStableBoundingBox(ltSwitch)).width;
 
     // 1) Text Size 140%, UI Size 100%: font size grows, switch width unchanged, and Finger Reach does NOT boost to Large UI 34px
     await setRangeSlider(ltMobilePage, 'setting-text-size', 1.4);
@@ -237,7 +239,7 @@ export async function runAccessibilityByocE2e(ctx) {
       .locator('[data-testid="settings-section-accessibility"] .text-xs')
       .first()
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-    const textOnlySwitchW = (await ltSwitch.boundingBox()).width;
+    const textOnlySwitchW = (await getStableBoundingBox(ltSwitch)).width;
     assert.ok(textOnlyFontSize > baselineFontSize + 2, `Text Size 140% must enlarge font (${baselineFontSize} -> ${textOnlyFontSize})`);
     assert.ok(Math.abs(textOnlySwitchW - baselineSwitchW) <= 1, `Text Size 140% alone must not resize switch (${baselineSwitchW} vs ${textOnlySwitchW})`);
 
@@ -274,7 +276,7 @@ export async function runAccessibilityByocE2e(ctx) {
       .locator('[data-testid="settings-section-accessibility"] .text-xs')
       .first()
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-    const uiOnlySwitchW = (await ltSwitch.boundingBox()).width;
+    const uiOnlySwitchW = (await getStableBoundingBox(ltSwitch)).width;
     assert.ok(Math.abs(uiOnlyFontSize - baselineFontSize) <= 1, `UI Size 140% alone must not enlarge font (${baselineFontSize} vs ${uiOnlyFontSize})`);
     assert.ok(uiOnlySwitchW > baselineSwitchW + 6, `UI Size 140% must enlarge switch (${baselineSwitchW} -> ${uiOnlySwitchW})`);
     await assertSwitchKnobContained(ltMobilePage, 'setting-large-text', true, 'UI Size 140% largeText ON');
@@ -341,10 +343,12 @@ export async function runAccessibilityByocE2e(ctx) {
     );
 
     // Measure enlarged SettingsModal controls & verify tabs zero-overflow, >=38-40px touch targets & ARIA labels at 360x780
-    const largeSwitchBox = await ltSwitch.boundingBox();
-    const largeFfSwitchBox = await ffSwitch.boundingBox();
-    const largeCloseBox = await ltMobilePage.getByTestId('settings-modal-close').boundingBox();
-    const largeTourBox = await ltMobilePage.getByTestId('settings-tour-btn').boundingBox();
+    const [largeSwitchBox, largeFfSwitchBox, largeCloseBox, largeTourBox] = await Promise.all([
+      getStableBoundingBox(ltSwitch),
+      getStableBoundingBox(ffSwitch),
+      getStableBoundingBox(ltMobilePage.getByTestId('settings-modal-close')),
+      getStableBoundingBox(ltMobilePage.getByTestId('settings-tour-btn')),
+    ]);
     assert.ok(largeSwitchBox && largeFfSwitchBox && largeCloseBox && largeTourBox);
     assert.equal(
       largeSwitchBox.width >= 50 && largeSwitchBox.height >= 28 && largeSwitchBox.width > normalSwitchBox.width,
@@ -458,13 +462,28 @@ export async function runAccessibilityByocE2e(ctx) {
     }
 
     // Measure enlarged HUD controls at 360x780
+    const [
+      largeSettingsBtnBox,
+      largePreviewBtnBox,
+      largeSavesBtnBox,
+      largePaintBtnBox,
+      largeUndoBtnBox,
+      largeSwatch1Box,
+    ] = await Promise.all([
+      getStableBoundingBox(ltMobilePage.getByTestId('topbar-settings-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('topbar-preview-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('topbar-saves-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('paint-mode-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('undo-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('palette-swatch-1')),
+    ]);
     const largeMobileBoxes = {
-      settingsBtn: await ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
-      previewBtn: await ltMobilePage.getByTestId('topbar-preview-btn').boundingBox(),
-      savesBtn: await ltMobilePage.getByTestId('topbar-saves-btn').boundingBox(),
-      paintBtn: await ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
-      undoBtn: await ltMobilePage.getByTestId('undo-btn').boundingBox(),
-      swatch1: await ltMobilePage.getByTestId('palette-swatch-1').boundingBox(),
+      settingsBtn: largeSettingsBtnBox,
+      previewBtn: largePreviewBtnBox,
+      savesBtn: largeSavesBtnBox,
+      paintBtn: largePaintBtnBox,
+      undoBtn: largeUndoBtnBox,
+      swatch1: largeSwatch1Box,
       swatch1FontPx: await ltMobilePage
         .getByTestId('palette-swatch-1')
         .locator('span')
@@ -547,10 +566,12 @@ export async function runAccessibilityByocE2e(ctx) {
     const customPaletteBtn = ltMobilePage.getByTestId('palette-custom-btn');
     await customPaletteBtn.scrollIntoViewIfNeeded();
     await customPaletteBtn.click();
-    const popoverCloseBtn = ltMobilePage.locator('button[title="Close"]').last();
+    const popoverCloseBtn = ltMobilePage.locator('button[aria-label="Close color picker"]').last();
     await popoverCloseBtn.waitFor({ state: 'visible', timeout: 3000 });
-    const popoverCloseBox = await popoverCloseBtn.boundingBox();
-    const popoverSwatchBox = await ltMobilePage.locator('.capy-quick-swatch').first().boundingBox();
+    const [popoverCloseBox, popoverSwatchBox] = await Promise.all([
+      getStableBoundingBox(popoverCloseBtn),
+      getStableBoundingBox(ltMobilePage.locator('.capy-quick-swatch').first()),
+    ]);
     assert.ok(popoverCloseBox && popoverCloseBox.width >= 40 && popoverCloseBox.height >= 40, `ColorPickerPopover close must be >=40px in Large Text (got ${JSON.stringify(popoverCloseBox)})`);
     assert.ok(popoverSwatchBox && popoverSwatchBox.width >= 38 && popoverSwatchBox.height >= 38, `ColorPickerPopover quick swatch must be >=40px in Large Text (got ${JSON.stringify(popoverSwatchBox)})`);
     await popoverCloseBtn.click();
@@ -563,18 +584,17 @@ export async function runAccessibilityByocE2e(ctx) {
       { timeout: 5000 }
     );
     await longPressUndoForReplay(ltMobilePage);
-    await getStableBoundingBox(ltMobilePage.getByTestId('replay-controls-window'));
+    const ltReplayWinBox = await getStableBoundingBox(ltMobilePage.getByTestId('replay-controls-window'));
 
-    const [ltReplayWinBox, ltReplayPlayBox, ltReplayFollowBox, ltReplayLoopBox, ltReplayExitBox, ltReplayScrubBox, ltPaintDuringReplayBox, ltPaletteDuringReplayBox] =
+    const [ltReplayPlayBox, ltReplayFollowBox, ltReplayLoopBox, ltReplayExitBox, ltReplayScrubBox, ltPaintDuringReplayBox, ltPaletteDuringReplayBox] =
       await Promise.all([
-        ltMobilePage.getByTestId('replay-controls-window').boundingBox(),
-        ltMobilePage.getByTestId('replay-play-pause-btn').boundingBox(),
-        ltMobilePage.getByTestId('replay-follow-btn').boundingBox(),
-        ltMobilePage.getByTestId('replay-loop-btn').boundingBox(),
-        ltMobilePage.getByTestId('replay-exit-btn').boundingBox(),
-        ltMobilePage.getByTestId('replay-scrubber-track').boundingBox(),
-        ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
-        ltMobilePage.getByTestId('palette-dock').boundingBox(),
+        getStableBoundingBox(ltMobilePage.getByTestId('replay-play-pause-btn')),
+        getStableBoundingBox(ltMobilePage.getByTestId('replay-follow-btn')),
+        getStableBoundingBox(ltMobilePage.getByTestId('replay-loop-btn')),
+        getStableBoundingBox(ltMobilePage.getByTestId('replay-exit-btn')),
+        getStableBoundingBox(ltMobilePage.getByTestId('replay-scrubber-track')),
+        getStableBoundingBox(ltMobilePage.getByTestId('paint-mode-btn')),
+        getStableBoundingBox(ltMobilePage.getByTestId('palette-dock')),
       ]);
     assert.ok(
       ltReplayWinBox &&
@@ -614,13 +634,11 @@ export async function runAccessibilityByocE2e(ctx) {
     // 22c. 1280x720 Desktop Viewport check (single-row ReplayControls + 46px topbar + stacking clearance)
     await ltMobilePage.setViewportSize({ width: 1280, height: 720 });
     await ltMobilePage.waitForFunction(() => window.innerWidth === 1280 && window.innerHeight === 720, { timeout: 3000 });
-    await getStableBoundingBox(ltMobilePage.getByTestId('topbar-settings-btn'));
-    await getStableBoundingBox(ltMobilePage.getByTestId('replay-controls-window'));
     const [deskLtSettingsBox, deskLtReplayBox, deskLtPaintBox, deskLtPaletteBox] = await Promise.all([
-      ltMobilePage.getByTestId('topbar-settings-btn').boundingBox(),
-      ltMobilePage.getByTestId('replay-controls-window').boundingBox(),
-      ltMobilePage.getByTestId('paint-mode-btn').boundingBox(),
-      ltMobilePage.getByTestId('palette-dock').boundingBox(),
+      getStableBoundingBox(ltMobilePage.getByTestId('topbar-settings-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('replay-controls-window')),
+      getStableBoundingBox(ltMobilePage.getByTestId('paint-mode-btn')),
+      getStableBoundingBox(ltMobilePage.getByTestId('palette-dock')),
     ]);
     assert.ok(deskLtSettingsBox && deskLtReplayBox && deskLtPaintBox && deskLtPaletteBox);
     assert.equal(deskLtSettingsBox.width >= 46 && deskLtSettingsBox.height >= 46, true, `1280px Large Text topbar-settings-btn must step up to >=46px (got ${JSON.stringify(deskLtSettingsBox)})`);
@@ -647,11 +665,10 @@ export async function runAccessibilityByocE2e(ctx) {
       'true',
       'Turning Large Text OFF must preserve fatFingerAssist: true'
     );
-    await ltMobilePage.close();
-    await ltMobileCtx.close();
+    });
 
     // 22c-landscape. 640x360 Short-Landscape Phone checks in Large Text mode (Fixes 6, 7, 8)
-    const landCtx = await browser.newContext({ viewport: { width: 640, height: 360 }, hasTouch: true });
+    await withContext(browser, { viewport: { width: 640, height: 360 }, hasTouch: true }, async (landCtx) => {
     await landCtx.addInitScript(() => {
       localStorage.setItem('capy_dev_debug', '1');
       localStorage.setItem(
@@ -682,14 +699,13 @@ export async function runAccessibilityByocE2e(ctx) {
     });
     await longPressUndoForReplay(landPage);
     await landPage.getByTestId('feature-offer-banner').waitFor({ state: 'visible', timeout: 4000 });
-    await getStableBoundingBox(landPage.getByTestId('feature-offer-banner'));
 
     const [landHeaderBox, landUndoBox, landPaintBox, landReplayBox, landBannerBox] = await Promise.all([
-      landPage.locator('header').first().boundingBox(),
-      landPage.getByTestId('undo-btn').boundingBox(),
-      landPage.getByTestId('paint-mode-btn').boundingBox(),
-      landPage.getByTestId('replay-controls-window').boundingBox(),
-      landPage.getByTestId('feature-offer-banner').boundingBox(),
+      getStableBoundingBox(landPage.locator('header').first()),
+      getStableBoundingBox(landPage.getByTestId('undo-btn')),
+      getStableBoundingBox(landPage.getByTestId('paint-mode-btn')),
+      getStableBoundingBox(landPage.getByTestId('replay-controls-window')),
+      getStableBoundingBox(landPage.getByTestId('feature-offer-banner')),
     ]);
     assert.ok(landHeaderBox && landUndoBox && landPaintBox && landReplayBox && landBannerBox);
     assert.equal(
@@ -723,7 +739,7 @@ export async function runAccessibilityByocE2e(ctx) {
     const landCustomBtn = landPage.getByTestId('palette-custom-btn');
     await landCustomBtn.scrollIntoViewIfNeeded();
     await landCustomBtn.click();
-    const landPopoverClose = landPage.locator('button[title="Close"]').last();
+    const landPopoverClose = landPage.locator('button[aria-label="Close color picker"]').last();
     await landPopoverClose.waitFor({ state: 'visible', timeout: 3000 });
     await getStableBoundingBox(landPopoverClose);
     const landPopoverMetrics = await landPopoverClose.evaluate((closeBtn) => {
@@ -808,33 +824,31 @@ export async function runAccessibilityByocE2e(ctx) {
       true,
       `640x360 completed+raised+replaying paint-mode-btn bottom (${compPaintBox.y + compPaintBox.height}) must clear ReplayControls top (${compReplayBox.y})`
     );
-    await landPage.close();
-    await landCtx.close();
+    });
 
     // 22d. OnboardingTutorial Large Text ON toggle must also enable fatFingerAssist
-    const tutCoupleCtx = await browser.newContext({ viewport: { width: 412, height: 915 }, hasTouch: true });
-    await tutCoupleCtx.addInitScript(() => {
-      localStorage.setItem('capy_dev_debug', '1');
-      localStorage.setItem(
-        'capy_user_settings_v8',
-        JSON.stringify({ fatFingerAssist: false, largeText: false })
-      );
+    await withContext(browser, { viewport: { width: 412, height: 915 }, hasTouch: true }, async (tutCoupleCtx) => {
+      await tutCoupleCtx.addInitScript(() => {
+        localStorage.setItem('capy_dev_debug', '1');
+        localStorage.setItem(
+          'capy_user_settings_v8',
+          JSON.stringify({ fatFingerAssist: false, largeText: false })
+        );
+      });
+      const tutCouplePage = await tutCoupleCtx.newPage();
+      attachErrorListeners(tutCouplePage, 'tutCouplePage');
+      await tutCouplePage.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
+      await waitForPuzzleLoaded(tutCouplePage);
+      await tutCouplePage.getByTestId('tutorial-large-text-btn').waitFor({ state: 'visible', timeout: 5000 });
+      await tutCouplePage.getByTestId('tutorial-large-text-btn').click();
+      await tutCouplePage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
+      const tutSettingsAfter = await tutCouplePage.evaluate(() => window.capyStorage.loadSettings());
+      assert.equal(tutSettingsAfter.largeText, true, 'Onboarding tutorial Large Text toggle must set largeText=true');
+      assert.equal(tutSettingsAfter.fatFingerAssist, true, 'Onboarding tutorial Large Text toggle must also enable fatFingerAssist=true');
     });
-    const tutCouplePage = await tutCoupleCtx.newPage();
-    attachErrorListeners(tutCouplePage, 'tutCouplePage');
-    await tutCouplePage.goto(`${BASE_URL}/`, { waitUntil: 'domcontentloaded' });
-    await waitForPuzzleLoaded(tutCouplePage);
-    await tutCouplePage.getByTestId('tutorial-large-text-btn').waitFor({ state: 'visible', timeout: 5000 });
-    await tutCouplePage.getByTestId('tutorial-large-text-btn').click();
-    await tutCouplePage.waitForFunction(() => document.documentElement.dataset.largeText === 'true', undefined, { timeout: 3000 });
-    const tutSettingsAfter = await tutCouplePage.evaluate(() => window.capyStorage.loadSettings());
-    assert.equal(tutSettingsAfter.largeText, true, 'Onboarding tutorial Large Text toggle must set largeText=true');
-    assert.equal(tutSettingsAfter.fatFingerAssist, true, 'Onboarding tutorial Large Text toggle must also enable fatFingerAssist=true');
-    await tutCouplePage.close();
-    await tutCoupleCtx.close();
 
     // 22e. #602 Regression Tests: Paint Mode single-tap & <12px micro-jitter no double-paint + Free Colour Mode repaint filled region
-    const regCtx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await withContext(browser, { viewport: { width: 1280, height: 720 } }, async (regCtx) => {
     await regCtx.addInitScript(() => {
       localStorage.setItem('capy_dev_debug', '1');
       localStorage.setItem(
@@ -970,12 +984,19 @@ export async function runAccessibilityByocE2e(ctx) {
     // Fix 5: Paint Mode <12px micro-jitter starting on already-filled regionA and sliding 3-8px into unfilled regionB (>=25ms hold) must paint ONLY regionB (+1, no neighbor C double-paint)
     // INTENTIONAL_TIMING_WINDOW: explicit wall-clock gap exceeding 350ms DOUBLE_TAP_TIMEOUT in PuzzleCanvas.tsx
     await regPage.waitForTimeout(450); // outside 350ms double-tap window
-    await regPage.mouse.move(adjacentTarget.clientX, adjacentTarget.clientY);
-    await regPage.mouse.down();
-    await regPage.mouse.move(adjacentTarget.bClientX, adjacentTarget.bClientY);
-    // INTENTIONAL_TIMING_WINDOW: explicit wall-clock hold satisfying >= 25ms micro-jitter Paint Mode threshold
-    await regPage.waitForTimeout(40);
-    await regPage.mouse.up();
+    await withMouseDrag(
+      regPage,
+      adjacentTarget.clientX,
+      adjacentTarget.clientY,
+      adjacentTarget.bClientX,
+      adjacentTarget.bClientY,
+      {
+        beforeUp: async () => {
+          // INTENTIONAL_TIMING_WINDOW: explicit wall-clock hold satisfying >= 25ms micro-jitter Paint Mode threshold
+          await regPage.waitForTimeout(40);
+        },
+      }
+    );
     await waitForAnimationFrames(regPage, 2);
     const activeAfterJitter = await regPage.evaluate(() => window.capyStorage.loadActiveState());
     const filledAfterJitter = activeAfterJitter?.filledRegionIds ?? [];
@@ -1061,13 +1082,12 @@ export async function runAccessibilityByocE2e(ctx) {
       `Free Colour Mode repaint tap must update regionA color (${colorAfterFirstFill} -> ${freeColorRepaintState.colorA})`
     );
 
-    await regPage.close();
-    await regCtx.close();
+    });
     logE2ePass('Large Text button scaling (360x780/412x915/640x360/1280x720), switch/slider/tab/centering, Fat-Finger coupling & Paint micro-jitter/Free-Colour fixes verified.');
 
     // E2E Stage 22: M4 $0 BYOC Multi-Provider Account Login, Auto-Sync & 360px Mobile Zero-Overflow
     logE2eStart('M4 $0 BYOC Multi-Provider Login UI, Play Store Default-Off Gate, Auto-Sync & 360px Mobile Zero-Overflow');
-    const byocContext = await browser.newContext({ viewport: { width: 360, height: 740 } });
+    await withContext(browser, { viewport: { width: 360, height: 740 } }, async (byocContext) => {
     const byocPage = await byocContext.newPage();
     attachErrorListeners(byocPage, 'm4-byoc');
 
@@ -1173,8 +1193,7 @@ export async function runAccessibilityByocE2e(ctx) {
       `Automatic background sync must push updated manifest to OneDrive (before=${putsBeforeAutoSync}, after=${oneDrivePutCount})`
     );
 
-    await byocPage.close();
-    await byocContext.close();
+    });
     logE2ePass('M4 $0 BYOC multi-provider login UI, default-off gate, 360px zero-overflow & automatic background sync verified.');
 }
 
@@ -1182,7 +1201,7 @@ export async function runStorageAnalyzerE2e(ctx) {
   const { browser, BASE_URL, attachErrorListeners, logE2eStart, logE2ePass } = ctx;
     // E2E Stage 24: Browser Storage Analyzer, Targeted Safe Cleanups, 360x780 Layout & Oversized Photo Compression
     logE2eStart('Browser Storage Analyzer modal, 360x780 zero-overflow, safe cleanups (caches/orphans/previews) & oversized photo upload compression');
-    const storageContext = await browser.newContext({ viewport: { width: 360, height: 780 } });
+    await withContext(browser, { viewport: { width: 360, height: 780 } }, async (storageContext) => {
     const storagePage = await storageContext.newPage();
     attachErrorListeners(storagePage, 'storage-analyzer');
 
@@ -1614,8 +1633,7 @@ export async function runStorageAnalyzerE2e(ctx) {
       'Clear All Capy Storage must preserve CapyGame localStorage key and CacheStorage'
     );
 
-    await storagePage.close();
-    await storageContext.close();
+    });
     logE2ePass('Browser Storage Analyzer modal, 360x780 zero-overflow, all 4 cleanups, Escape isolation & oversized photo upload compression verified.');
 }
 
