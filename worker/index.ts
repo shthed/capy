@@ -23,6 +23,7 @@ import {
   buildFeedbackCorsHeaders,
   buildGitHubIssuePayload,
   MAX_FEEDBACK_BODY_BYTES,
+  readBodyTextWithLimit,
   resolveFeedbackRepo,
   validateFeedbackPayload,
 } from './feedbackProtocol';
@@ -1375,8 +1376,15 @@ export default {
           }
         }
 
-        const rawBody = await request.text();
-        const validation = validateFeedbackPayload(rawBody);
+        const bodyResult = await readBodyTextWithLimit(request, MAX_FEEDBACK_BODY_BYTES);
+        if (!bodyResult.ok) {
+          return apiJsonResponse(
+            { ok: false, error: bodyResult.error },
+            bodyResult.status,
+            corsHeaders
+          );
+        }
+        const validation = validateFeedbackPayload(bodyResult.text);
         if (!validation.ok) {
           if (validation.honeypot) {
             return apiJsonResponse({ ok: true, accepted: true }, 202, corsHeaders);

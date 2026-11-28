@@ -829,6 +829,171 @@ export async function runCoopSharePwaTests({ vite, projectRoot, logUnitStart, lo
       assert.equal(oversized.ok, false);
       assert.equal(oversized.status, 413, 'Payload > 8192 bytes must return status 413');
 
+      // Streaming readBodyTextWithLimit: exact cap, early cancel, split UTF-8, null body, subarray, edge limits
+      {
+        const makeChunkedStream = (chunks) => {
+          let index = 0;
+          let pulls = 0;
+          let cancelled = false;
+          let cancelReason = null;
+          const stream = new ReadableStream(
+            {
+              pull(controller) {
+                pulls++;
+                if (index < chunks.length) {
+                  controller.enqueue(chunks[index++]);
+                } else {
+                  controller.close();
+                }
+              },
+              cancel(reason) {
+                cancelled = true;
+                cancelReason = reason;
+              },
+            },
+            { highWaterMark: 0 }
+          );
+          return {
+            stream,
+            getPulls: () => pulls,
+            wasCancelled: () => cancelled,
+            getCancelReason: () => cancelReason,
+          };
+        };
+
+        // 1. Exact 8192-byte chunked stream without Content-Length succeeds
+        const exactChunks = [
+          new Uint8Array(2048).fill(0x61), // 'a'
+          new Uint8Array(0), // empty chunk skipped cleanly
+          new Uint8Array(4096).fill(0x62), // 'b'
+          new Uint8Array(2048).fill(0x63), // 'c'
+        ];
+        const exactStream = makeChunkedStream(exactChunks);
+        const exactReq = new Request('https://capypaint.com/api/feedback', {
+          method: 'POST',
+          body: exactStream.stream,
+          duplex: 'half',
+        });
+        assert.equal(exactReq.headers.get('Content-Length'), null);
+        const exactRes = await feedbackProtoMod.readBodyTextWithLimit(exactReq);
+        assert.equal(exactRes.ok, true, 'Exact 8192-byte chunked stream must succeed');
+        assert.equal(exactRes.text.length, feedbackProtoMod.MAX_FEEDBACK_BODY_BYTES);
+        assert.equal(exactRes.text, `${'a'.repeat(2048)}${'b'.repeat(4096)}${'c'.repeat(2048)}`);
+        assert.equal(exactStream.wasCancelled(), false);
+
+        // 2. 8193-byte multi-chunk stream without Content-Length returns 413, cancels, and stops pulling early
+        const overChunks = [
+          new Uint8Array(2048).fill(0x78),
+          new Uint8Array(2048).fill(0x78),
+          new Uint8Array(2048).fill(0x78),
+          new Uint8Array(2048).fill(0x78),
+          new Uint8Array([0x79]), // byte 8193 triggers abort
+          new Uint8Array(2048).fill(0x7a), // trailing chunk 1 (must not be pulled)
+          new Uint8Array(2048).fill(0x7a), // trailing chunk 2 (must not be pulled)
+          new Uint8Array(2048).fill(0x7a), // trailing chunk 3 (must not be pulled)
+        ];
+        const overStream = makeChunkedStream(overChunks);
+        const overReq = new Request('https://capypaint.com/api/feedback', {
+          method: 'POST',
+          body: overStream.stream,
+          duplex: 'half',
+        });
+        assert.equal(overReq.headers.get('Content-Length'), null);
+        const overRes = await feedbackProtoMod.readBodyTextWithLimit(overReq);
+        assert.equal(overRes.ok, false, '8193-byte chunked stream must fail');
+        assert.equal(overRes.status, 413);
+        assert.equal(overStream.wasCancelled(), true, 'Oversized stream must trigger cancel()');
+        assert.equal(
+          overStream.getPulls() <= 5,
+          true,
+          `Oversized stream must stop pulling early (got ${overStream.getPulls()} pulls out of ${overChunks.length})`
+        );
+
+        // 3. Multi-byte UTF-8 characters split across chunks decode losslessly and count wire bytes (not UTF-16 .length)
+        const splitUtf8Stream = makeChunkedStream([
+          new Uint8Array([0x48, 0x69, 0x20, 0xf0, 0x9f]), // "Hi " + first 2 bytes of U+1F600
+          new Uint8Array([0x98, 0x80, 0x20, 0xe6]), // last 2 bytes of U+1F600 + " " + first byte of U+6F22
+          new Uint8Array([0xbc, 0xa2, 0x21]), // last 2 bytes of U+6F22 + "!"
+        ]);
+        const splitUtf8Res = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: splitUtf8Stream.stream },
+          12
+        );
+        assert.equal(splitUtf8Res.ok, true, 'Split UTF-8 stream within 12-byte limit must succeed');
+        assert.equal(splitUtf8Res.text, 'Hi \u{1F600} \u6F22!');
+        assert.equal(
+          splitUtf8Res.text.includes('\uFFFD'),
+          false,
+          'Split UTF-8 stream must not emit replacement characters'
+        );
+
+        // Payload whose UTF-16 .length (3) <= limit (8), but UTF-8 wire byte length (9) > limit (8) -> 413
+        const cjkThreeChars = '\u6F22\u6F22\u6F22';
+        assert.equal(cjkThreeChars.length, 3);
+        const cjkWireBytes = new TextEncoder().encode(cjkThreeChars);
+        assert.equal(cjkWireBytes.byteLength, 9);
+        const cjkOverStream = makeChunkedStream([
+          cjkWireBytes.subarray(0, 4),
+          cjkWireBytes.subarray(4, 9),
+          new Uint8Array([0x21]),
+        ]);
+        const cjkOverRes = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: cjkOverStream.stream },
+          8
+        );
+        assert.equal(cjkOverRes.ok, false, 'UTF-8 wire bytes > limit must fail even when UTF-16 .length <= limit');
+        assert.equal(cjkOverRes.status, 413);
+        assert.equal(cjkOverStream.wasCancelled(), true);
+
+        // 4. body: null returns { ok: true, text: '' }
+        const nullBodyRes = await feedbackProtoMod.readBodyTextWithLimit({ body: null });
+        assert.deepEqual(nullBodyRes, { ok: true, text: '' });
+
+        // 5. Subarray Uint8Array over a larger ArrayBuffer counts value.byteLength, not value.buffer.byteLength
+        const backingBuffer = new ArrayBuffer(65536);
+        const backingView = new Uint8Array(backingBuffer);
+        backingView.set(new TextEncoder().encode('hello'), 1024);
+        const sliceView = backingView.subarray(1024, 1029);
+        assert.equal(sliceView.byteLength, 5);
+        assert.equal(sliceView.buffer.byteLength, 65536);
+        const subarrayStream = makeChunkedStream([sliceView]);
+        const subarrayRes = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: subarrayStream.stream },
+          8
+        );
+        assert.deepEqual(subarrayRes, { ok: true, text: 'hello' });
+
+        // 6. Edge limits: maxBytes = 0 accepts empty stream and rejects 1 byte; non-finite falls back to MAX_FEEDBACK_BODY_BYTES
+        const emptyZeroRes = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: makeChunkedStream([new Uint8Array(0)]).stream },
+          0
+        );
+        assert.deepEqual(emptyZeroRes, { ok: true, text: '' });
+
+        const oneByteZeroStream = makeChunkedStream([new Uint8Array([0x41])]);
+        const oneByteZeroRes = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: oneByteZeroStream.stream },
+          0
+        );
+        assert.equal(oneByteZeroRes.ok, false);
+        assert.equal(oneByteZeroRes.status, 413);
+        assert.equal(oneByteZeroStream.wasCancelled(), true);
+
+        const nanLimitOk = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: makeChunkedStream([new Uint8Array(feedbackProtoMod.MAX_FEEDBACK_BODY_BYTES).fill(0x61)]).stream },
+          Number.NaN
+        );
+        assert.equal(nanLimitOk.ok, true, 'NaN maxBytes must fall back to MAX_FEEDBACK_BODY_BYTES');
+        assert.equal(nanLimitOk.text.length, feedbackProtoMod.MAX_FEEDBACK_BODY_BYTES);
+
+        const infLimitOver = await feedbackProtoMod.readBodyTextWithLimit(
+          { body: makeChunkedStream([new Uint8Array(feedbackProtoMod.MAX_FEEDBACK_BODY_BYTES + 1).fill(0x61)]).stream },
+          Number.POSITIVE_INFINITY
+        );
+        assert.equal(infLimitOver.ok, false, 'Infinity maxBytes must fall back to MAX_FEEDBACK_BODY_BYTES');
+        assert.equal(infLimitOver.status, 413);
+      }
+
       // CORS allow/deny including paint.capyboop.com and path-suffixed origin rejection
       const capyCors = feedbackProtoMod.buildFeedbackCorsHeaders('https://capypaint.com', undefined, false);
       assert.equal(capyCors['Access-Control-Allow-Origin'], 'https://capypaint.com');
