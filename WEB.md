@@ -433,7 +433,7 @@ flowchart LR
    - On `activate`, evicts older versions of the active scope, legacy `capy-cache-v2`, and stale sibling `/alpha/*`, `/PR/*`, and `/pull/*` preview caches while preserving the active `CACHE_NAME`, sibling Beta/Production caches, and non-Capy origin caches.
    - Parses `index.html` on `install` to pre-cache hashed Vite JS/CSS/Worker bundles when unstamped in dev.
    - Scopes `fetch` strictly to same-origin non-`/api/`, non-`/.well-known/`, non-`.apk` GET requests with exact-query cache matching (no `ignoreSearch`), Network-First (`cache: 'no-cache'`) `.capy` handling, and `isCacheableAssetResponse` anti-HTML-poisoning guards.
-3. **PWA Lifecycle ([`PwaService.ts`](./web/src/services/PwaService.ts))**: Captures `beforeinstallprompt` for the Settings install card, awaits `controllerchange` on `applyUpdate()`, and skips SW registration inside Android `WebViewAssetLoader` (`NativeBridge.isAndroid`).
+3. **PWA Lifecycle ([`PwaService.ts`](./web/src/services/PwaService.ts))**: Captures `beforeinstallprompt` for the Settings install card, awaits `controllerchange` on `applyUpdate()` (with a 5s waiting-clear fallback and 10s hard cap), and skips SW registration inside Android `WebViewAssetLoader` (`NativeBridge.isAndroid`).
 
 ---
 
