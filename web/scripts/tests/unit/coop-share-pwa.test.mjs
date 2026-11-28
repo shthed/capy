@@ -677,9 +677,10 @@ export async function runCoopSharePwaTests({ vite, projectRoot, logUnitStart, lo
         };
       };
 
-      const createMockEventTarget = () => {
+      const createMockEventTarget = ({ controller = { state: 'activated' } } = {}) => {
         const listeners = new Map();
         const target = {
+          controller,
           addCalls: 0,
           removeCalls: 0,
           addEventListener(type, fn, options) {
@@ -918,6 +919,149 @@ export async function runCoopSharePwaTests({ vite, projectRoot, logUnitStart, lo
         assert.equal(clock.now, 10000);
         assert.equal(reloads, 1);
         assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1);
+      }
+
+      // 4a. waiting clears before 5s while controller === null: does not reload at 5s or on post-5s statechange; reloads once via 250ms poll once controller becomes non-null
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget({ controller: null });
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(2000);
+        registration.waiting = null;
+        waitingWorker.dispatch('statechange');
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(3000);
+        assert.equal(clock.now, 5000);
+        assert.equal(reloads, 0, 'Must not reload at 5s while controller is still null even if registration.waiting cleared');
+        assert.equal(clock.activeTimerCount(), 2, '10s hard-cap timer and 250ms poll interval must remain active');
+
+        clock.advanceBy(500);
+        assert.equal(clock.now, 5500);
+        waitingWorker.dispatch('statechange');
+        assert.equal(reloads, 0, 'Post-5s statechange must not reload while controller is still null');
+
+        clock.advanceBy(900);
+        assert.equal(clock.now, 6400);
+        container.controller = { state: 'activated' };
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(100);
+        assert.equal(clock.now, 6500);
+        assert.equal(reloads, 1, 'Post-5s 250ms poll must reload promptly once controller becomes non-null');
+        assert.equal(clock.activeTimerCount(), 0);
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1, 'Must not trigger a second reload at the 10s hard cap');
+      }
+
+      // 4b. waiting clears at 5s while controller === null, then controllerchange fires after 5s: reloads promptly once and cleans up poll & hard-cap timers
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget({ controller: null });
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(4999);
+        registration.waiting = null;
+        clock.advanceBy(1);
+        assert.equal(clock.now, 5000);
+        assert.equal(reloads, 0, 'Must not reload at 5s when waiting cleared with controller === null');
+        assert.equal(clock.activeTimerCount(), 2, 'waitPollTimer and hardCapTimer must stay active');
+
+        clock.advanceBy(1200);
+        assert.equal(clock.now, 6200);
+        assert.equal(reloads, 0);
+
+        container.controller = { state: 'activated' };
+        container.dispatch('controllerchange');
+        assert.equal(reloads, 1, 'Post-5s controllerchange must reload immediately');
+        assert.equal(clock.activeTimerCount(), 0, 'waitPollTimer and hardCapTimer must be cleaned up');
+        assert.equal(container.listenerCount('controllerchange'), 0);
+        assert.equal(waitingWorker.listenerCount('statechange'), 0);
+
+        clock.advanceBy(10000);
+        assert.equal(reloads, 1);
+      }
+
+      // 4c. waiting clears while controller remains null through 10s: 10s hard cap reloads once and cleans up all timers and listeners
+      {
+        const clock = createVirtualClock();
+        const container = createMockEventTarget({ controller: null });
+        const waitingWorker = createMockWaitingWorker();
+        const registration = { waiting: waitingWorker };
+        let reloads = 0;
+
+        pwaMod.applyServiceWorkerUpdate({
+          registration,
+          serviceWorkerContainer: container,
+          reload: () => {
+            reloads += 1;
+          },
+          setTimeoutFn: clock.setTimeoutFn,
+          clearTimeoutFn: clock.clearTimeoutFn,
+          setIntervalFn: clock.setIntervalFn,
+          clearIntervalFn: clock.clearIntervalFn,
+        });
+
+        clock.advanceBy(2000);
+        registration.waiting = null;
+        waitingWorker.dispatch('statechange');
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(3000);
+        assert.equal(clock.now, 5000);
+        assert.equal(reloads, 0);
+        assert.equal(clock.activeTimerCount(), 2);
+
+        clock.advanceBy(2000);
+        waitingWorker.dispatch('statechange');
+        assert.equal(reloads, 0);
+
+        clock.advanceBy(2999);
+        assert.equal(clock.now, 9999);
+        assert.equal(reloads, 0);
+        assert.equal(clock.activeTimerCount(), 2);
+
+        clock.advanceBy(1);
+        assert.equal(clock.now, 10000);
+        assert.equal(reloads, 1, '10s hard cap must reload once when controller stays null');
+        assert.equal(clock.activeTimerCount(), 0, 'All timers including waitPollTimer must be cleaned up');
         assert.equal(container.listenerCount('controllerchange'), 0);
         assert.equal(waitingWorker.listenerCount('statechange'), 0);
 
