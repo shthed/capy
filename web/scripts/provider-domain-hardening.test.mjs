@@ -519,12 +519,12 @@ export async function runProviderDomainHardeningTests(vite) {
       );
       assert.equal(afterDeleteSync.totalSavesSynced, 0);
 
-      // Remote tombstone newer than Device B's local snapshot deletes local snapshot
+      // Remote tombstone older than TOMBSTONE_SKEW_TOLERANCE_MS deletes Device B's stale local snapshot
       const staleLocalSnap = {
         id: 'snap_remote_del',
         title: 'Remote Deleted',
-        timestamp: baseNow - 8_000,
-        lastOpened: baseNow - 8_000,
+        timestamp: baseNow - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 8_000,
+        lastOpened: baseNow - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 8_000,
         filledCount: 1,
         totalCount: 5,
         filledRegionIds: [1],
@@ -541,7 +541,7 @@ export async function runProviderDomainHardeningTests(vite) {
       assert.equal(
         storageMod.StorageService.loadSnapshots().some((s) => s.id === 'snap_remote_del'),
         false,
-        'Remote tombstone newer than local snapshot must delete local snapshot on sync'
+        'Remote tombstone outside clock-skew tolerance must delete stale local snapshot on sync'
       );
 
       // 5b-1D: Remote historical tombstone T_old must NOT be inflated to Date.now()
@@ -549,8 +549,8 @@ export async function runProviderDomainHardeningTests(vite) {
       const staleHistSnap = {
         id: 'snap_hist_tomb',
         title: 'Historical Tombstone Target',
-        timestamp: tOld - 10_000,
-        lastOpened: tOld - 10_000,
+        timestamp: tOld - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 10_000,
+        lastOpened: tOld - cloudMod.TOMBSTONE_SKEW_TOLERANCE_MS - 10_000,
         filledCount: 1,
         totalCount: 5,
         filledRegionIds: [1],
@@ -568,7 +568,7 @@ export async function runProviderDomainHardeningTests(vite) {
       assert.equal(
         storageMod.StorageService.loadSnapshots().some((s) => s.id === 'snap_hist_tomb'),
         false,
-        'Historical remote tombstone must still delete stale local snapshot'
+        'Historical remote tombstone outside clock-skew tolerance must still delete stale local snapshot'
       );
       assert.equal(
         remoteManifestStore.tombstones?.[histSlotKey],
