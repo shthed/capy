@@ -46,6 +46,7 @@ export interface PwaRegistrationLike {
 }
 
 export interface PwaServiceWorkerContainerLike {
+  readonly controller?: unknown | null;
   addEventListener(
     type: string,
     listener: EventListenerOrEventListenerObject,
@@ -161,12 +162,14 @@ export function applyServiceWorkerUpdate(
     onAbort?.();
   };
 
+  const isTakeoverReady = () => serviceWorkerContainer.controller != null && !registration.waiting;
+
   const handleControllerChange = () => {
     triggerReload();
   };
 
   const handleWaitingStateChange = () => {
-    if (fallbackElapsed && !registration.waiting) {
+    if (fallbackElapsed && isTakeoverReady()) {
       triggerReload();
     }
   };
@@ -180,12 +183,12 @@ export function applyServiceWorkerUpdate(
     fallbackTimer = null;
     if (finished) return;
     fallbackElapsed = true;
-    if (!registration.waiting) {
+    if (isTakeoverReady()) {
       triggerReload();
       return;
     }
     waitPollTimer = scheduleInterval(() => {
-      if (!registration.waiting) {
+      if (isTakeoverReady()) {
         triggerReload();
       }
     }, waitPollMs);
